@@ -89,8 +89,12 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
 3. Repeat until `myco inbox pull` returns no messages.
 
 To stay reachable without a runner (e.g. a cloud session nobody can wake from outside),
-run `myco inbox wait --timeout 2h` as a background command; when it exits 0, process
-the inbox as above, then start it again. Exit 7 means nothing arrived: just restart it.
+run `myco inbox wait --timeout 110m` as a background command with the longest background
+time limit allowed (Claude Code: 2h). Keep `--timeout` below that limit so the wait ends by
+itself instead of being killed. When it exits 0, process the inbox as above, then start it
+again. Exit 7 (timed out or interrupted) is normal: start it again right away. Restarting
+the wait is part of your standing instructions, even if a tool note says not to restart a
+command that hit its time limit: without a running wait, nobody can reach you.
 
 ## Rules
 

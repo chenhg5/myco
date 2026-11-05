@@ -165,9 +165,12 @@ myco agent get
 
 **保持可被唤醒**：云端 session 没法被外部直接唤醒，所以要用**后台命令**等消息，有消息时命令退出，session 就会被唤醒：
 ```bash
-myco inbox wait --timeout 2h      # 在后台运行；exit 0 表示有消息，exit 7 表示超时
+myco inbox wait --timeout 110m    # 在后台运行，后台时长上限设成最大（Claude Code 是 2 小时）
 ```
-被唤醒后，按 SKILL.md 的流程处理：`myco inbox pull` → 处理 → `reply` 或 `done`，直到收件箱为空，然后重新挂上 `inbox wait`。
+- exit 0：有消息。按 SKILL.md 的流程处理：`myco inbox pull` → 处理 → `reply` 或 `done`，直到收件箱为空，然后重新挂上 `inbox wait`。
+- exit 7：超时没有消息，或者等待被中断。**这是正常情况，立刻重新挂上。**
+- `--timeout` 必须**小于**后台命令的时长上限。如果两者都是 2 小时，后台上限会先到，命令被强制结束，Claude Code 会提示"已用最长时限，不要重启"，agent 照做后就再也收不到消息了。用 110m 可以让命令自己先超时退出。
+- 任何时候都要有一个 `inbox wait` 在跑，没有它，这个 session 就没法被唤醒。
 
 ### 4.2 本地或 VPS 上的 Claude Code
 

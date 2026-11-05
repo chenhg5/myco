@@ -303,9 +303,11 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 		Summary: "Block until your inbox has messages (does not lease them)",
 		Long: `Exit 0 with the pending messages, or exit 7 when the timeout passes. Lets an agent that
 cannot be woken from outside sleep cheaply, e.g. a cloud session running it as a background
-command and resuming when it exits.`,
+command and resuming when it exits. Keep --timeout below the harness's background-command limit
+(Claude Code: 2h, so use 110m) so the wait ends on its own with exit 7 instead of being killed,
+and start it again after every exit: an agent with no wait running cannot be woken.`,
 		Examples: []string{
-			"myco inbox wait --timeout 2h && myco inbox pull",
+			"myco inbox wait --timeout 110m && myco inbox pull",
 			"myco inbox wait --timeout 30m --format json",
 		},
 		Flags: []Flag{{Name: "timeout", Kind: Duration, Default: "60s", Help: "Give up after this long (exit 7)"}},
@@ -316,11 +318,16 @@ command and resuming when it exits.`,
 			}
 			msgs, err := c.WaitPending(e.in.Ctx, e.in.Duration("timeout"))
 			if err != nil {
+				if e.in.Ctx.Err() != nil {
+					return &Error{Code: "interrupted", Message: "the wait was stopped before it finished (e.g. a background-command time limit)",
+						Retryable: true, Exit: ExitTimeout,
+						Suggestion: "this is expected; start it again right away with a timeout below that limit: myco inbox wait --timeout 110m"}
+				}
 				return err
 			}
 			if len(msgs) == 0 {
 				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout,
-					Suggestion: "wait again: myco inbox wait --timeout " + e.in.String("timeout")}
+					Suggestion: "this is expected; start it again right away so you stay reachable: myco inbox wait --timeout " + e.in.String("timeout")}
 			}
 			return e.p.Print(api.MessageList{Messages: msgs}, func(w io.Writer) {
 				fmt.Fprintf(w, "%d message(s) waiting; run: myco inbox pull\n", len(msgs))
