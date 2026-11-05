@@ -116,14 +116,26 @@ $DOMAIN {
 	}
 }
 EOF
-  systemctl enable --now caddy
-  systemctl reload caddy
+  if systemctl is-active --quiet firewalld; then
+    echo "==> opening ports 80/443 in firewalld"
+    firewall-cmd --permanent --add-service=http --add-service=https >/dev/null
+    firewall-cmd --reload >/dev/null
+  fi
+  systemctl enable caddy >/dev/null 2>&1 || true
+  if ! systemctl restart caddy; then
+    echo "!! Caddy failed to start. Last log lines:" >&2
+    journalctl -u caddy -n 30 --no-pager >&2 || true
+    echo "!! Common causes: port 80/443 already used (check: ss -ltnp | grep -E ':(80|443)\\s'), or blocked by the cloud firewall." >&2
+    echo "!! The hub itself is running on 127.0.0.1:$PORT; fix Caddy and re-run this script." >&2
+    CADDY_FAILED=1
+  fi
 fi
 
 sleep 1
 curl -fsS "http://127.0.0.1:$PORT/v1/health" >/dev/null && echo "==> hub is healthy"
 
 echo
+[[ -n "${CADDY_FAILED:-}" ]] && echo "WARNING: HTTPS is not up yet (see Caddy errors above)."
 echo "Hub URL:      $PUBLIC_URL"
 if [[ -n "${NEW_TOKEN:-}" ]]; then
   echo "Admin token:  $(cut -d= -f2 /etc/myco/hub.env)"
