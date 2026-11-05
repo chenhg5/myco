@@ -90,13 +90,7 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			if err := service.Apply(plan, service.ExecRunner{}); err != nil {
 				return errorf("service_failed", ExitError, "inspect with --dry-run and the system logs", "%v", err)
 			}
-			// launchd/systemd report transient states (xpcproxy, activating)
-			// right after start; wait briefly for the process to be up.
-			st, _ := m.Status()
-			for i := 0; i < 10 && !st.Running; i++ {
-				time.Sleep(500 * time.Millisecond)
-				st, _ = m.Status()
-			}
+			st := waitRunning(m)
 			return e.p.Print(map[string]any{"installed": true, "plan": plan, "status": st}, func(w io.Writer) {
 				fmt.Fprintf(w, "runner service installed (%s)\nfile: %s\nlogs: %s\n", plan.Manager, plan.File, spec.LogPath)
 				printStatus(w, st)
@@ -163,7 +157,7 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			if err := m.Restart(); err != nil {
 				return errorf("service_failed", ExitError, "is it installed? myco runner service status", "%v", err)
 			}
-			st, _ := m.Status()
+			st := waitRunning(m)
 			return e.p.Print(map[string]any{"restarted": true, "status": st}, func(w io.Writer) { printStatus(w, st) })
 		}),
 	}
@@ -190,6 +184,17 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 	}
 
 	return (&Command{Name: "service", Summary: "Run the runner in the background (launchd / systemd)"}).Add(install, status, restart, logs, uninstall)
+}
+
+// waitRunning polls briefly: launchd/systemd report transient states
+// (xpcproxy, activating) right after a start.
+func waitRunning(m service.Manager) service.Status {
+	st, _ := m.Status()
+	for i := 0; i < 10 && !st.Running; i++ {
+		time.Sleep(500 * time.Millisecond)
+		st, _ = m.Status()
+	}
+	return st
 }
 
 func printStatus(w io.Writer, st service.Status) {
