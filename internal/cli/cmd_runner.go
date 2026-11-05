@@ -260,10 +260,18 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		}
 		return len(started)
 	}
-	if scan() == 0 && sh.once {
+	n := scan()
+	if n == 0 && sh.once {
 		return errorf("not_found", ExitNotFound, "enroll an agent first: myco agent enroll", "no agent profiles in %s", dir)
 	}
-	log.Info("runner serving all agents", "profiles_dir", dir, "max_concurrent", cap(sh.slots))
+	log.Info("runner serving all agents", "profiles_dir", dir, "profiles", n, "max_concurrent", cap(sh.slots))
+	if n == 0 {
+		hint := "enroll or register an agent on this machine (myco agent enroll / myco agent register --harness exec ...)"
+		if _, err := os.Stat(e.defaultPath); err == nil {
+			hint = e.defaultPath + " holds an identity but runner --all only serves " + dir + "/*.yaml; re-run the register/enroll/login command with this myco version to create the profile"
+		}
+		log.Warn("no agent profiles yet; checking again every 30s", "hint", hint)
+	}
 	if sh.once {
 		wg.Wait()
 		return nil
