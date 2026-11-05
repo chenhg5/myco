@@ -37,8 +37,8 @@ func (t MessageType) ExpectsReply() bool { return t == TypeTask }
 // Status is the delivery/processing state of a message.
 //
 //	queued ──pull──▶ delivered ──ack──▶ acked ──reply/done──▶ done
-//	   ▲                 │                 └──hold──▶ held ──reply/done──▶ done
-//	   └──lease expires──┘          any open state ──fail──▶ failed
+//	   ▲                 │  ▲              ├──hold──▶ held ──reply/done──▶ done
+//	   └──lease expires──┘  └───release────┘   any open state ──fail──▶ failed
 type Status string
 
 const (
@@ -171,6 +171,29 @@ func (m *Message) Hold(by AgentName, now time.Time) error {
 		return err
 	}
 	m.Status, m.UpdatedAt = StatusHeld, now
+	return nil
+}
+
+// MaxReleaseDelay bounds how long a released message can be deferred.
+const MaxReleaseDelay = time.Hour
+
+// Release hands a message back for later redelivery without counting it as a
+// failed delivery, e.g. when the recipient's session is busy (a human is
+// using it). It becomes due again after delay.
+func (m *Message) Release(by AgentName, delay time.Duration, now time.Time) error {
+	if err := m.requireRecipient(by); err != nil {
+		return err
+	}
+	if err := m.requireOpen("release", StatusDelivered, StatusAcked); err != nil {
+		return err
+	}
+	if delay < 0 || delay > MaxReleaseDelay {
+		return Errf(CodeInvalidArgument, "release delay must be between 0 and %s", MaxReleaseDelay)
+	}
+	m.Status, m.LeaseUntil, m.UpdatedAt = StatusDelivered, now.Add(delay), now
+	if m.Attempts > 0 {
+		m.Attempts-- // the next claim re-increments it: busy retries are free
+	}
 	return nil
 }
 

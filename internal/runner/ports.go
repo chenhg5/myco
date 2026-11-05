@@ -18,6 +18,7 @@ type Hub interface {
 	Complete(ctx context.Context, id string) error
 	Reply(ctx context.Context, id, body string, dry bool) (*api.Message, error)
 	Fail(ctx context.Context, id, reason string, dry bool) (*api.Message, error)
+	Release(ctx context.Context, id string, delay time.Duration, dry bool) (*api.Message, error)
 	GetMessage(ctx context.Context, id string) (*api.Message, error)
 }
 

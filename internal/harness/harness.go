@@ -5,10 +5,15 @@ package harness
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 )
+
+// ErrSessionBusy means the session is in use by another process (typically a
+// human in the interactive UI). Runners retry later instead of failing.
+var ErrSessionBusy = errors.New("session is busy")
 
 // Request is one invocation of a harness.
 type Request struct {

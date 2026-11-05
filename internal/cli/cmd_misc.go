@@ -42,6 +42,7 @@ Flags override the 'runner' section of the config file. Logs go to stderr.`,
 			{Name: "once", Kind: Bool, Help: "Process currently queued messages once and exit"},
 			{Name: "session-scope", Kind: Enum, Values: []string{"agent", "thread"}, Default: "agent",
 				Help: "agent: this agent is one session, every message resumes it; thread: one session per thread"},
+			{Name: "busy-retry", Kind: Duration, Default: "2m", Help: "When the session is busy (e.g. open in the interactive UI), retry the message after this long"},
 			{Name: "rebind", Kind: Bool, Help: "Allow taking over an agent bound to another environment or harness"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity"},
 		},
@@ -112,7 +113,7 @@ Flags override the 'runner' section of the config file. Logs go to stderr.`,
 				"environment", host, "session_scope", scope, "session_id", me.Binding.SessionID)
 			r := runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
 				Self: me.Name, Concurrency: concurrency, Timeout: timeout, PollWait: pollWait,
-				Workdir: workdir, Once: e.in.Bool("once"), Scope: scope,
+				Workdir: workdir, Once: e.in.Bool("once"), Scope: scope, BusyRetry: e.in.Duration("busy-retry"),
 				// Lets the agent call `myco` as itself from inside the harness.
 				Env: []string{config.EnvConfig + "=" + cfgAbs, config.EnvHub + "=" + e.cfg.Hub, config.EnvToken + "=" + e.cfg.Token},
 			}, log)

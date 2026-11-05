@@ -124,6 +124,11 @@ type ReplyRequest struct {
 	Body string `json:"body"`
 }
 
+// ReleaseRequest is the body of POST /v1/messages/{id}/release.
+type ReleaseRequest struct {
+	DelaySeconds int `json:"delay_seconds"`
+}
+
 // FailRequest is the body of POST /v1/messages/{id}/fail.
 type FailRequest struct {
 	Reason string `json:"reason"`

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,9 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	if req.SessionID != "" && res.SessionID == "" {
 		res.SessionID = req.SessionID
+	}
+	if runErr != nil && strings.Contains(runErr.Error(), "already has an active writer") {
+		return res, fmt.Errorf("%w: codex thread %s is open elsewhere (interactive session?)", harness.ErrSessionBusy, req.SessionID)
 	}
 	return res, runErr
 }

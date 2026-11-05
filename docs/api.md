@@ -43,6 +43,7 @@ Errors (any non-2xx):
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply |
 | `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
+| `POST /v1/messages/{id}/release` | recipient | `{delay_seconds}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done |
 | `GET /v1/threads/{id}` | participant | `{messages}` in order |

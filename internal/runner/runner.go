@@ -30,6 +30,9 @@ type Options struct {
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
 	Scope SessionScope
+	// BusyRetry is how long to wait before retrying a message whose session
+	// was busy (default 2m).
+	BusyRetry time.Duration
 }
 
 // Runner pulls messages and dispatches them to a harness.
@@ -57,6 +60,9 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	if prompt == nil {
 		prompt = DefaultPrompt{}
+	}
+	if opts.BusyRetry <= 0 {
+		opts.BusyRetry = 2 * time.Minute
 	}
 	if opts.Scope == "" {
 		opts.Scope = ScopeAgent
@@ -171,6 +177,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 
 	switch {
+	case errors.Is(runErr, harness.ErrSessionBusy):
+		// Someone is using the session; hand the message back without
+		// counting a failure and try again later.
+		_, err = r.hub.Release(ctx, m.ID, r.opts.BusyRetry, false)
+		log.Info("session busy; message released for retry", "retry_in", r.opts.BusyRetry, "reason", runErr)
 	case m.Type == "task" && runErr != nil:
 		_, err = r.hub.Fail(ctx, m.ID, runErr.Error(), false)
 		log.Warn("harness failed; task marked failed", "err", runErr)

@@ -72,6 +72,18 @@ func TestCLIEndToEnd(t *testing.T) {
 	if code, _, e := bob.run("message", "reply", "--id", sent.Message.ID, "--body", "pong"); code != 0 {
 		t.Fatalf("reply: %d %s", code, e)
 	}
+	// Release + re-pull works and is not a failed attempt.
+	code, out, _ = alice.run("message", "send", "--to", "bob", "--body", "later")
+	var later struct{ Message struct{ ID string } }
+	json.Unmarshal([]byte(out), &later)
+	bob.run("inbox", "pull")
+	if code, _, e := bob.run("message", "release", "--id", later.Message.ID, "--delay", "0s"); code != 0 {
+		t.Fatalf("release: %d %s", code, e)
+	}
+	if code, out, _ := bob.run("inbox", "pull"); code != 0 || !strings.Contains(out, later.Message.ID) || !strings.Contains(out, `"attempts": 1`) {
+		t.Fatalf("re-pull after release: %d %s", code, out)
+	}
+
 	code, out, _ = alice.run("message", "wait", "--id", sent.Message.ID, "--timeout", "1s")
 	if code != 0 || !strings.Contains(out, "pong") {
 		t.Fatalf("wait: %d %s", code, out)

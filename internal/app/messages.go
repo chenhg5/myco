@@ -210,6 +210,20 @@ func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id
 	})
 }
 
+// Release defers message id (addressed to agent) for redelivery after delay
+// without counting a failed attempt.
+func (s *MessageService) Release(ctx context.Context, agent *domain.Agent, id string, delay time.Duration, dryRun bool) (*domain.Message, error) {
+	apply := func(m *domain.Message) error { return m.Release(agent.Name, delay, s.clock.Now()) }
+	if dryRun {
+		m, err := s.messages.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return m, apply(m)
+	}
+	return s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) { return nil, apply(m) })
+}
+
 // Reply answers message id on behalf of agent and returns the reply.
 func (s *MessageService) Reply(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
 	var reply *domain.Message

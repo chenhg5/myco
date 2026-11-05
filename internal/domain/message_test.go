@@ -96,3 +96,29 @@ func TestValidation(t *testing.T) {
 		t.Error("allow-from policy broken")
 	}
 }
+
+func TestReleaseDefersWithoutCountingAttempt(t *testing.T) {
+	m := newTask(t)
+	t0 := time.Unix(100, 0)
+	m.Claim(t0, time.Minute, 3)
+	m.Ack("bob", t0)
+	if err := m.Release("bob", 2*time.Minute, t0); err != nil {
+		t.Fatal(err)
+	}
+	if m.IsDue(t0.Add(time.Minute)) || !m.IsDue(t0.Add(3*time.Minute)) {
+		t.Fatal("released message must become due only after the delay")
+	}
+	for i := range 10 { // many busy cycles never exhaust attempts
+		now := t0.Add(time.Duration(3+i*3) * time.Minute)
+		if !m.Claim(now, time.Minute, 3) {
+			t.Fatalf("cycle %d: claim failed, attempts=%d", i, m.Attempts)
+		}
+		m.Release("bob", 2*time.Minute, now)
+	}
+	if err := m.Release("mallory", 0, t0); !IsCode(err, CodePermissionDenied) {
+		t.Fatalf("stranger release: %v", err)
+	}
+	if err := m.Release("bob", 2*time.Hour, t0); !IsCode(err, CodeInvalidArgument) {
+		t.Fatalf("delay bound: %v", err)
+	}
+}

@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -53,6 +54,9 @@ func (h *fakeHub) Fail(_ context.Context, id, reason string, _ bool) (*api.Messa
 	h.fails[id], h.status[id] = reason, "failed"
 	h.mu.Unlock()
 	return &api.Message{}, nil
+}
+func (h *fakeHub) Release(_ context.Context, id string, _ time.Duration, _ bool) (*api.Message, error) {
+	return &api.Message{}, h.set(id, "delivered")
 }
 func (h *fakeHub) GetMessage(_ context.Context, id string) (*api.Message, error) {
 	h.mu.Lock()
@@ -151,5 +155,16 @@ func TestAgentScopeResumesOneBoundSession(t *testing.T) {
 	}
 	if len(binder.binds) != 1 || binder.binds[0] != "agent-session" {
 		t.Fatalf("new session must be bound on the hub exactly once: %v", binder.binds)
+	}
+}
+
+func TestBusySessionReleasesInsteadOfFailing(t *testing.T) {
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"})
+	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		return harness.Result{}, fmt.Errorf("%w: open in UI", harness.ErrSessionBusy)
+	}}
+	New(hub, h, NewMemorySessions(), nil, Options{Once: true}, quiet()).Run(context.Background())
+	if hub.fails["t1"] != "" || hub.status["t1"] != "delivered" {
+		t.Fatalf("busy session must release, not fail: status=%s fail=%q", hub.status["t1"], hub.fails["t1"])
 	}
 }

@@ -191,6 +191,35 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		}),
 	}
 
+	release := &Command{
+		Name:     "release",
+		Summary:  "Hand a pulled message back for later redelivery (not counted as a failure)",
+		Mutating: true,
+		Long:     "Use when you cannot process it right now (e.g. your session is busy); it becomes due again after --delay.",
+		Examples: []string{"myco message release --id msg_abc123 --delay 5m"},
+		Flags:    []Flag{idFlag, {Name: "delay", Kind: Duration, Default: "2m", Help: "Redeliver after this long (max 1h)"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id"); err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			m, err := c.Release(e.in.Ctx, e.in.String("id"), e.in.Duration("delay"), dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "release", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) {
+				fmt.Fprintf(w, "%s released; redelivered after %s\n", m.ID, e.in.String("delay"))
+			})
+		}),
+	}
+
 	transition := func(verb, summary, example string) *Command {
 		return &Command{
 			Name: verb, Summary: summary, Mutating: true, Examples: []string{example}, Flags: []Flag{idFlag},
@@ -216,7 +245,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 	}
 
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
-		send, get, wait, reply, fail,
+		send, get, wait, reply, fail, release,
 		transition("ack", "Acknowledge a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
 		transition("done", "Close a message without replying", "myco message done --id msg_abc123"),

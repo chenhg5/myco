@@ -90,6 +90,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/fail", s.agent(s.fail))
+	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))
 	m.HandleFunc("GET /v1/messages/{id}/reply", s.agent(s.waitReply))
 	m.HandleFunc("POST /v1/inbox/pull", s.agent(s.pull))
 	m.HandleFunc("GET /v1/threads/{id}", s.agent(s.thread))
@@ -397,6 +398,20 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	}
 	dry := dryRun(r)
 	m, err := s.messages.Fail(r.Context(), a, r.PathValue("id"), req.Reason, dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+}
+
+func (s *Server) release(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.ReleaseRequest
+	if r.ContentLength != 0 && !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	m, err := s.messages.Release(r.Context(), a, r.PathValue("id"), time.Duration(req.DelaySeconds)*time.Second, dry)
 	if err != nil {
 		writeError(w, err)
 		return

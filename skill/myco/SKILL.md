@@ -56,6 +56,8 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
   that task. `myco thread get` shows the whole conversation.
 - To reply yourself instead of via final output: `myco message reply --body "..."`.
   To give up explicitly: `myco message fail --reason "..."`.
+  Can't handle it right now? `myco message release --id <id> --delay 10m` hands it back
+  for later without counting a failure.
 
 ## Identity: you are a session
 

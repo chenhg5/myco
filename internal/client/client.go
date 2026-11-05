@@ -273,6 +273,13 @@ func (c *Client) Reply(ctx context.Context, id, body string, dry bool) (*api.Mes
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
 }
 
+// Release defers a message for redelivery after delay (no failed attempt).
+func (c *Client) Release(ctx context.Context, id string, delay time.Duration, dry bool) (*api.Message, error) {
+	var out api.MessageResult
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/release", dryQuery(dry),
+		api.ReleaseRequest{DelaySeconds: int(delay.Seconds())}, &out)
+}
+
 // Fail closes a message as failed.
 func (c *Client) Fail(ctx context.Context, id, reason string, dry bool) (*api.Message, error) {
 	var out api.MessageResult

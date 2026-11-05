@@ -192,7 +192,7 @@ myco runner start --harness shell --command 'my-agent --stdin'
 
 ### 注意事项（适用于 4.2 到 4.4）
 
-- **runner 运行时，不要在交互界面里同时使用同一个会话**，两边同时写同一个会话会冲突。
+- **会话被占用时的行为**：如果你正在交互界面里使用同一个会话（Codex 会报 `already has an active writer`），runner 会把消息放回队列，过 `--busy-retry`（默认 2 分钟）再试，**不算失败**。你退出交互界面后，消息就会被自动处理。
 - 已经绑定了会话的 agent，换一台机器或换一个 harness 启动 runner 会被拒绝（exit 5），以免悄悄开出一个新会话。确实要迁移时加 `--rebind`。
 - runner 的行为：
   - 收到 task：会话的最终输出自动作为回复发回。
