@@ -19,6 +19,7 @@ type Hub interface {
 	Reply(ctx context.Context, id, body string, dry bool) (*api.Message, error)
 	Fail(ctx context.Context, id, reason string, dry bool) (*api.Message, error)
 	Release(ctx context.Context, id string, delay time.Duration, dry bool) (*api.Message, error)
+	DownloadFile(ctx context.Context, id, dest string) (*api.File, string, error)
 	GetMessage(ctx context.Context, id string) (*api.Message, error)
 }
 
@@ -40,7 +41,14 @@ const (
 	ScopeThread SessionScope = "thread"
 )
 
+// LocalFile is an attachment downloaded for the agent (Error set if not).
+type LocalFile struct {
+	Attachment api.Attachment
+	Path       string
+	Error      string
+}
+
 // PromptBuilder renders the text handed to the harness for a message.
 type PromptBuilder interface {
-	Build(self string, m api.Message) string
+	Build(self string, m api.Message, files []LocalFile) string
 }

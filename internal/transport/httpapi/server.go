@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -27,7 +28,11 @@ type Server struct {
 	log        *slog.Logger
 	mux        *http.ServeMux
 	ingress    map[string]Ingress
+	files      *app.FileService
 }
+
+// SetFiles enables the file endpoints.
+func (s *Server) SetFiles(f *app.FileService) { s.files = f }
 
 // Inbound is a reply arriving from an external system.
 type Inbound struct {
@@ -54,7 +59,11 @@ func New(agents *app.AgentService, messages *app.MessageService, enroll *app.Enr
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, domain.MaxBodyBytes+64*1024)
+	limit := int64(domain.MaxBodyBytes + 64*1024)
+	if r.Method == http.MethodPost && r.URL.Path == "/v1/files" && s.files != nil {
+		limit = s.files.Policy().MaxSize + 1 // FileService reports "too large" itself
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	s.mux.ServeHTTP(w, r)
 }
 
@@ -84,6 +93,9 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
 	m.HandleFunc("POST /v1/broadcasts", s.agent(s.broadcast))
+	m.HandleFunc("POST /v1/files", s.agent(s.uploadFile))
+	m.HandleFunc("GET /v1/files/{id}", s.agent(s.downloadFile))
+	m.HandleFunc("GET /v1/files/{id}/meta", s.agent(s.fileMeta))
 	m.HandleFunc("GET /v1/broadcasts/{id}", s.agent(s.broadcastStatus))
 	m.HandleFunc("GET /v1/inbox/wait", s.agent(s.waitPending))
 	m.HandleFunc("POST /v1/ingress/{kind}", s.handleIngress)
@@ -360,7 +372,7 @@ func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Age
 	}
 	dry := dryRun(r)
 	out, err := s.messages.Broadcast(r.Context(), a, app.BroadcastInput{Selector: req.Selector, Type: req.Type, Body: req.Body,
-		IdempotencyKey: req.IdempotencyKey, IncludeSelf: req.IncludeSelf, DryRun: dry})
+		IdempotencyKey: req.IdempotencyKey, IncludeSelf: req.IncludeSelf, Attachments: req.Attachments, DryRun: dry})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -397,6 +409,65 @@ func (s *Server) broadcastStatus(w http.ResponseWriter, r *http.Request, a *doma
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) filesEnabled(w http.ResponseWriter) bool {
+	if s.files == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not store files"))
+		return false
+	}
+	return true
+}
+
+func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.filesEnabled(w) {
+		return
+	}
+	f, err := s.files.Upload(r.Context(), a, r.URL.Query().Get("name"), r.Header.Get("Content-Type"), r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			err = domain.Errf(domain.CodeInvalidArgument, "file larger than %d bytes", s.files.Policy().MaxSize)
+		}
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, fileDTO(f))
+}
+
+func (s *Server) fileMeta(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.filesEnabled(w) {
+		return
+	}
+	f, err := s.files.Meta(r.Context(), a, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, fileDTO(f))
+}
+
+func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.filesEnabled(w) {
+		return
+	}
+	f, rc, err := s.files.Open(r.Context(), a, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	ct := f.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Length", strconv.FormatInt(f.Size, 10))
+	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(f.Name))
+	w.Header().Set("X-Myco-SHA256", f.SHA256)
+	w.Header().Set("X-Myco-File-Name", url.PathEscape(f.Name))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, rc)
+}
+
 func bindingFromAPI(b api.Binding) domain.Binding {
 	return domain.Binding{Harness: b.Harness, SessionID: b.SessionID, Environment: b.Environment, Workdir: b.Workdir}
 }
@@ -408,7 +479,8 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	}
 	dry := dryRun(r)
 	out, err := s.messages.Send(r.Context(), a, app.SendInput{
-		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey, DryRun: dry,
+		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
+		Attachments: req.Attachments, DryRun: dry,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -448,7 +520,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) 
 		return
 	}
 	dry := dryRun(r)
-	m, err := s.messages.Reply(r.Context(), a, r.PathValue("id"), req.Body, dry)
+	m, err := s.messages.ReplyWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 	if err != nil {
 		writeError(w, err)
 		return

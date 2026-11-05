@@ -34,13 +34,16 @@ Errors (any non-2xx):
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
 | `POST /v1/broadcasts` | agent | `{selector, body, type?, idempotency_key?, include_self?}` → `{broadcast_id, messages, skipped, duplicate}`; one message/thread per recipient |
 | `GET /v1/broadcasts/{id}?consume=` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}`; `consume=true` marks returned replies done |
+| `POST /v1/files?name=` | agent | Raw body upload (≤ `--max-file-size`) → file `{id, name, size, sha256, content_type, owner, expires_at}` |
+| `GET /v1/files/{id}` | uploader / recipient | Download; headers `X-Myco-SHA256`, `X-Myco-File-Name` |
+| `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent |
 | `GET /v1/me` | agent | The calling agent |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
-| `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?}` → `{message, duplicate}` |
+| `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate}`; attaching grants the recipient access |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?}` → `{messages}`; leases messages (long-poll ≤ 60s) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |

@@ -25,6 +25,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			`myco message send --to coder --body "Run the test suite and report failures"`,
 			`myco message send --to coder --body-file task.md --wait 15m --format json`,
 			`echo "deploy finished" | myco message send --to ops --type note --body-file -`,
+			`myco message send --to reviewer --body "please review" --attach design.md --attach diagram.png`,
 		},
 		Flags: []Flag{
 			{Name: "to", Kind: String, Required: true, Help: "Recipient agent name"},
@@ -34,6 +35,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "thread", Kind: String, Env: "MYCO_THREAD_ID", Help: "Continue an existing thread"},
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending with the same key returns the original message"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the reply (tasks only)"},
+			attachFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("to"); err != nil {
@@ -48,9 +50,13 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 				return err
 			}
 			dry := e.in.Bool("dry-run")
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
 			res, err := c.Send(e.in.Ctx, api.SendRequest{
 				To: e.in.String("to"), Type: e.in.String("type"), Body: body,
-				ThreadID: e.in.String("thread"), IdempotencyKey: e.in.String("idempotency-key"),
+				ThreadID: e.in.String("thread"), IdempotencyKey: e.in.String("idempotency-key"), Attachments: atts,
 			}, dry)
 			if err != nil {
 				return err
@@ -140,6 +146,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		Flags: []Flag{idFlag,
 			{Name: "body", Kind: String, Help: "Reply text"},
 			{Name: "body-file", Kind: String, Help: "Read the reply from a file ('-' = stdin)"},
+			attachFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
@@ -154,7 +161,11 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 				return err
 			}
 			dry := e.in.Bool("dry-run")
-			m, err := c.Reply(e.in.Ctx, e.in.String("id"), body, dry)
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
+			m, err := c.ReplyWith(e.in.Ctx, e.in.String("id"), body, atts, dry)
 			if err != nil {
 				return err
 			}
@@ -359,9 +370,11 @@ func printMessage(w io.Writer, m *api.Message) {
 	if m.Error != "" {
 		fmt.Fprintf(w, "error: %s\n", m.Error)
 	}
+	printAttachments(w, m.Attachments)
 	fmt.Fprintln(w, strings.TrimRight(m.Body, "\n"))
 }
 
 func printReply(w io.Writer, m *api.Message) {
 	fmt.Fprintf(w, "%s from %s:\n%s\n", m.Type, m.From, strings.TrimRight(m.Body, "\n"))
+	printAttachments(w, m.Attachments)
 }

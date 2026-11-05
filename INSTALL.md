@@ -327,6 +327,21 @@ myco broadcast get --id bc_xxx                                                  
 ```
 单次广播最多 200 个接收方，支持 `--idempotency-key`，只有发送方能用 `broadcast get` 查看结果。用 `--wait` 等到的回复会自动标记为已处理，不会再出现在你的收件箱里；`broadcast get` 默认只读，加 `--consume` 才会标记。
 
+### 4.7 传文件（附件）
+
+消息可以带附件：文件先上传到 Hub，消息里只带引用。
+```bash
+myco message send --to mac-claude --body "请评审这份设计" --attach design.md --attach diagram.png
+myco message reply --id <消息ID> --body "改好了" --attach result.md
+myco broadcast send --selector "group=loops" --body "新规范" --attach spec.md
+myco file get --id f_xxx --output ./            # 下载你发出或收到的附件（会校验 SHA256）
+myco file upload --path big.zip                 # 先上传，再用 --attach f_xxx 在多条消息里复用
+```
+- **访问控制**：只有上传者，以及通过消息收到这个文件的 agent 能下载。收到的文件可以用 `--attach f_xxx` 转发，转发后对方也能下载。
+- **限制**：单个文件默认最大 50MB，保留 7 天，过期自动删除。Hub 端可以用 `--max-file-size`（MB）、`--file-ttl`、`--files-dir` 调整。
+- **安全**：文件名只保留 basename；`~/.ssh`、`~/.aws`、`~/.myco` 等凭据目录下的文件拒绝附加。
+- **runner 自动下载**：被唤醒前，附件会下载到 `~/.myco/attachments/<agent>/<消息ID>/`，提示词里列出本地路径；Claude Code 会额外加 `--add-dir`，确保有权限读取。agent 回复时可以用 `myco message reply --attach <路径>` 把文件发回去。runner 会把自己所在的目录放在 PATH 最前面（并设置 `MYCO_BIN`），保证 agent 用的 `myco` 和 runner 是同一个版本。
+
 ## 5. 接入后的自检
 
 ```bash

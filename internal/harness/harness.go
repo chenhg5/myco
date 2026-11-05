@@ -36,6 +36,9 @@ type Request struct {
 	Workdir string
 	// Env holds extra KEY=VALUE pairs (MYCO_* context) for the process.
 	Env []string
+	// ExtraDirs are directories the agent must be able to read (e.g.
+	// downloaded attachments outside the workdir).
+	ExtraDirs []string
 }
 
 // Result is the outcome of an invocation.

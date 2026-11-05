@@ -44,21 +44,22 @@ type Agent struct {
 
 // Message is the public view of a message.
 type Message struct {
-	ID             string     `json:"id"`
-	From           string     `json:"from"`
-	To             string     `json:"to"`
-	ThreadID       string     `json:"thread_id"`
-	ReplyTo        string     `json:"reply_to,omitempty"`
-	Type           string     `json:"type"`
-	Body           string     `json:"body"`
-	Status         string     `json:"status"`
-	Attempts       int        `json:"attempts"`
-	Error          string     `json:"error,omitempty"`
-	IdempotencyKey string     `json:"idempotency_key,omitempty"`
-	BroadcastID    string     `json:"broadcast_id,omitempty"`
-	LeaseUntil     *time.Time `json:"lease_until,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             string       `json:"id"`
+	From           string       `json:"from"`
+	To             string       `json:"to"`
+	ThreadID       string       `json:"thread_id"`
+	ReplyTo        string       `json:"reply_to,omitempty"`
+	Type           string       `json:"type"`
+	Body           string       `json:"body"`
+	Status         string       `json:"status"`
+	Attempts       int          `json:"attempts"`
+	Error          string       `json:"error,omitempty"`
+	IdempotencyKey string       `json:"idempotency_key,omitempty"`
+	BroadcastID    string       `json:"broadcast_id,omitempty"`
+	Attachments    []Attachment `json:"attachments,omitempty"`
+	LeaseUntil     *time.Time   `json:"lease_until,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 // RegisterRequest is the body of POST /v1/agents.
@@ -81,11 +82,12 @@ type LabelsRequest struct {
 
 // BroadcastRequest is the body of POST /v1/broadcasts.
 type BroadcastRequest struct {
-	Selector       string `json:"selector"`
-	Type           string `json:"type,omitempty"`
-	Body           string `json:"body"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
-	IncludeSelf    bool   `json:"include_self,omitempty"`
+	Selector       string   `json:"selector"`
+	Type           string   `json:"type,omitempty"`
+	Body           string   `json:"body"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	IncludeSelf    bool     `json:"include_self,omitempty"`
+	Attachments    []string `json:"attachments,omitempty"`
 }
 
 // BroadcastSkip is a matching agent that was not messaged.
@@ -136,11 +138,33 @@ type RegisterResponse struct {
 
 // SendRequest is the body of POST /v1/messages.
 type SendRequest struct {
-	To             string `json:"to"`
-	Type           string `json:"type,omitempty"`
-	Body           string `json:"body"`
-	ThreadID       string `json:"thread_id,omitempty"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	To             string   `json:"to"`
+	Type           string   `json:"type,omitempty"`
+	Body           string   `json:"body"`
+	ThreadID       string   `json:"thread_id,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	Attachments    []string `json:"attachments,omitempty"`
+}
+
+// Attachment is a file referenced by a message.
+type Attachment struct {
+	FileID      string `json:"file_id"`
+	Name        string `json:"name"`
+	Size        int64  `json:"size"`
+	SHA256      string `json:"sha256"`
+	ContentType string `json:"content_type,omitempty"`
+}
+
+// File is the metadata of an uploaded file.
+type File struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Size        int64      `json:"size"`
+	SHA256      string     `json:"sha256"`
+	ContentType string     `json:"content_type,omitempty"`
+	Owner       string     `json:"owner"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
 // SendResponse returns the queued (or previously queued) message.
@@ -168,7 +192,8 @@ type AgentList struct {
 
 // ReplyRequest is the body of POST /v1/messages/{id}/reply.
 type ReplyRequest struct {
-	Body string `json:"body"`
+	Body        string   `json:"body"`
+	Attachments []string `json:"attachments,omitempty"`
 }
 
 // ReleaseRequest is the body of POST /v1/messages/{id}/release.

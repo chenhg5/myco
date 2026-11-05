@@ -58,6 +58,22 @@ CREATE TABLE IF NOT EXISTS enrollments (
   revoked_at    INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS files (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  sha256       TEXT NOT NULL,
+  content_type TEXT NOT NULL DEFAULT '',
+  owner        TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  expires_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_files_expires ON files(expires_at);
+CREATE TABLE IF NOT EXISTS file_access (
+  file_id TEXT NOT NULL,
+  agent   TEXT NOT NULL,
+  PRIMARY KEY (file_id, agent)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -86,7 +102,7 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

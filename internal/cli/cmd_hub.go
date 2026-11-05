@@ -31,6 +31,9 @@ func hubCommands() *Command {
 			{Name: "wake-cooldown", Kind: Duration, Default: "2m", Help: "Minimum time between wakes of the same push agent"},
 			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
 			{Name: "github-reply-from", Kind: List, Help: "Only accept GitHub replies from these logins"},
+			{Name: "files-dir", Kind: String, Help: "Where attachment contents are stored (default: <db dir>/files)"},
+			{Name: "max-file-size", Kind: Int, Default: "50", Help: "Max attachment size in MB"},
+			{Name: "file-ttl", Kind: Duration, Default: "168h", Help: "Delete attachments after this long (0 = keep)"},
 		},
 		Run: func(in *Invocation) error {
 			tok := in.Getenv(config.EnvAdminToken)
@@ -61,6 +64,8 @@ func hubCommands() *Command {
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
+				FilesDir: in.String("files-dir"),
+				Files:    app.FilePolicy{MaxSize: int64(in.Int("max-file-size")) << 20, TTL: in.Duration("file-ttl")},
 			})
 		},
 	}

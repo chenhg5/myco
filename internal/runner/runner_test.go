@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -58,6 +59,10 @@ func (h *fakeHub) Fail(_ context.Context, id, reason string, _ bool) (*api.Messa
 }
 func (h *fakeHub) Release(_ context.Context, id string, _ time.Duration, _ bool) (*api.Message, error) {
 	return &api.Message{}, h.set(id, "delivered")
+}
+func (h *fakeHub) DownloadFile(_ context.Context, id, dest string) (*api.File, string, error) {
+	p := filepath.Join(dest, id+".txt")
+	return &api.File{ID: id}, p, os.WriteFile(p, []byte("content of "+id), 0o600)
 }
 func (h *fakeHub) GetMessage(_ context.Context, id string) (*api.Message, error) {
 	h.mu.Lock()
@@ -220,5 +225,25 @@ func TestOwnWritesSurviveRestart(t *testing.T) {
 	New(hub2, h, NewHubSessions(&fakeBinder{}, "s1"), nil, Options{Once: true, StatePath: state, Now: func() time.Time { return later }}, quiet()).Run(context.Background())
 	if hub2.replies["t2"] != "ok" {
 		t.Fatalf("own recent write must not count as busy after restart: status=%s", hub2.status["t2"])
+	}
+}
+
+func TestAttachmentsDownloadedAndInPrompt(t *testing.T) {
+	dir := t.TempDir()
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "a", ThreadID: "th", Body: "see file",
+		Attachments: []api.Attachment{{FileID: "f_1", Name: "spec.md", Size: 12}}})
+	var gotPrompt string
+	var gotDirs []string
+	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		gotPrompt, gotDirs = r.Prompt, r.ExtraDirs
+		return harness.Result{Output: "ok"}, nil
+	}}
+	New(hub, h, NewMemorySessions(), nil, Options{Once: true, AttachmentsDir: dir}, quiet()).Run(context.Background())
+	want := filepath.Join(dir, "t1", "f_1.txt")
+	if !strings.Contains(gotPrompt, "spec.md (12 bytes): "+want) || len(gotDirs) != 1 || gotDirs[0] != filepath.Join(dir, "t1") {
+		t.Fatalf("prompt/dirs: %q %v", gotPrompt, gotDirs)
+	}
+	if b, err := os.ReadFile(want); err != nil || string(b) != "content of f_1" {
+		t.Fatalf("download: %q %v", b, err)
 	}
 }

@@ -107,6 +107,9 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	// headless runs cannot ask for approval, so allow it explicitly. Other
 	// commands stay governed by the access level.
 	args = append(args, "--allowedTools", "Bash(myco:*)")
+	for _, d := range req.ExtraDirs {
+		args = append(args, "--add-dir", d)
+	}
 	args = append(args, c.opts.Args...)
 	out, runErr := harness.Exec(ctx, harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,

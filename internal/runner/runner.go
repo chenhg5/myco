@@ -49,6 +49,9 @@ type Options struct {
 	// StatePath, if set, persists when this runner last wrote each session,
 	// so a restarted runner does not mistake its own writes for a human's.
 	StatePath string
+	// AttachmentsDir, if set, is where message attachments are downloaded
+	// (<dir>/<message id>/<name>) before the harness runs.
+	AttachmentsDir string
 }
 
 // Runner pulls messages and dispatches them to a harness.
@@ -267,11 +270,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 	}
 
-	log.Info("running harness", "harness", r.harness.Name())
+	files, extraDirs := r.downloadAttachments(ctx, log, m)
+	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, r.opts.Timeout)
 	res, runErr := r.harness.Run(runCtx, harness.Request{
-		Prompt:    r.prompt.Build(r.opts.Self, m),
+		Prompt:    r.prompt.Build(r.opts.Self, m, files),
+		ExtraDirs: extraDirs,
 		SessionID: sessionID,
 		Workdir:   r.opts.Workdir,
 		Env: append(append([]string{}, r.opts.Env...),
@@ -330,6 +335,35 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	if err != nil {
 		log.Error("finishing message failed", "err", err)
 	}
+}
+
+// downloadAttachments fetches m's attachments into AttachmentsDir/<msg>.
+func (r *Runner) downloadAttachments(ctx context.Context, log *slog.Logger, m api.Message) ([]LocalFile, []string) {
+	if len(m.Attachments) == 0 {
+		return nil, nil
+	}
+	if r.opts.AttachmentsDir == "" {
+		out := make([]LocalFile, 0, len(m.Attachments))
+		for _, a := range m.Attachments {
+			out = append(out, LocalFile{Attachment: a, Error: "runner has no attachments directory"})
+		}
+		return out, nil
+	}
+	dir := filepath.Join(r.opts.AttachmentsDir, m.ID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		log.Warn("cannot create attachments dir", "dir", dir, "err", err)
+	}
+	out := make([]LocalFile, 0, len(m.Attachments))
+	for _, a := range m.Attachments {
+		_, path, err := r.hub.DownloadFile(ctx, a.FileID, dir)
+		lf := LocalFile{Attachment: a, Path: path}
+		if err != nil {
+			lf.Error = err.Error()
+			log.Warn("attachment download failed", "file_id", a.FileID, "err", err)
+		}
+		out = append(out, lf)
+	}
+	return out, []string{dir}
 }
 
 func (r *Runner) sessionKey(m api.Message) string {

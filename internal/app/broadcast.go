@@ -17,6 +17,8 @@ type BroadcastInput struct {
 	IdempotencyKey string
 	// IncludeSelf also delivers to the sender if it matches.
 	IncludeSelf bool
+	// Attachments are file ids shared with every recipient.
+	Attachments []string
 	DryRun      bool
 }
 
@@ -81,6 +83,10 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 			return &BroadcastOutput{ID: prev.BroadcastID, Messages: msgs, Duplicate: true}, err
 		}
 	}
+	atts, err := resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments)
+	if err != nil {
+		return nil, err
+	}
 	now := s.clock.Now()
 	for _, a := range recipients {
 		key := ""
@@ -92,10 +98,18 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 			return nil, err
 		}
 		m.BroadcastID = out.ID
+		m.Attachments = atts
 		out.Messages = append(out.Messages, m)
 	}
 	if in.DryRun {
 		return out, nil
+	}
+	if s.files != nil {
+		for _, a := range recipients {
+			if err := grantAttachments(ctx, s.files, atts, a.Name); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if err := s.messages.CreateMany(ctx, out.Messages); err != nil {
 		return nil, err

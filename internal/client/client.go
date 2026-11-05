@@ -4,12 +4,17 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -84,10 +89,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	return c.send(ctx, req, out)
+}
+
+func (c *Client) auth(req *http.Request) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	req.Header.Set("User-Agent", "myco-cli")
+}
+
+// send executes req and decodes a JSON response into out.
+func (c *Client) send(ctx context.Context, req *http.Request, out any) error {
+	c.auth(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -102,29 +116,34 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
 	}
 	if resp.StatusCode >= 300 {
-		var ae api.Error
-		if json.Unmarshal(data, &ae) != nil || ae.Code == "" {
-			// Not a hub error body: typically a reverse proxy answering while
-			// the hub restarts (502/503/504).
-			code := "internal"
-			switch resp.StatusCode {
-			case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-				code = CodeUnavailable
-			}
-			msg := fmt.Sprintf("hub returned HTTP %d", resp.StatusCode)
-			if body := strings.TrimSpace(string(data)); body != "" {
-				msg += ": " + truncate(body, 200)
-			}
-			return &Error{Status: resp.StatusCode, Code: code, Message: msg, Retryable: resp.StatusCode >= 500,
-				Suggestion: "the hub or its proxy may be restarting; retry shortly"}
-		}
-		return &Error{Status: resp.StatusCode, Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion,
-			Retryable: ae.Retryable || resp.StatusCode >= 500}
+		return decodeError(resp.StatusCode, data)
 	}
 	if out != nil {
 		return json.Unmarshal(data, out)
 	}
 	return nil
+}
+
+// decodeError turns a non-2xx response into *Error.
+func decodeError(status int, data []byte) error {
+	var ae api.Error
+	if json.Unmarshal(data, &ae) != nil || ae.Code == "" {
+		// Not a hub error body: typically a reverse proxy answering while
+		// the hub restarts (502/503/504).
+		code := "internal"
+		switch status {
+		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			code = CodeUnavailable
+		}
+		msg := fmt.Sprintf("hub returned HTTP %d", status)
+		if body := strings.TrimSpace(string(data)); body != "" {
+			msg += ": " + truncate(body, 200)
+		}
+		return &Error{Status: status, Code: code, Message: msg, Retryable: status >= 500,
+			Suggestion: "the hub or its proxy may be restarting; retry shortly"}
+	}
+	return &Error{Status: status, Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion,
+		Retryable: ae.Retryable || status >= 500}
 }
 
 func dryQuery(dry bool) url.Values {
@@ -300,8 +319,14 @@ func (c *Client) Complete(ctx context.Context, id string) error {
 
 // Reply answers a message and returns the reply.
 func (c *Client) Reply(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
+	return c.ReplyWith(ctx, id, body, nil, dry)
+}
+
+// ReplyWith answers a message with attachments (file ids).
+func (c *Client) ReplyWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
 	var out api.MessageResult
-	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry),
+		api.ReplyRequest{Body: body, Attachments: attachments}, &out)
 }
 
 // Release defers a message for redelivery after delay (no failed attempt).
@@ -366,4 +391,90 @@ func truncate(s string, n int) string {
 		return s[:n] + "…"
 	}
 	return s
+}
+
+// UploadFile streams a local file to the hub and returns its metadata.
+func (c *Client) UploadFile(ctx context.Context, path string) (*api.File, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if st.IsDir() {
+		return nil, &Error{Code: "invalid_argument", Message: path + " is a directory", Suggestion: "attach files (tar/zip directories first)"}
+	}
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/v1/files"
+	u.RawQuery = url.Values{"name": {filepath.Base(path)}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), f)
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = st.Size()
+	ct := mime.TypeByExtension(filepath.Ext(path))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	req.Header.Set("Content-Type", ct)
+	var out api.File
+	return &out, c.send(ctx, req, &out)
+}
+
+// DownloadFile saves file id to dest (a directory or a file path) and
+// verifies its SHA-256. It returns the metadata and the written path.
+func (c *Client) DownloadFile(ctx context.Context, id, dest string) (*api.File, string, error) {
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/v1/files/" + esc(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, "", &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, "", decodeError(resp.StatusCode, data)
+	}
+	name, _ := url.PathUnescape(resp.Header.Get("X-Myco-File-Name"))
+	name = filepath.Base(name)
+	if name == "" || name == "." || name == "/" {
+		name = id
+	}
+	path := dest
+	if st, err := os.Stat(dest); err == nil && st.IsDir() {
+		path = filepath.Join(dest, name)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, "", err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".myco-download-*")
+	if err != nil {
+		return nil, "", err
+	}
+	defer os.Remove(tmp.Name())
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tmp, h), resp.Body)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	want := resp.Header.Get("X-Myco-SHA256")
+	got := hex.EncodeToString(h.Sum(nil))
+	if want != "" && want != got {
+		return nil, "", &Error{Code: "integrity_error", Message: fmt.Sprintf("checksum mismatch for %s", id), Retryable: true}
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return nil, "", err
+	}
+	return &api.File{ID: id, Name: name, Size: n, SHA256: got, ContentType: resp.Header.Get("Content-Type")}, path, nil
 }

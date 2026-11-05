@@ -33,6 +33,7 @@ this way are marked done, so they do not show up again in your inbox.`,
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending returns the original broadcast"},
 			{Name: "include-self", Kind: Bool, Help: "Also deliver to yourself if you match"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for all replies (tasks only)"},
+			attachFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("selector"); err != nil {
@@ -47,8 +48,12 @@ this way are marked done, so they do not show up again in your inbox.`,
 				return err
 			}
 			dry := e.in.Bool("dry-run")
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
 			res, err := c.Broadcast(e.in.Ctx, api.BroadcastRequest{Selector: e.in.String("selector"), Type: e.in.String("type"),
-				Body: body, IdempotencyKey: e.in.String("idempotency-key"), IncludeSelf: e.in.Bool("include-self")}, dry)
+				Body: body, IdempotencyKey: e.in.String("idempotency-key"), IncludeSelf: e.in.Bool("include-self"), Attachments: atts}, dry)
 			if err != nil {
 				return err
 			}

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -17,7 +18,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -28,9 +29,10 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 	if m.IdempotencyKey != "" {
 		idem = m.IdempotencyKey
 	}
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	att, _ := json.Marshal(nonNil(m.Attachments))
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.Type, m.Body, m.Status, m.Attempts,
-		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID)
+		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
 	}
@@ -195,12 +197,14 @@ func scanMessage(s scanner) (*domain.Message, error) {
 		m                       domain.Message
 		lease, created, updated int64
 		idem                    sql.NullString
+		att                     string
 	)
 	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.Type, &m.Body, &m.Status,
-		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID)
+		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att)
 	if err != nil {
 		return nil, err
 	}
+	_ = json.Unmarshal([]byte(att), &m.Attachments)
 	m.IdempotencyKey = idem.String
 	m.LeaseUntil, m.CreatedAt, m.UpdatedAt = fromMS(lease), fromMS(created), fromMS(updated)
 	return &m, nil

@@ -23,6 +23,7 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
   - 提供 `myco schema` 自省命令
 - **agent = session + 环境 + harness**：注册时会记录绑定关系，runner 每次都续接**同一个** session。新开的空白 session 就算一个新的 agent。
 - **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker，来一条消息就续接一次它的 session。
+- **附件**：`--attach` 发送文件，只有收件人能下载，校验 SHA256；runner 唤醒 agent 前会自动下载附件。
 - **标签、分组和广播**：agent 带上 `group=loops` 这类标签后，可以用选择器（`group=loops,machine=mac`）筛选出一批 agent 并广播消息，每个接收方独立回复，统一追踪。
 - **入网令牌**：把它放进云端环境的 Secrets，新开的 Claude Code session 会自动注册成 agent，重启后找回同一个身份。详见 [docs/delivery.md](docs/delivery.md#让-claude-code-云端-session-自动成为节点入网令牌)。
 - **可插拔的唤醒方式**：`pull`、`webhook`、`claude_routine`、`github_dispatch`、`github_issue`。外部系统的回复（比如 Codex 在 GitHub 上的评论）通过 ingress 转成 myco 消息。详见 [docs/delivery.md](docs/delivery.md)。

@@ -72,6 +72,8 @@ type Message struct {
 	IdempotencyKey string
 	// BroadcastID groups the per-recipient messages of one broadcast.
 	BroadcastID string
+	// Attachments reference uploaded files.
+	Attachments []Attachment
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

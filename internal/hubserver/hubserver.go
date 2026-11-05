@@ -8,9 +8,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/chenhg5/myco/internal/app"
+	"github.com/chenhg5/myco/internal/infra/blob"
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
@@ -27,6 +30,10 @@ type Options struct {
 	Policy       app.MessagePolicy
 	OnlineWindow time.Duration
 	Dispatch     app.DispatchPolicy
+	// FilesDir stores attachment contents (default: <db dir>/files).
+	FilesDir string
+	// Files bounds uploads (zero value: DefaultFilePolicy).
+	Files app.FilePolicy
 	// GitHubWebhookSecret enables POST /v1/ingress/github.
 	GitHubWebhookSecret string
 	// GitHubReplyFrom restricts which GitHub logins can answer messages.
@@ -40,6 +47,7 @@ type Options struct {
 type Hub struct {
 	Handler    http.Handler
 	Dispatcher *app.Dispatcher
+	Files      *app.FileService
 	Close      func() error
 }
 
@@ -67,7 +75,26 @@ func Build(o Options) (*Hub, error) {
 	if o.GitHubWebhookSecret != "" {
 		ing = append(ing, &ingress.GitHub{Secret: o.GitHubWebhookSecret, AllowedAuthors: o.GitHubReplyFrom})
 	}
-	return &Hub{Handler: httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...), Dispatcher: dispatcher, Close: db.Close}, nil
+	filesDir := o.FilesDir
+	if filesDir == "" {
+		if o.DBPath == ":memory:" {
+			if filesDir, err = os.MkdirTemp("", "myco-files-"); err != nil {
+				return nil, err
+			}
+		} else {
+			filesDir = filepath.Join(filepath.Dir(o.DBPath), "files")
+		}
+	}
+	policy := o.Files
+	if policy.MaxSize <= 0 {
+		policy = app.DefaultFilePolicy()
+	}
+	fileRepo := sqlite.NewFileRepo(db)
+	files := app.NewFileService(fileRepo, blob.FS{Dir: filesDir}, ids, clock, policy, o.Log)
+	messages.SetFiles(fileRepo)
+	srv := httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...)
+	srv.SetFiles(files)
+	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -81,6 +108,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer hub.Close()
 	go hub.Dispatcher.Run(ctx)
+	go hub.Files.Run(ctx, time.Hour)
 	h := hub.Handler
 	ln, err := net.Listen("tcp", o.Addr)
 	if err != nil {

@@ -41,6 +41,10 @@ myco message send --to coder --body-file task.md --wait 15m
 myco message send --to coder --body "..." --idempotency-key deploy-2026-11-05
 ```
 
+Files: `--attach <path>` (repeatable) on `message send`, `message reply` and `broadcast send`
+uploads and attaches; `myco file get --id f_...` downloads what you received. When a runner
+woke you, attachments are already downloaded and their paths are listed in your prompt.
+
 Write self-contained task bodies: the recipient does not share your context, files or
 credentials. Say what "done" looks like and what to return.
 

@@ -173,6 +173,14 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	cfgAbs, _ := filepath.Abs(cfgPath)
 	env := []string{config.EnvConfig + "=" + cfgAbs, config.EnvHub + "=" + cfg.Hub, config.EnvToken + "=" + cfg.Token}
+	// The agent must call the same myco as the runner (not an older copy
+	// elsewhere on PATH): put our directory first and expose MYCO_BIN.
+	if self, err := os.Executable(); err == nil {
+		if real, err := filepath.EvalSymlinks(self); err == nil {
+			self = real
+		}
+		env = append(env, "MYCO_BIN="+self, "PATH="+filepath.Dir(self)+string(os.PathListSeparator)+e.in.Getenv("PATH"))
+	}
 	if rc.EnvFile != "" {
 		extra, err := config.ReadEnvFile(rc.EnvFile)
 		if err != nil {
@@ -189,7 +197,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	return runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots,
-		StatePath: filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
+		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
+		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.
 		Env: env,
 	}, alog), nil

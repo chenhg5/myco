@@ -404,3 +404,73 @@ func TestLabelsAndBroadcast(t *testing.T) {
 		t.Fatalf("recipient must not read the broadcast: %d", code)
 	}
 }
+
+func TestAttachments(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	mk := func(name string) *harnessT {
+		h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
+		if code, _, e := h.run("agent", "register", "--name", name); code != 0 {
+			t.Fatalf("register %s: %s", name, e)
+		}
+		return h
+	}
+	alice, bob, eve := mk("alice"), mk("bob"), mk("eve")
+	doc := filepath.Join(home, "design.md")
+	os.WriteFile(doc, []byte("# Design\nhello attachments\n"), 0o600)
+
+	code, out, e := alice.run("message", "send", "--to", "bob", "--body", "see attached", "--attach", doc, "--format", "json")
+	if code != 0 || !strings.Contains(out, `"name": "design.md"`) {
+		t.Fatalf("send with attach: %d %s %s", code, out, e)
+	}
+	var sent struct {
+		Message struct {
+			ID          string
+			Attachments []struct {
+				FileID string `json:"file_id"`
+			}
+		}
+	}
+	json.Unmarshal([]byte(out), &sent)
+	fid := sent.Message.Attachments[0].FileID
+
+	// bob received it and can download it (checksum verified).
+	if _, out, _ := bob.run("inbox", "pull", "--format", "json"); !strings.Contains(out, fid) {
+		t.Fatalf("pull should list the attachment: %s", out)
+	}
+	dl := filepath.Join(home, "dl")
+	os.MkdirAll(dl, 0o700)
+	if code, _, e := bob.run("file", "get", "--id", fid, "--output", dl); code != 0 {
+		t.Fatalf("bob download: %s", e)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dl, "design.md")); string(b) != "# Design\nhello attachments\n" {
+		t.Fatalf("content: %q", b)
+	}
+	// eve was not a recipient: not found (existence not revealed).
+	if code, _, _ := eve.run("file", "get", "--id", fid, "--output", dl, "--force"); code != ExitNotFound {
+		t.Fatalf("eve must not download: exit %d", code)
+	}
+	// bob forwards the same file id to eve, then eve can read it.
+	if code, _, e := bob.run("message", "send", "--to", "eve", "--body", "fyi", "--type", "note", "--attach", fid); code != 0 {
+		t.Fatalf("forward: %s", e)
+	}
+	if code, _, e := eve.run("file", "get", "--id", fid, "--output", filepath.Join(home, "eve.md")); code != 0 {
+		t.Fatalf("eve after forward: %s", e)
+	}
+	// bob replies with a file; alice gets it via wait.
+	res := filepath.Join(home, "result.txt")
+	os.WriteFile(res, []byte("done"), 0o600)
+	if code, _, e := bob.run("message", "reply", "--id", sent.Message.ID, "--body", "ok", "--attach", res); code != 0 {
+		t.Fatalf("reply attach: %s", e)
+	}
+	if _, out, _ := alice.run("message", "wait", "--id", sent.Message.ID, "--timeout", "2s", "--format", "json"); !strings.Contains(out, `"name": "result.txt"`) {
+		t.Fatalf("reply attachments: %s", out)
+	}
+	// Credential directories are never attached.
+	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
+	os.WriteFile(filepath.Join(home, ".ssh", "id_rsa"), []byte("secret"), 0o600)
+	if code, _, _ := alice.run("message", "send", "--to", "bob", "--body", "x", "--attach", filepath.Join(home, ".ssh", "id_rsa")); code != ExitPermission {
+		t.Fatalf("ssh key attach must be refused: %d", code)
+	}
+}

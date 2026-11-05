@@ -42,6 +42,11 @@ func enrollmentDTO(e *domain.Enrollment, now time.Time) api.Enrollment {
 	return out
 }
 
+func fileDTO(f *domain.File) api.File {
+	return api.File{ID: f.ID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, ContentType: f.ContentType,
+		Owner: string(f.Owner), CreatedAt: f.CreatedAt, ExpiresAt: timePtr(f.ExpiresAt)}
+}
+
 // redactURL drops query strings (which may carry tokens) from wake URLs.
 func redactURL(raw string) string {
 	if i := strings.IndexByte(raw, '?'); i >= 0 {
@@ -58,6 +63,9 @@ func messageDTO(m *domain.Message) api.Message {
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
+	}
+	for _, a := range m.Attachments {
+		out.Attachments = append(out.Attachments, api.Attachment{FileID: a.FileID, Name: a.Name, Size: a.Size, SHA256: a.SHA256, ContentType: a.ContentType})
 	}
 	return out
 }

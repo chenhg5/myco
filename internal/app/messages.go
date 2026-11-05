@@ -32,7 +32,11 @@ type MessageService struct {
 	clock    Clock
 	policy   MessagePolicy
 	observer DeliveryObserver
+	files    domain.FileRepository // nil: attachments disabled
 }
+
+// SetFiles enables attachments backed by repo.
+func (s *MessageService) SetFiles(repo domain.FileRepository) { s.files = repo }
 
 // NewMessageService wires the messaging use cases.
 func NewMessageService(agents domain.AgentRepository, messages domain.MessageRepository, n Notifier, ids IDGenerator, clock Clock, p MessagePolicy) *MessageService {
@@ -56,7 +60,9 @@ type SendInput struct {
 	Body           string
 	ThreadID       string
 	IdempotencyKey string
-	DryRun         bool
+	// Attachments are file ids (from upload) the sender may share.
+	Attachments []string
+	DryRun      bool
 }
 
 // SendOutput reports the stored message; Duplicate is true when an earlier
@@ -106,8 +112,16 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 	if err != nil {
 		return nil, err
 	}
+	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {
+		return nil, err
+	}
 	if in.DryRun {
 		return &SendOutput{Message: m}, nil
+	}
+	if s.files != nil {
+		if err := grantAttachments(ctx, s.files, m.Attachments, to); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.messages.Create(ctx, m); err != nil {
 		if domain.IsCode(err, domain.CodeConflict) && in.IdempotencyKey != "" {
@@ -226,17 +240,35 @@ func (s *MessageService) Release(ctx context.Context, agent *domain.Agent, id st
 
 // Reply answers message id on behalf of agent and returns the reply.
 func (s *MessageService) Reply(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	return s.ReplyWith(ctx, agent, id, body, nil, dryRun)
+}
+
+// ReplyWith answers message id with optional attachments (file ids).
+func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	atts, err := resolveAttachments(ctx, s.files, s.clock, agent.Name, attachIDs)
+	if err != nil {
+		return nil, err
+	}
 	var reply *domain.Message
 	fn := func(m *domain.Message) ([]*domain.Message, error) {
 		r, err := m.Reply(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}
+		r.Attachments = atts
 		reply = r
 		return []*domain.Message{r}, nil
 	}
 	if err := s.mutateOrPreview(ctx, id, dryRun, fn); err != nil {
 		return nil, err
+	}
+	// Grant outside the mutation's transaction (the store may serialize
+	// connections). The reply is already stored, so a failure here only
+	// delays the recipient's access; report it.
+	if !dryRun && s.files != nil {
+		if err := grantAttachments(ctx, s.files, atts, reply.To); err != nil {
+			return nil, err
+		}
 	}
 	if !dryRun {
 		s.queued(reply.To)
