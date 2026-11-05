@@ -67,7 +67,11 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			wait := e.in.Duration("wait")
 			if wait <= 0 || res.Message.Type != "task" {
 				return e.p.Print(res, func(w io.Writer) {
-					fmt.Fprintf(w, "sent %s to %s (thread %s)\n", res.Message.ID, res.Message.To, res.Message.ThreadID)
+					to := res.Message.To
+					if res.ViaAlias != "" {
+						to = fmt.Sprintf("%s (via alias %s)", to, res.ViaAlias)
+					}
+					fmt.Fprintf(w, "sent %s to %s (thread %s)\n", res.Message.ID, to, res.Message.ThreadID)
 				})
 			}
 			fmt.Fprintf(e.in.Stderr, "waiting up to %s for reply to %s...\n", wait, res.Message.ID)

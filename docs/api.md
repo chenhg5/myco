@@ -24,14 +24,19 @@ Errors (any non-2xx):
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1"}` |
-| `POST /v1/agents` | admin | Register `{name, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
+| `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `POST /v1/enrollments` | admin | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
 | `GET /v1/enrollments` | admin | `{enrollments}` |
 | `DELETE /v1/enrollments/{id}` | admin | Revoke |
-| `POST /v1/enroll` | enrollment token | `{name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |
+| `POST /v1/enroll` | enrollment token | `{name?, display_name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |
 | `PUT /v1/me/labels` | agent | `{add?, remove?}` — change your labels (a bare key in remove drops all its values) |
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
+| `PUT /v1/me/profile` | agent | `{display_name?, description?}` — omitted fields unchanged, `""` clears |
+| `PUT /v1/agents/{name}/profile` | admin | Same, for any agent |
+| `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
+| `PUT /v1/aliases/{alias}?dry_run=` | admin | `{target}` → `{alias, dry_run}`; creates or re-points. 409 if `alias` is an agent name; target must be a real agent (no chains) |
+| `DELETE /v1/aliases/{alias}?dry_run=` | admin | → `{alias, removed, dry_run}` |
 | `POST /v1/broadcasts` | agent | `{selector, body, type?, idempotency_key?, include_self?}` → `{broadcast_id, messages, skipped, duplicate}`; one message/thread per recipient |
 | `GET /v1/broadcasts/{id}?consume=` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}`; `consume=true` marks returned replies done |
 | `POST /v1/files?name=` | agent | Raw body upload (≤ `--max-file-size`) → file `{id, name, size, sha256, content_type, owner, expires_at}` |
@@ -39,12 +44,12 @@ Errors (any non-2xx):
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline) and counters; message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
-| `GET /v1/agents/{name}` | admin/agent | One agent |
+| `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name` and `aliases` |
 | `GET /v1/me` | agent | The calling agent |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
-| `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate}`; attaching grants the recipient access |
+| `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate, via_alias?}`; `to` may be an alias (the message stores the real name); attaching grants the recipient access |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?}` → `{messages}`; leases messages (long-poll ≤ 60s) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |

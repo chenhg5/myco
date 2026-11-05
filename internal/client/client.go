@@ -293,6 +293,35 @@ func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error
 	return &out, c.do(ctx, http.MethodGet, "/v1/overview", url.Values{"recent": {strconv.Itoa(recent)}}, nil, &out)
 }
 
+// UpdateProfile changes display name/description of the caller (name "")
+// or, with an admin token, of agent name.
+func (c *Client) UpdateProfile(ctx context.Context, name string, req api.ProfileRequest) (*api.Agent, error) {
+	path := "/v1/me/profile"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/profile"
+	}
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, path, nil, req, &out)
+}
+
+// ListAliases lists aliases.
+func (c *Client) ListAliases(ctx context.Context) ([]api.Alias, error) {
+	var out api.AliasList
+	return out.Aliases, c.do(ctx, http.MethodGet, "/v1/aliases", nil, nil, &out)
+}
+
+// SetAlias creates or re-points an alias (admin).
+func (c *Client) SetAlias(ctx context.Context, alias, target string, dry bool) (map[string]any, error) {
+	var out map[string]any
+	return out, c.do(ctx, http.MethodPut, "/v1/aliases/"+esc(alias), dryQuery(dry), api.AliasRequest{Target: target}, &out)
+}
+
+// RemoveAlias deletes an alias (admin).
+func (c *Client) RemoveAlias(ctx context.Context, alias string, dry bool) (map[string]any, error) {
+	var out map[string]any
+	return out, c.do(ctx, http.MethodDelete, "/v1/aliases/"+esc(alias), dryQuery(dry), nil, &out)
+}
+
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
 	var out api.SendResponse

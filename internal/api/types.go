@@ -30,6 +30,8 @@ type Delivery struct {
 type Agent struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
+	DisplayName  string     `json:"display_name,omitempty"`
+	Aliases      []string   `json:"aliases,omitempty"`
 	Description  string     `json:"description"`
 	Capabilities []string   `json:"capabilities"`
 	Labels       []string   `json:"labels"`
@@ -65,6 +67,7 @@ type Message struct {
 // RegisterRequest is the body of POST /v1/agents.
 type RegisterRequest struct {
 	Name         string   `json:"name"`
+	DisplayName  string   `json:"display_name,omitempty"`
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	AllowFrom    []string `json:"allow_from,omitempty"`
@@ -172,6 +175,33 @@ type SendResponse struct {
 	Message   Message `json:"message"`
 	Duplicate bool    `json:"duplicate"`
 	DryRun    bool    `json:"dry_run,omitempty"`
+	// ViaAlias is set when the message was addressed to an alias.
+	ViaAlias string `json:"via_alias,omitempty"`
+}
+
+// ProfileRequest changes cosmetic fields; omitted fields are unchanged and
+// an empty display_name clears it.
+type ProfileRequest struct {
+	DisplayName *string `json:"display_name,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+// Alias is a re-pointable address for an agent.
+type Alias struct {
+	Alias     string    `json:"alias"`
+	Target    string    `json:"target"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// AliasRequest is the body of PUT /v1/aliases/{alias}.
+type AliasRequest struct {
+	Target string `json:"target"`
+}
+
+// AliasList wraps aliases.
+type AliasList struct {
+	Aliases []Alias `json:"aliases"`
 }
 
 // PullRequest is the body of POST /v1/inbox/pull.
@@ -279,6 +309,7 @@ type EnrollmentList struct {
 // enrollment token).
 type EnrollRequest struct {
 	Name         string   `json:"name,omitempty"`
+	DisplayName  string   `json:"display_name,omitempty"`
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	Labels       []string `json:"labels,omitempty"`

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tip, TooltipProvider } from "@/components/ui/tooltip";
-import { AgentCard, AgentTable, Labels } from "@/components/agents";
+import { AgentCard, AgentTable, Aliases, Labels } from "@/components/agents";
 import { MessageBubble, MessageRow } from "@/components/messages";
 import { HarnessBadge, StateBadge } from "@/components/status";
 import { CopyText } from "@/components/copy";
@@ -124,7 +124,7 @@ export default function App() {
     return ov.agents.filter((a) =>
       (stateFilter === "all" || a.state === stateFilter) &&
       (!selector || !selectorValid || matches(a, selector)) &&
-      (!q || [a.agent.name, a.agent.description, a.agent.id, a.agent.binding.environment, a.agent.binding.session_id, ...a.agent.labels]
+      (!q || [a.agent.name, a.agent.display_name, ...(a.agent.aliases || []), a.agent.description, a.agent.id, a.agent.binding.environment, a.agent.binding.session_id, ...a.agent.labels]
         .filter(Boolean).some((x) => String(x).toLowerCase().includes(q))),
     );
   }, [ov, query, selector, selectorValid, stateFilter]);
@@ -242,7 +242,7 @@ export default function App() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索名字、描述、ID、环境、会话…" className="pl-9" />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索名字、别名、描述、环境、会话…" className="pl-9" />
                 </div>
                 <div className="relative lg:w-[340px]">
                   <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -333,12 +333,16 @@ export default function App() {
             <SheetContent>
               <div className="border-b p-6 pr-12">
                 <div className="flex items-center gap-2">
-                  <SheetTitle className="font-mono text-lg font-semibold">{current.agent.name}</SheetTitle>
+                  <SheetTitle className={cn("text-lg font-semibold", !current.agent.display_name && "font-mono")}>
+                    {current.agent.display_name || current.agent.name}
+                  </SheetTitle>
                   <StateBadge state={current.state} />
                 </div>
+                {current.agent.display_name && <div className="mt-0.5 font-mono text-xs text-muted-foreground"><CopyText text={current.agent.name} display={current.agent.name} /></div>}
                 <SheetDescription className="mt-1.5 text-sm text-muted-foreground">{current.agent.description || "（没有描述）"}</SheetDescription>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <HarnessBadge harness={current.agent.binding.harness} />
+                  <Aliases aliases={current.agent.aliases} />
                   {current.agent.capabilities.map((c) => <span key={c} className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px]">{c}</span>)}
                 </div>
               </div>

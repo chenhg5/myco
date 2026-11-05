@@ -69,6 +69,10 @@ func Build(o Options) (*Hub, error) {
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
 	enroll := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), agentsRepo, security.Tokens{}, ids, clock)
+	aliasRepo := sqlite.NewAliasRepo(db)
+	agents.SetAliases(aliasRepo)
+	messages.SetAliases(aliasRepo)
+	enroll.SetAliases(aliasRepo)
 	dispatcher := app.NewDispatcher(agentsRepo, msgRepo, wakers, clock, o.Dispatch, o.Log)
 	messages.SetObserver(dispatcher)
 	var ing []httpapi.Ingress

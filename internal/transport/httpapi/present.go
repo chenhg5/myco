@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
-		ID: a.ID, Name: string(a.Name), Description: a.Description,
+		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
 		Labels:       nonNil(a.Labels),
 		Binding: api.Binding{Harness: a.Binding.Harness, SessionID: a.Binding.SessionID,
@@ -29,6 +30,21 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		out.AllowFrom = append(out.AllowFrom, string(n))
 	}
 	return out
+}
+
+// withAliases fills the aliases of agent DTOs (best effort).
+func (s *Server) withAliases(ctx context.Context, dtos ...*api.Agent) {
+	m, err := s.agents.AliasMap(ctx)
+	if err != nil {
+		return
+	}
+	for _, d := range dtos {
+		d.Aliases = m[domain.AgentName(d.Name)]
+	}
+}
+
+func aliasDTO(a *domain.Alias) api.Alias {
+	return api.Alias{Alias: string(a.Name), Target: string(a.Target), CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
 }
 
 func enrollmentDTO(e *domain.Enrollment, now time.Time) api.Enrollment {

@@ -117,3 +117,32 @@ func TestEnrollmentExpiryAndRevoke(t *testing.T) {
 		t.Fatalf("dry-run create: %q %v", tok, err)
 	}
 }
+
+func TestEnrollRefusesAliasNames(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	ar, aliases := sqlite.NewAgentRepo(db), sqlite.NewAliasRepo(db)
+	clock := app.SystemClock{}
+	agents := app.NewAgentService(ar, security.Tokens{}, security.IDs{}, clock, time.Minute, nil)
+	agents.SetAliases(aliases)
+	enr := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), ar, security.Tokens{}, security.IDs{}, clock)
+	enr.SetAliases(aliases)
+
+	if _, err := agents.Register(ctx, app.RegisterInput{Name: "cloud-a"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agents.SetAlias(ctx, "cloud-reviewer", "cloud-a", false); err != nil {
+		t.Fatal(err)
+	}
+	_, tok, _ := enr.Create(ctx, app.CreateEnrollmentInput{NamePrefix: "cloud-"})
+	if _, err := enr.Enroll(ctx, tok, app.EnrollInput{Name: "cloud-reviewer", Binding: cloud("s9")}); !domain.IsCode(err, domain.CodeConflict) {
+		t.Fatalf("enrolling under an alias name: %v", err)
+	}
+	if got, err := agents.Get(ctx, "cloud-reviewer"); err != nil || got.Name != "cloud-a" {
+		t.Fatalf("alias get: %v %v", got, err)
+	}
+}

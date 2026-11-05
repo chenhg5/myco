@@ -19,7 +19,11 @@ type EnrollmentService struct {
 	tokens      TokenIssuer
 	ids         IDGenerator
 	clock       Clock
+	aliases     domain.AliasRepository
 }
+
+// SetAliases makes enrollment avoid names already used as aliases.
+func (s *EnrollmentService) SetAliases(repo domain.AliasRepository) { s.aliases = repo }
 
 // NewEnrollmentService wires the enrollment use cases.
 func NewEnrollmentService(enrollments domain.EnrollmentRepository, agents domain.AgentRepository, tokens TokenIssuer, ids IDGenerator, clock Clock) *EnrollmentService {
@@ -92,6 +96,7 @@ func (s *EnrollmentService) Revoke(ctx context.Context, id string, dryRun bool) 
 // EnrollInput is a session asking to join (or rejoin) the network.
 type EnrollInput struct {
 	Name         string
+	DisplayName  string
 	Description  string
 	Capabilities []string
 	// Labels are added to the enrollment's default labels.
@@ -151,7 +156,11 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.agents.Get(ctx, name); err == nil {
+	taken := func(n domain.AgentName) bool {
+		_, err := s.agents.Get(ctx, n)
+		return err == nil || (aliasResolver{agents: s.agents, aliases: s.aliases}).aliasTaken(ctx, n)
+	}
+	if taken(name) {
 		if in.Name != "" {
 			return nil, domain.Errf(domain.CodeConflict, "agent %s already exists", name).
 				WithSuggestion("pick another --name, or omit it to derive one from the session id")
@@ -173,7 +182,7 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 		return nil, err
 	}
 	a, err := domain.NewAgent(s.ids.New("agt"), name, domain.AgentSpec{
-		Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding,
+		DisplayName: in.DisplayName, Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding,
 		Delivery: domain.Delivery{Mode: domain.DeliveryPull}, AllowFrom: e.AllowFrom,
 	}, "", now)
 	if err != nil {

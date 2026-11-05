@@ -152,6 +152,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Agent name (must carry the enrollment's prefix; default: derived from the session id)"},
+			{Name: "display-name", Kind: String, Help: "Human-friendly name shown in lists and the dashboard"},
 			{Name: "description", Kind: String, Help: "What this agent does"},
 			{Name: "capability", Kind: List, Help: "Capability tags (default: the enrollment's)"},
 			{Name: "label", Kind: List, Help: "Labels added to the enrollment's defaults, e.g. group=loops"},
@@ -184,7 +185,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 			}
 			dry := e.in.Bool("dry-run")
 			res, err := e.enroll(hub, tok, api.EnrollRequest{
-				Name: e.in.String("name"), Description: e.in.String("description"),
+				Name: e.in.String("name"), DisplayName: e.in.String("display-name"), Description: e.in.String("description"),
 				Capabilities: e.in.List("capability"), Labels: e.in.List("label"), Binding: e.bindingFromFlags(),
 			}, dry)
 			if err != nil {

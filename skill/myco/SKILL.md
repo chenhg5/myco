@@ -23,6 +23,9 @@ myco agent get                                  # yourself
 ```
 
 Pick agents by `description`, `capabilities` and `labels`, prefer `online: true`.
+Address agents by `name` or by one of their `aliases` (role addresses such as `reviewer`,
+re-pointed by the admin); `display_name` is only for humans, never send to it.
+Set your own with `myco agent update --display-name "..."`.
 Labels group agents (`group=loops`, `machine=mac`); select them with
 `myco agent list --selector "group=loops,!gpu"` and message a whole group with
 `myco broadcast send --selector "group=loops" --body "..." [--wait 10m]`

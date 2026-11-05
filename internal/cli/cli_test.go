@@ -558,3 +558,116 @@ func TestOverviewAndUIServer(t *testing.T) {
 		t.Fatalf("index: %d", w.Code)
 	}
 }
+
+func TestAliasesAndDisplayNames(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	mk := func(name string) *harnessT {
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
+	}
+	boss, w1, w2 := mk("boss"), mk("w1"), mk("w2")
+	boss.run("agent", "register", "--name", "boss")
+	if code, _, e := w1.run("agent", "register", "--name", "worker-1", "--display-name", "Worker One"); code != 0 {
+		t.Fatalf("register: %s", e)
+	}
+	w2.run("agent", "register", "--name", "worker-2")
+
+	// Alias management: dry-run, set, collisions, no chains.
+	if code, _, _ := boss.run("agent", "alias", "set", "--alias", "reviewer", "--target", "worker-1", "--dry-run"); code != ExitDryRun {
+		t.Fatalf("alias dry-run exit %d", code)
+	}
+	if code, _, e := boss.run("agent", "alias", "set", "--alias", "reviewer", "--target", "worker-1"); code != 0 {
+		t.Fatalf("alias set: %s", e)
+	}
+	if code, _, _ := boss.run("agent", "alias", "set", "--alias", "worker-2", "--target", "worker-1"); code != ExitConflict {
+		t.Fatalf("alias over an agent name must conflict, exit %d", code)
+	}
+	if code, _, _ := boss.run("agent", "alias", "set", "--alias", "lead", "--target", "reviewer"); code == 0 {
+		t.Fatal("alias chains must be refused")
+	}
+	if code, _, _ := boss.run("agent", "alias", "set", "--alias", "lead", "--target", "nobody"); code != ExitNotFound {
+		t.Fatalf("alias to a missing agent: exit %d", code)
+	}
+	if code, _, _ := mk("x").run("agent", "register", "--name", "reviewer"); code != ExitConflict {
+		t.Fatalf("registering an alias name must conflict, exit %d", code)
+	}
+
+	// Only the admin manages aliases.
+	_, out, _ := boss.run("agent", "register", "--name", "worker-1", "--rotate-token", "--no-save", "--format", "json")
+	var reg struct{ Token string }
+	json.Unmarshal([]byte(out), &reg)
+	ac, _ := client.New(hub, reg.Token)
+	if _, err := ac.SetAlias(context.Background(), "mine", "worker-1", false); err == nil {
+		t.Fatal("agent token must not set aliases")
+	}
+	w1.env["MYCO_CONFIG"] = filepath.Join(home, "w1b.yaml")
+	w1.run("agent", "login", "--token-file", writeFile(t, home, "w1.token", reg.Token))
+
+	// Sending to the alias lands on the target and is stored under the real name.
+	code, out, e := boss.run("message", "send", "--to", "reviewer", "--body", "please review", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"via_alias": "reviewer"`) || !strings.Contains(out, `"to": "worker-1"`) {
+		t.Fatalf("send via alias: %d %s %s", code, out, e)
+	}
+	if _, out, _ := boss.run("message", "send", "--to", "reviewer", "--type", "note", "--body", "x", "--format", "text"); !strings.Contains(out, "via alias reviewer") {
+		t.Fatalf("text output should mention the alias: %s", out)
+	}
+	if _, out, _ := w1.run("inbox", "pull", "--format", "json"); !strings.Contains(out, "please review") {
+		t.Fatalf("worker-1 inbox: %s", out)
+	}
+	// get resolves aliases; list shows aliases and display names.
+	if _, out, _ := boss.run("agent", "get", "--name", "reviewer", "--format", "json"); !strings.Contains(out, `"name": "worker-1"`) || !strings.Contains(out, `"display_name": "Worker One"`) {
+		t.Fatalf("get via alias: %s", out)
+	}
+	if _, out, _ := boss.run("agent", "list", "--format", "text"); !strings.Contains(out, "Worker One") || !strings.Contains(out, "reviewer") {
+		t.Fatalf("list: %s", out)
+	}
+
+	// Re-point: the role moves to worker-2.
+	boss.run("agent", "alias", "set", "--alias", "reviewer", "--target", "worker-2")
+	if _, out, _ := boss.run("message", "send", "--to", "reviewer", "--type", "note", "--body", "y", "--format", "json"); !strings.Contains(out, `"to": "worker-2"`) {
+		t.Fatalf("re-pointed alias: %s", out)
+	}
+	if _, out, _ := boss.run("agent", "alias", "list", "--format", "json"); !strings.Contains(out, `"target": "worker-2"`) {
+		t.Fatalf("alias list: %s", out)
+	}
+
+	// Profile updates: self-service and admin; empty clears.
+	if code, _, e := w1.run("agent", "update", "--display-name", "Reviewer Bot"); code != 0 {
+		t.Fatalf("update self: %s", e)
+	}
+	if _, out, _ := boss.run("agent", "get", "--name", "worker-1", "--format", "json"); !strings.Contains(out, "Reviewer Bot") {
+		t.Fatalf("self update: %s", out)
+	}
+	boss.run("agent", "update", "--name", "worker-1", "--display-name", "", "--description", "reviews PRs")
+	if _, out, _ := boss.run("agent", "get", "--name", "worker-1", "--format", "json"); strings.Contains(out, "display_name") || !strings.Contains(out, "reviews PRs") {
+		t.Fatalf("admin update: %s", out)
+	}
+	if code, _, _ := w1.run("agent", "update"); code != ExitUsage {
+		t.Fatalf("update without flags: exit %d", code)
+	}
+	if code, _, _ := w1.run("agent", "update", "--display-name", "bad\x07name"); code == 0 {
+		t.Fatal("control characters must be refused")
+	}
+
+	// Removing the target drops its aliases; remove needs --force.
+	if code, _, _ := boss.run("agent", "alias", "remove", "--alias", "reviewer"); code != ExitUsage {
+		t.Fatalf("remove without --force: exit %d", code)
+	}
+	boss.run("agent", "remove", "--name", "worker-2", "--force")
+	if _, out, _ := boss.run("agent", "alias", "list", "--format", "json"); strings.Contains(out, "reviewer") {
+		t.Fatalf("aliases of a removed agent must go: %s", out)
+	}
+	if code, _, _ := boss.run("message", "send", "--to", "reviewer", "--body", "z"); code != ExitNotFound {
+		t.Fatalf("send to dropped alias: exit %d", code)
+	}
+}
+
+func writeFile(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}

@@ -349,11 +349,39 @@ myco file upload --path big.zip                 # 先上传，再用 --attach f_
 myco ui --open                                  # 以当前节点的身份查看
 MYCO_ADMIN_TOKEN=... myco ui --open             # 额外提供"管理员视图"
 ```
-- 显示所有节点的名字、描述、ID、harness、环境、会话、标签，以及**状态**：工作中（有处理中或挂起的任务）、有待办、空闲、离线。还有待处理、处理中、已挂起的数量。支持搜索、标签选择器和按状态筛选，可切换卡片和表格两种视图，支持深色模式。
+- 显示所有节点的显示名、名字、别名、描述、ID、harness、环境、会话、标签，以及**状态**：工作中（有处理中或挂起的任务）、有待办、空闲、离线。还有待处理、处理中、已挂起的数量。支持搜索、标签选择器和按状态筛选，可切换卡片和表格两种视图，支持深色模式。
 - 点开节点能看到绑定信息和最近往来；"动态"页显示最近的消息，点开可以看完整对话（包括附件）。
 - **权限**：普通节点身份能看到所有节点的资料和数量统计，但只能看到和自己有关的消息内容；管理员视图能看到全部。
 - **安全**：只监听 `127.0.0.1`；启动时打印一个带一次性密钥的地址；校验 Host 头，防止 DNS rebinding；令牌只留在本地进程里，不会交给浏览器。
 - 页面打包在 `myco` 二进制里，离线也能用。源码在 `web/`（React、Tailwind、shadcn/ui），改了之后用 `make web` 重新构建。
+
+### 4.9 显示名和别名
+
+每个 agent 有三种"名字"，作用不同：
+
+| | 例子 | 作用 | 谁能改 |
+|---|---|---|---|
+| **名字**（name） | `codex-loops-01a1a9c3` | 地址，发消息、选择器、权限（`allow-from`）都用它。**永不改变** | 不能改 |
+| **显示名**（display name） | `Codex 审查员` | 只用于展示：`agent list`、面板 | 自己，或管理员 |
+| **别名**（alias） | `reviewer` | 额外的地址，可以随时改指向另一个 agent | 只有管理员 |
+
+```bash
+myco agent update --display-name "Mac Claude（loops）"                          # 改自己的显示名
+myco agent update --name codex-loops-01a1a9c3 --display-name "Codex 审查员"     # 管理员改别人的
+myco agent update --display-name ""                                             # 清空
+myco agent register --name coder --display-name "主力程序员"                    # 注册 / 入网时直接带上（enroll 同理）
+
+myco agent alias set --alias reviewer --target codex-loops-01a1a9c3   # 管理员：创建或改指向
+myco agent alias list
+myco agent alias remove --alias reviewer --force
+myco message send --to reviewer --body "请审查 PR 12"                  # 发给别名 = 发给它当前指向的 agent
+```
+- **为什么名字不能改**：名字写在消息记录、线程、`allow-from` 和别人的脚本里，改了这些都会失效。需要"改名"时用别名代替：
+  - 给角色起别名（`reviewer`、`coder`），换人时只改指向，发消息的一方什么都不用改。这是推荐做法。
+  - 想让旧名字继续能用：先删除旧 agent，再执行 `alias set --alias <旧名字> --target <新名字>`（别名不能和现有的名字重名）。
+- **规则**：别名和名字共用一个命名空间，不能重名；别名只能指向真实的 agent，不能指向另一个别名；删除 agent 时，指向它的别名一并删除。
+- 通过别名发的消息，记录里存的是真实名字；`message send` 的结果会带上 `via_alias`。`agent get --name <别名>` 返回目标 agent。
+- 只有管理员能管理别名，防止有人把 `reviewer` 指向自己来截消息。
 
 ## 5. 接入后的自检
 

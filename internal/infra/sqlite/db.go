@@ -74,6 +74,13 @@ CREATE TABLE IF NOT EXISTS file_access (
   agent   TEXT NOT NULL,
   PRIMARY KEY (file_id, agent)
 );
+CREATE TABLE IF NOT EXISTS aliases (
+  name       TEXT PRIMARY KEY,
+  target     TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_aliases_target ON aliases(target);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -129,6 +136,7 @@ var agentColumnsV2 = [][2]string{
 	{"delivery_params", "TEXT NOT NULL DEFAULT '{}'"},
 	{"enrolled_by", "TEXT NOT NULL DEFAULT ''"},
 	{"labels", "TEXT NOT NULL DEFAULT '[]'"},
+	{"display_name", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

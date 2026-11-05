@@ -128,8 +128,11 @@ func (d Delivery) Validate() error {
 
 // Agent is a registered participant of the network.
 type Agent struct {
-	ID           string
-	Name         AgentName
+	ID   string
+	Name AgentName
+	// DisplayName is cosmetic (shown in lists and the dashboard); Name is
+	// the immutable address.
+	DisplayName  string
 	Description  string
 	Capabilities []string
 	// Labels group agents (tags or key=value); see Selector.
@@ -149,6 +152,7 @@ type Agent struct {
 
 // AgentSpec is the mutable profile of an agent.
 type AgentSpec struct {
+	DisplayName  string
 	Description  string
 	Capabilities []string
 	Labels       []string
@@ -160,6 +164,9 @@ type AgentSpec struct {
 const maxDescription = 2000
 
 func (s AgentSpec) validate() error {
+	if _, err := ParseDisplayName(s.DisplayName); err != nil {
+		return err
+	}
 	if _, err := ParseLabels(s.Labels); err != nil {
 		return err
 	}
@@ -192,6 +199,9 @@ func (a *Agent) Update(spec AgentSpec) error {
 	}
 	if spec.Description == "" {
 		spec.Description = a.Description
+	}
+	if spec.DisplayName == "" {
+		spec.DisplayName = a.DisplayName
 	}
 	if len(spec.Capabilities) == 0 {
 		spec.Capabilities = a.Capabilities
@@ -243,6 +253,7 @@ func (b *Binding) mergeFrom(o Binding) error {
 }
 
 func (a *Agent) apply(s AgentSpec) {
+	a.DisplayName = strings.TrimSpace(s.DisplayName)
 	a.Description = s.Description
 	a.Capabilities = s.Capabilities
 	a.Labels = s.Labels
@@ -280,5 +291,24 @@ func (a *Agent) SetLabels(add, remove []string) error {
 		return err
 	}
 	a.Labels = next
+	return nil
+}
+
+// SetProfile changes cosmetic fields; nil leaves a field unchanged and an
+// empty display name clears it.
+func (a *Agent) SetProfile(displayName, description *string) error {
+	if displayName != nil {
+		d, err := ParseDisplayName(*displayName)
+		if err != nil {
+			return err
+		}
+		a.DisplayName = d
+	}
+	if description != nil {
+		if len(*description) > maxDescription {
+			return Errf(CodeInvalidArgument, "description longer than %d bytes", maxDescription)
+		}
+		a.Description = *description
+	}
 	return nil
 }

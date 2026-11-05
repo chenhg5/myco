@@ -15,6 +15,7 @@ type AgentService struct {
 	clock        Clock
 	onlineWindow time.Duration
 	wakers       Wakers
+	aliases      domain.AliasRepository
 }
 
 // NewAgentService wires the agent use cases. wakers validates push delivery
@@ -35,6 +36,7 @@ func (s *AgentService) Now() time.Time { return s.clock.Now() }
 // RegisterInput describes an agent registration.
 type RegisterInput struct {
 	Name         string
+	DisplayName  string
 	Description  string
 	Capabilities []string
 	AllowFrom    []string
@@ -96,6 +98,10 @@ func (s *AgentService) Register(ctx context.Context, in RegisterInput) (*Registe
 		return nil, err
 	}
 
+	if s.resolver().aliasTaken(ctx, name) {
+		return nil, domain.Errf(domain.CodeConflict, "%s is already used as an alias", name).
+			WithSuggestion("pick another name, or remove the alias: myco agent alias remove --alias %s", name)
+	}
 	a, err := domain.NewAgent(s.ids.New("agt"), name, spec, "", now)
 	if err != nil {
 		return nil, err
@@ -130,7 +136,7 @@ func buildSpec(in RegisterInput) (domain.AgentSpec, error) {
 	if err != nil {
 		return domain.AgentSpec{}, err
 	}
-	return domain.AgentSpec{Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding, Delivery: in.Delivery, AllowFrom: allow}, nil
+	return domain.AgentSpec{DisplayName: in.DisplayName, Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding, Delivery: in.Delivery, AllowFrom: allow}, nil
 }
 
 // AgentFilter narrows List results.
@@ -168,13 +174,14 @@ func (s *AgentService) List(ctx context.Context, f AgentFilter) ([]*domain.Agent
 	return out, nil
 }
 
-// Get returns one agent by name.
+// Get returns one agent by name or alias.
 func (s *AgentService) Get(ctx context.Context, name string) (*domain.Agent, error) {
 	n, err := domain.ParseAgentName(name)
 	if err != nil {
 		return nil, err
 	}
-	return s.agents.Get(ctx, n)
+	a, _, err := s.resolver().resolve(ctx, n)
+	return a, err
 }
 
 // Remove deletes an agent. On dry-run it only verifies existence.
@@ -186,7 +193,15 @@ func (s *AgentService) Remove(ctx context.Context, name string, dryRun bool) (*d
 	if dryRun {
 		return a, nil
 	}
-	return a, s.agents.Delete(ctx, a.Name)
+	if err := s.agents.Delete(ctx, a.Name); err != nil {
+		return nil, err
+	}
+	if s.aliases != nil {
+		if err := s.aliases.DeleteForTarget(ctx, a.Name); err != nil {
+			return nil, err
+		}
+	}
+	return a, nil
 }
 
 // Bind updates the calling agent's session binding (empty fields unchanged).

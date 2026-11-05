@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -33,7 +34,11 @@ type MessageService struct {
 	policy   MessagePolicy
 	observer DeliveryObserver
 	files    domain.FileRepository // nil: attachments disabled
+	aliases  domain.AliasRepository
 }
+
+// SetAliases lets messages be addressed to aliases.
+func (s *MessageService) SetAliases(repo domain.AliasRepository) { s.aliases = repo }
 
 // SetFiles enables attachments backed by repo.
 func (s *MessageService) SetFiles(repo domain.FileRepository) { s.files = repo }
@@ -70,6 +75,8 @@ type SendInput struct {
 type SendOutput struct {
 	Message   *domain.Message
 	Duplicate bool
+	// ViaAlias is the alias the sender used ("" if a real name).
+	ViaAlias domain.AgentName
 }
 
 // Send queues a task or note from sender.
@@ -91,14 +98,15 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 			return nil, err
 		}
 	}
-	recipient, err := s.agents.Get(ctx, to)
+	recipient, via, err := aliasResolver{agents: s.agents, aliases: s.aliases}.resolve(ctx, to)
 	if err != nil {
-		if domain.IsCode(err, domain.CodeNotFound) {
+		if domain.IsCode(err, domain.CodeNotFound) && !strings.Contains(err.Error(), "alias") {
 			return nil, domain.Errf(domain.CodeNotFound, "agent %s not found", to).
-				WithSuggestion("list agents with: myco agent list")
+				WithSuggestion("list agents with: myco agent list (aliases: myco agent alias list)")
 		}
 		return nil, err
 	}
+	to = recipient.Name // messages always store the real name
 	if !recipient.Accepts(sender.Name) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
 			WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
@@ -116,7 +124,7 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	if in.DryRun {
-		return &SendOutput{Message: m}, nil
+		return &SendOutput{Message: m, ViaAlias: via}, nil
 	}
 	if s.files != nil {
 		if err := grantAttachments(ctx, s.files, m.Attachments, to); err != nil {
@@ -133,7 +141,7 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	s.queued(to)
-	return &SendOutput{Message: m}, nil
+	return &SendOutput{Message: m, ViaAlias: via}, nil
 }
 
 func (s *MessageService) requireThreadParticipant(ctx context.Context, agent domain.AgentName, threadID string) error {

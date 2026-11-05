@@ -32,6 +32,30 @@ function Counters({ a, compact }: { a: AgentStatus; compact?: boolean }) {
   );
 }
 
+export function Aliases({ aliases }: { aliases?: string[] }) {
+  if (!aliases?.length) return null;
+  return (
+    <>
+      {aliases.map((al) => (
+        <Tip key={al} content="别名：发给它的消息会送到这个节点">
+          <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 font-mono text-[11px] text-primary">@{al}</span>
+        </Tip>
+      ))}
+    </>
+  );
+}
+
+/** Display name prominently with the immutable address below (or just the address). */
+export function AgentName({ name, displayName, className }: { name: string; displayName?: string; className?: string }) {
+  if (!displayName) return <div className={cn("truncate font-mono font-semibold", className)}>{name}</div>;
+  return (
+    <div className="min-w-0">
+      <div className={cn("truncate font-semibold", className)}>{displayName}</div>
+      <div className="truncate font-mono text-xs text-muted-foreground">{name}</div>
+    </div>
+  );
+}
+
 export function Labels({ labels, onPick, max = 6 }: { labels: string[]; onPick?: (l: string) => void; max?: number }) {
   if (!labels.length) return <span className="text-xs text-muted-foreground/60">无标签</span>;
   const shown = labels.slice(0, max);
@@ -69,12 +93,13 @@ export function AgentCard({ a, onOpen, onLabel, now }: { a: AgentStatus; onOpen:
       {a.state === "working" && <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-working to-transparent" />}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <StatusDot state={a.state} />
-            <h3 className="truncate font-mono text-sm font-semibold">{ag.name}</h3>
+          <div className="flex items-start gap-2">
+            <StatusDot state={a.state} className="mt-1.5" />
+            <h3 className="min-w-0 text-sm"><AgentName name={ag.name} displayName={ag.display_name} /></h3>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <HarnessBadge harness={ag.binding.harness} />
+            <Aliases aliases={ag.aliases} />
             {ag.delivery.mode !== "pull" && <Badge variant="outline" className="text-[11px]">{ag.delivery.mode}</Badge>}
           </div>
         </div>
@@ -125,7 +150,8 @@ export function AgentTable({ agents, onOpen, onLabel, now }: { agents: AgentStat
             {agents.map((a) => (
               <tr key={a.agent.id} onClick={() => onOpen(a)} className="cursor-pointer transition hover:bg-muted/40">
                 <td className="max-w-[260px] px-4 py-3">
-                  <div className="font-mono font-medium">{a.agent.name}</div>
+                  <AgentName name={a.agent.name} displayName={a.agent.display_name} className="font-medium" />
+                  {!!a.agent.aliases?.length && <div className="mt-1 flex flex-wrap gap-1"><Aliases aliases={a.agent.aliases} /></div>}
                   <div className="truncate text-xs text-muted-foreground">{a.agent.description}</div>
                 </td>
                 <td className="px-4 py-3"><StateBadge state={a.state} /></td>

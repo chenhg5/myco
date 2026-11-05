@@ -19,14 +19,14 @@ func NewAgentRepo(db *sql.DB) *AgentRepo { return &AgentRepo{db: db} }
 var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
-  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels`
+  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
-		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels))
+		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -37,9 +37,9 @@ func (r *AgentRepo) Save(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
 	res, err := r.db.ExecContext(ctx, `UPDATE agents SET description=?, capabilities=?, delivery=?, allow_from=?, token_hash=?,
-		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=? WHERE name=?`,
+		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=?, display_name=? WHERE name=?`,
 		a.Description, caps, d.Mode, allow, a.TokenHash,
-		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, labelsJSON(a.Labels), a.Name)
+		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, labelsJSON(a.Labels), a.DisplayName, a.Name)
 	if err != nil {
 		return internal(err)
 	}
@@ -117,7 +117,7 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	)
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
-		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels); err != nil {
+		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)

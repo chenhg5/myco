@@ -92,11 +92,16 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
+	m.HandleFunc("PUT /v1/agents/{name}/profile", s.admin(s.adminProfile))
+	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
+	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
+	m.HandleFunc("DELETE /v1/aliases/{alias}", s.admin(s.removeAlias))
 
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
+	m.HandleFunc("PUT /v1/me/profile", s.agent(s.myProfile))
 	m.HandleFunc("POST /v1/broadcasts", s.agent(s.broadcast))
 	m.HandleFunc("POST /v1/files", s.agent(s.uploadFile))
 	m.HandleFunc("GET /v1/files/{id}", s.agent(s.downloadFile))
@@ -180,7 +185,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	dry := dryRun(r)
 	out, err := s.agents.Register(r.Context(), app.RegisterInput{
-		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities,
+		Name: req.Name, DisplayName: req.DisplayName, Description: req.Description, Capabilities: req.Capabilities,
 		AllowFrom: req.AllowFrom, Labels: req.Labels, Binding: bindingFromAPI(req.Binding), RotateToken: req.RotateToken, DryRun: dry,
 		Delivery: domain.Delivery{Mode: req.Delivery.Mode, URL: req.Delivery.URL, Secret: req.Delivery.Secret, Params: req.Delivery.Params},
 	})
@@ -216,6 +221,11 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	for _, a := range list {
 		out.Agents = append(out.Agents, s.agentDTO(a))
 	}
+	ptrs := make([]*api.Agent, len(out.Agents))
+	for i := range out.Agents {
+		ptrs[i] = &out.Agents[i]
+	}
+	s.withAliases(r.Context(), ptrs...)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -225,11 +235,15 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	dto := s.agentDTO(a)
+	s.withAliases(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	dto := s.agentDTO(a)
+	s.withAliases(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) bind(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -335,7 +349,7 @@ func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
 	}
 	dry := dryRun(r)
 	out, err := s.enroll.Enroll(r.Context(), bearer(r), app.EnrollInput{
-		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities, Labels: req.Labels,
+		Name: req.Name, DisplayName: req.DisplayName, Description: req.Description, Capabilities: req.Capabilities, Labels: req.Labels,
 		Binding: bindingFromAPI(req.Binding), DryRun: dry,
 	})
 	if err != nil {
@@ -368,6 +382,66 @@ func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agen
 
 func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
 	s.setLabels(w, r, r.PathValue("name"))
+}
+
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name string) {
+	var req api.ProfileRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dto := s.agentDTO(a)
+	s.withAliases(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (s *Server) myProfile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	s.updateProfile(w, r, string(a.Name))
+}
+
+func (s *Server) adminProfile(w http.ResponseWriter, r *http.Request) {
+	s.updateProfile(w, r, r.PathValue("name"))
+}
+
+func (s *Server) listAliases(w http.ResponseWriter, r *http.Request) {
+	list, err := s.agents.ListAliases(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.AliasList{Aliases: make([]api.Alias, 0, len(list))}
+	for _, a := range list {
+		out.Aliases = append(out.Aliases, aliasDTO(a))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) setAlias(w http.ResponseWriter, r *http.Request) {
+	var req api.AliasRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	a, err := s.agents.SetAlias(r.Context(), r.PathValue("alias"), req.Target, dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"alias": aliasDTO(a), "dry_run": dry})
+}
+
+func (s *Server) removeAlias(w http.ResponseWriter, r *http.Request) {
+	dry := dryRun(r)
+	a, err := s.agents.RemoveAlias(r.Context(), r.PathValue("alias"), dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"alias": aliasDTO(a), "removed": !dry, "dry_run": dry})
 }
 
 func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -440,8 +514,10 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	out := api.Overview{GeneratedAt: ov.GeneratedAt, Viewer: v, OnlineWindowSeconds: int(s.agents.OnlineWindow().Seconds()),
 		Agents: make([]api.AgentStatus, 0, len(ov.Agents)), Recent: messageList(ov.Recent).Messages}
+	aliasMap, _ := s.agents.AliasMap(r.Context())
 	for _, a := range ov.Agents {
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
+		st.Agent.Aliases = aliasMap[a.Agent.Name]
 		if len(a.Current) > 0 {
 			st.Current = messageList(a.Current).Messages
 		}
@@ -542,7 +618,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	if out.Duplicate || dry {
 		status = http.StatusOK
 	}
-	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry})
+	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry, ViaAlias: string(out.ViaAlias)})
 }
 
 func (s *Server) getMessage(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
