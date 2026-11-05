@@ -107,7 +107,24 @@ if [[ -n "$DOMAIN" ]]; then
       echo "install Caddy manually (https://caddyserver.com/docs/install), then re-run" >&2; exit 1
     fi
   fi
-  cat > /etc/caddy/Caddyfile <<EOF
+  # Something else (nginx, a panel, ...) may already own :80. Caddy can still
+  # get a certificate through the TLS-ALPN challenge on :443 alone, so move
+  # its HTTP listener aside instead of touching the other service.
+  port_busy() { ss -Hltn "sport = :$1" 2>/dev/null | grep -q . && ! ss -Hltnp "sport = :$1" 2>/dev/null | grep -q caddy; }
+  GLOBAL=""
+  if port_busy 80; then
+    echo "==> port 80 is used by another program; Caddy will use :443 only (TLS-ALPN challenge)"
+    ss -Hltnp "sport = :80" 2>/dev/null | sed 's/^/    /' || true
+    GLOBAL=$'{\n\thttp_port 18080\n}\n\n'
+  fi
+  if port_busy 443; then
+    echo "!! port 443 is already used by another program:" >&2
+    ss -Hltnp "sport = :443" >&2 || true
+    echo "!! free it, or put the hub behind that program (reverse proxy to 127.0.0.1:$PORT)." >&2
+    exit 1
+  fi
+  printf '%s' "$GLOBAL" > /etc/caddy/Caddyfile
+  cat >> /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
 	reverse_proxy 127.0.0.1:$PORT {
 		transport http {
@@ -122,7 +139,9 @@ EOF
     firewall-cmd --reload >/dev/null
   fi
   systemctl enable caddy >/dev/null 2>&1 || true
-  if ! systemctl restart caddy; then
+  systemctl restart caddy || true
+  sleep 3
+  if ! systemctl is-active --quiet caddy; then
     echo "!! Caddy failed to start. Last log lines:" >&2
     journalctl -u caddy -n 30 --no-pager >&2 || true
     echo "!! Common causes: port 80/443 already used (check: ss -ltnp | grep -E ':(80|443)\\s'), or blocked by the cloud firewall." >&2
@@ -133,6 +152,16 @@ fi
 
 sleep 1
 curl -fsS "http://127.0.0.1:$PORT/v1/health" >/dev/null && echo "==> hub is healthy"
+if [[ -n "$DOMAIN" && -z "${CADDY_FAILED:-}" ]]; then
+  echo "==> waiting for the TLS certificate (up to 60s)"
+  for _ in $(seq 1 12); do
+    if curl -fsS --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/v1/health" >/dev/null 2>&1; then
+      echo "==> HTTPS is up: https://$DOMAIN"; HTTPS_OK=1; break
+    fi
+    sleep 5
+  done
+  [[ -z "${HTTPS_OK:-}" ]] && echo "WARNING: HTTPS not answering yet; check: journalctl -u caddy -n 50 --no-pager"
+fi
 
 echo
 [[ -n "${CADDY_FAILED:-}" ]] && echo "WARNING: HTTPS is not up yet (see Caddy errors above)."
