@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -127,5 +129,28 @@ func TestCLIAutoEnroll(t *testing.T) {
 	session.env["MYCO_ADMIN_TOKEN"] = created.Token
 	if code, _, _ := session.run("agent", "register", "--name", "evil"); code != ExitPermission {
 		t.Fatalf("enroll token used as admin: exit %d", code)
+	}
+}
+
+func TestGatewayErrorsAreRetryable(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"pending":[{"id":"msg_x","from":"a","to":"b","thread_id":"msg_x","type":"task","body":"hi","status":"queued"}],"timed_out":false}`)
+	}))
+	defer srv.Close()
+	h := &harnessT{t, map[string]string{"MYCO_HUB": srv.URL, "MYCO_TOKEN": "myco_x", "MYCO_CONFIG": filepath.Join(t.TempDir(), "c.yaml")}}
+	if code, out, e := h.run("inbox", "wait", "--timeout", "30s"); code != 0 || !strings.Contains(out, "msg_x") {
+		t.Fatalf("wait should survive a 502: %d %s %s", code, out, e)
+	}
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusBadGateway) })
+	code, _, e := h.run("message", "get", "--id", "msg_x")
+	if code != ExitUnavailable || !strings.Contains(e, "HTTP 502") || !strings.Contains(e, `"retryable":true`) {
+		t.Fatalf("502 should map to unavailable: %d %s", code, e)
 	}
 }

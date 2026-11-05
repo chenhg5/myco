@@ -104,8 +104,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if resp.StatusCode >= 300 {
 		var ae api.Error
 		if json.Unmarshal(data, &ae) != nil || ae.Code == "" {
-			return &Error{Status: resp.StatusCode, Code: "internal", Message: strings.TrimSpace(string(data)),
-				Retryable: resp.StatusCode >= 500}
+			// Not a hub error body: typically a reverse proxy answering while
+			// the hub restarts (502/503/504).
+			code := "internal"
+			switch resp.StatusCode {
+			case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+				code = CodeUnavailable
+			}
+			msg := fmt.Sprintf("hub returned HTTP %d", resp.StatusCode)
+			if body := strings.TrimSpace(string(data)); body != "" {
+				msg += ": " + truncate(body, 200)
+			}
+			return &Error{Status: resp.StatusCode, Code: code, Message: msg, Retryable: resp.StatusCode >= 500,
+				Suggestion: "the hub or its proxy may be restarting; retry shortly"}
 		}
 		return &Error{Status: resp.StatusCode, Code: ae.Code, Message: ae.Message, Suggestion: ae.Suggestion,
 			Retryable: ae.Retryable || resp.StatusCode >= 500}
@@ -184,6 +195,15 @@ func (c *Client) WaitPending(ctx context.Context, total time.Duration) ([]api.Me
 		q := url.Values{"wait_seconds": {strconv.Itoa(min(secs, 60))}}
 		var out api.PendingResponse
 		if err := c.do(ctx, http.MethodGet, "/v1/inbox/wait", q, nil, &out); err != nil {
+			// Ride out hub restarts and network blips until the deadline.
+			if e, ok := AsError(err); ok && e.Retryable && time.Until(deadline) > 5*time.Second {
+				select {
+				case <-time.After(5 * time.Second):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
 			return nil, err
 		}
 		if len(out.Pending) > 0 || time.Until(deadline) <= 0 {
@@ -301,4 +321,11 @@ func AsError(err error) (*Error, bool) {
 	var e *Error
 	ok := errors.As(err, &e)
 	return e, ok
+}
+
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
 }
