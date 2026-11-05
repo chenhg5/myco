@@ -17,6 +17,8 @@ type Process struct {
 	Stdin   string
 	Workdir string
 	Env     []string
+	// UnsetEnv removes inherited variables (by name) before Env is applied.
+	UnsetEnv []string
 }
 
 // ProcessResult holds captured output.
@@ -31,7 +33,7 @@ const maxCapture = 8 << 20
 func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	cmd := exec.CommandContext(ctx, p.Binary, p.Args...)
 	cmd.Dir = p.Workdir
-	cmd.Env = append(os.Environ(), p.Env...)
+	cmd.Env = append(filterEnv(os.Environ(), p.UnsetEnv), p.Env...)
 	cmd.Stdin = strings.NewReader(p.Stdin)
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxCapture, maxCapture
@@ -90,4 +92,22 @@ func errorLines(stderr string) string {
 		return stderr
 	}
 	return strings.Join(keep, "\n")
+}
+
+func filterEnv(env, unset []string) []string {
+	if len(unset) == 0 {
+		return env
+	}
+	drop := map[string]bool{}
+	for _, k := range unset {
+		drop[k] = true
+	}
+	out := env[:0:0]
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		if !drop[k] {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

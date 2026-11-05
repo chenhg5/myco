@@ -4,6 +4,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,10 +25,14 @@ const (
 
 // Config is the on-disk client configuration.
 type Config struct {
-	Hub    string `yaml:"hub,omitempty"`
-	Agent  string `yaml:"agent,omitempty"`
-	Token  string `yaml:"token,omitempty"`
-	Runner Runner `yaml:"runner,omitempty"`
+	Hub   string `yaml:"hub,omitempty"`
+	Agent string `yaml:"agent,omitempty"`
+	Token string `yaml:"token,omitempty"`
+	// Harness and SessionID record which session this identity belongs to,
+	// so the CLI can pick the right profile automatically inside a session.
+	Harness   string `yaml:"harness,omitempty"`
+	SessionID string `yaml:"session_id,omitempty"`
+	Runner    Runner `yaml:"runner,omitempty"`
 }
 
 // Runner configures `myco runner start`.
@@ -104,3 +109,53 @@ func (c Config) Redacted() Config {
 
 // Dir is the directory holding the config file (runner state lives here).
 func Dir(path string) string { return filepath.Dir(path) }
+
+// Profiles: every agent identity bound to a session on this machine lives in
+// <config dir>/agents/<agent>.yaml. The CLI picks the profile whose
+// session_id matches the session it runs in, and `myco runner start --all`
+// serves all of them from one process.
+
+// ProfilesDir returns the profiles directory next to the default config.
+func ProfilesDir(defaultPath string) string { return filepath.Join(Dir(defaultPath), "agents") }
+
+// ProfilePath returns the profile file for agent.
+func ProfilePath(defaultPath, agent string) string {
+	return filepath.Join(ProfilesDir(defaultPath), agent+".yaml")
+}
+
+// Profile is a loaded profile file.
+type Profile struct {
+	Path   string
+	Config *Config
+}
+
+// ListProfiles loads every *.yaml in dir (missing dir = none).
+func ListProfiles(dir string) ([]Profile, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var out []Profile
+	for _, m := range matches {
+		c, err := Load(m)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", m, err)
+		}
+		out = append(out, Profile{Path: m, Config: c})
+	}
+	return out, nil
+}
+
+// FindBySession returns the profile bound to sessionID, if any.
+func FindBySession(dir, sessionID string) (Profile, bool) {
+	if sessionID == "" {
+		return Profile{}, false
+	}
+	ps, _ := ListProfiles(dir)
+	for _, p := range ps {
+		if p.Config.SessionID == sessionID {
+			return p, true
+		}
+	}
+	return Profile{}, false
+}

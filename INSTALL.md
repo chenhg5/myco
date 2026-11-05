@@ -58,8 +58,15 @@ sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco <命令> 
 
 ### 2.1 入网令牌（推荐方式）
 
-入网令牌让 session 自己加入网络，不需要把管理员令牌交出去。**每类环境建一个**：
+入网令牌让 session 自己加入网络，不需要把管理员令牌交出去。
 
+**令牌的维度**：一个入网令牌就是一条接入策略，包括名字前缀、可选的 harness 限制、次数和有效期、默认的 allow-from。它**不和某个会话绑定**：任意多个符合条件的会话都能用它入网，每个会话会得到自己的 agent 和 agent 令牌。
+
+推荐**按机器或环境建**。比如你自己的电脑建一个不限 harness 的令牌，这台电脑上的 Claude Code、Codex 都用它：
+```bash
+myco enrollment create --name-prefix mac- --note "Glenn 的 Mac（任意 harness）"
+```
+也可以按类型建，并限定 harness：
 ```bash
 # Claude Code 云端环境
 myco enrollment create --name-prefix cloud- --harness claude-cloud --note "claude.ai 云端环境"
@@ -163,9 +170,9 @@ myco agent get        # 确认 binding.harness=claude，binding.session_id 是�
 ```
 如果没识别到会话 ID，就用 `--harness claude --session-id <id>` 手动指定。ID 就是 `claude --resume <id>` 用的那个，会话文件在 `~/.claude/projects/<项目>/<id>.jsonl`。
 
-**保持可被唤醒**：在**另一个终端**运行 runner。它会对每条消息执行 `claude -p --resume <这个会话>`：
+**保持可被唤醒**：在另一个终端运行这台机器的 runner（见 [4.5 节](#45-每台机器一个-runner)）。它会对每条消息执行 `claude -p --resume <这个会话>`：
 ```bash
-myco runner start --harness claude --workdir <项目目录> --arg=--permission-mode --arg=acceptEdits
+myco runner start --all
 ```
 
 ### 4.3 本地或 VPS 上的 Codex
@@ -176,9 +183,9 @@ myco agent enroll --harness codex --session-id <会话ID> --name codex-<名字> 
 myco agent get
 ```
 
-**保持可被唤醒**：在另一个终端运行 runner，它会对每条消息执行 `codex exec resume <会话ID>`：
+**保持可被唤醒**：在另一个终端运行这台机器的 runner（见 [4.5 节](#45-每台机器一个-runner)），它会对每条消息执行 `codex exec resume <会话ID>`：
 ```bash
-myco runner start --harness codex --workdir <项目目录>
+myco runner start --all
 ```
 如果报 `model is not supported when using Codex with a ChatGPT account`，说明 headless 模式默认用的模型你的账号不能用，要显式指定一个：加上 `--arg=--model --arg=<模型名>`，或者在 `~/.myco/config.yaml` 里写 `runner.args: ["--model", "<模型名>"]`。可用的模型可以在 Codex 交互界面里用 `/model` 查看。
 Codex 的适配目前还是实验性的，遇到问题请把 runner 的日志（stderr）贴给维护者。
@@ -191,9 +198,35 @@ myco agent enroll --harness shell --session-id <能唯一标识它的ID> --name 
 myco runner start --harness shell --command 'my-agent --stdin'
 ```
 
-### 注意事项（适用于 4.2 到 4.4）
+### 4.5 每台机器一个 runner
 
-- **会话被占用时的行为**：如果你正在交互界面里使用同一个会话（Codex 会报 `already has an active writer`），runner 会把消息放回队列，过 `--busy-retry`（默认 2 分钟）再试，**不算失败**。你退出交互界面后，消息就会被自动处理。
+在本机通过 `myco agent enroll` 入网的会话，每个都会得到一份自己的身份文件 `~/.myco/agents/<agent>.yaml`，里面记录了它的 session_id。在某个会话里执行 `myco` 命令时，CLI 会按当前会话 ID **自动选用它自己的身份**，所以同一台机器上的多个会话不会互相覆盖。
+
+一个进程服务这台机器上的所有 agent：
+```bash
+myco runner start --all                       # 新入网的 agent 每 30 秒自动发现
+myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
+```
+
+每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
+```yaml
+# ~/.myco/agents/mac-codex.yaml（hub / agent / token / session_id 由 enroll 写入，不要手改）
+runner:
+  harness: codex
+  workdir: /Users/me/src/app
+  args: ["--model", "gpt-5.6", "-c", "model_reasoning_effort=medium"]
+  timeout: 30m
+```
+
+**跳过权限确认**：需要的话，把对应的参数写进 `runner.args`，但要清楚风险，见第 7 节。
+- Claude Code：`["--permission-mode", "bypassPermissions"]`，或比较温和的 `acceptEdits` / `auto`
+- Codex：`["--dangerously-bypass-approvals-and-sandbox"]`，或 `["-c", "sandbox_mode=\"workspace-write\""]`（`exec resume` 不接受 `-s`）
+
+### 注意事项（适用于 4.2 到 4.5）
+
+- **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。
+- runner 自己如果是在某个 Claude Code 会话里启动的，启动 claude 时会清掉继承来的 `CLAUDE*` 会话变量（保留 `CLAUDE_CONFIG_DIR` 和认证相关的），以免 headless claude 连到外层那个会话上。建议在普通终端或 systemd/launchd 里运行 runner。
+- Codex 如果报 `model is not supported when using Codex with a ChatGPT account`，就在 `runner.args` 里指定一个账号可用的模型。
 - 已经绑定了会话的 agent，换一台机器或换一个 harness 启动 runner 会被拒绝（exit 5），以免悄悄开出一个新会话。确实要迁移时加 `--rebind`。
 - runner 的行为：
   - 收到 task：会话的最终输出自动作为回复发回。

@@ -9,11 +9,21 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 )
 
 // ErrSessionBusy means the session is in use by another process (typically a
 // human in the interactive UI). Runners retry later instead of failing.
 var ErrSessionBusy = errors.New("session is busy")
+
+// BusyProber is implemented by harnesses that can tell when a session was
+// last written by anyone (e.g. from its transcript file). The runner uses it
+// to avoid writing into a session a human is using right now.
+type BusyProber interface {
+	// LastActivity returns the last time sessionID's transcript changed,
+	// and false if the transcript cannot be found.
+	LastActivity(sessionID string) (time.Time, bool)
+}
 
 // Request is one invocation of a harness.
 type Request struct {

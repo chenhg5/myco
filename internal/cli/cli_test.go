@@ -181,3 +181,58 @@ func TestDetectBinding(t *testing.T) {
 		t.Fatalf("nothing detected: %+v", b)
 	}
 }
+
+func TestProfilesAndRunnerAll(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
+	_, out, _ := admin.run("enrollment", "create", "--name-prefix", "mac-", "--format", "json")
+	var created struct{ Token string }
+	json.Unmarshal([]byte(out), &created)
+	admin.run("agent", "register", "--name", "boss")
+
+	// Two Claude Code sessions on the same machine enroll independently.
+	sess := func(id string) *harnessT {
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": created.Token, "CLAUDE_CODE_SESSION_ID": id}}
+	}
+	a, b := sess("aaaa1111"), sess("bbbb2222")
+	if code, _, e := a.run("agent", "enroll", "--name", "mac-a", "--workdir", home); code != 0 {
+		t.Fatalf("enroll a: %s", e)
+	}
+	if code, _, e := b.run("agent", "enroll", "--name", "mac-b", "--workdir", home); code != 0 {
+		t.Fatalf("enroll b: %s", e)
+	}
+	for name, h := range map[string]*harnessT{"mac-a": a, "mac-b": b} {
+		code, out, _ := h.run("agent", "get", "--format", "json")
+		if code != 0 || !strings.Contains(out, `"name": "`+name+`"`) {
+			t.Fatalf("session should resolve to its own profile %s: %s", name, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".myco", "agents", "mac-a.yaml")); err != nil {
+		t.Fatal("profile file missing")
+	}
+
+	// Use a shell harness in both profiles so the test needs no real CLI.
+	for _, n := range []string{"mac-a", "mac-b"} {
+		p := filepath.Join(home, ".myco", "agents", n+".yaml")
+		data, _ := os.ReadFile(p)
+		data = []byte(strings.Replace(string(data), "harness: claude\n    workdir", "harness: shell\n    command: 'echo handled-by-$MYCO_FROM'\n    workdir", 1))
+		os.WriteFile(p, data, 0o600)
+	}
+	admin.env["MYCO_CONFIG"] = filepath.Join(home, ".myco", "config.yaml")
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
+	for _, to := range []string{"mac-a", "mac-b"} {
+		if code, _, e := boss.run("message", "send", "--to", to, "--body", "hi"); code != 0 {
+			t.Fatalf("send: %s", e)
+		}
+	}
+	plain := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+	if code, _, e := plain.run("runner", "start", "--all", "--once", "--log-level", "error", "--rebind"); code != 0 {
+		t.Fatalf("runner --all: %d %s", code, e)
+	}
+	code, out, _ := boss.run("inbox", "pull", "--format", "json")
+	if code != 0 || strings.Count(out, "handled-by-boss") != 2 {
+		t.Fatalf("both agents should have replied: %s", out)
+	}
+}

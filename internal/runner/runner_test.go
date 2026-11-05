@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -166,5 +167,58 @@ func TestBusySessionReleasesInsteadOfFailing(t *testing.T) {
 	New(hub, h, NewMemorySessions(), nil, Options{Once: true}, quiet()).Run(context.Background())
 	if hub.fails["t1"] != "" || hub.status["t1"] != "delivered" {
 		t.Fatalf("busy session must release, not fail: status=%s fail=%q", hub.status["t1"], hub.fails["t1"])
+	}
+}
+
+type probingHarness struct {
+	fakeHarness
+	last time.Time
+}
+
+func (p probingHarness) LastActivity(string) (time.Time, bool) { return p.last, true }
+
+func TestTranscriptActivityDefersAndBacksOff(t *testing.T) {
+	now := time.Unix(1000, 0)
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"})
+	ran := false
+	h := probingHarness{fakeHarness: fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		ran = true
+		return harness.Result{Output: "ok"}, nil
+	}}, last: now.Add(-5 * time.Second)} // a human typed 5s ago
+	r := New(hub, h, NewHubSessions(&fakeBinder{}, "sess-1"), nil, Options{Once: true, Now: func() time.Time { return now }}, quiet())
+	r.Run(context.Background())
+	if ran || hub.status["t1"] != "delivered" {
+		t.Fatalf("must not run in a session used 5s ago: ran=%v status=%s", ran, hub.status["t1"])
+	}
+	if d1, d2 := r.busyDelay("agent"), r.busyDelay("agent"); d1 != 20*time.Second || d2 != 40*time.Second {
+		t.Fatalf("backoff should double from 10s: %v %v", d1, d2)
+	}
+
+	// Activity older than the window: runs.
+	hub2 := newFakeHub(api.Message{ID: "t2", Type: "task", From: "alice", ThreadID: "th"})
+	h.last = now.Add(-10 * time.Minute)
+	New(hub2, h, NewHubSessions(&fakeBinder{}, "sess-1"), nil, Options{Once: true, Now: func() time.Time { return now }}, quiet()).Run(context.Background())
+	if !ran || hub2.replies["t2"] != "ok" {
+		t.Fatalf("idle session should run: ran=%v reply=%q", ran, hub2.replies["t2"])
+	}
+}
+
+func TestOwnWritesSurviveRestart(t *testing.T) {
+	now := time.Unix(5000, 0)
+	state := filepath.Join(t.TempDir(), "state.json")
+	h := probingHarness{fakeHarness: fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		return harness.Result{Output: "ok", SessionID: "s1"}, nil
+	}}}
+	// First runner process writes the session at `now`.
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "a", ThreadID: "th"})
+	h.last = now.Add(-time.Hour)
+	New(hub, h, NewHubSessions(&fakeBinder{}, "s1"), nil, Options{Once: true, StatePath: state, Now: func() time.Time { return now }}, quiet()).Run(context.Background())
+	// Restarted runner, 5s later; the transcript changed at `now` (our write).
+	h.last = now
+	later := now.Add(5 * time.Second)
+	hub2 := newFakeHub(api.Message{ID: "t2", Type: "task", From: "a", ThreadID: "th"})
+	New(hub2, h, NewHubSessions(&fakeBinder{}, "s1"), nil, Options{Once: true, StatePath: state, Now: func() time.Time { return later }}, quiet()).Run(context.Background())
+	if hub2.replies["t2"] != "ok" {
+		t.Fatalf("own recent write must not count as busy after restart: status=%s", hub2.status["t2"])
 	}
 }

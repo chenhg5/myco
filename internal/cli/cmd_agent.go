@@ -75,8 +75,8 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			if e.in.Bool("no-save") {
 				out["token"] = res.Token
 			} else {
-				e.cfg.Agent, e.cfg.Token = res.Agent.Name, res.Token
-				if err := config.Save(e.cfgPath, e.cfg); err != nil {
+				hub, _ := e.hubURL()
+				if err := e.saveIdentity(hub, res.Agent.Name, res.Token, res.Agent.Binding); err != nil {
 					return fmt.Errorf("agent registered but saving config failed (token: %s): %w", res.Token, err)
 				}
 				out["config"] = e.cfgPath

@@ -92,14 +92,27 @@ type env struct {
 	p       *Printer
 	cfgPath string
 	cfg     *config.Config
+	// explicitConfig is true when --config / MYCO_CONFIG chose the file.
+	explicitConfig bool
+	// defaultPath is ~/.myco/config.yaml (profiles live next to it).
+	defaultPath string
 }
 
 // handler adapts a func(*env) error into a cmdkit Run func.
 func handler(fn func(*env) error) func(*cmdkit.Invocation) error {
 	return func(in *cmdkit.Invocation) error {
 		path := in.String("config")
-		if path == "" {
-			path = config.DefaultPath()
+		explicit := path != ""
+		def := config.DefaultPath()
+		if !explicit {
+			path = def
+			// Inside a known session, use that session's own identity so
+			// several agents on one machine never share a config.
+			if b := detectBinding(in.Getenv); b.SessionID != "" {
+				if p, ok := config.FindBySession(config.ProfilesDir(def), b.SessionID); ok {
+					path = p.Path
+				}
+			}
 		}
 		cfg, err := config.Load(path)
 		if err != nil {
@@ -114,7 +127,7 @@ func handler(fn func(*env) error) func(*cmdkit.Invocation) error {
 			tty = isTerminal(f)
 		}
 		p := &Printer{Format: resolveFormat(map[string][]string{"format": nonEmpty(in.String("format"))}, in.Getenv, tty), Out: in.Stdout, Err: in.Stderr}
-		return fn(&env{in: in, p: p, cfgPath: path, cfg: cfg})
+		return fn(&env{in: in, p: p, cfgPath: path, cfg: cfg, explicitConfig: explicit, defaultPath: def})
 	}
 }
 
@@ -181,11 +194,48 @@ func (e *env) enroll(hub, token string, req api.EnrollRequest, dry bool) (*api.R
 	if err != nil || dry {
 		return res, err
 	}
-	e.cfg.Hub, e.cfg.Agent, e.cfg.Token = hub, res.Agent.Name, res.Token
-	if err := config.Save(e.cfgPath, e.cfg); err != nil {
+	if err := e.saveIdentity(hub, res.Agent.Name, res.Token, res.Agent.Binding); err != nil {
 		return nil, fmt.Errorf("enrolled but saving config failed: %w", err)
 	}
 	return res, nil
+}
+
+// saveIdentity stores an agent's credentials. Identities bound to a session
+// go to their own profile (~/.myco/agents/<agent>.yaml) unless a config file
+// was chosen explicitly; others go to the current config file.
+func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
+	if e.explicitConfig || b.SessionID == "" {
+		e.cfg.Hub, e.cfg.Agent, e.cfg.Token = hub, agent, token
+		e.cfg.Harness, e.cfg.SessionID = b.Harness, b.SessionID
+		return config.Save(e.cfgPath, e.cfg)
+	}
+	path := config.ProfilePath(e.defaultPath, agent)
+	cfg, err := config.Load(path) // keep runner settings on re-enrollment
+	if err != nil {
+		return err
+	}
+	cfg.Hub, cfg.Agent, cfg.Token, cfg.Harness, cfg.SessionID = hub, agent, token, b.Harness, b.SessionID
+	if cfg.Runner.Harness == "" {
+		cfg.Runner.Harness = runnerHarnessFor(b.Harness)
+	}
+	if cfg.Runner.Workdir == "" {
+		cfg.Runner.Workdir = b.Workdir
+	}
+	if err := config.Save(path, cfg); err != nil {
+		return err
+	}
+	e.cfgPath, e.cfg = path, cfg
+	return nil
+}
+
+// runnerHarnessFor maps a binding harness to the runner adapter that can
+// resume it ("" if it cannot be driven by a local runner).
+func runnerHarnessFor(h string) string {
+	switch h {
+	case "claude", "codex":
+		return h
+	}
+	return ""
 }
 
 // adminClient returns a client authenticated with the hub admin token.

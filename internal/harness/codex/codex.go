@@ -16,14 +16,22 @@ import (
 // Name is the registry key.
 const Name = "codex"
 
-type codex struct{ opts harness.Options }
+type codex struct {
+	opts harness.Options
+	*harness.TranscriptFinder
+}
 
 // New is the harness.Factory for Codex.
 func New(opts harness.Options) (harness.Harness, error) {
 	if opts.Binary == "" {
 		opts.Binary = "codex"
 	}
-	return &codex{opts: opts}, nil
+	return &codex{opts: opts, TranscriptFinder: &harness.TranscriptFinder{Patterns: transcriptPatterns}}, nil
+}
+
+// transcriptPatterns: $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl
+func transcriptPatterns(id string) []string {
+	return []string{filepath.Join(harness.HomeDir("CODEX_HOME", ".codex"), "sessions", "*", "*", "*", "rollout-*"+id+".jsonl")}
 }
 
 func (c *codex) Name() string { return Name }

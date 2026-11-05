@@ -2,8 +2,11 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -30,9 +33,22 @@ type Options struct {
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
 	Scope SessionScope
-	// BusyRetry is how long to wait before retrying a message whose session
-	// was busy (default 2m).
+	// BusyRetry caps the delay before retrying a message whose session was
+	// busy; retries start at BusyRetryMin and double up to this (default 2m).
 	BusyRetry time.Duration
+	// BusyRetryMin is the first retry delay for a busy session (default 10s).
+	BusyRetryMin time.Duration
+	// BusyWindow: a session whose transcript changed within this window (and
+	// not by us) is considered in use by someone else (default 90s).
+	BusyWindow time.Duration
+	// Slots, if set, is shared by several runners in one process to cap the
+	// number of harness processes running at once.
+	Slots chan struct{}
+	// Now is the clock (tests).
+	Now func() time.Time
+	// StatePath, if set, persists when this runner last wrote each session,
+	// so a restarted runner does not mistake its own writes for a human's.
+	StatePath string
 }
 
 // Runner pulls messages and dispatches them to a harness.
@@ -45,6 +61,10 @@ type Runner struct {
 	log      *slog.Logger
 
 	threadLocks sync.Map // thread_id -> *sync.Mutex
+
+	mu         sync.Mutex
+	ownRunEnd  map[string]time.Time // session id -> when our last run ended
+	busyStreak map[string]int       // session key -> consecutive busy releases
 }
 
 // New builds a runner.
@@ -64,6 +84,18 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	if opts.BusyRetry <= 0 {
 		opts.BusyRetry = 2 * time.Minute
 	}
+	if opts.BusyRetryMin <= 0 {
+		opts.BusyRetryMin = 10 * time.Second
+	}
+	if opts.BusyRetryMin > opts.BusyRetry {
+		opts.BusyRetryMin = opts.BusyRetry
+	}
+	if opts.BusyWindow <= 0 {
+		opts.BusyWindow = 90 * time.Second
+	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
 	if opts.Scope == "" {
 		opts.Scope = ScopeAgent
 	}
@@ -72,7 +104,80 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		log.Warn("session scope 'agent' processes one message at a time; ignoring concurrency", "requested", opts.Concurrency)
 		opts.Concurrency = 1
 	}
-	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log}
+	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
+		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{}}
+}
+
+func loadState(path string) map[string]time.Time {
+	out := map[string]time.Time{}
+	if path == "" {
+		return out
+	}
+	var raw map[string]int64
+	if b, err := os.ReadFile(path); err == nil && json.Unmarshal(b, &raw) == nil {
+		for k, v := range raw {
+			out[k] = time.UnixMilli(v)
+		}
+	}
+	return out
+}
+
+// recordOwnRun notes that this runner just wrote sessionID (caller holds mu).
+func (r *Runner) recordOwnRun(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	r.ownRunEnd[sessionID] = r.opts.Now()
+	if r.opts.StatePath == "" {
+		return
+	}
+	raw := map[string]int64{}
+	for k, v := range r.ownRunEnd {
+		raw[k] = v.UnixMilli()
+	}
+	b, _ := json.Marshal(raw)
+	_ = os.MkdirAll(filepath.Dir(r.opts.StatePath), 0o700)
+	tmp := r.opts.StatePath + ".tmp"
+	if os.WriteFile(tmp, b, 0o600) == nil {
+		_ = os.Rename(tmp, r.opts.StatePath)
+	}
+}
+
+// inUseElsewhere reports whether someone else wrote to the session recently
+// (e.g. a human in the interactive UI), using the harness's transcript.
+func (r *Runner) inUseElsewhere(key, sessionID string) (bool, time.Time) {
+	p, ok := r.harness.(harness.BusyProber)
+	if !ok || sessionID == "" {
+		return false, time.Time{}
+	}
+	last, found := p.LastActivity(sessionID)
+	if !found {
+		return false, time.Time{}
+	}
+	r.mu.Lock()
+	own := r.ownRunEnd[sessionID]
+	r.mu.Unlock()
+	recent := r.opts.Now().Sub(last) < r.opts.BusyWindow
+	notUs := own.IsZero() || last.After(own.Add(2*time.Second))
+	return recent && notUs, last
+}
+
+// busyDelay returns the next retry delay for key (exponential backoff).
+func (r *Runner) busyDelay(key string) time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	d := r.opts.BusyRetryMin << min(r.busyStreak[key], 8)
+	r.busyStreak[key]++
+	return min(d, r.opts.BusyRetry)
+}
+
+func (r *Runner) release(ctx context.Context, log *slog.Logger, m api.Message, key, reason string) {
+	delay := r.busyDelay(key)
+	if _, err := r.hub.Release(ctx, m.ID, delay, false); err != nil {
+		log.Error("releasing busy message failed", "err", err)
+		return
+	}
+	log.Info("session busy; message released for retry", "retry_in", delay, "reason", reason)
 }
 
 // Run processes messages until ctx is cancelled (or after one batch if Once).
@@ -148,17 +253,38 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	unlock := r.lockThread(key)
 	defer unlock()
 
+	sessionID := r.sessions.Get(key)
+	if busy, last := r.inUseElsewhere(key, sessionID); busy {
+		r.release(ctx, log, m, key, "session transcript changed "+r.opts.Now().Sub(last).Round(time.Second).String()+" ago by someone else")
+		return
+	}
+	if r.opts.Slots != nil {
+		select {
+		case r.opts.Slots <- struct{}{}:
+			defer func() { <-r.opts.Slots }()
+		case <-ctx.Done():
+			return
+		}
+	}
+
 	log.Info("running harness", "harness", r.harness.Name())
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, r.opts.Timeout)
 	res, runErr := r.harness.Run(runCtx, harness.Request{
 		Prompt:    r.prompt.Build(r.opts.Self, m),
-		SessionID: r.sessions.Get(key),
+		SessionID: sessionID,
 		Workdir:   r.opts.Workdir,
 		Env: append(append([]string{}, r.opts.Env...),
 			"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
 	})
 	cancel()
+	r.mu.Lock()
+	if !errors.Is(runErr, harness.ErrSessionBusy) {
+		r.recordOwnRun(sessionID)
+		r.recordOwnRun(res.SessionID)
+		r.busyStreak[key] = 0
+	}
+	r.mu.Unlock()
 	if err := r.sessions.Put(key, res.SessionID); err != nil {
 		log.Warn("saving session failed", "err", err)
 	}
@@ -179,9 +305,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	switch {
 	case errors.Is(runErr, harness.ErrSessionBusy):
 		// Someone is using the session; hand the message back without
-		// counting a failure and try again later.
-		_, err = r.hub.Release(ctx, m.ID, r.opts.BusyRetry, false)
-		log.Info("session busy; message released for retry", "retry_in", r.opts.BusyRetry, "reason", runErr)
+		// counting a failure and try again soon.
+		r.release(ctx, log, m, key, runErr.Error())
 	case m.Type == "task" && runErr != nil:
 		_, err = r.hub.Fail(ctx, m.ID, runErr.Error(), false)
 		log.Warn("harness failed; task marked failed", "err", runErr)
