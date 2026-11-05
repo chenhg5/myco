@@ -138,8 +138,30 @@ type Invocation struct {
 func Resolve(root *Command, args []string) (*Command, map[string][]string, []string, error) {
 	cmd := root
 	i := 0
+	// Flags already valid on a group (global flags such as --hub, --format)
+	// may come before the subcommand: "myco --format text agent list".
+	var early []string
 	for i < len(args) {
 		a := args[i]
+		if strings.HasPrefix(a, "--") && a != "--" && a != "--help" && len(cmd.Subs) > 0 {
+			name, _, hasVal := strings.Cut(strings.TrimPrefix(a, "--"), "=")
+			f, ok := cmd.flag(name)
+			if !ok {
+				if bf, bok := cmd.flag(strings.TrimPrefix(name, "no-")); bok && bf.Kind == Bool && strings.HasPrefix(name, "no-") && !hasVal {
+					f, ok = bf, true
+					hasVal = true // --no-x takes no value
+				}
+			}
+			if ok {
+				early = append(early, a)
+				i++
+				if f.Kind != Bool && !hasVal && i < len(args) {
+					early = append(early, args[i])
+					i++
+				}
+				continue
+			}
+		}
 		if strings.HasPrefix(a, "-") {
 			break
 		}
@@ -169,7 +191,7 @@ func Resolve(root *Command, args []string) (*Command, map[string][]string, []str
 	}
 	values := map[string][]string{}
 	var positional []string
-	rest := args[i:]
+	rest := append(early, args[i:]...)
 	for j := 0; j < len(rest); j++ {
 		a := rest[j]
 		if a == "--" {
