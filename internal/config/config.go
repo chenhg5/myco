@@ -28,35 +28,35 @@ const (
 
 // Config is the on-disk client configuration.
 type Config struct {
-	Hub   string `yaml:"hub,omitempty"`
-	Agent string `yaml:"agent,omitempty"`
-	Token string `yaml:"token,omitempty"`
+	Hub   string `yaml:"hub,omitempty" json:"hub,omitempty"`
+	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Token string `yaml:"token,omitempty" json:"token,omitempty"`
 	// Harness and SessionID record which session this identity belongs to,
 	// so the CLI can pick the right profile automatically inside a session.
-	Harness   string `yaml:"harness,omitempty"`
-	SessionID string `yaml:"session_id,omitempty"`
-	Runner    Runner `yaml:"runner,omitempty"`
+	Harness   string `yaml:"harness,omitempty" json:"harness,omitempty"`
+	SessionID string `yaml:"session_id,omitempty" json:"session_id,omitempty"`
+	Runner    Runner `yaml:"runner,omitempty" json:"runner,omitempty"`
 }
 
 // Runner configures `myco runner start`.
 type Runner struct {
-	Harness     string   `yaml:"harness,omitempty"`
-	Binary      string   `yaml:"binary,omitempty"`
-	Args        []string `yaml:"args,omitempty"`
-	Command     string   `yaml:"command,omitempty"`
-	Workdir     string   `yaml:"workdir,omitempty"`
-	Timeout     string   `yaml:"timeout,omitempty"`
-	Concurrency int      `yaml:"concurrency,omitempty"`
-	PollWait    string   `yaml:"poll_wait,omitempty"`
+	Harness     string   `yaml:"harness,omitempty" json:"harness,omitempty"`
+	Binary      string   `yaml:"binary,omitempty" json:"binary,omitempty"`
+	Args        []string `yaml:"args,omitempty" json:"args,omitempty"`
+	Command     string   `yaml:"command,omitempty" json:"command,omitempty"`
+	Workdir     string   `yaml:"workdir,omitempty" json:"workdir,omitempty"`
+	Timeout     string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Concurrency int      `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	PollWait    string   `yaml:"poll_wait,omitempty" json:"poll_wait,omitempty"`
 	// EnvFile holds KEY=VALUE lines passed only to this agent's CLI (e.g.
 	// CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`). Keep it chmod 600.
-	EnvFile string `yaml:"env_file,omitempty"`
+	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 	// Model and Access are mapped to CLI flags by the harness.
-	Model  string `yaml:"model,omitempty"`
-	Access string `yaml:"access,omitempty"`
+	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
+	Access string `yaml:"access,omitempty" json:"access,omitempty"`
 	// Template configures the "template" harness, or overrides fields of a
 	// preset (pi, kiro, cursor, gemini, opencode).
-	Template *harness.TemplateSpec `yaml:"template,omitempty"`
+	Template *harness.TemplateSpec `yaml:"template,omitempty" json:"template,omitempty"`
 }
 
 // DefaultPath returns ~/.myco/config.yaml.
