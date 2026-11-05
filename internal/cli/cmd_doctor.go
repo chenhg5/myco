@@ -43,7 +43,7 @@ func harnessCommands() *Command {
 					rows = append(rows, r)
 					continue
 				}
-				if n == "shell" {
+				if n == "shell" || n == "exec" {
 					r.Kind = "generic"
 				}
 				if h, err := reg.New(n, opts); err == nil {

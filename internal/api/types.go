@@ -350,3 +350,18 @@ type Overview struct {
 	Agents              []AgentStatus  `json:"agents"`
 	Recent              []Message      `json:"recent"`
 }
+
+// ExecResult is the reply body of an exec node (harness "exec").
+type ExecResult struct {
+	ExitCode   int    `json:"exit_code"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	DurationMS int64  `json:"duration_ms"`
+	// Truncated: stdout or stderr exceeded the node's max_output.
+	Truncated bool `json:"truncated,omitempty"`
+	// TimedOut: the command was killed at the node's timeout (exit 124).
+	TimedOut bool `json:"timed_out,omitempty"`
+	// Denied: the node refused to run it (exit 126); Error says why.
+	Denied bool   `json:"denied,omitempty"`
+	Error  string `json:"error,omitempty"`
+}

@@ -25,6 +25,7 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
 - **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker，来一条消息就续接一次它的 session。
 - **可视化面板**：`myco ui --open` 在本机打开一个只读面板，能看到各节点的状态（工作中 / 有待办 / 空闲 / 离线）、标签、会话和最近的对话；页面打包在二进制里。
 - **附件**：`--attach` 发送文件，只有收件人能下载，校验 SHA256；runner 唤醒 agent 前会自动下载附件。
+- **exec 节点**：`myco exec --to vps-shell --cmd "df -h"` 在远端机器上执行命令，像 ssh 一样返回输出和退出码；必须限定发送方，可选命令白名单、超时、输出上限和审计日志。
 - **显示名和别名**：名字是永久地址；显示名只用于展示，可以随时改；别名（如 `reviewer`）是管理员维护的角色地址，可以改指向别的 agent，发消息的一方不用改。
 - **标签、分组和广播**：agent 带上 `group=loops` 这类标签后，可以用选择器（`group=loops,machine=mac`）筛选出一批 agent 并广播消息，每个接收方独立回复，统一追踪。
 - **入网令牌**：把它放进云端环境的 Secrets，新开的 Claude Code session 会自动注册成 agent，重启后找回同一个身份。详见 [docs/delivery.md](docs/delivery.md#让-claude-code-云端-session-自动成为节点入网令牌)。

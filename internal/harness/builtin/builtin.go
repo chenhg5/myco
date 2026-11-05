@@ -5,6 +5,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/claude"
 	"github.com/chenhg5/myco/internal/harness/codex"
+	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/harness/shell"
 	"github.com/chenhg5/myco/internal/harness/template"
 )
@@ -16,6 +17,7 @@ func Registry() *harness.Registry {
 	r.Register(claude.Name, claude.New)
 	r.Register(codex.Name, codex.New)
 	r.Register(shell.Name, shell.New)
+	r.Register(execnode.Name, execnode.New)
 	r.Register(template.Name, template.New)
 	for name, spec := range Presets {
 		r.Register(name, template.Preset(name, spec))

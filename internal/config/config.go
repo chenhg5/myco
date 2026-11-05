@@ -57,6 +57,9 @@ type Runner struct {
 	// Template configures the "template" harness, or overrides fields of a
 	// preset (pi, kiro, cursor, gemini, opencode).
 	Template *harness.TemplateSpec `yaml:"template,omitempty" json:"template,omitempty"`
+	// Exec configures an exec node (harness "exec"): command allowlist,
+	// timeout, output cap, shell and inherited environment.
+	Exec *harness.ExecSpec `yaml:"exec,omitempty" json:"exec,omitempty"`
 }
 
 // DefaultPath returns ~/.myco/config.yaml.

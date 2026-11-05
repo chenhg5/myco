@@ -46,6 +46,12 @@ type dryRunDone struct{}
 
 func (dryRunDone) Error() string { return "dry run" }
 
+// exitStatus ends a command with a specific exit code and no error output
+// (the command already printed what it had), e.g. a remote command's status.
+type exitStatus int
+
+func (s exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(s)) }
+
 var exitByCode = map[string]int{
 	"invalid_argument":     ExitUsage,
 	"not_found":            ExitNotFound,

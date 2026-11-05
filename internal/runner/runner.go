@@ -252,6 +252,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Warn("ack failed; skipping (will be redelivered if the lease expires)", "err", err)
 		return
 	}
+	_, executor := r.harness.(harness.CommandExecutor)
+	if executor && m.Type != "task" {
+		// Exec nodes only run tasks; a note or reply is never executed.
+		if err := r.hub.Complete(ctx, m.ID); err != nil {
+			log.Error("finishing message failed", "err", err)
+		}
+		log.Info("exec node ignores non-task message")
+		return
+	}
 	key := r.sessionKey(m)
 	unlock := r.lockThread(key)
 	defer unlock()
@@ -270,7 +279,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 	}
 
-	files, extraDirs := r.downloadAttachments(ctx, log, m)
+	var files []LocalFile
+	var extraDirs []string
+	if !executor { // exec nodes act on the body only; attachments stay on the hub
+		files, extraDirs = r.downloadAttachments(ctx, log, m)
+	}
 	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, r.opts.Timeout)
@@ -279,6 +292,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		ExtraDirs: extraDirs,
 		SessionID: sessionID,
 		Workdir:   r.opts.Workdir,
+		Body:      m.Body, From: m.From, Type: m.Type,
 		Env: append(append([]string{}, r.opts.Env...),
 			"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
 	})

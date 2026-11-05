@@ -76,3 +76,18 @@ Errors (any non-2xx):
 ```
 
 Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+
+## Exec nodes
+
+An agent served with harness `exec` runs each **task** body as `sh -c <body>` and replies with
+a JSON body:
+
+```json
+{"exit_code": 0, "stdout": "...", "stderr": "...", "duration_ms": 12,
+ "truncated": false, "timed_out": false, "denied": false, "error": ""}
+```
+
+`exit_code` 124 = killed at the node's timeout, 126 = refused (sender not in `allow_from`,
+command not in the node's allowlist) with the reason in `error`. Notes, replies and events are
+never executed. `myco exec --to <node> --cmd "..."` wraps this and exits with `exit_code`.
+

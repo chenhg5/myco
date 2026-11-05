@@ -19,12 +19,22 @@ type Process struct {
 	Env     []string
 	// UnsetEnv removes inherited variables (by name) before Env is applied.
 	UnsetEnv []string
+	// CleanEnv starts from an empty environment instead of the runner's.
+	CleanEnv bool
+	// MaxOutput caps captured stdout/stderr each (default 8 MiB).
+	MaxOutput int
 }
 
 // ProcessResult holds captured output.
 type ProcessResult struct {
 	Stdout string
 	Stderr string
+	// ExitCode is the process exit status (-1 if it did not exit normally).
+	ExitCode int
+	// Truncated reports that stdout or stderr exceeded MaxOutput.
+	Truncated bool
+	// Started reports that the process ran (false: it could not start).
+	Started bool
 }
 
 const maxCapture = 8 << 20
@@ -33,15 +43,25 @@ const maxCapture = 8 << 20
 func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	cmd := exec.CommandContext(ctx, p.Binary, p.Args...)
 	cmd.Dir = p.Workdir
-	cmd.Env = append(filterEnv(os.Environ(), p.UnsetEnv), p.Env...)
+	if p.CleanEnv {
+		cmd.Env = append([]string{}, p.Env...)
+	} else {
+		cmd.Env = append(filterEnv(os.Environ(), p.UnsetEnv), p.Env...)
+	}
 	cmd.Stdin = strings.NewReader(p.Stdin)
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxCapture, maxCapture
+	if p.MaxOutput > 0 {
+		stdout.max, stderr.max = p.MaxOutput, p.MaxOutput
+	}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	setProcessGroup(cmd)
 	cmd.WaitDelay = 5 * time.Second
 	err := cmd.Run()
-	res := ProcessResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	res := ProcessResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1, Truncated: stdout.cut || stderr.cut}
+	if cmd.ProcessState != nil {
+		res.ExitCode, res.Started = cmd.ProcessState.ExitCode(), true
+	}
 	if ctx.Err() != nil {
 		return res, fmt.Errorf("%s: %w", p.Binary, ctx.Err())
 	}
@@ -51,21 +71,29 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	return res, nil
 }
 
+// limitedBuffer keeps at most max bytes. It deliberately does not embed
+// bytes.Buffer: io.Copy would use the embedded ReadFrom and bypass Write.
 type limitedBuffer struct {
-	bytes.Buffer
+	buf bytes.Buffer
 	max int
+	cut bool
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if room := b.max - b.Len(); room > 0 {
-		if len(p) > room {
-			b.Buffer.Write(p[:room])
-		} else {
-			b.Buffer.Write(p)
-		}
+	room := b.max - b.buf.Len()
+	switch {
+	case room <= 0:
+		b.cut = b.cut || len(p) > 0
+	case len(p) > room:
+		b.buf.Write(p[:room])
+		b.cut = true
+	default:
+		b.buf.Write(p)
 	}
 	return len(p), nil
 }
+
+func (b *limitedBuffer) String() string { return b.buf.String() }
 
 func tail(s string, n int) string {
 	s = strings.TrimSpace(s)

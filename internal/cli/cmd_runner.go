@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
+	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/runner"
 )
 
@@ -125,11 +126,6 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if err != nil {
 		return nil, errorf("invalid_config", ExitUsage, "use readonly, workspace or full", "%s: %v", cfgPath, err)
 	}
-	h, err := sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
-		Model: first(ov.model, rc.Model), Access: access, Template: rc.Template})
-	if err != nil {
-		return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
-	}
 	if cfg.Hub == "" || cfg.Token == "" {
 		return nil, errorf("not_configured", ExitUsage, "enroll or register this agent first", "%s has no hub/token", cfgPath)
 	}
@@ -140,6 +136,27 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	me, err := c.Me(e.in.Ctx)
 	if err != nil {
 		return nil, err
+	}
+	var execSpec *harness.ExecSpec
+	if name == execnode.Name {
+		// Remote command execution: refuse to serve anyone-can-send agents.
+		if len(me.AllowFrom) == 0 {
+			return nil, errorf("permission_denied", ExitPermission,
+				"restrict senders first (admin): myco agent register --name "+me.Name+" --rotate-token --no-save --allow-from <agent>[,<agent>...]",
+				"exec agent %s accepts messages from anyone; exec nodes require allow_from", me.Name)
+		}
+		spec := harness.ExecSpec{}
+		if rc.Exec != nil {
+			spec = *rc.Exec
+		}
+		spec.Senders = me.AllowFrom
+		spec.AuditLog = filepath.Join(config.Dir(e.defaultPath), "logs", me.Name+".exec.jsonl")
+		execSpec = &spec
+	}
+	h, err := sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
+		Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec})
+	if err != nil {
+		return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
@@ -189,6 +206,14 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		env = append(extra, env...) // myco's own variables win
 	}
 	alog := log.With("agent", me.Name)
+	if execSpec != nil {
+		allow := "any command"
+		if len(execSpec.Allow) > 0 {
+			allow = strings.Join(execSpec.Allow, " | ")
+		}
+		alog.Warn("exec node: tasks from these agents run as shell commands on this machine",
+			"senders", strings.Join(me.AllowFrom, ","), "allow", allow, "audit_log", execSpec.AuditLog)
+	}
 	if access == harness.AccessFull {
 		alog.Warn("access=full: the agent CLI runs without approvals or sandbox; messages from other agents drive it")
 	}

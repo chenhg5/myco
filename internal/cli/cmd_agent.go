@@ -27,6 +27,7 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			"myco agent register --name reviewer --harness claude --session-id 7f3c...   # adopt an existing session",
 			"myco agent register --name ci --delivery github_dispatch --wake-param repo=me/app --wake-secret-file gh.token",
 			"myco agent register --name cloud-worker --detect --no-save --format json",
+			"myco agent register --name vps-shell --harness exec --allow-from cloud-1 --workdir /srv   # exec node",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Required: true, Help: "Agent name: lowercase letters, digits, . _ - (the permanent address)"},
@@ -55,6 +56,10 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			c, err := e.adminClient()
 			if err != nil {
 				return err
+			}
+			if e.bindingFromFlags().Harness == "exec" && len(e.in.List("allow-from")) == 0 && !e.in.Bool("rotate-token") {
+				return errorf("invalid_argument", ExitUsage, "pass --allow-from with the agents that may run commands, e.g. --allow-from cloud-1",
+					"an exec node runs any task it receives as a shell command, so --allow-from is required")
 			}
 			dry := e.in.Bool("dry-run")
 			delivery, err := e.deliveryFromFlags()

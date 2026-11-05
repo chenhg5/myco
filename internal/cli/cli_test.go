@@ -685,3 +685,77 @@ func TestTableAlignsWideCharacters(t *testing.T) {
 		t.Fatalf("misaligned:\n%s", b.String())
 	}
 }
+
+func TestExecNode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "boss.yaml")}}
+	eve := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "eve.yaml")}}
+	boss.run("agent", "register", "--name", "boss")
+	eve.run("agent", "register", "--name", "eve")
+
+	if code, _, _ := admin.run("agent", "register", "--name", "box", "--harness", "exec", "--workdir", home); code != ExitUsage {
+		t.Fatalf("exec node without --allow-from must be refused, exit %d", code)
+	}
+	if code, _, e := admin.run("agent", "register", "--name", "box", "--harness", "exec", "--allow-from", "boss", "--workdir", home); code != 0 {
+		t.Fatalf("register exec node: %s", e)
+	}
+	if b, err := os.ReadFile(filepath.Join(home, ".myco", "agents", "box.yaml")); err != nil || !strings.Contains(string(b), "harness: exec") {
+		t.Fatalf("exec node needs a profile for runner --all: %v %s", err, b)
+	}
+
+	// exec waits for the result while a runner serves the node.
+	execute := func(h *harnessT, args ...string) (int, string, string) {
+		type res struct {
+			code     int
+			out, err string
+		}
+		done := make(chan res, 1)
+		go func() {
+			c, o, e := h.run(append([]string{"exec", "--to", "box", "--timeout", "20s"}, args...)...)
+			done <- res{c, o, e}
+		}()
+		runner := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+		for {
+			select {
+			case r := <-done:
+				return r.code, r.out, r.err
+			default:
+				runner.run("runner", "start", "--all", "--once", "--log-level", "error")
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	}
+	code, out, e := execute(boss, "--cmd", "echo hi; echo oops >&2; exit 3", "--format", "text")
+	if code != 3 || out != "hi\n" || !strings.Contains(e, "oops") {
+		t.Fatalf("exec: code=%d out=%q err=%q", code, out, e)
+	}
+	code, out, _ = execute(boss, "--cmd", "pwd", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"exit_code": 0`) || !strings.Contains(out, home) {
+		t.Fatalf("exec json: %d %s", code, out)
+	}
+	// Senders outside allow_from are stopped by the hub.
+	if code, _, _ := eve.run("exec", "--to", "box", "--cmd", "id", "--timeout", "2s"); code != ExitPermission {
+		t.Fatalf("eve must not run commands, exit %d", code)
+	}
+	// Not an exec node, and dry-run.
+	if code, _, _ := boss.run("exec", "--to", "eve", "--cmd", "id"); code != ExitUsage {
+		t.Fatalf("exec to a non-exec agent: exit %d", code)
+	}
+	if code, _, _ := boss.run("exec", "--to", "box", "--cmd", "id", "--dry-run"); code != ExitDryRun {
+		t.Fatalf("dry-run: exit %d", code)
+	}
+	// Notes are never executed.
+	boss.run("message", "send", "--to", "box", "--type", "note", "--body", "touch "+filepath.Join(home, "pwned"))
+	(&harnessT{t, map[string]string{"MYCO_HUB": hub}}).run("runner", "start", "--all", "--once", "--log-level", "error")
+	if _, err := os.Stat(filepath.Join(home, "pwned")); err == nil {
+		t.Fatal("a note must not be executed")
+	}
+	// Every command is audited.
+	b, _ := os.ReadFile(filepath.Join(home, ".myco", "logs", "box.exec.jsonl"))
+	if strings.Count(string(b), "\n") != 2 || !strings.Contains(string(b), `"from":"boss"`) {
+		t.Fatalf("audit log:\n%s", b)
+	}
+}

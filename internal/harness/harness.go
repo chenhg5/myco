@@ -39,6 +39,19 @@ type Request struct {
 	// ExtraDirs are directories the agent must be able to read (e.g.
 	// downloaded attachments outside the workdir).
 	ExtraDirs []string
+	// Body, From and Type are the raw message, for harnesses that act on
+	// it directly instead of on a prompt (see CommandExecutor).
+	Body string
+	From string
+	Type string
+}
+
+// CommandExecutor marks harnesses that execute the message body itself
+// (the "exec" harness) rather than handing a prompt to an agent. The runner
+// only passes them tasks and refuses to start them unless the agent
+// restricts its senders.
+type CommandExecutor interface {
+	ExecutesBody() bool
 }
 
 // Result is the outcome of an invocation.
@@ -71,6 +84,33 @@ type Options struct {
 	// Template describes a CLI declaratively (the "template" harness and
 	// the built-in presets).
 	Template *TemplateSpec
+	// Exec configures the "exec" harness.
+	Exec *ExecSpec
+}
+
+// ExecSpec configures an exec node, which runs each task's body as a shell
+// command and replies with an api.ExecResult.
+type ExecSpec struct {
+	// Allow restricts commands: each entry is an exact command or a prefix
+	// ending in " *" (e.g. "git status", "systemctl status *"). When set,
+	// shell metacharacters (; & | ` $ < > ( ) { } newline) are rejected so a
+	// prefix cannot be chained into another command. Empty = any command.
+	Allow []string `yaml:"allow,omitempty" json:"allow,omitempty"`
+	// Timeout per command (default 60s).
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	// MaxOutput caps stdout and stderr each, in bytes (default 64 KiB).
+	MaxOutput int `yaml:"max_output,omitempty" json:"max_output,omitempty"`
+	// Shell runs the command with "-c" (default /bin/sh).
+	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
+	// InheritEnv lists variables copied from the runner's environment
+	// (default PATH HOME USER LANG LC_ALL TZ). Nothing else is inherited:
+	// in particular never the agent token.
+	InheritEnv []string `yaml:"inherit_env,omitempty" json:"inherit_env,omitempty"`
+	// Senders is the set of agents allowed to send commands, re-checked on
+	// every message (filled from the agent's allow_from at start).
+	Senders []string `yaml:"-" json:"-"`
+	// AuditLog is a JSONL file recording every command (set by the runner).
+	AuditLog string `yaml:"-" json:"-"`
 }
 
 // Access is a harness-independent permission level.

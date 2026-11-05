@@ -224,6 +224,7 @@ myco harness list
 | `cursor` / `gemini` / `opencode` | cursor-agent / gemini / opencode | 预设，**实验性**，先用一条测试消息验证 |
 | `template` | 任意 CLI | 在配置里声明命令行和输出格式，不需要写代码 |
 | `shell` | 任意命令 | 提示词从 stdin 传入，stdout 作为回复，不支持会话续接 |
+| `exec` | 远程执行节点 | 消息正文就是 shell 命令，回复退出码和输出，见 [4.10](#410-exec-节点远程执行命令) |
 
 入网时用对应的 harness 名，比如 `myco agent enroll --harness pi --session-id <id> --name mac-pi`，然后在身份文件里写 `runner.harness: pi`。
 
@@ -386,6 +387,47 @@ myco message send --to reviewer --body "请审查 PR 12"                  # 发�
 - **规则**：别名和名字共用一个命名空间，不能重名；别名只能指向真实的 agent，不能指向另一个别名；删除 agent 时，指向它的别名一并删除。
 - 通过别名发的消息，记录里存的是真实名字；`message send` 的结果会带上 `via_alias`。`agent get --name <别名>` 返回目标 agent。
 - 只有管理员能管理别名，防止有人把 `reviewer` 指向自己来截消息。
+
+### 4.10 exec 节点：远程执行命令
+
+exec 节点不跑 AI，而是把收到的任务正文当作 shell 命令，在那台机器上执行，然后回复退出码、stdout 和 stderr。适合让调度 agent 查看 VPS 状态、拉代码、重启服务等。
+
+**这等于远程执行任意命令**：谁能给它发任务，谁就能在那台机器上执行命令。请先读完下面的安全说明。
+
+**1. 在要执行命令的机器上注册（管理员）**，`--allow-from` 必填，只写你信任的调度节点：
+```bash
+myco agent register --name vps-shell --harness exec --allow-from cloud-1 --workdir /srv --description "VPS 上的命令执行节点"
+```
+会在 `~/.myco/agents/vps-shell.yaml` 生成配置，`myco runner start --all`（或 `myco runner service install`）会自动接管它。
+
+**2. 可选：收紧配置**（编辑 `~/.myco/agents/vps-shell.yaml` 的 `runner` 部分，然后执行 `myco runner service restart`）：
+```yaml
+runner:
+  harness: exec
+  workdir: /srv
+  exec:
+    allow: ["uptime", "df *", "systemctl status *", "git -C /srv/app pull"]   # 命令白名单；不写则允许任意命令
+    timeout: 60s          # 单条命令的超时，默认 60s，超时返回 124
+    max_output: 65536     # stdout、stderr 各自的上限（字节），默认 64KB，超出部分截断
+    inherit_env: [PATH, HOME, LANG]   # 从 runner 继承哪些环境变量，默认 PATH HOME USER LANG LC_ALL TZ
+```
+白名单的每一项是一条完整命令，或以 ` *` 结尾的前缀（`df *` 允许 `df`、`df -h /`）。启用白名单后，带分号、`&`、`|`、反引号、`$`、`<`、`>`、圆括号、花括号、反斜杠或换行的命令一律拒绝，防止用 `df -h; rm -rf /` 这类写法绕过。
+
+**3. 从别的节点调用：**
+```bash
+myco exec --to vps-shell --cmd "df -h /"
+myco exec --to vps-shell --cmd "systemctl status caddy" --timeout 2m --format json
+```
+和 ssh 一样：远端的 stdout、stderr 原样输出，远端的退出码就是本地的退出码（124 表示在节点上超时，126 表示被节点拒绝）。myco 自己出错时（找不到节点、没有权限、等待超时）用第 6 节的退出码，并在 stderr 输出 JSON 错误。加 `--format json` 时输出 `{exit_code, stdout, stderr, duration_ms, truncated, timed_out, denied, error}`。
+
+**安全说明**
+- **发送方限制**：没有 `allow_from` 的 exec 节点，runner 会拒绝启动。Hub 发消息时检查一次，节点执行前会再检查一次。
+- **提示词注入**：如果允许一个 AI agent 发命令，那么能影响这个 agent 的内容（网页、PR、别人发给它的消息）就可能间接在你的机器上执行命令。`allow-from` 里的节点越少越好，能用白名单就用白名单。
+- **只执行任务**：note、reply、event 一律不执行；附件不会下载。
+- **环境变量**：命令在一个干净的环境里运行，只带上面继承的变量、`env_file` 里的变量和 `MYCO_FROM` 等上下文变量。**不会**带上 agent 令牌（`MYCO_TOKEN`、`MYCO_CONFIG`）。
+- **审计日志**：每条命令（发送方、命令、退出码、耗时、是否被拒绝）都会追加到 `~/.myco/logs/<节点名>.exec.jsonl`。
+- **低权限用户**：建议用单独的系统用户运行这个节点的 runner，不要用 root。
+- **管理员令牌**：管理员可以重置任何 agent 的令牌，也就能冒充 allow-from 里的节点。exec 节点的安全最终取决于管理员令牌的安全。
 
 ## 5. 接入后的自检
 

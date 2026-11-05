@@ -56,11 +56,14 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	inv := cmdkit.NewInvocation(ctx, cmd, values, pos, stdin, stdout, stderr, getenv)
 	err = cmd.Run(inv)
 	var dry dryRunDone
+	var status exitStatus
 	switch {
 	case err == nil:
 		return ExitOK
 	case errors.As(err, &dry):
 		return ExitDryRun
+	case errors.As(err, &status):
+		return int(status)
 	}
 	e := toError(err, cmd.Path())
 	p.PrintError(e)
@@ -204,7 +207,9 @@ func (e *env) enroll(hub, token string, req api.EnrollRequest, dry bool) (*api.R
 // go to their own profile (~/.myco/agents/<agent>.yaml) unless a config file
 // was chosen explicitly; others go to the current config file.
 func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
-	if e.explicitConfig || b.SessionID == "" {
+	// Session agents get a profile per session; exec nodes have no session
+	// but still need a profile so `runner start --all` serves them.
+	if e.explicitConfig || (b.SessionID == "" && b.Harness != "exec") {
 		e.cfg.Hub, e.cfg.Agent, e.cfg.Token = hub, agent, token
 		e.cfg.Harness, e.cfg.SessionID = b.Harness, b.SessionID
 		return config.Save(e.cfgPath, e.cfg)
@@ -232,7 +237,7 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 // resume it ("" if it cannot be driven by a local runner).
 func runnerHarnessFor(h string) string {
 	switch h {
-	case "claude", "codex":
+	case "claude", "codex", "exec":
 		return h
 	}
 	return ""
