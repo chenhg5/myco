@@ -183,12 +183,13 @@ myco agent get        # 确认 binding.harness=claude，binding.session_id 是�
 myco runner start --all
 ```
 
-**后台服务里 claude 报 `OAuth session expired and could not be refreshed`**：macOS 上 Claude Code 的登录凭据存在钥匙串里，由后台服务（launchd）启动的 claude 可能读不到或刷新不了。解决办法是改用长期令牌：
+**后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
-claude setup-token                                   # 按提示生成长期令牌（sk-ant-oat01-...）
-printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' '<上一步得到的令牌>' > ~/.config/myco-claude.env && chmod 600 ~/.config/myco-claude.env
+myco runner env capture --agent <agent 名> --dry-run   # 先看会抓取哪些变量（只显示变量名）
+myco runner env capture --agent <agent 名>             # 写入 ~/.myco/env/<agent>.env（权限 600）并设置 runner.env_file
+myco runner service restart
 ```
-然后在这个 agent 的身份文件 `runner:` 下面加上 `env_file: ~/.config/myco-claude.env`。runner 只把这个文件里的变量传给该 agent 的 CLI，不写进服务配置，也不会发给 Hub。`myco doctor` 会检查这个文件能否读取、权限是否为 600。
+默认抓取所有 `ANTHROPIC_*` 变量，以及 Claude 的几个服务商开关（`CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY`、`CLAUDE_CODE_OAUTH_TOKEN`、`AWS_REGION` 等）；其他 CLI 可以用 `--prefix OPENAI_`、`--var NAME` 指定。这些变量**只传给该 agent 的 CLI**，不写进服务配置，也不会发给 Hub。用官方订阅（OAuth）登录的话，也可以用 `claude setup-token` 生成长期令牌，再设成 `CLAUDE_CODE_OAUTH_TOKEN`。
 
 ### 4.3 本地或 VPS 上的 Codex
 

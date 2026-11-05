@@ -303,3 +303,33 @@ func TestReadEnvFile(t *testing.T) {
 		t.Fatal("malformed line must fail")
 	}
 }
+
+func TestRunnerEnvCapture(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ANTHROPIC_BASE_URL", "https://llm.example.com/anthropic")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-secret value")
+	t.Setenv("UNRELATED", "x")
+	prof := filepath.Join(home, ".myco", "agents", "mac-claude.yaml")
+	os.MkdirAll(filepath.Dir(prof), 0o700)
+	os.WriteFile(prof, []byte("hub: http://h\nagent: mac-claude\ntoken: t\nruntime: x\n"), 0o600)
+	os.WriteFile(prof, []byte("hub: http://h\nagent: mac-claude\ntoken: t\n"), 0o600)
+	h := &harnessT{t, map[string]string{}}
+	code, out, e := h.run("runner", "env", "capture", "--agent", "mac-claude", "--format", "json")
+	if code != 0 || strings.Contains(out, "sk-secret") || !strings.Contains(out, "ANTHROPIC_API_KEY") {
+		t.Fatalf("capture: %d %s %s", code, out, e)
+	}
+	envFile := filepath.Join(home, ".myco", "env", "mac-claude.env")
+	st, err := os.Stat(envFile)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("env file perms: %v %v", st, err)
+	}
+	vars, err := config.ReadEnvFile(envFile)
+	if err != nil || len(vars) != 2 || vars[0] != "ANTHROPIC_API_KEY=sk-secret value" {
+		t.Fatalf("round trip: %v %v", vars, err)
+	}
+	cfg, _ := config.Load(prof)
+	if cfg.Runner.EnvFile != envFile {
+		t.Fatalf("profile env_file not set: %+v", cfg.Runner)
+	}
+}
