@@ -280,10 +280,12 @@ runner:
 |---|---|---|
 | 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认 |
 | `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
-| `workspace` | `--permission-mode acceptEdits` | `-c sandbox_mode="workspace-write"` |
+| `workspace` | `--permission-mode acceptEdits` | `-c sandbox_mode="workspace-write"` 加 `-c sandbox_workspace_write.network_access=true` |
 | `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
 
-`full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。另外 `runner.model`（或 `--model`）用来指定模型。
+`full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。
+
+无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。
 
 ### 注意事项（适用于 4.2 到 4.5）
 

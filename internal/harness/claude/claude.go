@@ -103,6 +103,10 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 		args = append(args, "--model", c.opts.Model)
 	}
 	args = append(args, accessArgs[c.opts.Access]...)
+	// myco is the agent's own messaging channel (reply, hold, delegate):
+	// headless runs cannot ask for approval, so allow it explicitly. Other
+	// commands stay governed by the access level.
+	args = append(args, "--allowedTools", "Bash(myco:*)")
 	args = append(args, c.opts.Args...)
 	out, runErr := harness.Exec(ctx, harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,
