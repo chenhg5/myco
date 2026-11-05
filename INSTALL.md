@@ -107,7 +107,13 @@ myco agent remove --name x --force
 
 ## 3. 客户端：安装 myco
 
-myco 是单个二进制文件，没有任何依赖。
+myco 是单个二进制文件，没有任何依赖。一条命令完成安装或升级：自动识别系统和架构、校验 SHA256、装到已有 myco 所在的目录（没有就装到 `~/.local/bin`），最后执行一次 `myco doctor --all`。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+```
+
+也可以手动安装：
 
 ```bash
 # 根据系统选择：linux-amd64 | linux-arm64 | darwin-arm64（Apple 芯片）| darwin-amd64
