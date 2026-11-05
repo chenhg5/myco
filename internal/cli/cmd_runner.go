@@ -38,7 +38,9 @@ notes are never auto-answered. Logs go to stderr.`,
 		Flags: []Flag{
 			{Name: "all", Kind: Bool, Help: "Serve every agent profile in ~/.myco/agents"},
 			{Name: "max-concurrent", Kind: Int, Default: "3", Help: "With --all: max agent CLIs running at once"},
-			{Name: "harness", Kind: Enum, Values: harnesses.Names(), Help: "Agent CLI adapter (default from config, else claude)"},
+			{Name: "harness", Kind: Enum, Values: harnesses.Names(), Help: "Agent CLI adapter (default from config, else claude); see: myco harness list"},
+			{Name: "access", Kind: Enum, Values: []string{"readonly", "workspace", "full"}, Help: "Permission level mapped to CLI flags (default: config, else the CLI's own headless default)"},
+			{Name: "model", Kind: String, Help: "Model in the CLI's own naming"},
 			{Name: "binary", Kind: String, Help: "Path to the agent CLI executable"},
 			{Name: "arg", Kind: List, Help: "Extra argument for the agent CLI (repeatable), e.g. --arg=--permission-mode --arg=acceptEdits"},
 			{Name: "command", Kind: String, Help: "Shell command line for --harness shell (prompt on stdin, reply on stdout)"},
@@ -87,15 +89,16 @@ type runnerShared struct {
 
 // runnerOverrides are per-invocation flags (single-agent mode only).
 type runnerOverrides struct {
-	harness, binary, command, workdir string
-	args                              []string
-	argsSet                           bool
-	timeout                           time.Duration
+	harness, binary, command, workdir, access, model string
+	args                                             []string
+	argsSet                                          bool
+	timeout                                          time.Duration
 }
 
 func (e *env) overrides() runnerOverrides {
 	o := runnerOverrides{harness: e.in.String("harness"), binary: e.in.String("binary"), command: e.in.String("command"),
-		workdir: e.in.String("workdir"), args: e.in.List("arg"), argsSet: e.in.IsSet("arg")}
+		workdir: e.in.String("workdir"), args: e.in.List("arg"), argsSet: e.in.IsSet("arg"),
+		access: e.in.String("access"), model: e.in.String("model")}
 	if e.in.IsSet("timeout") {
 		o.timeout = e.in.Duration("timeout")
 	}
@@ -118,7 +121,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if ov.argsSet {
 		args = ov.args
 	}
-	h, err := sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command)})
+	access, err := harness.ParseAccess(first(ov.access, rc.Access))
+	if err != nil {
+		return nil, errorf("invalid_config", ExitUsage, "use readonly, workspace or full", "%s: %v", cfgPath, err)
+	}
+	h, err := sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
+		Model: first(ov.model, rc.Model), Access: access, Template: rc.Template})
 	if err != nil {
 		return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 	}
@@ -165,7 +173,10 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	cfgAbs, _ := filepath.Abs(cfgPath)
 	alog := log.With("agent", me.Name)
-	alog.Info("runner ready", "hub", cfg.Hub, "harness", h.Name(), "workdir", workdir, "environment", host,
+	if access == harness.AccessFull {
+		alog.Warn("access=full: the agent CLI runs without approvals or sandbox; messages from other agents drive it")
+	}
+	alog.Info("runner ready", "hub", cfg.Hub, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,

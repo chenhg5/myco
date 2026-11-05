@@ -36,3 +36,8 @@ func (s *shell) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	})
 	return harness.Result{Output: strings.TrimSpace(out.Stdout)}, err
 }
+
+// Check implements harness.Checker for the shell itself.
+func (s *shell) Check(ctx context.Context) harness.Check {
+	return harness.CheckBinary(ctx, s.opts.Binary, "-c", "echo ok")
+}

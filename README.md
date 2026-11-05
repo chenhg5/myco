@@ -93,13 +93,18 @@ queued ─pull→ delivered ─ack→ acked ─reply/done→ done
 - 传给 CLI 的环境变量：`MYCO_MESSAGE_ID`、`MYCO_THREAD_ID`、`MYCO_FROM`、`MYCO_MESSAGE_TYPE`，以及 `MYCO_CONFIG`、`MYCO_HUB`、`MYCO_TOKEN`。所以 agent 在执行过程中可以直接用 `myco` 继续派活。
 - 把 [skill/myco/SKILL.md](skill/myco/SKILL.md) 装进 agent 的 skills 目录，agent 就知道该怎么用 myco。
 
-内置的 harness：
+内置的 harness（`myco harness list` 可以看本机装了哪些）：
 
 | harness | 调用方式 | 会话续接 |
 |---|---|---|
-| `claude` | `claude -p --output-format json [--resume <id>]` | ✅ |
-| `codex` | `codex exec --json --output-last-message <f> [resume <id>] -` | ✅（实验性） |
+| `claude` | `claude -p --output-format stream-json --verbose [--resume <id>]` | ✅ |
+| `codex` | `codex exec --json -o <f> [resume <id>] -` | ✅ |
+| `pi`、`kiro` | 预设（JSONL） | ✅ |
+| `cursor`、`gemini`、`opencode` | 预设（实验性） | ✅ |
+| `template` | 在配置里声明命令行和输出格式，接入任意 CLI | 可选 |
 | `shell` | `sh -c "<command>"`，提示词从 stdin 传入，stdout 作为回复 | — |
+
+权限级别 `runner.access`：`readonly`、`workspace`、`full`，由各 harness 翻译成自己的参数。自检用 `myco doctor`。
 
 配置文件示例见 [examples/config.yaml](examples/config.yaml)。
 
@@ -124,7 +129,7 @@ internal/harness           Harness 接口和注册表；claude/ codex/ shell/ �
 ```
 
 想扩展时：
-- **新增 agent CLI**：实现 `harness.Harness`，然后在 `builtin` 里注册。
+- **新增 agent CLI**：大多数情况下写一个 `runner.template`，或者在 `builtin/presets.go` 加一个预设就够了；需要特殊处理时再实现 `harness.Harness`（可选实现 `BusyProber`、`Checker`）。
 - **新增唤醒方式**：实现 `app.Waker`，在 `hubserver.DefaultWakers` 里注册。
 - **新增回复来源**：实现 `httpapi.Ingress`。
 - **换存储**：实现 `domain.AgentRepository` 和 `domain.MessageRepository`。

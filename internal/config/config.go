@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/chenhg5/myco/internal/harness"
 )
 
 // Env variable names.
@@ -45,6 +47,12 @@ type Runner struct {
 	Timeout     string   `yaml:"timeout,omitempty"`
 	Concurrency int      `yaml:"concurrency,omitempty"`
 	PollWait    string   `yaml:"poll_wait,omitempty"`
+	// Model and Access are mapped to CLI flags by the harness.
+	Model  string `yaml:"model,omitempty"`
+	Access string `yaml:"access,omitempty"`
+	// Template configures the "template" harness, or overrides fields of a
+	// preset (pi, kiro, cursor, gemini, opencode).
+	Template *harness.TemplateSpec `yaml:"template,omitempty"`
 }
 
 // DefaultPath returns ~/.myco/config.yaml.

@@ -36,6 +36,19 @@ func transcriptPatterns(id string) []string {
 
 func (c *codex) Name() string { return Name }
 
+// accessArgs maps access levels to Codex flags. `exec resume` rejects -s,
+// so the sandbox is set through -c, which both forms accept.
+var accessArgs = map[harness.Access][]string{
+	harness.AccessReadonly:  {"-c", `sandbox_mode="read-only"`},
+	harness.AccessWorkspace: {"-c", `sandbox_mode="workspace-write"`},
+	harness.AccessFull:      {"--dangerously-bypass-approvals-and-sandbox"},
+}
+
+// Check implements harness.Checker.
+func (c *codex) Check(ctx context.Context) harness.Check {
+	return harness.CheckBinary(ctx, c.opts.Binary, "--version")
+}
+
 // event is the subset of `codex exec --json` JSONL events we use.
 type event struct {
 	Type     string `json:"type"`
@@ -61,6 +74,10 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 
 	// codex exec [flags] [resume <id>] -   (prompt read from stdin)
 	args := []string{"exec", "--json", "--output-last-message", lastMsg}
+	if c.opts.Model != "" {
+		args = append(args, "-m", c.opts.Model)
+	}
+	args = append(args, accessArgs[c.opts.Access]...)
 	args = append(args, c.opts.Args...)
 	if req.SessionID != "" {
 		args = append(args, "resume", req.SessionID)

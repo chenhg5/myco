@@ -236,3 +236,30 @@ func TestProfilesAndRunnerAll(t *testing.T) {
 		t.Fatalf("both agents should have replied: %s", out)
 	}
 }
+
+func TestHarnessListAndDoctor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "c.yaml")}}
+	code, out, _ := h.run("harness", "list", "--format", "json")
+	for _, n := range []string{`"claude"`, `"codex"`, `"pi"`, `"kiro"`, `"template"`} {
+		if code != 0 || !strings.Contains(out, n) {
+			t.Fatalf("harness list missing %s: %s", n, out)
+		}
+	}
+	h.run("agent", "register", "--name", "doc")
+	// Healthy identity with a shell runner.
+	cfg := filepath.Join(home, "c.yaml")
+	data, _ := os.ReadFile(cfg)
+	os.WriteFile(cfg, append(data, []byte("runner:\n    harness: shell\n    command: \"true\"\n    workdir: "+home+"\n")...), 0o600)
+	if code, out, e := h.run("doctor", "--format", "json"); code != 0 || !strings.Contains(out, `"ok": true`) {
+		t.Fatalf("doctor healthy: %d %s %s", code, out, e)
+	}
+	// Broken workdir and invalid access -> exit 1 with suggestions.
+	os.WriteFile(cfg, append(data, []byte("runner:\n    harness: shell\n    command: \"true\"\n    workdir: /nope\n    access: superuser\n")...), 0o600)
+	code, out, _ = h.run("doctor", "--format", "json")
+	if code != ExitError || !strings.Contains(out, `"check": "workdir"`) || !strings.Contains(out, `"check": "runner.access"`) {
+		t.Fatalf("doctor broken: %d %s", code, out)
+	}
+}

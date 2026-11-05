@@ -66,6 +66,18 @@ func transcriptPatterns(id string) []string {
 
 func (c *claude) Name() string { return Name }
 
+// accessArgs maps access levels to Claude Code permission flags.
+var accessArgs = map[harness.Access][]string{
+	harness.AccessReadonly:  {"--permission-mode", "default", "--disallowedTools", "Edit,Write,NotebookEdit,Bash"},
+	harness.AccessWorkspace: {"--permission-mode", "acceptEdits"},
+	harness.AccessFull:      {"--permission-mode", "bypassPermissions"},
+}
+
+// Check implements harness.Checker.
+func (c *claude) Check(ctx context.Context) harness.Check {
+	return harness.CheckBinary(ctx, c.opts.Binary, "--version")
+}
+
 // event is the subset of `--output-format stream-json` events we use.
 type event struct {
 	Type      string `json:"type"`
@@ -87,6 +99,10 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	if req.SessionID != "" {
 		args = append(args, "--resume", req.SessionID)
 	}
+	if c.opts.Model != "" {
+		args = append(args, "--model", c.opts.Model)
+	}
+	args = append(args, accessArgs[c.opts.Access]...)
 	args = append(args, c.opts.Args...)
 	out, runErr := harness.Exec(ctx, harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,

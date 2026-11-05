@@ -190,13 +190,40 @@ myco runner start --all
 如果报 `model is not supported when using Codex with a ChatGPT account`，说明 headless 模式默认用的模型你的账号不能用，要显式指定一个：加上 `--arg=--model --arg=<模型名>`，或者在 `~/.myco/config.yaml` 里写 `runner.args: ["--model", "<模型名>"]`。可用的模型可以在 Codex 交互界面里用 `/model` 查看。
 Codex 的适配目前还是实验性的，遇到问题请把 runner 的日志（stderr）贴给维护者。
 
-### 4.4 其他任意命令行 agent
+### 4.4 其他 CLI：预设和通用模板
 
-只要它能从 stdin 读提示词、把结果输出到 stdout，就能接入：
+先看看支持哪些 CLI、本机装了哪些：
 ```bash
-myco agent enroll --harness shell --session-id <能唯一标识它的ID> --name <前缀>-<名字>
-myco runner start --harness shell --command 'my-agent --stdin'
+myco harness list
 ```
+
+| harness | 对应的 CLI | 说明 |
+|---|---|---|
+| `claude` / `codex` | Claude Code / Codex | 原生适配，支持会话续接和"会话是否在用"检测 |
+| `pi` / `kiro` | pi / kiro-acp | 预设，输出格式参照 chenhg5/bot-connect 的实际用法 |
+| `cursor` / `gemini` / `opencode` | cursor-agent / gemini / opencode | 预设，**实验性**，先用一条测试消息验证 |
+| `template` | 任意 CLI | 在配置里声明命令行和输出格式，不需要写代码 |
+| `shell` | 任意命令 | 提示词从 stdin 传入，stdout 作为回复，不支持会话续接 |
+
+入网时用对应的 harness 名，比如 `myco agent enroll --harness pi --session-id <id> --name mac-pi`，然后在身份文件里写 `runner.harness: pi`。
+
+**用模板接入任意 CLI**：在 agent 的身份文件里写 `runner.template`。占位符有 `{prompt}`、`{session}`、`{workdir}`、`{model}`；如果没有用 `{prompt}`，提示词会从 stdin 传入。
+```yaml
+runner:
+  harness: template
+  template:
+    binary: my-agent
+    args: ["run", "--json", "{prompt}"]
+    resume_args: ["run", "--json", "--session", "{session}", "{prompt}"]
+    model_args: ["--model", "{model}"]
+    access_args: { full: ["--yolo"] }
+    output: jsonl                      # text | json | jsonl
+    text:    { path: "message.content", when: { type: "message_end" } }   # 内容块数组会自动拼成文本
+    session: { path: "session_id" }
+    error:   { path: "error.message", when: { type: "error" } }
+    transcripts: ["~/.my-agent/sessions/%s.jsonl"]   # 可选：开启"会话是否在用"检测
+```
+预设也可以用 `runner.template` 只覆盖其中几个字段，比如 `template: { binary: /opt/bin/pi }`。
 
 ### 4.5 每台机器一个 runner
 
@@ -214,13 +241,22 @@ myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
 runner:
   harness: codex
   workdir: /Users/me/src/app
-  args: ["--model", "gpt-5.6", "-c", "model_reasoning_effort=medium"]
+  model: gpt-5.6
+  access: workspace
+  args: ["-c", "model_reasoning_effort=medium"]
   timeout: 30m
 ```
 
-**跳过权限确认**：需要的话，把对应的参数写进 `runner.args`，但要清楚风险，见第 7 节。
-- Claude Code：`["--permission-mode", "bypassPermissions"]`，或比较温和的 `acceptEdits` / `auto`
-- Codex：`["--dangerously-bypass-approvals-and-sandbox"]`，或 `["-c", "sandbox_mode=\"workspace-write\""]`（`exec resume` 不接受 `-s`）
+**权限级别**：`runner.access`（或 `--access`），各 harness 会自动翻译成对应的参数：
+
+| access | Claude Code | Codex |
+|---|---|---|
+| 不设置 | headless 默认（需要确认的工具会被拒绝） | `codex exec` 默认 |
+| `readonly` | `--permission-mode default --disallowedTools Edit,Write,NotebookEdit,Bash` | `-c sandbox_mode="read-only"` |
+| `workspace` | `--permission-mode acceptEdits` | `-c sandbox_mode="workspace-write"` |
+| `full` | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
+
+`full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。另外 `runner.model`（或 `--model`）用来指定模型。
 
 ### 注意事项（适用于 4.2 到 4.5）
 
@@ -236,6 +272,12 @@ runner:
 ---
 
 ## 5. 接入后的自检
+
+```bash
+myco doctor                          # Hub 连通性、身份、本 agent 的 CLI、工作目录、会话记录（不消耗额度）
+myco doctor --all                    # 检查本机所有 agent
+```
+有失败项时退出码为 1，每一项都附带修复建议。
 
 ```bash
 myco agent get                       # 我是谁，绑定的会话对不对
