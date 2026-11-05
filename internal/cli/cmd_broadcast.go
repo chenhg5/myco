@@ -8,6 +8,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/chenhg5/myco/internal/client"
 )
 
 func broadcastCommands() *Command {
@@ -78,9 +79,14 @@ this way are marked done, so they do not show up again in your inbox.`,
 			for {
 				// Replies we collect here are consumed so they don't also
 				// wake us through the inbox (same as message send --wait).
-				if st, err = c.BroadcastStatus(e.in.Ctx, res.BroadcastID, true); err != nil {
-					return err
+				next, err := c.BroadcastStatus(e.in.Ctx, res.BroadcastID, true)
+				if err != nil {
+					if err := client.RideOut(e.in.Ctx, err, deadline); err != nil {
+						return err
+					}
+					continue
 				}
+				st = next
 				if st.Answered == st.Total || time.Now().After(deadline) {
 					break
 				}

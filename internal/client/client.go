@@ -217,20 +217,32 @@ func (c *Client) WaitPending(ctx context.Context, total time.Duration) ([]api.Me
 		q := url.Values{"wait_seconds": {strconv.Itoa(min(secs, 60))}}
 		var out api.PendingResponse
 		if err := c.do(ctx, http.MethodGet, "/v1/inbox/wait", q, nil, &out); err != nil {
-			// Ride out hub restarts and network blips until the deadline.
-			if e, ok := AsError(err); ok && e.Retryable && time.Until(deadline) > 5*time.Second {
-				select {
-				case <-time.After(5 * time.Second):
-					continue
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
+			if err := RideOut(ctx, err, deadline); err != nil {
+				return nil, err
 			}
-			return nil, err
+			continue
 		}
 		if len(out.Pending) > 0 || time.Until(deadline) <= 0 {
 			return out.Pending, nil
 		}
+	}
+}
+
+// retryPause is how long long-poll loops back off after a retryable error.
+var retryPause = 5 * time.Second
+
+// RideOut lets long-poll loops survive hub restarts and network blips
+// (proxy resets, 502s) until their deadline: it returns nil after a short
+// pause when err is retryable and time remains, otherwise the error.
+func RideOut(ctx context.Context, err error, deadline time.Time) error {
+	if e, ok := AsError(err); !ok || !e.Retryable || time.Until(deadline) <= retryPause {
+		return err
+	}
+	select {
+	case <-time.After(retryPause):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -390,7 +402,10 @@ func (c *Client) WaitReply(ctx context.Context, id string, total time.Duration) 
 		q := url.Values{"wait_seconds": {strconv.Itoa(min(secs, 60))}}
 		var out api.WaitResponse
 		if err := c.do(ctx, http.MethodGet, "/v1/messages/"+esc(id)+"/reply", q, nil, &out); err != nil {
-			return nil, err
+			if err := RideOut(ctx, err, deadline); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		if out.Reply != nil {
 			return out.Reply, nil
