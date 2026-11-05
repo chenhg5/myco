@@ -1,0 +1,8 @@
+# Automatic HTTPS in front of the hub. Long-polls need generous timeouts.
+hub.example.com {
+	reverse_proxy 127.0.0.1:7777 {
+		transport http {
+			read_timeout 120s
+		}
+	}
+}

@@ -1,0 +1,339 @@
+package app
+
+import (
+	"context"
+	"time"
+
+	"github.com/chenhg5/myco/internal/domain"
+)
+
+// MessagePolicy tunes delivery semantics.
+type MessagePolicy struct {
+	// Lease is how long a pulled message stays invisible before redelivery
+	// unless acknowledged.
+	Lease time.Duration
+	// MaxAttempts bounds redeliveries of unacknowledged messages.
+	MaxAttempts int
+	// MaxWait caps long-poll durations.
+	MaxWait time.Duration
+}
+
+// DefaultMessagePolicy returns sensible defaults.
+func DefaultMessagePolicy() MessagePolicy {
+	return MessagePolicy{Lease: 5 * time.Minute, MaxAttempts: 5, MaxWait: 60 * time.Second}
+}
+
+// MessageService implements messaging use cases for an authenticated agent.
+type MessageService struct {
+	agents   domain.AgentRepository
+	messages domain.MessageRepository
+	notifier Notifier
+	ids      IDGenerator
+	clock    Clock
+	policy   MessagePolicy
+}
+
+// NewMessageService wires the messaging use cases.
+func NewMessageService(agents domain.AgentRepository, messages domain.MessageRepository, n Notifier, ids IDGenerator, clock Clock, p MessagePolicy) *MessageService {
+	return &MessageService{agents: agents, messages: messages, notifier: n, ids: ids, clock: clock, policy: p}
+}
+
+// SendInput describes a new message.
+type SendInput struct {
+	To             string
+	Type           string
+	Body           string
+	ThreadID       string
+	IdempotencyKey string
+	DryRun         bool
+}
+
+// SendOutput reports the stored message; Duplicate is true when an earlier
+// message with the same idempotency key was returned instead.
+type SendOutput struct {
+	Message   *domain.Message
+	Duplicate bool
+}
+
+// Send queues a task or note from sender.
+func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in SendInput) (*SendOutput, error) {
+	to, err := domain.ParseAgentName(in.To)
+	if err != nil {
+		return nil, err
+	}
+	typ, err := domain.ParseSendableType(in.Type)
+	if err != nil {
+		return nil, err
+	}
+	if in.IdempotencyKey != "" {
+		prev, err := s.messages.FindByIdempotencyKey(ctx, sender.Name, in.IdempotencyKey)
+		if err == nil {
+			return &SendOutput{Message: prev, Duplicate: true}, nil
+		}
+		if !domain.IsCode(err, domain.CodeNotFound) {
+			return nil, err
+		}
+	}
+	recipient, err := s.agents.Get(ctx, to)
+	if err != nil {
+		if domain.IsCode(err, domain.CodeNotFound) {
+			return nil, domain.Errf(domain.CodeNotFound, "agent %s not found", to).
+				WithSuggestion("list agents with: myco agent list")
+		}
+		return nil, err
+	}
+	if !recipient.Accepts(sender.Name) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
+			WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
+	}
+	if in.ThreadID != "" {
+		if err := s.requireThreadParticipant(ctx, sender.Name, in.ThreadID); err != nil {
+			return nil, err
+		}
+	}
+	m, err := domain.NewMessage(s.ids.New("msg"), sender.Name, to, typ, in.Body, in.ThreadID, "", in.IdempotencyKey, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	if in.DryRun {
+		return &SendOutput{Message: m}, nil
+	}
+	if err := s.messages.Create(ctx, m); err != nil {
+		if domain.IsCode(err, domain.CodeConflict) && in.IdempotencyKey != "" {
+			prev, ferr := s.messages.FindByIdempotencyKey(ctx, sender.Name, in.IdempotencyKey)
+			if ferr == nil {
+				return &SendOutput{Message: prev, Duplicate: true}, nil
+			}
+		}
+		return nil, err
+	}
+	s.notifier.Publish(inboxTopic(string(to)))
+	return &SendOutput{Message: m}, nil
+}
+
+func (s *MessageService) requireThreadParticipant(ctx context.Context, agent domain.AgentName, threadID string) error {
+	msgs, err := s.messages.ListThread(ctx, threadID)
+	if err != nil {
+		return err
+	}
+	for _, m := range msgs {
+		if m.Involves(agent) {
+			return nil
+		}
+	}
+	return domain.Errf(domain.CodeNotFound, "thread %s not found", threadID).
+		WithSuggestion("omit --thread to start a new thread")
+}
+
+// Pull leases up to limit due messages for agent, long-polling up to wait.
+func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration) ([]*domain.Message, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 10
+	}
+	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
+	deadline := s.clock.Now().Add(waitFor)
+	for {
+		// Subscribe before querying so a concurrent Send cannot be missed.
+		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
+		now := s.clock.Now()
+		msgs, err := s.messages.ClaimDue(ctx, agent.Name, now, limit, func(m *domain.Message) bool {
+			return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
+		})
+		if err != nil || len(msgs) > 0 {
+			cancel()
+			return msgs, err
+		}
+		remaining := deadline.Sub(s.clock.Now())
+		if remaining <= 0 {
+			cancel()
+			return nil, nil
+		}
+		fired := wait(ctx, ch, remaining)
+		cancel()
+		if !fired {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			// Timer elapsed: one final pass catches expired leases.
+			now := s.clock.Now()
+			return s.messages.ClaimDue(ctx, agent.Name, now, limit, func(m *domain.Message) bool {
+				return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
+			})
+		}
+	}
+}
+
+// Transition names a recipient-side state change.
+type Transition string
+
+const (
+	TransitionAck      Transition = "ack"
+	TransitionHold     Transition = "hold"
+	TransitionComplete Transition = "done"
+)
+
+// Transition applies ack/hold/done to a message addressed to agent.
+func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id string, t Transition, dryRun bool) (*domain.Message, error) {
+	apply := func(m *domain.Message) error {
+		now := s.clock.Now()
+		switch t {
+		case TransitionAck:
+			return m.Ack(agent.Name, now)
+		case TransitionHold:
+			return m.Hold(agent.Name, now)
+		case TransitionComplete:
+			return m.Complete(agent.Name, now)
+		}
+		return domain.Errf(domain.CodeInvalidArgument, "unknown transition %q", t)
+	}
+	if dryRun {
+		m, err := s.messages.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return m, apply(m)
+	}
+	return s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) {
+		return nil, apply(m)
+	})
+}
+
+// Reply answers message id on behalf of agent and returns the reply.
+func (s *MessageService) Reply(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	var reply *domain.Message
+	fn := func(m *domain.Message) ([]*domain.Message, error) {
+		r, err := m.Reply(agent.Name, s.ids.New("msg"), body, s.clock.Now())
+		if err != nil {
+			return nil, err
+		}
+		reply = r
+		return []*domain.Message{r}, nil
+	}
+	if err := s.mutateOrPreview(ctx, id, dryRun, fn); err != nil {
+		return nil, err
+	}
+	if !dryRun {
+		s.notifier.Publish(inboxTopic(string(reply.To)))
+		s.notifier.Publish(replyTopic(id))
+	}
+	return reply, nil
+}
+
+// Fail closes message id as failed; the sender is notified for tasks.
+func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reason string, dryRun bool) (*domain.Message, error) {
+	var event *domain.Message
+	fn := func(m *domain.Message) ([]*domain.Message, error) {
+		ev, err := m.Fail(agent.Name, s.ids.New("msg"), reason, s.clock.Now())
+		if err != nil || ev == nil {
+			return nil, err
+		}
+		event = ev
+		return []*domain.Message{ev}, nil
+	}
+	if dryRun {
+		m, err := s.messages.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		_, err = fn(m)
+		return m, err
+	}
+	m, err := s.messages.Mutate(ctx, id, fn)
+	if err != nil {
+		return nil, err
+	}
+	if event != nil {
+		s.notifier.Publish(inboxTopic(string(event.To)))
+		s.notifier.Publish(replyTopic(id))
+	}
+	return m, nil
+}
+
+func (s *MessageService) mutateOrPreview(ctx context.Context, id string, dryRun bool, fn domain.MutateFunc) error {
+	if dryRun {
+		m, err := s.messages.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		_, err = fn(m)
+		return err
+	}
+	_, err := s.messages.Mutate(ctx, id, fn)
+	return err
+}
+
+// Get returns a message visible to agent.
+func (s *MessageService) Get(ctx context.Context, agent *domain.Agent, id string) (*domain.Message, error) {
+	m, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !m.Involves(agent.Name) {
+		return nil, domain.Errf(domain.CodeNotFound, "message %s not found", id)
+	}
+	return m, nil
+}
+
+// Thread returns all messages of a thread agent participates in.
+func (s *MessageService) Thread(ctx context.Context, agent *domain.Agent, threadID string) ([]*domain.Message, error) {
+	if err := s.requireThreadParticipant(ctx, agent.Name, threadID); err != nil {
+		return nil, err
+	}
+	return s.messages.ListThread(ctx, threadID)
+}
+
+// WaitReply blocks up to waitFor for the answer to a message agent sent.
+// A returned reply is marked done so it is not delivered again via pull.
+// It returns (nil, nil) on timeout.
+func (s *MessageService) WaitReply(ctx context.Context, agent *domain.Agent, id string, waitFor time.Duration) (*domain.Message, error) {
+	orig, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if orig.From != agent.Name {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only the sender of %s can wait for its reply", id)
+	}
+	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
+	deadline := s.clock.Now().Add(waitFor)
+	for {
+		ch, cancel := s.notifier.Subscribe(replyTopic(id))
+		r, err := s.messages.FindReply(ctx, id)
+		if err == nil {
+			cancel()
+			return s.consume(ctx, agent, r)
+		}
+		if !domain.IsCode(err, domain.CodeNotFound) {
+			cancel()
+			return nil, err
+		}
+		remaining := deadline.Sub(s.clock.Now())
+		if remaining <= 0 {
+			cancel()
+			return nil, nil
+		}
+		fired := wait(ctx, ch, remaining)
+		cancel()
+		if !fired && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if !fired {
+			deadline = s.clock.Now() // one last lookup, then give up
+		}
+	}
+}
+
+// consume marks a reply as done so pull will not redeliver it.
+func (s *MessageService) consume(ctx context.Context, agent *domain.Agent, r *domain.Message) (*domain.Message, error) {
+	if r.Status.Terminal() {
+		return r, nil
+	}
+	return s.messages.Mutate(ctx, r.ID, func(m *domain.Message) ([]*domain.Message, error) {
+		if m.Status.Terminal() {
+			return nil, nil
+		}
+		if m.Status == domain.StatusQueued {
+			m.Claim(s.clock.Now(), 0, 0)
+		}
+		return nil, m.Complete(agent.Name, s.clock.Now())
+	})
+}

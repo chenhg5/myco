@@ -1,0 +1,15 @@
+# ~/.myco/config.yaml — written by `myco agent register`, edit the runner section by hand.
+hub: https://hub.example.com
+agent: vps-coder
+token: myco_xxxxxxxxxxxxxxxx          # or set MYCO_TOKEN instead
+runner:
+  harness: claude                    # claude | codex | shell
+  # binary: /usr/local/bin/claude    # override the executable
+  args:                              # extra flags for the agent CLI
+    - --permission-mode
+    - acceptEdits
+  # command: 'my-agent --stdin'      # for harness: shell
+  workdir: /srv/agents/vps-coder
+  timeout: 30m                       # max time per message
+  concurrency: 1                     # parallel messages (same thread is always serialized)
+  poll_wait: 30s                     # long-poll duration

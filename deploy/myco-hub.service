@@ -1,0 +1,17 @@
+# /etc/systemd/system/myco-hub.service
+# Put MYCO_ADMIN_TOKEN=... in /etc/myco/hub.env (chmod 600).
+[Unit]
+Description=myco hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/myco/hub.env
+ExecStart=/usr/local/bin/myco hub serve --addr 127.0.0.1:7777 --db /var/lib/myco/hub.db
+StateDirectory=myco
+DynamicUser=yes
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

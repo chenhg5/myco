@@ -1,0 +1,20 @@
+# /etc/systemd/system/myco-runner@.service — one instance per agent:
+#   systemctl enable --now myco-runner@vps-coder
+# Expects /home/<user>/.myco/<agent>.yaml (from `myco agent register --config ...`).
+[Unit]
+Description=myco runner for agent %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=agent
+Environment=MYCO_CONFIG=/home/agent/.myco/%i.yaml
+ExecStart=/usr/local/bin/myco runner start
+Restart=always
+RestartSec=5
+# Let in-flight agent runs finish on stop.
+TimeoutStopSec=30min
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
