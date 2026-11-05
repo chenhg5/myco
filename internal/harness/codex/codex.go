@@ -32,9 +32,14 @@ func (c *codex) Name() string { return Name }
 type event struct {
 	Type     string `json:"type"`
 	ThreadID string `json:"thread_id"`
-	Item     struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+	Message  string `json:"message"`
+	Error    *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+	Item struct {
+		Type    string `json:"type"`
+		Text    string `json:"text"`
+		Message string `json:"message"`
 	} `json:"item"`
 }
 
@@ -57,21 +62,30 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	out, runErr := harness.Exec(ctx, harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: req.Env,
 	})
-	res := parseEvents(out.Stdout)
+	res, failure := parseEvents(out.Stdout)
 	if b, err := os.ReadFile(lastMsg); err == nil && strings.TrimSpace(string(b)) != "" {
 		res.Output = strings.TrimSpace(string(b))
 	}
 	if req.SessionID != "" && res.SessionID == "" {
 		res.SessionID = req.SessionID
 	}
-	if runErr != nil && strings.Contains(runErr.Error(), "already has an active writer") {
+	if runErr != nil && strings.Contains(runErr.Error()+failure, "already has an active writer") {
 		return res, fmt.Errorf("%w: codex thread %s is open elsewhere (interactive session?)", harness.ErrSessionBusy, req.SessionID)
+	}
+	if runErr != nil && failure != "" {
+		// The real cause is in the JSON events; stderr is mostly warnings.
+		return res, fmt.Errorf("codex failed: %s", failure)
 	}
 	return res, runErr
 }
 
-func parseEvents(stdout string) harness.Result {
-	var res harness.Result
+// parseEvents extracts the session id, the final agent message and, if the
+// run failed, the error reported in the event stream.
+func parseEvents(stdout string) (harness.Result, string) {
+	var (
+		res      harness.Result
+		failures []string
+	)
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	sc.Buffer(make([]byte, 1<<20), 16<<20)
 	for sc.Scan() {
@@ -84,7 +98,13 @@ func parseEvents(stdout string) harness.Result {
 			res.SessionID = ev.ThreadID
 		case ev.Type == "item.completed" && ev.Item.Type == "agent_message":
 			res.Output = ev.Item.Text
+		case ev.Type == "error" && ev.Message != "":
+			failures = append(failures, ev.Message)
+		case ev.Type == "turn.failed" && ev.Error != nil && ev.Error.Message != "":
+			failures = append(failures, ev.Error.Message)
+		case ev.Type == "item.completed" && ev.Item.Type == "error" && ev.Item.Message != "":
+			failures = append(failures, ev.Item.Message)
 		}
 	}
-	return res
+	return res, strings.Join(failures, "; ")
 }

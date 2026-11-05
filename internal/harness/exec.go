@@ -44,7 +44,7 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		return res, fmt.Errorf("%s: %w", p.Binary, ctx.Err())
 	}
 	if err != nil {
-		return res, fmt.Errorf("%s exited: %v: %s", p.Binary, err, tail(res.Stderr, 2000))
+		return res, fmt.Errorf("%s exited: %v: %s", p.Binary, err, tail(errorLines(res.Stderr), 2000))
 	}
 	return res, nil
 }
@@ -71,4 +71,23 @@ func tail(s string, n int) string {
 		return "..." + s[len(s)-n:]
 	}
 	return s
+}
+
+// errorLines drops noisy WARN/INFO/DEBUG log lines so the actual error
+// survives truncation; it returns the input unchanged if nothing remains.
+func errorLines(stderr string) string {
+	var keep []string
+	for _, l := range strings.Split(stderr, "\n") {
+		u := strings.ToUpper(l)
+		if strings.Contains(u, " WARN ") || strings.Contains(u, " INFO ") || strings.Contains(u, " DEBUG ") || strings.Contains(u, " TRACE ") {
+			continue
+		}
+		if strings.TrimSpace(l) != "" {
+			keep = append(keep, l)
+		}
+	}
+	if len(keep) == 0 {
+		return stderr
+	}
+	return strings.Join(keep, "\n")
 }
