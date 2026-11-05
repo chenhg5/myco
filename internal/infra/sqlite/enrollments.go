@@ -17,14 +17,14 @@ func NewEnrollmentRepo(db *sql.DB) *EnrollmentRepo { return &EnrollmentRepo{db: 
 
 var _ domain.EnrollmentRepository = (*EnrollmentRepo)(nil)
 
-const enrCols = `id, token_hash, name_prefix, harness, allow_from, capabilities, note, max_uses, uses, expires_at, revoked_at, created_at`
+const enrCols = `id, token_hash, name_prefix, harness, allow_from, capabilities, note, max_uses, uses, expires_at, revoked_at, created_at, labels`
 
 func (r *EnrollmentRepo) Create(ctx context.Context, e *domain.Enrollment) error {
 	allow, _ := json.Marshal(nonNil(e.AllowFrom))
 	caps, _ := json.Marshal(nonNil(e.Capabilities))
-	_, err := r.db.ExecContext(ctx, `INSERT INTO enrollments (`+enrCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO enrollments (`+enrCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ID, e.TokenHash, e.NamePrefix, e.Harness, string(allow), string(caps), e.Note, e.MaxUses, e.Uses,
-		ms(e.ExpiresAt), ms(e.RevokedAt), ms(e.CreatedAt))
+		ms(e.ExpiresAt), ms(e.RevokedAt), ms(e.CreatedAt), labelsJSON(e.Labels))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "enrollment already exists")
 	}
@@ -89,15 +89,16 @@ func (r *EnrollmentRepo) one(ctx context.Context, where string, args ...any) (*d
 func scanEnrollment(s scanner) (*domain.Enrollment, error) {
 	var (
 		e                         domain.Enrollment
-		allow, caps               string
+		allow, caps, labels       string
 		expires, revoked, created int64
 	)
 	if err := s.Scan(&e.ID, &e.TokenHash, &e.NamePrefix, &e.Harness, &allow, &caps, &e.Note,
-		&e.MaxUses, &e.Uses, &expires, &revoked, &created); err != nil {
+		&e.MaxUses, &e.Uses, &expires, &revoked, &created, &labels); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(allow), &e.AllowFrom)
 	_ = json.Unmarshal([]byte(caps), &e.Capabilities)
+	_ = json.Unmarshal([]byte(labels), &e.Labels)
 	e.ExpiresAt, e.RevokedAt, e.CreatedAt = fromMS(expires), fromMS(revoked), fromMS(created)
 	return &e, nil
 }

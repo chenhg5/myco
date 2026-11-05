@@ -17,7 +17,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -28,9 +28,9 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 	if m.IdempotencyKey != "" {
 		idem = m.IdempotencyKey
 	}
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.Type, m.Body, m.Status, m.Attempts,
-		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt))
+		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
 	}
@@ -45,6 +45,24 @@ func updateMessage(ctx context.Context, x execer, m *domain.Message) error {
 
 func (r *MessageRepo) Create(ctx context.Context, m *domain.Message) error {
 	return insertMessage(ctx, r.db, m)
+}
+
+func (r *MessageRepo) CreateMany(ctx context.Context, msgs []*domain.Message) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return internal(err)
+	}
+	defer tx.Rollback()
+	for _, m := range msgs {
+		if err := insertMessage(ctx, tx, m); err != nil {
+			return err
+		}
+	}
+	return internal(tx.Commit())
+}
+
+func (r *MessageRepo) ListBroadcast(ctx context.Context, broadcastID string) ([]*domain.Message, error) {
+	return r.many(ctx, r.db, `WHERE broadcast_id=? ORDER BY created_at, id`, broadcastID)
 }
 
 func (r *MessageRepo) Get(ctx context.Context, id string) (*domain.Message, error) {
@@ -179,7 +197,7 @@ func scanMessage(s scanner) (*domain.Message, error) {
 		idem                    sql.NullString
 	)
 	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.Type, &m.Body, &m.Status,
-		&m.Attempts, &lease, &m.Error, &idem, &created, &updated)
+		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID)
 	if err != nil {
 		return nil, err
 	}

@@ -38,6 +38,7 @@ type RegisterInput struct {
 	Description  string
 	Capabilities []string
 	AllowFrom    []string
+	Labels       []string
 	Binding      domain.Binding
 	Delivery     domain.Delivery
 	// RotateToken updates an existing agent and issues a new token instead
@@ -125,17 +126,27 @@ func buildSpec(in RegisterInput) (domain.AgentSpec, error) {
 	if err != nil {
 		return domain.AgentSpec{}, err
 	}
-	return domain.AgentSpec{Description: in.Description, Capabilities: caps, Binding: in.Binding, Delivery: in.Delivery, AllowFrom: allow}, nil
+	labels, err := domain.ParseLabels(in.Labels)
+	if err != nil {
+		return domain.AgentSpec{}, err
+	}
+	return domain.AgentSpec{Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding, Delivery: in.Delivery, AllowFrom: allow}, nil
 }
 
 // AgentFilter narrows List results.
 type AgentFilter struct {
 	Capability string
 	OnlineOnly bool
+	// Selector matches labels (see domain.Selector); "" matches all.
+	Selector string
 }
 
 // List returns registered agents matching f.
 func (s *AgentService) List(ctx context.Context, f AgentFilter) ([]*domain.Agent, error) {
+	sel, err := domain.ParseSelector(f.Selector)
+	if err != nil {
+		return nil, err
+	}
 	all, err := s.agents.List(ctx)
 	if err != nil {
 		return nil, err
@@ -143,6 +154,9 @@ func (s *AgentService) List(ctx context.Context, f AgentFilter) ([]*domain.Agent
 	now := s.clock.Now()
 	out := all[:0]
 	for _, a := range all {
+		if !sel.Matches(a) {
+			continue
+		}
 		if f.Capability != "" && !a.HasCapability(f.Capability) {
 			continue
 		}
@@ -183,6 +197,18 @@ func (s *AgentService) Bind(ctx context.Context, a *domain.Agent, b domain.Bindi
 		return nil, err
 	}
 	if err := s.wakers.Validate(a); err != nil {
+		return nil, err
+	}
+	return a, s.agents.Save(ctx, a)
+}
+
+// SetLabels adds/removes labels on agent name (callers check who may).
+func (s *AgentService) SetLabels(ctx context.Context, name string, add, remove []string) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.SetLabels(add, remove); err != nil {
 		return nil, err
 	}
 	return a, s.agents.Save(ctx, a)

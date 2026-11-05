@@ -132,8 +132,10 @@ type Agent struct {
 	Name         AgentName
 	Description  string
 	Capabilities []string
-	Binding      Binding
-	Delivery     Delivery
+	// Labels group agents (tags or key=value); see Selector.
+	Labels   []string
+	Binding  Binding
+	Delivery Delivery
 	// AllowFrom restricts who may send tasks/notes to this agent.
 	// Empty means anyone. Replies are always accepted.
 	AllowFrom []AgentName
@@ -149,6 +151,7 @@ type Agent struct {
 type AgentSpec struct {
 	Description  string
 	Capabilities []string
+	Labels       []string
 	Binding      Binding
 	Delivery     Delivery
 	AllowFrom    []AgentName
@@ -157,6 +160,9 @@ type AgentSpec struct {
 const maxDescription = 2000
 
 func (s AgentSpec) validate() error {
+	if _, err := ParseLabels(s.Labels); err != nil {
+		return err
+	}
 	if len(s.Description) > maxDescription {
 		return Errf(CodeInvalidArgument, "description longer than %d bytes", maxDescription)
 	}
@@ -189,6 +195,9 @@ func (a *Agent) Update(spec AgentSpec) error {
 	}
 	if len(spec.Capabilities) == 0 {
 		spec.Capabilities = a.Capabilities
+	}
+	if len(spec.Labels) == 0 {
+		spec.Labels = a.Labels
 	}
 	if len(spec.AllowFrom) == 0 {
 		spec.AllowFrom = a.AllowFrom
@@ -236,6 +245,7 @@ func (b *Binding) mergeFrom(o Binding) error {
 func (a *Agent) apply(s AgentSpec) {
 	a.Description = s.Description
 	a.Capabilities = s.Capabilities
+	a.Labels = s.Labels
 	a.Binding = s.Binding
 	if s.Delivery.Mode == "" {
 		s.Delivery.Mode = DeliveryPull
@@ -262,3 +272,13 @@ func (a *Agent) IsOnline(now time.Time, window time.Duration) bool {
 
 // HasCapability reports whether the agent advertises capability c.
 func (a *Agent) HasCapability(c string) bool { return slices.Contains(a.Capabilities, c) }
+
+// SetLabels applies add/remove to the agent's labels.
+func (a *Agent) SetLabels(add, remove []string) error {
+	next, err := MergeLabels(a.Labels, add, remove)
+	if err != nil {
+		return err
+	}
+	a.Labels = next
+	return nil
+}

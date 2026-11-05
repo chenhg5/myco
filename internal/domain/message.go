@@ -70,8 +70,10 @@ type Message struct {
 	LeaseUntil     time.Time
 	Error          string
 	IdempotencyKey string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// BroadcastID groups the per-recipient messages of one broadcast.
+	BroadcastID string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // NewMessage builds a queued message. An empty threadID starts a new thread.

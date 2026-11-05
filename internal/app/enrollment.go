@@ -32,6 +32,7 @@ type CreateEnrollmentInput struct {
 	Harness      string
 	AllowFrom    []string
 	Capabilities []string
+	Labels       []string
 	Note         string
 	MaxUses      int
 	TTL          time.Duration
@@ -48,13 +49,17 @@ func (s *EnrollmentService) Create(ctx context.Context, in CreateEnrollmentInput
 	if err != nil {
 		return nil, "", err
 	}
+	labels, err := domain.ParseLabels(in.Labels)
+	if err != nil {
+		return nil, "", err
+	}
 	plain, _, err := s.tokens.Issue()
 	if err != nil {
 		return nil, "", err
 	}
 	plain = EnrollTokenPrefix + strings.TrimPrefix(plain, "myco_")
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
-		NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps,
+		NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps, Labels: labels,
 		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL,
 	}, s.clock.Now())
 	if err != nil {
@@ -89,8 +94,10 @@ type EnrollInput struct {
 	Name         string
 	Description  string
 	Capabilities []string
-	Binding      domain.Binding
-	DryRun       bool
+	// Labels are added to the enrollment's default labels.
+	Labels  []string
+	Binding domain.Binding
+	DryRun  bool
 }
 
 // Enroll registers the calling session as an agent, or recovers the agent
@@ -161,8 +168,12 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	if caps, err = domain.ParseCapabilities(caps); err != nil {
 		return nil, err
 	}
+	labels, err := domain.MergeLabels(e.Labels, in.Labels, nil)
+	if err != nil {
+		return nil, err
+	}
 	a, err := domain.NewAgent(s.ids.New("agt"), name, domain.AgentSpec{
-		Description: in.Description, Capabilities: caps, Binding: in.Binding,
+		Description: in.Description, Capabilities: caps, Labels: labels, Binding: in.Binding,
 		Delivery: domain.Delivery{Mode: domain.DeliveryPull}, AllowFrom: e.AllowFrom,
 	}, "", now)
 	if err != nil {

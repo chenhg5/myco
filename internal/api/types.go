@@ -32,6 +32,7 @@ type Agent struct {
 	Name         string     `json:"name"`
 	Description  string     `json:"description"`
 	Capabilities []string   `json:"capabilities"`
+	Labels       []string   `json:"labels"`
 	Binding      Binding    `json:"binding"`
 	Delivery     Delivery   `json:"delivery"`
 	AllowFrom    []string   `json:"allow_from"`
@@ -54,6 +55,7 @@ type Message struct {
 	Attempts       int        `json:"attempts"`
 	Error          string     `json:"error,omitempty"`
 	IdempotencyKey string     `json:"idempotency_key,omitempty"`
+	BroadcastID    string     `json:"broadcast_id,omitempty"`
 	LeaseUntil     *time.Time `json:"lease_until,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -65,9 +67,54 @@ type RegisterRequest struct {
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	AllowFrom    []string `json:"allow_from,omitempty"`
+	Labels       []string `json:"labels,omitempty"`
 	Binding      Binding  `json:"binding,omitempty"`
 	Delivery     Delivery `json:"delivery,omitempty"`
 	RotateToken  bool     `json:"rotate_token,omitempty"`
+}
+
+// LabelsRequest adds/removes labels (a bare key in Remove drops all its values).
+type LabelsRequest struct {
+	Add    []string `json:"add,omitempty"`
+	Remove []string `json:"remove,omitempty"`
+}
+
+// BroadcastRequest is the body of POST /v1/broadcasts.
+type BroadcastRequest struct {
+	Selector       string `json:"selector"`
+	Type           string `json:"type,omitempty"`
+	Body           string `json:"body"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	IncludeSelf    bool   `json:"include_self,omitempty"`
+}
+
+// BroadcastSkip is a matching agent that was not messaged.
+type BroadcastSkip struct {
+	Agent  string `json:"agent"`
+	Reason string `json:"reason"`
+}
+
+// BroadcastResponse lists the per-recipient messages of a broadcast.
+type BroadcastResponse struct {
+	BroadcastID string          `json:"broadcast_id"`
+	Messages    []Message       `json:"messages"`
+	Skipped     []BroadcastSkip `json:"skipped"`
+	Duplicate   bool            `json:"duplicate"`
+	DryRun      bool            `json:"dry_run,omitempty"`
+}
+
+// BroadcastDelivery is one recipient's message and its answer, if any.
+type BroadcastDelivery struct {
+	Message Message  `json:"message"`
+	Reply   *Message `json:"reply,omitempty"`
+}
+
+// BroadcastStatus is returned by GET /v1/broadcasts/{id}.
+type BroadcastStatus struct {
+	BroadcastID string              `json:"broadcast_id"`
+	Total       int                 `json:"total"`
+	Answered    int                 `json:"answered"`
+	Deliveries  []BroadcastDelivery `json:"deliveries"`
 }
 
 // BindRequest is the body of PUT /v1/me/binding (empty fields unchanged).
@@ -169,6 +216,7 @@ type Enrollment struct {
 	Harness      string     `json:"harness,omitempty"`
 	AllowFrom    []string   `json:"allow_from"`
 	Capabilities []string   `json:"capabilities"`
+	Labels       []string   `json:"labels"`
 	Note         string     `json:"note,omitempty"`
 	MaxUses      int        `json:"max_uses"`
 	Uses         int        `json:"uses"`
@@ -184,6 +232,7 @@ type CreateEnrollmentRequest struct {
 	Harness      string   `json:"harness,omitempty"`
 	AllowFrom    []string `json:"allow_from,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	Labels       []string `json:"labels,omitempty"`
 	Note         string   `json:"note,omitempty"`
 	MaxUses      int      `json:"max_uses,omitempty"`
 	TTLSeconds   int64    `json:"ttl_seconds,omitempty"`
@@ -207,5 +256,6 @@ type EnrollRequest struct {
 	Name         string   `json:"name,omitempty"`
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	Labels       []string `json:"labels,omitempty"`
 	Binding      Binding  `json:"binding"`
 }

@@ -34,6 +34,7 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			{Name: "description", Kind: String, Help: "What this agent does (used by orchestrators to pick agents)"},
 			{Name: "capability", Kind: List, Help: "Capability tags, repeatable or comma-separated"},
 			{Name: "allow-from", Kind: List, Help: "Only these agents may send tasks/notes to it (default: anyone)"},
+			{Name: "label", Kind: List, Help: "Labels for grouping/broadcast: tag or key=value, e.g. group=loops,machine=mac"},
 			{Name: "harness", Kind: String, Help: "Agent runtime: claude, codex, shell, claude-cloud, codex-cloud, ..."},
 			{Name: "session-id", Kind: String, Help: "Existing harness session this agent is bound to (default: created on first run)"},
 			{Name: "environment", Kind: String, Help: "Where the session lives (default: this host name)"},
@@ -62,7 +63,7 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			}
 			res, err := c.Register(e.in.Ctx, api.RegisterRequest{
 				Name: e.in.String("name"), Description: e.in.String("description"),
-				Capabilities: e.in.List("capability"), AllowFrom: e.in.List("allow-from"),
+				Capabilities: e.in.List("capability"), AllowFrom: e.in.List("allow-from"), Labels: e.in.List("label"),
 				RotateToken: e.in.Bool("rotate-token"), Binding: e.bindingFromFlags(), Delivery: delivery,
 			}, dry)
 			if err != nil {
@@ -102,17 +103,19 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 		Examples: []string{
 			"myco agent list",
 			"myco agent list --online --capability code --format json",
+			`myco agent list --selector "group=loops,machine=mac"`,
 		},
 		Flags: []Flag{
 			{Name: "capability", Kind: String, Help: "Only agents advertising this capability"},
 			{Name: "online", Kind: Bool, Help: "Only agents seen recently"},
+			{Name: "selector", Kind: String, Help: "Label selector: key, !key, key=value, key!=value, comma = AND (virtual keys: name, harness, capability)"},
 		},
 		Run: handler(func(e *env) error {
 			c, err := e.agentOrAdminClient()
 			if err != nil {
 				return err
 			}
-			agents, err := c.ListAgents(e.in.Ctx, e.in.String("capability"), e.in.Bool("online"))
+			agents, err := c.ListAgents(e.in.Ctx, e.in.String("capability"), e.in.Bool("online"), e.in.String("selector"))
 			if err != nil {
 				return err
 			}
@@ -285,7 +288,51 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		}),
 	}
 
-	return (&Command{Name: "agent", Summary: "Register, bind and discover agents"}).Add(register, agentEnrollCommand(), login, bind, list, get, remove)
+	labelCmd := func(verb, summary string, example string) *Command {
+		return &Command{
+			Name: verb, Summary: summary, Mutating: true, Examples: []string{example},
+			Flags: []Flag{
+				{Name: "label", Kind: List, Required: true, Help: "Labels (tag or key=value); for remove a bare key drops all its values"},
+				{Name: "name", Kind: String, Help: "Another agent (needs the admin token); default: yourself"},
+				{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
+			},
+			Run: handler(func(e *env) error {
+				if err := e.in.Require("label"); err != nil {
+					return err
+				}
+				req := api.LabelsRequest{}
+				if verb == "add" {
+					req.Add = e.in.List("label")
+				} else {
+					req.Remove = e.in.List("label")
+				}
+				var c *client.Client
+				var err error
+				if e.in.String("name") != "" {
+					c, err = e.adminClient()
+				} else {
+					c, err = e.agentClient()
+				}
+				if err != nil {
+					return err
+				}
+				if e.in.Bool("dry-run") {
+					return e.dryRun(map[string]any{"action": "label_" + verb, "agent": orDefault(e.in.String("name"), e.cfg.Agent), "labels": e.in.List("label")})
+				}
+				a, err := c.SetLabels(e.in.Ctx, e.in.String("name"), req)
+				if err != nil {
+					return err
+				}
+				return e.p.Print(a, func(w io.Writer) { fmt.Fprintf(w, "%s labels: %s\n", a.Name, strings.Join(a.Labels, ", ")) })
+			}),
+		}
+	}
+	label := (&Command{Name: "label", Summary: "Tag agents for grouping and broadcast"}).Add(
+		labelCmd("add", "Add labels", "myco agent label add --label group=loops,machine=mac"),
+		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
+	)
+
+	return (&Command{Name: "agent", Summary: "Register, bind, label and discover agents"}).Add(register, agentEnrollCommand(), login, bind, label, list, get, remove)
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
@@ -390,7 +437,7 @@ func (e *env) agentOrAdminClient() (*client.Client, error) {
 
 func agentTable(w io.Writer, agents []api.Agent) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tONLINE\tHARNESS\tSESSION\tENVIRONMENT\tDELIVERY\tCAPABILITIES\tLAST SEEN\tDESCRIPTION")
+	fmt.Fprintln(tw, "NAME\tONLINE\tHARNESS\tSESSION\tENVIRONMENT\tLABELS\tCAPABILITIES\tLAST SEEN\tDESCRIPTION")
 	for _, a := range agents {
 		seen := "never"
 		if a.LastSeenAt != nil {
@@ -401,7 +448,7 @@ func agentTable(w io.Writer, agents []api.Agent) {
 			online = "yes"
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.Name, online, dash(a.Binding.Harness), dash(truncate(a.Binding.SessionID, 14)),
-			dash(a.Binding.Environment), a.Delivery.Mode, strings.Join(a.Capabilities, ","), seen, truncate(a.Description, 40))
+			dash(a.Binding.Environment), dash(truncate(strings.Join(a.Labels, ","), 40)), strings.Join(a.Capabilities, ","), seen, truncate(a.Description, 40))
 	}
 	tw.Flush()
 }

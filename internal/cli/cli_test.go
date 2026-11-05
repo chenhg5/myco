@@ -333,3 +333,65 @@ func TestRunnerEnvCapture(t *testing.T) {
 		t.Fatalf("profile env_file not set: %+v", cfg.Runner)
 	}
 }
+
+func TestLabelsAndBroadcast(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
+	_, out, _ := admin.run("enrollment", "create", "--name-prefix", "mac-", "--label", "machine=mac", "--format", "json")
+	var created struct{ Token string }
+	json.Unmarshal([]byte(out), &created)
+	sess := func(id string) *harnessT {
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": created.Token, "CLAUDE_CODE_SESSION_ID": id}}
+	}
+	a, b, c := sess("s-a"), sess("s-b"), sess("s-c")
+	a.run("agent", "enroll", "--name", "mac-a", "--label", "group=loops")
+	b.run("agent", "enroll", "--name", "mac-b", "--label", "group=loops")
+	c.run("agent", "enroll", "--name", "mac-c")
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(home, "boss.yaml"), "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
+	boss.run("agent", "register", "--name", "boss")
+	// mac-b only accepts tasks from mac-a: the broadcast skips it.
+	admin.run("agent", "register", "--name", "mac-b", "--rotate-token", "--no-save", "--allow-from", "mac-a")
+
+	// Self-service label + selector listing.
+	if code, _, e := c.run("agent", "label", "add", "--label", "group=loops,gpu"); code != 0 {
+		t.Fatalf("label add: %s", e)
+	}
+	code, out, _ := boss.run("agent", "list", "--selector", "group=loops,machine=mac", "--format", "json")
+	if code != 0 || strings.Count(out, `"name": "mac-`) != 3 {
+		t.Fatalf("selector list: %s", out)
+	}
+
+	if code, _, _ := boss.run("broadcast", "send", "--selector", "group=loops", "--body", "x", "--dry-run"); code != ExitDryRun {
+		t.Fatalf("dry-run exit %d", code)
+	}
+	code, out, e := boss.run("broadcast", "send", "--selector", "group=loops", "--body", "status?", "--idempotency-key", "k1", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"agent": "mac-b"`) || strings.Count(out, `"to": "mac-`) != 2 {
+		t.Fatalf("broadcast: %d %s %s", code, out, e)
+	}
+	var bc struct {
+		BroadcastID string `json:"broadcast_id"`
+		Messages    []struct{ ID, To string }
+	}
+	json.Unmarshal([]byte(out), &bc)
+	_, again, _ := boss.run("broadcast", "send", "--selector", "group=loops", "--body", "status?", "--idempotency-key", "k1", "--format", "json")
+	if !strings.Contains(again, `"duplicate": true`) || !strings.Contains(again, bc.BroadcastID) {
+		t.Fatalf("idempotent broadcast: %s", again)
+	}
+	// Recipients answer; the sender sees both replies; others cannot read it.
+	for _, m := range bc.Messages {
+		h := map[string]*harnessT{"mac-a": a, "mac-c": c}[m.To]
+		h.run("inbox", "pull")
+		if code, _, e := h.run("message", "reply", "--id", m.ID, "--body", "ok from "+m.To); code != 0 {
+			t.Fatalf("reply: %s", e)
+		}
+	}
+	code, out, _ = boss.run("broadcast", "get", "--id", bc.BroadcastID, "--format", "json")
+	if code != 0 || !strings.Contains(out, `"answered": 2`) || !strings.Contains(out, "ok from mac-c") {
+		t.Fatalf("broadcast get: %s", out)
+	}
+	if code, _, _ := a.run("broadcast", "get", "--id", bc.BroadcastID); code != ExitNotFound {
+		t.Fatalf("recipient must not read the broadcast: %d", code)
+	}
+}

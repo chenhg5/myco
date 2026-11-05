@@ -156,8 +156,11 @@ func (c *Client) RemoveAgent(ctx context.Context, name string, dry bool) (map[st
 }
 
 // ListAgents lists agents, optionally filtered.
-func (c *Client) ListAgents(ctx context.Context, capability string, onlineOnly bool) ([]api.Agent, error) {
+func (c *Client) ListAgents(ctx context.Context, capability string, onlineOnly bool, selector ...string) ([]api.Agent, error) {
 	q := url.Values{}
+	if len(selector) > 0 && selector[0] != "" {
+		q.Set("selector", selector[0])
+	}
 	if capability != "" {
 		q.Set("capability", capability)
 	}
@@ -235,6 +238,29 @@ func (c *Client) RevokeEnrollment(ctx context.Context, id string, dry bool) (map
 func (c *Client) Enroll(ctx context.Context, req api.EnrollRequest, dry bool) (*api.RegisterResponse, error) {
 	var out api.RegisterResponse
 	return &out, c.do(ctx, http.MethodPost, "/v1/enroll", dryQuery(dry), req, &out)
+}
+
+// SetLabels changes labels of the caller (name == "") or, with an admin
+// token, of agent name.
+func (c *Client) SetLabels(ctx context.Context, name string, req api.LabelsRequest) (*api.Agent, error) {
+	path := "/v1/me/labels"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/labels"
+	}
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, path, nil, req, &out)
+}
+
+// Broadcast sends one message per agent matching req.Selector.
+func (c *Client) Broadcast(ctx context.Context, req api.BroadcastRequest, dry bool) (*api.BroadcastResponse, error) {
+	var out api.BroadcastResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
+}
+
+// BroadcastStatus returns deliveries and replies of a broadcast.
+func (c *Client) BroadcastStatus(ctx context.Context, id string) (*api.BroadcastStatus, error) {
+	var out api.BroadcastStatus
+	return &out, c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), nil, nil, &out)
 }
 
 // Send queues a message.

@@ -23,12 +23,14 @@ type Enrollment struct {
 	Harness      string
 	AllowFrom    []AgentName
 	Capabilities []string
-	Note         string
-	MaxUses      int // 0 = unlimited
-	Uses         int
-	ExpiresAt    time.Time // zero = never
-	RevokedAt    time.Time // zero = active
-	CreatedAt    time.Time
+	// Labels are given to every agent enrolled with this token.
+	Labels    []string
+	Note      string
+	MaxUses   int // 0 = unlimited
+	Uses      int
+	ExpiresAt time.Time // zero = never
+	RevokedAt time.Time // zero = active
+	CreatedAt time.Time
 }
 
 // EnrollmentSpec configures a new enrollment.
@@ -37,6 +39,7 @@ type EnrollmentSpec struct {
 	Harness      string
 	AllowFrom    []AgentName
 	Capabilities []string
+	Labels       []string
 	Note         string
 	MaxUses      int
 	TTL          time.Duration
@@ -54,11 +57,14 @@ func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enro
 	if s.MaxUses < 0 || s.TTL < 0 {
 		return nil, Errf(CodeInvalidArgument, "max uses and TTL must not be negative")
 	}
+	if _, err := ParseLabels(s.Labels); err != nil {
+		return nil, err
+	}
 	if len(s.Note) > 500 {
 		return nil, Errf(CodeInvalidArgument, "note longer than 500 bytes")
 	}
 	e := &Enrollment{ID: id, TokenHash: tokenHash, NamePrefix: s.NamePrefix, Harness: s.Harness,
-		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now}
+		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Labels: s.Labels, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now}
 	if s.TTL > 0 {
 		e.ExpiresAt = now.Add(s.TTL)
 	}

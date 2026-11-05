@@ -15,6 +15,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
 		ID: a.ID, Name: string(a.Name), Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
+		Labels:       nonNil(a.Labels),
 		Binding: api.Binding{Harness: a.Binding.Harness, SessionID: a.Binding.SessionID,
 			Environment: a.Binding.Environment, Workdir: a.Binding.Workdir},
 		Delivery: api.Delivery{Mode: a.Delivery.Mode, URL: redactURL(a.Delivery.URL),
@@ -31,7 +32,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 }
 
 func enrollmentDTO(e *domain.Enrollment, now time.Time) api.Enrollment {
-	out := api.Enrollment{ID: e.ID, NamePrefix: e.NamePrefix, Harness: e.Harness, Capabilities: nonNil(e.Capabilities),
+	out := api.Enrollment{ID: e.ID, NamePrefix: e.NamePrefix, Harness: e.Harness, Capabilities: nonNil(e.Capabilities), Labels: nonNil(e.Labels),
 		AllowFrom: make([]string, 0, len(e.AllowFrom)), Note: e.Note, MaxUses: e.MaxUses, Uses: e.Uses,
 		ExpiresAt: timePtr(e.ExpiresAt), RevokedAt: timePtr(e.RevokedAt), CreatedAt: e.CreatedAt,
 		Active: e.Usable(now, true) == nil}
@@ -53,7 +54,7 @@ func messageDTO(m *domain.Message) api.Message {
 	out := api.Message{
 		ID: m.ID, From: string(m.From), To: string(m.To), ThreadID: m.ThreadID, ReplyTo: m.ReplyTo,
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
-		Error: m.Error, IdempotencyKey: m.IdempotencyKey, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)

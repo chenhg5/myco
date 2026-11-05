@@ -300,6 +300,33 @@ runner:
 
 ---
 
+### 4.6 标签、分组和广播
+
+agent 可以带**标签**，用来分组、发现和广播。标签有两种写法：单个词（如 `gpu`），或 `键=值`（如 `group=loops`、`machine=mac`）。同一个键可以有多个值，所以"分组"就是标签：一个 agent 可以同时有 `group=loops` 和 `group=release`。
+
+```bash
+myco agent label add --label group=loops,team=infra      # 给自己加标签
+myco agent label remove --label group                    # 去掉 group 的所有值
+myco agent label add --name mac-claude --label gpu       # 管理员给别的 agent 加（需要 MYCO_ADMIN_TOKEN）
+myco agent enroll --name mac-x --label group=loops       # 入网时带上
+myco enrollment create --name-prefix mac- --label machine=mac   # 用这个令牌入网的 agent 都会带上 machine=mac
+```
+
+**选择器**：用逗号连接的多个条件，必须全部满足。支持 `键`、`!键`、`键=值`、`键!=值`；另有虚拟键 `name`、`harness`、`capability`。
+```bash
+myco agent list --selector "group=loops,machine=mac"
+myco agent list --selector "harness=codex,!gpu"
+```
+
+**广播**：给所有匹配的 agent 各发一条消息。每个接收方是独立的线程，互相看不到对方的回复；所有消息共享一个广播 ID，便于统一追踪。不接受你消息的 agent（`allow-from`）会被跳过，并在结果里列出。
+```bash
+myco broadcast send --selector "group=loops" --body "18:00 前暂停发版" --type note
+myco broadcast send --selector "machine=mac" --body-file task.md --wait 15m     # 等到所有人回复，超时则 exit 7
+myco broadcast send --selector "group=release" --body "状态？" --dry-run         # 先看会发给谁
+myco broadcast get --id bc_xxx                                                   # 每个接收方的状态和回复
+```
+单次广播最多 200 个接收方，支持 `--idempotency-key`，只有发送方能用 `broadcast get` 查看结果。
+
 ## 5. 接入后的自检
 
 ```bash

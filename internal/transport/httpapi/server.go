@@ -77,10 +77,14 @@ func (s *Server) routes() {
 	// Discovery (admin or any agent).
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
+	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
 
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
+	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
+	m.HandleFunc("POST /v1/broadcasts", s.agent(s.broadcast))
+	m.HandleFunc("GET /v1/broadcasts/{id}", s.agent(s.broadcastStatus))
 	m.HandleFunc("GET /v1/inbox/wait", s.agent(s.waitPending))
 	m.HandleFunc("POST /v1/ingress/{kind}", s.handleIngress)
 	m.HandleFunc("POST /v1/messages", s.agent(s.send))
@@ -160,7 +164,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	dry := dryRun(r)
 	out, err := s.agents.Register(r.Context(), app.RegisterInput{
 		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities,
-		AllowFrom: req.AllowFrom, Binding: bindingFromAPI(req.Binding), RotateToken: req.RotateToken, DryRun: dry,
+		AllowFrom: req.AllowFrom, Labels: req.Labels, Binding: bindingFromAPI(req.Binding), RotateToken: req.RotateToken, DryRun: dry,
 		Delivery: domain.Delivery{Mode: req.Delivery.Mode, URL: req.Delivery.URL, Secret: req.Delivery.Secret, Params: req.Delivery.Params},
 	})
 	if err != nil {
@@ -186,7 +190,7 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := s.agents.List(r.Context(), app.AgentFilter{Capability: q.Get("capability"), OnlineOnly: q.Get("online") == "true"})
+	list, err := s.agents.List(r.Context(), app.AgentFilter{Capability: q.Get("capability"), OnlineOnly: q.Get("online") == "true", Selector: q.Get("selector")})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -270,7 +274,7 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 	dry := dryRun(r)
 	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
-		NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities,
+		NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
 		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry,
 	})
 	if err != nil {
@@ -314,7 +318,7 @@ func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
 	}
 	dry := dryRun(r)
 	out, err := s.enroll.Enroll(r.Context(), bearer(r), app.EnrollInput{
-		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities,
+		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities, Labels: req.Labels,
 		Binding: bindingFromAPI(req.Binding), DryRun: dry,
 	})
 	if err != nil {
@@ -326,6 +330,70 @@ func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
+}
+
+func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string) {
+	var req api.LabelsRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	a, err := s.agents.SetLabels(r.Context(), name, req.Add, req.Remove)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.agentDTO(a))
+}
+
+func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	s.setLabels(w, r, string(a.Name))
+}
+
+func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
+	s.setLabels(w, r, r.PathValue("name"))
+}
+
+func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.BroadcastRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	out, err := s.messages.Broadcast(r.Context(), a, app.BroadcastInput{Selector: req.Selector, Type: req.Type, Body: req.Body,
+		IdempotencyKey: req.IdempotencyKey, IncludeSelf: req.IncludeSelf, DryRun: dry})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	resp := api.BroadcastResponse{BroadcastID: out.ID, Messages: messageList(out.Messages).Messages,
+		Skipped: []api.BroadcastSkip{}, Duplicate: out.Duplicate, DryRun: dry}
+	for _, sk := range out.Skipped {
+		resp.Skipped = append(resp.Skipped, api.BroadcastSkip{Agent: string(sk.Agent), Reason: sk.Reason})
+	}
+	status := http.StatusCreated
+	if dry || out.Duplicate {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, resp)
+}
+
+func (s *Server) broadcastStatus(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	ds, err := s.messages.BroadcastStatus(r.Context(), a, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.BroadcastStatus{BroadcastID: r.PathValue("id"), Total: len(ds), Deliveries: make([]api.BroadcastDelivery, 0, len(ds))}
+	for _, d := range ds {
+		bd := api.BroadcastDelivery{Message: messageDTO(d.Message)}
+		if d.Reply != nil {
+			rep := messageDTO(d.Reply)
+			bd.Reply = &rep
+			out.Answered++
+		}
+		out.Deliveries = append(out.Deliveries, bd)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func bindingFromAPI(b api.Binding) domain.Binding {

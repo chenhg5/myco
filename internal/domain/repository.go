@@ -45,6 +45,10 @@ type MessageRepository interface {
 	// FindReply returns the reply or failure event answering messageID.
 	FindReply(ctx context.Context, messageID string) (*Message, error)
 	ListThread(ctx context.Context, threadID string) ([]*Message, error)
+	// ListBroadcast returns the messages of a broadcast, oldest first.
+	ListBroadcast(ctx context.Context, broadcastID string) ([]*Message, error)
+	// CreateMany stores several new messages atomically.
+	CreateMany(ctx context.Context, ms []*Message) error
 	// ListDue returns (without claiming) up to limit messages deliverable to
 	// recipient at now, oldest first.
 	ListDue(ctx context.Context, recipient AgentName, now time.Time, limit int) ([]*Message, error)

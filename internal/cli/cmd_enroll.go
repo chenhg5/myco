@@ -31,6 +31,7 @@ same agent back after a restart. The token can only enroll the calling session, 
 			{Name: "harness", Kind: String, Help: "Only admit this harness (e.g. claude-cloud)"},
 			{Name: "allow-from", Kind: List, Help: "allow-from list given to enrolled agents"},
 			{Name: "capability", Kind: List, Help: "Default capabilities of enrolled agents"},
+			{Name: "label", Kind: List, Help: "Labels given to every agent enrolled with this token, e.g. machine=mac"},
 			{Name: "max-uses", Kind: Int, Default: "0", Help: "New agents it may create (0 = unlimited; recovery is free)"},
 			{Name: "expires", Kind: Duration, Default: "0s", Help: "Lifetime, e.g. 720h (0 = never)"},
 			{Name: "note", Kind: String, Help: "Free-text note (where the token is used)"},
@@ -47,7 +48,7 @@ same agent back after a restart. The token can only enroll the calling session, 
 			dry := e.in.Bool("dry-run")
 			res, err := c.CreateEnrollment(e.in.Ctx, api.CreateEnrollmentRequest{
 				NamePrefix: e.in.String("name-prefix"), Harness: e.in.String("harness"),
-				AllowFrom: e.in.List("allow-from"), Capabilities: e.in.List("capability"),
+				AllowFrom: e.in.List("allow-from"), Capabilities: e.in.List("capability"), Labels: e.in.List("label"),
 				MaxUses: e.in.Int("max-uses"), TTLSeconds: int64(e.in.Duration("expires").Seconds()), Note: e.in.String("note"),
 			}, dry)
 			if err != nil {
@@ -153,6 +154,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 			{Name: "name", Kind: String, Help: "Agent name (must carry the enrollment's prefix; default: derived from the session id)"},
 			{Name: "description", Kind: String, Help: "What this agent does"},
 			{Name: "capability", Kind: List, Help: "Capability tags (default: the enrollment's)"},
+			{Name: "label", Kind: List, Help: "Labels added to the enrollment's defaults, e.g. group=loops"},
 			{Name: "detect", Kind: Bool, Default: "true", Help: "Detect harness/session/environment from this process (--no-detect to disable)"},
 			{Name: "harness", Kind: String, Help: "Harness (overrides detection)"},
 			{Name: "session-id", Kind: String, Help: "Session ID (overrides detection)"},
@@ -183,7 +185,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 			dry := e.in.Bool("dry-run")
 			res, err := e.enroll(hub, tok, api.EnrollRequest{
 				Name: e.in.String("name"), Description: e.in.String("description"),
-				Capabilities: e.in.List("capability"), Binding: e.bindingFromFlags(),
+				Capabilities: e.in.List("capability"), Labels: e.in.List("label"), Binding: e.bindingFromFlags(),
 			}, dry)
 			if err != nil {
 				return err

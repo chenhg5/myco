@@ -82,9 +82,22 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`); err != nil {
+	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	for _, ddl := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_broadcast ON messages(broadcast_id) WHERE broadcast_id != ''`,
+	} {
+		if _, err := db.Exec(ddl); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
 	}
 	return db, nil
 }
@@ -99,6 +112,7 @@ var agentColumnsV2 = [][2]string{
 	{"delivery_secret", "TEXT NOT NULL DEFAULT ''"},
 	{"delivery_params", "TEXT NOT NULL DEFAULT '{}'"},
 	{"enrolled_by", "TEXT NOT NULL DEFAULT ''"},
+	{"labels", "TEXT NOT NULL DEFAULT '[]'"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

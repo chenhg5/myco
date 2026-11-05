@@ -22,7 +22,11 @@ myco agent list --online --capability code
 myco agent get                                  # yourself
 ```
 
-Pick agents by `description` and `capabilities`, prefer `online: true`.
+Pick agents by `description`, `capabilities` and `labels`, prefer `online: true`.
+Labels group agents (`group=loops`, `machine=mac`); select them with
+`myco agent list --selector "group=loops,!gpu"` and message a whole group with
+`myco broadcast send --selector "group=loops" --body "..." [--wait 10m]`
+(track replies: `myco broadcast get --id <bc_id>`).
 
 ## Delegate
 
