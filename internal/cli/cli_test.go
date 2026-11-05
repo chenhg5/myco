@@ -790,3 +790,67 @@ func TestExecNodeLoginOnAnotherMachine(t *testing.T) {
 		t.Fatalf("runner should start the exec node: %s", e)
 	}
 }
+
+func TestExecNodeViaEnrollment(t *testing.T) {
+	hub := newHub(t)
+	adminHome := t.TempDir()
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(adminHome, "a.yaml")}}
+	admin.run("agent", "register", "--name", "boss")
+	token := func(args ...string) string {
+		code, out, e := admin.run(append([]string{"enrollment", "create", "--format", "json"}, args...)...)
+		if code != 0 {
+			t.Fatalf("enrollment create %v: %s", args, e)
+		}
+		var c struct{ Token string }
+		json.Unmarshal([]byte(out), &c)
+		return c.Token
+	}
+	if code, _, _ := admin.run("enrollment", "create", "--name-prefix", "wsl-", "--harness", "exec"); code != ExitUsage {
+		t.Fatalf("exec enrollment without --allow-from must be refused, exit %d", code)
+	}
+	general, execTok := token("--name-prefix", "wsl-"), token("--name-prefix", "wsl-", "--harness", "exec", "--allow-from", "boss", "--max-uses", "1")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	work := filepath.Join(home, "exec")
+	os.Mkdir(work, 0o700)
+	node := func(tok string) *harnessT {
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": tok, "USER": "glenn"}}
+	}
+	if code, _, _ := node(general).run("agent", "enroll", "--harness", "exec", "--name", "wsl-shell", "--workdir", work); code != ExitPermission {
+		t.Fatalf("a general enrollment must not create exec nodes, exit %d", code)
+	}
+	if code, _, _ := node(execTok).run("agent", "enroll", "--harness", "exec", "--workdir", work); code != ExitUsage {
+		t.Fatalf("exec enroll without --name, exit %d", code)
+	}
+	code, out, e := node(execTok).run("agent", "enroll", "--harness", "exec", "--name", "wsl-shell", "--workdir", work, "--format", "text")
+	if code != 0 || !strings.Contains(out, "commands from boss will run here as glenn") {
+		t.Fatalf("exec enroll: %d %s %s", code, out, e)
+	}
+	// Re-running recovers the same node even though the token's single use is spent.
+	if code, out, e := node(execTok).run("agent", "enroll", "--harness", "exec", "--name", "wsl-shell", "--workdir", work, "--format", "text"); code != 0 || !strings.Contains(out, "recovered") {
+		t.Fatalf("re-enroll: %d %s %s", code, out, e)
+	}
+	if b, err := os.ReadFile(filepath.Join(home, ".myco", "agents", "wsl-shell.yaml")); err != nil || !strings.Contains(string(b), "harness: exec") {
+		t.Fatalf("profile: %v %s", err, b)
+	}
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(adminHome, "a.yaml")}}
+	done := make(chan [3]any, 1)
+	go func() {
+		c, o, e := boss.run("exec", "--to", "wsl-shell", "--cmd", "pwd", "--timeout", "20s", "--format", "text")
+		done <- [3]any{c, o, e}
+	}()
+	runner := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+	for {
+		select {
+		case r := <-done:
+			if r[0].(int) != 0 || strings.TrimSpace(r[1].(string)) != work {
+				t.Fatalf("exec via enrolled node: %v", r)
+			}
+			return
+		default:
+			runner.run("runner", "start", "--all", "--once", "--log-level", "error")
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}

@@ -6,6 +6,9 @@ import (
 	"unicode"
 )
 
+// HarnessExec is the harness of exec nodes (shell command execution).
+const HarnessExec = "exec"
+
 // Enrollment is a limited, shareable credential that lets a session register
 // itself as an agent (or recover its agent after a restart) without the admin
 // token. It is meant to live in an environment's secrets, so every session
@@ -53,6 +56,10 @@ func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enro
 	}
 	if s.Harness != "" && !namePattern.MatchString(s.Harness) {
 		return nil, Errf(CodeInvalidArgument, "invalid harness %q", s.Harness)
+	}
+	if s.Harness == HarnessExec && len(s.AllowFrom) == 0 {
+		return nil, Errf(CodeInvalidArgument, "an exec enrollment must name the agents allowed to send commands").
+			WithSuggestion("add --allow-from <agent>[,<agent>...]; exec nodes run every task they receive as a shell command")
 	}
 	if s.MaxUses < 0 || s.TTL < 0 {
 		return nil, Errf(CodeInvalidArgument, "max uses and TTL must not be negative")
@@ -104,6 +111,12 @@ func (e *Enrollment) Admit(b Binding) error {
 	}
 	if e.Harness != "" && b.Harness != e.Harness {
 		return Errf(CodePermissionDenied, "enrollment %s only admits harness %s, got %q", e.ID, e.Harness, b.Harness)
+	}
+	// Exec nodes execute commands, so only a token created for them (which
+	// carries an allow_from list) may create one.
+	if b.Harness == HarnessExec && e.Harness != HarnessExec {
+		return Errf(CodePermissionDenied, "enrollment %s cannot create exec nodes", e.ID).
+			WithSuggestion("the hub admin must create one for exec: myco enrollment create --harness exec --name-prefix <p> --allow-from <agent>")
 	}
 	return nil
 }

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/harness/execnode"
 )
 
 func enrollmentCommands() *Command {
@@ -24,6 +26,7 @@ same agent back after a restart. The token can only enroll the calling session, 
 		Examples: []string{
 			"myco enrollment create --name-prefix cloud- --harness claude-cloud --note \"claude.ai env\"",
 			"myco enrollment create --name-prefix ci- --max-uses 10 --expires 720h --allow-from orchestrator",
+			"myco enrollment create --name-prefix wsl- --harness exec --allow-from cloud-1 --max-uses 1 --expires 24h   # one exec node",
 		},
 		Flags: []Flag{
 			{Name: "name-prefix", Kind: String, Required: true, Help: "Agent names created with this token start with it, e.g. cloud-"},
@@ -148,6 +151,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 			"myco agent enroll                                # detect the session, derive the name",
 			"myco agent enroll --name cloud-reviewer --description \"reviews PRs\" --capability review",
 			"myco agent enroll --harness claude --session-id 7f3c... --enroll-token-file enroll.token",
+			"myco agent enroll --harness exec --name wsl-shell --workdir ~/exec     # exec node (needs an exec enrollment)",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Agent name (must carry the enrollment's prefix; default: derived from the session id)"},
@@ -183,9 +187,29 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 					"no enrollment token")
 			}
 			dry := e.in.Bool("dry-run")
+			binding := e.bindingFromFlags()
+			exec := e.in.String("harness") == execnode.Name
+			if exec {
+				// An exec node has no harness session: it is this user on this
+				// machine under this name, which also makes re-enrolling recover it.
+				if e.in.String("name") == "" {
+					return errorf("invalid_argument", ExitUsage, "pass --name, e.g. --name wsl-shell (it must start with the enrollment's prefix)",
+						"exec nodes need an explicit --name")
+				}
+				wd, err := filepath.Abs(orDefault(e.in.String("workdir"), "."))
+				if err != nil {
+					return err
+				}
+				if st, err := os.Stat(wd); err != nil || !st.IsDir() {
+					return errorf("not_found", ExitNotFound, "create it first, or pass another --workdir", "workdir %s does not exist", wd)
+				}
+				host, user := hostname(), orDefault(e.in.Getenv("USER"), "user")
+				binding = api.Binding{Harness: execnode.Name, Environment: orDefault(e.in.String("environment"), host), Workdir: wd,
+					SessionID: "exec:" + host + ":" + user + ":" + e.in.String("name")}
+			}
 			res, err := e.enroll(hub, tok, api.EnrollRequest{
 				Name: e.in.String("name"), DisplayName: e.in.String("display-name"), Description: e.in.String("description"),
-				Capabilities: e.in.List("capability"), Labels: e.in.List("label"), Binding: e.bindingFromFlags(),
+				Capabilities: e.in.List("capability"), Labels: e.in.List("label"), Binding: binding,
 			}, dry)
 			if err != nil {
 				return err
@@ -200,6 +224,11 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 					verb = "recovered (new token issued)"
 				}
 				fmt.Fprintf(w, "agent %s %s; credentials saved to %s\n", res.Agent.Name, verb, e.cfgPath)
+				if exec {
+					fmt.Fprintf(w, "exec node: commands from %s will run here as %s in %s\n",
+						strings.Join(res.Agent.AllowFrom, ", "), orDefault(e.in.Getenv("USER"), "this user"), res.Agent.Binding.Workdir)
+					fmt.Fprintln(w, "a running `myco runner service` picks it up within 30s; otherwise run: myco runner service install")
+				}
 			})
 		}),
 	}

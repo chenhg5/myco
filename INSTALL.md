@@ -82,6 +82,7 @@ myco enrollment create --name-prefix codex- --harness codex --note "本地 Codex
 - 只能把**调用它的 session** 注册成 agent，名字必须带指定前缀，harness 必须匹配。
 - 同一个 session 再次入网时，会找回原来的 agent，并换发新的 token。
 - 投递方式强制为 `pull`，不能做任何管理操作，也不能接管管理员手动注册的 agent。
+- 不能注册 exec 节点（远程执行命令），除非令牌本身是用 `--harness exec --allow-from ...` 建的，见 [4.10](#410-exec-节点远程执行命令)。
 - 可以用 `--max-uses N`、`--expires 720h` 限制次数和有效期，用 `--allow-from <agent>` 限定谁可以给这些 agent 派任务。
 
 管理：
@@ -394,23 +395,21 @@ exec 节点不跑 AI，而是把收到的任务正文当作 shell 命令，在�
 
 **这等于远程执行任意命令**：谁能给它发任务，谁就能在那台机器上执行命令。请先读完下面的安全说明。
 
-**1. 在要执行命令的机器上注册（管理员）**，`--allow-from` 必填，只写你信任的调度节点：
+**1. 管理员建一个 exec 专用的入网令牌**（在 VPS 上），`--allow-from` 必填，只写你信任的调度节点：
 ```bash
-myco agent register --name vps-shell --harness exec --allow-from cloud-1 --workdir /srv --description "VPS 上的命令执行节点"
+myco enrollment create --name-prefix wsl- --harness exec --allow-from cloud-1 --max-uses 1 --expires 24h --note "WSL exec 节点"
 ```
-会在 `~/.myco/agents/vps-shell.yaml` 生成配置，`myco runner start --all`（或 `myco runner service install`）会自动接管它。
+普通入网令牌不能注册 exec 节点，只有 `--harness exec` 的令牌可以，而且它必须带 `--allow-from`。`--max-uses 1 --expires 24h` 表示只能用一次、一天内有效。
 
-**管理员令牌不在那台机器上时**（比如家里的 WSL、Mac，推荐这样做）：在有管理员令牌的机器上注册，只把 agent 令牌交给那台机器。
+**2. 在要执行命令的机器上，一条命令入网**（令牌放在环境变量里，不要贴到聊天里）：
 ```bash
-# 管理员（比如在 VPS 上）：--no-save 会打印 agent 令牌，只显示一次
-myco agent register --name wsl-shell --harness exec --allow-from cloud-1 --no-save --format text
-# 那台机器上：把令牌存进文件（不要贴到聊天里），登录后删掉文件
-umask 077; cat > ~/wsl-shell.token        # 粘贴令牌，回车，Ctrl-D
-mkdir -p ~/exec && myco agent login --token-file ~/wsl-shell.token --workdir ~/exec && rm ~/wsl-shell.token
+mkdir -p ~/exec && MYCO_HUB=<HUB_URL> MYCO_ENROLL_TOKEN=<令牌> myco agent enroll --harness exec --name wsl-shell --workdir ~/exec
 ```
-登录会生成 `~/.myco/agents/wsl-shell.yaml`，已经在跑的 `myco runner service` 30 秒内会自动接管它（不想等就执行 `myco runner service restart`）。
+会生成 `~/.myco/agents/wsl-shell.yaml`。已经在跑的 `myco runner service` 30 秒内会自动接管它；这台机器还没有 runner 服务的话，执行 `myco runner service install`。以后在同一台机器、同一个用户下用同样的 `--name` 再执行一次，会找回同一个节点，并换发新令牌。
 
-**2. 可选：收紧配置**（编辑 `~/.myco/agents/vps-shell.yaml` 的 `runner` 部分，然后执行 `myco runner service restart`）：
+Hub 所在的机器上也可以由管理员直接注册：`myco agent register --name vps-shell --harness exec --allow-from cloud-1 --workdir /srv`。
+
+**3. 可选：收紧配置**（编辑 `~/.myco/agents/<节点名>.yaml` 的 `runner` 部分，然后执行 `myco runner service restart`）：
 ```yaml
 runner:
   harness: exec
@@ -423,7 +422,7 @@ runner:
 ```
 白名单的每一项是一条完整命令，或以 ` *` 结尾的前缀（`df *` 允许 `df`、`df -h /`）。启用白名单后，带分号、`&`、`|`、反引号、`$`、`<`、`>`、圆括号、花括号、反斜杠或换行的命令一律拒绝，防止用 `df -h; rm -rf /` 这类写法绕过。
 
-**3. 从别的节点调用：**
+**4. 从别的节点调用：**
 ```bash
 myco exec --to vps-shell --cmd "df -h /"
 myco exec --to vps-shell --cmd "systemctl status caddy" --timeout 2m --format json
