@@ -33,7 +33,7 @@ Errors (any non-2xx):
 | `PUT /v1/me/labels` | agent | `{add?, remove?}` — change your labels (a bare key in remove drops all its values) |
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
 | `POST /v1/broadcasts` | agent | `{selector, body, type?, idempotency_key?, include_self?}` → `{broadcast_id, messages, skipped, duplicate}`; one message/thread per recipient |
-| `GET /v1/broadcasts/{id}` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}` |
+| `GET /v1/broadcasts/{id}?consume=` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}`; `consume=true` marks returned replies done |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent |
 | `GET /v1/me` | agent | The calling agent |

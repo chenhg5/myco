@@ -325,7 +325,7 @@ myco broadcast send --selector "machine=mac" --body-file task.md --wait 15m     
 myco broadcast send --selector "group=release" --body "状态？" --dry-run         # 先看会发给谁
 myco broadcast get --id bc_xxx                                                   # 每个接收方的状态和回复
 ```
-单次广播最多 200 个接收方，支持 `--idempotency-key`，只有发送方能用 `broadcast get` 查看结果。
+单次广播最多 200 个接收方，支持 `--idempotency-key`，只有发送方能用 `broadcast get` 查看结果。用 `--wait` 等到的回复会自动标记为已处理，不会再出现在你的收件箱里；`broadcast get` 默认只读，加 `--consume` 才会标记。
 
 ## 5. 接入后的自检
 

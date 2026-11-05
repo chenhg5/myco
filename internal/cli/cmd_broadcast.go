@@ -18,7 +18,8 @@ func broadcastCommands() *Command {
 		Mutating: true,
 		Long: `Each recipient gets its own message and thread (recipients don't see each other's replies);
 all share a broadcast ID for tracking. Agents whose allow-from excludes you are skipped.
---wait polls until every recipient answered or the timeout passes (exit 7).`,
+--wait polls until every recipient answered or the timeout passes (exit 7); replies collected
+this way are marked done, so they do not show up again in your inbox.`,
 		Examples: []string{
 			`myco broadcast send --selector "group=loops" --body "Pause deploys until 18:00" --type note`,
 			`myco broadcast send --selector "machine=mac,harness=codex" --body-file task.md --wait 15m`,
@@ -71,7 +72,9 @@ all share a broadcast ID for tracking. Agents whose allow-from excludes you are 
 			deadline := time.Now().Add(wait)
 			var st *api.BroadcastStatus
 			for {
-				if st, err = c.BroadcastStatus(e.in.Ctx, res.BroadcastID); err != nil {
+				// Replies we collect here are consumed so they don't also
+				// wake us through the inbox (same as message send --wait).
+				if st, err = c.BroadcastStatus(e.in.Ctx, res.BroadcastID, true); err != nil {
 					return err
 				}
 				if st.Answered == st.Total || time.Now().After(deadline) {
@@ -97,8 +100,11 @@ all share a broadcast ID for tracking. Agents whose allow-from excludes you are 
 	get := &Command{
 		Name:     "get",
 		Summary:  "Show a broadcast's recipients, statuses and replies",
-		Examples: []string{"myco broadcast get --id bc_abc123"},
-		Flags:    []Flag{{Name: "id", Kind: String, Required: true, Help: "Broadcast ID"}},
+		Examples: []string{"myco broadcast get --id bc_abc123", "myco broadcast get --id bc_abc123 --consume"},
+		Flags: []Flag{
+			{Name: "id", Kind: String, Required: true, Help: "Broadcast ID"},
+			{Name: "consume", Kind: Bool, Help: "Mark the replies shown as done so they leave your inbox"},
+		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
 				return err
@@ -107,7 +113,7 @@ all share a broadcast ID for tracking. Agents whose allow-from excludes you are 
 			if err != nil {
 				return err
 			}
-			st, err := c.BroadcastStatus(e.in.Ctx, e.in.String("id"))
+			st, err := c.BroadcastStatus(e.in.Ctx, e.in.String("id"), e.in.Bool("consume"))
 			if err != nil {
 				return err
 			}

@@ -391,6 +391,15 @@ func TestLabelsAndBroadcast(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `"answered": 2`) || !strings.Contains(out, "ok from mac-c") {
 		t.Fatalf("broadcast get: %s", out)
 	}
+	// Plain get is read-only: the replies are still in boss's inbox.
+	if _, pending, _ := boss.run("inbox", "wait", "--timeout", "1s", "--format", "json"); strings.Count(pending, `"type": "reply"`) != 2 {
+		t.Fatalf("get must not consume: %s", pending)
+	}
+	// --consume (what send --wait uses) clears them.
+	boss.run("broadcast", "get", "--id", bc.BroadcastID, "--consume")
+	if code, _, _ := boss.run("inbox", "wait", "--timeout", "1s"); code != ExitTimeout {
+		t.Fatalf("consumed replies must leave the inbox, inbox wait exit=%d", code)
+	}
 	if code, _, _ := a.run("broadcast", "get", "--id", bc.BroadcastID); code != ExitNotFound {
 		t.Fatalf("recipient must not read the broadcast: %d", code)
 	}

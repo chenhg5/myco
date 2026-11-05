@@ -378,7 +378,8 @@ func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Age
 }
 
 func (s *Server) broadcastStatus(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	ds, err := s.messages.BroadcastStatus(r.Context(), a, r.PathValue("id"))
+	consume, _ := strconv.ParseBool(r.URL.Query().Get("consume"))
+	ds, err := s.messages.BroadcastStatus(r.Context(), a, r.PathValue("id"), consume)
 	if err != nil {
 		writeError(w, err)
 		return

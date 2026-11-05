@@ -112,8 +112,10 @@ type BroadcastDelivery struct {
 	Reply   *domain.Message
 }
 
-// BroadcastStatus returns a broadcast's deliveries; only its sender may read it.
-func (s *MessageService) BroadcastStatus(ctx context.Context, agent *domain.Agent, id string) ([]BroadcastDelivery, error) {
+// BroadcastStatus returns a broadcast's deliveries; only its sender may read
+// it. With consume, returned replies are marked done (like WaitReply) so they
+// are not delivered again through the sender's inbox.
+func (s *MessageService) BroadcastStatus(ctx context.Context, agent *domain.Agent, id string, consume bool) ([]BroadcastDelivery, error) {
 	msgs, err := s.messages.ListBroadcast(ctx, id)
 	if err != nil {
 		return nil, err
@@ -125,6 +127,11 @@ func (s *MessageService) BroadcastStatus(ctx context.Context, agent *domain.Agen
 	for _, m := range msgs {
 		d := BroadcastDelivery{Message: m}
 		if r, err := s.messages.FindReply(ctx, m.ID); err == nil {
+			if consume {
+				if c, err := s.consume(ctx, agent, r); err == nil {
+					r = c
+				}
+			}
 			d.Reply = r
 		}
 		out = append(out, d)

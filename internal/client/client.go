@@ -257,10 +257,15 @@ func (c *Client) Broadcast(ctx context.Context, req api.BroadcastRequest, dry bo
 	return &out, c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
 }
 
-// BroadcastStatus returns deliveries and replies of a broadcast.
-func (c *Client) BroadcastStatus(ctx context.Context, id string) (*api.BroadcastStatus, error) {
+// BroadcastStatus returns deliveries and replies of a broadcast; consume
+// marks the returned replies done so they leave the caller's inbox.
+func (c *Client) BroadcastStatus(ctx context.Context, id string, consume bool) (*api.BroadcastStatus, error) {
+	q := url.Values{}
+	if consume {
+		q.Set("consume", "true")
+	}
 	var out api.BroadcastStatus
-	return &out, c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), nil, nil, &out)
+	return &out, c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), q, nil, &out)
 }
 
 // Send queues a message.
