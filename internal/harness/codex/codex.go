@@ -39,7 +39,7 @@ func (c *codex) Name() string { return Name }
 // accessArgs maps access levels to Codex flags. `exec resume` rejects -s,
 // so the sandbox is set through -c, which both forms accept.
 var accessArgs = map[harness.Access][]string{
-	harness.AccessReadonly:  {"-c", `sandbox_mode="read-only"`},
+	harness.AccessReadonly: {"-c", `sandbox_mode="read-only"`},
 	// Network on so the agent can reach the hub with `myco` (reply, hold,
 	// delegate); file writes stay confined to the workspace.
 	harness.AccessWorkspace: {"-c", `sandbox_mode="workspace-write"`, "-c", "sandbox_workspace_write.network_access=true"},
