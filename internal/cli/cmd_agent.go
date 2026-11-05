@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -390,12 +394,38 @@ func detectBinding(getenv func(string) string) api.Binding {
 	return api.Binding{Environment: hostname(), Workdir: wd}
 }
 
+var (
+	hostOnce sync.Once
+	hostName string
+)
+
+// hostname names this machine for bindings ("environment"). It must stay
+// stable: macOS often derives the BSD host name from DHCP (it becomes the
+// current IP), so there the LocalHostName (e.g. Glenns-MacBook-Pro) is used.
+// MYCO_HOSTNAME overrides it.
 func hostname() string {
-	h, err := os.Hostname()
-	if err != nil {
-		return "unknown-host"
-	}
-	return h
+	hostOnce.Do(func() {
+		if h := strings.TrimSpace(os.Getenv("MYCO_HOSTNAME")); h != "" {
+			hostName = h
+			return
+		}
+		if runtime.GOOS == "darwin" {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if out, err := exec.CommandContext(ctx, "scutil", "--get", "LocalHostName").Output(); err == nil {
+				if h := strings.TrimSpace(string(out)); h != "" {
+					hostName = h
+					return
+				}
+			}
+		}
+		h, err := os.Hostname()
+		if err != nil || h == "" {
+			h = "unknown-host"
+		}
+		hostName = h
+	})
+	return hostName
 }
 
 // deliveryFromFlags builds the delivery settings from register flags.

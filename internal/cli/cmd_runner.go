@@ -177,7 +177,19 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	host := hostname()
 	if err := checkBinding(me, name, host, sh.rebind); err != nil {
-		return nil, err
+		// The same machine under a new name (e.g. macOS renamed itself
+		// after a network change): take over when the session provably
+		// lives here. Exec nodes have no shared session to protect.
+		b := me.Binding
+		local := name == execnode.Name && b.Harness == execnode.Name
+		if p, ok := h.(harness.BusyProber); ok && b.Harness == name && b.SessionID != "" {
+			_, local = p.LastActivity(b.SessionID)
+		}
+		if !local {
+			return nil, err
+		}
+		log.Info("machine name changed; the session is on this machine, taking it over",
+			"agent", me.Name, "was", b.Environment, "now", host)
 	}
 	if me, err = c.Bind(e.in.Ctx, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
 		return nil, err

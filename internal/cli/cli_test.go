@@ -1096,3 +1096,43 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	return s.b.Write(p)
 }
 func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
+
+// A machine that renamed itself (macOS DHCP host names) keeps serving its
+// sessions: the runner takes over when the session's transcript is here.
+func TestRunnerSurvivesMachineRename(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
+	for _, s := range []struct{ name, session string }{{"here", "sess-here-1"}, {"elsewhere", "sess-away-2"}} {
+		admin.run("agent", "register", "--name", s.name, "--harness", "claude", "--session-id", s.session,
+			"--environment", "192.168.1.210", "--no-save", "--format", "json")
+		_, out, _ := admin.run("agent", "register", "--name", s.name, "--rotate-token", "--no-save", "--format", "json")
+		var reg struct{ Token string }
+		json.Unmarshal([]byte(out), &reg)
+		login := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+		if code, _, e := login.run("agent", "login", "--token-file", writeFile(t, home, s.name+".tok", reg.Token), "--workdir", home); code != 0 {
+			t.Fatalf("login %s: %s", s.name, e)
+		}
+	}
+	// Only "here" has its transcript on this machine.
+	proj := filepath.Join(home, ".claude", "projects", "p")
+	os.MkdirAll(proj, 0o700)
+	os.WriteFile(filepath.Join(proj, "sess-here-1.jsonl"), []byte("{}\n"), 0o600)
+
+	r := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+	r.run("runner", "start", "--all", "--once", "--log-level", "error")
+	env := func(name string) string {
+		_, out, _ := admin.run("agent", "get", "--name", name, "--format", "json")
+		var a struct{ Binding struct{ Environment string } }
+		json.Unmarshal([]byte(out), &a)
+		return a.Binding.Environment
+	}
+	if got := env("here"); got != hostname() {
+		t.Fatalf("local session should be taken over and rebound to %q, got %q", hostname(), got)
+	}
+	if got := env("elsewhere"); got != "192.168.1.210" {
+		t.Fatalf("a session not on this machine must stay bound to its machine, got %q", got)
+	}
+}
