@@ -101,7 +101,7 @@ func (m *Message) Involves(agent AgentName) bool { return m.From == agent || m.T
 
 // IsDue reports whether the message can be handed to its recipient now.
 func (m *Message) IsDue(now time.Time) bool {
-	return m.Status == StatusQueued || (m.Status == StatusDelivered && now.After(m.LeaseUntil))
+	return m.Status == StatusQueued || (m.Status == StatusDelivered && !now.Before(m.LeaseUntil))
 }
 
 // Claim leases the message to its recipient. It returns false (and marks the

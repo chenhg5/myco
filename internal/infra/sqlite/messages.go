@@ -63,7 +63,7 @@ func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domai
 	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, id`, threadID)
 }
 
-const dueWhere = `(status='queued' OR (status='delivered' AND lease_until<?))`
+const dueWhere = `(status='queued' OR (status='delivered' AND lease_until<=?))`
 
 func (r *MessageRepo) ListDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int) ([]*domain.Message, error) {
 	return r.many(ctx, r.db, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`, recipient, ms(now), limit)
