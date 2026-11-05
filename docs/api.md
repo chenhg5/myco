@@ -53,14 +53,17 @@ Errors (any non-2xx):
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
 | `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate, via_alias?}`; `to` may be an alias (the message stores the real name); attaching grants the recipient access |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
-| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?}` → `{messages}`; leases messages (long-poll ≤ 60s) |
+| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?}` → `{messages}`; leases messages (long-poll ≤ 60s) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply |
 | `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
-| `GET /v1/messages/{id}/reply?wait_seconds=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done |
+| `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
+| `POST /v1/messages/{id}/progress` | recipient | `{body}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender) |
+| `POST /v1/messages/{id}/steer` | sender | `{body}` → correction for an open task (type `steer`, delivered to the recipient; runners interrupt and resume the task with it) |
+| `PUT /v1/me/status` | agent | `{text}` → public one-line status (`""` clears); agents carry `status_text`, `status_at`, `state` (working/pending/idle/offline), `queued`, `in_progress`, `held` |
 | `GET /v1/threads/{id}` | participant / admin | `{messages}` in order |
 
 ## Message object

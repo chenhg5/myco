@@ -138,6 +138,8 @@ var agentColumnsV2 = [][2]string{
 	{"enrolled_by", "TEXT NOT NULL DEFAULT ''"},
 	{"labels", "TEXT NOT NULL DEFAULT '[]'"},
 	{"display_name", "TEXT NOT NULL DEFAULT ''"},
+	{"status_text", "TEXT NOT NULL DEFAULT ''"},
+	{"status_at", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

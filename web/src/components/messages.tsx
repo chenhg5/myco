@@ -1,4 +1,4 @@
-import { ArrowRight, Megaphone, Paperclip, Reply, StickyNote, ListTodo, AlertTriangle } from "lucide-react";
+import { ArrowRight, Megaphone, Paperclip, Reply, StickyNote, ListTodo, AlertTriangle, Activity, Navigation } from "lucide-react";
 import type { Message } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { cn, bytes, clock, timeAgo } from "@/lib/utils";
@@ -8,6 +8,8 @@ const typeMeta: Record<string, { label: string; icon: typeof ListTodo; cls: stri
   reply: { label: "回复", icon: Reply, cls: "text-idle" },
   note: { label: "通知", icon: StickyNote, cls: "text-muted-foreground" },
   event: { label: "事件", icon: AlertTriangle, cls: "text-pending" },
+  progress: { label: "进展", icon: Activity, cls: "text-working" },
+  steer: { label: "调整", icon: Navigation, cls: "text-pending" },
 };
 
 const statusMeta: Record<string, { label: string; cls: string }> = {
@@ -39,7 +41,7 @@ export function MessageRow({ m, onOpen, now }: { m: Message; onOpen: () => void;
           <span className="font-mono font-medium">{m.from}</span>
           <ArrowRight className="h-3 w-3 text-muted-foreground" />
           <span className="font-mono font-medium">{m.to}</span>
-          <MsgStatus status={m.status} />
+          {m.type !== "progress" && <MsgStatus status={m.status} />}
           {m.broadcast_id && (
             <Badge variant="outline" className="gap-1 text-[10px]"><Megaphone className="h-3 w-3" />广播</Badge>
           )}
@@ -63,7 +65,7 @@ export function MessageBubble({ m, self }: { m: Message; self?: string }) {
         <span className="font-mono font-medium text-foreground">{m.from}</span>
         <span>→ {m.to}</span>
         <span>· {clock(m.created_at)}</span>
-        <MsgStatus status={m.status} />
+        {m.type !== "progress" && <MsgStatus status={m.status} />}
       </div>
       <div className={cn("max-w-[92%] rounded-xl border px-3.5 py-2.5 text-sm shadow-sm", mine ? "bg-accent/60" : "bg-card")}>
         <pre className="whitespace-pre-wrap break-words font-sans leading-relaxed">{m.body}</pre>

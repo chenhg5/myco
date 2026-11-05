@@ -56,6 +56,17 @@ export function AgentName({ name, displayName, className }: { name: string; disp
   );
 }
 
+/** The agent's public status line (myco agent status set). */
+export function StatusLine({ text, at, now }: { text: string; at?: string; now: number }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-working/20 bg-working/5 px-2.5 py-1.5 text-xs">
+      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-working" />
+      <span className="min-w-0 flex-1 break-words text-foreground/90">{text}</span>
+      {at && <span className="shrink-0 text-muted-foreground">{timeAgo(at, now)}</span>}
+    </div>
+  );
+}
+
 export function Labels({ labels, onPick, max = 6 }: { labels: string[]; onPick?: (l: string) => void; max?: number }) {
   if (!labels.length) return <span className="text-xs text-muted-foreground/60">无标签</span>;
   const shown = labels.slice(0, max);
@@ -108,6 +119,8 @@ export function AgentCard({ a, onOpen, onLabel, now }: { a: AgentStatus; onOpen:
 
       <p className="line-clamp-2 min-h-[2.5rem] text-sm text-muted-foreground">{ag.description || <span className="italic opacity-60">（没有描述）</span>}</p>
 
+      {ag.status_text && <StatusLine text={ag.status_text} at={ag.status_at} now={now} />}
+
       <Labels labels={ag.labels} onPick={onLabel} max={4} />
 
       <div className="mt-auto space-y-2 border-t pt-3">
@@ -152,7 +165,9 @@ export function AgentTable({ agents, onOpen, onLabel, now }: { agents: AgentStat
                 <td className="max-w-[260px] px-4 py-3">
                   <AgentName name={a.agent.name} displayName={a.agent.display_name} className="font-medium" />
                   {!!a.agent.aliases?.length && <div className="mt-1 flex flex-wrap gap-1"><Aliases aliases={a.agent.aliases} /></div>}
-                  <div className="truncate text-xs text-muted-foreground">{a.agent.description}</div>
+                  {a.agent.status_text
+                    ? <div className="truncate text-xs text-working">● {a.agent.status_text}</div>
+                    : <div className="truncate text-xs text-muted-foreground">{a.agent.description}</div>}
                 </td>
                 <td className="px-4 py-3"><StateBadge state={a.state} /></td>
                 <td className="px-4 py-3"><HarnessBadge harness={a.agent.binding.harness} /></td>

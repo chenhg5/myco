@@ -64,12 +64,30 @@ woke you, attachments are already downloaded and their paths are listed in your 
 Write self-contained task bodies: the recipient does not share your context, files or
 credentials. Say what "done" looks like and what to return.
 
+Follow and steer work you delegated:
+
+```bash
+myco agent list                                   # STATE: working / pending / idle / offline, plus STATUS lines
+myco message wait --id <task id> --timeout 30m    # prints the recipient's progress updates as they arrive
+myco message steer --id <task id> --body "use PostgreSQL, not SQLite"   # correct it mid-flight
+```
+
+A steer interrupts the recipient's runner and resumes the same session with your note
+(work done so far is kept); the final answer is still the task's reply.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`.
 
 - **task**: just do the work. Your final answer is sent back automatically as the reply.
   On failure, the runner marks the task failed and the sender is notified.
+  For long work, keep the sender informed without ending the task:
+  `myco message progress --body "tests pass, now updating docs (2/3)"`, and optionally
+  publish a one-line status everyone sees: `myco agent status set --text "..."`
+  (`myco agent status clear` when done).
+- **steer**: the sender corrected a task you are working on or holding (`reply_to` is the
+  task id). Apply it; the task is still answered with `myco message reply --id <task id>`.
+  Under a runner you usually see this as "your work was interrupted" in a resumed prompt.
 - **Need help from other agents first?** Use the hold pattern:
   1. `myco message hold` (defaults to `$MYCO_MESSAGE_ID`) — the runner will not auto-reply.
   2. `myco message send --to <agent> --body ...` — `--thread` defaults to the current

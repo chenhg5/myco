@@ -17,6 +17,13 @@ const (
 	TypeReply MessageType = "reply"
 	// TypeEvent is emitted by the hub (e.g. a task failed).
 	TypeEvent MessageType = "event"
+	// TypeProgress is an interim update on a task from its recipient. It is
+	// stored closed: it never wakes the sender, who sees it while waiting
+	// for the reply (myco message wait) or in the thread.
+	TypeProgress MessageType = "progress"
+	// TypeSteer is a correction from a task's sender while the task is
+	// open. Runners interrupt the task's run and resume it with the steer.
+	TypeSteer MessageType = "steer"
 )
 
 // ParseSendableType validates a type an agent may send directly.
@@ -230,6 +237,42 @@ func (m *Message) Reply(by AgentName, replyID, body string, now time.Time) (*Mes
 	}
 	m.Status, m.UpdatedAt = StatusDone, now
 	return r, nil
+}
+
+// Progress returns an interim update on task m from its recipient. The task
+// itself does not change.
+func (m *Message) Progress(by AgentName, id, body string, now time.Time) (*Message, error) {
+	if err := m.requireRecipient(by); err != nil {
+		return nil, err
+	}
+	if m.Type != TypeTask {
+		return nil, Errf(CodeInvalidArgument, "progress applies to tasks; %s is a %s", m.ID, m.Type)
+	}
+	if err := m.requireOpen("report progress on", StatusDelivered, StatusAcked, StatusHeld); err != nil {
+		return nil, err
+	}
+	p, err := NewMessage(id, m.To, m.From, TypeProgress, body, m.ThreadID, m.ID, "", now)
+	if err != nil {
+		return nil, err
+	}
+	p.Status = StatusDone
+	return p, nil
+}
+
+// Steer returns a correction to open task m from its sender, delivered to
+// the recipient like any message.
+func (m *Message) Steer(by AgentName, id, body string, now time.Time) (*Message, error) {
+	if m.From != by {
+		return nil, Errf(CodePermissionDenied, "only the sender of %s (%s) can steer it", m.ID, m.From)
+	}
+	if m.Type != TypeTask {
+		return nil, Errf(CodeInvalidArgument, "only tasks can be steered; %s is a %s", m.ID, m.Type)
+	}
+	if m.Status.Terminal() {
+		return nil, Errf(CodeInvalidState, "task %s is already %s", m.ID, m.Status).
+			WithSuggestion("send a follow-up instead: myco message send --to %s --thread %s --body ...", m.To, m.ThreadID)
+	}
+	return NewMessage(id, m.From, m.To, TypeSteer, body, m.ThreadID, m.ID, "", now)
 }
 
 // Fail closes the message as failed. If the sender expects a reply, an event

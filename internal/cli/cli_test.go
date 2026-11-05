@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1002,3 +1003,96 @@ func TestAdminFromHubEnv(t *testing.T) {
 		t.Fatalf("link create from hub.env: %d %s %s", code, out, e)
 	}
 }
+
+func TestProgressStatusAndSteer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	mk := func(name string) *harnessT {
+		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
+	}
+	boss, worker := mk("boss"), mk("worker")
+	boss.run("agent", "register", "--name", "boss")
+	worker.run("agent", "register", "--name", "worker", "--workdir", home)
+	worker.env["PATH"] = os.Getenv("PATH") // the runner passes PATH on to the agent
+
+	// A shell "agent" that works slowly unless it was given a correction.
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	runnerDone := make(chan struct{})
+	var runnerErr syncBuffer
+	go func() {
+		defer close(runnerDone)
+		var out bytes.Buffer
+		errb := &runnerErr
+		Run(ctx, []string{"runner", "start", "--harness", "shell", "--log-level", "error", "--workdir", home,
+			"--command", `p=$(cat); case "$p" in *"corrections from the sender"*) echo "plan B done";; *) sleep 30; echo "plan A done";; esac`},
+			strings.NewReader(""), &out, errb, func(k string) string { return worker.env[k] }, false)
+	}()
+
+	_, out, _ := boss.run("message", "send", "--to", "worker", "--body", "do plan A", "--format", "json")
+	var sent struct{ Message struct{ ID string } }
+	json.Unmarshal([]byte(out), &sent)
+	id := sent.Message.ID
+	// Wait until the runner works on it.
+	for i := 0; ; i++ {
+		_, out, _ := worker.run("agent", "get", "--format", "json")
+		if strings.Contains(out, `"state": "working"`) {
+			break
+		}
+		if i > 100 {
+			_, m, _ := boss.run("thread", "get", "--id", id, "--format", "json")
+			t.Fatalf("worker never started: %s\nmessage: %s\nrunner: %s", out, m, runnerErr.String())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// Everyone sees it is busy, and its public status line.
+	if code, _, e := worker.run("agent", "status", "set", "--text", "working on plan A"); code != 0 {
+		t.Fatalf("status set: %s", e)
+	}
+	if _, out, _ := boss.run("agent", "list", "--format", "text"); !strings.Contains(out, "working") || !strings.Contains(out, "working on plan A") || !strings.Contains(out, "1 running") {
+		t.Fatalf("list should show state and status:\n%s", out)
+	}
+	// Interim progress reaches the waiting sender without ending the task.
+	if code, _, e := worker.run("message", "progress", "--id", id, "--body", "half way"); code != 0 {
+		t.Fatalf("progress: %s", e)
+	}
+	if code, _, _ := boss.run("message", "progress", "--id", id, "--body", "x"); code != ExitPermission {
+		t.Fatalf("only the recipient reports progress, exit %d", code)
+	}
+	code, out, e := boss.run("message", "wait", "--id", id, "--timeout", "1s", "--format", "json")
+	if code != ExitTimeout || !strings.Contains(e, "[progress") || !strings.Contains(e, "half way") || !strings.Contains(out, `"half way"`) {
+		t.Fatalf("wait with progress: %d %s %s", code, out, e)
+	}
+	// Steer: the runner interrupts the slow run and resumes with the correction.
+	if code, _, _ := worker.run("message", "steer", "--id", id, "--body", "x"); code != ExitPermission {
+		t.Fatalf("only the sender steers, exit %d", code)
+	}
+	start := time.Now()
+	if code, _, e := boss.run("message", "steer", "--id", id, "--body", "switch to plan B"); code != 0 {
+		t.Fatalf("steer: %s", e)
+	}
+	code, out, e = boss.run("message", "wait", "--id", id, "--timeout", "25s", "--format", "json")
+	if code != 0 || !strings.Contains(out, "plan B done") || time.Since(start) > 20*time.Second {
+		t.Fatalf("steered reply: %d %s %s (after %s)", code, out, e, time.Since(start))
+	}
+	// A finished task cannot be steered.
+	if code, _, _ := boss.run("message", "steer", "--id", id, "--body", "too late"); code != ExitConflict {
+		t.Fatalf("steering a finished task, exit %d", code)
+	}
+	stop()
+	<-runnerDone
+}
+
+// syncBuffer is a bytes.Buffer safe for concurrent use.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }

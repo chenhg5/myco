@@ -42,6 +42,13 @@ func (h *fakeHub) Pull(ctx context.Context, limit int, wait time.Duration) ([]ap
 	h.queue = h.queue[n:]
 	return out, nil
 }
+func (h *fakeHub) PullTypes(ctx context.Context, _ int, wait time.Duration, _ []string) ([]api.Message, error) {
+	select { // no steers in these tests
+	case <-time.After(wait):
+	case <-ctx.Done():
+	}
+	return nil, nil
+}
 func (h *fakeHub) set(id, s string) error                      { h.mu.Lock(); h.status[id] = s; h.mu.Unlock(); return nil }
 func (h *fakeHub) Ack(_ context.Context, id string) error      { return h.set(id, "acked") }
 func (h *fakeHub) Complete(_ context.Context, id string) error { return h.set(id, "done") }

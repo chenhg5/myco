@@ -52,6 +52,43 @@ func NewOverviewService(agents domain.AgentRepository, messages domain.MessageRe
 	return &OverviewService{agents: agents, messages: messages, clock: clock, onlineWindow: onlineWindow}
 }
 
+// States returns every agent's live state and counters, without message
+// contents (for agent listings).
+func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]AgentOverview, error) {
+	agents, err := s.agents.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := s.messages.OpenCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock.Now()
+	out := make(map[domain.AgentName]AgentOverview, len(agents))
+	for _, a := range agents {
+		out[a.Name] = s.stateOf(a, counts[a.Name], now)
+	}
+	return out, nil
+}
+
+func (s *OverviewService) stateOf(a *domain.Agent, c map[domain.Status]int, now time.Time) AgentOverview {
+	o := AgentOverview{
+		Agent: a, Online: a.IsOnline(now, s.onlineWindow),
+		Queued: c[domain.StatusQueued], InProgress: c[domain.StatusDelivered] + c[domain.StatusAcked], Held: c[domain.StatusHeld],
+	}
+	switch {
+	case o.InProgress+o.Held > 0:
+		o.State = StateWorking
+	case o.Queued > 0:
+		o.State = StatePending
+	case o.Online:
+		o.State = StateIdle
+	default:
+		o.State = StateOffline
+	}
+	return o
+}
+
 // Snapshot returns the overview as seen by viewer (nil viewer = admin).
 // Non-admin viewers see every agent's profile and counters, but message
 // contents only for messages they are part of.
@@ -67,21 +104,7 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 	now := s.clock.Now()
 	ov := &Overview{GeneratedAt: now}
 	for _, a := range agents {
-		c := counts[a.Name]
-		o := AgentOverview{
-			Agent: a, Online: a.IsOnline(now, s.onlineWindow),
-			Queued: c[domain.StatusQueued], InProgress: c[domain.StatusDelivered] + c[domain.StatusAcked], Held: c[domain.StatusHeld],
-		}
-		switch {
-		case o.InProgress+o.Held > 0:
-			o.State = StateWorking
-		case o.Queued > 0:
-			o.State = StatePending
-		case o.Online:
-			o.State = StateIdle
-		default:
-			o.State = StateOffline
-		}
+		o := s.stateOf(a, counts[a.Name], now)
 		if (viewer == nil || viewer.Name == a.Name) && o.InProgress+o.Held > 0 {
 			if o.Current, err = s.messages.ListOpen(ctx, a.Name, 10); err != nil {
 				return nil, err

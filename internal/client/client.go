@@ -418,8 +418,13 @@ func (c *Client) WaitReply(ctx context.Context, id string, total time.Duration) 
 
 // Pull leases up to limit messages, long-polling up to wait.
 func (c *Client) Pull(ctx context.Context, limit int, wait time.Duration) ([]api.Message, error) {
+	return c.PullTypes(ctx, limit, wait, nil)
+}
+
+// PullTypes is Pull restricted to message types (nil = all).
+func (c *Client) PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error) {
 	var out api.MessageList
-	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds())}, &out)
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types}, &out)
 	return out.Messages, err
 }
 
@@ -534,4 +539,53 @@ func (c *Client) DownloadFile(ctx context.Context, id, dest string) (*api.File, 
 func (c *Client) Join(ctx context.Context, machine string, dry bool) (*api.JoinResponse, error) {
 	var out api.JoinResponse
 	return &out, c.do(ctx, http.MethodPost, "/v1/join", dryQuery(dry), api.JoinRequest{Machine: machine}, &out)
+}
+
+// SetStatus publishes the caller's public status line ("" clears it).
+func (c *Client) SetStatus(ctx context.Context, text string) (*api.Agent, error) {
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, "/v1/me/status", nil, api.StatusRequest{Text: text}, &out)
+}
+
+// Progress posts an interim update on task id (as its recipient).
+func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
+	var out api.MessageResult
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+}
+
+// Steer sends a correction for open task id (as its sender).
+func (c *Client) Steer(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
+	var out api.MessageResult
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/steer", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+}
+
+// WaitReplyProgress waits like WaitReply and calls onProgress for each of the
+// task's progress updates (including ones posted before the wait) as they
+// arrive. It returns the reply, or nil at the deadline.
+func (c *Client) WaitReplyProgress(ctx context.Context, id string, total time.Duration, onProgress func(api.Message)) (*api.Message, error) {
+	deadline := time.Now().Add(total)
+	since := "0"
+	for {
+		secs := max(int(time.Until(deadline).Seconds()), 0)
+		q := url.Values{"wait_seconds": {strconv.Itoa(min(secs, 60))}, "progress_since": {since}}
+		var out api.WaitResponse
+		if err := c.do(ctx, http.MethodGet, "/v1/messages/"+esc(id)+"/reply", q, nil, &out); err != nil {
+			if err := RideOut(ctx, err, deadline); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		for _, p := range out.Progress {
+			if onProgress != nil {
+				onProgress(p)
+			}
+			since = p.CreatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		if out.Reply != nil {
+			return out.Reply, nil
+		}
+		if time.Until(deadline) <= 0 {
+			return nil, nil
+		}
+	}
 }

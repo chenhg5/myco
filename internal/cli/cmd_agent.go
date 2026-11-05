@@ -337,7 +337,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), label, agentAliasCommands(), list, get, remove)
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), list, get, remove)
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
@@ -442,18 +442,27 @@ func (e *env) agentOrAdminClient() (*client.Client, error) {
 
 func agentTable(w io.Writer, agents []api.Agent) {
 	tw := newTable(w)
-	fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tALIASES\tONLINE\tHARNESS\tSESSION\tENVIRONMENT\tLABELS\tCAPABILITIES\tLAST SEEN\tDESCRIPTION")
+	fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tSTATE\tTASKS\tSTATUS\tALIASES\tHARNESS\tENVIRONMENT\tLABELS\tLAST SEEN\tDESCRIPTION")
 	for _, a := range agents {
 		seen := "never"
 		if a.LastSeenAt != nil {
 			seen = time.Since(*a.LastSeenAt).Round(time.Second).String() + " ago"
 		}
-		online := "no"
-		if a.Online {
-			online = "yes"
+		state := a.State
+		if state == "" { // older hub
+			state = map[bool]string{true: "online", false: "offline"}[a.Online]
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.Name, dash(truncate(a.DisplayName, 30)), dash(strings.Join(a.Aliases, ",")), online, dash(a.Binding.Harness), dash(truncate(a.Binding.SessionID, 14)),
-			dash(a.Binding.Environment), dash(truncate(strings.Join(a.Labels, ","), 40)), strings.Join(a.Capabilities, ","), seen, truncate(a.Description, 40))
+		tasks := "-"
+		if a.InProgress+a.Held+a.Queued > 0 {
+			tasks = fmt.Sprintf("%d running, %d queued", a.InProgress+a.Held, a.Queued)
+		}
+		status := truncate(a.StatusText, 50)
+		if a.StatusAt != nil && status != "" {
+			status += " (" + time.Since(*a.StatusAt).Round(time.Minute).String() + " ago)"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.Name, dash(truncate(a.DisplayName, 30)), state, tasks,
+			dash(status), dash(strings.Join(a.Aliases, ",")), dash(a.Binding.Harness), dash(a.Binding.Environment),
+			dash(truncate(strings.Join(a.Labels, ","), 40)), seen, truncate(a.Description, 40))
 	}
 	tw.Flush()
 }

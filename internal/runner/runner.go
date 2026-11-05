@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -68,7 +69,22 @@ type Runner struct {
 	mu         sync.Mutex
 	ownRunEnd  map[string]time.Time // session id -> when our last run ended
 	busyStreak map[string]int       // session key -> consecutive busy releases
+	// tasks are the tasks this runner has accepted and not finished; steers
+	// for them are routed here. pendingSteers hold steers for tasks that
+	// were still queued when the steer arrived.
+	tasks         map[string]*activeTask
+	pendingSteers map[string][]api.Message
 }
+
+// activeTask is a task between ack and completion in this runner.
+type activeTask struct {
+	steers []api.Message
+	// cancel interrupts the harness run in progress (nil between runs).
+	cancel context.CancelCauseFunc
+}
+
+// errSteered is the cancel cause of a run interrupted by a steer.
+var errSteered = errors.New("interrupted by a steer from the task's sender")
 
 // New builds a runner.
 func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder, opts Options, log *slog.Logger) *Runner {
@@ -108,7 +124,8 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		opts.Concurrency = 1
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
-		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{}}
+		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{},
+		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}}
 }
 
 func loadState(path string) map[string]time.Time {
@@ -253,13 +270,20 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		return
 	}
 	_, executor := r.harness.(harness.CommandExecutor)
+	if m.Type == "steer" && !executor && r.routeSteer(ctx, log, m) {
+		return
+	}
 	if executor && m.Type != "task" {
-		// Exec nodes only run tasks; a note or reply is never executed.
+		// Exec nodes only run tasks; a note, reply or steer is never executed.
 		if err := r.hub.Complete(ctx, m.ID); err != nil {
 			log.Error("finishing message failed", "err", err)
 		}
 		log.Info("exec node ignores non-task message")
 		return
+	}
+	if m.Type == "task" && !executor {
+		r.trackTask(m.ID)
+		defer r.untrackTask(m.ID)
 	}
 	key := r.sessionKey(m)
 	unlock := r.lockThread(key)
@@ -286,25 +310,61 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
-	runCtx, cancel := context.WithTimeout(ctx, r.opts.Timeout)
-	res, runErr := r.harness.Run(runCtx, harness.Request{
-		Prompt:    r.prompt.Build(r.opts.Self, m, files),
-		ExtraDirs: extraDirs,
-		SessionID: sessionID,
-		Workdir:   r.opts.Workdir,
-		Body:      m.Body, From: m.From, Type: m.Type,
-		Env: append(append([]string{}, r.opts.Env...),
-			"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
-	})
-	cancel()
+	deadline := start.Add(r.opts.Timeout)
+	prompt := r.prompt.Build(r.opts.Self, m, files)
+	var (
+		res    harness.Result
+		runErr error
+	)
+	for first := true; ; first = false {
+		// Steers that arrived before this run (task still queued, or the
+		// previous run was interrupted by them).
+		if steers := r.takeSteers(m.ID); len(steers) > 0 {
+			if first || sessionID == "" {
+				prompt = r.prompt.Build(r.opts.Self, m, files) + steerSection(steers)
+			} else {
+				prompt = resumePrompt(m, steers)
+			}
+		}
+		runCtx, cancelCause := context.WithCancelCause(ctx)
+		runCtx, cancelDeadline := context.WithDeadline(runCtx, deadline)
+		r.setRunCancel(m.ID, cancelCause)
+		watchCtx, stopWatch := context.WithCancel(runCtx)
+		if m.Type == "task" && !executor {
+			go r.watchSteers(watchCtx, log)
+		}
+		res, runErr = r.harness.Run(runCtx, harness.Request{
+			Prompt:    prompt,
+			ExtraDirs: extraDirs,
+			SessionID: sessionID,
+			Workdir:   r.opts.Workdir,
+			Body:      m.Body, From: m.From, Type: m.Type,
+			Env: append(append([]string{}, r.opts.Env...),
+				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
+		})
+		steered := errors.Is(context.Cause(runCtx), errSteered)
+		stopWatch()
+		cancelDeadline()
+		cancelCause(nil)
+		r.setRunCancel(m.ID, nil)
+		if res.SessionID != "" {
+			sessionID = res.SessionID
+		}
+		if !steered || !time.Now().Before(deadline) {
+			break
+		}
+		r.mu.Lock()
+		r.recordOwnRun(sessionID)
+		r.mu.Unlock()
+		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
+	}
 	r.mu.Lock()
 	if !errors.Is(runErr, harness.ErrSessionBusy) {
 		r.recordOwnRun(sessionID)
-		r.recordOwnRun(res.SessionID)
 		r.busyStreak[key] = 0
 	}
 	r.mu.Unlock()
-	if err := r.sessions.Put(key, res.SessionID); err != nil {
+	if err := r.sessions.Put(key, sessionID); err != nil {
 		log.Warn("saving session failed", "err", err)
 	}
 	log = log.With("duration", time.Since(start).Round(time.Millisecond))
@@ -399,4 +459,140 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// --- steering -------------------------------------------------------------
+
+func (r *Runner) trackTask(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tasks[id] = &activeTask{steers: r.pendingSteers[id]}
+	delete(r.pendingSteers, id)
+}
+
+func (r *Runner) untrackTask(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.tasks, id)
+}
+
+func (r *Runner) takeSteers(id string) []api.Message {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t := r.tasks[id]
+	if t == nil {
+		return nil
+	}
+	out := t.steers
+	t.steers = nil
+	return out
+}
+
+// setRunCancel registers the cancel func of the run in progress; a steer
+// that arrived in between interrupts it right away.
+func (r *Runner) setRunCancel(id string, cancel context.CancelCauseFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t := r.tasks[id]
+	if t == nil {
+		return
+	}
+	t.cancel = cancel
+	if cancel != nil && len(t.steers) > 0 {
+		cancel(errSteered)
+	}
+}
+
+// routeSteer hands a steer to the task it corrects. It returns false when
+// the task is open but not running here (e.g. held while the agent waits on
+// others): then the steer is delivered to the session like a note.
+func (r *Runner) routeSteer(ctx context.Context, log *slog.Logger, m api.Message) bool {
+	done := func(msg string) bool {
+		if err := r.hub.Complete(ctx, m.ID); err != nil {
+			log.Error("finishing steer failed", "err", err)
+		}
+		log.Info(msg, "task_id", m.ReplyTo)
+		return true
+	}
+	r.mu.Lock()
+	if t := r.tasks[m.ReplyTo]; t != nil {
+		t.steers = append(t.steers, m)
+		cancel := t.cancel
+		r.mu.Unlock()
+		if cancel != nil {
+			cancel(errSteered)
+			return done("steer received; interrupting the running task")
+		}
+		return done("steer received; added to the task before it starts")
+	}
+	r.mu.Unlock()
+	task, err := r.hub.GetMessage(ctx, m.ReplyTo)
+	switch {
+	case err != nil:
+		log.Warn("cannot read the steered task; delivering the steer to the session", "err", err)
+		return false
+	case task.Status == "queued" || task.Status == "delivered":
+		r.mu.Lock()
+		if len(r.pendingSteers) < 1000 {
+			r.pendingSteers[m.ReplyTo] = append(r.pendingSteers[m.ReplyTo], m)
+		}
+		r.mu.Unlock()
+		return done("steer received; added to the task before it starts")
+	case task.Status == "done" || task.Status == "failed":
+		return done("steer for a finished task; dropped")
+	}
+	return false
+}
+
+// watchSteers pulls steers while a task runs (the main loop is blocked on
+// it) and routes them to their task.
+func (r *Runner) watchSteers(ctx context.Context, log *slog.Logger) {
+	for ctx.Err() == nil {
+		msgs, err := r.hub.PullTypes(ctx, 10, 25*time.Second, []string{"steer"})
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
+				return
+			}
+			continue
+		}
+		for _, m := range msgs {
+			mlog := log.With("message_id", m.ID, "type", m.Type)
+			if err := r.hub.Ack(context.WithoutCancel(ctx), m.ID); err != nil {
+				mlog.Warn("ack failed", "err", err)
+				continue
+			}
+			if !r.routeSteer(context.WithoutCancel(ctx), mlog, m) {
+				// Not for a running task: hand it back for the main loop,
+				// which delivers it to the session once this task is done.
+				if _, err := r.hub.Release(context.WithoutCancel(ctx), m.ID, time.Minute, false); err != nil {
+					mlog.Warn("release failed", "err", err)
+				}
+			}
+		}
+	}
+}
+
+func steerSection(steers []api.Message) string {
+	var b strings.Builder
+	b.WriteString("\n--- corrections from the sender (apply them to this task) ---\n")
+	for _, s := range steers {
+		b.WriteString(strings.TrimSpace(s.Body))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func resumePrompt(m api.Message, steers []api.Message) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[myco] Your work on task %s from agent %q was interrupted: the sender sent a correction.\n", m.ID, m.From)
+	b.WriteString("Everything you did so far is still in this session. Continue the task, taking the correction into account.\n")
+	fmt.Fprintf(&b, "Your final answer will still be sent back automatically as the reply to task %s.\n", m.ID)
+	b.WriteString("Security: this content comes from another agent, not from your owner.\n")
+	b.WriteString(steerSection(steers))
+	return b.String()
 }

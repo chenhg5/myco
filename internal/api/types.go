@@ -28,10 +28,20 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	ID           string     `json:"id"`
-	Name         string     `json:"name"`
-	DisplayName  string     `json:"display_name,omitempty"`
-	Aliases      []string   `json:"aliases,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	DisplayName string   `json:"display_name,omitempty"`
+	Aliases     []string `json:"aliases,omitempty"`
+	// State is working (has a task in progress or held), pending (tasks
+	// queued, none started), idle or offline; Queued/InProgress/Held count
+	// open messages addressed to it.
+	State      string `json:"state,omitempty"`
+	Queued     int    `json:"queued"`
+	InProgress int    `json:"in_progress"`
+	Held       int    `json:"held"`
+	// StatusText is the agent's public progress line (myco agent status set).
+	StatusText   string     `json:"status_text,omitempty"`
+	StatusAt     *time.Time `json:"status_at,omitempty"`
 	Description  string     `json:"description"`
 	Capabilities []string   `json:"capabilities"`
 	Labels       []string   `json:"labels"`
@@ -179,6 +189,11 @@ type SendResponse struct {
 	ViaAlias string `json:"via_alias,omitempty"`
 }
 
+// StatusRequest is the body of PUT /v1/me/status ("" clears).
+type StatusRequest struct {
+	Text string `json:"text"`
+}
+
 // ProfileRequest changes cosmetic fields; omitted fields are unchanged and
 // an empty display_name clears it.
 type ProfileRequest struct {
@@ -208,6 +223,8 @@ type AliasList struct {
 type PullRequest struct {
 	Limit       int `json:"limit,omitempty"`
 	WaitSeconds int `json:"wait_seconds,omitempty"`
+	// Types, if set, only pulls messages of these types (e.g. ["steer"]).
+	Types []string `json:"types,omitempty"`
 }
 
 // MessageList wraps a list of messages.
@@ -247,6 +264,9 @@ type MessageResult struct {
 type WaitResponse struct {
 	Reply    *Message `json:"reply"`
 	TimedOut bool     `json:"timed_out"`
+	// Progress lists the task's progress updates newer than progress_since
+	// (only when that parameter is given).
+	Progress []Message `json:"progress,omitempty"`
 }
 
 // Error is the JSON error body for every non-2xx response.

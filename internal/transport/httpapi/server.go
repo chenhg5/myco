@@ -106,6 +106,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
 	m.HandleFunc("PUT /v1/me/profile", s.agent(s.myProfile))
+	m.HandleFunc("PUT /v1/me/status", s.agent(s.myStatus))
 	m.HandleFunc("POST /v1/broadcasts", s.agent(s.broadcast))
 	m.HandleFunc("POST /v1/files", s.agent(s.uploadFile))
 	m.HandleFunc("GET /v1/files/{id}", s.agent(s.downloadFile))
@@ -119,6 +120,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/hold", s.agent(s.transition(app.TransitionHold)))
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
+	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
+	m.HandleFunc("POST /v1/messages/{id}/steer", s.agent(s.followUp("steer")))
 	m.HandleFunc("POST /v1/messages/{id}/fail", s.agent(s.fail))
 	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))
 	m.HandleFunc("GET /v1/messages/{id}/reply", s.agent(s.waitReply))
@@ -229,7 +232,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	for i := range out.Agents {
 		ptrs[i] = &out.Agents[i]
 	}
-	s.withAliases(r.Context(), ptrs...)
+	s.enrich(r.Context(), ptrs...)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -240,13 +243,13 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto := s.agentDTO(a)
-	s.withAliases(r.Context(), &dto)
+	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dto := s.agentDTO(a)
-	s.withAliases(r.Context(), &dto)
+	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -444,7 +447,22 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 		return
 	}
 	dto := s.agentDTO(a)
-	s.withAliases(r.Context(), &dto)
+	s.enrich(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.StatusRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	got, err := s.agents.SetStatus(r.Context(), string(a.Name), req.Text)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	dto := s.agentDTO(got)
+	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -738,6 +756,31 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request, a *domain.Agent
 }
 
 func (s *Server) waitReply(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	// With progress_since (RFC 3339; "0" = from the start) the wait also
+	// returns as soon as there are newer progress updates.
+	if ps := r.URL.Query().Get("progress_since"); ps != "" {
+		var since time.Time
+		if ps != "0" {
+			t, err := time.Parse(time.RFC3339Nano, ps)
+			if err != nil {
+				writeError(w, domain.Errf(domain.CodeInvalidArgument, "progress_since must be RFC 3339 or 0"))
+				return
+			}
+			since = t
+		}
+		m, progress, err := s.messages.WaitUpdate(r.Context(), a, r.PathValue("id"), waitParam(r), since)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		resp := api.WaitResponse{TimedOut: m == nil && len(progress) == 0, Progress: messageList(progress).Messages}
+		if m != nil {
+			dto := messageDTO(m)
+			resp.Reply = &dto
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
 	m, err := s.messages.WaitReply(r.Context(), a, r.PathValue("id"), waitParam(r))
 	if err != nil {
 		writeError(w, err)
@@ -751,12 +794,42 @@ func (s *Server) waitReply(w http.ResponseWriter, r *http.Request, a *domain.Age
 	writeJSON(w, http.StatusOK, api.WaitResponse{Reply: &dto})
 }
 
+// progress and steer create a follow-up on task {id}: an update from its
+// recipient, or a correction from its sender.
+func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, *domain.Agent) {
+	return func(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+		var req api.ReplyRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		dry := dryRun(r)
+		op := s.messages.Progress
+		if kind == "steer" {
+			op = s.messages.Steer
+		}
+		m, err := op(r.Context(), a, r.PathValue("id"), req.Body, dry)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		status := http.StatusCreated
+		if dry {
+			status = http.StatusOK
+		}
+		writeJSON(w, status, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+	}
+}
+
 func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	var req api.PullRequest
 	if r.ContentLength != 0 && !decode(w, r, &req) {
 		return
 	}
-	msgs, err := s.messages.Pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second)
+	types := make([]domain.MessageType, 0, len(req.Types))
+	for _, t := range req.Types {
+		types = append(types, domain.MessageType(t))
+	}
+	msgs, err := s.messages.Pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return // client went away

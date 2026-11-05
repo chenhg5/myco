@@ -14,6 +14,9 @@ import (
 // Hub is the subset of the hub API the runner needs.
 type Hub interface {
 	Pull(ctx context.Context, limit int, wait time.Duration) ([]api.Message, error)
+	// PullTypes pulls only messages of the given types (the runner watches
+	// for steers while a task runs).
+	PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error)
 	Ack(ctx context.Context, id string) error
 	Complete(ctx context.Context, id string) error
 	Reply(ctx context.Context, id, body string, dry bool) (*api.Message, error)

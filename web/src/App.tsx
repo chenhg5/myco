@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tip, TooltipProvider } from "@/components/ui/tooltip";
-import { AgentCard, AgentTable, Aliases, Labels } from "@/components/agents";
+import { AgentCard, AgentTable, Aliases, Labels, StatusLine } from "@/components/agents";
 import { MessageBubble, MessageRow } from "@/components/messages";
 import { HarnessBadge, StateBadge } from "@/components/status";
 import { CopyText } from "@/components/copy";
@@ -124,7 +124,7 @@ export default function App() {
     return ov.agents.filter((a) =>
       (stateFilter === "all" || a.state === stateFilter) &&
       (!selector || !selectorValid || matches(a, selector)) &&
-      (!q || [a.agent.name, a.agent.display_name, ...(a.agent.aliases || []), a.agent.description, a.agent.id, a.agent.binding.environment, a.agent.binding.session_id, ...a.agent.labels]
+      (!q || [a.agent.name, a.agent.display_name, ...(a.agent.aliases || []), a.agent.status_text, a.agent.description, a.agent.id, a.agent.binding.environment, a.agent.binding.session_id, ...a.agent.labels]
         .filter(Boolean).some((x) => String(x).toLowerCase().includes(q))),
     );
   }, [ov, query, selector, selectorValid, stateFilter]);
@@ -340,6 +340,7 @@ export default function App() {
                 </div>
                 {current.agent.display_name && <div className="mt-0.5 font-mono text-xs text-muted-foreground"><CopyText text={current.agent.name} display={current.agent.name} /></div>}
                 <SheetDescription className="mt-1.5 text-sm text-muted-foreground">{current.agent.description || "（没有描述）"}</SheetDescription>
+                {current.agent.status_text && <div className="mt-3"><StatusLine text={current.agent.status_text} at={current.agent.status_at} now={now} /></div>}
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <HarnessBadge harness={current.agent.binding.harness} />
                   <Aliases aliases={current.agent.aliases} />

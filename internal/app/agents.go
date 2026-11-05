@@ -252,3 +252,15 @@ func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.
 	a.LastSeenAt = now
 	return a, nil
 }
+
+// SetStatus publishes the agent's public status line ("" clears it).
+func (s *AgentService) SetStatus(ctx context.Context, name string, text string) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.SetStatus(text, s.clock.Now()); err != nil {
+		return nil, err
+	}
+	return a, s.agents.Save(ctx, a)
+}

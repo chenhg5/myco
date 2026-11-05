@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -167,15 +168,21 @@ func (r *MessageRepo) Mutate(ctx context.Context, id string, fn domain.MutateFun
 	return m, internal(tx.Commit())
 }
 
-func (r *MessageRepo) ClaimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, claim func(*domain.Message) bool) ([]*domain.Message, error) {
+func (r *MessageRepo) ClaimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType, claim func(*domain.Message) bool) ([]*domain.Message, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, internal(err)
 	}
 	defer tx.Rollback()
 	// Over-fetch: some candidates may be failed out instead of claimed.
-	cands, err := r.many(ctx, tx, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`,
-		recipient, ms(now), limit*2)
+	where, args := `WHERE to_agent=? AND `+dueWhere, []any{recipient, ms(now)}
+	if len(types) > 0 {
+		where += ` AND type IN (?` + strings.Repeat(",?", len(types)-1) + `)`
+		for _, t := range types {
+			args = append(args, string(t))
+		}
+	}
+	cands, err := r.many(ctx, tx, where+` ORDER BY created_at, id LIMIT ?`, append(args, limit*2)...)
 	if err != nil {
 		return nil, err
 	}

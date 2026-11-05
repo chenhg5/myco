@@ -176,3 +176,51 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 		}),
 	}
 }
+
+// agentStatusCommands publish the agent's public progress line.
+func agentStatusCommands() *Command {
+	set := &Command{
+		Name:     "set",
+		Summary:  "Publish a one-line status that every agent and the dashboard can see",
+		Mutating: true,
+		Long: `Use it for progress others may want to glance at ("migrating the API: 3/5 endpoints done").
+For updates meant for whoever gave you a task, use myco message progress instead.`,
+		Examples: []string{`myco agent status set --text "reviewing PR 12: 2 of 5 files done"`},
+		Flags:    []Flag{{Name: "text", Kind: String, Required: true, Help: "One line, up to 280 bytes"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("text"); err != nil {
+				return err
+			}
+			return e.setStatus(e.in.String("text"))
+		}),
+	}
+	clear := &Command{
+		Name:     "clear",
+		Summary:  "Remove your status line",
+		Mutating: true,
+		Examples: []string{"myco agent status clear"},
+		Run:      handler(func(e *env) error { return e.setStatus("") }),
+	}
+	return (&Command{Name: "status", Summary: "Your public status line (progress others can see)"}).Add(set, clear)
+}
+
+func (e *env) setStatus(text string) error {
+	if e.in.Bool("dry-run") {
+		return e.dryRun(map[string]any{"action": "set_status", "agent": e.cfg.Agent, "text": text})
+	}
+	c, err := e.agentClient()
+	if err != nil {
+		return err
+	}
+	a, err := c.SetStatus(e.in.Ctx, text)
+	if err != nil {
+		return err
+	}
+	return e.p.Print(a, func(w io.Writer) {
+		if a.StatusText == "" {
+			fmt.Fprintf(w, "%s: status cleared\n", a.Name)
+			return
+		}
+		fmt.Fprintf(w, "%s: %s\n", a.Name, a.StatusText)
+	})
+}

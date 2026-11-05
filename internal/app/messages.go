@@ -159,7 +159,7 @@ func (s *MessageService) requireThreadParticipant(ctx context.Context, agent dom
 }
 
 // Pull leases up to limit due messages for agent, long-polling up to wait.
-func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration) ([]*domain.Message, error) {
+func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
@@ -170,7 +170,7 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 		// Subscribe before querying so a concurrent Send cannot be missed.
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
 		now := s.clock.Now()
-		msgs, err := s.messages.ClaimDue(ctx, agent.Name, now, limit, func(m *domain.Message) bool {
+		msgs, err := s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
 			return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
 		})
 		if err != nil || len(msgs) > 0 {
@@ -190,7 +190,7 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 			}
 			// Timer elapsed: one final pass catches expired leases.
 			now := s.clock.Now()
-			return s.messages.ClaimDue(ctx, agent.Name, now, limit, func(m *domain.Message) bool {
+			return s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
 				return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
 			})
 		}
@@ -283,6 +283,110 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 		s.notifier.Publish(replyTopic(id))
 	}
 	return reply, nil
+}
+
+// Progress records an interim update on task id from its recipient and
+// wakes anyone waiting for the task's reply.
+func (s *MessageService) Progress(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	var out *domain.Message
+	err := s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
+		p, err := m.Progress(agent.Name, s.ids.New("msg"), body, s.clock.Now())
+		if err != nil {
+			return nil, err
+		}
+		out = p
+		return []*domain.Message{p}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !dryRun {
+		s.notifier.Publish(replyTopic(id))
+	}
+	return out, nil
+}
+
+// Steer sends a correction for open task id from its sender to the task's
+// recipient.
+func (s *MessageService) Steer(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	var out *domain.Message
+	err := s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
+		st, err := m.Steer(agent.Name, s.ids.New("msg"), body, s.clock.Now())
+		if err != nil {
+			return nil, err
+		}
+		out = st
+		return []*domain.Message{st}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !dryRun {
+		s.queued(out.To)
+	}
+	return out, nil
+}
+
+// WaitUpdate is WaitReply that also returns early with the task's progress
+// updates created after since.
+func (s *MessageService) WaitUpdate(ctx context.Context, agent *domain.Agent, id string, waitFor time.Duration, since time.Time) (*domain.Message, []*domain.Message, error) {
+	orig, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if orig.From != agent.Name {
+		return nil, nil, domain.Errf(domain.CodePermissionDenied, "only the sender of %s can wait for its reply", id)
+	}
+	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
+	deadline := s.clock.Now().Add(waitFor)
+	for {
+		ch, cancel := s.notifier.Subscribe(replyTopic(id))
+		progress, err := s.progressSince(ctx, orig, since)
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+		r, err := s.messages.FindReply(ctx, id)
+		switch {
+		case err == nil:
+			cancel()
+			r, err = s.consume(ctx, agent, r)
+			return r, progress, err
+		case !domain.IsCode(err, domain.CodeNotFound):
+			cancel()
+			return nil, nil, err
+		case len(progress) > 0:
+			cancel()
+			return nil, progress, nil
+		}
+		remaining := deadline.Sub(s.clock.Now())
+		if remaining <= 0 {
+			cancel()
+			return nil, nil, nil
+		}
+		fired := wait(ctx, ch, remaining)
+		cancel()
+		if !fired && ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+		if !fired {
+			deadline = s.clock.Now()
+		}
+	}
+}
+
+func (s *MessageService) progressSince(ctx context.Context, task *domain.Message, since time.Time) ([]*domain.Message, error) {
+	all, err := s.messages.ListThread(ctx, task.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	var out []*domain.Message
+	for _, m := range all {
+		if m.Type == domain.TypeProgress && m.ReplyTo == task.ID && m.CreatedAt.After(since) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 // ReplyOnBehalf answers message id as its recipient. It is used by ingress

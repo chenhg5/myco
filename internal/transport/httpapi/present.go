@@ -25,6 +25,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		EnrolledBy: a.EnrolledBy,
 		Online:     a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
 		CreatedAt:  a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
+		StatusText: a.StatusText, StatusAt: timePtr(a.StatusAt),
 	}
 	for _, n := range a.AllowFrom {
 		out.AllowFrom = append(out.AllowFrom, string(n))
@@ -32,14 +33,22 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	return out
 }
 
-// withAliases fills the aliases of agent DTOs (best effort).
-func (s *Server) withAliases(ctx context.Context, dtos ...*api.Agent) {
-	m, err := s.agents.AliasMap(ctx)
-	if err != nil {
+// enrich fills the aliases and live state of agent DTOs (best effort).
+func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
+	if m, err := s.agents.AliasMap(ctx); err == nil {
+		for _, d := range dtos {
+			d.Aliases = m[domain.AgentName(d.Name)]
+		}
+	}
+	if s.overview == nil {
 		return
 	}
-	for _, d := range dtos {
-		d.Aliases = m[domain.AgentName(d.Name)]
+	if states, err := s.overview.States(ctx); err == nil {
+		for _, d := range dtos {
+			if st, ok := states[domain.AgentName(d.Name)]; ok {
+				d.State, d.Queued, d.InProgress, d.Held = string(st.State), st.Queued, st.InProgress, st.Held
+			}
+		}
 	}
 }
 

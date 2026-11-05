@@ -67,5 +67,6 @@ type MessageRepository interface {
 	// ClaimDue atomically selects up to limit due messages for recipient
 	// (oldest first), applies claim to each and persists them. It returns
 	// the messages for which claim returned true.
-	ClaimDue(ctx context.Context, recipient AgentName, now time.Time, limit int, claim func(*Message) bool) ([]*Message, error)
+	// With types set, only messages of those types are considered.
+	ClaimDue(ctx context.Context, recipient AgentName, now time.Time, limit int, types []MessageType, claim func(*Message) bool) ([]*Message, error)
 }

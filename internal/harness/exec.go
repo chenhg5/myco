@@ -56,7 +56,7 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	setProcessGroup(cmd)
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = interruptGrace + 2*time.Second
 	err := cmd.Run()
 	res := ProcessResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1, Truncated: stdout.cut || stderr.cut}
 	if cmd.ProcessState != nil {

@@ -130,6 +130,10 @@ func (d Delivery) Validate() error {
 type Agent struct {
 	ID   string
 	Name AgentName
+	// StatusText is the agent's public progress line ("refactoring the
+	// runner: 3/5 done"), visible to everyone who can list agents.
+	StatusText string
+	StatusAt   time.Time
 	// DisplayName is cosmetic (shown in lists and the dashboard); Name is
 	// the immutable address.
 	DisplayName  string
@@ -296,6 +300,27 @@ func (a *Agent) SetLabels(add, remove []string) error {
 
 // SetProfile changes cosmetic fields; nil leaves a field unchanged and an
 // empty display name clears it.
+// MaxStatusText bounds the public status line.
+const MaxStatusText = 280
+
+// SetStatus publishes (or, with "", clears) the agent's status line.
+func (a *Agent) SetStatus(text string, now time.Time) error {
+	text = strings.TrimSpace(text)
+	if len(text) > MaxStatusText {
+		return Errf(CodeInvalidArgument, "status is %d bytes, limit is %d", len(text), MaxStatusText).
+			WithSuggestion("keep it to one line; send details to the people who asked with `myco message progress`")
+	}
+	if strings.ContainsAny(text, "\r\n") {
+		return Errf(CodeInvalidArgument, "status must be a single line")
+	}
+	a.StatusText = text
+	a.StatusAt = now
+	if text == "" {
+		a.StatusAt = time.Time{}
+	}
+	return nil
+}
+
 func (a *Agent) SetProfile(displayName, description *string) error {
 	if displayName != nil {
 		d, err := ParseDisplayName(*displayName)

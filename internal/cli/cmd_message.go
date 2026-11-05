@@ -8,6 +8,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/chenhg5/myco/internal/client"
 )
 
 var idFlag = Flag{Name: "id", Kind: String, Required: true, Env: "MYCO_MESSAGE_ID",
@@ -74,11 +75,11 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 				})
 			}
 			fmt.Fprintf(e.in.Stderr, "waiting up to %s for reply to %s...\n", wait, res.Message.ID)
-			reply, err := c.WaitReply(e.in.Ctx, res.Message.ID, wait)
+			reply, progress, err := e.waitWithProgress(c, res.Message.ID, wait)
 			if err != nil {
 				return err
 			}
-			out := map[string]any{"message": res.Message, "reply": reply, "timed_out": reply == nil}
+			out := map[string]any{"message": res.Message, "reply": reply, "timed_out": reply == nil, "progress": progress}
 			if reply == nil {
 				_ = e.p.Print(out, nil)
 				return &Error{Code: "timeout", Message: fmt.Sprintf("no reply to %s within %s", res.Message.ID, wait),
@@ -112,7 +113,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 
 	wait := &Command{
 		Name:     "wait",
-		Summary:  "Wait for the reply to a task you sent",
+		Summary:  "Wait for the reply to a task you sent, showing its progress updates as they arrive",
 		Examples: []string{"myco message wait --id msg_abc123 --timeout 10m"},
 		Flags: []Flag{
 			{Name: "id", Kind: String, Required: true, Help: "ID of the task you sent"},
@@ -126,15 +127,16 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			if err != nil {
 				return err
 			}
-			reply, err := c.WaitReply(e.in.Ctx, e.in.String("id"), e.in.Duration("timeout"))
+			reply, progress, err := e.waitWithProgress(c, e.in.String("id"), e.in.Duration("timeout"))
 			if err != nil {
 				return err
 			}
 			if reply == nil {
+				_ = e.p.Print(map[string]any{"reply": nil, "timed_out": true, "progress": progress}, nil)
 				return &Error{Code: "timeout", Message: "no reply yet", Retryable: true, Exit: ExitTimeout,
 					Suggestion: "wait again, or check status with: myco message get --id " + e.in.String("id")}
 			}
-			return e.p.Print(map[string]any{"reply": reply}, func(w io.Writer) { printReply(w, reply) })
+			return e.p.Print(map[string]any{"reply": reply, "progress": progress}, func(w io.Writer) { printReply(w, reply) })
 		}),
 	}
 
@@ -258,8 +260,82 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		}
 	}
 
+	progress := &Command{
+		Name:     "progress",
+		Summary:  "Tell the sender how a task is going, without closing it",
+		Mutating: true,
+		Long: `For long tasks: the sender sees each update while waiting (myco message send --wait, myco message
+wait) and in the thread, but is not woken up by it. Finish with myco message reply as usual. For a
+status everyone can see, use myco agent status set.`,
+		Examples: []string{
+			`myco message progress --body "tests pass; now updating the docs (2/3)"   # inside a runner, --id is $MYCO_MESSAGE_ID`,
+			`myco message progress --id msg_abc123 --body "found the cause: a race in the lease check"`,
+		},
+		Flags: []Flag{idFlag, {Name: "body", Kind: String, Required: true, Help: "Update text"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id", "body"); err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			m, err := c.Progress(e.in.Ctx, e.in.String("id"), e.in.String("body"), dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "progress", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "progress sent to %s\n", m.To) })
+		}),
+	}
+
+	steer := &Command{
+		Name:     "steer",
+		Summary:  "Correct a task you sent while it is being worked on",
+		Mutating: true,
+		Long: `If a myco runner is working on the task, it interrupts the run and resumes the same session with your
+note (work done so far is kept); the final answer is still the task's reply. If the task has not
+started, the note is added to it. Agents without a runner receive it in their inbox.`,
+		Examples: []string{
+			`myco message steer --id msg_abc123 --body "use PostgreSQL, not SQLite"`,
+			"myco message steer --id msg_abc123 --body-file correction.md && myco message wait --id msg_abc123 --timeout 30m",
+		},
+		Flags: []Flag{
+			{Name: "id", Kind: String, Required: true, Help: "ID of the task you sent"},
+			{Name: "body", Kind: String, Help: "Correction text"},
+			{Name: "body-file", Kind: String, Help: "Read the correction from a file (- for stdin)"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id"); err != nil {
+				return err
+			}
+			body, err := e.readBody("body", "body-file")
+			if err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			m, err := c.Steer(e.in.Ctx, e.in.String("id"), body, dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "steer", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) {
+				fmt.Fprintf(w, "steer sent to %s for task %s\nwait for the (updated) answer with: myco message wait --id %s --timeout 30m\n", m.To, m.ReplyTo, m.ReplyTo)
+			})
+		}),
+	}
+
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
-		send, get, wait, reply, fail, release,
+		send, get, wait, progress, steer, reply, fail, release,
 		transition("ack", "Acknowledge a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
 		transition("done", "Close a message without replying", "myco message done --id msg_abc123"),
@@ -382,6 +458,17 @@ func printMessage(w io.Writer, m *api.Message) {
 	}
 	printAttachments(w, m.Attachments)
 	fmt.Fprintln(w, strings.TrimRight(m.Body, "\n"))
+}
+
+// waitWithProgress waits for the reply to task id, printing each progress
+// update to stderr as it arrives.
+func (e *env) waitWithProgress(c *client.Client, id string, d time.Duration) (*api.Message, []api.Message, error) {
+	progress := []api.Message{}
+	reply, err := c.WaitReplyProgress(e.in.Ctx, id, d, func(p api.Message) {
+		progress = append(progress, p)
+		fmt.Fprintf(e.in.Stderr, "[progress %s from %s] %s\n", p.CreatedAt.Local().Format("15:04:05"), p.From, strings.TrimSpace(p.Body))
+	})
+	return reply, progress, err
 }
 
 func printReply(w io.Writer, m *api.Message) {

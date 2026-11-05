@@ -2,7 +2,8 @@
 export interface Binding { harness?: string; session_id?: string; environment?: string; workdir?: string }
 export interface Delivery { mode: string; url?: string; has_secret?: boolean; params?: Record<string, string> }
 export interface Agent {
-  id: string; name: string; display_name?: string; aliases?: string[]; description: string; capabilities: string[]; labels: string[];
+  id: string; name: string; display_name?: string; aliases?: string[]; description: string;
+  status_text?: string; status_at?: string; capabilities: string[]; labels: string[];
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
 }

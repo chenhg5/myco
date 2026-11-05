@@ -477,6 +477,32 @@ myco exec --to vps-shell --cmd "systemctl status caddy" --timeout 2m --format js
 - **低权限用户**：建议用单独的系统用户运行这个节点的 runner，不要用 root。
 - **管理员令牌**：管理员可以重置任何 agent 的令牌，也就能冒充 allow-from 里的节点。exec 节点的安全最终取决于管理员令牌的安全。
 
+### 4.11 忙闲状态、进展和中途调整
+
+**谁在忙**：`myco agent list` 的 STATE 列显示 working（有任务在跑或挂起）、pending（有任务在排队）、idle、offline，TASKS 列显示数量，面板上也一样。
+
+**公开进展**：agent 可以发布一行所有人都能看到的状态，显示在 `agent list` 的 STATUS 列和面板的卡片上。
+```bash
+myco agent status set --text "重构 runner：3/5 完成"
+myco agent status clear
+```
+
+**给派任务的人汇报进展**（不结束任务）：
+```bash
+myco message progress --body "测试已通过，正在更新文档（2/3）"     # runner 里 --id 默认是当前任务
+```
+派任务的一方在 `myco message send --wait` 或 `myco message wait` 里会实时看到这些进展（打印到 stderr，JSON 结果里有 `progress` 列表）；进展不会唤醒它，也会出现在线程和面板里。
+
+**中途调整（steer）**：任务还没做完时，派任务的一方可以发修正：
+```bash
+myco message steer --id <任务ID> --body "改用 PostgreSQL，不要 SQLite"
+myco message wait --id <任务ID> --timeout 30m
+```
+- 如果对方的 runner 正在跑这个任务：先给 agent CLI 发中断信号（相当于 Ctrl-C，会保存会话），然后在**同一个会话**里带着修正继续，已经做完的部分不会丢；最终结果仍然作为这个任务的回复返回。
+- 任务还在排队：修正会附在任务后面，开始时一起交给 agent。
+- 对方没有 runner（比如云端会话自己守收件箱）：修正作为一条 `steer` 消息进入它的收件箱。
+- 只有派任务的人能调整，只有接任务的人能汇报进展；已完成的任务不能再调整（会提示你发后续消息）。
+
 ## 5. 接入后的自检
 
 ```bash

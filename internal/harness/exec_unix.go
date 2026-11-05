@@ -5,7 +5,12 @@ package harness
 import (
 	"os/exec"
 	"syscall"
+	"time"
 )
+
+// interruptGrace is how long an interrupted agent CLI gets to save its
+// session (after SIGINT) before the whole process group is killed.
+var interruptGrace = 5 * time.Second
 
 func setProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -13,7 +18,14 @@ func setProcessGroup(cmd *exec.Cmd) {
 		if cmd.Process == nil {
 			return nil
 		}
-		// Kill the whole group so agent sub-processes die too.
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		// Interrupt the whole group (agent CLIs save their session on
+		// SIGINT, like Ctrl-C), then kill whatever is left.
+		pgid := cmd.Process.Pid
+		_ = syscall.Kill(-pgid, syscall.SIGINT)
+		go func() {
+			time.Sleep(interruptGrace)
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		}()
+		return nil
 	}
 }
