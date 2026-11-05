@@ -237,9 +237,19 @@ runner:
 
 一个进程服务这台机器上的所有 agent：
 ```bash
-myco runner start --all                       # 新入网的 agent 每 30 秒自动发现
+myco runner start --all                       # 前台运行；新入网的 agent 每 30 秒自动发现
 myco runner start --all --max-concurrent 2    # 同时最多跑 2 个 CLI
 ```
+
+**放到后台长期运行（推荐）**：一条命令装成系统服务，开机或登录后自动启动，崩溃了会自动重启。macOS 用 launchd，Linux 用 systemd 的用户服务：
+```bash
+myco runner service install            # 安装并立即启动（先用 --dry-run 看会写什么）
+myco runner service status             # 是否在运行，pid 是多少
+myco runner service logs --lines 100   # 查看日志（~/.myco/runner.log）
+myco runner service restart            # 升级 myco 后重启
+myco runner service uninstall          # 停止并删除
+```
+安装时会记录当前的 `PATH`（以及设置了的 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`MYCO_CONFIG`），这样服务能找到装在 nvm 等目录下的 claude 和 codex。这些变量变了之后，重新执行一次 `install` 即可。服务定义里不会写入任何令牌。Linux 上如果希望注销后也继续运行，执行 `sudo loginctl enable-linger $USER`。
 
 每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
 ```yaml

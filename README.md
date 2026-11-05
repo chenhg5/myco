@@ -84,7 +84,7 @@ queued ─pull→ delivered ─ack→ acked ─reply/done→ done
 
 ## runner 的行为
 
-- **一台机器一个 runner**：`myco runner start --all` 服务本机所有 agent（`~/.myco/agents/*.yaml`），新入网的 agent 会自动发现，并有全局并发上限。
+- **一台机器一个 runner**：`myco runner start --all` 服务本机所有 agent（`~/.myco/agents/*.yaml`），新入网的 agent 会自动发现，并有全局并发上限。`myco runner service install` 把它装成后台服务（macOS 用 launchd，Linux 用 systemd）。
 - **不和人抢会话**：会话最近 90 秒内被别人写过（比如你正开着交互界面），消息就放回队列，10 秒起逐步加长重试，不算失败。
 - **会话**：默认 `--session-scope agent`，一个 agent 就是一个 session，每条消息都 `--resume` 同一个 session。第一次运行时创建 session，并自动写回 Hub。如果 agent 绑定在别的机器或别的 harness 上，runner 会拒绝启动。想每个线程各用一个 session，就用 `--session-scope thread`。
 - **task**：CLI 的最终输出自动作为 reply 发回；CLI 出错就 fail，发送方会收到通知。

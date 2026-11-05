@@ -73,7 +73,7 @@ notes are never auto-answered. Logs go to stderr.`,
 			return e.runAll(shared, log)
 		}),
 	}
-	return (&Command{Name: "runner", Summary: "Turn agent CLIs into always-reachable workers"}).Add(start)
+	return (&Command{Name: "runner", Summary: "Turn agent CLIs into always-reachable workers"}).Add(start, serviceCommands())
 }
 
 // runnerShared holds settings common to every agent a process serves.
