@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/config"
@@ -89,7 +90,13 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			if err := service.Apply(plan, service.ExecRunner{}); err != nil {
 				return errorf("service_failed", ExitError, "inspect with --dry-run and the system logs", "%v", err)
 			}
+			// launchd/systemd report transient states (xpcproxy, activating)
+			// right after start; wait briefly for the process to be up.
 			st, _ := m.Status()
+			for i := 0; i < 10 && !st.Running; i++ {
+				time.Sleep(500 * time.Millisecond)
+				st, _ = m.Status()
+			}
 			return e.p.Print(map[string]any{"installed": true, "plan": plan, "status": st}, func(w io.Writer) {
 				fmt.Fprintf(w, "runner service installed (%s)\nfile: %s\nlogs: %s\n", plan.Manager, plan.File, spec.LogPath)
 				printStatus(w, st)
