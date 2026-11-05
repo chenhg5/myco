@@ -759,3 +759,34 @@ func TestExecNode(t *testing.T) {
 		t.Fatalf("audit log:\n%s", b)
 	}
 }
+
+// Admin registers the exec node elsewhere; the node's machine only gets the
+// agent token and logs in, which must create a profile for runner --all.
+func TestExecNodeLoginOnAnotherMachine(t *testing.T) {
+	hub := newHub(t)
+	adminHome := t.TempDir()
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(adminHome, "a.yaml")}}
+	admin.run("agent", "register", "--name", "boss")
+	code, out, e := admin.run("agent", "register", "--name", "wsl-shell", "--harness", "exec", "--allow-from", "boss", "--no-save", "--format", "json")
+	if code != 0 {
+		t.Fatalf("register: %s", e)
+	}
+	var reg struct{ Token string }
+	json.Unmarshal([]byte(out), &reg)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	work := filepath.Join(home, "exec")
+	os.Mkdir(work, 0o700)
+	node := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+	if code, _, e := node.run("agent", "login", "--token-file", writeFile(t, home, "t", reg.Token), "--workdir", work); code != 0 {
+		t.Fatalf("login: %s", e)
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".myco", "agents", "wsl-shell.yaml"))
+	if err != nil || !strings.Contains(string(b), "harness: exec") || !strings.Contains(string(b), work) {
+		t.Fatalf("profile: %v\n%s", err, b)
+	}
+	if code, _, e := node.run("runner", "start", "--all", "--once", "--log-level", "error"); code != 0 {
+		t.Fatalf("runner should start the exec node: %s", e)
+	}
+}

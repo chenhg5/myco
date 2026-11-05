@@ -400,6 +400,16 @@ myco agent register --name vps-shell --harness exec --allow-from cloud-1 --workd
 ```
 会在 `~/.myco/agents/vps-shell.yaml` 生成配置，`myco runner start --all`（或 `myco runner service install`）会自动接管它。
 
+**管理员令牌不在那台机器上时**（比如家里的 WSL、Mac，推荐这样做）：在有管理员令牌的机器上注册，只把 agent 令牌交给那台机器。
+```bash
+# 管理员（比如在 VPS 上）：--no-save 会打印 agent 令牌，只显示一次
+myco agent register --name wsl-shell --harness exec --allow-from cloud-1 --no-save --format text
+# 那台机器上：把令牌存进文件（不要贴到聊天里），登录后删掉文件
+umask 077; cat > ~/wsl-shell.token        # 粘贴令牌，回车，Ctrl-D
+mkdir -p ~/exec && myco agent login --token-file ~/wsl-shell.token --workdir ~/exec && rm ~/wsl-shell.token
+```
+登录会生成 `~/.myco/agents/wsl-shell.yaml`，已经在跑的 `myco runner service` 30 秒内会自动接管它（不想等就执行 `myco runner service restart`）。
+
 **2. 可选：收紧配置**（编辑 `~/.myco/agents/vps-shell.yaml` 的 `runner` 部分，然后执行 `myco runner service restart`）：
 ```yaml
 runner:
