@@ -271,6 +271,11 @@ func detectBinding(getenv func(string) string) api.Binding {
 		return api.Binding{Harness: "claude-cloud", SessionID: id, Environment: "claude-" + envType, Workdir: wd}
 	}
 	wd, _ := os.Getwd()
+	// Local Claude Code exports its session id to the commands it runs; it is
+	// the id `claude --resume` takes.
+	if id := getenv("CLAUDE_CODE_SESSION_ID"); id != "" {
+		return api.Binding{Harness: "claude", SessionID: id, Environment: hostname(), Workdir: wd}
+	}
 	return api.Binding{Environment: hostname(), Workdir: wd}
 }
 

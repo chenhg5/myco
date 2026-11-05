@@ -154,3 +154,18 @@ func TestGatewayErrorsAreRetryable(t *testing.T) {
 		t.Fatalf("502 should map to unavailable: %d %s", code, e)
 	}
 }
+
+func TestDetectBinding(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	b := detectBinding(env(map[string]string{"CLAUDE_CODE_REMOTE_SESSION_ID": "cse_01Ab", "CLAUDE_CODE_SESSION_ID": "local-uuid"}))
+	if b.Harness != "claude-cloud" || b.SessionID != "session_01Ab" {
+		t.Fatalf("cloud: %+v", b)
+	}
+	b = detectBinding(env(map[string]string{"CLAUDE_CODE_SESSION_ID": "7f3c2a"}))
+	if b.Harness != "claude" || b.SessionID != "7f3c2a" || b.Environment == "" {
+		t.Fatalf("local claude: %+v", b)
+	}
+	if b = detectBinding(env(nil)); b.SessionID != "" || b.Harness != "" {
+		t.Fatalf("nothing detected: %+v", b)
+	}
+}

@@ -28,6 +28,8 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
 
 ## 快速开始
 
+> 完整的部署和接入步骤（服务端、管理员、各类 agent）见 **[INSTALL.md](INSTALL.md)**。让别的 agent 接入时，直接让它读这份文档即可。
+
 ```bash
 go install github.com/chenhg5/myco/cmd/myco@latest    # 或 make build
 ```
