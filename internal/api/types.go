@@ -8,13 +8,32 @@ import "time"
 // Version of the wire contract, exposed at GET /v1/health.
 const Version = "v1"
 
+// Binding ties an agent to one session of one harness in one environment.
+type Binding struct {
+	Harness     string `json:"harness,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Workdir     string `json:"workdir,omitempty"`
+}
+
+// Delivery configures how the hub wakes the agent. Secret is write-only:
+// accepted on registration, never returned (HasSecret reports it is set).
+type Delivery struct {
+	Mode      string            `json:"mode"`
+	URL       string            `json:"url,omitempty"`
+	Secret    string            `json:"secret,omitempty"`
+	HasSecret bool              `json:"has_secret,omitempty"`
+	Params    map[string]string `json:"params,omitempty"`
+}
+
 // Agent is the public view of a registered agent.
 type Agent struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	Description  string     `json:"description"`
 	Capabilities []string   `json:"capabilities"`
-	Delivery     string     `json:"delivery"`
+	Binding      Binding    `json:"binding"`
+	Delivery     Delivery   `json:"delivery"`
 	AllowFrom    []string   `json:"allow_from"`
 	Online       bool       `json:"online"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -45,8 +64,18 @@ type RegisterRequest struct {
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	AllowFrom    []string `json:"allow_from,omitempty"`
-	Delivery     string   `json:"delivery,omitempty"`
+	Binding      Binding  `json:"binding,omitempty"`
+	Delivery     Delivery `json:"delivery,omitempty"`
 	RotateToken  bool     `json:"rotate_token,omitempty"`
+}
+
+// BindRequest is the body of PUT /v1/me/binding (empty fields unchanged).
+type BindRequest = Binding
+
+// PendingResponse is returned by GET /v1/inbox/wait.
+type PendingResponse struct {
+	Pending  []Message `json:"pending"`
+	TimedOut bool      `json:"timed_out"`
 }
 
 // RegisterResponse returns the agent and, once, its token.

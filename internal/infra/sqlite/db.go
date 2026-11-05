@@ -64,7 +64,48 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := addColumns(db, "agents", agentColumnsV2); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	return db, nil
+}
+
+// agentColumnsV2 were added in phase 2 (session binding + push delivery).
+var agentColumnsV2 = [][2]string{
+	{"harness", "TEXT NOT NULL DEFAULT ''"},
+	{"session_id", "TEXT NOT NULL DEFAULT ''"},
+	{"environment", "TEXT NOT NULL DEFAULT ''"},
+	{"workdir", "TEXT NOT NULL DEFAULT ''"},
+	{"delivery_url", "TEXT NOT NULL DEFAULT ''"},
+	{"delivery_secret", "TEXT NOT NULL DEFAULT ''"},
+	{"delivery_params", "TEXT NOT NULL DEFAULT '{}'"},
+}
+
+// addColumns adds missing columns (idempotent, forward-only migrations).
+func addColumns(db *sql.DB, table string, cols [][2]string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		have[n] = true
+	}
+	rows.Close()
+	for _, c := range cols {
+		if !have[c[0]] {
+			if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + c[0] + ` ` + c[1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func ms(t time.Time) int64 {

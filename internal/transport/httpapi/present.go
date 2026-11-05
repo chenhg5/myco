@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -13,7 +14,11 @@ import (
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
 		ID: a.ID, Name: string(a.Name), Description: a.Description,
-		Capabilities: nonNil(a.Capabilities), Delivery: string(a.Delivery),
+		Capabilities: nonNil(a.Capabilities),
+		Binding: api.Binding{Harness: a.Binding.Harness, SessionID: a.Binding.SessionID,
+			Environment: a.Binding.Environment, Workdir: a.Binding.Workdir},
+		Delivery: api.Delivery{Mode: a.Delivery.Mode, URL: redactURL(a.Delivery.URL),
+			HasSecret: a.Delivery.Secret != "", Params: a.Delivery.Params},
 		AllowFrom: make([]string, 0, len(a.AllowFrom)),
 		Online:    a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
 		CreatedAt: a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
@@ -22,6 +27,14 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		out.AllowFrom = append(out.AllowFrom, string(n))
 	}
 	return out
+}
+
+// redactURL drops query strings (which may carry tokens) from wake URLs.
+func redactURL(raw string) string {
+	if i := strings.IndexByte(raw, '?'); i >= 0 {
+		return raw[:i] + "?…"
+	}
+	return raw
 }
 
 func messageDTO(m *domain.Message) api.Message {

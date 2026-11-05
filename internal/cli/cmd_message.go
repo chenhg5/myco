@@ -255,7 +255,36 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 			})
 		}),
 	}
-	return (&Command{Name: "inbox", Summary: "Read your inbox"}).Add(pull)
+	wait := &Command{
+		Name:    "wait",
+		Summary: "Block until your inbox has messages (does not lease them)",
+		Long: `Exit 0 with the pending messages, or exit 7 when the timeout passes. Lets an agent that
+cannot be woken from outside sleep cheaply, e.g. a cloud session running it as a background
+command and resuming when it exits.`,
+		Examples: []string{
+			"myco inbox wait --timeout 2h && myco inbox pull",
+			"myco inbox wait --timeout 30m --format json",
+		},
+		Flags: []Flag{{Name: "timeout", Kind: Duration, Default: "60s", Help: "Give up after this long (exit 7)"}},
+		Run: handler(func(e *env) error {
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			msgs, err := c.WaitPending(e.in.Ctx, e.in.Duration("timeout"))
+			if err != nil {
+				return err
+			}
+			if len(msgs) == 0 {
+				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout,
+					Suggestion: "wait again: myco inbox wait --timeout " + e.in.String("timeout")}
+			}
+			return e.p.Print(api.MessageList{Messages: msgs}, func(w io.Writer) {
+				fmt.Fprintf(w, "%d message(s) waiting; run: myco inbox pull\n", len(msgs))
+			})
+		}),
+	}
+	return (&Command{Name: "inbox", Summary: "Read your inbox"}).Add(pull, wait)
 }
 
 func threadCommands() *Command {

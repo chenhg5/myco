@@ -14,7 +14,9 @@ import (
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/chenhg5/myco/internal/infra/wake"
 	"github.com/chenhg5/myco/internal/transport/httpapi"
+	"github.com/chenhg5/myco/internal/transport/ingress"
 )
 
 // Options configures the hub.
@@ -24,23 +26,47 @@ type Options struct {
 	AdminToken   string
 	Policy       app.MessagePolicy
 	OnlineWindow time.Duration
-	Log          *slog.Logger
+	Dispatch     app.DispatchPolicy
+	// GitHubWebhookSecret enables POST /v1/ingress/github.
+	GitHubWebhookSecret string
+	// GitHubReplyFrom restricts which GitHub logins can answer messages.
+	GitHubReplyFrom []string
+	Log             *slog.Logger
 	// Ready, if set, receives the bound address once listening.
 	Ready func(addr string)
 }
 
-// Build assembles the HTTP handler and returns a cleanup func.
-func Build(o Options) (http.Handler, func() error, error) {
+// Hub is an assembled hub: the HTTP handler plus background workers.
+type Hub struct {
+	Handler    http.Handler
+	Dispatcher *app.Dispatcher
+	Close      func() error
+}
+
+// DefaultWakers are the push delivery modes shipped with myco.
+func DefaultWakers() app.Wakers {
+	return app.NewWakers(wake.Webhook{}, wake.ClaudeRoutine{}, wake.GitHubDispatch{}, wake.GitHubIssue{})
+}
+
+// Build assembles the hub. Call hub.Dispatcher.Run in the background.
+func Build(o Options) (*Hub, error) {
 	db, err := sqlite.Open(o.DBPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	agentsRepo := sqlite.NewAgentRepo(db)
 	msgRepo := sqlite.NewMessageRepo(db)
 	ids, clock := security.IDs{}, app.SystemClock{}
-	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow)
+	wakers := DefaultWakers()
+	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
-	return httpapi.New(agents, messages, o.AdminToken, o.Log), db.Close, nil
+	dispatcher := app.NewDispatcher(agentsRepo, msgRepo, wakers, clock, o.Dispatch, o.Log)
+	messages.SetObserver(dispatcher)
+	var ing []httpapi.Ingress
+	if o.GitHubWebhookSecret != "" {
+		ing = append(ing, &ingress.GitHub{Secret: o.GitHubWebhookSecret, AllowedAuthors: o.GitHubReplyFrom})
+	}
+	return &Hub{Handler: httpapi.New(agents, messages, o.AdminToken, o.Log, ing...), Dispatcher: dispatcher, Close: db.Close}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -48,11 +74,13 @@ func Run(ctx context.Context, o Options) error {
 	if o.AdminToken == "" {
 		return errors.New("admin token is required")
 	}
-	h, closeDB, err := Build(o)
+	hub, err := Build(o)
 	if err != nil {
 		return err
 	}
-	defer closeDB()
+	defer hub.Close()
+	go hub.Dispatcher.Run(ctx)
+	h := hub.Handler
 	ln, err := net.Listen("tcp", o.Addr)
 	if err != nil {
 		return err

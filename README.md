@@ -21,7 +21,9 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
   - 用不同的退出码区分错误类型
   - 有副作用的命令都支持 `--dry-run`
   - 提供 `myco schema` 自省命令
-- **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker。来一条消息就调用一次 CLI；同一线程里的追问会接续原来的会话。
+- **agent = session + 环境 + harness**：注册时会记录绑定关系，runner 每次都续接**同一个** session。新开的空白 session 就算一个新的 agent。
+- **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker，来一条消息就续接一次它的 session。
+- **可插拔的唤醒方式**：`pull`、`webhook`、`claude_routine`、`github_dispatch`、`github_issue`。外部系统的回复（比如 Codex 在 GitHub 上的评论）通过 ingress 转成 myco 消息。详见 [docs/delivery.md](docs/delivery.md)。
 
 ## 快速开始
 
@@ -40,8 +42,9 @@ myco hub serve --addr 127.0.0.1:7777 --db /var/lib/myco/hub.db
 
 ```bash
 export MYCO_ADMIN_TOKEN=...
-myco agent register --hub https://hub.example.com --name vps-coder \
+myco agent register --hub https://hub.example.com --name vps-coder --harness claude \
   --description "VPS 上的 Claude Code，负责写代码、跑测试、提 PR" --capability code,github
+# 沿用一个已有的 session：加上 --session-id <claude session uuid>
 ```
 
 **3. 让 agent 常驻接活：**
@@ -78,6 +81,7 @@ queued ─pull→ delivered ─ack→ acked ─reply/done→ done
 
 ## runner 的行为
 
+- **会话**：默认 `--session-scope agent`，一个 agent 就是一个 session，每条消息都 `--resume` 同一个 session。第一次运行时创建 session，并自动写回 Hub。如果 agent 绑定在别的机器或别的 harness 上，runner 会拒绝启动。想每个线程各用一个 session，就用 `--session-scope thread`。
 - **task**：CLI 的最终输出自动作为 reply 发回；CLI 出错就 fail，发送方会收到通知。
 - **reply / event / note**：交给 CLI 处理，但**不会自动回复**，避免两个 runner 无限互相回复。
 - 如果 agent 在执行过程中自己调用了 `myco message reply/hold/fail`，runner 就不再替它回复。
@@ -104,9 +108,10 @@ internal/cli               CLI 适配层（命令树、输出、退出码）
   └─ cmdkit                与业务无关的命令框架：help 和 schema 由同一份定义生成
 internal/hubserver         Hub 的组装根（只在这里把各层的具体实现装到一起）
 internal/transport/httpapi HTTP 适配层（DTO 映射、错误码到 HTTP 状态码的映射）
-internal/app               用例层：AgentService、MessageService，依赖 Notifier / IDGenerator / TokenIssuer / Clock 接口
+internal/app               用例层：AgentService、MessageService、Dispatcher，依赖 Waker / Notifier / IDGenerator / TokenIssuer / Clock 接口
 internal/domain            领域层：Agent、Message 聚合，状态机，仓储接口。不依赖任何外部包
-internal/infra/{sqlite,notify,security}  各接口的具体实现（可以替换）
+internal/infra/{sqlite,notify,security,wake}  各接口的具体实现（可以替换）
+internal/transport/ingress 外部回调的适配层（GitHub webhook → reply）
 internal/api               对外的 JSON 数据契约（client 和 server 共用）
 internal/client            Hub 的 Go 客户端
 internal/runner            runner：依赖 Hub / SessionStore / PromptBuilder 接口
@@ -115,6 +120,8 @@ internal/harness           Harness 接口和注册表；claude/ codex/ shell/ �
 
 想扩展时：
 - **新增 agent CLI**：实现 `harness.Harness`，然后在 `builtin` 里注册。
+- **新增唤醒方式**：实现 `app.Waker`，在 `hubserver.DefaultWakers` 里注册。
+- **新增回复来源**：实现 `httpapi.Ingress`。
 - **换存储**：实现 `domain.AgentRepository` 和 `domain.MessageRepository`。
 - **多实例 Hub**：实现 `app.Notifier`，比如用 Redis 或 NATS。
 
@@ -131,7 +138,8 @@ HTTP API 见 [docs/api.md](docs/api.md)。
 ## 路线图
 
 - [x] 第 1 阶段：Hub、CLI、runner（claude / codex / shell），长轮询，租约，幂等，白名单
-- [ ] 第 2 阶段：推送唤醒，包括 webhook 和 Claude Code 定时任务的 API 触发器，让云端 agent 用完即走
+- [x] 第 2 阶段：session 绑定；Waker 接口（webhook、claude_routine、github_dispatch、github_issue）；GitHub ingress；`inbox wait`
+- [ ] 唤醒指定的 Claude Code 云端 session：平台目前不支持，详见 [docs/delivery.md](docs/delivery.md)
 - [ ] 第 3 阶段：MCP 端点（Streamable HTTP），让 ChatGPT、Claude 以连接器方式接入
 - [ ] 第 4 阶段：主调度 agent 的模板和调度策略
 - [ ] 第 5 阶段：多 Hub 互联、管理面板

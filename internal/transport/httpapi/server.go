@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -24,11 +25,29 @@ type Server struct {
 	adminToken string
 	log        *slog.Logger
 	mux        *http.ServeMux
+	ingress    map[string]Ingress
+}
+
+// Inbound is a reply arriving from an external system.
+type Inbound struct {
+	MessageID string
+	Body      string
+	Source    string
+}
+
+// Ingress authenticates and parses callbacks from an external system
+// (mounted at POST /v1/ingress/{kind}).
+type Ingress interface {
+	Kind() string
+	Parse(r *http.Request, body []byte) ([]Inbound, error)
 }
 
 // New builds the HTTP handler. adminToken guards agent administration.
-func New(agents *app.AgentService, messages *app.MessageService, adminToken string, log *slog.Logger) *Server {
-	s := &Server{agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux()}
+func New(agents *app.AgentService, messages *app.MessageService, adminToken string, log *slog.Logger, ingress ...Ingress) *Server {
+	s := &Server{agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux(), ingress: map[string]Ingress{}}
+	for _, in := range ingress {
+		s.ingress[in.Kind()] = in
+	}
 	s.routes()
 	return s
 }
@@ -54,6 +73,9 @@ func (s *Server) routes() {
 
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
+	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
+	m.HandleFunc("GET /v1/inbox/wait", s.agent(s.waitPending))
+	m.HandleFunc("POST /v1/ingress/{kind}", s.handleIngress)
 	m.HandleFunc("POST /v1/messages", s.agent(s.send))
 	m.HandleFunc("GET /v1/messages/{id}", s.agent(s.getMessage))
 	m.HandleFunc("POST /v1/messages/{id}/ack", s.agent(s.transition(app.TransitionAck)))
@@ -130,7 +152,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	dry := dryRun(r)
 	out, err := s.agents.Register(r.Context(), app.RegisterInput{
 		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities,
-		AllowFrom: req.AllowFrom, Delivery: req.Delivery, RotateToken: req.RotateToken, DryRun: dry,
+		AllowFrom: req.AllowFrom, Binding: bindingFromAPI(req.Binding), RotateToken: req.RotateToken, DryRun: dry,
+		Delivery: domain.Delivery{Mode: req.Delivery.Mode, URL: req.Delivery.URL, Secret: req.Delivery.Secret, Params: req.Delivery.Params},
 	})
 	if err != nil {
 		writeError(w, err)
@@ -178,6 +201,62 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	writeJSON(w, http.StatusOK, s.agentDTO(a))
+}
+
+func (s *Server) bind(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.BindRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	a, err := s.agents.Bind(r.Context(), a, bindingFromAPI(req))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.agentDTO(a))
+}
+
+func (s *Server) waitPending(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	msgs, err := s.messages.WaitPending(r.Context(), a, waitParam(r))
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.PendingResponse{Pending: messageList(msgs).Messages, TimedOut: len(msgs) == 0})
+}
+
+func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
+	in, ok := s.ingress[r.PathValue("kind")]
+	if !ok {
+		writeError(w, domain.Errf(domain.CodeNotFound, "no ingress %q on this hub", r.PathValue("kind")))
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "read body: %v", err))
+		return
+	}
+	replies, err := in.Parse(r, body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	accepted := 0
+	for _, rep := range replies {
+		if _, err := s.messages.ReplyOnBehalf(r.Context(), rep.MessageID, rep.Body, rep.Source); err != nil {
+			s.log.Info("ingress reply ignored", "kind", in.Kind(), "message_id", rep.MessageID, "err", err)
+			continue
+		}
+		accepted++
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"received": len(replies), "accepted": accepted})
+}
+
+func bindingFromAPI(b api.Binding) domain.Binding {
+	return domain.Binding{Harness: b.Harness, SessionID: b.SessionID, Environment: b.Environment, Workdir: b.Workdir}
 }
 
 func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {

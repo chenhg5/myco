@@ -30,7 +30,7 @@ func setup(t *testing.T) *fixture {
 	p.Lease = 50 * time.Millisecond
 	p.MaxAttempts = 3
 	return &fixture{
-		agents:   app.NewAgentService(ar, security.Tokens{}, security.IDs{}, clock, time.Minute),
+		agents:   app.NewAgentService(ar, security.Tokens{}, security.IDs{}, clock, time.Minute, nil),
 		messages: app.NewMessageService(ar, mr, notify.NewMemory(), security.IDs{}, clock, p),
 	}
 }

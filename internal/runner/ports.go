@@ -21,12 +21,23 @@ type Hub interface {
 	GetMessage(ctx context.Context, id string) (*api.Message, error)
 }
 
-// SessionStore maps myco threads to harness session IDs so follow-ups in a
-// thread resume the same agent conversation.
+// SessionStore resolves which harness session a message runs in. The key is
+// chosen by the runner's SessionScope ("agent" for the agent's single bound
+// session, or a thread ID).
 type SessionStore interface {
-	Get(threadID string) string
-	Put(threadID, sessionID string) error
+	Get(key string) string
+	Put(key, sessionID string) error
 }
+
+// SessionScope decides how messages map to harness sessions.
+type SessionScope string
+
+const (
+	// ScopeAgent: the agent is one session; every message resumes it.
+	ScopeAgent SessionScope = "agent"
+	// ScopeThread: one session per myco thread.
+	ScopeThread SessionScope = "thread"
+)
 
 // PromptBuilder renders the text handed to the harness for a message.
 type PromptBuilder interface {

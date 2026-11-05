@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
@@ -39,6 +40,9 @@ Flags override the 'runner' section of the config file. Logs go to stderr.`,
 			{Name: "concurrency", Kind: Int, Help: "Messages processed in parallel (default 1)"},
 			{Name: "timeout", Kind: Duration, Help: "Max time per message (default 30m)"},
 			{Name: "once", Kind: Bool, Help: "Process currently queued messages once and exit"},
+			{Name: "session-scope", Kind: Enum, Values: []string{"agent", "thread"}, Default: "agent",
+				Help: "agent: this agent is one session, every message resumes it; thread: one session per thread"},
+			{Name: "rebind", Kind: Bool, Help: "Allow taking over an agent bound to another environment or harness"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity"},
 		},
 		Run: handler(func(e *env) error {
@@ -88,16 +92,27 @@ Flags override the 'runner' section of the config file. Logs go to stderr.`,
 			if e.in.IsSet("concurrency") {
 				concurrency = e.in.Int("concurrency")
 			}
-			sessions, err := runner.NewFileSessions(filepath.Join(config.Dir(e.cfgPath), "sessions", me.Name+".json"))
-			if err != nil {
+			host := hostname()
+			if err := checkBinding(me, name, host, e.in.Bool("rebind")); err != nil {
 				return err
+			}
+			if me, err = c.Bind(e.in.Ctx, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
+				return err
+			}
+			scope := runner.SessionScope(e.in.String("session-scope"))
+			var sessions runner.SessionStore = runner.NewHubSessions(c, me.Binding.SessionID)
+			if scope == runner.ScopeThread {
+				if sessions, err = runner.NewFileSessions(filepath.Join(config.Dir(e.cfgPath), "sessions", me.Name+".json")); err != nil {
+					return err
+				}
 			}
 			cfgAbs, _ := filepath.Abs(e.cfgPath)
 			log := newLogger(e.in.String("log-level"))
-			log.Info("runner started", "agent", me.Name, "hub", e.cfg.Hub, "harness", h.Name(), "workdir", workdir)
+			log.Info("runner started", "agent", me.Name, "hub", e.cfg.Hub, "harness", h.Name(), "workdir", workdir,
+				"environment", host, "session_scope", scope, "session_id", me.Binding.SessionID)
 			r := runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
 				Self: me.Name, Concurrency: concurrency, Timeout: timeout, PollWait: pollWait,
-				Workdir: workdir, Once: e.in.Bool("once"),
+				Workdir: workdir, Once: e.in.Bool("once"), Scope: scope,
 				// Lets the agent call `myco` as itself from inside the harness.
 				Env: []string{config.EnvConfig + "=" + cfgAbs, config.EnvHub + "=" + e.cfg.Hub, config.EnvToken + "=" + e.cfg.Token},
 			}, log)
@@ -105,6 +120,25 @@ Flags override the 'runner' section of the config file. Logs go to stderr.`,
 		}),
 	}
 	return (&Command{Name: "runner", Summary: "Turn an agent CLI into an always-reachable worker"}).Add(start)
+}
+
+// checkBinding refuses to silently move an agent's session to another
+// environment or harness: the session would not exist there.
+func checkBinding(me *api.Agent, harness, host string, rebind bool) error {
+	b := me.Binding
+	if rebind || b.SessionID == "" {
+		return nil
+	}
+	if b.Environment != "" && b.Environment != host {
+		return errorf("conflict", ExitConflict,
+			fmt.Sprintf("run the runner on %s, or pass --rebind to start a new session here", b.Environment),
+			"agent %s is bound to session %s in environment %s, not %s", me.Name, b.SessionID, b.Environment, host)
+	}
+	if b.Harness != "" && b.Harness != harness {
+		return errorf("conflict", ExitConflict, "use --harness "+b.Harness+", or pass --rebind",
+			"agent %s is bound to a %s session, not %s", me.Name, b.Harness, harness)
+	}
+	return nil
 }
 
 func durationOr(e *env, flag, cfgVal string, def time.Duration) (time.Duration, error) {

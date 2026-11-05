@@ -89,7 +89,7 @@ func TestRunnerRepliesFailsAndNeverAnswersReplies(t *testing.T) {
 		}
 		return harness.Result{Output: "done!", SessionID: "sess-th1"}, nil
 	}}
-	r := New(hub, h, sessions, nil, Options{Self: "me", Once: true}, quiet())
+	r := New(hub, h, sessions, nil, Options{Self: "me", Once: true, Scope: ScopeThread}, quiet())
 	for range 3 {
 		if err := r.Run(context.Background()); err != nil {
 			t.Fatal(err)
@@ -118,5 +118,38 @@ func TestRunnerRespectsAgentHandledMessages(t *testing.T) {
 	New(hub, h, NewMemorySessions(), nil, Options{Once: true}, quiet()).Run(context.Background())
 	if _, ok := hub.replies["t1"]; ok || hub.status["t1"] != "held" {
 		t.Fatalf("held task must not be auto-replied: %v", hub.status["t1"])
+	}
+}
+
+type fakeBinder struct{ binds []string }
+
+func (f *fakeBinder) Bind(_ context.Context, b api.Binding) (*api.Agent, error) {
+	f.binds = append(f.binds, b.SessionID)
+	return &api.Agent{}, nil
+}
+
+func TestAgentScopeResumesOneBoundSession(t *testing.T) {
+	hub := newFakeHub(
+		api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1"},
+		api.Message{ID: "t2", Type: "task", From: "bob", ThreadID: "th2"},
+	)
+	binder := &fakeBinder{}
+	var seen []string
+	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		seen = append(seen, r.SessionID)
+		sid := r.SessionID
+		if sid == "" {
+			sid = "agent-session"
+		}
+		return harness.Result{Output: "ok", SessionID: sid}, nil
+	}}
+	r := New(hub, h, NewHubSessions(binder, ""), nil, Options{Once: true, Concurrency: 4}, quiet())
+	r.Run(context.Background())
+	r.Run(context.Background())
+	if len(seen) != 2 || seen[0] != "" || seen[1] != "agent-session" {
+		t.Fatalf("second message (other thread) must resume the agent session: %v", seen)
+	}
+	if len(binder.binds) != 1 || binder.binds[0] != "agent-session" {
+		t.Fatalf("new session must be bound on the hub exactly once: %v", binder.binds)
 	}
 }

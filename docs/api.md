@@ -24,11 +24,14 @@ Errors (any non-2xx):
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1"}` |
-| `POST /v1/agents` | admin | Register `{name, description?, capabilities?, allow_from?, rotate_token?}` → `{agent, token, created}` (token returned once) |
+| `POST /v1/agents` | admin | Register `{name, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `GET /v1/agents?capability=&online=true` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent |
 | `GET /v1/me` | agent | The calling agent |
+| `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
+| `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
+| `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
 | `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?}` → `{message, duplicate}` |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?}` → `{messages}`; leases messages (long-poll ≤ 60s) |

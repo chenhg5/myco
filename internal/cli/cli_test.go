@@ -27,13 +27,13 @@ func (h *harnessT) run(args ...string) (int, string, string) {
 
 func newHub(t *testing.T) string {
 	t.Helper()
-	h, closeFn, err := hubserver.Build(hubserver.Options{DBPath: ":memory:", AdminToken: "admin-token-123456",
+	hub, err := hubserver.Build(hubserver.Options{DBPath: ":memory:", AdminToken: "admin-token-123456",
 		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, Log: newLogger("error")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(h)
-	t.Cleanup(func() { srv.Close(); closeFn() })
+	srv := httptest.NewServer(hub.Handler)
+	t.Cleanup(func() { srv.Close(); hub.Close() })
 	return srv.URL
 }
 

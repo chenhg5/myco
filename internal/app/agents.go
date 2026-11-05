@@ -14,11 +14,16 @@ type AgentService struct {
 	ids          IDGenerator
 	clock        Clock
 	onlineWindow time.Duration
+	wakers       Wakers
 }
 
-// NewAgentService wires the agent use cases.
-func NewAgentService(agents domain.AgentRepository, tokens TokenIssuer, ids IDGenerator, clock Clock, onlineWindow time.Duration) *AgentService {
-	return &AgentService{agents: agents, tokens: tokens, ids: ids, clock: clock, onlineWindow: onlineWindow}
+// NewAgentService wires the agent use cases. wakers validates push delivery
+// settings (nil means only "pull" is supported).
+func NewAgentService(agents domain.AgentRepository, tokens TokenIssuer, ids IDGenerator, clock Clock, onlineWindow time.Duration, wakers Wakers) *AgentService {
+	if wakers == nil {
+		wakers = Wakers{}
+	}
+	return &AgentService{agents: agents, tokens: tokens, ids: ids, clock: clock, onlineWindow: onlineWindow, wakers: wakers}
 }
 
 // OnlineWindow is how recently an agent must have been seen to count as online.
@@ -33,7 +38,8 @@ type RegisterInput struct {
 	Description  string
 	Capabilities []string
 	AllowFrom    []string
-	Delivery     string
+	Binding      domain.Binding
+	Delivery     domain.Delivery
 	// RotateToken updates an existing agent and issues a new token instead
 	// of failing with a conflict.
 	RotateToken bool
@@ -70,6 +76,9 @@ func (s *AgentService) Register(ctx context.Context, in RegisterInput) (*Registe
 		if err := existing.Update(spec); err != nil {
 			return nil, err
 		}
+		if err := s.wakers.Validate(existing); err != nil {
+			return nil, err
+		}
 		if in.DryRun {
 			return &RegisterOutput{Agent: existing}, nil
 		}
@@ -88,6 +97,9 @@ func (s *AgentService) Register(ctx context.Context, in RegisterInput) (*Registe
 
 	a, err := domain.NewAgent(s.ids.New("agt"), name, spec, "", now)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.wakers.Validate(a); err != nil {
 		return nil, err
 	}
 	if in.DryRun {
@@ -113,11 +125,7 @@ func buildSpec(in RegisterInput) (domain.AgentSpec, error) {
 	if err != nil {
 		return domain.AgentSpec{}, err
 	}
-	mode, err := domain.ParseDeliveryMode(in.Delivery)
-	if err != nil {
-		return domain.AgentSpec{}, err
-	}
-	return domain.AgentSpec{Description: in.Description, Capabilities: caps, Delivery: mode, AllowFrom: allow}, nil
+	return domain.AgentSpec{Description: in.Description, Capabilities: caps, Binding: in.Binding, Delivery: in.Delivery, AllowFrom: allow}, nil
 }
 
 // AgentFilter narrows List results.
@@ -166,6 +174,22 @@ func (s *AgentService) Remove(ctx context.Context, name string, dryRun bool) (*d
 	}
 	return a, s.agents.Delete(ctx, a.Name)
 }
+
+// Bind updates the calling agent's session binding (empty fields unchanged).
+// Runners call it when a harness session is created so the hub can always
+// find the agent's session again.
+func (s *AgentService) Bind(ctx context.Context, a *domain.Agent, b domain.Binding) (*domain.Agent, error) {
+	if err := a.Bind(b); err != nil {
+		return nil, err
+	}
+	if err := s.wakers.Validate(a); err != nil {
+		return nil, err
+	}
+	return a, s.agents.Save(ctx, a)
+}
+
+// DeliveryModes lists supported delivery modes.
+func (s *AgentService) DeliveryModes() []string { return s.wakers.Modes() }
 
 // Authenticate resolves a bearer token to an agent and records activity.
 func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.Agent, error) {

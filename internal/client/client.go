@@ -169,6 +169,29 @@ func (c *Client) Me(ctx context.Context) (*api.Agent, error) {
 	return &out, c.do(ctx, http.MethodGet, "/v1/me", nil, nil, &out)
 }
 
+// Bind updates the calling agent's session binding.
+func (c *Client) Bind(ctx context.Context, b api.Binding) (*api.Agent, error) {
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, "/v1/me/binding", nil, b, &out)
+}
+
+// WaitPending long-polls until the inbox has deliverable messages (without
+// claiming them), re-polling until total elapses. Returns nil on timeout.
+func (c *Client) WaitPending(ctx context.Context, total time.Duration) ([]api.Message, error) {
+	deadline := time.Now().Add(total)
+	for {
+		secs := max(int(time.Until(deadline).Seconds()), 0)
+		q := url.Values{"wait_seconds": {strconv.Itoa(min(secs, 60))}}
+		var out api.PendingResponse
+		if err := c.do(ctx, http.MethodGet, "/v1/inbox/wait", q, nil, &out); err != nil {
+			return nil, err
+		}
+		if len(out.Pending) > 0 || time.Until(deadline) <= 0 {
+			return out.Pending, nil
+		}
+	}
+}
+
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
 	var out api.SendResponse

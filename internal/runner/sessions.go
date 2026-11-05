@@ -1,12 +1,15 @@
 package runner
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/chenhg5/myco/internal/api"
 )
 
 // FileSessions persists thread→session mappings as a JSON file.
@@ -84,5 +87,43 @@ func (s *MemorySessions) Put(thread, session string) error {
 		s.m[thread] = session
 		s.mu.Unlock()
 	}
+	return nil
+}
+
+// Binder persists the agent's session binding on the hub.
+type Binder interface {
+	Bind(ctx context.Context, b api.Binding) (*api.Agent, error)
+}
+
+// HubSessions is the SessionStore for ScopeAgent: the session ID lives in the
+// agent's binding on the hub, so the agent can always be found again (from
+// any machine) and a new session is never silently started once bound.
+type HubSessions struct {
+	hub     Binder
+	mu      sync.Mutex
+	session string
+}
+
+// NewHubSessions starts from the binding the hub already knows.
+func NewHubSessions(hub Binder, current string) *HubSessions {
+	return &HubSessions{hub: hub, session: current}
+}
+
+func (s *HubSessions) Get(string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.session
+}
+
+func (s *HubSessions) Put(_ string, session string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if session == "" || session == s.session {
+		return nil
+	}
+	if _, err := s.hub.Bind(context.Background(), api.Binding{SessionID: session}); err != nil {
+		return err
+	}
+	s.session = session
 	return nil
 }

@@ -31,11 +31,22 @@ type MessageService struct {
 	ids      IDGenerator
 	clock    Clock
 	policy   MessagePolicy
+	observer DeliveryObserver
 }
 
 // NewMessageService wires the messaging use cases.
 func NewMessageService(agents domain.AgentRepository, messages domain.MessageRepository, n Notifier, ids IDGenerator, clock Clock, p MessagePolicy) *MessageService {
-	return &MessageService{agents: agents, messages: messages, notifier: n, ids: ids, clock: clock, policy: p}
+	return &MessageService{agents: agents, messages: messages, notifier: n, ids: ids, clock: clock, policy: p, observer: noopObserver{}}
+}
+
+// SetObserver registers the component told about inbox activity (the
+// Dispatcher that wakes push agents).
+func (s *MessageService) SetObserver(o DeliveryObserver) { s.observer = o }
+
+// queued notifies long-pollers and the observer that agent has new mail.
+func (s *MessageService) queued(agent domain.AgentName) {
+	s.notifier.Publish(inboxTopic(string(agent)))
+	s.observer.Queued(agent)
 }
 
 // SendInput describes a new message.
@@ -107,7 +118,7 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 		}
 		return nil, err
 	}
-	s.notifier.Publish(inboxTopic(string(to)))
+	s.queued(to)
 	return &SendOutput{Message: m}, nil
 }
 
@@ -130,6 +141,7 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
+	s.observer.Pulled(agent.Name)
 	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
 	deadline := s.clock.Now().Add(waitFor)
 	for {
@@ -213,10 +225,28 @@ func (s *MessageService) Reply(ctx context.Context, agent *domain.Agent, id, bod
 		return nil, err
 	}
 	if !dryRun {
-		s.notifier.Publish(inboxTopic(string(reply.To)))
+		s.queued(reply.To)
 		s.notifier.Publish(replyTopic(id))
 	}
 	return reply, nil
+}
+
+// ReplyOnBehalf answers message id as its recipient. It is used by ingress
+// adapters (e.g. a GitHub comment written by Codex cloud) that the hub has
+// already authenticated; source is recorded in the reply body header.
+func (s *MessageService) ReplyOnBehalf(ctx context.Context, id, body, source string) (*domain.Message, error) {
+	m, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	recipient, err := s.agents.Get(ctx, m.To)
+	if err != nil {
+		return nil, err
+	}
+	if source != "" {
+		body = "[via " + source + "]\n" + body
+	}
+	return s.Reply(ctx, recipient, id, body, false)
 }
 
 // Fail closes message id as failed; the sender is notified for tasks.
@@ -243,7 +273,7 @@ func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reas
 		return nil, err
 	}
 	if event != nil {
-		s.notifier.Publish(inboxTopic(string(event.To)))
+		s.queued(event.To)
 		s.notifier.Publish(replyTopic(id))
 	}
 	return m, nil
@@ -336,4 +366,32 @@ func (s *MessageService) consume(ctx context.Context, agent *domain.Agent, r *do
 		}
 		return nil, m.Complete(agent.Name, s.clock.Now())
 	})
+}
+
+// WaitPending blocks up to waitFor until agent has deliverable messages and
+// returns them without claiming (for "sleep until there is mail" loops).
+func (s *MessageService) WaitPending(ctx context.Context, agent *domain.Agent, waitFor time.Duration) ([]*domain.Message, error) {
+	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
+	deadline := s.clock.Now().Add(waitFor)
+	for {
+		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
+		msgs, err := s.messages.ListDue(ctx, agent.Name, s.clock.Now(), 20)
+		if err != nil || len(msgs) > 0 {
+			cancel()
+			return msgs, err
+		}
+		remaining := deadline.Sub(s.clock.Now())
+		if remaining <= 0 {
+			cancel()
+			return nil, nil
+		}
+		fired := wait(ctx, ch, remaining)
+		cancel()
+		if !fired {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return s.messages.ListDue(ctx, agent.Name, s.clock.Now(), 20)
+		}
+	}
 }

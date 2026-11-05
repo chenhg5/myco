@@ -63,6 +63,29 @@ func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domai
 	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, id`, threadID)
 }
 
+const dueWhere = `(status='queued' OR (status='delivered' AND lease_until<?))`
+
+func (r *MessageRepo) ListDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int) ([]*domain.Message, error) {
+	return r.many(ctx, r.db, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`, recipient, ms(now), limit)
+}
+
+func (r *MessageRepo) DueRecipients(ctx context.Context, now time.Time) ([]domain.AgentName, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT to_agent FROM messages WHERE `+dueWhere, ms(now))
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	var out []domain.AgentName
+	for rows.Next() {
+		var n domain.AgentName
+		if err := rows.Scan(&n); err != nil {
+			return nil, internal(err)
+		}
+		out = append(out, n)
+	}
+	return out, internal(rows.Err())
+}
+
 func (r *MessageRepo) Mutate(ctx context.Context, id string, fn domain.MutateFunc) (*domain.Message, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -95,7 +118,7 @@ func (r *MessageRepo) ClaimDue(ctx context.Context, recipient domain.AgentName, 
 	}
 	defer tx.Rollback()
 	// Over-fetch: some candidates may be failed out instead of claimed.
-	cands, err := r.many(ctx, tx, `WHERE to_agent=? AND (status='queued' OR (status='delivered' AND lease_until<?)) ORDER BY created_at, id LIMIT ?`,
+	cands, err := r.many(ctx, tx, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`,
 		recipient, ms(now), limit*2)
 	if err != nil {
 		return nil, err

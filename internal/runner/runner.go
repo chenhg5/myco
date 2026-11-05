@@ -28,6 +28,8 @@ type Options struct {
 	Env []string
 	// Once processes at most one pull batch and returns.
 	Once bool
+	// Scope selects agent-level (default) or per-thread sessions.
+	Scope SessionScope
 }
 
 // Runner pulls messages and dispatches them to a harness.
@@ -55,6 +57,14 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	if prompt == nil {
 		prompt = DefaultPrompt{}
+	}
+	if opts.Scope == "" {
+		opts.Scope = ScopeAgent
+	}
+	if opts.Scope == ScopeAgent && opts.Concurrency > 1 {
+		// One session cannot run two turns at once.
+		log.Warn("session scope 'agent' processes one message at a time; ignoring concurrency", "requested", opts.Concurrency)
+		opts.Concurrency = 1
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log}
 }
@@ -128,7 +138,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Warn("ack failed; skipping (will be redelivered if the lease expires)", "err", err)
 		return
 	}
-	unlock := r.lockThread(m.ThreadID)
+	key := r.sessionKey(m)
+	unlock := r.lockThread(key)
 	defer unlock()
 
 	log.Info("running harness", "harness", r.harness.Name())
@@ -136,13 +147,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	runCtx, cancel := context.WithTimeout(ctx, r.opts.Timeout)
 	res, runErr := r.harness.Run(runCtx, harness.Request{
 		Prompt:    r.prompt.Build(r.opts.Self, m),
-		SessionID: r.sessions.Get(m.ThreadID),
+		SessionID: r.sessions.Get(key),
 		Workdir:   r.opts.Workdir,
 		Env: append(append([]string{}, r.opts.Env...),
 			"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
 	})
 	cancel()
-	if err := r.sessions.Put(m.ThreadID, res.SessionID); err != nil {
+	if err := r.sessions.Put(key, res.SessionID); err != nil {
 		log.Warn("saving session failed", "err", err)
 	}
 	log = log.With("duration", time.Since(start).Round(time.Millisecond))
@@ -183,6 +194,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	if err != nil {
 		log.Error("finishing message failed", "err", err)
 	}
+}
+
+func (r *Runner) sessionKey(m api.Message) string {
+	if r.opts.Scope == ScopeThread {
+		return m.ThreadID
+	}
+	return "agent"
 }
 
 func (r *Runner) lockThread(thread string) func() {

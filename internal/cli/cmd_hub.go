@@ -27,6 +27,10 @@ func hubCommands() *Command {
 			{Name: "max-attempts", Kind: Int, Default: "5", Help: "Deliveries before an unacked message fails"},
 			{Name: "online-window", Kind: Duration, Default: "90s", Help: "Agents seen within this window count as online"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity (stderr)"},
+			{Name: "public-url", Kind: String, Help: "Hub URL as agents see it (included in wake messages)"},
+			{Name: "wake-cooldown", Kind: Duration, Default: "2m", Help: "Minimum time between wakes of the same push agent"},
+			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
+			{Name: "github-reply-from", Kind: List, Help: "Only accept GitHub replies from these logins"},
 		},
 		Run: func(in *Invocation) error {
 			tok := in.Getenv(config.EnvAdminToken)
@@ -44,9 +48,19 @@ func hubCommands() *Command {
 			p := app.DefaultMessagePolicy()
 			p.Lease = in.Duration("lease")
 			p.MaxAttempts = in.Int("max-attempts")
+			ghSecret := ""
+			if f := in.String("github-webhook-secret-file"); f != "" {
+				b, err := os.ReadFile(f)
+				if err != nil {
+					return errorf("invalid_argument", ExitUsage, "", "cannot read --github-webhook-secret-file: %v", err)
+				}
+				ghSecret = strings.TrimSpace(string(b))
+			}
 			return hubserver.Run(in.Ctx, hubserver.Options{
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
+				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
+				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
 			})
 		},
 	}

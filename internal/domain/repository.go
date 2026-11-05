@@ -32,6 +32,11 @@ type MessageRepository interface {
 	// FindReply returns the reply or failure event answering messageID.
 	FindReply(ctx context.Context, messageID string) (*Message, error)
 	ListThread(ctx context.Context, threadID string) ([]*Message, error)
+	// ListDue returns (without claiming) up to limit messages deliverable to
+	// recipient at now, oldest first.
+	ListDue(ctx context.Context, recipient AgentName, now time.Time, limit int) ([]*Message, error)
+	// DueRecipients lists agents that have deliverable messages at now.
+	DueRecipients(ctx context.Context, now time.Time) ([]AgentName, error)
 	// Mutate loads message id, applies fn and persists the result atomically.
 	Mutate(ctx context.Context, id string, fn MutateFunc) (*Message, error)
 	// ClaimDue atomically selects up to limit due messages for recipient
