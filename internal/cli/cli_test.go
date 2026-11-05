@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/app"
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
 )
 
@@ -287,5 +288,18 @@ func TestRotateKeepsBindingAndLoginWritesProfile(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(home, ".myco", "agents", "cx.yaml"))
 	if err != nil || !strings.Contains(string(b), "session_id: sess-9") || !strings.Contains(string(b), "harness: codex") {
 		t.Fatalf("profile: %s %v", b, err)
+	}
+}
+
+func TestReadEnvFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "e.env")
+	os.WriteFile(f, []byte("# claude\nexport CLAUDE_CODE_OAUTH_TOKEN=\"sk-ant-oat01-x\"\nFOO = bar\n\n"), 0o600)
+	got, err := config.ReadEnvFile(f)
+	if err != nil || len(got) != 2 || got[0] != "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-x" || got[1] != "FOO=bar" {
+		t.Fatalf("%v %v", got, err)
+	}
+	os.WriteFile(f, []byte("not a pair\n"), 0o600)
+	if _, err := config.ReadEnvFile(f); err == nil {
+		t.Fatal("malformed line must fail")
 	}
 }

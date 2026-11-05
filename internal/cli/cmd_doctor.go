@@ -218,6 +218,25 @@ func doctorProfile(ctx context.Context, p config.Profile, add func(scope, check,
 				"busy detection is off for this agent; check the session id and CLAUDE_CONFIG_DIR / CODEX_HOME")
 		}
 	}
+	if rc.EnvFile != "" {
+		path := rc.EnvFile
+		if strings.HasPrefix(path, "~/") {
+			home, _ := os.UserHomeDir()
+			path = filepath.Join(home, path[2:])
+		}
+		if vars, err := config.ReadEnvFile(path); err != nil {
+			add(scope, "env_file", "fail", err.Error(), "fix runner.env_file")
+		} else if st, _ := os.Stat(path); st != nil && st.Mode().Perm()&0o077 != 0 {
+			add(scope, "env_file", "warn", fmt.Sprintf("%s is readable by others (%v)", path, st.Mode().Perm()), "chmod 600 "+path)
+		} else {
+			names := make([]string, 0, len(vars))
+			for _, kv := range vars {
+				k, _, _ := strings.Cut(kv, "=")
+				names = append(names, k)
+			}
+			add(scope, "env_file", "ok", fmt.Sprintf("%s: %s", path, strings.Join(names, ", ")), "")
+		}
+	}
 	if access == harness.AccessFull {
 		add(scope, "access", "warn", "full: no approvals, no sandbox", "use workspace unless this machine is isolated")
 	}

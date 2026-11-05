@@ -172,6 +172,14 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		}
 	}
 	cfgAbs, _ := filepath.Abs(cfgPath)
+	env := []string{config.EnvConfig + "=" + cfgAbs, config.EnvHub + "=" + cfg.Hub, config.EnvToken + "=" + cfg.Token}
+	if rc.EnvFile != "" {
+		extra, err := config.ReadEnvFile(rc.EnvFile)
+		if err != nil {
+			return nil, errorf("invalid_config", ExitUsage, "fix runner.env_file in "+cfgPath, "runner.env_file: %v", err)
+		}
+		env = append(extra, env...) // myco's own variables win
+	}
 	alog := log.With("agent", me.Name)
 	if access == harness.AccessFull {
 		alog.Warn("access=full: the agent CLI runs without approvals or sandbox; messages from other agents drive it")
@@ -183,7 +191,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots,
 		StatePath: filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
 		// Lets the agent call `myco` as itself from inside the harness.
-		Env: []string{config.EnvConfig + "=" + cfgAbs, config.EnvHub + "=" + cfg.Hub, config.EnvToken + "=" + cfg.Token},
+		Env: env,
 	}, alog), nil
 }
 

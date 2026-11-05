@@ -183,6 +183,13 @@ myco agent get        # 确认 binding.harness=claude，binding.session_id 是�
 myco runner start --all
 ```
 
+**后台服务里 claude 报 `OAuth session expired and could not be refreshed`**：macOS 上 Claude Code 的登录凭据存在钥匙串里，由后台服务（launchd）启动的 claude 可能读不到或刷新不了。解决办法是改用长期令牌：
+```bash
+claude setup-token                                   # 按提示生成长期令牌（sk-ant-oat01-...）
+printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' '<上一步得到的令牌>' > ~/.config/myco-claude.env && chmod 600 ~/.config/myco-claude.env
+```
+然后在这个 agent 的身份文件 `runner:` 下面加上 `env_file: ~/.config/myco-claude.env`。runner 只把这个文件里的变量传给该 agent 的 CLI，不写进服务配置，也不会发给 Hub。`myco doctor` 会检查这个文件能否读取、权限是否为 600。
+
 ### 4.3 本地或 VPS 上的 Codex
 
 在 Codex 会话里，先找到当前会话的 ID（`codex resume` 用的那个，会话记录一般在 `~/.codex/sessions/` 下面）。**找不到就如实报告，不要编造。**找到后执行：
@@ -261,6 +268,7 @@ runner:
   workdir: /Users/me/src/app
   model: gpt-5.6
   access: workspace
+  env_file: ~/.config/myco-codex.env     # 可选：只传给这个 agent 的 CLI 的环境变量（KEY=VALUE，权限 600）
   args: ["-c", "model_reasoning_effort=medium"]
   timeout: 30m
 ```

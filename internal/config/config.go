@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -47,6 +48,9 @@ type Runner struct {
 	Timeout     string   `yaml:"timeout,omitempty"`
 	Concurrency int      `yaml:"concurrency,omitempty"`
 	PollWait    string   `yaml:"poll_wait,omitempty"`
+	// EnvFile holds KEY=VALUE lines passed only to this agent's CLI (e.g.
+	// CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`). Keep it chmod 600.
+	EnvFile string `yaml:"env_file,omitempty"`
 	// Model and Access are mapped to CLI flags by the harness.
 	Model  string `yaml:"model,omitempty"`
 	Access string `yaml:"access,omitempty"`
@@ -166,4 +170,36 @@ func FindBySession(dir, sessionID string) (Profile, bool) {
 		}
 	}
 	return Profile{}, false
+}
+
+// ReadEnvFile parses KEY=VALUE lines (blank lines, # comments and an
+// optional "export " prefix allowed; values may be quoted).
+func ReadEnvFile(path string) ([]string, error) {
+	if strings.HasPrefix(path, "~/") {
+		home, _ := os.UserHomeDir()
+		path = filepath.Join(home, path[2:])
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for i, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		k, v, ok := strings.Cut(line, "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" || strings.ContainsAny(k, " \t") {
+			return nil, fmt.Errorf("%s:%d: expected KEY=VALUE", path, i+1)
+		}
+		v = strings.TrimSpace(v)
+		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
+			v = v[1 : len(v)-1]
+		}
+		out = append(out, k+"="+v)
+	}
+	return out, nil
 }
