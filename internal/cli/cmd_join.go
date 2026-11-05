@@ -263,7 +263,7 @@ node right away.`,
 			}
 			switch {
 			case cloud:
-				notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 110m` running as a background command.")
+				notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command.")
 			case e.in.Bool("no-service"):
 				notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
 			default:
@@ -423,7 +423,7 @@ Safe to re-run: the same session gets the same agent back.`,
 				fmt.Fprintf(w, "%s %s (%s)\n", verb, res.Agent.Name, how)
 				if cloud {
 					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
-					fmt.Fprintln(w, "  myco inbox wait --timeout 110m")
+					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
 				} else {
 					fmt.Fprintln(w, "The machine's runner service will wake this session when a message arrives (within ~30s of joining).")
 				}

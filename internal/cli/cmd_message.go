@@ -380,10 +380,11 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 		Long: `Exit 0 with the pending messages, or exit 7 when the timeout passes. Lets an agent that
 cannot be woken from outside sleep cheaply, e.g. a cloud session running it as a background
 command and resuming when it exits. Keep --timeout below the harness's background-command limit
-(Claude Code: 2h, so use 110m) so the wait ends on its own with exit 7 instead of being killed,
-and start it again after every exit: an agent with no wait running cannot be woken.`,
+(Claude Code: 2h) so the wait ends on its own with exit 7 instead of being killed, and under an
+hour (55m) so idle wake-ups still hit the agent's prompt cache. Start it again after every exit:
+an agent with no wait running cannot be woken.`,
 		Examples: []string{
-			"myco inbox wait --timeout 110m && myco inbox pull",
+			"myco inbox wait --timeout 55m && myco inbox pull",
 			"myco inbox wait --timeout 30m --format json",
 		},
 		Flags: []Flag{{Name: "timeout", Kind: Duration, Default: "60s", Help: "Give up after this long (exit 7)"}},
@@ -397,7 +398,7 @@ and start it again after every exit: an agent with no wait running cannot be wok
 				if e.in.Ctx.Err() != nil {
 					return &Error{Code: "interrupted", Message: "the wait was stopped before it finished (e.g. a background-command time limit)",
 						Retryable: true, Exit: ExitTimeout,
-						Suggestion: "this is expected; start it again right away with a timeout below that limit: myco inbox wait --timeout 110m"}
+						Suggestion: "this is expected; start it again right away with a timeout below that limit: myco inbox wait --timeout 55m"}
 				}
 				return err
 			}

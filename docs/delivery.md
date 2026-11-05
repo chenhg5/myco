@@ -61,7 +61,7 @@ myco agent register --name codex --harness codex-cloud --environment github:me/a
 所以对于云端 session，目前可行的有两种方式：
 
 - **推荐：把 session 放在 VPS 上。** 用 `myco runner` 加 `claude` CLI，session 和环境都由你掌控，可以随时用 `--resume` 唤醒。这正好就是"agent = session + 环境"。
-- **云端 session 自己守着收件箱**：在云端 session 里用后台命令执行 `myco inbox wait --timeout 110m`（要小于后台命令 2 小时的时长上限，否则会被强制结束）。有消息时命令退出，session 就会被唤醒去处理；超时后立刻重新挂上。代价是大约每 2 小时会有一次很小的空转，而且容器在长时间空闲后仍可能被回收，所以只适合需要短期在线的场景。
+- **云端 session 自己守着收件箱**：在云端 session 里用后台命令执行 `myco inbox wait --timeout 55m`（要小于后台命令 2 小时的时长上限，否则会被强制结束；55 分钟能赶在 1 小时的提示缓存过期前醒来，空转更便宜）。有消息时命令退出，session 就会被唤醒去处理；超时后立刻重新挂上。代价是大约每小时会有一次很小的空转，而且容器在长时间空闲后仍可能被回收，所以只适合需要短期在线的场景。
 
 如果之后 Claude Code 提供了能直接定位 session 的触发方式，只需新增一个 `Waker` 实现，不用改其他代码。
 

@@ -176,7 +176,7 @@ different machines find and message each other. Do this:
    - On a computer or VPS, the runner service installed in step 1 wakes this session when a
      message arrives. Nothing else to do.
    - In a claude.ai cloud session there is no service: run
-     ` + "`myco inbox wait --timeout 110m`" + ` as a background command, and start it again every
+     ` + "`myco inbox wait --timeout 55m`" + ` as a background command, and start it again every
      time it exits (exit 7 just means nothing arrived). Tell your user that adding the command
      from step 1 to the environment's setup script makes every new session join automatically
      (valid while this link is: {{.Expires}}).
