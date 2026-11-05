@@ -187,13 +187,22 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 }
 
 func (s *EnrollmentService) authenticate(ctx context.Context, token string) (*domain.Enrollment, error) {
-	if !strings.HasPrefix(token, EnrollTokenPrefix) {
-		return nil, domain.Errf(domain.CodeUnauthenticated, "missing or invalid enrollment token").
-			WithSuggestion("set MYCO_ENROLL_TOKEN to a token from: myco enrollment create")
+	switch {
+	case token == "":
+		return nil, domain.Errf(domain.CodeUnauthenticated, "no enrollment token was sent").
+			WithSuggestion("export MYCO_ENROLL_TOKEN (a plain `VAR=value` line in a sourced file is not exported to child processes), or pass --enroll-token-file")
+	case !strings.HasPrefix(token, EnrollTokenPrefix):
+		hint := "this looks like an agent token, not an enrollment token"
+		if strings.HasPrefix(token, "enr_") {
+			hint = "this is an enrollment ID, not its token"
+		}
+		return nil, domain.Errf(domain.CodeUnauthenticated, "not an enrollment token (expected prefix %s; %s)", EnrollTokenPrefix, hint).
+			WithSuggestion("use the `token: myco_enroll_...` line printed by: myco enrollment create")
 	}
 	e, err := s.enrollments.GetByTokenHash(ctx, s.tokens.Hash(token))
 	if domain.IsCode(err, domain.CodeNotFound) {
-		return nil, domain.Errf(domain.CodeUnauthenticated, "unknown enrollment token")
+		return nil, domain.Errf(domain.CodeUnauthenticated, "enrollment token not issued by this hub").
+			WithSuggestion("check MYCO_HUB points at the hub that created it; list valid ones with: myco enrollment list")
 	}
 	return e, err
 }
