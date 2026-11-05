@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chenhg5/myco/internal/api"
+	"github.com/chenhg5/myco/internal/client"
+
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
@@ -472,5 +475,86 @@ func TestAttachments(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".ssh", "id_rsa"), []byte("secret"), 0o600)
 	if code, _, _ := alice.run("message", "send", "--to", "bob", "--body", "x", "--attach", filepath.Join(home, ".ssh", "id_rsa")); code != ExitPermission {
 		t.Fatalf("ssh key attach must be refused: %d", code)
+	}
+}
+
+func TestOverviewAndUIServer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	mk := func(name string) *harnessT {
+		h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
+		h.run("agent", "register", "--name", name)
+		return h
+	}
+	alice, bob, carol := mk("alice"), mk("bob"), mk("carol")
+	_, out, _ := alice.run("message", "send", "--to", "bob", "--body", "secret plan", "--format", "json")
+	var sent struct{ Message struct{ ID string } }
+	json.Unmarshal([]byte(out), &sent)
+	bob.run("inbox", "pull")
+	bob.run("message", "ack", "--id", sent.Message.ID)
+	carol.run("message", "send", "--to", "bob", "--body", "queued one")
+
+	cfg, _ := config.Load(filepath.Join(home, "alice.yaml"))
+	ac, _ := client.New(hub, cfg.Token)
+	ov, err := ac.Overview(context.Background(), 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bobSt *api.AgentStatus
+	for i := range ov.Agents {
+		if ov.Agents[i].Agent.Name == "bob" {
+			bobSt = &ov.Agents[i]
+		}
+	}
+	if bobSt == nil || bobSt.State != "working" || bobSt.InProgress != 1 || bobSt.Queued != 1 || len(bobSt.Current) != 0 {
+		t.Fatalf("alice's view of bob: %+v", bobSt)
+	}
+	for _, m := range ov.Recent {
+		if m.From != "alice" && m.To != "alice" {
+			t.Fatalf("agent view leaked a foreign message: %+v", m)
+		}
+	}
+	admin, _ := client.New(hub, "admin-token-123456")
+	aov, err := admin.Overview(context.Background(), 50)
+	if err != nil || aov.Viewer.Kind != "admin" || len(aov.Recent) != 2 {
+		t.Fatalf("admin overview: %+v %v", aov, err)
+	}
+	if th, err := admin.Thread(context.Background(), sent.Message.ID); err != nil || len(th) != 1 {
+		t.Fatalf("admin thread: %v %v", th, err)
+	}
+
+	// UI server guards.
+	ui := &uiServer{hub: hub, agentName: "alice", agent: ac, admin: admin, key: "k123", port: 7790}
+	h := ui.routes()
+	do := func(method, target, host string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, nil)
+		r.Host = host
+		if cookie != nil {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do("GET", "/api/overview", "evil.com:7790", nil); w.Code != http.StatusForbidden {
+		t.Fatalf("foreign host: %d", w.Code)
+	}
+	if w := do("GET", "/api/overview", "127.0.0.1:7790", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("no key: %d", w.Code)
+	}
+	if w := do("GET", "/?key=wrong", "127.0.0.1:7790", nil); w.Code != http.StatusForbidden {
+		t.Fatalf("wrong key: %d", w.Code)
+	}
+	w := do("GET", "/?key=k123", "localhost:7790", nil)
+	if w.Code != http.StatusFound || len(w.Result().Cookies()) != 1 || !w.Result().Cookies()[0].HttpOnly {
+		t.Fatalf("key exchange: %d %v", w.Code, w.Result().Cookies())
+	}
+	ck := w.Result().Cookies()[0]
+	if w := do("GET", "/api/overview?as=admin", "127.0.0.1:7790", ck); w.Code != 200 || !strings.Contains(w.Body.String(), `"kind":"admin"`) {
+		t.Fatalf("admin overview via ui: %d %s", w.Code, w.Body.String())
+	}
+	if w := do("GET", "/", "127.0.0.1:7790", ck); w.Code != 200 || !strings.Contains(w.Body.String(), `<div id="root">`) {
+		t.Fatalf("index: %d", w.Code)
 	}
 }

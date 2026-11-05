@@ -287,6 +287,12 @@ func (c *Client) BroadcastStatus(ctx context.Context, id string, consume bool) (
 	return &out, c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), q, nil, &out)
 }
 
+// Overview returns the network snapshot visible to this client's token.
+func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error) {
+	var out api.Overview
+	return &out, c.do(ctx, http.MethodGet, "/v1/overview", url.Values{"recent": {strconv.Itoa(recent)}}, nil, &out)
+}
+
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
 	var out api.SendResponse

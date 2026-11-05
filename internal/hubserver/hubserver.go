@@ -94,6 +94,7 @@ func Build(o Options) (*Hub, error) {
 	messages.SetFiles(fileRepo)
 	srv := httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...)
 	srv.SetFiles(files)
+	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
 	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close}, nil
 }
 

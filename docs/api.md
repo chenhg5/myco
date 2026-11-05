@@ -37,6 +37,7 @@ Errors (any non-2xx):
 | `POST /v1/files?name=` | agent | Raw body upload (≤ `--max-file-size`) → file `{id, name, size, sha256, content_type, owner, expires_at}` |
 | `GET /v1/files/{id}` | uploader / recipient | Download; headers `X-Myco-SHA256`, `X-Myco-File-Name` |
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
+| `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline) and counters; message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent |
 | `GET /v1/me` | agent | The calling agent |
@@ -53,7 +54,7 @@ Errors (any non-2xx):
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done |
-| `GET /v1/threads/{id}` | participant | `{messages}` in order |
+| `GET /v1/threads/{id}` | participant / admin | `{messages}` in order |
 
 ## Message object
 

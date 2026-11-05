@@ -38,6 +38,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 		runnerCommands(),
 		harnessCommands(),
 		doctorCommand(),
+		uiCommand(),
 		configCommands(),
 		schemaCommand(root),
 		versionCommand(),

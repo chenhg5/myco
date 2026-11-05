@@ -49,6 +49,42 @@ func (r *MessageRepo) Create(ctx context.Context, m *domain.Message) error {
 	return insertMessage(ctx, r.db, m)
 }
 
+func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[domain.Status]int, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, status, COUNT(*) FROM messages
+		WHERE status IN ('queued','delivered','acked','held') GROUP BY to_agent, status`)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	out := map[domain.AgentName]map[domain.Status]int{}
+	for rows.Next() {
+		var (
+			a domain.AgentName
+			s domain.Status
+			n int
+		)
+		if err := rows.Scan(&a, &s, &n); err != nil {
+			return nil, internal(err)
+		}
+		if out[a] == nil {
+			out[a] = map[domain.Status]int{}
+		}
+		out[a][s] = n
+	}
+	return out, internal(rows.Err())
+}
+
+func (r *MessageRepo) ListOpen(ctx context.Context, recipient domain.AgentName, limit int) ([]*domain.Message, error) {
+	return r.many(ctx, r.db, `WHERE to_agent=? AND status IN ('delivered','acked','held') ORDER BY updated_at DESC LIMIT ?`, recipient, limit)
+}
+
+func (r *MessageRepo) ListRecent(ctx context.Context, agent domain.AgentName, limit int) ([]*domain.Message, error) {
+	if agent == "" {
+		return r.many(ctx, r.db, `ORDER BY updated_at DESC, id LIMIT ?`, limit)
+	}
+	return r.many(ctx, r.db, `WHERE from_agent=? OR to_agent=? ORDER BY updated_at DESC, id LIMIT ?`, agent, agent, limit)
+}
+
 func (r *MessageRepo) CreateMany(ctx context.Context, msgs []*domain.Message) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

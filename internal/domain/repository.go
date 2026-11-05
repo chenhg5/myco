@@ -47,6 +47,14 @@ type MessageRepository interface {
 	ListThread(ctx context.Context, threadID string) ([]*Message, error)
 	// ListBroadcast returns the messages of a broadcast, oldest first.
 	ListBroadcast(ctx context.Context, broadcastID string) ([]*Message, error)
+	// OpenCounts returns, per recipient, how many messages are in each open
+	// status (queued, delivered, acked, held).
+	OpenCounts(ctx context.Context) (map[AgentName]map[Status]int, error)
+	// ListOpen returns open (not queued, not closed) messages of recipient.
+	ListOpen(ctx context.Context, recipient AgentName, limit int) ([]*Message, error)
+	// ListRecent returns the most recently updated messages; with agent set,
+	// only those it sent or received.
+	ListRecent(ctx context.Context, agent AgentName, limit int) ([]*Message, error)
 	// CreateMany stores several new messages atomically.
 	CreateMany(ctx context.Context, ms []*Message) error
 	// ListDue returns (without claiming) up to limit messages deliverable to

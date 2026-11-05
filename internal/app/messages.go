@@ -358,6 +358,15 @@ func (s *MessageService) Thread(ctx context.Context, agent *domain.Agent, thread
 	return s.messages.ListThread(ctx, threadID)
 }
 
+// ThreadAll returns a thread without participant checks (admin views).
+func (s *MessageService) ThreadAll(ctx context.Context, threadID string) ([]*domain.Message, error) {
+	msgs, err := s.messages.ListThread(ctx, threadID)
+	if err == nil && len(msgs) == 0 {
+		err = domain.Errf(domain.CodeNotFound, "thread %s not found", threadID)
+	}
+	return msgs, err
+}
+
 // WaitReply blocks up to waitFor for the answer to a message agent sent.
 // A returned reply is marked done so it is not delivered again via pull.
 // It returns (nil, nil) on timeout.

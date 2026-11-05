@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/chenhg5/myco/internal/cli.Version=$(VERSION)
 
-.PHONY: build test vet cross clean
+.PHONY: build test vet cross clean web
 
 build:
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco ./cmd/myco
@@ -20,3 +20,8 @@ cross:
 
 clean:
 	rm -rf bin
+
+# Rebuild the embedded dashboard (needs Node 18+); output is committed in
+# internal/web/dist so Go builds never need Node.
+web:
+	cd web && npm ci && npm run build

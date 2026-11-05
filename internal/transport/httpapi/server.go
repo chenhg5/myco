@@ -29,7 +29,11 @@ type Server struct {
 	mux        *http.ServeMux
 	ingress    map[string]Ingress
 	files      *app.FileService
+	overview   *app.OverviewService
 }
+
+// SetOverview enables GET /v1/overview.
+func (s *Server) SetOverview(o *app.OverviewService) { s.overview = o }
 
 // SetFiles enables the file endpoints.
 func (s *Server) SetFiles(f *app.FileService) { s.files = f }
@@ -86,6 +90,7 @@ func (s *Server) routes() {
 	// Discovery (admin or any agent).
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
+	m.HandleFunc("GET /v1/overview", s.handleOverview)
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
 
 	// Agent-scoped operations.
@@ -109,7 +114,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))
 	m.HandleFunc("GET /v1/messages/{id}/reply", s.agent(s.waitReply))
 	m.HandleFunc("POST /v1/inbox/pull", s.agent(s.pull))
-	m.HandleFunc("GET /v1/threads/{id}", s.agent(s.thread))
+	m.HandleFunc("GET /v1/threads/{id}", s.threadAny)
 
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodeNotFound, "no route for %s %s", r.Method, r.URL.Path).
@@ -409,6 +414,53 @@ func (s *Server) broadcastStatus(w http.ResponseWriter, r *http.Request, a *doma
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
+	if s.overview == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "overview not enabled on this hub"))
+		return
+	}
+	var viewer *domain.Agent
+	v := api.Viewer{Kind: "admin"}
+	if !s.isAdmin(r) {
+		a, err := s.agents.Authenticate(r.Context(), bearer(r))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		viewer, v = a, api.Viewer{Kind: "agent", Name: string(a.Name)}
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("recent"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	ov, err := s.overview.Snapshot(r.Context(), viewer, limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.Overview{GeneratedAt: ov.GeneratedAt, Viewer: v, OnlineWindowSeconds: int(s.agents.OnlineWindow().Seconds()),
+		Agents: make([]api.AgentStatus, 0, len(ov.Agents)), Recent: messageList(ov.Recent).Messages}
+	for _, a := range ov.Agents {
+		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
+		if len(a.Current) > 0 {
+			st.Current = messageList(a.Current).Messages
+		}
+		out.Agents = append(out.Agents, st)
+		out.Totals.Agents++
+		switch a.State {
+		case app.StateWorking:
+			out.Totals.Working++
+		case app.StatePending:
+			out.Totals.Pending++
+		case app.StateIdle:
+			out.Totals.Idle++
+		default:
+			out.Totals.Offline++
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) filesEnabled(w http.ResponseWriter) bool {
 	if s.files == nil {
 		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not store files"))
@@ -588,6 +640,20 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		return
 	}
 	writeJSON(w, http.StatusOK, messageList(msgs))
+}
+
+// threadAny serves participants (agent token) and the admin (any thread).
+func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
+	if s.isAdmin(r) {
+		msgs, err := s.messages.ThreadAll(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, messageList(msgs))
+		return
+	}
+	s.agent(s.thread)(w, r)
 }
 
 func (s *Server) thread(w http.ResponseWriter, r *http.Request, a *domain.Agent) {

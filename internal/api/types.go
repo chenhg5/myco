@@ -284,3 +284,38 @@ type EnrollRequest struct {
 	Labels       []string `json:"labels,omitempty"`
 	Binding      Binding  `json:"binding"`
 }
+
+// Viewer says whose permissions an overview was built with.
+type Viewer struct {
+	Kind string `json:"kind"` // agent | admin
+	Name string `json:"name,omitempty"`
+}
+
+// AgentStatus is one agent with live counters (GET /v1/overview).
+type AgentStatus struct {
+	Agent      Agent     `json:"agent"`
+	State      string    `json:"state"` // working | pending | idle | offline
+	Queued     int       `json:"queued"`
+	InProgress int       `json:"in_progress"`
+	Held       int       `json:"held"`
+	Current    []Message `json:"current,omitempty"`
+}
+
+// OverviewTotals counts agents by state.
+type OverviewTotals struct {
+	Agents  int `json:"agents"`
+	Working int `json:"working"`
+	Pending int `json:"pending"`
+	Idle    int `json:"idle"`
+	Offline int `json:"offline"`
+}
+
+// Overview is a network snapshot for dashboards.
+type Overview struct {
+	GeneratedAt         time.Time      `json:"generated_at"`
+	Viewer              Viewer         `json:"viewer"`
+	OnlineWindowSeconds int            `json:"online_window_seconds"`
+	Totals              OverviewTotals `json:"totals"`
+	Agents              []AgentStatus  `json:"agents"`
+	Recent              []Message      `json:"recent"`
+}
