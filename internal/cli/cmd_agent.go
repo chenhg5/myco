@@ -39,11 +39,11 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			{Name: "environment", Kind: String, Help: "Where the session lives (default: this host name)"},
 			{Name: "workdir", Kind: String, Help: "Working directory of the session"},
 			{Name: "detect", Kind: Bool, Help: "Detect harness/session/environment from the current process (e.g. inside a Claude Code cloud session)"},
-			{Name: "delivery", Kind: String, Default: "pull", Help: "How the hub wakes it: pull | webhook | claude_routine | github_dispatch | github_issue"},
+			{Name: "delivery", Kind: String, Default: "pull", Help: "How the hub wakes it: pull | webhook | claude_routine | github_dispatch | github_issue (with --rotate-token: unchanged unless given)"},
 			{Name: "wake-url", Kind: String, Help: "Wake endpoint (webhook URL or routine fire URL)"},
 			{Name: "wake-secret-file", Kind: String, Help: "File with the wake secret (HMAC key, routine token, GitHub token)"},
 			{Name: "wake-param", Kind: List, Help: "Mode-specific key=value, e.g. repo=owner/name, mention=@codex"},
-			{Name: "rotate-token", Kind: Bool, Help: "If the agent exists, update its profile and issue a new token"},
+			{Name: "rotate-token", Kind: Bool, Help: "If the agent exists, issue a new token; only the flags you pass change its profile"},
 			{Name: "no-save", Kind: Bool, Help: "Do not write the config file; print the token instead"},
 			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (instead of MYCO_ADMIN_TOKEN)"},
 		},
@@ -226,7 +226,66 @@ creates the session; use this to adopt an existing session or to move an agent.`
 		}),
 	}
 
-	return (&Command{Name: "agent", Summary: "Register, bind and discover agents"}).Add(register, agentEnrollCommand(), bind, list, get, remove)
+	login := &Command{
+		Name:     "login",
+		Summary:  "Store an existing agent token on this machine (e.g. one rotated by the hub admin)",
+		Mutating: true,
+		Long: `Verifies the token with the hub, then saves it. If the agent is bound to a session, it is saved as
+that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner start --all" use it.`,
+		Examples: []string{
+			"myco agent login --token-file ./codex-loops.token --workdir ~/src/app",
+			"MYCO_TOKEN=myco_... myco agent login",
+		},
+		Flags: []Flag{
+			{Name: "token-file", Kind: String, Help: "File containing the agent token (default: MYCO_TOKEN)"},
+			{Name: "workdir", Kind: String, Help: "Runner working directory to record (default: the agent's binding)"},
+		},
+		Run: handler(func(e *env) error {
+			hub, err := e.hubURL()
+			if err != nil {
+				return err
+			}
+			tok := e.in.Getenv(config.EnvToken)
+			if f := e.in.String("token-file"); f != "" {
+				if err := safePath(f); err != nil {
+					return err
+				}
+				b, err := os.ReadFile(f)
+				if err != nil {
+					return errorf("not_found", ExitNotFound, "check the path", "cannot read --token-file: %v", err)
+				}
+				tok = strings.TrimSpace(string(b))
+			}
+			if tok == "" {
+				return errorf("not_configured", ExitUsage, "pass --token-file <file> or set MYCO_TOKEN", "no agent token given")
+			}
+			c, err := client.New(hub, tok)
+			if err != nil {
+				return err
+			}
+			me, err := c.Me(e.in.Ctx)
+			if err != nil {
+				return err
+			}
+			b := me.Binding
+			if wd := e.in.String("workdir"); wd != "" {
+				if abs, err := filepath.Abs(wd); err == nil {
+					b.Workdir = abs
+				}
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "login", "agent": me})
+			}
+			if err := e.saveIdentity(hub, me.Name, tok, b); err != nil {
+				return err
+			}
+			return e.p.Print(map[string]any{"agent": me, "config": e.cfgPath}, func(w io.Writer) {
+				fmt.Fprintf(w, "logged in as %s; credentials saved to %s\n", me.Name, e.cfgPath)
+			})
+		}),
+	}
+
+	return (&Command{Name: "agent", Summary: "Register, bind and discover agents"}).Add(register, agentEnrollCommand(), login, bind, list, get, remove)
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
@@ -289,7 +348,12 @@ func hostname() string {
 
 // deliveryFromFlags builds the delivery settings from register flags.
 func (e *env) deliveryFromFlags() (api.Delivery, error) {
-	d := api.Delivery{Mode: e.in.String("delivery"), URL: e.in.String("wake-url")}
+	d := api.Delivery{URL: e.in.String("wake-url")}
+	// Only send a mode when asked: on --rotate-token an empty mode keeps the
+	// agent's current delivery settings.
+	if e.in.IsSet("delivery") || e.in.IsSet("wake-url") || e.in.IsSet("wake-secret-file") || e.in.IsSet("wake-param") {
+		d.Mode = e.in.String("delivery")
+	}
 	if f := e.in.String("wake-secret-file"); f != "" {
 		if err := safePath(f); err != nil {
 			return d, err

@@ -112,7 +112,7 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 		if existing.EnrolledBy != e.ID {
 			return nil, domain.Errf(domain.CodePermissionDenied,
 				"session %s is bound to agent %s, which this enrollment did not create", in.Binding.SessionID, existing.Name).
-				WithSuggestion("ask the hub admin to rotate that agent's token with: myco agent register --name %s --rotate-token", existing.Name)
+				WithSuggestion("use the enrollment token that created it (%s), or have the hub admin run `myco agent register --name %s --rotate-token --no-save` and then `myco agent login --token-file <file>` here", existing.EnrolledBy, existing.Name)
 		}
 		if err := e.Usable(now, false); err != nil {
 			return nil, err

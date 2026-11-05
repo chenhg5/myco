@@ -97,7 +97,9 @@ myco enrollment revoke --id enr_xxx --force      # 已入网的 agent 不受影�
 ```bash
 myco agent register --name glenn --description "人类：Glenn"
 myco agent register --name x --harness claude --session-id <id> --no-save --format text   # 打印 token，交给对应的 agent
-myco agent register --name x --rotate-token                                                # 换发 token，旧的立即失效
+myco agent register --name x --rotate-token --no-save                                      # 换发 token，旧的立即失效；其他字段只改你传了的
+# 把换发的 token 存到 agent 所在的机器上（会按绑定的会话生成身份文件）：
+#   myco agent login --token-file x.token --workdir <项目目录>
 myco agent remove --name x --force
 ```
 

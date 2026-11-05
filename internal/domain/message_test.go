@@ -122,3 +122,21 @@ func TestReleaseDefersWithoutCountingAttempt(t *testing.T) {
 		t.Fatalf("delay bound: %v", err)
 	}
 }
+
+func TestUpdateKeepsUnsetFields(t *testing.T) {
+	a, _ := NewAgent("id", "x", AgentSpec{Description: "d", Capabilities: []string{"code"},
+		Binding:  Binding{Harness: "codex", SessionID: "s1", Environment: "mac"},
+		Delivery: Delivery{Mode: "webhook", URL: "https://h", Secret: "k"}}, "", time.Now())
+	if err := a.Update(AgentSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	if a.Description != "d" || len(a.Capabilities) != 1 || a.Binding.SessionID != "s1" || a.Delivery.Secret != "k" || a.Delivery.URL != "https://h" {
+		t.Fatalf("rotate-style update wiped fields: %+v", a)
+	}
+	if err := a.Update(AgentSpec{Description: "new", Binding: Binding{Workdir: "/w"}}); err != nil {
+		t.Fatal(err)
+	}
+	if a.Description != "new" || a.Binding.Workdir != "/w" || a.Binding.SessionID != "s1" {
+		t.Fatalf("partial update: %+v", a)
+	}
+}

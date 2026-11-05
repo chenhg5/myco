@@ -176,16 +176,60 @@ func NewAgent(id string, name AgentName, spec AgentSpec, tokenHash string, now t
 	return a, nil
 }
 
-// Update replaces the agent's profile. A delivery secret left empty keeps
-// the current one when the mode is unchanged.
+// Update merges spec into the agent's profile: fields left empty in spec
+// keep their current value (re-registering to rotate a token must not wipe
+// the session binding or delivery settings). A delivery secret left empty
+// keeps the current one when the mode is unchanged.
 func (a *Agent) Update(spec AgentSpec) error {
 	if err := spec.validate(); err != nil {
 		return err
 	}
-	if spec.Delivery.Secret == "" && spec.Delivery.Mode == a.Delivery.Mode {
+	if spec.Description == "" {
+		spec.Description = a.Description
+	}
+	if len(spec.Capabilities) == 0 {
+		spec.Capabilities = a.Capabilities
+	}
+	if len(spec.AllowFrom) == 0 {
+		spec.AllowFrom = a.AllowFrom
+	}
+	cur := a.Binding
+	if err := (&cur).mergeFrom(spec.Binding); err != nil {
+		return err
+	}
+	spec.Binding = cur
+	if spec.Delivery.Mode == "" {
+		spec.Delivery = a.Delivery
+	} else if spec.Delivery.Secret == "" && spec.Delivery.Mode == a.Delivery.Mode {
 		spec.Delivery.Secret = a.Delivery.Secret
+		if spec.Delivery.URL == "" {
+			spec.Delivery.URL = a.Delivery.URL
+		}
+		if spec.Delivery.Params == nil {
+			spec.Delivery.Params = a.Delivery.Params
+		}
 	}
 	a.apply(spec)
+	return nil
+}
+
+// mergeFrom overwrites b's fields with the non-empty fields of o.
+func (b *Binding) mergeFrom(o Binding) error {
+	if err := o.Validate(); err != nil {
+		return err
+	}
+	if o.Harness != "" {
+		b.Harness = o.Harness
+	}
+	if o.SessionID != "" {
+		b.SessionID = o.SessionID
+	}
+	if o.Environment != "" {
+		b.Environment = o.Environment
+	}
+	if o.Workdir != "" {
+		b.Workdir = o.Workdir
+	}
 	return nil
 }
 
@@ -201,24 +245,7 @@ func (a *Agent) apply(s AgentSpec) {
 }
 
 // Bind updates the session binding; empty fields keep their current value.
-func (a *Agent) Bind(b Binding) error {
-	if err := b.Validate(); err != nil {
-		return err
-	}
-	if b.Harness != "" {
-		a.Binding.Harness = b.Harness
-	}
-	if b.SessionID != "" {
-		a.Binding.SessionID = b.SessionID
-	}
-	if b.Environment != "" {
-		a.Binding.Environment = b.Environment
-	}
-	if b.Workdir != "" {
-		a.Binding.Workdir = b.Workdir
-	}
-	return nil
-}
+func (a *Agent) Bind(b Binding) error { return a.Binding.mergeFrom(b) }
 
 // RotateToken replaces the agent's credential.
 func (a *Agent) RotateToken(hash string) { a.TokenHash = hash }

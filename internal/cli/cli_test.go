@@ -263,3 +263,29 @@ func TestHarnessListAndDoctor(t *testing.T) {
 		t.Fatalf("doctor broken: %d %s", code, out)
 	}
 }
+
+func TestRotateKeepsBindingAndLoginWritesProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
+	if code, _, e := admin.run("agent", "register", "--name", "cx", "--harness", "codex", "--session-id", "sess-9", "--environment", "mac", "--description", "keep me", "--no-save"); code != 0 {
+		t.Fatalf("register: %s", e)
+	}
+	code, out, e := admin.run("agent", "register", "--name", "cx", "--rotate-token", "--no-save", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"session_id": "sess-9"`) || !strings.Contains(out, `"description": "keep me"`) {
+		t.Fatalf("rotate must keep binding/description: %d %s %s", code, out, e)
+	}
+	var res struct{ Token string }
+	json.Unmarshal([]byte(out), &res)
+	tokFile := filepath.Join(home, "cx.token")
+	os.WriteFile(tokFile, []byte(res.Token+"\n"), 0o600)
+	mac := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
+	if code, _, e := mac.run("agent", "login", "--token-file", tokFile, "--workdir", home); code != 0 {
+		t.Fatalf("login: %s", e)
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".myco", "agents", "cx.yaml"))
+	if err != nil || !strings.Contains(string(b), "session_id: sess-9") || !strings.Contains(string(b), "harness: codex") {
+		t.Fatalf("profile: %s %v", b, err)
+	}
+}
