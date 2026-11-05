@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"text/tabwriter"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -107,7 +106,7 @@ after replacing an agent.`,
 					fmt.Fprintln(w, "no aliases")
 					return
 				}
-				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+				tw := newTable(w)
 				fmt.Fprintln(tw, "ALIAS\tTARGET\tUPDATED")
 				for _, a := range aliases {
 					fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Alias, a.Target, a.UpdatedAt.Local().Format("2006-01-02 15:04"))

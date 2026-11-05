@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -56,7 +55,7 @@ func harnessCommands() *Command {
 				rows = append(rows, r)
 			}
 			return e.p.Print(map[string]any{"harnesses": rows}, func(w io.Writer) {
-				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+				tw := newTable(w)
 				fmt.Fprintln(tw, "NAME\tKIND\tBINARY\tINSTALLED\tVERSION")
 				for _, r := range rows {
 					name := r.Name
@@ -117,7 +116,7 @@ func doctorCommand() *Command {
 				}
 			}
 			if err := e.p.Print(map[string]any{"ok": failed == 0, "checks": results}, func(w io.Writer) {
-				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+				tw := newTable(w)
 				fmt.Fprintln(tw, "SCOPE\tCHECK\tSTATUS\tDETAIL")
 				for _, r := range results {
 					d := r.Detail

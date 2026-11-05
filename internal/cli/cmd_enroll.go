@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -82,7 +81,7 @@ same agent back after a restart. The token can only enroll the calling session, 
 				list = []api.Enrollment{}
 			}
 			return e.p.Print(api.EnrollmentList{Enrollments: list}, func(w io.Writer) {
-				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+				tw := newTable(w)
 				fmt.Fprintln(tw, "ID\tACTIVE\tPREFIX\tHARNESS\tUSES\tEXPIRES\tNOTE")
 				for _, en := range list {
 					uses := fmt.Sprintf("%d/%d", en.Uses, en.MaxUses)

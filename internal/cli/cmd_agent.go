@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -437,7 +436,7 @@ func (e *env) agentOrAdminClient() (*client.Client, error) {
 }
 
 func agentTable(w io.Writer, agents []api.Agent) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := newTable(w)
 	fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tALIASES\tONLINE\tHARNESS\tSESSION\tENVIRONMENT\tLABELS\tCAPABILITIES\tLAST SEEN\tDESCRIPTION")
 	for _, a := range agents {
 		seen := "never"

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -350,7 +349,7 @@ func threadCommands() *Command {
 				return err
 			}
 			return e.p.Print(api.MessageList{Messages: nonNilMsgs(msgs)}, func(w io.Writer) {
-				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+				tw := newTable(w)
 				fmt.Fprintln(tw, "TIME\tFROM\tTO\tTYPE\tSTATUS\tBODY")
 				for _, m := range msgs {
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", m.CreatedAt.Local().Format(time.TimeOnly), m.From, m.To, m.Type, m.Status, truncate(m.Body, 60))

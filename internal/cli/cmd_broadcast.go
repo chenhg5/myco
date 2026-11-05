@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -130,7 +129,7 @@ this way are marked done, so they do not show up again in your inbox.`,
 
 func printBroadcast(w io.Writer, st *api.BroadcastStatus) {
 	fmt.Fprintf(w, "broadcast %s: %d/%d answered\n", st.BroadcastID, st.Answered, st.Total)
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := newTable(w)
 	fmt.Fprintln(tw, "TO\tSTATUS\tREPLY")
 	for _, d := range st.Deliveries {
 		reply := "-"

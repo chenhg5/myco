@@ -671,3 +671,17 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	}
 	return p
 }
+
+func TestTableAlignsWideCharacters(t *testing.T) {
+	var b bytes.Buffer
+	tw := newTable(&b)
+	io.WriteString(tw, "NAME\tDISPLAY\tX\n")
+	io.WriteString(tw, "a\t云端开发会话\t1\n")
+	io.WriteString(tw, "bb\tMac Claude（loops）\t2\n")
+	tw.Flush()
+	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
+	col := func(s string) int { return displayWidth(s[:strings.LastIndex(s, " ")+1]) }
+	if col(lines[0]) != col(lines[1]) || col(lines[1]) != col(lines[2]) {
+		t.Fatalf("misaligned:\n%s", b.String())
+	}
+}
