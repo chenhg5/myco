@@ -235,6 +235,7 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	var (
 		wg      sync.WaitGroup
 		started = map[string]bool{}
+		failed  = map[string]string{} // profile -> last start error
 	)
 	scan := func() int {
 		profiles, err := config.ListProfiles(dir)
@@ -245,20 +246,31 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			if started[p.Path] {
 				continue
 			}
-			started[p.Path] = true
 			if runnerHarnessFor(p.Config.Harness) == "" && p.Config.Runner.Harness == "" {
+				started[p.Path] = true
 				log.Info("skipping agent without a local runner harness", "profile", p.Path, "harness", p.Config.Harness)
 				continue
 			}
 			r, err := e.buildRunner(p.Path, p.Config, sh, runnerOverrides{}, log)
 			if err != nil {
-				log.Error("cannot start agent", "profile", p.Path, "err", toError(err, "").Message)
+				// Retried on every scan (the hub may be restarting); log
+				// only when the reason changes.
+				msg := toError(err, "").Message
+				if failed[p.Path] != msg {
+					log.Error("cannot start agent; retrying every 30s", "profile", p.Path, "err", msg)
+					failed[p.Path] = msg
+				}
 				continue
 			}
+			if _, ok := failed[p.Path]; ok {
+				log.Info("agent started after earlier failures", "profile", p.Path)
+				delete(failed, p.Path)
+			}
+			started[p.Path] = true
 			wg.Add(1)
 			go func() { defer wg.Done(); _ = r.Run(e.in.Ctx) }()
 		}
-		return len(started)
+		return len(profiles)
 	}
 	n := scan()
 	if n == 0 && sh.once {
