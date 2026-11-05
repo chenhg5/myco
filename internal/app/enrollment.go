@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ func NewEnrollmentService(enrollments domain.EnrollmentRepository, agents domain
 
 // CreateEnrollmentInput configures a new enrollment (admin).
 type CreateEnrollmentInput struct {
+	// Kind is domain.EnrollmentPlain (default) or domain.EnrollmentLink.
+	Kind         string
 	NamePrefix   string
 	Harness      string
 	AllowFrom    []string
@@ -57,13 +60,15 @@ func (s *EnrollmentService) Create(ctx context.Context, in CreateEnrollmentInput
 	if err != nil {
 		return nil, "", err
 	}
-	plain, _, err := s.tokens.Issue()
+	plain, err := s.issueEnrollToken()
 	if err != nil {
 		return nil, "", err
 	}
-	plain = EnrollTokenPrefix + strings.TrimPrefix(plain, "myco_")
+	if in.Kind == domain.EnrollmentMachine {
+		return nil, "", domain.Errf(domain.CodeInvalidArgument, "machine enrollments are created by joining with a link")
+	}
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
-		NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps, Labels: labels,
+		Kind: in.Kind, NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps, Labels: labels,
 		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL,
 	}, s.clock.Now())
 	if err != nil {
@@ -73,6 +78,113 @@ func (s *EnrollmentService) Create(ctx context.Context, in CreateEnrollmentInput
 		return e, "", nil
 	}
 	return e, plain, s.enrollments.Create(ctx, e)
+}
+
+// JoinInput is a machine joining through a link.
+type JoinInput struct {
+	// Machine is the requested machine name (usually the host name).
+	Machine string
+	DryRun  bool
+}
+
+// JoinOutput is the machine's enrollment and, unless dry-run, its token.
+type JoinOutput struct {
+	Machine *domain.Enrollment
+	Link    *domain.Enrollment
+	Token   string
+	Created bool
+}
+
+// PeekLink validates a join link without using it (for serving its page).
+func (s *EnrollmentService) PeekLink(ctx context.Context, token string) (*domain.Enrollment, error) {
+	e, err := s.authenticate(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if e.Kind != domain.EnrollmentLink {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "not a join link")
+	}
+	return e, e.Usable(s.clock.Now(), false)
+}
+
+// Join gives the calling machine its own enrollment, derived from the link:
+// same harness and allow_from restrictions, name prefix "<machine>-" and the
+// label machine=<machine>. The same machine joining again with the same link
+// gets its enrollment back with a new token, without using up the link.
+func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinInput) (*JoinOutput, error) {
+	link, err := s.PeekLink(ctx, linkToken)
+	if err != nil {
+		return nil, err
+	}
+	machine, err := domain.ParseMachineName(in.Machine)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.enrollments.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range all {
+		if e.Kind == domain.EnrollmentMachine && e.ParentID == link.ID && e.Machine == machine && e.RevokedAt.IsZero() {
+			if in.DryRun {
+				return &JoinOutput{Machine: e, Link: link}, nil
+			}
+			plain, err := s.issueEnrollToken()
+			if err != nil {
+				return nil, err
+			}
+			e.SetToken(s.tokens.Hash(plain))
+			return &JoinOutput{Machine: e, Link: link, Token: plain}, s.enrollments.Save(ctx, e)
+		}
+	}
+	if err := link.Usable(s.clock.Now(), true); err != nil {
+		return nil, err
+	}
+	// Another machine (from another link) may already use this name.
+	taken := map[string]bool{}
+	for _, e := range all {
+		if e.Kind == domain.EnrollmentMachine && e.RevokedAt.IsZero() {
+			taken[e.Machine] = true
+		}
+	}
+	base := machine
+	for i := 2; taken[machine]; i++ {
+		machine = fmt.Sprintf("%s-%d", base, i)
+	}
+	labels, err := domain.MergeLabels(link.Labels, []string{"machine=" + machine}, nil)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := s.issueEnrollToken()
+	if err != nil {
+		return nil, err
+	}
+	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
+		Kind: domain.EnrollmentMachine, ParentID: link.ID, Machine: machine, NamePrefix: machine + "-",
+		Harness: link.Harness, AllowFrom: link.AllowFrom, Capabilities: link.Capabilities, Labels: labels,
+		Note: "machine " + machine + " (joined via " + link.ID + ")",
+	}, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	if in.DryRun {
+		return &JoinOutput{Machine: e, Link: link, Created: true}, nil
+	}
+	if err := s.enrollments.ConsumeUse(ctx, link.ID); err != nil {
+		return nil, err
+	}
+	if err := s.enrollments.Create(ctx, e); err != nil {
+		return nil, err
+	}
+	return &JoinOutput{Machine: e, Link: link, Token: plain, Created: true}, nil
+}
+
+func (s *EnrollmentService) issueEnrollToken() (string, error) {
+	plain, _, err := s.tokens.Issue()
+	if err != nil {
+		return "", err
+	}
+	return EnrollTokenPrefix + strings.TrimPrefix(plain, "myco_"), nil
 }
 
 // List returns all enrollments (admin).

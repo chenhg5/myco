@@ -854,3 +854,151 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinLinks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
+	admin.run("agent", "register", "--name", "boss")
+
+	code, out, e := admin.run("link", "create", "--note", "test", "--format", "json")
+	if code != 0 {
+		t.Fatalf("link create: %s", e)
+	}
+	var link struct {
+		JoinURL string `json:"join_url"`
+		Command string
+		Link    struct{ ID string }
+	}
+	json.Unmarshal([]byte(out), &link)
+	if !strings.HasPrefix(link.JoinURL, hub+"/j/myco_enroll_") || link.Command != "curl -fsSL "+link.JoinURL+" | bash" {
+		t.Fatalf("link: %s", out)
+	}
+	tok := strings.TrimPrefix(link.JoinURL, hub+"/j/")
+
+	// One URL, three faces.
+	get := func(url string, hdr map[string]string) (int, string) {
+		req, _ := http.NewRequest("GET", url, nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	if _, body := get(link.JoinURL, map[string]string{"User-Agent": "curl/8.5.0"}); !strings.Contains(body, "export MYCO_JOIN_TOKEN='"+tok+"'") ||
+		!strings.Contains(body, "export MYCO_HUB='"+hub+"'") || !strings.Contains(body, "machine join") {
+		t.Fatalf("script:\n%s", body)
+	}
+	if _, body := get(link.JoinURL, map[string]string{"Accept": "text/html"}); !strings.Contains(body, "curl -fsSL "+link.JoinURL+" | bash") || !strings.Contains(body, "接入 myco：") {
+		t.Fatalf("html:\n%s", body)
+	}
+	if _, body := get(link.JoinURL+"?format=md", nil); !strings.Contains(body, "myco join") {
+		t.Fatalf("guide:\n%s", body)
+	}
+	if status, body := get(hub+"/j/myco_enroll_bogus", map[string]string{"Accept": "text/html"}); status != 404 || !strings.Contains(body, "不存在") {
+		t.Fatalf("bogus link: %d %s", status, body)
+	}
+
+	// A link is not an enrollment token.
+	plain := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": tok, "CLAUDE_CODE_SESSION_ID": "x1"}}
+	if code, _, _ := plain.run("agent", "enroll"); code != ExitUsage {
+		t.Fatalf("enrolling with a link must be refused, exit %d", code)
+	}
+
+	// The machine joins (what the script runs), twice.
+	m := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": tok}}
+	for i := 0; i < 2; i++ {
+		if code, out, e := m.run("machine", "join", "--machine", "Test Box.local", "--no-service", "--format", "json"); code != 0 || !strings.Contains(out, `"machine": "test-box"`) {
+			t.Fatalf("machine join #%d: %d %s %s", i, code, out, e)
+		}
+	}
+	mpath := filepath.Join(home, ".myco", "machine.yaml")
+	if st, err := os.Stat(mpath); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("machine.yaml: %v %v", st, err)
+	}
+	if _, out, _ := admin.run("link", "list", "--format", "json"); !strings.Contains(out, `"uses": 1`) || !strings.Contains(out, `"machine": "test-box"`) {
+		t.Fatalf("re-joining must not use up the link: %s", out)
+	}
+
+	// Sessions join with zero arguments: Claude Code...
+	sess := &harnessT{t, map[string]string{"CLAUDE_CODE_SESSION_ID": "abcd-1234-ef56"}}
+	code, out, e = sess.run("join", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"name": "test-box-claude-ef56"`) || !strings.Contains(out, "machine=test-box") {
+		t.Fatalf("claude join: %d %s %s", code, out, e)
+	}
+	// ...and Codex, found from its active rollout in this directory.
+	wd, _ := os.Getwd()
+	day := filepath.Join(home, ".codex", "sessions", "2026", "11", "05")
+	os.MkdirAll(day, 0o700)
+	sid := "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"
+	os.WriteFile(filepath.Join(day, "rollout-2026-11-05T10-00-00-"+sid+".jsonl"),
+		[]byte(`{"type":"session_meta","payload":{"id":"`+sid+`","cwd":"`+wd+`"}}`+"\n"), 0o600)
+	cx := &harnessT{t, map[string]string{}}
+	code, out, e = cx.run("join", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"name": "test-box-codex-4a5b"`) || !strings.Contains(out, `"session_id": "`+sid+`"`) {
+		t.Fatalf("codex join: %d %s %s", code, out, e)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".myco", "agents", "test-box-codex-4a5b.yaml")); err != nil {
+		t.Fatal("codex profile missing")
+	}
+	// No session at all: a clear error, not a guess.
+	os.RemoveAll(filepath.Join(home, ".codex"))
+	if code, _, _ := cx.run("join"); code != ExitNotFound {
+		t.Fatalf("join without a session: exit %d", code)
+	}
+
+	// Exec links make exec nodes.
+	if code, _, _ := admin.run("link", "create", "--exec"); code != ExitUsage {
+		t.Fatalf("exec link without --allow-from: exit %d", code)
+	}
+	_, out, _ = admin.run("link", "create", "--exec", "--allow-from", "boss", "--uses", "1", "--format", "json")
+	json.Unmarshal([]byte(out), &link)
+	execTok := strings.TrimPrefix(link.JoinURL, hub+"/j/")
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	ex := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": execTok, "USER": "glenn"}}
+	code, out, e = ex.run("machine", "join", "--machine", "box2", "--no-service", "--workdir", home2, "--format", "text")
+	if code != 0 || !strings.Contains(out, "exec node box2-shell ready: tasks from boss run here as glenn") {
+		t.Fatalf("exec machine join: %d %s %s", code, out, e)
+	}
+	if b, err := os.ReadFile(filepath.Join(home2, ".myco", "agents", "box2-shell.yaml")); err != nil || !strings.Contains(string(b), "harness: exec") {
+		t.Fatalf("exec profile: %v %s", err, b)
+	}
+
+	// Revoking a link stops new machines but not the ones that joined.
+	_, out, _ = admin.run("link", "list", "--format", "json")
+	admin.run("link", "revoke", "--id", strings.Split(strings.Split(out, `"id": "`)[1], `"`)[0], "--force")
+	t.Setenv("HOME", home)
+	if code, _, _ := m.run("machine", "join", "--machine", "other", "--no-service"); code != ExitPermission {
+		t.Fatalf("revoked link must not add machines, exit %d", code)
+	}
+	if _, body := get(link.JoinURL, map[string]string{"User-Agent": "curl/8"}); !strings.Contains(body, "exit 1") && !strings.Contains(body, "export MYCO_JOIN_TOKEN") {
+		t.Fatalf("script for a link: %s", body)
+	}
+	sess2 := &harnessT{t, map[string]string{"CLAUDE_CODE_SESSION_ID": "zzzz-9999"}}
+	if code, _, e := sess2.run("join"); code != 0 {
+		t.Fatalf("an already-joined machine keeps working after its link is revoked: %s", e)
+	}
+}
+
+// On the hub's own server, root's admin commands find hub and token in
+// /etc/myco/hub.env: `sudo myco link create` needs no flags.
+func TestAdminFromHubEnv(t *testing.T) {
+	hub := newHub(t)
+	t.Setenv("HOME", t.TempDir())
+	f := writeFile(t, t.TempDir(), "hub.env", "MYCO_ADMIN_TOKEN=admin-token-123456\nMYCO_HUB="+hub+"\n")
+	old := hubEnvPath
+	hubEnvPath = f
+	defer func() { hubEnvPath = old }()
+	root := &harnessT{t, map[string]string{}}
+	if code, out, e := root.run("link", "create", "--format", "json"); code != 0 || !strings.Contains(out, hub+"/j/") {
+		t.Fatalf("link create from hub.env: %d %s %s", code, out, e)
+	}
+}

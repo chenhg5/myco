@@ -47,54 +47,17 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Runner log verbosity"},
 		},
 		Run: handler(func(e *env) error {
-			m, err := manager(e)
+			res, err := e.installService(e.in.Int("max-concurrent"), e.in.String("log-level"), e.in.Bool("dry-run"))
 			if err != nil {
 				return err
-			}
-			bin, err := os.Executable()
-			if err != nil {
-				return err
-			}
-			if real, err := filepath.EvalSymlinks(bin); err == nil {
-				bin = real
-			}
-			spec := service.Spec{
-				Binary: bin,
-				Args: []string{"runner", "start", "--all", "--max-concurrent", strconv.Itoa(e.in.Int("max-concurrent")),
-					"--log-level", e.in.String("log-level")},
-				Env:     map[string]string{},
-				LogPath: filepath.Join(config.Dir(e.defaultPath), "runner.log"),
-			}
-			for _, k := range serviceEnvKeys {
-				if v := e.in.Getenv(k); v != "" {
-					spec.Env[k] = v
-				}
-			}
-			plan, err := m.PlanInstall(spec)
-			if err != nil {
-				return err
-			}
-			profiles, _ := config.ListProfiles(config.ProfilesDir(e.defaultPath))
-			if len(profiles) == 0 {
-				plan.Notes = append(plan.Notes, "no agent profiles yet; the runner will pick them up as sessions enroll (myco agent enroll)")
-			}
-			if strings.HasPrefix(bin, os.TempDir()) {
-				plan.Notes = append(plan.Notes, "warning: myco runs from a temporary directory ("+bin+"); install it permanently first")
 			}
 			if e.in.Bool("dry-run") {
-				return e.dryRun(map[string]any{"action": "install_service", "plan": plan})
+				return e.dryRun(map[string]any{"action": "install_service", "plan": res.Plan})
 			}
-			if err := os.MkdirAll(filepath.Dir(spec.LogPath), 0o700); err != nil {
-				return err
-			}
-			if err := service.Apply(plan, service.ExecRunner{}); err != nil {
-				return errorf("service_failed", ExitError, "inspect with --dry-run and the system logs", "%v", err)
-			}
-			st := waitRunning(m)
-			return e.p.Print(map[string]any{"installed": true, "plan": plan, "status": st}, func(w io.Writer) {
-				fmt.Fprintf(w, "runner service installed (%s)\nfile: %s\nlogs: %s\n", plan.Manager, plan.File, spec.LogPath)
-				printStatus(w, st)
-				for _, n := range plan.Notes {
+			return e.p.Print(map[string]any{"installed": true, "plan": res.Plan, "status": res.Status}, func(w io.Writer) {
+				fmt.Fprintf(w, "runner service installed (%s)\nfile: %s\nlogs: %s\n", res.Plan.Manager, res.Plan.File, res.LogPath)
+				printStatus(w, res.Status)
+				for _, n := range res.Plan.Notes {
 					fmt.Fprintln(w, "note:", n)
 				}
 			})
@@ -188,6 +151,68 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 
 // waitRunning polls briefly: launchd/systemd report transient states
 // (xpcproxy, activating) right after a start.
+// serviceResult describes an (attempted) runner service install.
+type serviceResult struct {
+	Plan    service.Plan
+	Status  service.Status
+	LogPath string
+}
+
+// installService installs (or re-installs, which is safe) the background
+// `myco runner start --all` service for this user. With dry it only plans.
+func (e *env) installService(maxConcurrent int, logLevel string, dry bool) (*serviceResult, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	m, err := service.Detect(home, service.ExecRunner{})
+	if err != nil {
+		return nil, errorf("unsupported", ExitError, "run `myco runner start --all` under your own process manager", "%v", err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	if real, err := filepath.EvalSymlinks(bin); err == nil {
+		bin = real
+	}
+	spec := service.Spec{
+		Binary: bin,
+		Args: []string{"runner", "start", "--all", "--max-concurrent", strconv.Itoa(maxConcurrent),
+			"--log-level", logLevel},
+		Env:     map[string]string{},
+		LogPath: filepath.Join(config.Dir(e.defaultPath), "runner.log"),
+	}
+	for _, k := range serviceEnvKeys {
+		if v := e.in.Getenv(k); v != "" {
+			spec.Env[k] = v
+		}
+	}
+	plan, err := m.PlanInstall(spec)
+	if err != nil {
+		return nil, err
+	}
+	profiles, _ := config.ListProfiles(config.ProfilesDir(e.defaultPath))
+	if len(profiles) == 0 {
+		plan.Notes = append(plan.Notes, "no agent profiles yet; the runner will pick them up as sessions join (myco join)")
+	}
+	if strings.HasPrefix(bin, os.TempDir()) {
+		plan.Notes = append(plan.Notes, "warning: myco runs from a temporary directory ("+bin+"); install it permanently first")
+	}
+	res := &serviceResult{Plan: plan, LogPath: spec.LogPath}
+	if dry {
+		return res, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(spec.LogPath), 0o700); err != nil {
+		return nil, err
+	}
+	if err := service.Apply(plan, service.ExecRunner{}); err != nil {
+		return nil, errorf("service_failed", ExitError, "inspect with `myco runner service install --dry-run` and the system logs", "%v", err)
+	}
+	res.Status = waitRunning(m)
+	return res, nil
+}
+
 func waitRunning(m service.Manager) service.Status {
 	st, _ := m.Status()
 	for i := 0; i < 10 && !st.Running; i++ {

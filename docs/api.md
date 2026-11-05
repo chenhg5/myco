@@ -30,6 +30,8 @@ Errors (any non-2xx):
 | `GET /v1/enrollments` | admin | `{enrollments}` |
 | `DELETE /v1/enrollments/{id}` | admin | Revoke |
 | `POST /v1/enroll` | enrollment token | `{name?, display_name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |
+| `POST /v1/join` | join link | `{machine}` → `{machine, token, created, name_prefix, harness, allow_from, labels}`: the machine's own enrollment token (prefix `<machine>-`, label `machine=<machine>`); the same machine re-joining gets a new token without using up the link |
+| `GET /j/{token}` | — | A join link: shell script for curl/wget, Markdown guide for agents (`?format=md` or `Accept: text/markdown`), HTML page for browsers. Links are enrollments with `kind: "link"` (`POST /v1/enrollments` with `{"kind":"link"}` returns `join_url`) |
 | `PUT /v1/me/labels` | agent | `{add?, remove?}` — change your labels (a bare key in remove drops all its values) |
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
 | `PUT /v1/me/profile` | agent | `{display_name?, description?}` — omitted fields unchanged, `""` clears |

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -190,22 +189,15 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 			binding := e.bindingFromFlags()
 			exec := e.in.String("harness") == execnode.Name
 			if exec {
-				// An exec node has no harness session: it is this user on this
-				// machine under this name, which also makes re-enrolling recover it.
 				if e.in.String("name") == "" {
 					return errorf("invalid_argument", ExitUsage, "pass --name, e.g. --name wsl-shell (it must start with the enrollment's prefix)",
 						"exec nodes need an explicit --name")
 				}
-				wd, err := filepath.Abs(orDefault(e.in.String("workdir"), "."))
+				b, err := execBinding(e, e.in.String("name"), e.in.String("workdir"))
 				if err != nil {
 					return err
 				}
-				if st, err := os.Stat(wd); err != nil || !st.IsDir() {
-					return errorf("not_found", ExitNotFound, "create it first, or pass another --workdir", "workdir %s does not exist", wd)
-				}
-				host, user := hostname(), orDefault(e.in.Getenv("USER"), "user")
-				binding = api.Binding{Harness: execnode.Name, Environment: orDefault(e.in.String("environment"), host), Workdir: wd,
-					SessionID: "exec:" + host + ":" + user + ":" + e.in.String("name")}
+				binding = b
 			}
 			res, err := e.enroll(hub, tok, api.EnrollRequest{
 				Name: e.in.String("name"), DisplayName: e.in.String("display-name"), Description: e.in.String("description"),

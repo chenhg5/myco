@@ -26,6 +26,7 @@ type Server struct {
 	messages   *app.MessageService
 	adminToken string
 	log        *slog.Logger
+	publicURL  string
 	mux        *http.ServeMux
 	ingress    map[string]Ingress
 	files      *app.FileService
@@ -86,6 +87,9 @@ func (s *Server) routes() {
 
 	// Self-service join with an enrollment token.
 	m.HandleFunc("POST /v1/enroll", s.enrollSession)
+	// A machine joins with a link; /j/{token} serves the link's script/page.
+	m.HandleFunc("POST /v1/join", s.join)
+	m.HandleFunc("GET /j/{token}", s.joinPage)
 
 	// Discovery (admin or any agent).
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
@@ -305,7 +309,7 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 	dry := dryRun(r)
 	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
-		NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
+		Kind: req.Kind, NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
 		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry,
 	})
 	if err != nil {
@@ -316,8 +320,53 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 	if dry {
 		status = http.StatusOK
 	}
-	writeJSON(w, status, api.CreateEnrollmentResponse{Enrollment: enrollmentDTO(e, s.agents.Now()), Token: tok, DryRun: dry})
+	resp := api.CreateEnrollmentResponse{Enrollment: enrollmentDTO(e, s.agents.Now()), Token: tok, DryRun: dry}
+	if e.Kind == domain.EnrollmentLink && tok != "" {
+		resp.JoinURL = s.publicBase(r) + "/j/" + tok
+	}
+	writeJSON(w, status, resp)
 }
+
+// join gives a machine its own enrollment through a join link.
+func (s *Server) join(w http.ResponseWriter, r *http.Request) {
+	var req api.JoinRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	out, err := s.enroll.Join(r.Context(), bearer(r), app.JoinInput{Machine: req.Machine, DryRun: dry})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	m := out.Machine
+	resp := api.JoinResponse{Machine: m.Machine, Token: out.Token, Created: out.Created, NamePrefix: m.NamePrefix, Harness: m.Harness,
+		AllowFrom: make([]string, 0, len(m.AllowFrom)), Labels: nonNil(m.Labels), DryRun: dry}
+	for _, n := range m.AllowFrom {
+		resp.AllowFrom = append(resp.AllowFrom, string(n))
+	}
+	status := http.StatusOK
+	if out.Created && !dry {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, resp)
+}
+
+// publicBase is the hub URL as clients see it: --public-url, else derived
+// from the request (behind a TLS proxy, X-Forwarded-Proto says https).
+func (s *Server) publicBase(r *http.Request) string {
+	if s.publicURL != "" {
+		return strings.TrimRight(s.publicURL, "/")
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+// SetPublicURL sets the hub URL used in join links.
+func (s *Server) SetPublicURL(u string) { s.publicURL = u }
 
 func (s *Server) listEnrollments(w http.ResponseWriter, r *http.Request) {
 	list, err := s.enroll.List(r.Context())

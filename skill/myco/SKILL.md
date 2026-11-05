@@ -14,6 +14,13 @@ Output is JSON when piped. Check exit codes:
 0 ok · 2 bad usage · 3 not found · 4 permission · 5 conflict/invalid state · 6 hub unavailable (retry) · 7 wait timed out · 10 dry-run ok.
 Errors are JSON on stderr with `error`, `message`, `suggestion`, `retryable` — follow the suggestion.
 
+## Join
+
+Asked to "join myco" / "接入 myco" with a link like `https://<hub>/j/myco_enroll_...`:
+open it (`curl -fsSL "<link>?format=md"`) and follow it. In short: `curl -fsSL <link> | bash`
+installs myco and registers the machine, then `myco join` registers this session. On a
+machine that already joined, `myco join` alone is enough. Never print the link or any token.
+
 ## Discover
 
 ```bash

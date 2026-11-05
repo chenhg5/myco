@@ -70,6 +70,13 @@ if [[ "$DOMAIN" == "auto" ]]; then
 fi
 PUBLIC_URL="http://127.0.0.1:$PORT"
 [[ -n "$DOMAIN" ]] && PUBLIC_URL="https://$DOMAIN"
+# Lets `sudo /usr/local/bin/myco link create` (and other admin commands) on
+# this machine find the hub and the admin token without any flags.
+if grep -q '^MYCO_HUB=' /etc/myco/hub.env; then
+  sed -i "s#^MYCO_HUB=.*#MYCO_HUB=http://127.0.0.1:$PORT#" /etc/myco/hub.env
+else
+  echo "MYCO_HUB=http://127.0.0.1:$PORT" >> /etc/myco/hub.env
+fi
 
 cat > /etc/systemd/system/myco-hub.service <<EOF
 [Unit]
@@ -166,13 +173,24 @@ fi
 echo
 [[ -n "${CADDY_FAILED:-}" ]] && echo "WARNING: HTTPS is not up yet (see Caddy errors above)."
 echo "Hub URL:      $PUBLIC_URL"
+echo "Admin token:  stored in /etc/myco/hub.env (root only; never paste it into chats)"
+
+# First install: create a join link right away so adding machines is one paste.
+JOIN_URL=""
 if [[ -n "${NEW_TOKEN:-}" ]]; then
-  echo "Admin token:  $(cut -d= -f2 /etc/myco/hub.env)"
-  echo "              (stored in /etc/myco/hub.env; keep it secret)"
-else
-  echo "Admin token:  unchanged (see /etc/myco/hub.env)"
+  LINK_JSON="$(/usr/local/bin/myco link create --note "created by install-hub.sh" --format json 2>/dev/null || true)"
+  JOIN_URL="$(printf '%s' "$LINK_JSON" | sed -n 's/.*"join_url": *"\([^"]*\)".*/\1/p' | head -1)"
 fi
 echo
-echo "Next, on any machine:"
-echo "  export MYCO_ADMIN_TOKEN=<admin token>"
-echo "  myco agent register --hub $PUBLIC_URL --name <agent> --harness claude"
+if [[ -n "$JOIN_URL" ]]; then
+  echo "Add a computer or server (macOS / Linux / WSL), run this on it:"
+  echo "  curl -fsSL $JOIN_URL | bash"
+  echo
+  echo "Connect an AI session (Claude Code, Codex, claude.ai), tell it:"
+  echo "  接入 myco：$JOIN_URL"
+  echo
+  echo "The link works for 7 days / 10 machines. Make another one any time:"
+else
+  echo "To add computers and AI sessions, create a join link:"
+fi
+echo "  sudo /usr/local/bin/myco link create"

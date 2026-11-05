@@ -143,6 +143,14 @@ func nonEmpty(s string) []string {
 
 func (e *env) hubURL() (string, error) {
 	if e.cfg.Hub == "" {
+		// A machine that joined with a link, or the hub's own host (as root).
+		if m, _ := config.LoadMachine(e.defaultPath); m != nil && m.Hub != "" {
+			e.cfg.Hub = m.Hub
+		} else if h := readHubEnv()["MYCO_HUB"]; h != "" {
+			e.cfg.Hub = h
+		}
+	}
+	if e.cfg.Hub == "" {
 		return "", errorf("not_configured", ExitUsage,
 			"pass --hub <url>, set MYCO_HUB, or run: myco agent register --hub <url> --name <name>",
 			"no hub configured")
@@ -258,8 +266,11 @@ func (e *env) adminClient() (*client.Client, error) {
 		tok = strings.TrimSpace(string(b))
 	}
 	if tok == "" {
+		tok = readHubEnv()[config.EnvAdminToken] // on the hub's host, as root
+	}
+	if tok == "" {
 		return nil, errorf("not_configured", ExitUsage,
-			"set MYCO_ADMIN_TOKEN or pass --admin-token-file <path>", "admin token required for this command")
+			"set MYCO_ADMIN_TOKEN or pass --admin-token-file <path> (on the hub's own server: sudo /usr/local/bin/myco ...)", "admin token required for this command")
 	}
 	return client.New(hub, tok)
 }
@@ -309,4 +320,22 @@ func (e *env) dryRun(v any) error {
 		return err
 	}
 	return dryRunDone{}
+}
+
+// hubEnvPath is where install-hub.sh keeps the admin token and local hub
+// URL (root-only). Admin commands run as root on that server use it.
+var hubEnvPath = "/etc/myco/hub.env"
+
+func readHubEnv() map[string]string {
+	vals, err := config.ReadEnvFile(hubEnvPath)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, kv := range vals {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			out[k] = v
+		}
+	}
+	return out
 }

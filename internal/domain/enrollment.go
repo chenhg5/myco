@@ -9,6 +9,16 @@ import (
 // HarnessExec is the harness of exec nodes (shell command execution).
 const HarnessExec = "exec"
 
+// Enrollment kinds. A plain enrollment admits sessions directly. A join link
+// is handed to people as a URL: each machine that opens it gets its own
+// machine enrollment (named after the machine, labelled machine=<name>),
+// which its sessions then use to join.
+const (
+	EnrollmentPlain   = ""
+	EnrollmentLink    = "link"
+	EnrollmentMachine = "machine"
+)
+
 // Enrollment is a limited, shareable credential that lets a session register
 // itself as an agent (or recover its agent after a restart) without the admin
 // token. It is meant to live in an environment's secrets, so every session
@@ -34,10 +44,19 @@ type Enrollment struct {
 	ExpiresAt time.Time // zero = never
 	RevokedAt time.Time // zero = active
 	CreatedAt time.Time
+	// Kind is EnrollmentPlain, EnrollmentLink or EnrollmentMachine.
+	Kind string
+	// ParentID is the link a machine enrollment came from; Machine is the
+	// machine's name (machine enrollments only).
+	ParentID string
+	Machine  string
 }
 
 // EnrollmentSpec configures a new enrollment.
 type EnrollmentSpec struct {
+	Kind         string
+	ParentID     string
+	Machine      string
 	NamePrefix   string
 	Harness      string
 	AllowFrom    []AgentName
@@ -50,6 +69,15 @@ type EnrollmentSpec struct {
 
 // NewEnrollment validates and builds an enrollment.
 func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enrollment, error) {
+	switch s.Kind {
+	case EnrollmentPlain, EnrollmentMachine:
+	case EnrollmentLink:
+		if s.NamePrefix == "" {
+			s.NamePrefix = "link-" // never used: links do not admit sessions
+		}
+	default:
+		return nil, Errf(CodeInvalidArgument, "invalid enrollment kind %q", s.Kind)
+	}
 	if s.NamePrefix == "" || !namePattern.MatchString(s.NamePrefix+"x") || len(s.NamePrefix) > 32 {
 		return nil, Errf(CodeInvalidArgument, "invalid name prefix %q", s.NamePrefix).
 			WithSuggestion("use a short lowercase prefix such as cloud-")
@@ -71,7 +99,8 @@ func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enro
 		return nil, Errf(CodeInvalidArgument, "note longer than 500 bytes")
 	}
 	e := &Enrollment{ID: id, TokenHash: tokenHash, NamePrefix: s.NamePrefix, Harness: s.Harness,
-		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Labels: s.Labels, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now}
+		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Labels: s.Labels, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now,
+		Kind: s.Kind, ParentID: s.ParentID, Machine: s.Machine}
 	if s.TTL > 0 {
 		e.ExpiresAt = now.Add(s.TTL)
 	}
@@ -102,6 +131,10 @@ func (e *Enrollment) Revoke(now time.Time) {
 
 // Admit checks that a binding may enroll under this enrollment.
 func (e *Enrollment) Admit(b Binding) error {
+	if e.Kind == EnrollmentLink {
+		return Errf(CodeInvalidArgument, "this is a join link, not an enrollment token").
+			WithSuggestion("join this machine first with: curl -fsSL <hub>/j/<link token> | bash  (then: myco join)")
+	}
 	if err := b.Validate(); err != nil {
 		return err
 	}
@@ -148,4 +181,38 @@ func sessionSlug(id string) string {
 		return "agent"
 	}
 	return string(r)
+}
+
+// SetToken replaces the token (a machine re-joining with its link).
+func (e *Enrollment) SetToken(hash string) { e.TokenHash = hash }
+
+// ParseMachineName turns a host name into a machine name usable as an agent
+// name prefix: lowercase letters, digits and dashes, at most 24 bytes.
+func ParseMachineName(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if i := strings.IndexByte(s, '.'); i > 0 {
+		s = s[:i] // drop the domain part of an FQDN
+	}
+	var b strings.Builder
+	dash := false
+	for _, c := range s {
+		ok := (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+		switch {
+		case ok:
+			b.WriteRune(c)
+			dash = false
+		case !dash && b.Len() > 0:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if len(out) > 24 {
+		out = strings.Trim(out[:24], "-")
+	}
+	if out == "" {
+		return "", Errf(CodeInvalidArgument, "invalid machine name %q", s).
+			WithSuggestion("pass --machine with letters and digits, e.g. --machine glenn-mac")
+	}
+	return out, nil
 }

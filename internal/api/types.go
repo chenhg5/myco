@@ -279,10 +279,16 @@ type Enrollment struct {
 	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
 	Active       bool       `json:"active"`
 	CreatedAt    time.Time  `json:"created_at"`
+	// Kind is "" (plain), "link" (join link) or "machine" (a machine that
+	// joined through link ParentID).
+	Kind     string `json:"kind,omitempty"`
+	ParentID string `json:"parent_id,omitempty"`
+	Machine  string `json:"machine,omitempty"`
 }
 
 // CreateEnrollmentRequest is the body of POST /v1/enrollments.
 type CreateEnrollmentRequest struct {
+	Kind         string   `json:"kind,omitempty"`
 	NamePrefix   string   `json:"name_prefix"`
 	Harness      string   `json:"harness,omitempty"`
 	AllowFrom    []string `json:"allow_from,omitempty"`
@@ -298,6 +304,25 @@ type CreateEnrollmentResponse struct {
 	Enrollment Enrollment `json:"enrollment"`
 	Token      string     `json:"token,omitempty"`
 	DryRun     bool       `json:"dry_run,omitempty"`
+	// JoinURL is set for links: the page/script a machine opens to join.
+	JoinURL string `json:"join_url,omitempty"`
+}
+
+// JoinRequest is the body of POST /v1/join (authenticated with a link).
+type JoinRequest struct {
+	Machine string `json:"machine"`
+}
+
+// JoinResponse gives a machine its own enrollment token (shown once).
+type JoinResponse struct {
+	Machine    string   `json:"machine"`
+	Token      string   `json:"token,omitempty"`
+	Created    bool     `json:"created"`
+	NamePrefix string   `json:"name_prefix"`
+	Harness    string   `json:"harness,omitempty"`
+	AllowFrom  []string `json:"allow_from"`
+	Labels     []string `json:"labels"`
+	DryRun     bool     `json:"dry_run,omitempty"`
 }
 
 // EnrollmentList wraps a list of enrollments.

@@ -105,7 +105,8 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"}}); err != nil {
+	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"},
+		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

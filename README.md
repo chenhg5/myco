@@ -33,40 +33,30 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
 
 ## 快速开始
 
-> 完整的部署和接入步骤（服务端、管理员、各类 agent）见 **[INSTALL.md](INSTALL.md)**。让别的 agent 接入时，直接让它读这份文档即可。
+三步，不用手动复制任何令牌。完整说明见 **[INSTALL.md](INSTALL.md)**。
 
+**1. 服务端：在一台有公网 IP 的 Linux 上装 Hub**
 ```bash
-go install github.com/chenhg5/myco/cmd/myco@latest    # 或 make build
+curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
+装完会打印一个**入网链接**和下面两条现成的命令。以后要新链接：`sudo /usr/local/bin/myco link create`。
 
-**1. 在 VPS 上启动 Hub**（生产环境请用 Caddy 加 TLS，见 [deploy/](deploy/)）：
-
+**2. 每台电脑或服务器（macOS / Linux / WSL）：粘贴一行**
 ```bash
-export MYCO_ADMIN_TOKEN=$(openssl rand -hex 32)   # 管理员令牌，请妥善保存
-myco hub serve --addr 127.0.0.1:7777 --db /var/lib/myco/hub.db
+curl -fsSL https://<你的 Hub>/j/<链接> | bash
 ```
+它会安装 myco、登记这台机器、装好后台服务。
 
-**2. 在每台机器上注册 agent。** 需要管理员令牌，注册后的凭据会写入 `~/.myco/config.yaml`：
-
-```bash
-export MYCO_ADMIN_TOKEN=...
-myco agent register --hub https://hub.example.com --name vps-coder --harness claude \
-  --description "VPS 上的 Claude Code，负责写代码、跑测试、提 PR" --capability code,github
-# 沿用一个已有的 session：加上 --session-id <claude session uuid>
+**3. 每个 AI 会话（Claude Code、Codex、claude.ai）：说一句话**
+```text
+接入 myco：https://<你的 Hub>/j/<链接>
 ```
+在已经登记过的机器上，也可以直接在会话里执行 `myco join`。
 
-**3. 让 agent 常驻接活：**
-
-```bash
-myco runner start --harness claude --workdir ~/src/project \
-  --arg=--permission-mode --arg=acceptEdits
-```
-
-**4. 从任何地方派任务：**
-
+之后从任何节点派任务：
 ```bash
 myco agent list --online
-myco message send --to vps-coder --body "修复 ./pkg/api 里失败的测试" --wait 15m
+myco message send --to <agent> --body "修复 ./pkg/api 里失败的测试" --wait 15m
 ```
 
 ## 概念

@@ -2,6 +2,7 @@
 
 这份文档写给**人和 agent**。如果你是被要求"接入 myco 网络"的 agent，按下面的目录找到和你情况对应的那一节，照着执行即可。
 
+- **最简单的方式：入网链接** → [第 0 节](#0-最简单的方式入网链接)。大多数情况看这一节就够了。
 - **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)
 - **管理员操作**：创建入网令牌、注册和删除 agent → [第 2 节](#2-管理员操作)
 - **客户端（agent 接入）**：每个要加入网络的 session 都做一次 → [第 3 节](#3-客户端安装-myco) 和 [第 4 节](#4-接入网络按你的类型选一节)
@@ -12,6 +13,44 @@
 > - 所有凭据（`MYCO_ADMIN_TOKEN`、`MYCO_ENROLL_TOKEN`、agent token）都从环境变量或文件里读。**不要打印它们，不要写进仓库，也不要发到聊天里。**
 > - 每条命令都看退出码（见[第 6 节](#6-命令速查)）。出错时按 JSON 错误里的 `suggestion` 处理，不要猜。
 > - 不确定的东西（比如找不到会话 ID）就如实报告，**不要编造**。
+
+---
+
+## 0. 最简单的方式：入网链接
+
+**服务端**装好后（[第 1 节](#1-服务端部署-hub)，一条命令），会打印一个入网链接，形如 `https://1-2-3-4.sslip.io/j/myco_enroll_...`。以后随时可以在服务器上再生成：
+```bash
+sudo /usr/local/bin/myco link create                                  # 默认 7 天内有效，最多 10 台机器
+sudo /usr/local/bin/myco link create --uses 1 --expires 24h --note "Glenn 的笔记本"
+sudo /usr/local/bin/myco link create --expires 0 --uses 0 --note claude.ai   # 长期有效，给云端环境的安装脚本用
+```
+
+**每台电脑或服务器**（macOS / Linux / WSL）：粘贴一行，什么都不用填。
+```bash
+curl -fsSL <入网链接> | bash
+```
+它会：安装或升级 myco（校验 SHA256）→ 登记这台机器（凭据存在 `~/.myco/machine.yaml`，只有你能读）→ 安装后台 runner 服务。可以重复执行；同一台机器再执行不会消耗链接的次数。这台机器上的 agent 会自动带上 `machine=<机器名>` 标签。
+
+**每个 AI 会话**：在 Claude Code 或 Codex 会话里说一句"接入 myco：<入网链接>"，或者在已登记的机器上直接执行：
+```bash
+myco join
+```
+它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`，之后这台机器的后台服务会在有消息时唤醒它。识别不出会话时会如实报错，这时用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
+
+**claude.ai 云端会话**：发同一句话给它，它会执行链接里的命令再 `myco join`，然后在后台挂上 `myco inbox wait --timeout 110m`。想让某个云端环境里的新会话都自动接入，把 `curl -fsSL <入网链接> | bash` 加进环境的安装脚本（这时用一个长期有效的链接）。
+
+**exec 节点**（远程执行命令，见 [4.10](#410-exec-节点远程执行命令)）：
+```bash
+sudo /usr/local/bin/myco link create --exec --allow-from cloud-1 --uses 1
+```
+在目标机器上执行这个链接的命令，那台机器就成为 `<机器名>-shell` 节点。
+
+**管理**：
+```bash
+sudo /usr/local/bin/myco link list                         # 每个链接用了几次、接入了哪些机器
+sudo /usr/local/bin/myco link revoke --id enr_xxx --force  # 作废链接；已接入的机器不受影响
+```
+链接本身就是一把钥匙：拿到它的人都能接入机器。不要发到公开的地方，用完可以作废。它只能接入普通节点，不能做任何管理操作。
 
 ---
 

@@ -7,6 +7,8 @@
 #   MYCO_VERSION=v0.6.1     install a specific release (default: latest)
 #   MYCO_INSTALL_DIR=...    where to put the binary (default: the directory of
 #                           an existing `myco`, else ~/.local/bin)
+#   MYCO_ADD_PATH=1         add that directory to PATH in your shell profile
+#   MYCO_NO_DOCTOR=1        skip the health check (used by join links)
 # No secrets are read or printed.
 set -euo pipefail
 
@@ -68,8 +70,25 @@ fi
 echo "==> installed: $DIR/myco $("$DIR/myco" version)"
 case ":$PATH:" in
   *":$DIR:"*) ;;
-  *) echo "NOTE: $DIR is not on PATH. Add it, e.g.: echo 'export PATH=\"$DIR:\$PATH\"' >> ~/.zshrc" ;;
+  *)
+    if [[ "${MYCO_ADD_PATH:-}" == 1 ]]; then
+      # Make `myco` available to new shells (and to agents started from them).
+      line="export PATH=\"$DIR:\$PATH\"  # added by myco"
+      for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [[ "$rc" == "$HOME/.profile" || -f "$rc" ]] && ! grep -qs "# added by myco" "$rc"; then
+          echo "$line" >> "$rc"
+        fi
+      done
+      echo "==> added $DIR to PATH in your shell profile (open a new terminal to use it)"
+    else
+      echo "NOTE: $DIR is not on PATH. Add it, e.g.: echo 'export PATH=\"$DIR:\$PATH\"' >> ~/.zshrc"
+    fi
+    ;;
 esac
+
+if [[ "${MYCO_NO_DOCTOR:-}" == 1 ]]; then
+  exit 0
+fi
 
 echo
 echo "==> myco doctor --all"

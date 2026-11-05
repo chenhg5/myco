@@ -528,3 +528,10 @@ func (c *Client) DownloadFile(ctx context.Context, id, dest string) (*api.File, 
 	}
 	return &api.File{ID: id, Name: name, Size: n, SHA256: got, ContentType: resp.Header.Get("Content-Type")}, path, nil
 }
+
+// Join registers this machine through a join link (c must carry the link
+// token) and returns the machine's own enrollment token.
+func (c *Client) Join(ctx context.Context, machine string, dry bool) (*api.JoinResponse, error) {
+	var out api.JoinResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/join", dryQuery(dry), api.JoinRequest{Machine: machine}, &out)
+}
