@@ -80,11 +80,13 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 }
 
 // parseEvents extracts the session id, the final agent message and, if the
-// run failed, the error reported in the event stream.
+// run failed, the most specific error in the event stream: turn.failed beats
+// error events, which beat non-fatal "error" items (Codex also uses those for
+// warnings such as missing model metadata).
 func parseEvents(stdout string) (harness.Result, string) {
 	var (
-		res      harness.Result
-		failures []string
+		res                         harness.Result
+		turnFailed, errs, itemNotes []string
 	)
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	sc.Buffer(make([]byte, 1<<20), 16<<20)
@@ -98,13 +100,48 @@ func parseEvents(stdout string) (harness.Result, string) {
 			res.SessionID = ev.ThreadID
 		case ev.Type == "item.completed" && ev.Item.Type == "agent_message":
 			res.Output = ev.Item.Text
-		case ev.Type == "error" && ev.Message != "":
-			failures = append(failures, ev.Message)
 		case ev.Type == "turn.failed" && ev.Error != nil && ev.Error.Message != "":
-			failures = append(failures, ev.Error.Message)
+			turnFailed = append(turnFailed, unwrapAPIError(ev.Error.Message))
+		case ev.Type == "error" && ev.Message != "":
+			errs = append(errs, unwrapAPIError(ev.Message))
 		case ev.Type == "item.completed" && ev.Item.Type == "error" && ev.Item.Message != "":
-			failures = append(failures, ev.Item.Message)
+			itemNotes = append(itemNotes, ev.Item.Message)
 		}
 	}
-	return res, strings.Join(failures, "; ")
+	for _, group := range [][]string{turnFailed, errs, itemNotes} {
+		if len(group) > 0 {
+			return res, strings.Join(dedupe(group), "; ")
+		}
+	}
+	return res, ""
+}
+
+// unwrapAPIError turns `{"error":{"message":"..."}}` payloads into the
+// human-readable message.
+func unwrapAPIError(s string) string {
+	var v struct {
+		Error struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(s), &v) == nil && v.Error.Message != "" {
+		if v.Error.Code != "" {
+			return v.Error.Message + " (" + v.Error.Code + ")"
+		}
+		return v.Error.Message
+	}
+	return s
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }

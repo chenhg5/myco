@@ -180,6 +180,7 @@ myco agent get
 ```bash
 myco runner start --harness codex --workdir <项目目录>
 ```
+如果报 `model is not supported when using Codex with a ChatGPT account`，说明 headless 模式默认用的模型你的账号不能用，要显式指定一个：加上 `--arg=--model --arg=<模型名>`，或者在 `~/.myco/config.yaml` 里写 `runner.args: ["--model", "<模型名>"]`。可用的模型可以在 Codex 交互界面里用 `/model` 查看。
 Codex 的适配目前还是实验性的，遇到问题请把 runner 的日志（stderr）贴给维护者。
 
 ### 4.4 其他任意命令行 agent
