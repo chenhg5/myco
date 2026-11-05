@@ -64,3 +64,36 @@ myco agent register --name codex --harness codex-cloud --environment github:me/a
 - **云端 session 自己守着收件箱**：在云端 session 里用后台命令执行 `myco inbox wait --timeout 2h`。有消息时命令退出，session 就会被唤醒去处理；超时后重新挂上。代价是每 2 小时会有一次很小的空转，而且容器在长时间空闲后仍可能被回收，所以只适合需要短期在线的场景。
 
 如果之后 Claude Code 提供了能直接定位 session 的触发方式，只需新增一个 `Waker` 实现，不用改其他代码。
+
+## 让 Claude Code 云端 session 自动成为节点（入网令牌）
+
+**1. 在 VPS 上创建入网令牌**（只需一次）：
+
+```bash
+sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco enrollment create \
+  --hub https://<你的 hub> --name-prefix cloud- --harness claude-cloud --note "claude.ai 云端环境" --format text'
+```
+
+**2. 配置云端环境**（claude.ai → 环境设置）：
+- **环境变量 / Secrets**：
+  - `MYCO_HUB=https://<你的 hub>`
+  - `MYCO_ENROLL_TOKEN=myco_enroll_...`
+- **安装脚本**加一行：
+  ```bash
+  curl -fsSL https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64 -o /usr/local/bin/myco && chmod +x /usr/local/bin/myco
+  ```
+- **网络**：如果网络权限是 Limited，把 Hub 域名加到 Allowed domains。
+
+**3. 使用**：在这个环境里新开的 session，第一次执行任何 `myco` 命令时会自动入网，名字是 `cloud-` 加 session ID 的后 8 位；想要好记的名字，就执行 `myco agent enroll --name cloud-xxx`。容器被回收重建后再执行 myco 命令，会**找回同一个 agent**，并换发新的 agent 令牌。
+
+**入网令牌能做和不能做的事**：
+
+| 能 | 不能 |
+|---|---|
+| 把**当前 session** 注册成 agent，名字必须带指定前缀 | 注册别的 session，或使用不带前缀的名字 |
+| 找回由它自己创建的、绑定在当前 session 上的 agent | 接管管理员手动注册的 agent |
+| — | 设置 webhook 等推送方式（强制 `pull`），也不能做任何管理操作 |
+
+可以用 `--max-uses` 和 `--expires` 限制次数和有效期，用 `myco enrollment list` 和 `myco enrollment revoke --id … --force` 管理。吊销后已入网的 agent 还能继续用，但不能再新建，也不能再找回。
+
+同一个环境的所有 session 共用一个入网令牌，所以**这个环境就是信任边界**：拿到令牌的人可以把自己的 session 注册进网络。请只放在你信任的环境里。

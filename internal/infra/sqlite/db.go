@@ -44,6 +44,20 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_inbox  ON messages(to_agent, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_reply  ON messages(reply_to);
+CREATE TABLE IF NOT EXISTS enrollments (
+  id            TEXT PRIMARY KEY,
+  token_hash    TEXT NOT NULL UNIQUE,
+  name_prefix   TEXT NOT NULL,
+  harness       TEXT NOT NULL DEFAULT '',
+  allow_from    TEXT NOT NULL DEFAULT '[]',
+  capabilities  TEXT NOT NULL DEFAULT '[]',
+  note          TEXT NOT NULL DEFAULT '',
+  max_uses      INTEGER NOT NULL DEFAULT 0,
+  uses          INTEGER NOT NULL DEFAULT 0,
+  expires_at    INTEGER NOT NULL DEFAULT 0,
+  revoked_at    INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -68,6 +82,10 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	return db, nil
 }
 
@@ -80,6 +98,7 @@ var agentColumnsV2 = [][2]string{
 	{"delivery_url", "TEXT NOT NULL DEFAULT ''"},
 	{"delivery_secret", "TEXT NOT NULL DEFAULT ''"},
 	{"delivery_params", "TEXT NOT NULL DEFAULT '{}'"},
+	{"enrolled_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

@@ -136,8 +136,11 @@ type Agent struct {
 	Delivery     Delivery
 	// AllowFrom restricts who may send tasks/notes to this agent.
 	// Empty means anyone. Replies are always accepted.
-	AllowFrom  []AgentName
-	TokenHash  string
+	AllowFrom []AgentName
+	TokenHash string
+	// EnrolledBy is the enrollment that created this agent ("" if the admin
+	// registered it). Only that enrollment can recover the agent.
+	EnrolledBy string
 	CreatedAt  time.Time
 	LastSeenAt time.Time
 }

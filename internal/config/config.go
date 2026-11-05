@@ -17,6 +17,9 @@ const (
 	EnvHub        = "MYCO_HUB"
 	EnvToken      = "MYCO_TOKEN"
 	EnvAdminToken = "MYCO_ADMIN_TOKEN"
+	// EnvEnrollToken lets a session join the network by itself (see
+	// `myco enrollment create`). Safe to put in an environment's secrets.
+	EnvEnrollToken = "MYCO_ENROLL_TOKEN"
 )
 
 // Config is the on-disk client configuration.

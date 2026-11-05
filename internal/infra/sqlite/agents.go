@@ -19,14 +19,14 @@ func NewAgentRepo(db *sql.DB) *AgentRepo { return &AgentRepo{db: db} }
 var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
-  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params`
+  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
-		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params)
+		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -99,6 +99,14 @@ func (r *AgentRepo) Touch(ctx context.Context, name domain.AgentName, at time.Ti
 	return internal(err)
 }
 
+func (r *AgentRepo) FindBySession(ctx context.Context, harness, sessionID string) (*domain.Agent, error) {
+	a, err := scanAgent(r.db.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE session_id=? AND harness=? LIMIT 1`, sessionID, harness))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.Errf(domain.CodeNotFound, "no agent bound to session %s", sessionID)
+	}
+	return a, internal(err)
+}
+
 type scanner interface{ Scan(dest ...any) error }
 
 func scanAgent(s scanner) (*domain.Agent, error) {
@@ -109,7 +117,7 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	)
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
-		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params); err != nil {
+		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)

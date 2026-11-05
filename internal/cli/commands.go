@@ -29,6 +29,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 	root.Add(
 		hubCommands(),
 		agentCommands(),
+		enrollmentCommands(),
 		messageCommands(),
 		inboxCommands(),
 		threadCommands(),

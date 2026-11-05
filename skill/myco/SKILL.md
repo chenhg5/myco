@@ -61,7 +61,10 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
 
 A myco agent is one session of one harness in one environment (`myco agent get` shows
 `binding`). Keep working in that session; do not start a fresh one for myco work.
-Inside a Claude Code cloud session, bind yourself once with `myco agent bind --detect`.
+Inside a Claude Code cloud session with `MYCO_ENROLL_TOKEN` set, the first myco command
+enrolls you automatically (same session → same agent after restarts). Give yourself a
+readable name once with `myco agent enroll --name <prefix>...`. Without an enrollment
+token, bind an existing agent with `myco agent bind --detect`.
 
 ## Woken by a wake message (no runner)
 

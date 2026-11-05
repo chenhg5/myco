@@ -35,6 +35,7 @@ type Agent struct {
 	Binding      Binding    `json:"binding"`
 	Delivery     Delivery   `json:"delivery"`
 	AllowFrom    []string   `json:"allow_from"`
+	EnrolledBy   string     `json:"enrolled_by,omitempty"`
 	Online       bool       `json:"online"`
 	CreatedAt    time.Time  `json:"created_at"`
 	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
@@ -153,4 +154,53 @@ type Error struct {
 type Health struct {
 	OK      bool   `json:"ok"`
 	Version string `json:"version"`
+}
+
+// Enrollment is the public view of an enrollment (the token is never shown
+// again after creation).
+type Enrollment struct {
+	ID           string     `json:"id"`
+	NamePrefix   string     `json:"name_prefix"`
+	Harness      string     `json:"harness,omitempty"`
+	AllowFrom    []string   `json:"allow_from"`
+	Capabilities []string   `json:"capabilities"`
+	Note         string     `json:"note,omitempty"`
+	MaxUses      int        `json:"max_uses"`
+	Uses         int        `json:"uses"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	Active       bool       `json:"active"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// CreateEnrollmentRequest is the body of POST /v1/enrollments.
+type CreateEnrollmentRequest struct {
+	NamePrefix   string   `json:"name_prefix"`
+	Harness      string   `json:"harness,omitempty"`
+	AllowFrom    []string `json:"allow_from,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	Note         string   `json:"note,omitempty"`
+	MaxUses      int      `json:"max_uses,omitempty"`
+	TTLSeconds   int64    `json:"ttl_seconds,omitempty"`
+}
+
+// CreateEnrollmentResponse returns the enrollment and, once, its token.
+type CreateEnrollmentResponse struct {
+	Enrollment Enrollment `json:"enrollment"`
+	Token      string     `json:"token,omitempty"`
+	DryRun     bool       `json:"dry_run,omitempty"`
+}
+
+// EnrollmentList wraps a list of enrollments.
+type EnrollmentList struct {
+	Enrollments []Enrollment `json:"enrollments"`
+}
+
+// EnrollRequest is the body of POST /v1/enroll (authenticated with an
+// enrollment token).
+type EnrollRequest struct {
+	Name         string   `json:"name,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	Binding      Binding  `json:"binding"`
 }

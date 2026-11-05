@@ -26,6 +26,10 @@ Errors (any non-2xx):
 | `GET /v1/health` | — | `{"ok":true,"version":"v1"}` |
 | `POST /v1/agents` | admin | Register `{name, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
+| `POST /v1/enrollments` | admin | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
+| `GET /v1/enrollments` | admin | `{enrollments}` |
+| `DELETE /v1/enrollments/{id}` | admin | Revoke |
+| `POST /v1/enroll` | enrollment token | `{name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |
 | `GET /v1/agents?capability=&online=true` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent |
 | `GET /v1/me` | agent | The calling agent |

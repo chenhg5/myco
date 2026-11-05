@@ -226,7 +226,7 @@ creates the session; use this to adopt an existing session or to move an agent.`
 		}),
 	}
 
-	return (&Command{Name: "agent", Summary: "Register, bind and discover agents"}).Add(register, bind, list, get, remove)
+	return (&Command{Name: "agent", Summary: "Register, bind and discover agents"}).Add(register, agentEnrollCommand(), bind, list, get, remove)
 }
 
 // bindingFromFlags merges --detect results with explicit flags.

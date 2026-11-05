@@ -20,6 +20,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	enroll     *app.EnrollmentService
 	agents     *app.AgentService
 	messages   *app.MessageService
 	adminToken string
@@ -43,8 +44,8 @@ type Ingress interface {
 }
 
 // New builds the HTTP handler. adminToken guards agent administration.
-func New(agents *app.AgentService, messages *app.MessageService, adminToken string, log *slog.Logger, ingress ...Ingress) *Server {
-	s := &Server{agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux(), ingress: map[string]Ingress{}}
+func New(agents *app.AgentService, messages *app.MessageService, enroll *app.EnrollmentService, adminToken string, log *slog.Logger, ingress ...Ingress) *Server {
+	s := &Server{enroll: enroll, agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux(), ingress: map[string]Ingress{}}
 	for _, in := range ingress {
 		s.ingress[in.Kind()] = in
 	}
@@ -66,6 +67,12 @@ func (s *Server) routes() {
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
+	m.HandleFunc("POST /v1/enrollments", s.admin(s.createEnrollment))
+	m.HandleFunc("GET /v1/enrollments", s.admin(s.listEnrollments))
+	m.HandleFunc("DELETE /v1/enrollments/{id}", s.admin(s.revokeEnrollment))
+
+	// Self-service join with an enrollment token.
+	m.HandleFunc("POST /v1/enroll", s.enrollSession)
 
 	// Discovery (admin or any agent).
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
@@ -253,6 +260,71 @@ func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
 		accepted++
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"received": len(replies), "accepted": accepted})
+}
+
+func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
+	var req api.CreateEnrollmentRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
+		NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities,
+		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusCreated
+	if dry {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, api.CreateEnrollmentResponse{Enrollment: enrollmentDTO(e, s.agents.Now()), Token: tok, DryRun: dry})
+}
+
+func (s *Server) listEnrollments(w http.ResponseWriter, r *http.Request) {
+	list, err := s.enroll.List(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.EnrollmentList{Enrollments: make([]api.Enrollment, 0, len(list))}
+	for _, e := range list {
+		out.Enrollments = append(out.Enrollments, enrollmentDTO(e, s.agents.Now()))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) revokeEnrollment(w http.ResponseWriter, r *http.Request) {
+	dry := dryRun(r)
+	e, err := s.enroll.Revoke(r.Context(), r.PathValue("id"), dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"enrollment": enrollmentDTO(e, s.agents.Now()), "revoked": !dry, "dry_run": dry})
+}
+
+func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
+	var req api.EnrollRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	out, err := s.enroll.Enroll(r.Context(), bearer(r), app.EnrollInput{
+		Name: req.Name, Description: req.Description, Capabilities: req.Capabilities,
+		Binding: bindingFromAPI(req.Binding), DryRun: dry,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if out.Created && !dry {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
 }
 
 func bindingFromAPI(b api.Binding) domain.Binding {

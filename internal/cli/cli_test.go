@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -93,5 +94,38 @@ func TestCLIEndToEnd(t *testing.T) {
 	}
 	if code, out, _ := alice.run("--help"); code != 0 || !strings.Contains(out, "Exit codes") {
 		t.Errorf("help: %d %s", code, out)
+	}
+}
+
+func TestCLIAutoEnroll(t *testing.T) {
+	hub := newHub(t)
+	dir := t.TempDir()
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "admin.yaml")}}
+	code, out, e := admin.run("enrollment", "create", "--name-prefix", "cloud-", "--harness", "claude-cloud", "--format", "json")
+	if code != 0 {
+		t.Fatalf("create enrollment: %d %s", code, e)
+	}
+	var created struct{ Token string }
+	json.Unmarshal([]byte(out), &created)
+
+	session := &harnessT{t, map[string]string{
+		"MYCO_HUB": hub, "MYCO_ENROLL_TOKEN": created.Token, "MYCO_CONFIG": filepath.Join(dir, "s.yaml"),
+		"CLAUDE_CODE_REMOTE_SESSION_ID": "cse_01AbCdEfGh12345678", "CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE": "cloud_default",
+	}}
+	// Any agent command auto-enrolls on first use.
+	code, out, e = session.run("agent", "get", "--format", "json")
+	if code != 0 || !strings.Contains(e, "enrolled as cloud-") || !strings.Contains(out, `"session_id": "session_01AbCdEfGh12345678"`) {
+		t.Fatalf("auto-enroll: %d out=%s err=%s", code, out, e)
+	}
+	// Container restart: config lost, same session -> same agent.
+	os.Remove(filepath.Join(dir, "s.yaml"))
+	code, out2, _ := session.run("agent", "enroll", "--format", "json")
+	if code != 0 || !strings.Contains(out2, `"created": false`) {
+		t.Fatalf("recover: %d %s", code, out2)
+	}
+	// Enrollment token cannot administer the hub.
+	session.env["MYCO_ADMIN_TOKEN"] = created.Token
+	if code, _, _ := session.run("agent", "register", "--name", "evil"); code != ExitPermission {
+		t.Fatalf("enroll token used as admin: exit %d", code)
 	}
 }

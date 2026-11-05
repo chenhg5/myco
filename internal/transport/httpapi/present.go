@@ -19,11 +19,23 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 			Environment: a.Binding.Environment, Workdir: a.Binding.Workdir},
 		Delivery: api.Delivery{Mode: a.Delivery.Mode, URL: redactURL(a.Delivery.URL),
 			HasSecret: a.Delivery.Secret != "", Params: a.Delivery.Params},
-		AllowFrom: make([]string, 0, len(a.AllowFrom)),
-		Online:    a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
-		CreatedAt: a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
+		AllowFrom:  make([]string, 0, len(a.AllowFrom)),
+		EnrolledBy: a.EnrolledBy,
+		Online:     a.IsOnline(s.agents.Now(), s.agents.OnlineWindow()),
+		CreatedAt:  a.CreatedAt, LastSeenAt: timePtr(a.LastSeenAt),
 	}
 	for _, n := range a.AllowFrom {
+		out.AllowFrom = append(out.AllowFrom, string(n))
+	}
+	return out
+}
+
+func enrollmentDTO(e *domain.Enrollment, now time.Time) api.Enrollment {
+	out := api.Enrollment{ID: e.ID, NamePrefix: e.NamePrefix, Harness: e.Harness, Capabilities: nonNil(e.Capabilities),
+		AllowFrom: make([]string, 0, len(e.AllowFrom)), Note: e.Note, MaxUses: e.MaxUses, Uses: e.Uses,
+		ExpiresAt: timePtr(e.ExpiresAt), RevokedAt: timePtr(e.RevokedAt), CreatedAt: e.CreatedAt,
+		Active: e.Usable(now, true) == nil}
+	for _, n := range e.AllowFrom {
 		out.AllowFrom = append(out.AllowFrom, string(n))
 	}
 	return out

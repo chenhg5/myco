@@ -23,6 +23,7 @@ myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。�
   - 提供 `myco schema` 自省命令
 - **agent = session + 环境 + harness**：注册时会记录绑定关系，runner 每次都续接**同一个** session。新开的空白 session 就算一个新的 agent。
 - **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker，来一条消息就续接一次它的 session。
+- **入网令牌**：把它放进云端环境的 Secrets，新开的 Claude Code session 会自动注册成 agent，重启后找回同一个身份。详见 [docs/delivery.md](docs/delivery.md#让-claude-code-云端-session-自动成为节点入网令牌)。
 - **可插拔的唤醒方式**：`pull`、`webhook`、`claude_routine`、`github_dispatch`、`github_issue`。外部系统的回复（比如 Codex 在 GitHub 上的评论）通过 ingress 转成 myco 消息。详见 [docs/delivery.md](docs/delivery.md)。
 
 ## 快速开始
@@ -139,6 +140,7 @@ HTTP API 见 [docs/api.md](docs/api.md)。
 
 - [x] 第 1 阶段：Hub、CLI、runner（claude / codex / shell），长轮询，租约，幂等，白名单
 - [x] 第 2 阶段：session 绑定；Waker 接口（webhook、claude_routine、github_dispatch、github_issue）；GitHub ingress；`inbox wait`
+- [x] 入网令牌：云端 session 自助入网、按 session 找回身份
 - [ ] 唤醒指定的 Claude Code 云端 session：平台目前不支持，详见 [docs/delivery.md](docs/delivery.md)
 - [ ] 第 3 阶段：MCP 端点（Streamable HTTP），让 ChatGPT、Claude 以连接器方式接入
 - [ ] 第 4 阶段：主调度 agent 的模板和调度策略

@@ -15,6 +15,19 @@ type AgentRepository interface {
 	List(ctx context.Context) ([]*Agent, error)
 	Delete(ctx context.Context, name AgentName) error
 	Touch(ctx context.Context, name AgentName, at time.Time) error
+	// FindBySession returns the agent bound to (harness, sessionID).
+	FindBySession(ctx context.Context, harness, sessionID string) (*Agent, error)
+}
+
+// EnrollmentRepository persists enrollments.
+type EnrollmentRepository interface {
+	Create(ctx context.Context, e *Enrollment) error
+	Get(ctx context.Context, id string) (*Enrollment, error)
+	GetByTokenHash(ctx context.Context, hash string) (*Enrollment, error)
+	List(ctx context.Context) ([]*Enrollment, error)
+	Save(ctx context.Context, e *Enrollment) error
+	// ConsumeUse atomically increments Uses if a use is still available.
+	ConsumeUse(ctx context.Context, id string) error
 }
 
 // MutateFunc changes a loaded message and may return new messages that must

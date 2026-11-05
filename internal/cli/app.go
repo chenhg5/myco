@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
@@ -139,12 +140,52 @@ func (e *env) agentClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	if e.cfg.Token == "" && e.in.Getenv(config.EnvEnrollToken) != "" {
+		if err := e.autoEnroll(hub); err != nil {
+			return nil, err
+		}
+	}
 	if e.cfg.Token == "" {
 		return nil, errorf("not_configured", ExitUsage,
-			"set MYCO_TOKEN, or register this agent: myco agent register --name <name>",
+			"set MYCO_TOKEN or MYCO_ENROLL_TOKEN, or register this agent: myco agent register --name <name>",
 			"no agent token configured")
 	}
 	return client.New(hub, e.cfg.Token)
+}
+
+// autoEnroll joins the network as the current session using
+// MYCO_ENROLL_TOKEN (idempotent: the same session gets the same agent back)
+// and saves the resulting credentials.
+func (e *env) autoEnroll(hub string) error {
+	b := detectBinding(e.in.Getenv)
+	if b.SessionID == "" {
+		return errorf("not_configured", ExitUsage,
+			"run `myco agent enroll --session-id <id> --harness <name>` to enroll explicitly",
+			"MYCO_ENROLL_TOKEN is set but no session could be detected for auto-enrollment")
+	}
+	res, err := e.enroll(hub, e.in.Getenv(config.EnvEnrollToken), api.EnrollRequest{Binding: b}, false)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(e.in.Stderr, "myco: enrolled as %s (session %s); credentials saved to %s\n", res.Agent.Name, b.SessionID, e.cfgPath)
+	return nil
+}
+
+// enroll calls POST /v1/enroll and, unless dry, saves hub/agent/token.
+func (e *env) enroll(hub, token string, req api.EnrollRequest, dry bool) (*api.RegisterResponse, error) {
+	c, err := client.New(hub, token)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.Enroll(e.in.Ctx, req, dry)
+	if err != nil || dry {
+		return res, err
+	}
+	e.cfg.Hub, e.cfg.Agent, e.cfg.Token = hub, res.Agent.Name, res.Token
+	if err := config.Save(e.cfgPath, e.cfg); err != nil {
+		return nil, fmt.Errorf("enrolled but saving config failed: %w", err)
+	}
+	return res, nil
 }
 
 // adminClient returns a client authenticated with the hub admin token.

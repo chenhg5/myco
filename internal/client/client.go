@@ -192,6 +192,31 @@ func (c *Client) WaitPending(ctx context.Context, total time.Duration) ([]api.Me
 	}
 }
 
+// CreateEnrollment issues an enrollment token (admin).
+func (c *Client) CreateEnrollment(ctx context.Context, req api.CreateEnrollmentRequest, dry bool) (*api.CreateEnrollmentResponse, error) {
+	var out api.CreateEnrollmentResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/enrollments", dryQuery(dry), req, &out)
+}
+
+// ListEnrollments lists enrollments (admin).
+func (c *Client) ListEnrollments(ctx context.Context) ([]api.Enrollment, error) {
+	var out api.EnrollmentList
+	return out.Enrollments, c.do(ctx, http.MethodGet, "/v1/enrollments", nil, nil, &out)
+}
+
+// RevokeEnrollment disables an enrollment (admin).
+func (c *Client) RevokeEnrollment(ctx context.Context, id string, dry bool) (map[string]any, error) {
+	var out map[string]any
+	return out, c.do(ctx, http.MethodDelete, "/v1/enrollments/"+esc(id), dryQuery(dry), nil, &out)
+}
+
+// Enroll joins (or rejoins) the network as the calling session; the client
+// must be built with an enrollment token.
+func (c *Client) Enroll(ctx context.Context, req api.EnrollRequest, dry bool) (*api.RegisterResponse, error) {
+	var out api.RegisterResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/enroll", dryQuery(dry), req, &out)
+}
+
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
 	var out api.SendResponse

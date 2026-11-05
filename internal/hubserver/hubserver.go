@@ -60,13 +60,14 @@ func Build(o Options) (*Hub, error) {
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
+	enroll := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), agentsRepo, security.Tokens{}, ids, clock)
 	dispatcher := app.NewDispatcher(agentsRepo, msgRepo, wakers, clock, o.Dispatch, o.Log)
 	messages.SetObserver(dispatcher)
 	var ing []httpapi.Ingress
 	if o.GitHubWebhookSecret != "" {
 		ing = append(ing, &ingress.GitHub{Secret: o.GitHubWebhookSecret, AllowedAuthors: o.GitHubReplyFrom})
 	}
-	return &Hub{Handler: httpapi.New(agents, messages, o.AdminToken, o.Log, ing...), Dispatcher: dispatcher, Close: db.Close}, nil
+	return &Hub{Handler: httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...), Dispatcher: dispatcher, Close: db.Close}, nil
 }
 
 // Run serves until ctx is cancelled.
