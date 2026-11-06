@@ -14,15 +14,19 @@ type Launchd struct {
 	Home string
 	UID  int
 	R    Runner
+	// ID names the service (default: the runner's).
+	ID ID
 }
+
+func (l *Launchd) label() string { return l.ID.orDefault().Label }
 
 func (l *Launchd) Name() string { return "launchd" }
 
 func (l *Launchd) file() string {
-	return filepath.Join(l.Home, "Library", "LaunchAgents", Label+".plist")
+	return filepath.Join(l.Home, "Library", "LaunchAgents", l.label()+".plist")
 }
 func (l *Launchd) domain() string  { return fmt.Sprintf("gui/%d", l.UID) }
-func (l *Launchd) service() string { return l.domain() + "/" + Label }
+func (l *Launchd) service() string { return l.domain() + "/" + l.label() }
 
 // Plist renders the LaunchAgent definition.
 func (l *Launchd) Plist(s Spec) string {
@@ -32,7 +36,7 @@ func (l *Launchd) Plist(s Spec) string {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>` + Label + `</string>
+  <key>Label</key><string>` + l.label() + `</string>
   <key>ProgramArguments</key>
   <array>
 `)

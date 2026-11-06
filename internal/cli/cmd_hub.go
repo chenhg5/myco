@@ -3,12 +3,14 @@ package cli
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/app"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/chenhg5/myco/internal/infra/tunnel"
 )
 
 func hubCommands() *Command {
@@ -34,6 +36,9 @@ func hubCommands() *Command {
 			{Name: "files-dir", Kind: String, Help: "Where attachment contents are stored (default: <db dir>/files)"},
 			{Name: "max-file-size", Kind: Int, Default: "50", Help: "Max attachment size in MB"},
 			{Name: "file-ttl", Kind: Duration, Default: "168h", Help: "Delete attachments after this long (0 = keep)"},
+			{Name: "tunnel", Kind: Enum, Values: tunnel.Kinds, Help: "Publish the hub through cloudflare (cloudflared) or tailscale (Funnel); its URL becomes --public-url"},
+			{Name: "tunnel-hostname", Kind: String, Help: "cloudflare: your hostname, e.g. hub.example.com (empty = temporary trycloudflare.com URL)"},
+			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
 		},
 		Run: func(in *Invocation) error {
 			tok := in.Getenv(config.EnvAdminToken)
@@ -42,7 +47,7 @@ func hubCommands() *Command {
 				if err != nil {
 					return errorf("invalid_argument", ExitUsage, "", "cannot read --admin-token-file: %v", err)
 				}
-				tok = strings.TrimSpace(string(b))
+				tok = tokenFromFile(string(b))
 			}
 			if len(tok) < 16 {
 				return errorf("not_configured", ExitUsage, "generate one with: openssl rand -hex 32",
@@ -59,8 +64,17 @@ func hubCommands() *Command {
 				}
 				ghSecret = strings.TrimSpace(string(b))
 			}
+			var tun tunnel.Tunnel
+			if k := in.String("tunnel"); k != "" {
+				var err error
+				if tun, err = tunnel.New(tunnel.Options{Kind: k, Hostname: in.String("tunnel-hostname"), Name: in.String("tunnel-name"),
+					StateDir: filepath.Dir(in.String("db")), Log: newLogger(in.String("log-level"))}); err != nil {
+					return errorf("invalid_argument", ExitUsage, "", "%v", err)
+				}
+			}
 			return hubserver.Run(in.Ctx, hubserver.Options{
-				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
+				Tunnel: tun,
+				Addr:   in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
@@ -69,7 +83,18 @@ func hubCommands() *Command {
 			})
 		},
 	}
-	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve)
+	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand())
+}
+
+// tokenFromFile reads an admin token file: either just the token, or
+// KEY=VALUE lines with MYCO_ADMIN_TOKEN (a hub.env file).
+func tokenFromFile(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), config.EnvAdminToken+"="); ok {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return strings.TrimSpace(content)
 }
 
 func newLogger(level string) *slog.Logger {

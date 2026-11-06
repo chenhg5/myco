@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1134,5 +1135,81 @@ func TestRunnerSurvivesMachineRename(t *testing.T) {
 	}
 	if got := env("elsewhere"); got != "192.168.1.210" {
 		t.Fatalf("a session not on this machine must stay bound to its machine, got %q", got)
+	}
+}
+
+// hub serve --tunnel: the tunnel's URL becomes the hub's public URL (health
+// and join links). The tunnel CLIs are faked with scripts on PATH.
+func TestHubServeWithTunnels(t *testing.T) {
+	bin := t.TempDir()
+	os.WriteFile(filepath.Join(bin, "cloudflared"), []byte("#!/bin/sh\necho 'INF Requesting new quick Tunnel on trycloudflare.com...' >&2\necho 'INF |  https://fake-quick-tunnel.trycloudflare.com  |' >&2\nexec sleep 60\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "tailscale"), []byte(`#!/bin/sh
+case "$1" in
+  status) echo '{"BackendState":"Running","Self":{"DNSName":"glenn-mac.tail1234.ts.net."}}' ;;
+  funnel) echo "funnel $*" >> "$(dirname "$0")/funnel.log"; echo "Available on the internet: https://glenn-mac.tail1234.ts.net/" ;;
+esac
+`), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, tc := range []struct{ kind, want string }{
+		{"cloudflare", "https://fake-quick-tunnel.trycloudflare.com"},
+		{"tailscale", "https://glenn-mac.tail1234.ts.net"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			dir := t.TempDir()
+			ln, _ := net.Listen("tcp", "127.0.0.1:0")
+			addr := ln.Addr().String()
+			ln.Close()
+			ctx, stop := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				var out, errb bytes.Buffer
+				Run(ctx, []string{"hub", "serve", "--addr", addr, "--db", filepath.Join(dir, "hub.db"), "--tunnel", tc.kind, "--log-level", "error"},
+					strings.NewReader(""), &out, &errb, func(k string) string {
+						return map[string]string{"MYCO_ADMIN_TOKEN": "admin-token-123456"}[k]
+					}, false)
+			}()
+			defer func() { stop(); <-done }()
+			local := "http://" + addr
+			got, err := waitHub(context.Background(), local, "", 15*time.Second)
+			if err != nil || got != tc.want {
+				t.Fatalf("public url: %q %v", got, err)
+			}
+			admin := &harnessT{t, map[string]string{"MYCO_HUB": local, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "a.yaml")}}
+			if _, out, _ := admin.run("link", "create", "--format", "json"); !strings.Contains(out, `"join_url": "`+tc.want+`/j/`) {
+				t.Fatalf("join link should use the tunnel URL: %s", out)
+			}
+		})
+	}
+	if b, _ := os.ReadFile(filepath.Join(bin, "funnel.log")); !strings.Contains(string(b), "funnel --bg") {
+		t.Fatalf("tailscale funnel was not configured: %q", b)
+	}
+}
+
+func TestHubEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	created, err := writeHubEnv(dir, "http://127.0.0.1:7777")
+	if err != nil || !created {
+		t.Fatalf("create: %v %v", created, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "hub.env"))
+	tok := tokenFromFile(string(b))
+	if len(tok) != 64 {
+		t.Fatalf("token %q", tok)
+	}
+	// Re-running keeps the token and updates the URL.
+	if created, _ := writeHubEnv(dir, "http://127.0.0.1:8888"); created {
+		t.Fatal("re-run must keep the existing hub")
+	}
+	b, _ = os.ReadFile(filepath.Join(dir, "hub.env"))
+	if tokenFromFile(string(b)) != tok || !strings.Contains(string(b), "MYCO_HUB=http://127.0.0.1:8888") {
+		t.Fatalf("hub.env after re-run:\n%s", b)
+	}
+	if st, _ := os.Stat(filepath.Join(dir, "hub.env")); st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode().Perm())
+	}
+	if tokenFromFile("  plain-token-value \n") != "plain-token-value" {
+		t.Fatal("plain token files still work")
 	}
 }

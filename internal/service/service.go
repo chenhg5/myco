@@ -69,22 +69,46 @@ func (ExecRunner) Run(name string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// Label is the service identifier.
+// Label is the runner service's launchd label.
 const Label = "ai.myco.runner"
+
+// ID names a service: its launchd label, systemd unit and description.
+type ID struct {
+	Label       string
+	Unit        string
+	Description string
+}
+
+// RunnerID is `myco runner start --all`; HubID is a hub on a personal
+// machine (`myco hub up`).
+var (
+	RunnerID = ID{Label: Label, Unit: "myco-runner.service", Description: "myco runner (serves every local agent)"}
+	HubID    = ID{Label: "ai.myco.hub", Unit: "myco-hub.service", Description: "myco hub"}
+)
+
+func (id ID) orDefault() ID {
+	if id.Label == "" {
+		return RunnerID
+	}
+	return id
+}
 
 // ErrUnsupported is returned on platforms without a supported manager.
 var ErrUnsupported = errors.New("no supported service manager on this platform (launchd on macOS, systemd on Linux)")
 
-// Detect returns the manager for this OS.
-func Detect(home string, r Runner) (Manager, error) {
+// Detect returns the runner service's manager for this OS.
+func Detect(home string, r Runner) (Manager, error) { return DetectID(home, r, RunnerID) }
+
+// DetectID returns the manager of service id for this OS.
+func DetectID(home string, r Runner, id ID) (Manager, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		return &Launchd{Home: home, UID: os.Getuid(), R: r}, nil
+		return &Launchd{Home: home, UID: os.Getuid(), R: r, ID: id}, nil
 	case "linux":
 		if _, err := exec.LookPath("systemctl"); err != nil {
 			return nil, fmt.Errorf("%w: systemctl not found", ErrUnsupported)
 		}
-		return &Systemd{Home: home, R: r}, nil
+		return &Systemd{Home: home, R: r, ID: id}, nil
 	}
 	return nil, ErrUnsupported
 }

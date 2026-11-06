@@ -23,7 +23,7 @@ Errors (any non-2xx):
 
 | Method & path | Auth | Description |
 |---|---|---|
-| `GET /v1/health` | — | `{"ok":true,"version":"v1"}` |
+| `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |
 | `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `POST /v1/enrollments` | admin | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |

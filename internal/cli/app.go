@@ -146,7 +146,7 @@ func (e *env) hubURL() (string, error) {
 		// A machine that joined with a link, or the hub's own host (as root).
 		if m, _ := config.LoadMachine(e.defaultPath); m != nil && m.Hub != "" {
 			e.cfg.Hub = m.Hub
-		} else if h := readHubEnv()["MYCO_HUB"]; h != "" {
+		} else if h := e.readHubEnv()["MYCO_HUB"]; h != "" {
 			e.cfg.Hub = h
 		}
 	}
@@ -266,7 +266,7 @@ func (e *env) adminClient() (*client.Client, error) {
 		tok = strings.TrimSpace(string(b))
 	}
 	if tok == "" {
-		tok = readHubEnv()[config.EnvAdminToken] // on the hub's host, as root
+		tok = e.readHubEnv()[config.EnvAdminToken] // on the hub's own machine
 	}
 	if tok == "" {
 		return nil, errorf("not_configured", ExitUsage,
@@ -323,19 +323,23 @@ func (e *env) dryRun(v any) error {
 }
 
 // hubEnvPath is where install-hub.sh keeps the admin token and local hub
-// URL (root-only). Admin commands run as root on that server use it.
+// URL (root-only). `myco hub up` keeps its own in ~/.myco/hub/hub.env.
+// Admin commands run on the hub's machine use them when nothing else is set.
 var hubEnvPath = "/etc/myco/hub.env"
 
-func readHubEnv() map[string]string {
-	vals, err := config.ReadEnvFile(hubEnvPath)
-	if err != nil {
-		return nil
-	}
-	out := map[string]string{}
-	for _, kv := range vals {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			out[k] = v
+func (e *env) readHubEnv() map[string]string {
+	for _, path := range []string{filepath.Join(e.hubDir(), "hub.env"), hubEnvPath} {
+		vals, err := config.ReadEnvFile(path)
+		if err != nil {
+			continue
 		}
+		out := map[string]string{}
+		for _, kv := range vals {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				out[k] = v
+			}
+		}
+		return out
 	}
-	return out
+	return nil
 }

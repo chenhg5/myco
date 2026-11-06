@@ -281,6 +281,8 @@ type Error struct {
 type Health struct {
 	OK      bool   `json:"ok"`
 	Version string `json:"version"`
+	// PublicURL is the hub's URL as clients see it (e.g. its tunnel), when known.
+	PublicURL string `json:"public_url,omitempty"`
 }
 
 // Enrollment is the public view of an enrollment (the token is never shown

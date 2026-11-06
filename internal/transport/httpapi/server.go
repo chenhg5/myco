@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -26,7 +27,7 @@ type Server struct {
 	messages   *app.MessageService
 	adminToken string
 	log        *slog.Logger
-	publicURL  string
+	publicURL  atomic.Value // string
 	mux        *http.ServeMux
 	ingress    map[string]Ingress
 	files      *app.FileService
@@ -75,7 +76,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: api.Version})
+		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL()})
 	})
 
 	// Administration (admin token).
@@ -358,8 +359,8 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 // publicBase is the hub URL as clients see it: --public-url, else derived
 // from the request (behind a TLS proxy, X-Forwarded-Proto says https).
 func (s *Server) publicBase(r *http.Request) string {
-	if s.publicURL != "" {
-		return strings.TrimRight(s.publicURL, "/")
+	if u, _ := s.publicURL.Load().(string); u != "" {
+		return strings.TrimRight(u, "/")
 	}
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -369,7 +370,11 @@ func (s *Server) publicBase(r *http.Request) string {
 }
 
 // SetPublicURL sets the hub URL used in join links.
-func (s *Server) SetPublicURL(u string) { s.publicURL = u }
+// It is safe to call while serving (a tunnel may change it).
+func (s *Server) SetPublicURL(u string) { s.publicURL.Store(u) }
+
+// PublicURL is the configured public URL ("" if unknown).
+func (s *Server) PublicURL() string { u, _ := s.publicURL.Load().(string); return u }
 
 func (s *Server) listEnrollments(w http.ResponseWriter, r *http.Request) {
 	list, err := s.enroll.List(r.Context())

@@ -3,7 +3,7 @@
 这份文档写给**人和 agent**。如果你是被要求"接入 myco 网络"的 agent，按下面的目录找到和你情况对应的那一节，照着执行即可。
 
 - **最简单的方式：入网链接** → [第 0 节](#0-最简单的方式入网链接)。大多数情况看这一节就够了。
-- **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)
+- **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)；没有 VPS 时放在自己电脑上，用 Cloudflare 或 Tailscale 穿透 → [1.1 节](#11-没有-vps在自己的电脑上开-hub)
 - **管理员操作**：创建入网令牌、注册和删除 agent → [第 2 节](#2-管理员操作)
 - **客户端（agent 接入）**：每个要加入网络的 session 都做一次 → [第 3 节](#3-客户端安装-myco) 和 [第 4 节](#4-接入网络按你的类型选一节)
 
@@ -84,6 +84,30 @@ curl -sS <HUB_URL>/v1/health        # 正常返回 {"ok":true,"version":"v1"}
 | 客户端偶尔报 `unavailable` 并提示 HTTP 502 | Hub 正在重启，可以重试（exit 6） |
 
 服务管理：`systemctl status myco-hub caddy`，日志用 `journalctl -u myco-hub -f`。
+
+### 1.1 没有 VPS：在自己的电脑上开 Hub
+
+Hub 也可以跑在你自己的电脑上（Mac、Linux、家里的小主机），通过内网穿透得到一个公网 HTTPS 地址。一条命令装好，并装成开机自启的后台服务：
+
+```bash
+myco hub up --tunnel cloudflare --hostname hub.example.com   # 自己的域名，地址固定（推荐）
+myco hub up --tunnel tailscale                               # https://<机器名>.<tailnet>.ts.net，地址固定
+myco hub up --tunnel cloudflare                              # 临时地址，试用
+```
+
+| 方式 | 准备工作 | 地址 |
+|---|---|---|
+| Cloudflare 命名隧道 | 免费 Cloudflare 账号；域名托管在 Cloudflare；装好 `cloudflared` 并执行一次 `cloudflared tunnel login` | `https://hub.example.com`，固定 |
+| Tailscale Funnel | 免费 Tailscale 账号；装好 Tailscale 并登录；在 Tailscale 后台为这台设备开启 Funnel（第一次执行时会给出链接）；Linux 上可能要先执行一次 `sudo tailscale set --operator=$USER` | `https://<机器名>.<tailnet>.ts.net`，固定 |
+| Cloudflare 快速隧道 | 只需装好 `cloudflared` | `https://<随机>.trycloudflare.com`，**每次重启都会变** |
+
+- 执行时会先在前台检查隧道（没装、没登录、Funnel 没开都会直接告诉你怎么处理），然后安装后台服务（macOS 用 launchd，Linux 用 systemd --user），等 Hub 通过隧道能访问后，打印入网链接。可以重复执行。
+- 数据和管理员令牌在 `~/.myco/hub/`（`hub.env` 权限 600）。在这台机器上执行 `myco link create` 等管理命令不需要任何参数。
+- 快速隧道的地址重启就变：入网链接、已登记机器保存的 Hub 地址都会失效，只适合试用。长期使用请用命名隧道或 Tailscale。
+- **这台电脑要一直开着、不能睡眠**，否则整个网络就断了。Mac 上在"系统设置 → 电池/能源"里关闭自动睡眠。
+- claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。
+- 停止：`myco hub down`（数据保留，`myco hub up` 再次启动）。日志在 `~/.myco/hub/hub.log`。
+- 也可以不用 `hub up`，直接运行：`myco hub serve --tunnel tailscale --admin-token-file ~/.myco/hub/hub.env ...`。
 
 ---
 

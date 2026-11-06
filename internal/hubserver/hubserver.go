@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/app"
@@ -17,6 +18,7 @@ import (
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/chenhg5/myco/internal/infra/tunnel"
 	"github.com/chenhg5/myco/internal/infra/wake"
 	"github.com/chenhg5/myco/internal/transport/httpapi"
 	"github.com/chenhg5/myco/internal/transport/ingress"
@@ -41,6 +43,9 @@ type Options struct {
 	Log             *slog.Logger
 	// Ready, if set, receives the bound address once listening.
 	Ready func(addr string)
+	// Tunnel, if set, publishes the hub (listening on localhost) at a
+	// public URL, which then becomes its public URL.
+	Tunnel tunnel.Tunnel
 }
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
@@ -49,6 +54,8 @@ type Hub struct {
 	Dispatcher *app.Dispatcher
 	Files      *app.FileService
 	Close      func() error
+	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
+	SetPublicURL func(string)
 }
 
 // DefaultWakers are the push delivery modes shipped with myco.
@@ -100,7 +107,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
-	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close}, nil
+	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -122,6 +129,23 @@ func Run(ctx context.Context, o Options) error {
 	}
 	srv := &http.Server{Handler: logRequests(h, o.Log), ReadHeaderTimeout: 10 * time.Second}
 	o.Log.Info("myco hub listening", "addr", ln.Addr().String(), "db", o.DBPath)
+	if o.Tunnel != nil {
+		local := "http://" + ln.Addr().String()
+		public, err := o.Tunnel.Prepare(ctx, local)
+		if err != nil {
+			ln.Close()
+			return err
+		}
+		if public != "" {
+			hub.SetPublicURL(public)
+			o.Log.Info("published through tunnel", "tunnel", o.Tunnel.Name(), "url", public)
+		}
+		go func() {
+			if err := o.Tunnel.Run(ctx, local, hub.SetPublicURL); err != nil {
+				o.Log.Error("tunnel stopped", "tunnel", o.Tunnel.Name(), "err", err)
+			}
+		}()
+	}
 	if o.Ready != nil {
 		o.Ready(ln.Addr().String())
 	}
@@ -150,6 +174,10 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		h.ServeHTTP(rec, r)
-		log.Debug("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/j/") {
+			path = "/j/<redacted>" // join links carry a credential
+		}
+		log.Debug("request", "method", r.Method, "path", path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
 	})
 }

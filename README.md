@@ -41,6 +41,11 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 ```
 装完会打印一个**入网链接**和下面两条现成的命令。以后要新链接：`sudo /usr/local/bin/myco link create`。
 
+没有 VPS？在自己一直开着的电脑上用内网穿透开 Hub（见 [INSTALL.md 1.1](INSTALL.md#11-没有-vps在自己的电脑上开-hub)）：
+```bash
+myco hub up --tunnel tailscale                               # 或 --tunnel cloudflare --hostname hub.example.com
+```
+
 **2. 每台电脑或服务器（macOS / Linux / WSL）：粘贴一行**
 ```bash
 curl -fsSL https://<你的 Hub>/j/<链接> | bash
