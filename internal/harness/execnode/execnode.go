@@ -105,7 +105,7 @@ func (n *node) Run(ctx context.Context, req harness.Request) (harness.Result, er
 		}
 	}
 	switch {
-	case len(senders) > 0 && !slices.Contains(senders, req.From):
+	case len(senders) > 0 && !slices.Contains(senders, req.From) && !slices.Contains(senders, "*"):
 		res = denied(fmt.Sprintf("sender %q is not allowed to run commands on this node", req.From))
 	case len(senders) == 0:
 		res = denied("this exec node has no allowed senders configured (set allow_from on the agent)")

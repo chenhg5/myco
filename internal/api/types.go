@@ -202,6 +202,9 @@ type ProfileRequest struct {
 	// AllowFrom replaces who may send tasks/notes (admin only; [] = anyone,
 	// refused for exec nodes). The agent's token is not changed.
 	AllowFrom *[]string `json:"allow_from,omitempty"`
+	// AcceptExecRisk confirms that an exec node with an empty allow_from
+	// should run commands from every agent (stored as "*").
+	AcceptExecRisk bool `json:"accept_exec_risk,omitempty"`
 }
 
 // Alias is a re-pointable address for an agent.

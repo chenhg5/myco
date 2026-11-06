@@ -494,7 +494,7 @@ myco exec --to vps-shell --cmd "systemctl status caddy" --timeout 2m --format js
 和 ssh 一样：远端的 stdout、stderr 原样输出，远端的退出码就是本地的退出码（124 表示在节点上超时，126 表示被节点拒绝）。myco 自己出错时（找不到节点、没有权限、等待超时）用第 6 节的退出码，并在 stderr 输出 JSON 错误。加 `--format json` 时输出 `{exit_code, stdout, stderr, duration_ms, truncated, timed_out, denied, error}`。
 
 **安全说明**
-- **发送方限制**：没有 `allow_from` 的 exec 节点，runner 会拒绝启动。Hub 发消息时检查一次，节点执行前会再检查一次。之后要改允许谁，由管理员执行 `myco agent update --name <节点> --allow-from a,b`：不换令牌，节点不用重新登录，约 30 秒内生效。
+- **发送方限制**：没有 `allow_from` 的 exec 节点，runner 会拒绝启动。Hub 发消息时检查一次，节点执行前会再检查一次。之后要改允许谁，由管理员执行 `myco agent update --name <节点> --allow-from a,b`：不换令牌，节点不用重新登录，约 30 秒内生效。确实要让所有节点（包括以后加入的）都能在这台机器上执行命令时，必须显式确认：`myco agent update --name <节点> --allow-anyone --i-understand-exec-risk`（名单会记为 `*`）。
 - **提示词注入**：如果允许一个 AI agent 发命令，那么能影响这个 agent 的内容（网页、PR、别人发给它的消息）就可能间接在你的机器上执行命令。`allow-from` 里的节点越少越好，能用白名单就用白名单。
 - **只执行任务**：note、reply、event 一律不执行；附件不会下载。
 - **环境变量**：命令在一个干净的环境里运行，只带上面继承的变量、`env_file` 里的变量和 `MYCO_FROM` 等上下文变量。**不会**带上 agent 令牌（`MYCO_TOKEN`、`MYCO_CONFIG`）。

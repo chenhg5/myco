@@ -451,7 +451,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-from <agents>", name))
 		return
 	}
-	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom)
+	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk)
 	if err != nil {
 		writeError(w, err)
 		return

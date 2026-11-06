@@ -137,7 +137,8 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 			{Name: "display-name", Kind: String, Help: "Human-friendly name, up to 80 bytes"},
 			{Name: "description", Kind: String, Help: "What this agent does"},
 			{Name: "allow-from", Kind: List, Help: "Admin: replace who may send tasks/notes to it (exec nodes take effect within ~30s)"},
-			{Name: "allow-anyone", Kind: Bool, Help: "Admin: let any agent send to it (not allowed for exec nodes)"},
+			{Name: "allow-anyone", Kind: Bool, Help: "Admin: let any agent send to it (exec nodes also need --i-understand-exec-risk)"},
+			{Name: "i-understand-exec-risk", Kind: Bool, Help: "With --allow-anyone on an exec node: every agent, including future ones, may run shell commands there"},
 			{Name: "name", Kind: String, Help: "Another agent (needs the admin token); default: yourself"},
 			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
 		},
@@ -161,6 +162,7 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 			case e.in.Bool("allow-anyone"):
 				v := []string{}
 				req.AllowFrom = &v
+				req.AcceptExecRisk = e.in.Bool("i-understand-exec-risk")
 			}
 			if req.AllowFrom != nil && name == "" {
 				return errorf("invalid_usage", ExitUsage, "add --name <agent> (changing allow-from needs the admin token)", "--allow-from changes another agent")
@@ -189,8 +191,11 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 			}
 			return e.p.Print(a, func(w io.Writer) {
 				allow := strings.Join(a.AllowFrom, ", ")
-				if allow == "" {
+				switch allow {
+				case "":
 					allow = "anyone"
+				case "*":
+					allow = "anyone (explicitly; exec risk accepted)"
 				}
 				fmt.Fprintf(w, "%s: display name %q, description %q, accepts messages from %s\n", a.Name, a.DisplayName, a.Description, allow)
 			})

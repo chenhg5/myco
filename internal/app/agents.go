@@ -267,7 +267,7 @@ func (s *AgentService) SetStatus(ctx context.Context, name string, text string) 
 
 // UpdateProfile changes cosmetic fields and, for the admin, allow_from
 // (nil = unchanged). The agent's token is not touched.
-func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string, allowFrom *[]string) (*domain.Agent, error) {
+func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string, allowFrom *[]string, acceptExecRisk bool) (*domain.Agent, error) {
 	a, err := s.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayNa
 		if err != nil {
 			return nil, err
 		}
-		if err := a.SetAllowFrom(names); err != nil {
+		if err := a.SetAllowFrom(names, acceptExecRisk); err != nil {
 			return nil, err
 		}
 	}

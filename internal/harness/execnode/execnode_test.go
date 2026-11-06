@@ -115,3 +115,9 @@ func TestExecTimeoutTruncationAndAudit(t *testing.T) {
 		t.Fatalf("audit log mode %v", st.Mode().Perm())
 	}
 }
+
+func TestExecAnySenderWhenExplicit(t *testing.T) {
+	if res := run(t, harness.ExecSpec{Senders: []string{"*"}}, "anyone-at-all", "echo ok"); res.Denied || res.Stdout != "ok\n" {
+		t.Fatalf("explicit * must admit every sender: %+v", res)
+	}
+}

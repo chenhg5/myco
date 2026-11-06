@@ -277,8 +277,12 @@ func (a *Agent) RotateToken(hash string) { a.TokenHash = hash }
 
 // Accepts reports whether sender may send new tasks/notes to this agent.
 func (a *Agent) Accepts(sender AgentName) bool {
-	return len(a.AllowFrom) == 0 || slices.Contains(a.AllowFrom, sender)
+	return len(a.AllowFrom) == 0 || slices.Contains(a.AllowFrom, sender) || slices.Contains(a.AllowFrom, AnySender)
 }
+
+// AnySender in allow_from explicitly admits every agent. Exec nodes need it
+// (an empty list means "not configured" for them and is refused).
+const AnySender AgentName = "*"
 
 // IsOnline reports whether the agent was seen within window.
 func (a *Agent) IsOnline(now time.Time, window time.Duration) bool {
@@ -301,11 +305,16 @@ func (a *Agent) SetLabels(add, remove []string) error {
 // SetProfile changes cosmetic fields; nil leaves a field unchanged and an
 // empty display name clears it.
 // SetAllowFrom replaces who may send to the agent (empty = anyone). Exec
-// nodes run what they receive as shell commands, so they must name senders.
-func (a *Agent) SetAllowFrom(names []AgentName) error {
+// nodes run what they receive as shell commands, so they must name senders
+// unless acceptExecRisk explicitly opens them to every agent (stored as
+// AnySender).
+func (a *Agent) SetAllowFrom(names []AgentName, acceptExecRisk bool) error {
 	if len(names) == 0 && a.Binding.Harness == HarnessExec {
-		return Errf(CodeInvalidArgument, "exec node %s must keep at least one allowed sender", a.Name).
-			WithSuggestion("pass the agents that may run commands, e.g. --allow-from cloud-1")
+		if !acceptExecRisk {
+			return Errf(CodeInvalidArgument, "exec node %s must keep at least one allowed sender", a.Name).
+				WithSuggestion("pass the agents that may run commands, e.g. --allow-from cloud-1; to let every agent run commands there, add --i-understand-exec-risk")
+		}
+		names = []AgentName{AnySender}
 	}
 	a.AllowFrom = names
 	return nil

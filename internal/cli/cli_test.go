@@ -1251,3 +1251,29 @@ func TestUpdateAllowFrom(t *testing.T) {
 		t.Fatalf("exec node with allow-anyone: exit %d", code)
 	}
 }
+
+func TestExecAllowAnyoneNeedsRiskFlag(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
+	stranger := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "s.yaml")}}
+	stranger.run("agent", "register", "--name", "stranger")
+	admin.run("agent", "register", "--name", "boss", "--no-save")
+	admin.run("agent", "register", "--name", "box", "--harness", "exec", "--allow-from", "boss", "--workdir", home)
+
+	if code, _, _ := admin.run("agent", "update", "--name", "box", "--allow-anyone"); code != ExitUsage {
+		t.Fatalf("without the risk flag: exit %d", code)
+	}
+	code, out, e := admin.run("agent", "update", "--name", "box", "--allow-anyone", "--i-understand-exec-risk", "--format", "text")
+	if code != 0 || !strings.Contains(out, "exec risk accepted") {
+		t.Fatalf("with the risk flag: %d %s %s", code, out, e)
+	}
+	if code, _, _ := stranger.run("message", "send", "--to", "box", "--body", "id"); code != 0 {
+		t.Fatalf("any agent may send now, exit %d", code)
+	}
+	// "*" cannot be set by hand, only through the explicit flag.
+	if code, _, _ := admin.run("agent", "update", "--name", "box", "--allow-from", "*"); code == 0 {
+		t.Fatal(`allow-from "*" must be rejected as a name`)
+	}
+}
