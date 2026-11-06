@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -123,17 +124,20 @@ after replacing an agent.`,
 func agentUpdateCommand() *Command {
 	return &Command{
 		Name:     "update",
-		Summary:  "Change your display name or description (or another agent's, as admin)",
+		Summary:  "Change display name, description, or (admin) who may send to an agent",
 		Mutating: true,
 		Long: `The agent name is the address and never changes; the display name is only shown in lists and the
 dashboard. Pass an empty value (--display-name "") to clear it. To give an agent a new address, use an alias.`,
 		Examples: []string{
 			`myco agent update --display-name "Mac Claude (loops)"`,
 			`myco agent update --name codex-loops-01a1a9c3 --display-name "Codex reviewer" --description "reviews PRs"`,
+			"myco agent update --name mac-exec --allow-from cloud-1,cloud-cc-connect   # admin; the token is unchanged",
 		},
 		Flags: []Flag{
 			{Name: "display-name", Kind: String, Help: "Human-friendly name, up to 80 bytes"},
 			{Name: "description", Kind: String, Help: "What this agent does"},
+			{Name: "allow-from", Kind: List, Help: "Admin: replace who may send tasks/notes to it (exec nodes take effect within ~30s)"},
+			{Name: "allow-anyone", Kind: Bool, Help: "Admin: let any agent send to it (not allowed for exec nodes)"},
 			{Name: "name", Kind: String, Help: "Another agent (needs the admin token); default: yourself"},
 			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
 		},
@@ -147,10 +151,23 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				v := e.in.String("description")
 				req.Description = &v
 			}
-			if req.DisplayName == nil && req.Description == nil {
-				return errorf("invalid_usage", ExitUsage, "pass --display-name and/or --description", "nothing to update")
-			}
 			name := e.in.String("name")
+			switch {
+			case e.in.IsSet("allow-from") && e.in.Bool("allow-anyone"):
+				return errorf("invalid_usage", ExitUsage, "use one of them", "--allow-from and --allow-anyone conflict")
+			case e.in.IsSet("allow-from"):
+				v := e.in.List("allow-from")
+				req.AllowFrom = &v
+			case e.in.Bool("allow-anyone"):
+				v := []string{}
+				req.AllowFrom = &v
+			}
+			if req.AllowFrom != nil && name == "" {
+				return errorf("invalid_usage", ExitUsage, "add --name <agent> (changing allow-from needs the admin token)", "--allow-from changes another agent")
+			}
+			if req.DisplayName == nil && req.Description == nil && req.AllowFrom == nil {
+				return errorf("invalid_usage", ExitUsage, "pass --display-name, --description or --allow-from", "nothing to update")
+			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "update_profile", "agent": orDefault(name, e.cfg.Agent), "profile": req})
 			}
@@ -171,7 +188,11 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				return err
 			}
 			return e.p.Print(a, func(w io.Writer) {
-				fmt.Fprintf(w, "%s: display name %q, description %q\n", a.Name, a.DisplayName, a.Description)
+				allow := strings.Join(a.AllowFrom, ", ")
+				if allow == "" {
+					allow = "anyone"
+				}
+				fmt.Fprintf(w, "%s: display name %q, description %q, accepts messages from %s\n", a.Name, a.DisplayName, a.Description, allow)
 			})
 		}),
 	}

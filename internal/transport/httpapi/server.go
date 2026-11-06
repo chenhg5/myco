@@ -441,12 +441,17 @@ func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
 	s.setLabels(w, r, r.PathValue("name"))
 }
 
-func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name string) {
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name string, admin bool) {
 	var req api.ProfileRequest
 	if !decode(w, r, &req) {
 		return
 	}
-	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description)
+	if req.AllowFrom != nil && !admin {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub admin can change allow_from").
+			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-from <agents>", name))
+		return
+	}
+	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -472,11 +477,11 @@ func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agen
 }
 
 func (s *Server) myProfile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	s.updateProfile(w, r, string(a.Name))
+	s.updateProfile(w, r, string(a.Name), false)
 }
 
 func (s *Server) adminProfile(w http.ResponseWriter, r *http.Request) {
-	s.updateProfile(w, r, r.PathValue("name"))
+	s.updateProfile(w, r, r.PathValue("name"), true)
 }
 
 func (s *Server) listAliases(w http.ResponseWriter, r *http.Request) {

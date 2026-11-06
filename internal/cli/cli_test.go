@@ -1213,3 +1213,41 @@ func TestHubEnvFile(t *testing.T) {
 		t.Fatal("plain token files still work")
 	}
 }
+
+func TestUpdateAllowFrom(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	hub := newHub(t)
+	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "boss.yaml")}}
+	eve := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "eve.yaml")}}
+	boss.run("agent", "register", "--name", "boss")
+	eve.run("agent", "register", "--name", "eve")
+	admin.run("agent", "register", "--name", "box", "--harness", "exec", "--allow-from", "boss", "--workdir", home)
+	node := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(home, ".myco", "agents", "box.yaml")}}
+	if code, _, _ := node.run("agent", "get"); code != 0 {
+		t.Fatal("node should be logged in")
+	}
+
+	if code, _, _ := eve.run("message", "send", "--to", "box", "--body", "id"); code != ExitPermission {
+		t.Fatalf("eve is not allowed yet, exit %d", code)
+	}
+	// The node itself cannot widen its own allow_from.
+	if code, _, _ := node.run("agent", "update", "--name", "box", "--allow-from", "eve", "--admin-token-file", "/nonexistent"); code == 0 {
+		t.Fatal("changing allow_from must need the admin token")
+	}
+	if code, out, e := admin.run("agent", "update", "--name", "box", "--allow-from", "boss,eve", "--format", "text"); code != 0 || !strings.Contains(out, "boss, eve") {
+		t.Fatalf("admin update: %d %s %s", code, out, e)
+	}
+	if code, _, _ := eve.run("message", "send", "--to", "box", "--body", "id"); code != 0 {
+		t.Fatalf("eve should be allowed now, exit %d", code)
+	}
+	// The node's token still works (no rotation, no re-login).
+	if code, _, e := node.run("agent", "get"); code != 0 {
+		t.Fatalf("token must be unchanged: %s", e)
+	}
+	// Exec nodes cannot be opened to anyone.
+	if code, _, _ := admin.run("agent", "update", "--name", "box", "--allow-anyone"); code != ExitUsage {
+		t.Fatalf("exec node with allow-anyone: exit %d", code)
+	}
+}

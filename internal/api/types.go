@@ -199,6 +199,9 @@ type StatusRequest struct {
 type ProfileRequest struct {
 	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
+	// AllowFrom replaces who may send tasks/notes (admin only; [] = anyone,
+	// refused for exec nodes). The agent's token is not changed.
+	AllowFrom *[]string `json:"allow_from,omitempty"`
 }
 
 // Alias is a re-pointable address for an agent.

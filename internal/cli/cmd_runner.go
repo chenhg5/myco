@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -150,6 +151,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			spec = *rc.Exec
 		}
 		spec.Senders = me.AllowFrom
+		spec.CurrentSenders = cachedAllowFrom(e.in.Ctx, c, 30*time.Second)
 		spec.AuditLog = filepath.Join(config.Dir(e.defaultPath), "logs", me.Name+".exec.jsonl")
 		execSpec = &spec
 	}
@@ -310,5 +312,31 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		case <-t.C:
 			scan()
 		}
+	}
+}
+
+// cachedAllowFrom returns the agent's current allow_from, asking the hub at
+// most once per ttl, so an admin's change reaches a running exec node.
+func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) func() ([]string, error) {
+	var (
+		mu   sync.Mutex
+		last []string
+		at   time.Time
+	)
+	return func() ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if last != nil && time.Since(at) < ttl {
+			return last, nil
+		}
+		me, err := c.Me(ctx)
+		if err != nil {
+			return nil, err
+		}
+		last, at = me.AllowFrom, time.Now()
+		if last == nil {
+			last = []string{}
+		}
+		return last, nil
 	}
 }

@@ -35,7 +35,7 @@ Errors (any non-2xx):
 | `PUT /v1/me/labels` | agent | `{add?, remove?}` — change your labels (a bare key in remove drops all its values) |
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
 | `PUT /v1/me/profile` | agent | `{display_name?, description?}` — omitted fields unchanged, `""` clears |
-| `PUT /v1/agents/{name}/profile` | admin | Same, for any agent |
+| `PUT /v1/agents/{name}/profile` | admin | Same, for any agent, plus `allow_from` (`[]` = anyone, refused for exec nodes); the token is not changed |
 | `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
 | `PUT /v1/aliases/{alias}?dry_run=` | admin | `{target}` → `{alias, dry_run}`; creates or re-points. 409 if `alias` is an agent name; target must be a real agent (no chains) |
 | `DELETE /v1/aliases/{alias}?dry_run=` | admin | → `{alias, removed, dry_run}` |

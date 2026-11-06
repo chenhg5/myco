@@ -98,10 +98,16 @@ func (n *node) Run(ctx context.Context, req harness.Request) (harness.Result, er
 	cmdline := strings.TrimSpace(req.Body)
 	start := time.Now()
 	var res api.ExecResult
+	senders := n.spec.Senders
+	if n.spec.CurrentSenders != nil {
+		if cur, err := n.spec.CurrentSenders(); err == nil {
+			senders = cur
+		}
+	}
 	switch {
-	case len(n.spec.Senders) > 0 && !slices.Contains(n.spec.Senders, req.From):
+	case len(senders) > 0 && !slices.Contains(senders, req.From):
 		res = denied(fmt.Sprintf("sender %q is not allowed to run commands on this node", req.From))
-	case len(n.spec.Senders) == 0:
+	case len(senders) == 0:
 		res = denied("this exec node has no allowed senders configured (set allow_from on the agent)")
 	case cmdline == "":
 		res = denied("empty command: put the command line in the message body")

@@ -122,15 +122,3 @@ func (s *AgentService) AliasMap(ctx context.Context) (map[domain.AgentName][]str
 	}
 	return m, nil
 }
-
-// UpdateProfile changes display name and/or description (nil = unchanged).
-func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string) (*domain.Agent, error) {
-	a, err := s.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.SetProfile(displayName, description); err != nil {
-		return nil, err
-	}
-	return a, s.agents.Save(ctx, a)
-}

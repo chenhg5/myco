@@ -300,6 +300,17 @@ func (a *Agent) SetLabels(add, remove []string) error {
 
 // SetProfile changes cosmetic fields; nil leaves a field unchanged and an
 // empty display name clears it.
+// SetAllowFrom replaces who may send to the agent (empty = anyone). Exec
+// nodes run what they receive as shell commands, so they must name senders.
+func (a *Agent) SetAllowFrom(names []AgentName) error {
+	if len(names) == 0 && a.Binding.Harness == HarnessExec {
+		return Errf(CodeInvalidArgument, "exec node %s must keep at least one allowed sender", a.Name).
+			WithSuggestion("pass the agents that may run commands, e.g. --allow-from cloud-1")
+	}
+	a.AllowFrom = names
+	return nil
+}
+
 // MaxStatusText bounds the public status line.
 const MaxStatusText = 280
 
