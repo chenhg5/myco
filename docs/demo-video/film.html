@@ -83,6 +83,7 @@ const $ = (s, r = document) => r.querySelector(s);
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const LOGO = (s = 64) => `<svg viewBox="0 0 32 32" width="${s}" height="${s}"><path d="M16 16L6 8M16 16L26 9M16 16L9 26M16 16L25 24" stroke="#fafafa" stroke-width="1.8" stroke-linecap="round" opacity=".55"/><circle cx="6" cy="8" r="2.6" fill="#fafafa" opacity=".75"/><circle cx="26" cy="9" r="2.6" fill="#fafafa" opacity=".75"/><circle cx="9" cy="26" r="2.6" fill="#fafafa" opacity=".75"/><circle cx="25" cy="24" r="2.6" fill="#fafafa" opacity=".75"/><circle cx="16" cy="16" r="4.4" fill="#31c48d"/></svg>`;
 const CURSOR = `<svg viewBox="0 0 24 24" width="30" height="30"><path d="M4 2l16 11-7 1.5-3.5 7z" fill="#fafafa" stroke="#09090b" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+const ZH = window.LANG === 'zh'; const T = (en, zh) => (ZH ? zh : en);
 const root = $('#root');
 const TL = window.TL; // { shots: {id: {start, end}}, lines: [{start, end, en, zh, shot}] }
 const S = {};
@@ -124,7 +125,7 @@ function drawScatter(t) {
   const a = pts[i % 3], b = pts[(i + 1) % 3]; const p = eio(k / d);
   const x = lerp(a[0], b[0], p), y = lerp(a[1], b[1], p) - Math.sin(p * Math.PI) * 60;
   cur.style.transform = `translate(${x}px,${y}px)`;
-  pill.style.opacity = p < .25 || p > .8 ? 1 : 0; pill.textContent = p < .5 ? 'Copy' : 'Paste';
+  pill.style.opacity = p < .25 || p > .8 ? 1 : 0; pill.textContent = p < .5 ? T('Copy', '复制') : T('Paste', '粘贴');
   pill.style.transform = `translate(${x + 28}px,${y + 26}px)`;
   const typed = 'check the refactor on macbook'; const n = Math.floor(clamp((lt - t0 - 1.2) / 1.6) * typed.length);
   $('#w1 .ps').textContent = typed.slice(0, n);
@@ -151,7 +152,7 @@ function drawScatter(t) {
   e.querySelectorAll('path.fil').forEach((p) => { p.setAttribute('stroke', 'rgba(49,196,141,.35)'); p.setAttribute('stroke-width', '1.2'); });
   const mini = ['Claude Code', 'Codex', 'claude.ai'];
   tops.forEach(([x, y], i) => e.appendChild(el(`<div class="win mini" id="m${i}" style="left:${x - 170}px;top:${y - 150}px;width:340px;height:150px"><div class="tb"><i></i><i></i><i></i><span>${mini[i]}</span></div><div class="body" style="font-size:16px"><span class="dot"></span><span class="st">offline</span></div></div>`)));
-  e.appendChild(el(`<div id="logo" style="position:absolute;left:0;right:0;top:660px;text-align:center"><div style="display:inline-flex;align-items:center;gap:22px">${LOGO(84)}<span style="font-size:96px;font-weight:700;letter-spacing:-.04em">myco</span></div><div style="margin-top:12px;font-size:24px;color:var(--fg2)">the mycelium for your AI agents</div></div>`));
+  e.appendChild(el(`<div id="logo" style="position:absolute;left:0;right:0;top:660px;text-align:center"><div style="display:inline-flex;align-items:center;gap:22px">${LOGO(84)}<span style="font-size:96px;font-weight:700;letter-spacing:-.04em">myco</span></div><div style="margin-top:12px;font-size:24px;color:var(--fg2)">${T('the mycelium for your AI agents', 'AI agent 的菌丝网络')}</div></div>`));
   S.connect = { el: e };
 }
 function drawConnect(t) {
@@ -169,14 +170,14 @@ function drawConnect(t) {
 {
   const e = shotEl('setup');
   const X = [130, 700, 1270];
-  e.appendChild(el(`<div class="card" id="c0" style="left:${X[0]}px;top:140px;width:520px;height:560px"><div class="step">Step 1</div><div class="ctitle">Start a hub</div>
+  e.appendChild(el(`<div class="card" id="c0" style="left:${X[0]}px;top:140px;width:520px;height:560px"><div class="step">${T('Step 1', '第 1 步')}</div><div class="ctitle">${T('Start a hub', '开一个 Hub')}</div>
     <svg viewBox="0 0 200 140" width="300" height="190" style="display:block;margin:34px auto 26px"><g stroke="#31c48d" stroke-width="2" fill="none" opacity=".7"><path d="M100 70 L30 24"/><path d="M100 70 L170 24"/><path d="M100 70 L28 118"/><path d="M100 70 L172 116"/></g><g fill="#fafafa" opacity=".85"><circle cx="30" cy="24" r="7"/><circle cx="170" cy="24" r="7"/><circle cx="28" cy="118" r="7"/><circle cx="172" cy="116" r="7"/></g><circle cx="100" cy="70" r="20" fill="#31c48d"/></svg>
-    <div><span class="chip" id="h0">Your VPS</span><span class="chip" id="h1">Cloudflare Tunnel</span><span class="chip" id="h2">Tailscale Funnel</span></div></div>`));
-  e.appendChild(el(`<div class="card" id="c1" style="left:${X[1]}px;top:140px;width:520px;height:560px"><div class="step">Step 2</div><div class="ctitle">Paste one line per machine</div>
+    <div><span class="chip" id="h0">${T('Your VPS', '自己的 VPS')}</span><span class="chip" id="h1">Cloudflare Tunnel</span><span class="chip" id="h2">Tailscale Funnel</span></div></div>`));
+  e.appendChild(el(`<div class="card" id="c1" style="left:${X[1]}px;top:140px;width:520px;height:560px"><div class="step">${T('Step 2', '第 2 步')}</div><div class="ctitle">${T('Paste one line per machine', '每台机器粘贴一行')}</div>
     <div class="term mono" style="margin-top:34px"><div><span class="ok">$</span> <span id="ty"></span></div><div id="o1" class="ok">✓ myco installed</div><div id="o2" class="ok">✓ machine "macbook" joined</div><div id="o3" class="ok">✓ background runner started</div></div>
     <div style="margin-top:22px;font-size:17px;color:var(--fg2)">macOS · Linux · WSL</div></div>`));
-  e.appendChild(el(`<div class="card" id="c2" style="left:${X[2]}px;top:140px;width:520px;height:560px"><div class="step">Step 3</div><div class="ctitle">Tell each agent to join</div>
-    <div style="margin-top:34px;display:flex;flex-direction:column;gap:16px"><div class="bubble me" id="b1">join myco: https://hub.example.com/j/9f3k…</div><div class="bubble ag" id="b2"><span class="ok">✓</span> Joined as <b class="mono" style="font-size:16px">macbook-claude-7f3c</b>.<br>Listening for tasks.</div></div></div>`));
+  e.appendChild(el(`<div class="card" id="c2" style="left:${X[2]}px;top:140px;width:520px;height:560px"><div class="step">${T('Step 3', '第 3 步')}</div><div class="ctitle">${T('Tell each agent to join', '告诉每个 agent 加入')}</div>
+    <div style="margin-top:34px;display:flex;flex-direction:column;gap:16px"><div class="bubble me" id="b1">${T('join myco: ', '加入 myco：')}https://hub.example.com/j/9f3k…</div><div class="bubble ag" id="b2"><span class="ok">✓</span> ${T('Joined as ', '已加入，名字是 ')}<b class="mono" style="font-size:16px">macbook-claude-7f3c</b>${T('.<br>Listening for tasks.', '。<br>等待任务中。')}</div></div></div>`));
   S.setup = { el: e };
 }
 function drawSetup(t) {
@@ -192,24 +193,24 @@ function drawSetup(t) {
 }
 
 // ---------- shot 4: the team at work (based on the real run) ----------
-const NODES = { you: [240, 480, 'Y', 'You', 'human'], lead: [520, 480, 'L', 'lead', 'Claude Code'], coder: [810, 270, 'C', 'coder', 'Claude Code'], reviewer: [810, 690, 'R', 'reviewer', 'Claude Code'], ci: [810, 480, '›_', 'ci-box', 'exec node'] };
+const NODES = { you: [240, 480, T('Y', '你'), T('You', '你'), T('human', '人')], lead: [520, 480, 'L', 'lead', 'Claude Code'], coder: [810, 270, 'C', 'coder', 'Claude Code'], reviewer: [810, 690, 'R', 'reviewer', 'Claude Code'], ci: [810, 480, '›_', 'ci-box', T('exec node', 'exec 节点')] };
 const EDGES = [['you', 'lead'], ['lead', 'coder'], ['lead', 'reviewer'], ['lead', 'ci'], ['coder', 'ci']];
 // messages shortened from the real run (thread msg_jd2umsq5ngzwtcyd and ci-box exec tasks)
 const MSGS = [
-  { line: 6, at: .3, from: 'you', to: 'lead', ty: 'task', body: 'Slugify panics and its test fails. Get it fixed with the team.' },
-  { line: 7, at: .1, from: 'lead', to: 'coder', ty: 'task', body: 'Find the cause and fix slug.go. Ask ci-box to run the tests.' },
+  { line: 6, at: .3, from: 'you', to: 'lead', ty: 'task', body: T('Slugify panics and its test fails. Get it fixed with the team.', 'Slugify 直接 panic，测试挂了。叫上团队把它修好。') },
+  { line: 7, at: .1, from: 'lead', to: 'coder', ty: 'task', body: T('Find the cause and fix slug.go. Ask ci-box to run the tests.', '找出原因，修好 slug.go，让 ci-box 跑测试。') },
   { line: 8, at: .2, from: 'coder', to: 'ci', ty: 'exec', body: '<span class="mono" style="font-size:17px">go test ./...</span>', denied: true },
-  { line: 8, at: 4.0, from: 'coder', to: 'lead', ty: 'reply', body: 'Blocked: ci-box won’t take orders from me.' },
-  { line: 9, at: .1, from: 'lead', to: 'coder', ty: 'task', body: 'Root cause: slug.go is a stub. Implement it; I’ll handle CI.' },
-  { line: 9, at: 1.3, from: 'coder', to: 'lead', ty: 'reply', body: 'Implemented: lowercase, fold accents, collapse separators.', x: '<span class="tag mono" style="background:rgba(49,196,141,.14);color:#31c48d">slug.go +38 −1</span>' },
-  { line: 9, at: 2.3, from: 'lead', to: 'reviewer', ty: 'task', body: 'Review slug.go against slug_test.go.' },
-  { line: 9, at: 3.3, from: 'reviewer', to: 'lead', ty: 'reply', body: 'Verdict: correct. No blocking issues.', x: '<span class="tag" style="background:rgba(49,196,141,.14);color:#31c48d">✓ Approved</span>' },
+  { line: 8, at: 4.0, from: 'coder', to: 'lead', ty: 'reply', body: T('Blocked: ci-box won’t take orders from me.', '被拦了：ci-box 不接受我的任务。') },
+  { line: 9, at: .1, from: 'lead', to: 'coder', ty: 'task', body: T('Root cause: slug.go is a stub. Implement it; I’ll handle CI.', '原因：slug.go 只是个空壳。你来实现，CI 我来安排。') },
+  { line: 9, at: 1.3, from: 'coder', to: 'lead', ty: 'reply', body: T('Implemented: lowercase, fold accents, collapse separators.', '已实现：转小写、去掉重音符号、合并分隔符。'), x: '<span class="tag mono" style="background:rgba(49,196,141,.14);color:#31c48d">slug.go +38 −1</span>' },
+  { line: 9, at: 2.3, from: 'lead', to: 'reviewer', ty: 'task', body: T('Review slug.go against slug_test.go.', '对照 slug_test.go 审查 slug.go。') },
+  { line: 9, at: 3.3, from: 'reviewer', to: 'lead', ty: 'reply', body: T('Verdict: correct. No blocking issues.', '结论：正确，没有阻塞问题。'), x: `<span class="tag" style="background:rgba(49,196,141,.14);color:#31c48d">${T('✓ Approved', '✓ 审查通过')}</span>` },
   { line: 9, at: 4.4, from: 'lead', to: 'ci', ty: 'exec', body: '<span class="mono" style="font-size:17px">go test ./...</span>', x: '<span class="mono ok" style="font-size:16px">ok&nbsp;&nbsp;example.com/shop</span>' },
-  { line: 10, at: .2, from: 'lead', to: 'you', ty: 'reply', body: 'Fixed Slugify. Reviewer approved. Tests pass on ci-box.' },
+  { line: 10, at: .2, from: 'lead', to: 'you', ty: 'reply', body: T('Fixed Slugify. Reviewer approved. Tests pass on ci-box.', 'Slugify 已修好，reviewer 审查通过，ci-box 上测试全部通过。') },
 ];
 {
   const e = shotEl('team');
-  e.appendChild(el(`<div style="position:absolute;left:80px;top:62px;right:80px;display:flex;align-items:center;gap:16px"><span style="font-size:30px;font-weight:600;letter-spacing:-.02em">Fix Slugify</span><span class="tag" style="border:1px solid rgba(255,255,255,.14);color:#a1a1aa">team=shop</span><span style="margin-left:auto;font-size:15px;color:#71717a">Based on a real run · messages shortened</span><span id="timer" class="mono" style="font-size:26px;color:#fafafa;margin-left:22px">0:00</span></div>`));
+  e.appendChild(el(`<div style="position:absolute;left:80px;top:62px;right:80px;display:flex;align-items:center;gap:16px"><span style="font-size:30px;font-weight:600;letter-spacing:-.02em">${T('Fix Slugify', '修复 Slugify')}</span><span class="tag" style="border:1px solid rgba(255,255,255,.14);color:#a1a1aa">team=shop</span><span style="margin-left:auto;font-size:15px;color:#71717a">${T('Based on a real run · messages shortened', '基于一次真实运行 · 消息有删减并译为中文')}</span><span id="timer" class="mono" style="font-size:26px;color:#fafafa;margin-left:22px">0:00</span></div>`));
   e.appendChild(el(`<div class="panel" style="left:80px;top:124px;width:880px;height:736px"></div>`));
   e.appendChild(el(`<div class="panel" id="feed" style="left:990px;top:124px;width:850px;height:736px;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 70px)"></div>`));
   const lines = EDGES.map(([a, b]) => { const [x1, y1] = NODES[a], [x2, y2] = NODES[b]; const mx = (x1 + x2) / 2 + (a === 'coder' ? 60 : 0); return `<path id="e-${a}-${b}" d="M${x1} ${y1} Q ${mx} ${(y1 + y2) / 2 + (x1 === x2 ? 0 : 0)} ${x2} ${y2}" stroke="${a === 'coder' ? 'rgba(240,68,56,.0)' : 'rgba(49,196,141,.28)'}" stroke-width="2" fill="none" ${a === 'coder' ? 'stroke-dasharray="6 8"' : ''}/>`; }).join('');
@@ -274,10 +275,10 @@ const ICON = {
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.5l-8.5 8.5a6 6 0 0 1-8.5-8.5L12.5 4a4 4 0 0 1 5.7 5.7L9.6 18.3a2 2 0 0 1-2.8-2.8L15 7.3"/></svg>',
 };
 const FEATS = [
-  { i: 'mem', h: 'Sessions that remember', p: 'Every message resumes the same Claude Code or Codex session.', line: 12 },
-  { i: 'cast', h: 'Broadcast by label', p: '<span class="mono">myco broadcast send --selector group=review</span>', line: 13 },
-  { i: 'exec', h: 'Exec nodes', p: '<span class="mono">myco exec --to vps-shell --cmd "df -h"</span>', line: 14 },
-  { i: 'file', h: 'Attachments', p: '<span class="mono">myco message send --attach report.pdf</span>', line: 14, d: .5 },
+  { i: 'mem', h: T('Sessions that remember', '会话不丢记忆'), p: T('Every message resumes the same Claude Code or Codex session.', '每条消息都续接同一个 Claude Code 或 Codex 会话。'), line: 12 },
+  { i: 'cast', h: T('Broadcast by label', '按标签广播'), p: '<span class="mono">myco broadcast send --selector group=review</span>', line: 13 },
+  { i: 'exec', h: T('Exec nodes', 'exec 节点：远程执行'), p: '<span class="mono">myco exec --to vps-shell --cmd "df -h"</span>', line: 14 },
+  { i: 'file', h: T('Attachments', '收发文件'), p: '<span class="mono">myco message send --attach report.pdf</span>', line: 14, d: .5 },
 ];
 {
   const e = shotEl('features');
@@ -292,7 +293,7 @@ function drawFeatures(t) { const lt = fade('features', t); const s0 = TL.shots.f
 {
   const e = shotEl('end');
   e.appendChild(el(`<div style="position:absolute;left:0;right:0;top:290px;text-align:center"><div id="eL" style="display:inline-flex;align-items:center;gap:26px">${LOGO(104)}<span style="font-size:124px;font-weight:700;letter-spacing:-.045em">myco</span></div>
-    <div id="eT" style="margin-top:18px;font-size:34px;color:#d4d4d8;letter-spacing:-.01em">Let your agents talk.</div>
+    <div id="eT" style="margin-top:18px;font-size:34px;color:#d4d4d8;letter-spacing:-.01em">${T('Let your agents talk.', '让你的 agent 互相协作。')}</div>
     <div id="eC" class="mono" style="display:inline-block;margin-top:48px;padding:16px 26px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:#111114;font-size:22px;color:#a1a1aa"><span style="color:#31c48d">$</span> curl -fsSL https://&lt;your-hub&gt;/j/&lt;link&gt; | bash</div>
     <div id="eG" style="margin-top:30px;font-size:24px;color:#fafafa;font-weight:500">github.com/chenhg5/myco</div></div>`));
   S.end = { el: e };
@@ -304,7 +305,7 @@ function drawSub(t) {
   const cur = TL.lines.find((l) => t >= l.start - .1 && t < l.end + .35);
   const s = $('#sub');
   if (!cur) { s.style.opacity = 0; return; }
-  if (s.dataset.k !== String(TL.lines.indexOf(cur))) { s.dataset.k = TL.lines.indexOf(cur); $('.en', s).textContent = cur.en; $('.zh', s).textContent = cur.zh; }
+  if (s.dataset.k !== String(TL.lines.indexOf(cur))) { s.dataset.k = TL.lines.indexOf(cur); $('.en', s).textContent = ZH ? cur.text : cur.en; $('.zh', s).textContent = ZH ? '' : cur.zh; }
   s.style.opacity = seg(t, cur.start - .1, .2) * (1 - seg(t, cur.end + .15, .2));
 }
 

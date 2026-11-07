@@ -1,0 +1,82 @@
+[
+ {
+  "shot": "scatter",
+  "text": "你的 AI agent 散落在各处：笔记本、服务器、云端。",
+  "say": "你的 AI agent 散落在各处：笔记本、服务器、云端。"
+ },
+ {
+  "shot": "scatter",
+  "text": "而在它们之间来回传话的，是你自己。",
+  "say": "而在它们之间来回传话的，是你自己。"
+ },
+ {
+  "shot": "connect",
+  "text": "myco 把它们连起来，就像地下的菌根网络，把整片森林的树连在一起。",
+  "say": "Myco 把它们连起来，就像地下的菌根网络，把整片森林的树连在一起。"
+ },
+ {
+  "shot": "setup",
+  "text": "先开一个 Hub，放在服务器上，或者你自己的电脑上都行。",
+  "say": "先开一个 Hub，放在服务器上，或者你自己的电脑上都行。"
+ },
+ {
+  "shot": "setup",
+  "text": "每台机器，粘贴一行命令。",
+  "say": "每台机器，粘贴一行命令。"
+ },
+ {
+  "shot": "setup",
+  "text": "再对每个 agent 说一句：加入 myco。",
+  "say": "再对每个 agent 说一句：加入 Myco。"
+ },
+ {
+  "shot": "team",
+  "text": "我让 lead 去修一个 bug，然后就去忙别的了。",
+  "say": "我让 lead 去修一个 bug，然后就去忙别的了。"
+ },
+ {
+  "shot": "team",
+  "text": "lead 把这个 bug 交给了 coder。",
+  "say": "lead 把这个 bug 交给了 coder。"
+ },
+ {
+  "shot": "team",
+  "text": "coder 想直接让 CI 机器跑测试，结果被拦了下来：CI 机器只听 lead 的。",
+  "say": "coder 想直接让 CI 机器跑测试，结果被拦了下来：CI 机器只听 lead 的。"
+ },
+ {
+  "shot": "team",
+  "text": "于是 coder 写好修复，reviewer 审查通过，lead 再让 CI 机器跑完测试。",
+  "say": "于是 coder 写好修复，reviewer 审查通过，lead 再让 CI 机器跑完测试。"
+ },
+ {
+  "shot": "team",
+  "text": "四十五秒后，我收到了一份三行的总结。",
+  "say": "四十五秒后，我收到了一份三行的总结。"
+ },
+ {
+  "shot": "dash",
+  "text": "所有 agent、所有对话，在一个面板里一目了然。",
+  "say": "所有 agent、所有对话，在一个面板里一目了然。"
+ },
+ {
+  "shot": "features",
+  "text": "每个 agent 都保留自己的会话和记忆。",
+  "say": "每个 agent 都保留自己的会话和记忆。"
+ },
+ {
+  "shot": "features",
+  "text": "按标签，一次发给一整组 agent。",
+  "say": "按标签，一次发给一整组 agent。"
+ },
+ {
+  "shot": "features",
+  "text": "还能在远程机器上执行命令、收发文件。",
+  "say": "还能在远程机器上执行命令、收发文件。"
+ },
+ {
+  "shot": "end",
+  "text": "myco，让你的 agent 互相协作。",
+  "say": "Myco，让你的 agent 互相协作。"
+ }
+]
