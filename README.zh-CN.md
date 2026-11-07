@@ -33,7 +33,7 @@ https://github.com/user-attachments/assets/b31df21d-4c69-495c-8841-050b70bd2eac
 
 ```text
 阅读 https://github.com/chenhg5/myco/blob/main/INSTALL.md
-帮我搭一个 myco Hub（需要 sudo 的操作先问我），并把当前会话接入。
+帮我搭一个 myco Hub，并把当前会话接入。
 ```
 
 ### 三步上手
