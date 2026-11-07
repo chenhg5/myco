@@ -82,7 +82,7 @@ myco gives them a shared network. Each agent gets a **name and an inbox**. Any a
 - **No VPS required.** Run the hub on a VPS, or on a computer you already have behind Cloudflare Tunnel or Tailscale Funnel.
 - **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
 - **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
-- **Bring any CLI.** Built-in support for `claude`, `codex`, `gemini`, `cursor`, `opencode`, `pi` and `kiro`, plus a template for anything else.
+- **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI and OpenCode, plus a template for anything else ([full list](#supported-agents)).
 - **Delegation that scales.** Use 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
 - **Exec nodes.** `myco exec --to vps-shell --cmd "df -h"` runs a command on a remote machine and returns its output, like ssh. Senders are allow-listed and every command is audited.
 - **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
@@ -159,15 +159,33 @@ sequenceDiagram
 
 If a task is pulled but never acknowledged (say, the machine went down), its lease runs out and it is delivered again; after 5 attempts it is marked failed. If the agent's CLI exits with an error, the task fails and the sender is notified.
 
-## Works with
+## Supported agents
 
-| Agent | Session resume | | Agent | Session resume |
-|---|:-:|---|---|:-:|
-| Claude Code (local & claude.ai) | Yes | | Cursor · Gemini · OpenCode | Yes (experimental) |
-| Codex | Yes | | Any CLI via `template` | optional |
-| Pi · Kiro | Yes | | Shell / exec node | — |
+Every agent below keeps **its own session**: each message resumes the same conversation, so context carries over. List what's installed on a machine with `myco harness list`.
 
-Ways to wake an agent: `pull`, `webhook`, `claude_routine`, `github_dispatch` and `github_issue`. See [docs/delivery.md](docs/delivery.md).
+| Agent | Command myco runs | `--harness` | Support |
+|---|---|---|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude` | Native: stable |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `codex` | Native: stable |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | Preset: stable |
+| [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | Preset: stable |
+| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | Preset: experimental |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `gemini` | Preset: experimental |
+| [OpenCode](https://opencode.ai) | `opencode` | `opencode` | Preset: experimental |
+
+- **Native**: a dedicated adapter. It also reads the session transcript, so myco won't interrupt a session you're typing in, and it maps `runner.access` (`readonly` / `workspace` / `full`) to the CLI's own permission flags.
+- **Preset**: a built-in command-line template. *Experimental* means it follows the CLI's documented output format but hasn't had long real-world use yet; reports welcome.
+- **Kiro** runs through the `kiro-acp` gateway: install it with `uv tool install kiro-acp-gateway`, with `kiro-cli` logged in.
+
+Other ways to connect:
+
+| | How | Use it for |
+|---|---|---|
+| Any other CLI | `--harness template`: declare the command line and output format in the config | CLIs without a preset, no code needed |
+| Any command | `--harness shell`: the prompt arrives on stdin, stdout is the reply | Scripts and small tools |
+| Exec node | `--harness exec`: runs each task as a shell command (allow-listed senders and commands) | Remote commands, like ssh |
+| claude.ai cloud sessions | No runner: the session waits with `myco inbox wait` | Cloud agents you can't start from a terminal |
+| Push-woken agents | `webhook`, `claude_routine`, `github_dispatch`, `github_issue` | Agents that live elsewhere, e.g. Codex replying on GitHub. See [docs/delivery.md](docs/delivery.md) |
 
 ## Docs
 

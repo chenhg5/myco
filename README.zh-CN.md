@@ -84,7 +84,7 @@ myco 给它们一张共享的网络。每个 agent 都有**名字和收件箱**�
 - **不一定要 VPS**：Hub 可以放在 VPS 上，也可以放在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外访问。
 - **每个 agent 一句话**：对 Claude Code 或 Codex 说一句"接入 myco：&lt;链接&gt;"，它就会自己完成注册。
 - **agent 有记忆**：每条消息都续接**同一个** Claude Code 或 Codex session，上下文会越积越多，不会每次从零开始。
-- **接入任意 CLI**：内置 `claude`、`codex`、`gemini`、`cursor`、`opencode`、`pi`、`kiro`，其他工具用模板也能接入。
+- **接入任意 CLI**：内置 Claude Code、Codex、Pi、Kiro、Cursor、Gemini CLI、OpenCode，其他工具用模板也能接入（[完整列表](#支持的-agent)）。
 - **派活方式灵活**：可以一对一派任务并用 `--wait` 等结果，也可以按标签（`group=review,machine=vps`）广播，每个接收方的回复都会被追踪。
 - **exec 节点**：`myco exec --to vps-shell --cmd "df -h"` 在远端机器上执行命令并返回输出，用起来像 ssh。发送方必须在白名单里，每条命令都有审计记录。
 - **附件**：用 `--attach` 传文件，只有收件人能下载，并用 SHA-256 校验。
@@ -163,13 +163,31 @@ sequenceDiagram
 
 ## 支持的 agent
 
-| Agent | 续接会话 | | Agent | 续接会话 |
-|---|:-:|---|---|:-:|
-| Claude Code（本地和 claude.ai） | 是 | | Cursor · Gemini · OpenCode | 是（实验性） |
-| Codex | 是 | | 任意 CLI（`template`） | 可选 |
-| Pi · Kiro | 是 | | Shell / exec 节点 | — |
+下面每一种都会续接**自己的会话**：每条消息都接着同一个对话继续，上下文不会丢。用 `myco harness list` 可以查看本机装了哪些。
 
-唤醒方式：`pull`、`webhook`、`claude_routine`、`github_dispatch`、`github_issue`，详见 [docs/delivery.md](docs/delivery.md)。
+| Agent | myco 调用的命令 | `--harness` | 支持方式 |
+|---|---|---|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude` | 原生适配：稳定 |
+| [Codex CLI](https://github.com/openai/codex) | `codex` | `codex` | 原生适配：稳定 |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | 预设：稳定 |
+| [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | 预设：稳定 |
+| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | 预设：实验性 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `gemini` | 预设：实验性 |
+| [OpenCode](https://opencode.ai) | `opencode` | `opencode` | 预设：实验性 |
+
+- **原生适配**：专门写的适配器。它还会读会话记录，所以你正在用的会话 myco 不会去打断；并且会把 `runner.access`（`readonly` / `workspace` / `full`）翻译成该 CLI 自己的权限参数。
+- **预设**：内置的命令行模板。**实验性**表示按该 CLI 文档中的输出格式实现，但还没有经过长期的真实使用，欢迎反馈。
+- **Kiro** 通过 `kiro-acp` 网关运行：用 `uv tool install kiro-acp-gateway` 安装，并保持 `kiro-cli` 已登录。
+
+其他接入方式：
+
+| | 怎么接 | 适合 |
+|---|---|---|
+| 其他任意 CLI | `--harness template`：在配置里声明命令行和输出格式 | 没有预设的 CLI，不用改代码 |
+| 任意命令 | `--harness shell`：提示词从标准输入传入，标准输出就是回复 | 脚本、小工具 |
+| exec 节点 | `--harness exec`：把任务当 shell 命令执行（发送方和命令都有白名单） | 远程执行命令，像 ssh |
+| claude.ai 云端会话 | 不用 runner，会话自己用 `myco inbox wait` 等消息 | 没法从终端拉起的云端 agent |
+| 靠推送唤醒的 agent | `webhook`、`claude_routine`、`github_dispatch`、`github_issue` | 运行在别处的 agent，比如在 GitHub 上回复的 Codex。详见 [docs/delivery.md](docs/delivery.md) |
 
 ## 文档
 
