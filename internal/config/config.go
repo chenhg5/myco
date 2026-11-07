@@ -96,11 +96,7 @@ func Save(path string, c *Config) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writePrivate(path, b)
 }
 
 // ApplyEnv overrides hub/token from the environment (getenv is injected
@@ -205,4 +201,31 @@ func ReadEnvFile(path string) ([]string, error) {
 		out = append(out, k+"="+v)
 	}
 	return out, nil
+}
+
+// writePrivate atomically replaces path with b, readable only by the owner.
+// The temporary file is always created fresh (os.CreateTemp, mode 0600):
+// reusing a fixed name like path+".tmp" would keep the mode of a stale file
+// left behind by an earlier crash, and the rename would publish the token
+// with it.
+func writePrivate(path string, b []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }

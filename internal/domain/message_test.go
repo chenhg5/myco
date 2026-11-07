@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -138,5 +140,280 @@ func TestUpdateKeepsUnsetFields(t *testing.T) {
 	}
 	if a.Description != "new" || a.Binding.Workdir != "/w" || a.Binding.SessionID != "s1" {
 		t.Fatalf("partial update: %+v", a)
+	}
+}
+
+// messageIn returns a message of type typ (alice -> bob) driven into status s
+// through the public transitions.
+func messageIn(t *testing.T, typ MessageType, s Status) *Message {
+	t.Helper()
+	now := time.Unix(10, 0)
+	m, err := NewMessage("msg_s", "alice", "bob", typ, "body", "", "", "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s == StatusQueued {
+		return m
+	}
+	m.Claim(now, time.Minute, 0)
+	switch s {
+	case StatusDelivered:
+	case StatusAcked:
+		err = m.Ack("bob", now)
+	case StatusHeld:
+		err = m.Hold("bob", now)
+	case StatusDone:
+		err = m.Complete("bob", now)
+	case StatusFailed:
+		_, err = m.Fail("bob", "msg_ev", "setup", now)
+	default:
+		t.Fatalf("unknown status %s", s)
+	}
+	if err != nil || m.Status != s {
+		t.Fatalf("driving to %s: status=%s err=%v", s, m.Status, err)
+	}
+	return m
+}
+
+type msgOp func(m *Message, by AgentName, now time.Time) error
+
+var recipientOps = map[string]msgOp{
+	"ack":  func(m *Message, by AgentName, now time.Time) error { return m.Ack(by, now) },
+	"hold": func(m *Message, by AgentName, now time.Time) error { return m.Hold(by, now) },
+	"release": func(m *Message, by AgentName, now time.Time) error {
+		return m.Release(by, time.Minute, now)
+	},
+	"complete": func(m *Message, by AgentName, now time.Time) error { return m.Complete(by, now) },
+	"reply": func(m *Message, by AgentName, now time.Time) error {
+		_, err := m.Reply(by, "msg_r", "answer", now)
+		return err
+	},
+	"fail": func(m *Message, by AgentName, now time.Time) error {
+		_, err := m.Fail(by, "msg_e", "boom", now)
+		return err
+	},
+	"progress": func(m *Message, by AgentName, now time.Time) error {
+		_, err := m.Progress(by, "msg_p", "50%", now)
+		return err
+	},
+}
+
+// TestTransitionTable pins every (status, operation) pair of the diagram
+// above `type Status`: the resulting status, or the error code with the
+// status left unchanged.
+func TestTransitionTable(t *testing.T) {
+	const bad = "invalid_state"
+	// want[status][op] is the resulting status, or an error code.
+	want := map[Status]map[string]string{
+		StatusQueued: {
+			"ack": bad, "hold": bad, "release": bad, "complete": bad, "reply": bad, "fail": bad, "progress": bad,
+		},
+		StatusDelivered: {
+			"ack": "acked", "hold": "held", "release": "delivered", "complete": "done", "reply": "done", "fail": "failed", "progress": "delivered",
+		},
+		StatusAcked: {
+			"ack": "acked", "hold": "held", "release": "delivered", "complete": "done", "reply": "done", "fail": "failed", "progress": "acked",
+		},
+		StatusHeld: {
+			"ack": bad, "hold": "held", "release": bad, "complete": "done", "reply": "done", "fail": "failed", "progress": "held",
+		},
+		StatusDone: {
+			"ack": bad, "hold": bad, "release": bad, "complete": "done", "reply": bad, "fail": bad, "progress": bad,
+		},
+		StatusFailed: {
+			"ack": bad, "hold": bad, "release": bad, "complete": bad, "reply": bad, "fail": bad, "progress": bad,
+		},
+	}
+	later := time.Unix(500, 0)
+	for from, ops := range want {
+		for op, exp := range ops {
+			t.Run(string(from)+"/"+op, func(t *testing.T) {
+				m := messageIn(t, TypeTask, from)
+				before := *m
+				err := recipientOps[op](m, "bob", later)
+				if exp == bad {
+					if !IsCode(err, CodeInvalidState) {
+						t.Fatalf("want invalid_state, got %v", err)
+					}
+					if m.Status != from || !m.UpdatedAt.Equal(before.UpdatedAt) {
+						t.Fatalf("failed op changed the message: %+v", m)
+					}
+					var de *Error
+					_ = errors.As(err, &de)
+					switch {
+					case from == StatusQueued && !strings.Contains(de.Suggestion, "pull"):
+						t.Errorf("queued: suggestion should say pull first: %q", de.Suggestion)
+					case from.Terminal() && !strings.Contains(de.Suggestion, "--thread "+m.ThreadID):
+						t.Errorf("closed: suggestion should point at a follow-up: %q", de.Suggestion)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("want %s, got error %v", exp, err)
+				}
+				if m.Status != Status(exp) {
+					t.Fatalf("status = %s, want %s", m.Status, exp)
+				}
+				changed := m.Status != from || op == "release"
+				if changed != m.UpdatedAt.Equal(later) {
+					t.Errorf("UpdatedAt = %v (changed=%v)", m.UpdatedAt, changed)
+				}
+			})
+		}
+	}
+}
+
+func TestNonRecipientIsDeniedInEveryStatus(t *testing.T) {
+	for _, s := range []Status{StatusQueued, StatusDelivered, StatusAcked, StatusHeld, StatusDone, StatusFailed} {
+		for op, f := range recipientOps {
+			for _, by := range []AgentName{"alice", "mallory"} { // even the sender
+				m := messageIn(t, TypeTask, s)
+				if err := f(m, by, time.Unix(500, 0)); !IsCode(err, CodePermissionDenied) {
+					t.Errorf("%s/%s by %s: want permission_denied, got %v", s, op, by, err)
+				}
+				if m.Status != s {
+					t.Errorf("%s/%s by %s changed status to %s", s, op, by, m.Status)
+				}
+			}
+		}
+	}
+}
+
+func TestFailFromEachOpenState(t *testing.T) {
+	now := time.Unix(500, 0)
+	for _, s := range []Status{StatusDelivered, StatusAcked, StatusHeld} {
+		for _, typ := range []MessageType{TypeTask, TypeNote} {
+			m := messageIn(t, typ, s)
+			ev, err := m.Fail("bob", "msg_ev2", "  disk full \n", now)
+			if err != nil || m.Status != StatusFailed || m.Error != "disk full" {
+				t.Fatalf("%s %s: status=%s error=%q err=%v", typ, s, m.Status, m.Error, err)
+			}
+			if typ != TypeTask {
+				if ev != nil {
+					t.Errorf("%s %s: non-task failure emitted %+v", typ, s, ev)
+				}
+				continue
+			}
+			if ev == nil || ev.ID != "msg_ev2" || ev.Type != TypeEvent || ev.From != "bob" || ev.To != "alice" ||
+				ev.ThreadID != m.ThreadID || ev.ReplyTo != m.ID || ev.Body != "task failed: disk full" || ev.Status != StatusQueued {
+				t.Errorf("%s %s: event = %+v", typ, s, ev)
+			}
+		}
+	}
+	m := messageIn(t, TypeTask, StatusDelivered)
+	if _, err := m.Fail("bob", "e", "   ", now); err != nil || m.Error != "no reason given" {
+		t.Fatalf("blank reason: %q %v", m.Error, err)
+	}
+}
+
+func TestReplyAndProgressMessages(t *testing.T) {
+	now := time.Unix(500, 0)
+	m := messageIn(t, TypeTask, StatusHeld)
+	p, err := m.Progress("bob", "msg_p", "halfway", now)
+	if err != nil || p.Type != TypeProgress || p.Status != StatusDone || p.To != "alice" || p.ReplyTo != m.ID || m.Status != StatusHeld {
+		t.Fatalf("progress: p=%+v m=%s err=%v", p, m.Status, err)
+	}
+	note := messageIn(t, TypeNote, StatusDelivered)
+	if _, err := note.Progress("bob", "p", "x", now); !IsCode(err, CodeInvalidArgument) {
+		t.Fatalf("progress on a note: %v", err)
+	}
+	// An empty reply body is rejected and leaves the task open.
+	if _, err := m.Reply("bob", "r", " ", now); !IsCode(err, CodeInvalidArgument) || m.Status != StatusHeld {
+		t.Fatalf("empty reply: status=%s err=%v", m.Status, err)
+	}
+	r, err := m.Reply("bob", "msg_r", "done!", now)
+	if err != nil || r.Type != TypeReply || r.Status != StatusQueued || r.From != "bob" || r.To != "alice" || m.Status != StatusDone {
+		t.Fatalf("reply from held: r=%+v m=%s err=%v", r, m.Status, err)
+	}
+}
+
+func TestSteer(t *testing.T) {
+	now := time.Unix(500, 0)
+	for _, s := range []Status{StatusQueued, StatusDelivered, StatusAcked, StatusHeld} {
+		m := messageIn(t, TypeTask, s)
+		st, err := m.Steer("alice", "msg_st", "use v2", now)
+		if err != nil || st.Type != TypeSteer || st.From != "alice" || st.To != "bob" || st.ReplyTo != m.ID || st.ThreadID != m.ThreadID || m.Status != s {
+			t.Errorf("steer %s: st=%+v err=%v", s, st, err)
+		}
+		if _, err := m.Steer("bob", "x", "y", now); !IsCode(err, CodePermissionDenied) {
+			t.Errorf("steer %s by recipient: %v", s, err)
+		}
+	}
+	for _, s := range []Status{StatusDone, StatusFailed} {
+		if _, err := messageIn(t, TypeTask, s).Steer("alice", "x", "y", now); !IsCode(err, CodeInvalidState) {
+			t.Errorf("steer %s: want invalid_state, got %v", s, err)
+		}
+	}
+	if _, err := messageIn(t, TypeNote, StatusDelivered).Steer("alice", "x", "y", now); !IsCode(err, CodeInvalidArgument) {
+		t.Errorf("steer note: %v", err)
+	}
+}
+
+func TestClaimMaxAttempts(t *testing.T) {
+	t0 := time.Unix(100, 0)
+	m := messageIn(t, TypeTask, StatusQueued)
+	for i := 1; i <= 3; i++ {
+		now := t0.Add(time.Duration(i) * time.Hour)
+		if !m.Claim(now, time.Minute, 3) || m.Status != StatusDelivered || m.Attempts != i || !m.LeaseUntil.Equal(now.Add(time.Minute)) {
+			t.Fatalf("claim %d: %+v", i, m)
+		}
+	}
+	now := t0.Add(10 * time.Hour)
+	if m.Claim(now, time.Minute, 3) {
+		t.Fatal("4th claim with maxAttempts=3 must fail")
+	}
+	if m.Status != StatusFailed || m.Attempts != 3 || !strings.Contains(m.Error, "exhausted") || !m.UpdatedAt.Equal(now) {
+		t.Fatalf("exhausted: %+v", m)
+	}
+	if m.IsDue(now.Add(time.Hour)) {
+		t.Fatal("failed message must never be due")
+	}
+
+	// maxAttempts <= 0 means unlimited.
+	u := messageIn(t, TypeTask, StatusQueued)
+	for i := range 50 {
+		if !u.Claim(t0, time.Minute, 0) {
+			t.Fatalf("unlimited claim %d failed", i)
+		}
+	}
+}
+
+func TestReleaseDoesNotCountAttempts(t *testing.T) {
+	t0 := time.Unix(100, 0)
+	for _, from := range []Status{StatusDelivered, StatusAcked} {
+		m := messageIn(t, TypeTask, from) // one claim: Attempts == 1
+		if err := m.Release("bob", 0, t0); err != nil {
+			t.Fatal(err)
+		}
+		if m.Status != StatusDelivered || m.Attempts != 0 || !m.LeaseUntil.Equal(t0) || !m.IsDue(t0) {
+			t.Fatalf("release from %s: %+v", from, m)
+		}
+		if err := m.Release("bob", -time.Second, t0); !IsCode(err, CodeInvalidArgument) {
+			t.Fatalf("negative delay: %v", err)
+		}
+		if err := m.Release("bob", MaxReleaseDelay, t0); err != nil {
+			t.Fatalf("max delay must be allowed: %v", err)
+		}
+		if m.Attempts != 0 {
+			t.Fatalf("attempts must not go negative: %d", m.Attempts)
+		}
+	}
+}
+
+func TestIsDueByStatus(t *testing.T) {
+	now := time.Unix(10, 0).Add(time.Hour) // past every lease set by messageIn
+	want := map[Status]bool{
+		StatusQueued: true, StatusDelivered: true, // lease expired
+		StatusAcked: false, StatusHeld: false, StatusDone: false, StatusFailed: false,
+	}
+	for s, due := range want {
+		if got := messageIn(t, TypeTask, s).IsDue(now); got != due {
+			t.Errorf("IsDue(%s) = %v, want %v", s, got, due)
+		}
+	}
+	for s, term := range map[Status]bool{StatusQueued: false, StatusDelivered: false, StatusAcked: false, StatusHeld: false, StatusDone: true, StatusFailed: true} {
+		if s.Terminal() != term {
+			t.Errorf("%s.Terminal() = %v", s, !term)
+		}
 	}
 }
