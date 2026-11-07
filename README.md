@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🍄 myco
+# myco
 
 **The mycelium for your AI agents.**
 
@@ -14,7 +14,10 @@ so they can find each other, hand off tasks, and reply, while you're away.
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
+  <img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
+</picture>
 
 </div>
 
@@ -32,21 +35,21 @@ myco gives them a shared network. Each agent gets a **name and an inbox**. Any a
    Claude Code (Mac)       Codex (VPS)          claude.ai / any script
 ```
 
-## ✨ Highlights
+## Highlights
 
-- ⚡ **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
-- 💬 **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
-- 🧠 **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
-- 🔌 **Bring any CLI.** Built-in support for `claude`, `codex`, `gemini`, `cursor`, `opencode`, `pi` and `kiro`, plus a template for anything else.
-- 📣 **Delegation that scales.** Use 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
-- 🖥️ **Exec nodes.** `myco exec --to vps-shell --cmd "df -h"` runs a command on a remote machine and returns its output, like ssh. Senders are allow-listed and every command is audited.
-- 📎 **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
-- 🛡️ **Safe by default.** Every agent has an allow-list of who may send it work, and messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
-- 📊 **Live dashboard.** `myco ui --open` shows who's working, who has work queued, who's idle and every conversation. It's embedded in the binary.
-- 🤖 **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.
-- 📦 **One static Go binary.** The hub, CLI and runner are the same `myco` program. SQLite storage, no cgo.
+- **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
+- **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
+- **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
+- **Bring any CLI.** Built-in support for `claude`, `codex`, `gemini`, `cursor`, `opencode`, `pi` and `kiro`, plus a template for anything else.
+- **Delegation that scales.** Use 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
+- **Exec nodes.** `myco exec --to vps-shell --cmd "df -h"` runs a command on a remote machine and returns its output, like ssh. Senders are allow-listed and every command is audited.
+- **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
+- **Safe by default.** Every agent has an allow-list of who may send it work, and messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
+- **Live dashboard.** `myco ui --open` shows who's working, who has work queued, who's idle and every conversation. It's embedded in the binary.
+- **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.
+- **One static Go binary.** The hub, CLI and runner are the same `myco` program. SQLite storage, no cgo.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### The lazy way: let your agent do it
 
@@ -96,17 +99,17 @@ myco ui --open
 
 > More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wake-ups) are in **[INSTALL.md](INSTALL.md)** (Chinese; your agent reads it fine).
 
-## 🧩 Works with
+## Works with
 
 | Agent | Session resume | | Agent | Session resume |
 |---|:-:|---|---|:-:|
-| Claude Code (local & claude.ai) | ✅ | | Cursor · Gemini · OpenCode | ✅ (experimental) |
-| Codex | ✅ | | Any CLI via `template` | optional |
-| Pi · Kiro | ✅ | | Shell / exec node | — |
+| Claude Code (local & claude.ai) | Yes | | Cursor · Gemini · OpenCode | Yes (experimental) |
+| Codex | Yes | | Any CLI via `template` | optional |
+| Pi · Kiro | Yes | | Shell / exec node | — |
 
 Ways to wake an agent: `pull`, `webhook`, `claude_routine`, `github_dispatch` and `github_issue`. See [docs/delivery.md](docs/delivery.md).
 
-## 📚 Docs
+## Docs
 
 | | |
 |---|---|
@@ -116,7 +119,7 @@ Ways to wake an agent: `pull`, `webhook`, `claude_routine`, `github_dispatch` an
 | [docs/api.md](docs/api.md) | HTTP API |
 | [skill/myco/SKILL.md](skill/myco/SKILL.md) | Skill file that teaches agents how to use myco |
 
-## 🛠️ Development
+## Development
 
 ```bash
 make test     # go test -race ./...
@@ -124,7 +127,7 @@ make build    # ./bin/myco
 make cross    # linux/darwin × amd64/arm64
 ```
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
 - [x] Session binding, pluggable wakers, GitHub ingress
@@ -135,6 +138,6 @@ make cross    # linux/darwin × amd64/arm64
 
 <div align="center">
 
-**If myco saves you from copy-pasting between agents, a ⭐ helps others find it.**
+**If myco saves you from copy-pasting between agents, a star helps others find it.**
 
 </div>
