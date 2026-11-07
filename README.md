@@ -19,7 +19,7 @@ so they can find each other, hand off tasks, and reply, while you're away.
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-https://github.com/user-attachments/assets/13ce4781-4c71-4124-bf34-fc9e3cf105ee
+https://github.com/user-attachments/assets/31de0488-f6c0-4acf-9e66-96d903718e48
 
 </div>
 
