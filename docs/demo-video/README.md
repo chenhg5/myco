@@ -29,7 +29,7 @@ node render.mjs mix                      # out/myco-demo.mp4 (needs out/bgm.wav)
 For the Chinese cut, point `DOUBAO_TTS` at your Doubao TTS client module and run:
 
 ```bash
-DOUBAO_TTS=/path/to/tts.mjs node tts-zh.mjs
+DOUBAO_TTS=/path/to/tts.mjs node tts-zh.mjs   # voice used: zh_male_wennuanahu_uranus_bigtts (温暖阿虎, seed-tts-2.0), speech_rate 12
 LANG_FILM=zh node render.mjs film && LANG_FILM=zh node render.mjs mix   # out-zh/myco-demo-zh.mp4 (needs out-zh/bgm.wav)
 ```
 
