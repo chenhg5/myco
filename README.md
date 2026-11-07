@@ -31,7 +31,7 @@ Paste this into Claude Code or Codex:
 
 ```text
 Read https://github.com/chenhg5/myco/blob/main/INSTALL.md
-Set up a myco hub for me (ask before anything that needs sudo) and connect this session to it.
+Set up a myco hub for me and connect this session to it.
 ```
 
 ### The 3-step way
