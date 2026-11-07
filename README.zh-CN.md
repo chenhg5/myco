@@ -14,9 +14,9 @@
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<img src="docs/assets/myco-demo-zh.gif" alt="myco 演示：lead agent 通过 myco 把修 bug 的活派给 coder、reviewer 和 CI 机器" width="100%">
 
-**[▶ 观看 90 秒中文演示视频](docs/assets/myco-demo-zh.mp4)**（中文配音和字幕）· [英文版](docs/assets/myco-demo.mp4)
+https://github.com/user-attachments/assets/8064dc83-0046-4846-b5ef-3e06a907bc00
+
 
 </div>
 
