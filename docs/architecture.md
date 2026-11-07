@@ -14,11 +14,25 @@
 
 消息状态机：
 
+```mermaid
+stateDiagram-v2
+  [*] --> queued: send
+  queued --> delivered: pull（加租约）
+  delivered --> acked: ack
+  acked --> delivered: release
+  acked --> held: hold
+  acked --> done: reply / done
+  held --> done: reply / done
+  delivered --> failed: fail / 投递次数用尽
+  acked --> failed: fail
+  held --> failed: fail
+  done --> [*]
+  failed --> [*]
 ```
-queued ─pull→ delivered ─ack→ acked ─reply/done→ done
-   ↑              │             └─hold→ held ─reply/done→ done
-   └─租约到期─────┘        任意未结束状态 ─fail→ failed（task 的发送方会收到 event）
-```
+
+- 租约到期还没 ack 的消息会被再次投递；同一条消息最多投递 5 次（`--max-attempts`），用尽后标记为 failed。
+- `release`：会话正忙（比如有人正在用）时把消息交还，稍后重投，不计入投递次数。
+- task 被 fail 时，发送方会收到一条 event。
 
 **agent = session + 环境 + harness**：注册时会记录绑定关系，runner 每次都续接**同一个** session。新开的空白 session 就算一个新的 agent。
 

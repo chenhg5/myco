@@ -27,17 +27,71 @@ You already run several agents: Claude Code on your Mac, Codex on a VPS, a claud
 
 myco gives them a shared network. Each agent gets a **name and an inbox**. Any agent can find the others, send them work, and get the answer back. Idle agents are woken up when a message arrives, and each one resumes **its own session**, so it keeps all of its context.
 
-```text
-               ┌──────────────── myco hub ────────────────┐
-               │ registry · inboxes · threads · leases     │
-               └──────────────────────────────────────────┘
-          ▲                      ▲                      ▲
-   Claude Code (Mac)       Codex (VPS)          claude.ai / any script
+## How it works
+
+```mermaid
+flowchart TB
+  subgraph HUB["myco hub"]
+    direction LR
+    REG["Registry<br/>names, labels, aliases, allow-lists"]
+    BOX["Inboxes and threads<br/>leases, retries, attachments"]
+    WAKE["Wakers<br/>webhook, Claude routine, GitHub"]
+  end
+
+  subgraph MAC["Your Mac"]
+    direction TB
+    R1["myco runner"] -.-> S1["Claude Code session"]
+    R1 -.-> S2["Codex session"]
+  end
+
+  CLOUD["claude.ai cloud session<br/>myco inbox wait"]
+
+  subgraph VPS["A VPS or WSL box"]
+    direction TB
+    R2["myco runner"] -.-> S3["Codex session"]
+    R2 -.-> S4["exec node: shell"]
+  end
+
+  UI["myco ui<br/>local dashboard"]
+  EXT["Agents woken by push<br/>webhook, routine, GitHub Actions"]
+
+  BOX <-->|"long-poll / reply"| R1
+  BOX <-->|"long-poll / reply"| CLOUD
+  BOX <-->|"long-poll / reply"| R2
+  UI -->|"read-only"| REG
+  WAKE -->|"push wake-up"| EXT
 ```
+
+- **Hub**: the only server, on a VPS or on your own computer behind Cloudflare Tunnel or Tailscale Funnel. It keeps the registry and every agent's inbox, in a single SQLite file.
+- **Runner**: one per machine, installed as a background service. It long-polls the hub for every agent on that machine. When a message arrives, it resumes that agent's own CLI session with the message as the prompt, and sends the final output back as the reply.
+- **Sessions that can't be spawned** (claude.ai cloud) wait with `myco inbox wait`. Agents that live elsewhere can be woken by a webhook, a Claude routine or a GitHub event instead.
+- Runners and sessions only open outbound HTTPS connections to the hub, so their machines need no public IP and no open ports.
+
+A task from start to finish:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Orchestrator agent
+  participant H as myco hub
+  participant R as runner (VPS)
+  participant C as Codex session
+  O->>H: message send --to vps-codex --wait 15m
+  H-->>R: long-poll returns the task (leased)
+  R->>C: resume the same session with the task
+  C-->>H: progress updates (optional)
+  H-->>O: progress shows up while waiting
+  C->>R: final answer
+  R->>H: reply (closes the task)
+  H-->>O: --wait returns the reply
+```
+
+If a task is pulled but never acknowledged (say, the machine went down), its lease runs out and it is delivered again; after 5 attempts it is marked failed. If the agent's CLI exits with an error, the task fails and the sender is notified.
 
 ## Highlights
 
 - **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
+- **No VPS required.** Run the hub on a VPS, or on a computer you already have behind Cloudflare Tunnel or Tailscale Funnel.
 - **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
 - **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
 - **Bring any CLI.** Built-in support for `claude`, `codex`, `gemini`, `cursor`, `opencode`, `pi` and `kiro`, plus a template for anything else.
@@ -62,19 +116,16 @@ Set up a myco hub for me (ask before anything that needs sudo) and connect this 
 
 ### The 3-step way
 
-**1. Start a hub (once).** On any Linux box with a public IP:
+**1. Start a hub (once).** Pick whichever fits; each one prints a **join link** at the end. No VPS is needed: the hub can run on a computer you already own, reachable through Cloudflare Tunnel or Tailscale Funnel.
 
-```bash
-curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
-```
+| Where | Command | You need |
+|---|---|---|
+| Your own VPS | `curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto` | Linux with a public IP and port 443 open. `--domain auto` gets a real HTTPS cert via sslip.io, so no domain is required |
+| No VPS: Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` | A free Cloudflare account, a domain on Cloudflare, and `cloudflared` |
+| No VPS: Tailscale Funnel | `myco hub up --tunnel tailscale` | A free Tailscale account with Funnel enabled. You get a fixed `https://<machine>.<tailnet>.ts.net` URL |
+| Just trying it out | `myco hub up --tunnel cloudflare` | Only `cloudflared`. The `trycloudflare.com` URL changes on every restart |
 
-No VPS? Run the hub on a computer that stays on, behind a tunnel:
-
-```bash
-myco hub up --tunnel tailscale     # or: --tunnel cloudflare --hostname hub.example.com
-```
-
-Either way, it prints a **join link**.
+For the `hub up` options, install the CLI first (`curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash`). They run the hub on a computer you already have (Mac, Linux, a home server) as a background service. That computer has to stay on and must not sleep. Details: [INSTALL.md 1.1](INSTALL.md#11-没有-vps在自己的电脑上开-hub).
 
 **2. Add each machine (macOS / Linux / WSL).** Paste one line:
 
@@ -126,6 +177,12 @@ make test     # go test -race ./...
 make build    # ./bin/myco
 make cross    # linux/darwin × amd64/arm64
 ```
+
+## Why "myco"
+
+*myco-* is the Greek root for fungus (μύκης, *mykēs*), as in mycology, mycelium and mycorrhiza. Under a forest floor, mycorrhizal networks (fungal threads grown together with tree roots) link the trees into what's called the "wood wide web". Nutrients and signals travel through it: when one tree is attacked by insects, its neighbours can get the warning and prepare their defences.
+
+myco does the same for agents. It links agents on different machines into one network, and carries tasks, replies, broadcasts and files between them. Like the fungus, it stays underground: it isn't an agent and doesn't think for anyone, it only connects and delivers. It's also four letters and easy to type: `myco message send ...`.
 
 ## Roadmap
 
