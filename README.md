@@ -14,9 +14,7 @@ so they can find each other, hand off tasks, and reply, while you're away.
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<img src="docs/assets/myco-demo.gif" alt="myco demo: a lead agent delegates a bug fix to a coder, a reviewer and a CI box over myco" width="100%">
-
-**[▶ Watch the 80-second demo](docs/assets/myco-demo.mp4)** (English narration, English and Chinese subtitles)
+https://github.com/user-attachments/assets/13ce4781-4c71-4124-bf34-fc9e3cf105ee
 
 </div>
 
