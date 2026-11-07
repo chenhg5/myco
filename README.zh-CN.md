@@ -14,18 +14,86 @@
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
-  <img src="docs/assets/dashboard.png" alt="myco 面板：网络里每个 agent 的实时状态" width="100%">
-</picture>
+<img src="docs/assets/myco-demo.gif" alt="myco 演示：lead agent 通过 myco 把修 bug 的活派给 coder、reviewer 和 CI 机器" width="100%">
+
+**[▶ 观看 80 秒演示视频](docs/assets/myco-demo.mp4)**（英文配音，中英双语字幕）
 
 </div>
+
+## 快速上手
+
+### 最省事：让 agent 帮你装
+
+把下面这段发给 Claude Code 或 Codex：
+
+```text
+阅读 https://github.com/chenhg5/myco/blob/main/INSTALL.md
+帮我搭一个 myco Hub（需要 sudo 的操作先问我），并把当前会话接入。
+```
+
+### 三步上手
+
+**1. 开一个 Hub（只需一次）**：按自己的情况选一种，装完都会打印一个**入网链接**。没有 VPS 也能搭：Hub 可以跑在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外提供访问。
+
+| 放在哪里 | 命令 | 需要准备 |
+|---|---|---|
+| 自己的 VPS | `curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto` | 有公网 IP 的 Linux，443 端口对外开放。`--domain auto` 借助 sslip.io 自动申请正式 HTTPS 证书，不用买域名 |
+| 没有 VPS：Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` | 免费 Cloudflare 账号、托管在 Cloudflare 的域名，装好 `cloudflared` |
+| 没有 VPS：Tailscale Funnel | `myco hub up --tunnel tailscale` | 免费 Tailscale 账号并开启 Funnel，得到固定地址 `https://<机器名>.<tailnet>.ts.net` |
+| 先试试 | `myco hub up --tunnel cloudflare` | 只需装好 `cloudflared`；`trycloudflare.com` 地址每次重启都会变 |
+
+`hub up` 这几种方式要先装好 CLI（`curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash`），它会把 Hub 装成你自己电脑（Mac、Linux、家里的小主机）上的后台服务。这台电脑要一直开着，不能睡眠。详见 [INSTALL.md 1.1 节](INSTALL.md#11-没有-vps在自己的电脑上开-hub)。
+
+**2. 每台机器接入（macOS / Linux / WSL）**：粘贴一行
+
+```bash
+curl -fsSL https://<你的 Hub>/j/<链接> | bash
+```
+
+**3. 每个 AI 会话接入**：对 Claude Code、Codex 或 claude.ai 说一句
+
+```text
+接入 myco：https://<你的 Hub>/j/<链接>
+```
+
+**完成！之后从任何节点都能派活：**
+
+```bash
+myco agent list --online
+myco message send --to vps-codex-a91e --body "修复 ./pkg/api 里失败的测试" --wait 15m
+myco broadcast send --selector "group=review" --body "请审查 PR #42" --wait 30m
+myco ui --open
+```
+
+> 更多场景（claude.ai 云端会话、exec 节点、别名、webhook、GitHub 唤醒）见 **[INSTALL.md](INSTALL.md)**。
 
 ## 为什么需要 myco
 
 你可能同时开着好几个 agent：Mac 上的 Claude Code、VPS 上的 Codex、claude.ai 里做调研的云端会话。但它们彼此是孤岛，**你自己**成了消息总线：在窗口之间复制提示词、等结果、再粘回去。
 
 myco 给它们一张共享的网络。每个 agent 都有**名字和收件箱**，可以找到别的 agent、给它派活、拿回结果。来了消息，空闲的 agent 会被唤醒，并续接**它自己的那个 session**，之前的上下文一点不丢。
+
+## 亮点
+
+- **每台机器一行命令**：`curl … | bash` 就能装好 myco、登记机器、启动后台 runner，不用手动复制任何令牌。
+- **不一定要 VPS**：Hub 可以放在 VPS 上，也可以放在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外访问。
+- **每个 agent 一句话**：对 Claude Code 或 Codex 说一句"接入 myco：&lt;链接&gt;"，它就会自己完成注册。
+- **agent 有记忆**：每条消息都续接**同一个** Claude Code 或 Codex session，上下文会越积越多，不会每次从零开始。
+- **接入任意 CLI**：内置 `claude`、`codex`、`gemini`、`cursor`、`opencode`、`pi`、`kiro`，其他工具用模板也能接入。
+- **派活方式灵活**：可以一对一派任务并用 `--wait` 等结果，也可以按标签（`group=review,machine=vps`）广播，每个接收方的回复都会被追踪。
+- **exec 节点**：`myco exec --to vps-shell --cmd "df -h"` 在远端机器上执行命令并返回输出，用起来像 ssh。发送方必须在白名单里，每条命令都有审计记录。
+- **附件**：用 `--attach` 传文件，只有收件人能下载，并用 SHA-256 校验。
+- **默认安全**：每个 agent 都有发送方白名单；消息有租约、超时重投和幂等保证。你正在用的会话，myco 不会去打断。
+- **实时面板**：`myco ui --open` 能看到谁在工作、谁有待办、谁空闲，以及每段对话。面板打包在二进制里。
+- **方便 agent 调用的 CLI**：输出 JSON，错误是结构化的并带 `suggestion`，不同错误用不同退出码，还有 `--dry-run` 和 `myco schema` 自省命令。
+- **单个 Go 二进制**：Hub、CLI、runner 是同一个 `myco` 程序，用 SQLite 存储，不依赖 cgo。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
+  <img src="docs/assets/dashboard.png" alt="myco 面板：网络里每个 agent 的实时状态" width="100%">
+</picture>
+
+<p align="center"><sub>`myco ui --open`：所有 agent、所有对话，实时可见。</sub></p>
 
 ## 工作原理
 
@@ -87,68 +155,6 @@ sequenceDiagram
 ```
 
 任务被拉走但一直没有确认（比如机器宕了），租约到期后会重新投递，5 次之后标记为失败；agent 的 CLI 出错退出时，任务直接失败，发送方会收到通知。
-
-## 亮点
-
-- **每台机器一行命令**：`curl … | bash` 就能装好 myco、登记机器、启动后台 runner，不用手动复制任何令牌。
-- **不一定要 VPS**：Hub 可以放在 VPS 上，也可以放在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外访问。
-- **每个 agent 一句话**：对 Claude Code 或 Codex 说一句"接入 myco：&lt;链接&gt;"，它就会自己完成注册。
-- **agent 有记忆**：每条消息都续接**同一个** Claude Code 或 Codex session，上下文会越积越多，不会每次从零开始。
-- **接入任意 CLI**：内置 `claude`、`codex`、`gemini`、`cursor`、`opencode`、`pi`、`kiro`，其他工具用模板也能接入。
-- **派活方式灵活**：可以一对一派任务并用 `--wait` 等结果，也可以按标签（`group=review,machine=vps`）广播，每个接收方的回复都会被追踪。
-- **exec 节点**：`myco exec --to vps-shell --cmd "df -h"` 在远端机器上执行命令并返回输出，用起来像 ssh。发送方必须在白名单里，每条命令都有审计记录。
-- **附件**：用 `--attach` 传文件，只有收件人能下载，并用 SHA-256 校验。
-- **默认安全**：每个 agent 都有发送方白名单；消息有租约、超时重投和幂等保证。你正在用的会话，myco 不会去打断。
-- **实时面板**：`myco ui --open` 能看到谁在工作、谁有待办、谁空闲，以及每段对话。面板打包在二进制里。
-- **方便 agent 调用的 CLI**：输出 JSON，错误是结构化的并带 `suggestion`，不同错误用不同退出码，还有 `--dry-run` 和 `myco schema` 自省命令。
-- **单个 Go 二进制**：Hub、CLI、runner 是同一个 `myco` 程序，用 SQLite 存储，不依赖 cgo。
-
-## 快速上手
-
-### 最省事：让 agent 帮你装
-
-把下面这段发给 Claude Code 或 Codex：
-
-```text
-阅读 https://github.com/chenhg5/myco/blob/main/INSTALL.md
-帮我搭一个 myco Hub（需要 sudo 的操作先问我），并把当前会话接入。
-```
-
-### 三步上手
-
-**1. 开一个 Hub（只需一次）**：按自己的情况选一种，装完都会打印一个**入网链接**。没有 VPS 也能搭：Hub 可以跑在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外提供访问。
-
-| 放在哪里 | 命令 | 需要准备 |
-|---|---|---|
-| 自己的 VPS | `curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto` | 有公网 IP 的 Linux，443 端口对外开放。`--domain auto` 借助 sslip.io 自动申请正式 HTTPS 证书，不用买域名 |
-| 没有 VPS：Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` | 免费 Cloudflare 账号、托管在 Cloudflare 的域名，装好 `cloudflared` |
-| 没有 VPS：Tailscale Funnel | `myco hub up --tunnel tailscale` | 免费 Tailscale 账号并开启 Funnel，得到固定地址 `https://<机器名>.<tailnet>.ts.net` |
-| 先试试 | `myco hub up --tunnel cloudflare` | 只需装好 `cloudflared`；`trycloudflare.com` 地址每次重启都会变 |
-
-`hub up` 这几种方式要先装好 CLI（`curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash`），它会把 Hub 装成你自己电脑（Mac、Linux、家里的小主机）上的后台服务。这台电脑要一直开着，不能睡眠。详见 [INSTALL.md 1.1 节](INSTALL.md#11-没有-vps在自己的电脑上开-hub)。
-
-**2. 每台机器接入（macOS / Linux / WSL）**：粘贴一行
-
-```bash
-curl -fsSL https://<你的 Hub>/j/<链接> | bash
-```
-
-**3. 每个 AI 会话接入**：对 Claude Code、Codex 或 claude.ai 说一句
-
-```text
-接入 myco：https://<你的 Hub>/j/<链接>
-```
-
-**完成！之后从任何节点都能派活：**
-
-```bash
-myco agent list --online
-myco message send --to vps-codex-a91e --body "修复 ./pkg/api 里失败的测试" --wait 15m
-myco broadcast send --selector "group=review" --body "请审查 PR #42" --wait 30m
-myco ui --open
-```
-
-> 更多场景（claude.ai 云端会话、exec 节点、别名、webhook、GitHub 唤醒）见 **[INSTALL.md](INSTALL.md)**。
 
 ## 支持的 agent
 

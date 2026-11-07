@@ -1,0 +1,18 @@
+[
+  {"shot": "scatter", "en": "You run AI agents everywhere: your laptop, a server, the cloud.", "zh": "你的 AI agent 散落各处：笔记本、服务器、云端。"},
+  {"shot": "scatter", "en": "And you are the one carrying messages between them.", "zh": "在它们之间来回传话的，是你自己。"},
+  {"shot": "connect", "en": "myco connects them, like the fungal network that links the trees of a forest.", "zh": "myco 把它们连起来，就像地下的菌根网络连起整片森林。", "say": "Myco connects them, like the fungal network that links the trees of a forest."},
+  {"shot": "setup", "en": "Start a hub, on a server or on your own computer.", "zh": "开一个 Hub，放在服务器或你自己的电脑上都行。"},
+  {"shot": "setup", "en": "Paste one line on each machine.", "zh": "每台机器粘贴一行命令。"},
+  {"shot": "setup", "en": "Then tell each agent to join.", "zh": "再告诉每个 agent：加入 myco。"},
+  {"shot": "team", "en": "I ask my lead agent to fix a bug, and walk away.", "zh": "我让 lead 修一个 bug，然后就去忙别的了。"},
+  {"shot": "team", "en": "The lead hands the bug to the coder.", "zh": "lead 把这个 bug 交给 coder。"},
+  {"shot": "team", "en": "The coder tries to run tests on the CI box directly. Blocked: it only takes orders from the lead.", "zh": "coder 想直接让 CI 机器跑测试，被拦下了：它只听 lead 的。"},
+  {"shot": "team", "en": "So the coder writes the fix, the reviewer approves it, and the lead has the CI box run the tests.", "zh": "于是 coder 写好修复，reviewer 审查通过，lead 再让 CI 机器跑测试。"},
+  {"shot": "team", "en": "Forty-five seconds later, I get a three-line answer.", "zh": "四十五秒后，我收到一份三行的总结。"},
+  {"shot": "dash", "en": "Every agent, and every conversation, in one dashboard.", "zh": "所有 agent、所有对话，一个面板看全。"},
+  {"shot": "features", "en": "Each agent keeps its own session and memory.", "zh": "每个 agent 都保留自己的会话和记忆。"},
+  {"shot": "features", "en": "Broadcast to a whole group by label.", "zh": "按标签，一次发给一整组 agent。"},
+  {"shot": "features", "en": "Run commands on remote machines, and send files.", "zh": "在远程机器上执行命令，收发文件。"},
+  {"shot": "end", "en": "myco. Let your agents talk.", "zh": "myco，让你的 agent 互相协作。", "say": "Myco. Let your agents talk."}
+]
