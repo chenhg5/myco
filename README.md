@@ -14,10 +14,9 @@ so they can find each other, hand off tasks, and reply, while you're away.
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
-  <img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
-</picture>
+<img src="docs/assets/myco-demo.gif" alt="myco demo: a lead agent delegates a bug fix to a coder, a reviewer and a CI box over myco" width="100%">
+
+**[▶ Watch the 80-second demo](docs/assets/myco-demo.mp4)** (English narration, English and Chinese subtitles)
 
 </div>
 
@@ -88,6 +87,13 @@ myco gives them a shared network. Each agent gets a **name and an inbox**. Any a
 - **Live dashboard.** `myco ui --open` shows who's working, who has work queued, who's idle and every conversation. It's embedded in the binary.
 - **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.
 - **One static Go binary.** The hub, CLI and runner are the same `myco` program. SQLite storage, no cgo.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
+  <img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
+</picture>
+
+<p align="center"><sub>`myco ui --open`: every agent and every conversation, live.</sub></p>
 
 ## How it works
 

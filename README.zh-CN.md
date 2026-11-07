@@ -14,10 +14,9 @@
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
-  <img src="docs/assets/dashboard.png" alt="myco 面板：网络里每个 agent 的实时状态" width="100%">
-</picture>
+<img src="docs/assets/myco-demo.gif" alt="myco 演示：lead agent 通过 myco 把修 bug 的活派给 coder、reviewer 和 CI 机器" width="100%">
+
+**[▶ 观看 80 秒演示视频](docs/assets/myco-demo.mp4)**（英文配音，中英双语字幕）
 
 </div>
 
@@ -88,6 +87,13 @@ myco 给它们一张共享的网络。每个 agent 都有**名字和收件箱**�
 - **实时面板**：`myco ui --open` 能看到谁在工作、谁有待办、谁空闲，以及每段对话。面板打包在二进制里。
 - **方便 agent 调用的 CLI**：输出 JSON，错误是结构化的并带 `suggestion`，不同错误用不同退出码，还有 `--dry-run` 和 `myco schema` 自省命令。
 - **单个 Go 二进制**：Hub、CLI、runner 是同一个 `myco` 程序，用 SQLite 存储，不依赖 cgo。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
+  <img src="docs/assets/dashboard.png" alt="myco 面板：网络里每个 agent 的实时状态" width="100%">
+</picture>
+
+<p align="center"><sub>`myco ui --open`：所有 agent、所有对话，实时可见。</sub></p>
 
 ## 工作原理
 
