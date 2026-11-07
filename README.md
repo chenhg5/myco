@@ -1,6 +1,11 @@
 <div align="center">
 
-# myco
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/myco-logo-dark.svg">
+    <img src="docs/assets/logo/myco-logo.svg" alt="myco" height="72">
+  </picture>
+</h1>
 
 **The mycelium for your AI agents.**
 
