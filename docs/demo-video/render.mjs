@@ -10,8 +10,12 @@ import { join } from 'node:path';
 
 const DIR = import.meta.dirname;
 const FPS = 30;
-const lines = JSON.parse(readFileSync(join(DIR, 'lines.json'), 'utf8'));
-const durs = JSON.parse(readFileSync(join(DIR, 'vo/durations.json'), 'utf8'));
+const LANG = process.env.LANG_FILM === 'zh' ? 'zh' : 'en';
+const VO = LANG === 'zh' ? 'vo-zh' : 'vo';
+const OUT = LANG === 'zh' ? 'out-zh' : 'out';
+const clip = (i) => join(DIR, `${VO}/${String(i).padStart(2, '0')}.${LANG === 'zh' ? 'mp3' : 'wav'}`);
+const lines = JSON.parse(readFileSync(join(DIR, LANG === 'zh' ? 'lines-zh.json' : 'lines.json'), 'utf8'));
+const durs = JSON.parse(readFileSync(join(DIR, `${VO}/durations.json`), 'utf8'));
 // per shot: silence before the first line, between lines, and after the last line (seconds)
 const CFG = {
   scatter: { lead: 1.4, gap: 0.7, tail: 1.6, gaps: { 1: 1.0 } },
@@ -37,13 +41,13 @@ function timeline() {
   return { shots, lines: out, total: +t.toFixed(3) };
 }
 const TL = timeline();
-mkdirSync(join(DIR, 'out'), { recursive: true });
-writeFileSync(join(DIR, 'out/tl.json'), JSON.stringify(TL, null, 1));
+mkdirSync(join(DIR, OUT), { recursive: true });
+writeFileSync(join(DIR, OUT + '/tl.json'), JSON.stringify(TL, null, 1));
 
 async function page() {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  await p.addInitScript((tl) => { window.TL = tl; }, TL);
+  await p.addInitScript(([tl, lang]) => { window.TL = tl; window.LANG = lang; }, [TL, LANG]);
   p.on('pageerror', (e) => console.error('page error:', e.message));
   await p.goto('file://' + join(DIR, 'film.html'));
   await p.evaluate(() => window.ready);
@@ -53,12 +57,12 @@ async function page() {
 const mode = process.argv[2];
 if (mode === 'stills') {
   const { b, p } = await page(); mkdirSync(join(DIR, 'stills'), { recursive: true });
-  for (const s of process.argv.slice(3)) { await p.evaluate((t) => window.seek(t), +s); await p.screenshot({ path: join(DIR, `stills/t${s}.png`) }); }
+  for (const s of process.argv.slice(3)) { await p.evaluate((t) => window.seek(t), +s); await p.screenshot({ path: join(DIR, `stills/${LANG}-t${s}.png`) }); }
   await b.close(); console.log('total', TL.total, 's'); for (const [k, v] of Object.entries(TL.shots)) console.log(k, v.start.toFixed(1), v.end.toFixed(1));
 } else if (mode === 'film') {
   const { b, p } = await page();
   const n = Math.ceil(TL.total * FPS);
-  const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', join(DIR, 'out/video.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
+  const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', join(DIR, OUT + '/video.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
   const t0 = Date.now();
   for (let f = 0; f < n; f++) {
     await p.evaluate((t) => window.seek(t), f / FPS);
@@ -71,17 +75,17 @@ if (mode === 'stills') {
 } else if (mode === 'mix') {
   // narration: each clip starts at its line's start; light music under it, ducked by the voice
   const inputs = []; const fl = [];
-  TL.lines.forEach((l, i) => { inputs.push('-i', join(DIR, `vo/${String(i).padStart(2, '0')}.wav`)); const ms = Math.round(l.start * 1000); fl.push(`[${i}:a]aresample=48000,adelay=${ms}|${ms}[a${i}]`); });
+  TL.lines.forEach((l, i) => { inputs.push('-i', clip(i)); const ms = Math.round(l.start * 1000); fl.push(`[${i}:a]aresample=48000,adelay=${ms}|${ms}[a${i}]`); });
   const k = TL.lines.length; const T = TL.total.toFixed(2);
   const vo = `${fl.join(';')};${TL.lines.map((_, i) => `[a${i}]`).join('')}amix=inputs=${k}:normalize=0,apad,atrim=0:${T}[vo]`;
   const music = `[${k}:a]aresample=48000,volume=-30dB,afade=t=in:d=2,afade=t=out:st=${(TL.total - 3.5).toFixed(2)}:d=3.5,atrim=0:${T}[m]`;
   const graph = `${vo};${music};[vo]asplit=2[v1][v2];[m][v2]sidechaincompress=threshold=0.03:ratio=4:attack=30:release=600[duck];[v1][duck]amix=inputs=2:normalize=0:duration=first[aout]`;
-  execFileSync('ffmpeg', ['-v', 'error', '-y', ...inputs, '-stream_loop', '-1', '-i', join(DIR, 'out/bgm.wav'), '-filter_complex', graph, '-map', '[aout]', '-ac', '2', '-c:a', 'aac', '-b:a', '192k', join(DIR, 'out/audio.m4a')], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-v', 'error', '-y', ...inputs, '-stream_loop', '-1', '-i', join(DIR, OUT + '/bgm.wav'), '-filter_complex', graph, '-map', '[aout]', '-ac', '2', '-c:a', 'aac', '-b:a', '192k', join(DIR, OUT + '/audio.m4a')], { stdio: 'inherit' });
   // one fixed gain to about -16 LUFS plus a limiter (keeps the voice/music balance; loudnorm's dynamic mode lifts the music in the gaps)
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-i', join(DIR, 'out/audio.m4a'), '-af', 'ebur128', '-f', 'null', '-'], { encoding: 'utf8' });
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-i', join(DIR, OUT + '/audio.m4a'), '-af', 'ebur128', '-f', 'null', '-'], { encoding: 'utf8' });
   const sum = /Integrated loudness:\s+I:\s+(-?[\d.]+)/.exec(r.stderr)[1];
   const gain = (-16 - Number(sum)).toFixed(1); console.log('measured', sum, 'LUFS, gain', gain, 'dB');
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(DIR, 'out/audio.m4a'), '-af', `volume=${gain}dB,alimiter=limit=0.89:level=false`, '-c:a', 'aac', '-b:a', '192k', join(DIR, 'out/audio2.m4a')], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(DIR, 'out/video.mp4'), '-i', join(DIR, 'out/audio2.m4a'), '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'copy', '-shortest', '-movflags', '+faststart', join(DIR, 'out/myco-demo.mp4')], { stdio: 'inherit' });
-  console.log('→ out/myco-demo.mp4');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(DIR, OUT + '/audio.m4a'), '-af', `volume=${gain}dB,alimiter=limit=0.89:level=false`, '-c:a', 'aac', '-b:a', '192k', join(DIR, OUT + '/audio2.m4a')], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(DIR, OUT + '/video.mp4'), '-i', join(DIR, OUT + '/audio2.m4a'), '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'copy', '-shortest', '-movflags', '+faststart', join(DIR, OUT + (LANG === 'zh' ? '/myco-demo-zh.mp4' : '/myco-demo.mp4'))], { stdio: 'inherit' });
+  console.log('→', OUT + (LANG === 'zh' ? '/myco-demo-zh.mp4' : '/myco-demo.mp4'));
 }
