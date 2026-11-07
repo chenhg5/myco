@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, CircleDot, Filter, LayoutGrid, List, Moon, Network, RefreshCw, Search, ShieldCheck, Sun, Users, Wifi, WifiOff, X, Zap, Inbox,
+  CircleDot, Filter, LayoutGrid, List, Moon, RefreshCw, Search, ShieldCheck, Sun, Users, WifiOff, X,
 } from "lucide-react";
 import { api, type AgentStatus, type Message, type Overview, type Session, type State, type ViewAs } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { CopyText } from "@/components/copy";
 import { cn, timeAgo } from "@/lib/utils";
 
 const POLL_MS = 5000;
+const UNDERLINE = "relative gap-2 rounded-none bg-transparent px-0 pb-2.5 pt-0 text-sm text-muted-foreground shadow-none hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 data-[state=active]:after:opacity-100";
 
 // --- selector matching (mirrors the hub's label selector) ---
 function matches(a: AgentStatus, selector: string): boolean {
@@ -43,22 +44,38 @@ function useTheme() {
   return [dark, setDark] as const;
 }
 
-function StatCard({ label, value, icon: Icon, tone, active, onClick }: {
-  label: string; value: number | string; icon: typeof Users; tone: string; active?: boolean; onClick?: () => void;
+function StatCell({ label, value, dot, active, onClick }: {
+  label: string; value: number | string; dot?: string; active?: boolean; onClick?: () => void;
 }) {
   return (
-    <Card
+    <button
+      type="button"
       onClick={onClick}
-      className={cn("flex cursor-pointer items-center gap-4 p-4 transition hover:shadow-md", active && "ring-2 ring-primary/40")}
+      className={cn(
+        "group relative flex flex-col gap-2 bg-card px-5 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none",
+        active && "bg-muted/50",
+      )}
     >
-      <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", tone)}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <div className="text-2xl font-semibold tabular-nums tracking-tight">{value}</div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-      </div>
-    </Card>
+      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+        {dot ? <span className={cn("h-1.5 w-1.5 rounded-full", dot)} /> : <span className="h-1.5 w-1.5 rounded-full border border-foreground/40" />}
+        {label}
+      </span>
+      <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value}</span>
+      <span className={cn("absolute inset-x-0 bottom-0 h-0.5 bg-foreground transition-opacity", active ? "opacity-100" : "opacity-0")} />
+    </button>
+  );
+}
+
+function Logo() {
+  return (
+    <svg viewBox="0 0 32 32" className="h-[18px] w-[18px]" aria-hidden>
+      <path d="M16 16L6 8M16 16L26 9M16 16L9 26M16 16L25 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity=".55" />
+      <circle cx="6" cy="8" r="2.6" fill="currentColor" opacity=".7" />
+      <circle cx="26" cy="9" r="2.6" fill="currentColor" opacity=".7" />
+      <circle cx="9" cy="26" r="2.6" fill="currentColor" opacity=".7" />
+      <circle cx="25" cy="24" r="2.6" fill="currentColor" opacity=".7" />
+      <circle cx="16" cy="16" r="4.2" fill="hsl(var(--brand))" />
+    </svg>
   );
 }
 
@@ -157,23 +174,22 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-full bg-grid">
+      <div className="min-h-full bg-glow">
         {/* Header */}
         <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-md">
           <div className="container flex h-14 items-center gap-2 px-4 sm:gap-4 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <Network className="h-4 w-4" />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border bg-card text-foreground shadow-[0_1px_2px_0_rgb(0_0_0/0.04)]">
+                <Logo />
               </div>
-              <div className="leading-tight">
-                <div className="text-sm font-semibold tracking-tight">myco</div>
-                <div className="hidden max-w-[260px] truncate text-[11px] text-muted-foreground sm:block">{session?.hub || "…"}</div>
-              </div>
+              <span className="text-[15px] font-semibold tracking-tight">myco</span>
+              <span className="hidden text-border sm:inline">/</span>
+              <span className="hidden max-w-[280px] truncate font-mono text-xs text-muted-foreground sm:inline">{session?.hub || "…"}</span>
             </div>
             <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
               <Tip content={error ? "无法连接 Hub" : fresh ? `每 ${POLL_MS / 1000} 秒自动刷新` : "数据可能已过期"}>
-                <span className={cn("hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs sm:inline-flex", error ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
-                  {error ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className={cn("h-3.5 w-3.5", fresh && "text-working")} />}
+                <span className={cn("mr-1 hidden items-center gap-2 text-xs sm:inline-flex", error ? "text-destructive" : "text-muted-foreground")}>
+                  {error ? <WifiOff className="h-3.5 w-3.5" /> : <span className={cn("h-1.5 w-1.5 rounded-full", fresh ? "bg-working shadow-[0_0_0_3px_hsl(var(--working)/0.15)]" : "bg-offline")} />}
                   {ov ? `更新于 ${timeAgo(ov.generated_at, now)}` : "连接中"}
                 </span>
               </Tip>
@@ -185,7 +201,7 @@ export default function App() {
                   </TabsList>
                 </Tabs>
               ) : session && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium">
                   {session.admin ? <ShieldCheck className="h-3.5 w-3.5" /> : <CircleDot className="h-3.5 w-3.5" />}
                   {session.admin && !session.agent ? "管理员视图" : session.agent}
                 </span>
@@ -200,7 +216,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="container space-y-6 px-4 py-6 sm:px-6">
+        <main className="container space-y-8 px-4 py-8 sm:px-6">
           {error && (
             <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/5 p-4 text-sm">
               <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -212,32 +228,38 @@ export default function App() {
           )}
 
           {/* Stats */}
-          <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <section>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight">网络概览</h1>
+                <p className="mt-1 text-sm text-muted-foreground">所有接入这个 Hub 的 agent，以及它们正在做的事。</p>
+              </div>
+            </div>
             {ov ? (
-              <>
-                <StatCard label="全部节点" value={ov.totals.agents} icon={Users} tone="bg-primary/10 text-primary" active={stateFilter === "all"} onClick={() => setStateFilter("all")} />
-                <StatCard label="工作中" value={ov.totals.working} icon={Zap} tone="bg-working/10 text-working" active={stateFilter === "working"} onClick={() => setStateFilter("working")} />
-                <StatCard label="有待办" value={ov.totals.pending} icon={Inbox} tone="bg-pending/10 text-pending" active={stateFilter === "pending"} onClick={() => setStateFilter("pending")} />
-                <StatCard label="空闲" value={ov.totals.idle} icon={Activity} tone="bg-idle/10 text-idle" active={stateFilter === "idle"} onClick={() => setStateFilter("idle")} />
-                <StatCard label="离线" value={ov.totals.offline} icon={WifiOff} tone="bg-offline/15 text-offline" active={stateFilter === "offline"} onClick={() => setStateFilter("offline")} />
-              </>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] md:grid-cols-5">
+                <StatCell label="全部节点" value={ov.totals.agents} active={stateFilter === "all"} onClick={() => setStateFilter("all")} />
+                <StatCell label="工作中" value={ov.totals.working} dot="bg-working" active={stateFilter === "working"} onClick={() => setStateFilter("working")} />
+                <StatCell label="有待办" value={ov.totals.pending} dot="bg-pending" active={stateFilter === "pending"} onClick={() => setStateFilter("pending")} />
+                <StatCell label="空闲" value={ov.totals.idle} dot="bg-idle" active={stateFilter === "idle"} onClick={() => setStateFilter("idle")} />
+                <StatCell label="离线" value={ov.totals.offline} dot="bg-offline" active={stateFilter === "offline"} onClick={() => setStateFilter("offline")} />
+              </div>
             ) : (
-              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[74px] rounded-xl" />)
+              <Skeleton className="h-[86px] rounded-xl" />
             )}
           </section>
 
           <Tabs defaultValue="agents">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <TabsList>
-                <TabsTrigger value="agents"><Users className="h-4 w-4" />节点</TabsTrigger>
-                <TabsTrigger value="activity"><Activity className="h-4 w-4" />动态{ov ? <span className="ml-1 rounded bg-muted px-1 text-[10px] tabular-nums">{ov.recent.length}</span> : null}</TabsTrigger>
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b">
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <TabsTrigger value="agents" className={UNDERLINE}>节点{ov ? <span className="rounded-md bg-muted px-1.5 text-[11px] font-normal tabular-nums text-muted-foreground">{ov.agents.length}</span> : null}</TabsTrigger>
+                <TabsTrigger value="activity" className={UNDERLINE}>动态{ov ? <span className="rounded-md bg-muted px-1.5 text-[11px] font-normal tabular-nums text-muted-foreground">{ov.recent.length}</span> : null}</TabsTrigger>
               </TabsList>
               {ov?.viewer.kind === "agent" && (
-                <p className="text-xs text-muted-foreground">以 <span className="font-mono">{ov.viewer.name}</span> 的身份查看：其他节点的消息内容不可见</p>
+                <p className="pb-2.5 text-xs text-muted-foreground">以 <span className="font-mono text-foreground/80">{ov.viewer.name}</span> 的身份查看：其他节点的消息内容不可见</p>
               )}
             </div>
 
-            <TabsContent value="agents" className="mt-4 space-y-4">
+            <TabsContent value="agents" className="mt-5 space-y-4">
               {/* Toolbar */}
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <div className="relative flex-1">
@@ -267,7 +289,7 @@ export default function App() {
               </div>
               {allLabels.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 text-xs text-muted-foreground">常用标签</span>
+                  <span className="mr-1.5 text-xs text-muted-foreground">常用标签</span>
                   {allLabels.map(([l, n]) => {
                     const on = selector.split(",").map((t) => t.trim()).includes(l);
                     return (
@@ -275,8 +297,8 @@ export default function App() {
                         key={l}
                         onClick={() => pickLabel(l)}
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[11px] transition",
-                          on ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/50",
+                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[11px] transition-colors",
+                          on ? "border-foreground bg-foreground text-background" : "bg-card text-foreground/80 hover:border-foreground/30",
                         )}
                       >
                         {l}<span className={cn("tabular-nums", on ? "opacity-80" : "text-muted-foreground")}>{n}</span>
@@ -288,7 +310,7 @@ export default function App() {
 
               {!ov ? (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[230px] rounded-xl" />)}
+                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[200px] rounded-xl" />)}
                 </div>
               ) : agents.length === 0 ? (
                 <Card className="flex flex-col items-center justify-center gap-2 p-12 text-center">
@@ -305,7 +327,7 @@ export default function App() {
               )}
             </TabsContent>
 
-            <TabsContent value="activity" className="mt-4">
+            <TabsContent value="activity" className="mt-5">
               <Card className="overflow-hidden">
                 <div className="flex items-center justify-between border-b px-4 py-3">
                   <div className="text-sm font-medium">{ov?.viewer.kind === "admin" ? "全网最近消息" : "与我相关的最近消息"}</div>
@@ -322,7 +344,7 @@ export default function App() {
             </TabsContent>
           </Tabs>
 
-          <footer className="pb-4 pt-2 text-center text-xs text-muted-foreground">
+          <footer className="pb-6 pt-2 text-center text-xs text-muted-foreground/70">
             myco {session?.version} · 只读视图 · 数据来自 Hub 的 /v1/overview
           </footer>
         </main>
@@ -396,7 +418,7 @@ export default function App() {
 
                 <section>
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">标签</h4>
-                  <Labels labels={current.agent.labels} max={32} />
+                  <div className="flex flex-wrap gap-1"><Labels labels={current.agent.labels} max={32} /></div>
                 </section>
 
                 {ov && (

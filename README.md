@@ -1,156 +1,143 @@
+<div align="center">
+
 # myco
 
-> 像菌丝网络连接森林里的树一样，把散落在各处的 AI agent 连起来。
+**The mycelium for your AI agents.**
 
-myco 是一个让 AI agent 互相发现、互相派活的消息中转系统。本地的 Claude Code、VPS 上的 Codex、云端的 agent，只要能访问 Hub，就能注册、查看彼此，并通过各自的收件箱收发任务和回复。
+Connect Claude Code, Codex and any agent CLI across laptops, VPSes and the cloud —<br>
+so they can find each other, hand off tasks, and reply, while you're away.
 
+[![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=10b981)](https://github.com/chenhg5/myco/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
+[![Go](https://img.shields.io/github/go-mod/go-version/chenhg5/myco?style=flat-square&logo=go&logoColor=white)](go.mod)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Linux%20·%20WSL-grey?style=flat-square)
+
+**English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
+  <img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
+</picture>
+
+</div>
+
+## Why myco
+
+You already run several agents: Claude Code on your Mac, Codex on a VPS, a claude.ai cloud session doing research. Today they're islands, and **you** are the message bus: copying prompts between them, waiting, pasting results back.
+
+myco gives them a shared network. Each agent gets a **name and an inbox**. Any agent can find the others, send them work, and get the answer back. Idle agents are woken up when a message arrives, and each one resumes **its own session**, so it keeps all of its context.
+
+```text
+               ┌──────────────── myco hub ────────────────┐
+               │ registry · inboxes · threads · leases     │
+               └──────────────────────────────────────────┘
+          ▲                      ▲                      ▲
+   Claude Code (Mac)       Codex (VPS)          claude.ai / any script
 ```
-                ┌──────────── myco hub（VPS） ─────────────┐
-                │ 注册表 · 每个 agent 的收件箱 · 会话线程   │
-                │ 长轮询唤醒 · 租约重投 · 幂等 · 权限白名单 │
-                └──────────────────────────────────────────┘
-        ▲ myco runner           ▲ myco runner           ▲ myco CLI
-   本地 Claude Code         VPS 上的 Codex          任何脚本 / 主调度 agent
+
+## Highlights
+
+- **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
+- **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
+- **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
+- **Bring any CLI.** Built-in support for `claude`, `codex`, `gemini`, `cursor`, `opencode`, `pi` and `kiro`, plus a template for anything else.
+- **Delegation that scales.** Use 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
+- **Exec nodes.** `myco exec --to vps-shell --cmd "df -h"` runs a command on a remote machine and returns its output, like ssh. Senders are allow-listed and every command is audited.
+- **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
+- **Safe by default.** Every agent has an allow-list of who may send it work, and messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
+- **Live dashboard.** `myco ui --open` shows who's working, who has work queued, who's idle and every conversation. It's embedded in the binary.
+- **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.
+- **One static Go binary.** The hub, CLI and runner are the same `myco` program. SQLite storage, no cgo.
+
+## Quick Start
+
+### The lazy way: let your agent do it
+
+Paste this into Claude Code or Codex:
+
+```text
+Read https://github.com/chenhg5/myco/blob/main/INSTALL.md
+Set up a myco hub for me (ask before anything that needs sudo) and connect this session to it.
 ```
 
-- **单个二进制**：Go 编写，没有 cgo。Hub、CLI 和 runner 是同一个 `myco` 程序。
-- **为 agent 设计的 CLI**：
-  - 命令按 `名词 动词` 组织，参数都是长 flag
-  - 不在终端里运行时默认输出 JSON
-  - 错误是结构化的，带 `suggestion` 和 `retryable`
-  - 用不同的退出码区分错误类型
-  - 有副作用的命令都支持 `--dry-run`
-  - 提供 `myco schema` 自省命令
-- **agent = session + 环境 + harness**：注册时会记录绑定关系，runner 每次都续接**同一个** session。新开的空白 session 就算一个新的 agent。
-- **runner**：把 `claude`、`codex` 或任意命令行工具变成一个常驻 worker，来一条消息就续接一次它的 session。
-- **可视化面板**：`myco ui --open` 在本机打开一个只读面板，能看到各节点的状态（工作中 / 有待办 / 空闲 / 离线）、标签、会话和最近的对话；页面打包在二进制里。
-- **附件**：`--attach` 发送文件，只有收件人能下载，校验 SHA256；runner 唤醒 agent 前会自动下载附件。
-- **exec 节点**：`myco exec --to vps-shell --cmd "df -h"` 在远端机器上执行命令，像 ssh 一样返回输出和退出码；必须限定发送方，可选命令白名单、超时、输出上限和审计日志。
-- **显示名和别名**：名字是永久地址；显示名只用于展示，可以随时改；别名（如 `reviewer`）是管理员维护的角色地址，可以改指向别的 agent，发消息的一方不用改。
-- **标签、分组和广播**：agent 带上 `group=loops` 这类标签后，可以用选择器（`group=loops,machine=mac`）筛选出一批 agent 并广播消息，每个接收方独立回复，统一追踪。
-- **入网令牌**：把它放进云端环境的 Secrets，新开的 Claude Code session 会自动注册成 agent，重启后找回同一个身份。详见 [docs/delivery.md](docs/delivery.md#让-claude-code-云端-session-自动成为节点入网令牌)。
-- **可插拔的唤醒方式**：`pull`、`webhook`、`claude_routine`、`github_dispatch`、`github_issue`。外部系统的回复（比如 Codex 在 GitHub 上的评论）通过 ingress 转成 myco 消息。详见 [docs/delivery.md](docs/delivery.md)。
+### The 3-step way
 
-## 快速开始
+**1. Start a hub (once).** On any Linux box with a public IP:
 
-三步，不用手动复制任何令牌。完整说明见 **[INSTALL.md](INSTALL.md)**。
-
-**1. 服务端：在一台有公网 IP 的 Linux 上装 Hub**
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
-装完会打印一个**入网链接**和下面两条现成的命令。以后要新链接：`sudo /usr/local/bin/myco link create`。
 
-没有 VPS？在自己一直开着的电脑上用内网穿透开 Hub（见 [INSTALL.md 1.1](INSTALL.md#11-没有-vps在自己的电脑上开-hub)）：
+No VPS? Run the hub on a computer that stays on, behind a tunnel:
+
 ```bash
-myco hub up --tunnel tailscale                               # 或 --tunnel cloudflare --hostname hub.example.com
+myco hub up --tunnel tailscale     # or: --tunnel cloudflare --hostname hub.example.com
 ```
 
-**2. 每台电脑或服务器（macOS / Linux / WSL）：粘贴一行**
-```bash
-curl -fsSL https://<你的 Hub>/j/<链接> | bash
-```
-它会安装 myco、登记这台机器、装好后台服务。
+Either way, it prints a **join link**.
 
-**3. 每个 AI 会话（Claude Code、Codex、claude.ai）：说一句话**
+**2. Add each machine (macOS / Linux / WSL).** Paste one line:
+
+```bash
+curl -fsSL https://<your-hub>/j/<link> | bash
+```
+
+**3. Add each agent session.** Say this to Claude Code, Codex or claude.ai:
+
 ```text
-接入 myco：https://<你的 Hub>/j/<链接>
+join myco: https://<your-hub>/j/<link>
 ```
-在已经登记过的机器上，也可以直接在会话里执行 `myco join`。
 
-之后从任何节点派任务：
+**That's it. Now delegate from anywhere:**
+
 ```bash
 myco agent list --online
-myco message send --to <agent> --body "修复 ./pkg/api 里失败的测试" --wait 15m
+myco message send --to vps-codex-a91e --body "Fix the failing tests in ./pkg/api" --wait 15m
+myco broadcast send --selector "group=review" --body "Review PR #42" --wait 30m
+myco ui --open
 ```
 
-## 概念
+> More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wake-ups) are in **[INSTALL.md](INSTALL.md)** (Chinese; your agent reads it fine).
 
-| 概念 | 说明 |
+## Works with
+
+| Agent | Session resume | | Agent | Session resume |
+|---|:-:|---|---|:-:|
+| Claude Code (local & claude.ai) | Yes | | Cursor · Gemini · OpenCode | Yes (experimental) |
+| Codex | Yes | | Any CLI via `template` | optional |
+| Pi · Kiro | Yes | | Shell / exec node | — |
+
+Ways to wake an agent: `pull`, `webhook`, `claude_routine`, `github_dispatch` and `github_issue`. See [docs/delivery.md](docs/delivery.md).
+
+## Docs
+
+| | |
 |---|---|
-| Agent | 有名字、描述、能力标签和收件箱。`--allow-from` 限制谁能给它派任务 |
-| Message | `task` 需要一个回复；`note` 只是通知；`reply` / `event` 由系统生成 |
-| Thread | 一来一回的消息共享 `thread_id`。runner 按线程续接 CLI 会话 |
-| Lease | 拉取消息后需要在租约内 ack，否则消息会重投；超过次数上限后标记为失败 |
-| Hold | "先接下，稍后答复"，用于主 agent 先派出子任务、等结果回来再汇总 |
+| [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
+| [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
+| [docs/delivery.md](docs/delivery.md) | Wake-up modes and enrollment for cloud sessions |
+| [docs/api.md](docs/api.md) | HTTP API |
+| [skill/myco/SKILL.md](skill/myco/SKILL.md) | Skill file that teaches agents how to use myco |
 
-消息状态机：
-
-```
-queued ─pull→ delivered ─ack→ acked ─reply/done→ done
-   ↑              │             └─hold→ held ─reply/done→ done
-   └─租约到期─────┘        任意未结束状态 ─fail→ failed（task 的发送方会收到 event）
-```
-
-## runner 的行为
-
-- **一台机器一个 runner**：`myco runner start --all` 服务本机所有 agent（`~/.myco/agents/*.yaml`），新入网的 agent 会自动发现，并有全局并发上限。`myco runner service install` 把它装成后台服务（macOS 用 launchd，Linux 用 systemd）。
-- **不和人抢会话**：会话最近 90 秒内被别人写过（比如你正开着交互界面），消息就放回队列，10 秒起逐步加长重试，不算失败。
-- **会话**：默认 `--session-scope agent`，一个 agent 就是一个 session，每条消息都 `--resume` 同一个 session。第一次运行时创建 session，并自动写回 Hub。如果 agent 绑定在别的机器或别的 harness 上，runner 会拒绝启动。想每个线程各用一个 session，就用 `--session-scope thread`。
-- **task**：CLI 的最终输出自动作为 reply 发回；CLI 出错就 fail，发送方会收到通知。
-- **reply / event / note**：交给 CLI 处理，但**不会自动回复**，避免两个 runner 无限互相回复。
-- 如果 agent 在执行过程中自己调用了 `myco message reply/hold/fail`，runner 就不再替它回复。
-- 传给 CLI 的环境变量：`MYCO_MESSAGE_ID`、`MYCO_THREAD_ID`、`MYCO_FROM`、`MYCO_MESSAGE_TYPE`，以及 `MYCO_CONFIG`、`MYCO_HUB`、`MYCO_TOKEN`。所以 agent 在执行过程中可以直接用 `myco` 继续派活。
-- 把 [skill/myco/SKILL.md](skill/myco/SKILL.md) 装进 agent 的 skills 目录，agent 就知道该怎么用 myco。
-
-内置的 harness（`myco harness list` 可以看本机装了哪些）：
-
-| harness | 调用方式 | 会话续接 |
-|---|---|---|
-| `claude` | `claude -p --output-format stream-json --verbose [--resume <id>]` | ✅ |
-| `codex` | `codex exec --json -o <f> [resume <id>] -` | ✅ |
-| `pi`、`kiro` | 预设（JSONL） | ✅ |
-| `cursor`、`gemini`、`opencode` | 预设（实验性） | ✅ |
-| `template` | 在配置里声明命令行和输出格式，接入任意 CLI | 可选 |
-| `shell` | `sh -c "<command>"`，提示词从 stdin 传入，stdout 作为回复 | — |
-
-权限级别 `runner.access`：`readonly`、`workspace`、`full`，由各 harness 翻译成自己的参数。自检用 `myco doctor`。
-
-配置文件示例见 [examples/config.yaml](examples/config.yaml)。
-
-## 架构
-
-按 DDD 和端口适配器（六边形架构）分层，依赖只指向内层：
-
-```
-cmd/myco                   入口
-internal/cli               CLI 适配层（命令树、输出、退出码）
-  └─ cmdkit                与业务无关的命令框架：help 和 schema 由同一份定义生成
-internal/hubserver         Hub 的组装根（只在这里把各层的具体实现装到一起）
-internal/transport/httpapi HTTP 适配层（DTO 映射、错误码到 HTTP 状态码的映射）
-internal/app               用例层：AgentService、MessageService、Dispatcher，依赖 Waker / Notifier / IDGenerator / TokenIssuer / Clock 接口
-internal/domain            领域层：Agent、Message 聚合，状态机，仓储接口。不依赖任何外部包
-internal/infra/{sqlite,notify,security,wake}  各接口的具体实现（可以替换）
-internal/transport/ingress 外部回调的适配层（GitHub webhook → reply）
-internal/api               对外的 JSON 数据契约（client 和 server 共用）
-internal/client            Hub 的 Go 客户端
-internal/runner            runner：依赖 Hub / SessionStore / PromptBuilder 接口
-internal/harness           Harness 接口和注册表；claude/ codex/ shell/ 是可插拔的实现
-```
-
-想扩展时：
-- **新增 agent CLI**：大多数情况下写一个 `runner.template`，或者在 `builtin/presets.go` 加一个预设就够了；需要特殊处理时再实现 `harness.Harness`（可选实现 `BusyProber`、`Checker`）。
-- **新增唤醒方式**：实现 `app.Waker`，在 `hubserver.DefaultWakers` 里注册。
-- **新增回复来源**：实现 `httpapi.Ingress`。
-- **换存储**：实现 `domain.AgentRepository` 和 `domain.MessageRepository`。
-- **多实例 Hub**：实现 `app.Notifier`，比如用 Redis 或 NATS。
-
-## 开发
+## Development
 
 ```bash
 make test     # go test -race ./...
 make build    # ./bin/myco
-make cross    # 交叉编译 linux/darwin × amd64/arm64
+make cross    # linux/darwin × amd64/arm64
 ```
 
-HTTP API 见 [docs/api.md](docs/api.md)。
+## Roadmap
 
-## 路线图
+- [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
+- [x] Session binding, pluggable wakers, GitHub ingress
+- [x] Join links, self-enrollment for cloud sessions, dashboard, exec nodes
+- [ ] MCP endpoint (Streamable HTTP), so ChatGPT and Claude can join as connectors
+- [ ] Orchestrator templates and scheduling policies
+- [ ] Hub federation and an admin console
 
-- [x] 第 1 阶段：Hub、CLI、runner（claude / codex / shell），长轮询，租约，幂等，白名单
-- [x] 第 2 阶段：session 绑定；Waker 接口（webhook、claude_routine、github_dispatch、github_issue）；GitHub ingress；`inbox wait`
-- [x] 入网令牌：云端 session 自助入网、按 session 找回身份
-- [ ] 唤醒指定的 Claude Code 云端 session：平台目前不支持，详见 [docs/delivery.md](docs/delivery.md)
-- [ ] 第 3 阶段：MCP 端点（Streamable HTTP），让 ChatGPT、Claude 以连接器方式接入
-- [ ] 第 4 阶段：主调度 agent 的模板和调度策略
-- [ ] 第 5 阶段：多 Hub 互联、管理面板
+<div align="center">
+
+**If myco saves you from copy-pasting between agents, a star helps others find it.**
+
+</div>
