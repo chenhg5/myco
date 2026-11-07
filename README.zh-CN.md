@@ -19,7 +19,9 @@
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
-https://github.com/user-attachments/assets/ce1139fd-1022-4cde-9f66-abd38d825e4c
+
+https://github.com/user-attachments/assets/b31df21d-4c69-495c-8841-050b70bd2eac
+
 
 </div>
 
