@@ -36,6 +36,9 @@ jobs:
       - if: steps.exists.outputs.skip != 'true'
         run: make cross VERSION=${{ steps.v.outputs.version }} && (cd bin && sha256sum myco-* > SHA256SUMS)
       - if: steps.exists.outputs.skip != 'true'
+        name: Smoke-test the linux/amd64 release binary
+        run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh
+      - if: steps.exists.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ steps.v.outputs.version }}" bin/* --target "$GITHUB_SHA" --generate-notes

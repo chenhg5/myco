@@ -1,0 +1,43 @@
+name: ci
+
+# Runs on every push and pull request. (release.yml publishes when VERSION changes on main.)
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt and vet
+        run: make vet
+      - name: Unit and integration tests (race detector)
+        run: make test
+      - name: Smoke test (real binary, separate processes)
+        run: make smoke
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build the dashboard
+        run: make web
+      - name: Committed internal/web/dist matches the source
+        run: |
+          if ! git diff --quiet -- internal/web/dist || [ -n "$(git ls-files --others --exclude-standard internal/web/dist)" ]; then
+            git status --short internal/web/dist
+            echo "::error::internal/web/dist is stale: run 'make web' and commit the result"
+            exit 1
+          fi
