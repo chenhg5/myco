@@ -14,6 +14,7 @@ import { AgentCard, AgentTable, Aliases, Labels, StatusLine } from "@/components
 import { MessageBubble, MessageRow } from "@/components/messages";
 import { HarnessBadge, StateBadge } from "@/components/status";
 import { CopyText } from "@/components/copy";
+import { LogoSymbol, LogoWordmark } from "@/components/brand";
 import { cn, timeAgo } from "@/lib/utils";
 
 const POLL_MS = 5000;
@@ -63,19 +64,6 @@ function StatCell({ label, value, dot, active, onClick }: {
       <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value}</span>
       <span className={cn("absolute inset-x-0 bottom-0 h-0.5 bg-foreground transition-opacity", active ? "opacity-100" : "opacity-0")} />
     </button>
-  );
-}
-
-function Logo() {
-  return (
-    <svg viewBox="0 0 32 32" className="h-[18px] w-[18px]" aria-hidden>
-      <path d="M16 16L6 8M16 16L26 9M16 16L9 26M16 16L25 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity=".55" />
-      <circle cx="6" cy="8" r="2.6" fill="currentColor" opacity=".7" />
-      <circle cx="26" cy="9" r="2.6" fill="currentColor" opacity=".7" />
-      <circle cx="9" cy="26" r="2.6" fill="currentColor" opacity=".7" />
-      <circle cx="25" cy="24" r="2.6" fill="currentColor" opacity=".7" />
-      <circle cx="16" cy="16" r="4.2" fill="hsl(var(--brand))" />
-    </svg>
   );
 }
 
@@ -179,10 +167,10 @@ export default function App() {
         <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-md">
           <div className="container flex h-14 items-center gap-2 px-4 sm:gap-4 sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border bg-card text-foreground shadow-[0_1px_2px_0_rgb(0_0_0/0.04)]">
-                <Logo />
+              <div className="flex items-center gap-2">
+                <LogoSymbol className="h-[22px] w-[22px]" />
+                <LogoWordmark className="h-[17px] w-auto text-foreground" />
               </div>
-              <span className="text-[15px] font-semibold tracking-tight">myco</span>
               <span className="hidden text-border sm:inline">/</span>
               <span className="hidden max-w-[280px] truncate font-mono text-xs text-muted-foreground sm:inline">{session?.hub || "…"}</span>
             </div>
