@@ -202,8 +202,11 @@ func TestAuth(t *testing.T) {
 		{"lowercase bearer scheme is not accepted", "GET", "/v1/me", "", nil, 401, "unauthenticated"},
 		{"discovery without token", "GET", "/v1/agents", "", nil, 401, "unauthenticated"},
 		{"discovery with bad token", "GET", "/v1/agents", "nope", nil, 401, "unauthenticated"},
-		{"admin route without token", "POST", "/v1/agents", "", map[string]any{"name": "x"}, 403, "permission_denied"},
-		{"admin route with wrong admin token", "POST", "/v1/agents", adminToken + "x", map[string]any{"name": "x"}, 403, "permission_denied"},
+		// Admin routes: no/unknown token is 401 (not authenticated); a valid
+		// agent token is 403 (authenticated, but admin only).
+		{"admin route without token", "POST", "/v1/agents", "", map[string]any{"name": "x"}, 401, "unauthenticated"},
+		{"admin route with wrong admin token", "POST", "/v1/agents", adminToken + "x", map[string]any{"name": "x"}, 401, "unauthenticated"},
+		{"admin route with an unknown token", "DELETE", "/v1/agents/alice", "myco_notarealtoken", nil, 401, "unauthenticated"},
 		{"register with agent token", "POST", "/v1/agents", alice, map[string]any{"name": "x"}, 403, "permission_denied"},
 		{"delete agent with agent token", "DELETE", "/v1/agents/alice", alice, nil, 403, "permission_denied"},
 		{"create enrollment with agent token", "POST", "/v1/enrollments", alice, map[string]any{"name_prefix": "c-"}, 403, "permission_denied"},

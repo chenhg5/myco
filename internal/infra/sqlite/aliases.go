@@ -56,6 +56,17 @@ func (r *AliasRepo) DeleteForTarget(ctx context.Context, target domain.AgentName
 	return internal(err)
 }
 
+// DeleteDangling removes aliases whose target agent no longer exists (left
+// behind by an interrupted removal on older hubs) and returns how many.
+func (r *AliasRepo) DeleteDangling(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM aliases WHERE target NOT IN (SELECT name FROM agents)`)
+	if err != nil {
+		return 0, internal(err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func (r *AliasRepo) List(ctx context.Context) ([]*domain.Alias, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT name, target, created_at, updated_at FROM aliases ORDER BY name`)
 	if err != nil {

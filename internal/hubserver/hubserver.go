@@ -77,6 +77,12 @@ func Build(o Options) (*Hub, error) {
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
 	enroll := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), agentsRepo, security.Tokens{}, ids, clock)
 	aliasRepo := sqlite.NewAliasRepo(db)
+	if n, err := aliasRepo.DeleteDangling(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	} else if n > 0 && o.Log != nil {
+		o.Log.Info("removed aliases whose agent no longer exists", "count", n)
+	}
 	agents.SetAliases(aliasRepo)
 	messages.SetAliases(aliasRepo)
 	enroll.SetAliases(aliasRepo)

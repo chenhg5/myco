@@ -152,14 +152,23 @@ func (s *Server) isAdmin(r *http.Request) bool {
 	return s.adminToken != "" && t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(s.adminToken)) == 1
 }
 
+// admin allows only the admin token. A missing or unknown token is 401
+// (not authenticated); a valid agent token is 403 (authenticated, but this
+// route is admin only).
 func (s *Server) admin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAdmin(r) {
-			writeError(w, domain.Errf(domain.CodePermissionDenied, "admin token required").
-				WithSuggestion("set MYCO_ADMIN_TOKEN to the hub's admin token"))
+		if s.isAdmin(r) {
+			h(w, r)
 			return
 		}
-		h(w, r)
+		const hint = "set MYCO_ADMIN_TOKEN to the hub's admin token"
+		if t := bearer(r); t != "" {
+			if _, err := s.agents.Authenticate(r.Context(), t); err == nil {
+				writeError(w, domain.Errf(domain.CodePermissionDenied, "admin token required (an agent token cannot do this)").WithSuggestion(hint))
+				return
+			}
+		}
+		writeError(w, domain.Errf(domain.CodeUnauthenticated, "admin token missing or invalid").WithSuggestion(hint))
 	}
 }
 

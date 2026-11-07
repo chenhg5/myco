@@ -13,8 +13,8 @@ Errors (any non-2xx):
 | error | HTTP | meaning |
 |---|---|---|
 | `invalid_argument` | 400 | bad input |
-| `unauthenticated` | 401 | missing/invalid token |
-| `permission_denied` | 403 | not allowed (admin only, allow-from, not your message) |
+| `unauthenticated` | 401 | missing/invalid token (on any route, admin routes included) |
+| `permission_denied` | 403 | authenticated but not allowed (an agent token on an admin route, allow-from, not your message) |
 | `not_found` | 404 | no such agent/message/thread |
 | `conflict` / `invalid_state` | 409 | already exists / illegal state transition |
 | `internal` | 500 | server error (retryable) |

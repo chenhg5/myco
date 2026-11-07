@@ -193,13 +193,17 @@ func (s *AgentService) Remove(ctx context.Context, name string, dryRun bool) (*d
 	if dryRun {
 		return a, nil
 	}
-	if err := s.agents.Delete(ctx, a.Name); err != nil {
-		return nil, err
-	}
+	// Aliases go first: if the hub stops between the two deletes, the agent
+	// is left without its aliases (harmless, and removing it again finishes
+	// the job) rather than aliases pointing at a name that a new agent could
+	// later take over. The hub also sweeps dangling aliases at start-up.
 	if s.aliases != nil {
 		if err := s.aliases.DeleteForTarget(ctx, a.Name); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.agents.Delete(ctx, a.Name); err != nil {
+		return nil, err
 	}
 	return a, nil
 }

@@ -393,6 +393,30 @@ func TestAliasRepoDeleteForTarget(t *testing.T) {
 	mustNoErr(t, aliases.DeleteForTarget(ctx, "nobody"))
 }
 
+func TestAliasRepoDeleteDangling(t *testing.T) {
+	ctx := context.Background()
+	db := openMem(t)
+	agents, aliases := sqlite.NewAgentRepo(db), sqlite.NewAliasRepo(db)
+	mustNoErr(t, agents.Create(ctx, newAgent(t, "alice", "h", domain.AgentSpec{})))
+	mustNoErr(t, aliases.Set(ctx, &domain.Alias{Name: "lead", Target: "alice", CreatedAt: t0, UpdatedAt: t0}))
+	for _, n := range []domain.AgentName{"ghost1", "ghost2"} { // targets that no longer exist
+		mustNoErr(t, aliases.Set(ctx, &domain.Alias{Name: n, Target: "gone", CreatedAt: t0, UpdatedAt: t0}))
+	}
+	n, err := aliases.DeleteDangling(ctx)
+	mustNoErr(t, err)
+	if n != 2 {
+		t.Fatalf("removed %d, want 2", n)
+	}
+	list, err := aliases.List(ctx)
+	mustNoErr(t, err)
+	if len(list) != 1 || list[0].Name != "lead" {
+		t.Fatalf("after DeleteDangling: %+v", list)
+	}
+	if n, err := aliases.DeleteDangling(ctx); err != nil || n != 0 {
+		t.Fatalf("second sweep: %d %v", n, err)
+	}
+}
+
 // ---- messages ----
 
 func TestMessageRepoCreateGet(t *testing.T) {

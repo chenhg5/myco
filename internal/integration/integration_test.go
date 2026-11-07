@@ -28,6 +28,7 @@ import (
 	"github.com/chenhg5/myco/internal/cli"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/chenhg5/myco/internal/infra/sqlite"
 )
 
 const adminToken = "integration-admin-token-0123456789"
@@ -414,5 +415,61 @@ func TestExecNodeEnforcesSendersAndAllowList(t *testing.T) {
 	audit, err := os.ReadFile(filepath.Join(home, ".myco", "logs", "ci.exec.jsonl"))
 	if err != nil || strings.Count(string(audit), "\n") < 3 {
 		t.Fatalf("audit log: %v\n%s", err, audit)
+	}
+}
+
+// A hub that stopped halfway through removing an agent (older hubs deleted
+// the agent first) left an alias pointing at nothing; a new agent with the
+// old name would have inherited it. The hub sweeps such aliases at start-up.
+func TestRestartSweepsDanglingAliases(t *testing.T) {
+	c := ctx(t)
+	db := filepath.Join(t.TempDir(), "hub.db")
+	h1 := startHub(t, db, app.DefaultMessagePolicy())
+	h1.register(api.RegisterRequest{Name: "bob"})
+	if _, err := h1.admin().SetAlias(c, "reviewer", "bob", false); err != nil {
+		t.Fatal(err)
+	}
+	h1.stop()
+
+	// Simulate the interrupted removal: the agent row is gone, the alias is not.
+	raw, err := sqlite.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlite.NewAgentRepo(raw).Delete(c, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+
+	h2 := startHub(t, db, app.DefaultMessagePolicy())
+	if list, err := h2.admin().ListAliases(c); err != nil || len(list) != 0 {
+		t.Fatalf("dangling alias survived a restart: %v %+v", err, list)
+	}
+	// A new "bob" does not pick up the old alias.
+	h2.register(api.RegisterRequest{Name: "bob"})
+	if _, err := h2.admin().GetAgent(c, "reviewer"); err == nil {
+		t.Fatal("alias reviewer still routes to the new bob")
+	}
+}
+
+// Admin routes answer 401 for a missing or unknown token and 403 for a valid
+// agent token, and the CLI treats both as a permission error (exit 4).
+func TestAdminRoutesDistinguish401And403(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	agentTok := h.register(api.RegisterRequest{Name: "alice"})
+	for _, tc := range []struct {
+		token, code string
+	}{{"", "unauthenticated"}, {"wrong-admin-token", "unauthenticated"}, {agentTok, "permission_denied"}} {
+		_, err := h.client(tc.token).Register(c, api.RegisterRequest{Name: "x"}, false)
+		if e, ok := client.AsError(err); !ok || e.Code != tc.code {
+			t.Errorf("token %q: %v, want %s", tc.token[:min(len(tc.token), 6)], err, tc.code)
+		}
+	}
+	e := newCLI(t, h, filepath.Join(home, "x.yaml"))
+	e.env["MYCO_ADMIN_TOKEN"] = "wrong-admin-token"
+	if code, _, _ := e.run(c, "agent", "register", "--name", "x"); code != cli.ExitPermission {
+		t.Fatalf("CLI with a wrong admin token: exit %d, want %d", code, cli.ExitPermission)
 	}
 }
