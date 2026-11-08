@@ -18,6 +18,47 @@ import (
 // decide where CLIs and sessions are found. Tokens are never copied.
 var serviceEnvKeys = []string{"PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", config.EnvConfig}
 
+// proxyEnvKeys are copied too: a service does not read the shell profile
+// that usually sets them, and without them agent CLIs behind a proxy cannot
+// reach their model API. A proxy URL with a user name or password is not
+// copied (service definitions are readable by other local users).
+var proxyEnvKeys = []string{"HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+	"https_proxy", "http_proxy", "all_proxy", "no_proxy"}
+
+// serviceEnv is the environment written into a service definition, and
+// notes about what was left out.
+func serviceEnv(getenv func(string) string) (map[string]string, []string) {
+	env := map[string]string{}
+	for _, k := range serviceEnvKeys {
+		if v := getenv(k); v != "" {
+			env[k] = v
+		}
+	}
+	var notes []string
+	for _, k := range proxyEnvKeys {
+		v := getenv(k)
+		if v == "" {
+			continue
+		}
+		if proxyHasCredentials(v) {
+			notes = append(notes, fmt.Sprintf("%s has a user name or password, so it was not written into the service definition: put it in the agents' runner.env_file (mode 600) instead", k))
+			continue
+		}
+		env[k] = v
+	}
+	return env, notes
+}
+
+// proxyHasCredentials reports whether a proxy setting carries userinfo
+// (scheme://user:pass@host).
+func proxyHasCredentials(v string) bool {
+	if i := strings.Index(v, "://"); i >= 0 {
+		v = v[i+3:]
+	}
+	host, _, _ := strings.Cut(v, "/")
+	return strings.Contains(host, "@")
+}
+
 func serviceCommands() *Command {
 	manager := func(e *env) (service.Manager, error) {
 		home, err := os.UserHomeDir()
@@ -180,18 +221,15 @@ func (e *env) installService(maxConcurrent int, logLevel string, dry bool) (*ser
 		Binary: bin,
 		Args: []string{"runner", "start", "--all", "--max-concurrent", strconv.Itoa(maxConcurrent),
 			"--log-level", logLevel},
-		Env:     map[string]string{},
 		LogPath: filepath.Join(config.Dir(e.defaultPath), "runner.log"),
 	}
-	for _, k := range serviceEnvKeys {
-		if v := e.in.Getenv(k); v != "" {
-			spec.Env[k] = v
-		}
-	}
+	var envNotes []string
+	spec.Env, envNotes = serviceEnv(e.in.Getenv)
 	plan, err := m.PlanInstall(spec)
 	if err != nil {
 		return nil, err
 	}
+	plan.Notes = append(plan.Notes, envNotes...)
 	profiles, _ := config.ListProfiles(config.ProfilesDir(e.defaultPath))
 	if len(profiles) == 0 {
 		plan.Notes = append(plan.Notes, "no agent profiles yet; the runner will pick them up as sessions join (myco join)")

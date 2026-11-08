@@ -332,7 +332,9 @@ myco runner service logs --lines 100   # 查看日志（~/.myco/runner.log）
 myco runner service restart            # 手动替换 myco 后重启（myco upgrade 会自动重启）
 myco runner service uninstall          # 停止并删除
 ```
-安装时会记录当前的 `PATH`（以及设置了的 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`MYCO_CONFIG`），这样服务能找到装在 nvm 等目录下的 claude 和 codex。这些变量变了之后，重新执行一次 `install` 即可。服务定义里不会写入任何令牌。Linux 上如果希望注销后也继续运行，执行 `sudo loginctl enable-linger $USER`。
+安装时会记录当前的 `PATH`（以及设置了的 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`MYCO_CONFIG`），这样服务能找到装在 nvm 等目录下的 claude 和 codex。这些变量变了之后，重新执行一次 `install` 即可。服务定义里不会写入任何令牌。
+
+**要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上如果希望注销后也继续运行，执行 `sudo loginctl enable-linger $USER`。
 
 每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
 ```yaml
