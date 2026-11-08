@@ -3,6 +3,7 @@ import {
   Check, ChevronDown, ChevronUp, Layers, Plus, Settings,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
+import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** The switcher sits at the sidebar bottom ("sidebar") or, when the sidebar
@@ -140,17 +141,21 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
     }
   };
 
+  const count = selected ? nodeCount(hubsOv, selected.id) : undefined;
   const sub = selected
     ? selected.ok
-      ? `已连接${nodeCount(hubsOv, selected.id) === undefined ? "" : ` · ${nodeCount(hubsOv, selected.id)} 个节点`}`
-      : "连不上"
-    : `${hubs.length} 个 Hub · ${connected} 个已连接`;
+      ? L(
+        `已连接${count === undefined ? "" : ` · ${count} 个节点`}`,
+        `Connected${count === undefined ? "" : ` · ${count} node${count === 1 ? "" : "s"}`}`,
+      )
+      : L("连不上", "Unreachable")
+    : L(`${hubs.length} 个 Hub · ${connected} 个已连接`, `${hubs.length} Hub${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
 
   const dotClass = selected
     ? selected.ok ? "working" : "down"
     : connected === hubs.length ? "working" : connected === 0 ? "down" : "pending";
 
-  const label = selected ? selected.name : "全部 Hub";
+  const label = selected ? selected.name : L("全部 Hub", "All Hubs");
 
   return (
     <div className={cn("app-hub-switch", variant === "pill" && "is-pill")} ref={rootRef}>
@@ -163,8 +168,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
         )}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`切换 Hub：${label}`}
-        title={selected ? (selected.ok ? selected.url : `${selected.url}（连不上）`) : "所有 Hub"}
+        aria-label={L(`切换 Hub：${label}`, `Switch Hub: ${label}`)}
+        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : L("所有 Hub", "All Hubs")}
         onClick={toggle}
       >
         <Avatar
@@ -192,7 +197,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
         <div
           className={cn("app-hub-menu", variant === "pill" ? "down" : "up")}
           role="menu"
-          aria-label="选择 Hub"
+          aria-label={L("选择 Hub", "Choose Hub")}
           onKeyDown={onMenuKeyDown}
         >
           {entries.map((e, i) => {
@@ -213,7 +218,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                   onClick={() => pick("all")}
                 >
                   <Avatar all />
-                  <span className="app-hub-menu-name">全部 Hub</span>
+                  <span className="app-hub-menu-name">{L("全部 Hub", "All Hubs")}</span>
                   {value === "all" && <Check className="app-hub-menu-check" />}
                 </button>
               );
@@ -233,7 +238,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                   )}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(e.hub.id)}
-                  title={e.hub.ok ? e.hub.url : `${e.hub.url}（连不上）`}
+                  title={e.hub.ok ? e.hub.url : L(`${e.hub.url}（连不上）`, `${e.hub.url} (unreachable)`)}
                 >
                   <Avatar name={e.hub.name} id={e.hub.id} />
                   <span className="app-hub-menu-name">{e.hub.name}</span>
@@ -256,7 +261,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
-                    {e.kind === "add" ? "添加 Hub…" : "Hub 设置…"}
+                    {e.kind === "add" ? L("添加 Hub…", "Add Hub…") : L("Hub 设置…", "Hub settings…")}
                   </span>
                 </button>
               </Fragment>

@@ -4,6 +4,7 @@ import { appApi, type Hub } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
+import { L } from "@/lib/i18n";
 
 export interface NewConversationTarget {
   hubId?: string;
@@ -51,7 +52,7 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
           hubId: r.hub.id,
           hubName: byHub.get(r.hub.id)?.name || r.hub.name,
           name: a.name,
-          label: `${a.display_name || a.name}${shell ? "（Shell）" : ""}${r.st.state === "offline" ? "（离线）" : ""}`,
+          label: `${a.display_name || a.name}${shell ? L("（Shell）", " (Shell)") : ""}${r.st.state === "offline" ? L("（离线）", " (offline)") : ""}`,
           shell,
           offline: r.st.state === "offline",
         };
@@ -108,23 +109,23 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
     <Modal
       open={!!target}
       onOpenChange={(o) => !o && close()}
-      title="新对话"
-      description="把任务发给一个节点，处理过程和结果都会出现在这里。"
+      title={L("新对话", "New conversation")}
+      description={L("把任务发给一个节点，处理过程和结果都会出现在这里。", "Give a node a task. Its progress and results will show up here.")}
       wide
     >
       {options.length === 0 ? (
         <>
           <div className="app-empty-note" style={{ marginTop: 12 }}>
-            还没有可以发消息的节点。先在「节点」页添加一个。
+            {L("还没有可以发消息的节点。先在「节点」页添加一个。", "There are no nodes to message yet. Add one on the Nodes page first.")}
           </div>
           <div className="app-modal-actions">
-            <button type="button" className="app-btn" onClick={onClose}>关闭</button>
+            <button type="button" className="app-btn" onClick={onClose}>{L("关闭", "Close")}</button>
           </div>
         </>
       ) : (
         <>
           <label className="app-field">
-            <span className="app-field-label">节点</span>
+            <span className="app-field-label">{L("节点", "Node")}</span>
             <select
               className="app-select-field"
               value={node ? valueOf(node) : ""}
@@ -152,34 +153,34 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
           {node?.shell && (
             <div className="app-notice">
               <Terminal />
-              <span>这是一个 Shell 节点：发送的内容会作为命令执行。</span>
+              <span>{L("这是一个 Shell 节点：发送的内容会作为命令执行。", "This is a Shell node: what you send runs as a command.")}</span>
             </div>
           )}
 
           <label className="app-field">
-            <span className="app-field-label">任务</span>
+            <span className="app-field-label">{L("任务", "Task")}</span>
             <textarea
               className="app-input"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="要让它做什么？"
+              placeholder={L("要让它做什么？", "What should it do?")}
               autoFocus
               disabled={busy}
             />
           </label>
-          <div className="app-small-note">Enter 发送，Shift+Enter 换行</div>
+          <div className="app-small-note">{L("Enter 发送，Shift+Enter 换行", "Enter to send, Shift+Enter for a new line")}</div>
 
           <ErrorText error={error} />
           <div className="app-modal-actions">
-            <button type="button" className="app-btn" onClick={close} disabled={busy}>取消</button>
+            <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
             <button
               type="button"
               className="app-btn app-btn-primary"
               onClick={() => void send()}
               disabled={busy || !body.trim() || !node}
             >
-              {busy ? "正在发送…" : "发送"}
+              {busy ? L("正在发送…", "Sending…") : L("发送", "Send")}
             </button>
           </div>
         </>

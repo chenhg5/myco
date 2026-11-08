@@ -7,6 +7,7 @@ import { cliName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
+import { L, lang, locale } from "@/lib/i18n";
 
 export interface ConversationTarget {
   hubId: string;
@@ -25,7 +26,7 @@ function isConsole(from: string): boolean {
 function clockTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function isOpen(status: string): boolean {
@@ -116,12 +117,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     : [];
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
   const state = openTask
-    ? { dot: "working", label: "处理中" }
+    ? { dot: "working", label: L("处理中", "Working") }
     : failed
-      ? { dot: "failed", label: "失败" }
+      ? { dot: "failed", label: L("失败", "Failed") }
       : lastTask
-        ? { dot: "idle", label: "已完成" }
-        : { dot: "idle", label: "空闲" };
+        ? { dot: "idle", label: L("已完成", "Done") }
+        : { dot: "idle", label: L("空闲", "Idle") };
   const steerOn = steerMode && !!openTask;
 
   // A thread you take no part in (two nodes working together) is only
@@ -133,7 +134,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     : [];
 
   const nameOf = (from: string): string => {
-    if (isConsole(from)) return "你";
+    if (isConsole(from)) return L("你", "You");
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
     return r?.st.agent.display_name || from;
   };
@@ -167,13 +168,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   return (
     <div className="conv-detail">
       <header className="conv-head">
-        <button type="button" className="app-btn app-btn-plain" onClick={onBack} aria-label="返回对话列表" title="返回">
+        <button type="button" className="app-btn app-btn-plain" onClick={onBack} aria-label={L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
           <ArrowLeft />
         </button>
         <div className="conv-head-titles">
           <h2>{observed ? parties.map(nameOf).join(" ↔ ") : agentName}</h2>
           <p>
-            {observed && <>其他节点之间的消息 · </>}
+            {observed && <>{L("其他节点之间的消息", "Messages between other nodes")} · </>}
             {target.hubName}
             {cli && <> · {cli}</>}
             {model && <> · <span className="mono">{model}</span></>}
@@ -181,7 +182,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
         {!observed && <span className="conv-head-state">
           <span className={cn("dot", state.dot)} />
-          {messages === null ? "加载中" : state.label}
+          {messages === null ? L("加载中", "Loading") : state.label}
         </span>}
       </header>
 
@@ -191,16 +192,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             loadError ? (
               <ErrorText error={loadError} />
             ) : (
-              <div className="app-empty-note">正在加载…</div>
+              <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
             )
           ) : messages.length === 0 ? (
-            <div className="app-empty-note">还没有消息。发一条任务开始。</div>
+            <div className="app-empty-note">{L("还没有消息。发一条任务开始。", "No messages yet. Give a task to get started.")}</div>
           ) : (
             messages.map((m) => {
               if (m.type === "progress") {
                 return (
                   <div className="conv-progress" key={m.id}>
-                    <span className="conv-progress-label">进度：</span>
+                    <span className="conv-progress-label">{L("进度：", "Progress: ")}</span>
                     <span>{m.body}</span>
                   </div>
                 );
@@ -220,13 +221,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} key={m.id}>
                   <div className="conv-msg-name">{nameOf(m.from)}</div>
                   <div className="conv-bubble">
-                    {m.type === "steer" && <span className="conv-tag">修正</span>}
-                    {m.type === "note" && <span className="conv-tag neutral">备注</span>}
+                    {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
+                    {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
                     <MessageContent body={m.body} />
                     {m.attachments && m.attachments.length > 0 && (
                       <div className="conv-attach-list">
                         {m.attachments.map((a) => (
-                          <div className="conv-attach" key={a.file_id} title="下载暂不可用">
+                          <div className="conv-attach" key={a.file_id} title={L("下载暂不可用", "Download not available yet")}>
                             <Paperclip />
                             <span className="conv-attach-name">{a.name}</span>
                             <span className="conv-attach-size">{bytes(a.size)}</span>
@@ -236,7 +237,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                     )}
                   </div>
                   <div className={cn("conv-msg-meta", m.status === "failed" && "is-failed")}>
-                    {m.status === "failed" && m.error ? `失败：${m.error}` : clockTime(m.created_at)}
+                    {m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
                   </div>
                 </div>
               );
@@ -247,9 +248,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
       {observed ? (
         <div className="conv-observe">
-          <span>这是节点之间的协作记录，你只能查看。</span>
+          <span>{L("这是节点之间的协作记录，你只能查看。", "This is a record of nodes working together. You can only view it.")}</span>
           <button type="button" className="app-btn" onClick={() => onNewConversation(target.hubId, target.agent)}>
-            给 {agentName} 发任务
+            {L(`给 ${agentName} 发任务`, `Give ${agentName} a task`)}
           </button>
         </div>
       ) : (
@@ -257,19 +258,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {openTask && (
           <div className="conv-working">
             <span className="dot working" />
-            <span>Agent 正在处理…</span>
+            <span>{L("Agent 正在处理…", "Agent is working…")}</span>
             <button
               type="button"
               className={cn("conv-steer-btn", steerMode && "active")}
               aria-pressed={steerMode}
               onClick={() => setSteerMode((s) => !s)}
             >
-              修正
+              {L("修正", "Correct")}
             </button>
           </div>
         )}
         {steerOn && (
-          <div className="conv-steer-hint">修正会打断当前处理，让 agent 按新的要求继续。</div>
+          <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}
         <div className="conv-compose-box">
           <textarea
@@ -277,10 +278,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={steerOn ? "修改刚才的任务…" : `发给 ${agentName}…`}
+            placeholder={steerOn ? L("修改刚才的任务…", "Change the last task…") : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
             rows={2}
             disabled={sending}
-            aria-label="消息"
+            aria-label={L("消息", "Message")}
           />
           <button
             type="button"
@@ -288,13 +289,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             onClick={() => void send()}
             disabled={sending || !draft.trim()}
           >
-            {sending ? "发送中…" : steerOn ? "发送修正" : "发送"}
+            {sending ? L("发送中…", "Sending…") : steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
           </button>
         </div>
         <div className="conv-compose-hint">
-          Enter 发送，Shift+Enter 换行
+          {L("Enter 发送，Shift+Enter 换行", "Enter to send, Shift+Enter for a new line")}
           {messages && messages.length > 0 && (
-            <span className="conv-compose-ago">更新于 {timeAgo(messages[messages.length - 1]?.updated_at, now)}</span>
+            <span className="conv-compose-ago">{lang() === "zh" ? <>更新于 {timeAgo(messages[messages.length - 1]?.updated_at, now)}</> : <>Updated {timeAgo(messages[messages.length - 1]?.updated_at, now)}</>}</span>
           )}
         </div>
         <ErrorText error={sendError} />

@@ -4,6 +4,7 @@ import { Marked } from "marked";
 import { ChevronDown } from "lucide-react";
 import { copyText } from "@/app/copy";
 import { cn } from "@/lib/utils";
+import { L } from "@/lib/i18n";
 
 /** Rough line budget for one message before it starts collapsed. */
 const COLLAPSE_LINES = 30;
@@ -31,7 +32,7 @@ const md = new Marked({
       const langClass = lang ? ` class="language-${escapeAttr(lang)}"` : "";
       return (
         `<div class="md-code">` +
-        `<button type="button" class="md-code-copy" data-code="${encodeURIComponent(text)}">复制</button>` +
+        `<button type="button" class="md-code-copy" data-code="${encodeURIComponent(text)}">${L("复制", "Copy")}</button>` +
         `<pre><code${langClass}>${escapeHtml(text)}</code></pre>` +
         `</div>`
       );
@@ -61,8 +62,8 @@ function onCopyClick(e: React.MouseEvent<HTMLDivElement>) {
   const code = decodeURIComponent(btn.dataset.code || "");
   const label = btn.textContent;
   void copyText(code).then(() => {
-    btn.textContent = "已复制";
-    window.setTimeout(() => { btn.textContent = label || "复制"; }, 1500);
+    btn.textContent = L("已复制", "Copied");
+    window.setTimeout(() => { btn.textContent = label || L("复制", "Copy"); }, 1500);
   });
 }
 
@@ -100,7 +101,7 @@ function ExecBlock({ data }: { data: ExecResult }) {
     <div className="md-exec">
       <div className="md-exec-head">
         <span className={cn("md-exit", ok && "ok", failed && "bad")}>
-          {typeof code === "number" ? `退出码 ${code}` : "已结束"}
+          {typeof code === "number" ? L(`退出码 ${code}`, `Exit code ${code}`) : L("已结束", "Finished")}
         </span>
         {took && <span className="md-exec-meta">{took}</span>}
       </div>
@@ -130,8 +131,8 @@ function PrettyJSON({ data }: { data: unknown }) {
     <details className="md-json" open={lines <= 24}>
       <summary>
         <ChevronDown />
-        <span>JSON 数据</span>
-        <span className="md-json-meta">{lines} 行</span>
+        <span>{L("JSON 数据", "JSON data")}</span>
+        <span className="md-json-meta">{L(`${lines} 行`, `${lines} line${lines === 1 ? "" : "s"}`)}</span>
       </summary>
       <pre>{text}</pre>
     </details>
@@ -174,7 +175,7 @@ export function MessageContent({ body }: { body: string }) {
         <RenderedBody body={body} />
       </div>
       <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)}>
-        {open ? "收起" : `展开（共 ${lines} 行）`}
+        {open ? L("收起", "Show less") : L(`展开（共 ${lines} 行）`, `Show all (${lines} lines)`)}
       </button>
     </div>
   );

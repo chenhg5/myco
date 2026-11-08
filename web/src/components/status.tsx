@@ -1,12 +1,13 @@
 import { Bot, Cloud, Code2, Sparkles, Terminal, Boxes, SquareTerminal, Server } from "lucide-react";
 import type { State } from "@/api";
 import { cn } from "@/lib/utils";
+import { L } from "@/lib/i18n";
 
 export const stateMeta: Record<State, { label: string; dot: string; text: string }> = {
-  working: { label: "工作中", dot: "bg-working", text: "text-working" },
-  pending: { label: "有待办", dot: "bg-pending", text: "text-pending" },
-  idle: { label: "空闲", dot: "bg-idle", text: "text-idle" },
-  offline: { label: "离线", dot: "bg-offline", text: "text-offline" },
+  working: { get label() { return L("工作中", "Working"); }, dot: "bg-working", text: "text-working" },
+  pending: { get label() { return L("有待办", "Pending"); }, dot: "bg-pending", text: "text-pending" },
+  idle: { get label() { return L("空闲", "Idle"); }, dot: "bg-idle", text: "text-idle" },
+  offline: { get label() { return L("离线", "Offline"); }, dot: "bg-offline", text: "text-offline" },
 };
 
 export function StatusDot({ state, className }: { state: State; className?: string }) {
@@ -31,16 +32,16 @@ export function StateBadge({ state }: { state: State }) {
 
 const harnessMeta: Record<string, { label: string; icon: typeof Bot }> = {
   claude: { label: "Claude Code", icon: Sparkles },
-  "claude-cloud": { label: "Claude 云端", icon: Cloud },
+  "claude-cloud": { get label() { return L("Claude 云端", "Claude cloud"); }, icon: Cloud },
   codex: { label: "Codex", icon: Code2 },
-  "codex-cloud": { label: "Codex 云端", icon: Cloud },
+  "codex-cloud": { get label() { return L("Codex 云端", "Codex cloud"); }, icon: Cloud },
   shell: { label: "Shell", icon: Terminal },
   exec: { label: "Exec", icon: SquareTerminal },
-  machine: { label: "机器节点", icon: Server },
+  machine: { get label() { return L("机器节点", "Machine node"); }, icon: Server },
 };
 
 export function harnessInfo(harness?: string) {
-  return (harness && harnessMeta[harness]) || { label: harness || "未绑定", icon: harness ? Boxes : Bot };
+  return (harness && harnessMeta[harness]) || { label: harness || L("未绑定", "Unbound"), icon: harness ? Boxes : Bot };
 }
 
 /** Square runtime icon used as the agent's avatar. */

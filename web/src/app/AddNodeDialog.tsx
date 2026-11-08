@@ -10,15 +10,16 @@ import type { Agent, RuntimeAccess } from "@/api";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { cn, timeAgo } from "@/lib/utils";
+import { L } from "@/lib/i18n";
 
 export interface SpawnTarget { hubId?: string; machineId?: string }
 
 type Tab = "local" | "link" | "new";
 
 const TABS: { value: Tab; label: string }[] = [
-  { value: "local", label: "本机的 agent" },
-  { value: "link", label: "其他电脑上的 agent" },
-  { value: "new", label: "在机器上开新会话" },
+  { value: "local", get label() { return L("本机的 agent", "Agent on this computer"); } },
+  { value: "link", get label() { return L("其他电脑上的 agent", "Agent on another computer"); } },
+  { value: "new", get label() { return L("在机器上开新会话", "New session on a machine"); } },
 ];
 
 const CLIS: { value: SpawnCli; label: string }[] = [
@@ -32,12 +33,12 @@ const CLIS: { value: SpawnCli; label: string }[] = [
 ];
 
 const ACCESS: { value: RuntimeAccess; label: string }[] = [
-  { value: "readonly", label: "只读" },
-  { value: "workspace", label: "工作区" },
-  { value: "full", label: "完全" },
+  { value: "readonly", get label() { return L("只读", "Read-only"); } },
+  { value: "workspace", get label() { return L("工作区", "Workspace"); } },
+  { value: "full", get label() { return L("完全", "Full"); } },
 ];
 
-const NO_SPAWN = "这台机器的 myco 版本太旧，或者它的 runner 没在运行。";
+const noSpawn = () => L("这台机器的 myco 版本太旧，或者它的 runner 没在运行。", "This machine's myco is too old, or its runner isn't running.");
 
 function sameHub(a?: string, b?: string): boolean {
   if (!a || !b) return false;
@@ -46,7 +47,7 @@ function sameHub(a?: string, b?: string): boolean {
 
 function dirName(dir: string): string {
   const parts = dir.replace(/\\/g, "/").split("/").filter(Boolean);
-  return parts[parts.length - 1] || dir || "未命名目录";
+  return parts[parts.length - 1] || dir || L("未命名目录", "Untitled folder");
 }
 
 function cliIcon(cli: string) {
@@ -58,7 +59,7 @@ function cliIcon(cli: string) {
 // One sentence for the agent on the other computer: install and register
 // the machine (safe to re-run if myco is already there), then join the session.
 function inviteSentence(command: string): string {
-  return `接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入。`;
+  return L(`接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入。`, `Join the myco network: run ${command} in a terminal, then run myco join to add the current session.`);
 }
 
 export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onSpawned, onJoined }: {
@@ -254,11 +255,11 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
     <Modal
       open={!!target}
       onOpenChange={(o) => !o && close()}
-      title="添加节点"
-      description="把一个正在运行的会话接进来，或者开一个新的。"
+      title={L("添加节点", "Add node")}
+      description={L("把一个正在运行的会话接进来，或者开一个新的。", "Connect a running session, or start a new one.")}
       wide
     >
-      <div className="seg seg-fill app-addnode-tabs" role="tablist" aria-label="添加方式">
+      <div className="seg seg-fill app-addnode-tabs" role="tablist" aria-label={L("添加方式", "How to add")}>
         {TABS.map((t) => (
           <button
             key={t.value}
@@ -285,7 +286,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           >
             {hubs.map((h) => (
               <option key={h.id} value={h.id} disabled={!h.ok}>
-                {h.name}{h.ok ? "" : "（连不上）"}
+                {h.name}{h.ok ? "" : L("（连不上）", " (unreachable)")}
               </option>
             ))}
           </select>
@@ -298,52 +299,52 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             <>
               <div className="app-success">
                 <Check />
-                <span>已加入为 {joined.agent}</span>
+                <span>{L(`已加入为 ${joined.agent}`, `Joined as ${joined.agent}`)}</span>
               </div>
               {joined.runner !== "running" && (
                 <div className="app-notice">
                   <AlertTriangle />
-                  <span>这台电脑的 runner 没有在运行，节点可能收不到任务。runner：{joined.runner || "未知"}</span>
+                  <span>{L(`这台电脑的 runner 没有在运行，节点可能收不到任务。runner：${joined.runner || "未知"}`, `The runner on this computer isn't running, so the node may not receive tasks. Runner: ${joined.runner || "unknown"}`)}</span>
                 </div>
               )}
               <div className="app-hint">
-                节点已经加到「{hub?.name || "Hub"}」，会在节点列表里标出来。
+                {L(`节点已经加到「${hub?.name || "Hub"}」，会在节点列表里标出来。`, `The node was added to “${hub?.name || "Hub"}” and is highlighted in the node list.`)}
               </div>
               <div className="app-modal-actions">
-                <button type="button" className="app-btn app-btn-primary" onClick={onClose}>完成</button>
+                <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
               </div>
             </>
           ) : (
             <>
               <div className="app-addnode-bar">
                 <span className="app-small-note">
-                  这台电脑上最近的 Claude Code 和 Codex 会话
+                  {L("这台电脑上最近的 Claude Code 和 Codex 会话", "Recent Claude Code and Codex sessions on this computer")}
                 </span>
                 <button
                   type="button"
                   className="app-btn app-btn-small"
                   onClick={() => { setSessions(null); void loadSessions(); }}
                   disabled={sessionsBusy}
-                  title="重新读取会话"
+                  title={L("重新读取会话", "Reload sessions")}
                 >
-                  <RefreshCw className={cn(sessionsBusy && "animate-spin")} />刷新
+                  <RefreshCw className={cn(sessionsBusy && "animate-spin")} />{L("刷新", "Refresh")}
                 </button>
               </div>
 
               {sessionsBusy && sessions === null ? (
-                <div className="app-progress"><span className="app-spinner" />正在读取本机会话…</div>
+                <div className="app-progress"><span className="app-spinner" />{L("正在读取本机会话…", "Reading sessions on this computer…")}</div>
               ) : sessionsError && sessions === null ? (
                 <>
                   <ErrorText error={sessionsError} />
                   <div className="app-actions">
                     <button type="button" className="app-btn" onClick={() => void loadSessions()}>
-                      <RefreshCw />重试
+                      <RefreshCw />{L("重试", "Retry")}
                     </button>
                   </div>
                 </>
               ) : sessions && sessions.length === 0 ? (
                 <div className="app-empty-note app-addnode-empty">
-                  这台电脑上最近没有 Claude Code 或 Codex 会话。先在终端里打开一个，再回来刷新。
+                  {L("这台电脑上最近没有 Claude Code 或 Codex 会话。先在终端里打开一个，再回来刷新。", "No recent Claude Code or Codex sessions on this computer. Open one in a terminal, then come back and refresh.")}
                 </div>
               ) : sessions ? (
                 <div className="app-list app-session-list">
@@ -369,14 +370,14 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                           <span className="app-row-title">{s.title || dirName(s.workdir)}</span>
                           <span className="app-row-sub">
                             {joinedElsewhere ? (
-                              <span>已加入另一个 Hub · {s.joined?.agent}</span>
+                              <span>{L(`已加入另一个 Hub · ${s.joined?.agent}`, `Joined another Hub · ${s.joined?.agent}`)}</span>
                             ) : joinedHere ? (
-                              <span>已加入 · {s.joined?.agent}</span>
+                              <span>{L(`已加入 · ${s.joined?.agent}`, `Joined · ${s.joined?.agent}`)}</span>
                             ) : (
                               <>
                                 <span className="txt">{s.workdir}</span>
                                 <span className="sep">·</span>
-                                <span>最后活动 {timeAgo(s.last_active)}</span>
+                                <span>{L(`最后活动 ${timeAgo(s.last_active)}`, `Last active ${timeAgo(s.last_active)}`)}</span>
                               </>
                             )}
                           </span>
@@ -391,28 +392,28 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               {sessions && sessions.length > 0 && (
                 <>
                   <label className="app-field">
-                    <span className="app-field-label">显示名（可选）</span>
+                    <span className="app-field-label">{L("显示名（可选）", "Display name (optional)")}</span>
                     <input
                       className="app-input"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="留空按会话自动命名"
+                      placeholder={L("留空按会话自动命名", "Leave empty to name it after the session")}
                       disabled={joinBusy || !selected}
                     />
                   </label>
                   <ErrorText error={joinError} />
                   {joinBusy && (
-                    <div className="app-progress"><span className="app-spinner" />正在加入…</div>
+                    <div className="app-progress"><span className="app-spinner" />{L("正在加入…", "Joining…")}</div>
                   )}
                   <div className="app-modal-actions">
-                    <button type="button" className="app-btn" onClick={close} disabled={joinBusy}>取消</button>
+                    <button type="button" className="app-btn" onClick={close} disabled={joinBusy}>{L("取消", "Cancel")}</button>
                     <button
                       type="button"
                       className="app-btn app-btn-primary"
                       onClick={() => void join()}
                       disabled={!selected || !hubId || joinBusy}
                     >
-                      {joinBusy ? "正在加入…" : "加入"}
+                      {joinBusy ? L("正在加入…", "Joining…") : L("加入", "Join")}
                     </button>
                   </div>
                 </>
@@ -425,17 +426,17 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
       {tab === "link" && (
         <>
           <div className="app-hint" style={{ marginTop: 10 }}>
-            给另一台电脑上的 agent 一个加入链接。那边接入后，节点会出现在这个 Hub 上。
+            {L("给另一台电脑上的 agent 一个加入链接。那边接入后，节点会出现在这个 Hub 上。", "Give an agent on another computer a join link. Once it joins, the node appears on this Hub.")}
           </div>
           {linkBusy && !link && (
-            <div className="app-progress"><span className="app-spinner" />正在生成链接…</div>
+            <div className="app-progress"><span className="app-spinner" />{L("正在生成链接…", "Creating link…")}</div>
           )}
           {linkError && (
             <>
               <ErrorText error={linkError} />
               <div className="app-actions">
                 <button type="button" className="app-btn" onClick={() => void makeLink(true)} disabled={linkBusy}>
-                  <Link2 />重试
+                  <Link2 />{L("重试", "Retry")}
                 </button>
               </div>
             </>
@@ -443,20 +444,20 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           {link && (
             <>
               <div className="app-field">
-                <span className="app-field-label">把这句话发给那台电脑上的 agent（Claude Code / Codex 会话），它会自己装好 myco 并加入：</span>
+                <span className="app-field-label">{L("把这句话发给那台电脑上的 agent（Claude Code / Codex 会话），它会自己装好 myco 并加入：", "Send this sentence to the agent on that computer (a Claude Code or Codex session). It installs myco and joins by itself:")}</span>
                 <div className="app-command">
                   <code>{inviteSentence(link.command)}</code>
                   <CopyButton value={inviteSentence(link.command)} />
                 </div>
               </div>
               <div className="app-small-note" style={{ marginTop: 10 }}>
-                链接 7 天内有效，可加入 5 台机器。没有 agent 的话，在那台电脑的终端里照着这句话运行两条命令也一样。
+                {L("链接 7 天内有效，可加入 5 台机器。没有 agent 的话，在那台电脑的终端里照着这句话运行两条命令也一样。", "The link is valid for 7 days and can join 5 machines. Without an agent, run the two commands from the sentence in a terminal on that computer instead.")}
               </div>
               <div className="app-modal-actions">
                 <button type="button" className="app-btn" onClick={() => void makeLink(true)} disabled={linkBusy}>
-                  {linkBusy ? "正在生成…" : "重新生成"}
+                  {linkBusy ? L("正在生成…", "Creating…") : L("重新生成", "Create new link")}
                 </button>
-                <button type="button" className="app-btn app-btn-primary" onClick={onClose}>完成</button>
+                <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
               </div>
             </>
           )}
@@ -468,18 +469,18 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           <>
             <div className="app-success">
               <Check />
-              <span>已启动 {result.agent.display_name || result.agent.name}</span>
+              <span>{L(`已启动 ${result.agent.display_name || result.agent.name}`, `Started ${result.agent.display_name || result.agent.name}`)}</span>
             </div>
             <div className="app-reply">{result.reply}</div>
-            <div className="app-hint">新节点已经加到节点列表里，会用绿色标记一会儿。</div>
+            <div className="app-hint">{L("新节点已经加到节点列表里，会用绿色标记一会儿。", "The new node was added to the node list and is highlighted in green for a moment.")}</div>
             <div className="app-modal-actions">
-              <button type="button" className="app-btn app-btn-primary" onClick={onClose}>完成</button>
+              <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
             </div>
           </>
         ) : (
           <form onSubmit={submit}>
             <label className="app-field">
-              <span className="app-field-label">机器</span>
+              <span className="app-field-label">{L("机器", "Machine")}</span>
               <select
                 className="app-select-field"
                 value={machineId}
@@ -487,29 +488,29 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                 disabled={busy || machines.length === 0}
                 required
               >
-                {machines.length === 0 && <option value="">没有可用的机器</option>}
+                {machines.length === 0 && <option value="">{L("没有可用的机器", "No machines available")}</option>}
                 {machines.map((m) => (
                   <option key={m.id} value={m.id} disabled={!m.can_spawn}>
-                    {m.name}{!m.can_spawn ? "（不可用）" : !m.online ? "（离线）" : ""}
+                    {m.name}{!m.can_spawn ? L("（不可用）", " (unavailable)") : !m.online ? L("（离线）", " (offline)") : ""}
                   </option>
                 ))}
               </select>
             </label>
             {machines.length === 0 ? (
               <div className="app-small-note" style={{ marginTop: 6 }}>
-                这个 Hub 还没有上报机器。先到机器页添加一台。
+                {L("这个 Hub 还没有上报机器。先到机器页添加一台。", "This Hub has no machines yet. Add one on the Machines page first.")}
               </div>
             ) : (
               <>
                 {machine && !machine.online && (
                   <div className="app-notice">
                     <AlertTriangle />
-                    <span>这台机器现在离线，会话可能启动不了。</span>
+                    <span>{L("这台机器现在离线，会话可能启动不了。", "This machine is offline right now, so the session may not start.")}</span>
                   </div>
                 )}
                 {unavailable.map((m) => (
                   <div className="app-small-note" key={m.id} style={{ marginTop: 6 }}>
-                    {m.name} 不可用：{NO_SPAWN}
+                    {L(`${m.name} 不可用：${noSpawn()}`, `${m.name} is unavailable: ${noSpawn()}`)}
                   </div>
                 ))}
               </>
@@ -528,30 +529,30 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             </label>
 
             <label className="app-field">
-              <span className="app-field-label">目录</span>
+              <span className="app-field-label">{L("目录", "Folder")}</span>
               <input
                 className="app-input mono"
                 value={dir}
                 onChange={(e) => setDir(e.target.value)}
-                placeholder="~/code/项目名"
+                placeholder={L("~/code/项目名", "~/code/project")}
                 disabled={busy}
                 required
               />
             </label>
 
             <label className="app-field">
-              <span className="app-field-label">名称（可选）</span>
+              <span className="app-field-label">{L("名称（可选）", "Name (optional)")}</span>
               <input
                 className="app-input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="留空自动命名"
+                placeholder={L("留空自动命名", "Leave empty to name it automatically")}
                 disabled={busy}
               />
             </label>
 
             <label className="app-field">
-              <span className="app-field-label">描述（可选）</span>
+              <span className="app-field-label">{L("描述（可选）", "Description (optional)")}</span>
               <input
                 className="app-input"
                 value={description}
@@ -561,19 +562,19 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             </label>
 
             <label className="app-field">
-              <span className="app-field-label">模型（可选）</span>
+              <span className="app-field-label">{L("模型（可选）", "Model (optional)")}</span>
               <input
                 className="app-input mono"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="留空用 CLI 默认"
+                placeholder={L("留空用 CLI 默认", "Leave empty for the CLI default")}
                 disabled={busy}
               />
             </label>
 
             <div className="app-field">
-              <span className="app-field-label">权限</span>
-              <div className="seg seg-fill" role="tablist" aria-label="权限">
+              <span className="app-field-label">{L("权限", "Access")}</span>
+              <div className="seg seg-fill" role="tablist" aria-label={L("权限", "Access")}>
                 {ACCESS.map((o) => (
                   <button
                     key={o.value}
@@ -592,24 +593,24 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             {access === "full" && (
               <div className="app-warn">
                 <AlertTriangle />
-                <span>完全权限可以让它读写那台机器上的任何文件，需要在那台机器上本地允许。</span>
+                <span>{L("完全权限可以让它读写那台机器上的任何文件，需要在那台机器上本地允许。", "Full access lets it read and write any file on that machine, and must be allowed locally on that machine.")}</span>
               </div>
             )}
 
             <ErrorText error={error} />
             {busy && (
               <div className="app-progress">
-                <span className="app-spinner" />正在那台机器上启动会话，可能需要一两分钟…
+                <span className="app-spinner" />{L("正在那台机器上启动会话，可能需要一两分钟…", "Starting the session on that machine. This can take a minute or two…")}
               </div>
             )}
             <div className="app-modal-actions">
-              <button type="button" className="app-btn" onClick={close} disabled={busy}>取消</button>
+              <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
               <button
                 type="submit"
                 className="app-btn app-btn-primary"
                 disabled={busy || !hubId || !machineId || !dir.trim()}
               >
-                {busy ? "正在启动…" : "开始会话"}
+                {busy ? L("正在启动…", "Starting…") : L("开始会话", "Start session")}
               </button>
             </div>
           </form>

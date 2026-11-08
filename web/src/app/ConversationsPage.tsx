@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { MessageSquare, Plus, Search } from "lucide-react";
 import { appApi, errorMessage, type Conversation, type Hub } from "@/appapi";
-import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { cn, timeAgo } from "@/lib/utils";
+import { summarize } from "@/app/summary";
+import { L } from "@/lib/i18n";
 
 export interface ConversationRow {
   hubId: string;
@@ -18,34 +19,11 @@ type Tag = { label: string; cls: "" | "green" | "amber" | "red" };
 /** A conversation's state, from the last message and the task's status. */
 function convTag(c: Conversation): Tag {
   const m = c.last;
-  if (m.type === "event" || m.status === "failed") return { label: "失败", cls: "red" };
-  if (m.type === "reply") return { label: "已完成", cls: "green" };
+  if (m.type === "event" || m.status === "failed") return { label: L("失败", "Failed"), cls: "red" };
+  if (m.type === "reply") return { label: L("已完成", "Done"), cls: "green" };
   if (m.type === "note") return { label: "", cls: "" };
-  if (m.type === "task" && m.status === "done") return { label: "已完成", cls: "green" };
-  return { label: "处理中", cls: "amber" };
-}
-
-function summarize(m: Message): string {
-  const body = (m.body || "").trim();
-  if (!body) return "（空消息）";
-  if (body[0] === "{") {
-    try {
-      const v: unknown = JSON.parse(body);
-      if (v && typeof v === "object" && "exit_code" in v) {
-        const code = (v as { exit_code?: unknown }).exit_code;
-        return typeof code === "number"
-          ? `命令执行${code === 0 ? "完成" : "失败"}（退出码 ${code}）`
-          : "命令执行结果";
-      }
-    } catch { /* ordinary text */ }
-  }
-  return body
-    .replace(/```[\s\S]*?```/g, "［代码］")
-    .replace(/^\s*\|?[\s:|-]*-{3,}[\s:|-]*\|?\s*$/gm, "") // table separator rows
-    .replace(/\s*\|\s*/g, " ") // table cell borders
-    .replace(/[#>*`_~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  if (m.type === "task" && m.status === "done") return { label: L("已完成", "Done"), cls: "green" };
+  return { label: L("处理中", "Working"), cls: "amber" };
 }
 
 function oldestOf(list: ConversationRow[]): number | undefined {
@@ -140,7 +118,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
   };
 
   const nameOf = (name?: string): string => {
-    if (!name) return "未知节点";
+    if (!name) return L("未知节点", "Unknown node");
     const row = rows.find((r) => r.st.agent.name === name);
     return row?.st.agent.display_name || name;
   };
@@ -152,10 +130,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
     <div className="app-page">
       <div className="app-page-head">
         <p className="app-summary">
-          {loading && items.length === 0 ? "正在加载…" : `${items.length} 个对话`}
+          {loading && items.length === 0 ? L("正在加载…", "Loading…") : L(`${items.length} 个对话`, `${items.length} conversation${items.length === 1 ? "" : "s"}`)}
         </p>
         <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
-          <Plus />新对话
+          <Plus />{L("新对话", "New conversation")}
         </button>
       </div>
 
@@ -165,8 +143,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="搜索对话内容或节点"
-            aria-label="搜索对话"
+            placeholder={L("搜索对话内容或节点", "Search conversations or nodes")}
+            aria-label={L("搜索对话", "Search conversations")}
           />
         </div>
       </div>
@@ -176,20 +154,20 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
       )}
 
       {firstLoad ? (
-        <div className="app-empty-note">正在加载…</div>
+        <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
       ) : items.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><MessageSquare /></div>
-          <h2>{query ? "没有匹配的对话" : "还没有对话"}</h2>
+          <h2>{query ? L("没有匹配的对话", "No matching conversations") : L("还没有对话", "No conversations yet")}</h2>
           <p>
             {query
-              ? "换一个搜索词试试。"
-              : "发一条任务给节点，处理过程和结果都会出现在这里。"}
+              ? L("换一个搜索词试试。", "Try a different search.")
+              : L("发一条任务给节点，处理过程和结果都会出现在这里。", "Give a node a task. Its progress and results will show up here.")}
           </p>
           {!query && (
             <div className="app-empty-actions">
               <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
-                <Plus />新对话
+                <Plus />{L("新对话", "New conversation")}
               </button>
             </div>
           )}
@@ -223,7 +201,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
       {canLoadMore && (
         <div className="app-actions" style={{ justifyContent: "center" }}>
           <button type="button" className="app-btn" onClick={() => void loadMore()} disabled={moreBusy}>
-            {moreBusy ? "正在加载…" : "加载更多"}
+            {moreBusy ? L("正在加载…", "Loading…") : L("加载更多", "Load more")}
           </button>
         </div>
       )}

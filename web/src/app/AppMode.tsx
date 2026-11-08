@@ -21,6 +21,7 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { Welcome } from "@/app/Welcome";
 import { LogoWordmark } from "@/components/brand";
 import { useTextSize, useThemeMode } from "@/lib/theme";
+import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 5000;
@@ -42,24 +43,24 @@ function readPendingLink(): Promise<string> {
 type Page = "conversations" | "nodes" | "machines" | "settings";
 
 const PAGE_META: Record<Page, { group: string; label: string }> = {
-  conversations: { group: "消息", label: "对话" },
-  nodes: { group: "管理", label: "节点" },
-  machines: { group: "管理", label: "机器" },
-  settings: { group: "App", label: "设置" },
+  conversations: { get group() { return L("消息", "Messages"); }, get label() { return L("对话", "Conversations"); } },
+  nodes: { get group() { return L("管理", "Manage"); }, get label() { return L("节点", "Nodes"); } },
+  machines: { get group() { return L("管理", "Manage"); }, get label() { return L("机器", "Machines"); } },
+  settings: { group: "App", get label() { return L("设置", "Settings"); } },
 };
 
 const NAV: { group: string; items: { page: Page; label: string; icon: typeof LayoutGrid }[] }[] = [
   {
-    group: "管理",
+    get group() { return L("管理", "Manage"); },
     items: [
-      { page: "nodes", label: "节点", icon: LayoutGrid },
-      { page: "machines", label: "机器", icon: Monitor },
+      { page: "nodes", get label() { return L("节点", "Nodes"); }, icon: LayoutGrid },
+      { page: "machines", get label() { return L("机器", "Machines"); }, icon: Monitor },
     ],
   },
   {
-    group: "消息",
+    get group() { return L("消息", "Messages"); },
     items: [
-      { page: "conversations", label: "对话", icon: MessageSquare },
+      { page: "conversations", get label() { return L("对话", "Conversations"); }, icon: MessageSquare },
     ],
   },
 ];
@@ -79,6 +80,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }) {
   const [theme, setTheme] = useThemeMode();
   const [textSize, setTextSize] = useTextSize();
+  const [langChoice, setLangChoiceState] = useState<LangChoice>(storedLangChoice());
+  // Labels come from L() at render time; the shells below key on lang() so
+  // the whole tree re-renders in the new language while this state stays.
+  const chooseLang = (choice: LangChoice) => {
+    setLangChoice(choice);
+    setLangChoiceState(choice);
+  };
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -256,7 +264,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   if (hubs.length === 0) {
     return (
-      <div className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
+      <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
         <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} />
         <ConnectHubDialog
           open={connectOpen}
@@ -269,7 +277,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }
 
   return (
-    <div className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
+    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
       {!collapsed && (
         <aside className="app-sidebar">
           <div className="app-sidebar-head" style={dragStyle}>
@@ -305,7 +313,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onClick={() => setPage("settings")}
             >
               <Settings strokeWidth={1.75} />
-              <span>设置</span>
+              <span>{L("设置", "Settings")}</span>
             </button>
             <HubSwitcher
               hubs={namedHubs}
@@ -325,8 +333,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
             type="button"
             className="app-btn app-btn-plain"
             onClick={toggleSidebar}
-            aria-label={collapsed ? "显示边栏" : "隐藏边栏"}
-            title={collapsed ? "显示边栏" : "隐藏边栏"}
+            aria-label={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
+            title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
           >
             <PanelLeft />
           </button>
@@ -341,13 +349,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onSettings={openHubSettings}
             />
           )}
-          <nav className="app-crumbs" aria-label="位置">
+          <nav className="app-crumbs" aria-label={L("位置", "Location")}>
             <span>{meta.group}</span>
             <span className="sep">/</span>
             <span className="cur">{meta.label}</span>
           </nav>
           <div className="app-crumb-actions">
-            <button type="button" className="app-btn app-btn-plain" onClick={() => void refresh()} aria-label="刷新" title="刷新">
+            <button type="button" className="app-btn app-btn-plain" onClick={() => void refresh()} aria-label={L("刷新", "Refresh")} title={L("刷新", "Refresh")}>
               <RefreshCw className={cn(loading && "animate-spin")} />
             </button>
           </div>
@@ -367,7 +375,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <div className="app-banner-wrap">
                 <div className="app-error-row">
                   <WifiOff />
-                  <span className="err" title={errorMessage(error)}>无法获取 App 数据：{errorMessage(error)}</span>
+                  <span className="err" title={errorMessage(error)}>{L(`无法获取 App 数据：${errorMessage(error)}`, `Couldn’t load app data: ${errorMessage(error)}`)}</span>
                 </div>
               </div>
             )}
@@ -416,6 +424,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onTheme={setTheme}
                 textSize={textSize}
                 onTextSize={setTextSize}
+                langChoice={langChoice}
+                onLangChoice={chooseLang}
                 refreshKey={localTick}
                 sectionRequest={hubSettingsRequest}
                 onRefresh={refresh}

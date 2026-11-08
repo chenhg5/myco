@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronDown, Link2 } from "lucide-react";
 import { appApi, type Hub } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
+import { L, lang } from "@/lib/i18n";
 
 const INSTALL_COMMAND =
   "curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh | sudo bash -s -- --domain auto";
@@ -76,19 +77,19 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
     <Modal
       open={open}
       onOpenChange={(o) => { if (!o) close(); }}
-      title="连接 Hub"
-      description={screen === "link" ? "粘贴 App 连接链接，就能看到这个 Hub 上的节点。" : undefined}
+      title={L("连接 Hub", "Connect Hub")}
+      description={screen === "link" ? L("粘贴 App 连接链接，就能看到这个 Hub 上的节点。", "Paste an app link to see the nodes on this Hub.") : undefined}
       wide
     >
       {screen === "link" ? (
         <form onSubmit={connect}>
           <label className="app-field">
-            <span className="app-field-label">App 连接链接</span>
+            <span className="app-field-label">{L("App 连接链接", "App link")}</span>
             <input
               className="app-input mono app-input-lg"
               value={link}
               onChange={(e) => setLink(e.target.value)}
-              placeholder="https://你的服务器/c/myco_console_…"
+              placeholder={L("https://你的服务器/c/myco_console_…", "https://your-server/c/myco_console_…")}
               autoFocus
               required
             />
@@ -96,29 +97,29 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
 
           <div className="app-linkline">
             <button type="button" className="app-linklike" onClick={() => { setScreen("command"); setError(null); }}>
-              还没有链接？
+              {L("还没有链接？", "No link yet?")}
             </button>
-            <span>先在一台服务器上安装 Hub</span>
+            <span>{L("先在一台服务器上安装 Hub", "Install a Hub on a server first")}</span>
           </div>
 
           <details className="app-advanced">
             <summary>
-              手动填写地址和令牌
+              {L("手动填写地址和令牌", "Enter address and token manually")}
               <ChevronDown />
             </summary>
             <div className="app-advanced-body">
               <label className="app-field">
-                <span className="app-field-label">名称（可选）</span>
+                <span className="app-field-label">{L("名称（可选）", "Name (optional)")}</span>
                 <input
                   className="app-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="我的服务器"
+                  placeholder={L("我的服务器", "My server")}
                   disabled={busy}
                 />
               </label>
               <label className="app-field">
-                <span className="app-field-label">地址</span>
+                <span className="app-field-label">{L("地址", "Address")}</span>
                 <input
                   className="app-input mono"
                   value={url}
@@ -128,7 +129,7 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
                 />
               </label>
               <label className="app-field">
-                <span className="app-field-label">控制台令牌</span>
+                <span className="app-field-label">{L("控制台令牌", "Console token")}</span>
                 <input
                   className="app-input mono"
                   type="password"
@@ -140,7 +141,9 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
                 />
               </label>
               <div className="app-hint">
-                在 Hub 所在机器上运行 <code>myco console token create --name {name.trim() || "<设备名>"}</code> 获取令牌。
+                {lang() === "zh"
+                  ? <>在 Hub 所在机器上运行 <code>myco console token create --name {name.trim() || "<设备名>"}</code> 获取令牌。</>
+                  : <>Run <code>myco console token create --name {name.trim() || "<device-name>"}</code> on the Hub’s machine to get a token.</>}
               </div>
               <div className="app-actions">
                 <button
@@ -149,7 +152,7 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
                   onClick={() => void connectManual()}
                   disabled={busy || !url.trim() || !token.trim()}
                 >
-                  {busy ? "验证中…" : "用地址和令牌连接"}
+                  {busy ? L("验证中…", "Verifying…") : L("用地址和令牌连接", "Connect with address and token")}
                 </button>
               </div>
             </div>
@@ -157,27 +160,29 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
 
           <ErrorText error={error} />
           <div className="app-modal-actions">
-            <button type="button" className="app-btn" onClick={close} disabled={busy}>取消</button>
+            <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
             <button type="submit" className="app-btn app-btn-primary" disabled={busy || !link.trim()}>
-              {busy ? <><span className="app-spinner" />正在连接…</> : <><Link2 />连接</>}
+              {busy ? <><span className="app-spinner" />{L("正在连接…", "Connecting…")}</> : <><Link2 />{L("连接", "Connect")}</>}
             </button>
           </div>
         </form>
       ) : (
         <>
           <div className="app-hint">
-            在你的服务器（Linux）上运行下面这行命令，装好后它会打印一个 App 连接链接，复制回来粘贴到上一步。
+            {L("在你的服务器（Linux）上运行下面这行命令，装好后它会打印一个 App 连接链接，复制回来粘贴到上一步。", "Run this command on your server (Linux). When it’s done it prints an app link; copy it and paste it in the previous step.")}
           </div>
           <div className="app-command">
             <code>{INSTALL_COMMAND}</code>
             <CopyButton value={INSTALL_COMMAND} />
           </div>
           <div className="app-hint" style={{ marginTop: 12 }}>
-            已经装过 Hub？在服务器上运行 <code>sudo myco console link</code> 生成新链接。
+            {lang() === "zh"
+              ? <>已经装过 Hub？在服务器上运行 <code>sudo myco console link</code> 生成新链接。</>
+              : <>Already installed a Hub? Run <code>sudo myco console link</code> on the server to make a new link.</>}
           </div>
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={() => { setScreen("link"); setError(null); }}>
-              <ArrowLeft />返回
+              <ArrowLeft />{L("返回", "Back")}
             </button>
           </div>
         </>

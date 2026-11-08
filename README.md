@@ -9,97 +9,132 @@
 
 **The mycelium for your AI agents.**
 
-Connect Claude Code, Codex and any agent CLI across laptops, VPSes and the cloud —<br>
-so they can find each other, hand off tasks, and reply, while you're away.
+One app to see, organize and direct every Claude Code, Codex and agent CLI you run —<br>
+on your laptop, your servers and in the cloud.
 
 [![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
-[![Go](https://img.shields.io/github/go-mod/go-version/chenhg5/myco?style=flat-square&logo=go&logoColor=white)](go.mod)
-![Platforms](https://img.shields.io/badge/macOS%20·%20Linux%20·%20WSL-grey?style=flat-square)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
+
+**[Download for Mac](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows (preview)](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [All downloads](https://github.com/chenhg5/myco/releases/latest)
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-https://github.com/user-attachments/assets/31de0488-f6c0-4acf-9e66-96d903718e48
-
 </div>
 
-## Quick Start
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/nodes-dark.webp">
+  <img src="docs/assets/app/en/nodes.webp" alt="The myco app: every agent on every hub, with its status, CLI, model and machine" width="100%">
+</picture>
 
-### The lazy way: let your agent do it
+## What is myco?
 
-Paste this into Claude Code or Codex:
+You already run several agents: Claude Code on your Mac, Codex on a server, a claude.ai session doing research. Today they're islands, and **you** are the message bus — copying prompts between them, waiting, pasting results back.
+
+myco connects them into one network and gives you **one app** to run it:
+
+- **See every agent in one place.** Which ones are working, which have tasks waiting, which are offline — with the CLI, model and machine each one runs on.
+- **Give tasks from the app.** Type a task to any agent; its progress and reply come back as a conversation, rendered as Markdown with tables and code.
+- **Let agents work together.** Agents find each other and hand off work on their own; you can read every exchange.
+- **Add agents in one click.** The app finds the Claude Code and Codex sessions already on your computer. For another computer, it gives you one sentence to paste into that agent.
+- **Organize them.** Put agents in groups, tag them, filter by status, type, machine or group.
+- **Your agents keep their memory.** Every task resumes the agent's **own** session, so context builds up instead of resetting.
+
+## Download
+
+| | |
+|---|---|
+| **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** — one download for Apple silicon and Intel, signed and notarized by Apple. Open it and drag myco into Applications. The app updates itself (Settings → About → Update and reopen). |
+| **Windows** (preview) | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) ([ARM](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)). Not code-signed yet: on first run choose *More info → Run anyway*. |
+| **Linux / servers** | The command-line tool — see [Prefer the command line?](#prefer-the-command-line) |
+
+## Get started in three steps
+
+**1. Open the app and get a hub.** The hub is the small server your agents connect to. Choose **Start on this computer** to run one right here with a click (it can be opened to the internet later via Cloudflare or Tailscale), or **Connect an existing Hub** by pasting its app link. To put a hub on your own server, run one line there — it prints the app link at the end:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
+```
+
+**2. Add your agents.** Click **Add node**:
+
+- **On this computer** — the app lists your recent Claude Code and Codex sessions; click one to add it.
+- **On another computer** — copy the one sentence the app gives you and paste it into the Claude Code or Codex session over there. It installs myco and joins by itself.
+- **Start a new session** on a machine that's already connected, in any folder you choose.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/add-node-dark.webp">
+  <img src="docs/assets/app/en/add-node.webp" alt="Add a node: the Claude Code and Codex sessions found on this computer" width="100%">
+</picture>
+
+**3. Give them work.** Open an agent and click **Message**, or start from **Conversations**. A task runs in the agent's own session; progress shows up as it goes, and you can correct a task while it runs.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/conversation-dark.webp">
+  <img src="docs/assets/app/en/conversation.webp" alt="A conversation: the task, progress, and the agent's reply with a table" width="100%">
+</picture>
+
+## A closer look
+
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/app/en/node.webp" alt="Node details"><br><b>Every agent, in detail.</b> Its CLI, model, permissions and machine; its group and tags; what it's working on; your conversations with it and its exchanges with other agents. Choose who may give it tasks, or disconnect it.</td>
+<td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Machines"><br><b>Machines.</b> Every computer and server running your agents, whether it's online, and which agents run on it. Start a new Claude Code or Codex session on any of them, in the folder you choose.</td>
+</tr>
+</table>
+
+- **Many hubs, one window.** Keep a hub at home and one for your team; switch between them at the bottom of the sidebar, or see all at once.
+- **Offline? It tells you why** — and on this computer, brings the agent back with one click. Tasks sent while an agent is offline wait for it.
+- **English and Chinese**, light and dark, following your system.
+
+## Prefer the command line?
+
+Everything the app does is also a `myco` command — handy on servers and for agents themselves.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
+```
+
+Or let your agent do it — paste this into Claude Code or Codex:
 
 ```text
 Read https://github.com/chenhg5/myco/blob/main/INSTALL.md
 Set up a myco hub for me and connect this session to it.
 ```
 
-### The 3-step way
+| Start a hub | Command |
+|---|---|
+| On your VPS | `sudo bash install-hub.sh --domain auto` (real HTTPS via sslip.io, no domain needed) |
+| On your computer, via Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` |
+| On your computer, via Tailscale Funnel | `myco hub up --tunnel tailscale` |
 
-**1. Start a hub (once).** Pick whichever fits; each one prints a **join link** at the end. No VPS is needed: the hub can run on a computer you already own, reachable through Cloudflare Tunnel or Tailscale Funnel.
-
-| Where | Command | You need |
-|---|---|---|
-| Your own VPS | `curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto` | Linux with a public IP and port 443 open. `--domain auto` gets a real HTTPS cert via sslip.io, so no domain is required |
-| No VPS: Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` | A free Cloudflare account, a domain on Cloudflare, and `cloudflared` |
-| No VPS: Tailscale Funnel | `myco hub up --tunnel tailscale` | A free Tailscale account with Funnel enabled. You get a fixed `https://<machine>.<tailnet>.ts.net` URL |
-| Just trying it out | `myco hub up --tunnel cloudflare` | Only `cloudflared`. The `trycloudflare.com` URL changes on every restart |
-
-For the `hub up` options, install the CLI first (`curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash`). They run the hub on a computer you already have (Mac, Linux, a home server) as a background service. That computer has to stay on and must not sleep. Details: [INSTALL.md 1.1](INSTALL.md#11-没有-vps在自己的电脑上开-hub).
-
-**2. Add each machine (macOS / Linux / WSL).** Paste one line:
-
-```bash
-curl -fsSL https://<your-hub>/j/<link> | bash
-```
-
-**3. Add each agent session.** Say this to Claude Code, Codex or claude.ai:
-
-```text
-join myco: https://<your-hub>/j/<link>
-```
-
-**That's it. Now delegate from anywhere:**
+Add a machine with `curl -fsSL https://<your-hub>/j/<link> | bash`, add a session by telling it `join myco: https://<your-hub>/j/<link>`, then:
 
 ```bash
 myco agent list --online
-myco message send --to vps-codex-a91e --body "Fix the failing tests in ./pkg/api" --wait 15m
+myco message send --to build-backend --body "Fix the failing tests in ./pkg/api" --wait 15m
 myco broadcast send --selector "group=review" --body "Review PR #42" --wait 30m
-myco ui --open
+myco exec --to build-shell --cmd "df -h"
+myco upgrade
 ```
 
-**Staying up to date:** `myco version` shows this machine's, the hub's and the latest version; `myco upgrade` upgrades and restarts the local services (`sudo myco upgrade` on a server installed with `install-hub.sh`).
+More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wake-ups) are in **[INSTALL.md](INSTALL.md)** (Chinese; your agent reads it fine).
 
-> More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wake-ups) are in **[INSTALL.md](INSTALL.md)** (Chinese; your agent reads it fine).
-
-## Why myco
-
-You already run several agents: Claude Code on your Mac, Codex on a VPS, a claude.ai cloud session doing research. Today they're islands, and **you** are the message bus: copying prompts between them, waiting, pasting results back.
-
-myco gives them a shared network. Each agent gets a **name and an inbox**. Any agent can find the others, send them work, and get the answer back. Idle agents are woken up when a message arrives, and each one resumes **its own session**, so it keeps all of its context.
-
-## Highlights
+<details>
+<summary><b>All features</b></summary>
 
 - **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
 - **No VPS required.** Run the hub on a VPS, or on a computer you already have behind Cloudflare Tunnel or Tailscale Funnel.
-- **Spawn agents remotely.** `myco agent spawn --on wsl --dir ~/code/app` starts a new Claude Code or Codex session in a folder on another machine and joins it. That machine's own rules decide who may, where, and with what permissions.
-- **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
-- **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
+- **Spawn agents remotely.** Start a new Claude Code or Codex session in a folder on another machine. That machine's own rules decide who may, where, and with what permissions.
 - **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI and OpenCode, plus a template for anything else ([full list](#supported-agents)).
-- **Delegation that scales.** Use 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
-- **Exec nodes.** `myco exec --to vps-shell --cmd "df -h"` runs a command on a remote machine and returns its output, like ssh. Senders are allow-listed and every command is audited.
+- **Delegation that scales.** 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
+- **Exec nodes.** Run a command on a remote machine and get its output, like ssh. Senders are allow-listed and every command is audited.
 - **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
-- **Safe by default.** Every agent has an allow-list of who may send it work, and messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
-- **Live dashboard.** `myco ui --open` shows who's working, who has work queued, who's idle and every conversation. It's embedded in the binary.
+- **Safe by default.** Every agent has an allow-list of who may send it work; messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
 - **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.
 - **One static Go binary.** The hub, CLI and runner are the same `myco` program. SQLite storage, no cgo.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
-  <img src="docs/assets/dashboard.png" alt="myco dashboard: every agent in the network with its live status" width="100%">
-</picture>
-
-<p align="center"><sub>`myco ui --open`: every agent and every conversation, live.</sub></p>
+</details>
 
 ## How it works
 
@@ -126,13 +161,13 @@ flowchart TB
     R2 -.-> S4["exec node: shell"]
   end
 
-  UI["myco ui<br/>local dashboard"]
+  UI["myco app<br/>Mac / Windows"]
   EXT["Agents woken by push<br/>webhook, routine, GitHub Actions"]
 
   BOX <-->|"long-poll / reply"| R1
   BOX <-->|"long-poll / reply"| CLOUD
   BOX <-->|"long-poll / reply"| R2
-  UI -->|"read-only"| REG
+  UI <-->|"console token"| REG
   WAKE -->|"push wake-up"| EXT
 ```
 
@@ -205,7 +240,9 @@ Other ways to connect:
 ```bash
 make test     # go test -race ./...
 make build    # ./bin/myco
-make cross    # linux/darwin × amd64/arm64
+make cross    # the CLI for linux/darwin/windows × amd64/arm64
+make app      # the Mac app (bin/myco.app), on macOS
+cd web && npm run dev:app   # the app's UI in a browser, with a mock backend
 ```
 
 ## Why "myco"
@@ -219,9 +256,11 @@ myco does the same for agents. It links agents on different machines into one ne
 - [x] Hub, CLI and runner, with long-polling, leases, idempotency and allow-lists
 - [x] Session binding, pluggable wakers, GitHub ingress
 - [x] Join links, self-enrollment for cloud sessions, dashboard, exec nodes
+- [x] The myco app for Mac and Windows: many hubs, conversations, groups and tags, one-click local agents
 - [ ] MCP endpoint (Streamable HTTP), so ChatGPT and Claude can join as connectors
 - [ ] Orchestrator templates and scheduling policies
-- [ ] Hub federation and an admin console
+- [ ] Teams: shared hubs with roles and team-only visibility
+- [ ] Fork a session into a new agent
 
 <div align="center">
 

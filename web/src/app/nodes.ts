@@ -3,6 +3,7 @@ import {
 } from "lucide-react";
 import type { Agent, Machine, ModelSource, RuntimeAccess } from "@/api";
 import type { AgentRow, NodeKind } from "@/app/types";
+import { L } from "@/lib/i18n";
 
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
 export type Kind = NodeKind | "machine";
@@ -19,7 +20,7 @@ const CLI_META: Record<string, { label: string; icon: typeof Bot }> = {
   opencode: { label: "OpenCode", icon: SquareTerminal },
   shell: { label: "Shell", icon: Terminal },
   exec: { label: "Exec", icon: SquareTerminal },
-  human: { label: "人", icon: UserRound },
+  human: { get label() { return L("人", "Human"); }, icon: UserRound },
 };
 
 export function agentKind(a: Agent): Kind {
@@ -39,7 +40,7 @@ export function isCloud(a: Agent): boolean {
 
 export function cliName(a: Agent): string {
   const cli = a.runtime?.cli || a.binding.harness;
-  return cli ? CLI_META[cli]?.label || cli : "未上报";
+  return cli ? CLI_META[cli]?.label || cli : L("未上报", "Not reported");
 }
 
 export function cliVersion(a: Agent): string | undefined {
@@ -63,9 +64,9 @@ export function nodeIcon(a: Agent) {
 /** How a cloud session is shown where a machine name would go. */
 export function cloudLabel(a: Agent): string {
   const cli = a.runtime?.cli || a.binding.harness || "";
-  if (cli.startsWith("claude")) return "云端（claude.ai）";
-  if (cli.startsWith("codex")) return "云端（Codex）";
-  return "云端";
+  if (cli.startsWith("claude")) return L("云端（claude.ai）", "Cloud (claude.ai)");
+  if (cli.startsWith("codex")) return L("云端（Codex）", "Cloud (Codex)");
+  return L("云端", "Cloud");
 }
 
 export function machinesOfHub(hub: AgentRow["hub"]): Machine[] {
@@ -93,22 +94,22 @@ export function machineLabel(row: AgentRow): string | undefined {
 export function kindLabel(kind: Kind): string {
   if (kind === "agent") return "AI";
   if (kind === "shell") return "Shell";
-  if (kind === "human") return "人";
-  return "机器节点";
+  if (kind === "human") return L("人", "Human");
+  return L("机器节点", "Machine node");
 }
 
 export function modelSourceLabel(source?: ModelSource): string | undefined {
-  if (source === "configured") return "配置";
-  if (source === "observed") return "实际使用";
-  if (source === "default") return "CLI 默认";
-  if (source === "cli-config") return "CLI 设置";
+  if (source === "configured") return L("配置", "Configured");
+  if (source === "observed") return L("实际使用", "In use");
+  if (source === "default") return L("CLI 默认", "CLI default");
+  if (source === "cli-config") return L("CLI 设置", "CLI setting");
   return undefined;
 }
 
 export function accessLabel(access?: RuntimeAccess): string {
-  if (access === "readonly") return "只读";
-  if (access === "workspace") return "工作区";
-  if (access === "full") return "完全";
+  if (access === "readonly") return L("只读", "Read-only");
+  if (access === "workspace") return L("工作区", "Workspace");
+  if (access === "full") return L("完全", "Full");
   return "—";
 }
 
@@ -116,9 +117,9 @@ export function osInfo(os: Machine["os"]): { label: string; icon: typeof Monitor
   if (os === "darwin") return { label: "macOS", icon: Laptop };
   if (os === "linux") return { label: "Linux", icon: Terminal };
   if (os === "windows") return { label: "Windows", icon: Monitor };
-  if (os === "cloud") return { label: "云端", icon: Cloud };
+  if (os === "cloud") return { label: L("云端", "Cloud"), icon: Cloud };
   // Machines whose runners predate machine reporting: grouped by host name.
-  return { label: "系统未知", icon: Monitor };
+  return { label: L("系统未知", "Unknown OS"), icon: Monitor };
 }
 
 /** A version for display: "v0.16.9" whether or not the source has the v. */
@@ -131,8 +132,8 @@ export function machineSubtitle(m: Machine): string {
     osInfo(m.os).label,
     m.arch,
     ver(m.myco_version),
-    `${m.agents.length} 个节点`,
-    m.legacy ? "升级 myco 后识别" : "",
+    L(`${m.agents.length} 个节点`, `${m.agents.length} node${m.agents.length === 1 ? "" : "s"}`),
+    m.legacy ? L("升级 myco 后识别", "Upgrade myco to identify") : "",
   ].filter(Boolean).join(" · ");
 }
 

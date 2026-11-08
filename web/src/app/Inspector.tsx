@@ -9,8 +9,10 @@ import {
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
+import { summarize } from "@/app/summary";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
+import { L, lang, locale } from "@/lib/i18n";
 
 type Action = null | "profile" | "allow" | "kick" | "delete";
 
@@ -34,8 +36,8 @@ function MessageRows({ row, now, mine, onThread }: {
     .filter((m) => (isConsole(m.from) || isConsole(m.to)) === mine)
     .filter((m) => (seen.has(m.thread_id) ? false : (seen.add(m.thread_id), true)))
     .slice(0, 6);
-  if (!msgs.length) return <div className="app-empty-note">{mine ? "你还没有和它对话" : "最近没有和其他节点的往来"}</div>;
-  const label = (n: string) => (isConsole(n) ? "你" : n === name ? (row.st.agent.display_name || n) : n);
+  if (!msgs.length) return <div className="app-empty-note">{mine ? L("你还没有和它对话", "No conversation with it yet") : L("最近没有和其他节点的往来", "No recent exchanges with other nodes")}</div>;
+  const label = (n: string) => (isConsole(n) ? L("你", "You") : n === name ? (row.st.agent.display_name || n) : n);
   return (
     <>
       {msgs.map((m) => (
@@ -44,7 +46,7 @@ function MessageRows({ row, now, mine, onThread }: {
             <span className="who">{label(m.from)}</span>→<span className="who">{label(m.to)}</span>
             <span className="time">{timeAgo(m.updated_at, now)}</span>
           </span>
-          <span className="body">{m.body}</span>
+          <span className="body">{summarize(m)}</span>
         </button>
       ))}
     </>
@@ -66,8 +68,8 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
   const [error, setError] = useState<unknown>(null);
 
   const others = (row.hub.overview?.agents || []).map((x) => x.agent);
-  const knownGroups = [...new Set(others.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, "zh-CN"));
-  const knownTags = [...new Set(others.flatMap(tagsOf))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const knownGroups = [...new Set(others.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, locale()));
+  const knownTags = [...new Set(others.flatMap(tagsOf))].sort((a, b) => a.localeCompare(b, locale()));
 
   const start = () => {
     setGroup(groups[0] || "");
@@ -104,17 +106,17 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
     <>
       <button type="button" className="app-labels-summary" onClick={start}>
         <span className="app-labels-chips">
-          {groups.length === 0 && tags.length === 0 && <span className="app-labels-empty">未分组，没有标签</span>}
+          {groups.length === 0 && tags.length === 0 && <span className="app-labels-empty">{L("未分组，没有标签", "No group, no tags")}</span>}
           {groups.map((g) => <span key={"g" + g} className="app-label group">{g}</span>)}
           {tags.map((t) => <span key={"t" + t} className="app-label">#{t}</span>)}
         </span>
-        <span className="app-labels-edit">编辑<span className="app-chev">›</span></span>
+        <span className="app-labels-edit">{L("编辑", "Edit")}<span className="app-chev">›</span></span>
       </button>
 
-      <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title="分组和标签" description="分组和标签只用来在 App 里整理和筛选节点。">
+      <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("分组和标签", "Group and tags")} description={L("分组和标签只用来在 App 里整理和筛选节点。", "Groups and tags are only used to organize and filter nodes in the app.")}>
         <label className="app-field">
-          <span className="app-field-label">分组</span>
-          <input className="app-input" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="不分组" disabled={busy} />
+          <span className="app-field-label">{L("分组", "Group")}</span>
+          <input className="app-input" value={group} onChange={(e) => setGroup(e.target.value)} placeholder={L("不分组", "No group")} disabled={busy} />
         </label>
         {knownGroups.length > 0 && (
           <div className="app-label-picks">
@@ -124,12 +126,12 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
           </div>
         )}
         <div className="app-field">
-          <span className="app-field-label">标签</span>
+          <span className="app-field-label">{L("标签", "Tags")}</span>
           <div className="app-tag-box">
             {draftTags.map((t) => (
               <span key={t} className="app-label editable">
                 #{t}
-                <button type="button" aria-label={`去掉标签 ${t}`} onClick={() => setDraftTags(draftTags.filter((x) => x !== t))}>×</button>
+                <button type="button" aria-label={L(`去掉标签 ${t}`, `Remove tag ${t}`)} onClick={() => setDraftTags(draftTags.filter((x) => x !== t))}>×</button>
               </span>
             ))}
             <input
@@ -140,8 +142,8 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
                 if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tag); }
                 if (e.key === "Backspace" && !tag && draftTags.length) setDraftTags(draftTags.slice(0, -1));
               }}
-              placeholder={draftTags.length ? "" : "输入后按回车"}
-              aria-label="添加标签"
+              placeholder={draftTags.length ? "" : L("输入后按回车", "Type and press Return")}
+              aria-label={L("添加标签", "Add tag")}
               disabled={busy}
             />
           </div>
@@ -155,9 +157,9 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
         )}
         <ErrorText error={error} />
         <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>取消</button>
+          <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy}>
-            {busy ? "正在保存…" : "保存"}
+            {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
           </button>
         </div>
       </Modal>
@@ -193,7 +195,7 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
     try {
       const r = await appApi.restartRunner();
       if (r.runner !== "running") throw new Error(r.runner);
-      setNote("runner 已重启，通常半分钟内会重新上线。");
+      setNote(L("runner 已重启，通常半分钟内会重新上线。", "The runner restarted. The node is usually back online within half a minute."));
       window.setTimeout(() => void onRefresh(), 8000);
       window.setTimeout(() => void onRefresh(), 30000);
     } catch (e) {
@@ -208,27 +210,26 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
     <section className="app-offline">
       <div className="app-offline-head">
         <span className="dot offline" />
-        <b>离线</b>
-        {seen && <span>· 最后一次连接 Hub 是 {seen}</span>}
+        <b>{L("离线", "Offline")}</b>
+        {seen && <span>{L(`· 最后一次连接 Hub 是 ${seen}`, `· Last connected to the Hub ${seen}`)}</span>}
       </div>
       <p>
-        在线是指它最近 90 秒内连过 Hub：节点所在机器上的 runner 会每隔几秒替它连一次。
-        离线时发给它的任务会先排队，上线后自动送达。
+        {L("在线是指它最近 90 秒内连过 Hub：节点所在机器上的 runner 会每隔几秒替它连一次。 离线时发给它的任务会先排队，上线后自动送达。", "Online means it reached the Hub in the last 90 seconds: the runner on the node's machine checks in for it every few seconds. Tasks sent while it is offline wait in a queue and are delivered when it comes back.")}
       </p>
       {isCloud(ag) ? (
-        <p>这是云端会话，会话结束就会离线。回到那个会话继续对话，它就会重新上线。</p>
+        <p>{L("这是云端会话，会话结束就会离线。回到那个会话继续对话，它就会重新上线。", "This is a cloud session. It goes offline when the session ends. Continue the conversation in that session to bring it back online.")}</p>
       ) : here ? (
         <>
-          <p>它在这台电脑上。重启这里的 runner，它就会重新连上 Hub。</p>
+          <p>{L("它在这台电脑上。重启这里的 runner，它就会重新连上 Hub。", "It runs on this computer. Restart the runner here and it reconnects to the Hub.")}</p>
           <button type="button" className="app-btn app-btn-primary" onClick={() => void restart()} disabled={busy}>
-            {busy ? <><span className="app-spinner" />正在重启…</> : "重启本机的 runner"}
+            {busy ? <><span className="app-spinner" />{L("正在重启…", "Restarting…")}</> : L("重启本机的 runner", "Restart the runner on this computer")}
           </button>
         </>
       ) : (
         <>
           <p>
-            {machine ? <>它在「{machine.name}」上。</> : null}
-            在那台机器的终端里运行下面这条命令（启动 runner；已经在运行就重启它）。机器关机或睡眠时，开机后会自动上线。
+            {machine ? (lang() === "zh" ? <>它在「{machine.name}」上。</> : <>It runs on “{machine.name}”. </>) : null}
+            {L("在那台机器的终端里运行下面这条命令（启动 runner；已经在运行就重启它）。机器关机或睡眠时，开机后会自动上线。", "Run this command in a terminal on that machine (it starts the runner, or restarts it if it's already running). If the machine is off or asleep, the node comes back online once it wakes.")}
           </p>
           <div className="app-command">
             <code>myco runner service restart || myco runner service install</code>
@@ -319,7 +320,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
   return (
     <>
       <div className="app-inspector-backdrop" onClick={onClose} />
-      <aside className="app-inspector" role="dialog" aria-label={`${ag.display_name || ag.name} 详情`}>
+      <aside className="app-inspector" role="dialog" aria-label={L(`${ag.display_name || ag.name} 详情`, `${ag.display_name || ag.name} details`)}>
         <div className="app-inspector-head">
           <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
           <div className="titles">
@@ -331,7 +332,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           <span className={cn("app-pill", pillClass[row.st.state])}>
             <span className={cn("dot", row.st.state)} />{state.label}
           </span>
-          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label="关闭">
+          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>
             <X />
           </button>
         </div>
@@ -341,10 +342,10 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">运行</span></div>
+            <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
             <div className="app-list">
               <div className="app-kv">
-                <span className="app-kv-label">类型</span>
+                <span className="app-kv-label">{L("类型", "Type")}</span>
                 <span className="app-kv-value">{kindLabel(kind)}</span>
               </div>
               <div className="app-kv">
@@ -354,20 +355,20 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 </span>
               </div>
               <div className="app-kv">
-                <span className="app-kv-label">模型</span>
+                <span className="app-kv-label">{L("模型", "Model")}</span>
                 <span className="app-kv-value">
                   {rt?.model || "—"}
                   {rt?.model && modelSourceLabel(rt.model_source) && (
-                    <span className="app-kv-note">（{modelSourceLabel(rt.model_source)}）</span>
+                    <span className="app-kv-note">{lang() === "zh" ? <>（{modelSourceLabel(rt.model_source)}）</> : <> ({modelSourceLabel(rt.model_source)})</>}</span>
                   )}
                 </span>
               </div>
               <div className="app-kv">
-                <span className="app-kv-label">权限</span>
+                <span className="app-kv-label">{L("权限", "Access")}</span>
                 <span className="app-kv-value">{accessLabel(rt?.access)}</span>
               </div>
               <div className="app-kv">
-                <span className="app-kv-label">机器</span>
+                <span className="app-kv-label">{L("机器", "Machine")}</span>
                 <span className="app-kv-value">
                   {machineObj ? (
                     <button
@@ -388,23 +389,23 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">分组和标签</span></div>
+            <div className="app-group-title"><span className="name">{L("分组和标签", "Group and tags")}</span></div>
             <LabelsEditor row={row} onRefresh={onRefresh} />
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">当前工作</span></div>
+            <div className="app-group-title"><span className="name">{L("当前工作", "Current work")}</span></div>
             <div className="app-list">
               <div className="app-counts">
-                <span>处理中<b>{row.st.in_progress}</b></span>
-                <span>待处理<b>{row.st.queued}</b></span>
-                <span>已挂起<b>{row.st.held}</b></span>
+                <span>{L("处理中", "In progress")}<b>{row.st.in_progress}</b></span>
+                <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
+                <span>{L("已挂起", "Held")}<b>{row.st.held}</b></span>
               </div>
-              {current.length === 0 && <div className="app-empty-note">暂无进行中的任务</div>}
+              {current.length === 0 && <div className="app-empty-note">{L("暂无进行中的任务", "No tasks in progress")}</div>}
               {current.map((m) => (
                 <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                   <span className="meta">
-                    <span className="who">{isConsole(m.from) ? "你" : m.from}</span>→<span className="who">{isConsole(m.to) ? "你" : m.to}</span>
+                    <span className="who">{isConsole(m.from) ? L("你", "You") : m.from}</span>→<span className="who">{isConsole(m.to) ? L("你", "You") : m.to}</span>
                     <span className="time">{timeAgo(m.updated_at, now)}</span>
                   </span>
                   <span className="body">{m.body}</span>
@@ -415,10 +416,10 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
 
           <section className="app-group">
             <div className="app-group-title">
-              <span className="name">和你的对话</span>
+              <span className="name">{L("和你的对话", "Conversations with you")}</span>
               {(kind === "agent" || kind === "shell") && (
                 <button type="button" className="app-group-action" onClick={() => onMessage(row)}>
-                  <MessageSquare />发消息
+                  <MessageSquare />{L("发消息", "Message")}
                 </button>
               )}
             </div>
@@ -427,40 +428,40 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
 
           <section className="app-group">
             <div className="app-group-title">
-              <span className="name">与其他节点的往来</span>
-              <span className="app-group-note">只读</span>
+              <span className="name">{L("与其他节点的往来", "Exchanges with other nodes")}</span>
+              <span className="app-group-note">{L("只读", "Read-only")}</span>
             </div>
             <div className="app-list"><MessageRows row={row} now={now} mine={false} onThread={onThread} /></div>
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">身份与绑定</span></div>
+            <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
-              <div className="app-kv"><span className="app-kv-label">会话 ID</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">工作目录</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">投递方式</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
-              <div className="app-kv"><span className="app-kv-label">入网令牌</span><span className="app-kv-value mono">{ag.enrolled_by || "管理员注册"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">允许来源</span><span className="app-kv-value">{ag.allow_from.length ? ag.allow_from.join(", ") : "任何人"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">最近在线</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
-              <div className="app-kv"><span className="app-kv-label">注册时间</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString("zh-CN", { hour12: false })}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("工作目录", "Working directory")}</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("投递方式", "Delivery")}</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("入网令牌", "Join token")}</span><span className="app-kv-value mono">{ag.enrolled_by || L("管理员注册", "Registered by admin")}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("允许来源", "Allowed from")}</span><span className="app-kv-value">{ag.allow_from.length ? ag.allow_from.join(", ") : L("任何人", "Anyone")}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("注册时间", "Registered")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
             </div>
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">操作</span></div>
+            <div className="app-group-title"><span className="name">{L("操作", "Actions")}</span></div>
             <div className="app-list">
               <button type="button" className="app-action-row" onClick={() => openAction("profile")}>
-                修改显示名和描述…<span className="app-chev">›</span>
+                {L("修改显示名和描述…", "Edit display name and description…")}<span className="app-chev">›</span>
               </button>
               <button type="button" className="app-action-row" onClick={() => openAction("allow")}>
-                允许谁派任务…<span className="app-chev">›</span>
+                {L("允许谁派任务…", "Who can give tasks…")}<span className="app-chev">›</span>
               </button>
               <button type="button" className="app-action-row danger" onClick={() => openAction("kick")}>
-                踢下线<span className="app-chev">›</span>
+                {L("踢下线", "Disconnect")}<span className="app-chev">›</span>
               </button>
               <button type="button" className="app-action-row danger" onClick={() => openAction("delete")}>
-                删除<span className="app-chev">›</span>
+                {L("删除", "Delete")}<span className="app-chev">›</span>
               </button>
             </div>
           </section>
@@ -470,29 +471,29 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
       <Modal
         open={action === "profile"}
         onOpenChange={(o) => !o && closeAction()}
-        title="修改显示名和描述"
-        description="显示名和描述会在所有 Hub 上生效。显示名留空则只显示名字。"
+        title={L("修改显示名和描述", "Edit display name and description")}
+        description={L("显示名和描述会在所有 Hub 上生效。显示名留空则只显示名字。", "The display name and description apply on every Hub. Leave the display name empty to show just the name.")}
       >
         <label className="app-field">
-          <span className="app-field-label">显示名</span>
+          <span className="app-field-label">{L("显示名", "Display name")}</span>
           <input className="app-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={ag.name} />
         </label>
         <label className="app-field">
-          <span className="app-field-label">描述</span>
+          <span className="app-field-label">{L("描述", "Description")}</span>
           <textarea className="app-input" value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
         <ErrorText error={error} />
         <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>取消</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={saveProfile} disabled={busy}>{busy ? "保存中…" : "保存"}</button>
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={saveProfile} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
         </div>
       </Modal>
 
       <Modal
         open={action === "allow"}
         onOpenChange={(o) => !o && closeAction()}
-        title="允许谁派任务"
-        description="只有选中的节点可以给它派任务。一个都不选表示任何节点都可以。你在 App 里发的消息不受这个限制。"
+        title={L("允许谁派任务", "Who can give tasks")}
+        description={L("只有选中的节点可以给它派任务。一个都不选表示任何节点都可以。你在 App 里发的消息不受这个限制。", "Only the selected nodes can give it tasks. Select none to allow any node. Messages you send from the app are not limited by this.")}
       >
         <NodePicker
           nodes={(row.hub.overview?.agents || []).map((x) => x.agent)
@@ -503,18 +504,18 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
         />
         <ErrorText error={error} />
         <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>取消</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={saveAllowFrom} disabled={busy}>{busy ? "保存中…" : "保存"}</button>
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={saveAllowFrom} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
         </div>
       </Modal>
 
       <ConfirmDialog
         open={action === "kick"}
         onOpenChange={(o) => !o && closeAction()}
-        title={`将 ${ag.name} 踢下线？`}
-        description={`它会立即从 ${row.hub.name} 下线，并收不到新消息。`}
-        consequences={<p>令牌立即作废，正在进行的任务会被中断。节点记录、消息和资料仍保留在 Hub 上，重新接入即可回来。</p>}
-        confirmLabel="踢下线"
+        title={L(`将 ${ag.name} 踢下线？`, `Disconnect ${ag.name}?`)}
+        description={L(`它会立即从 ${row.hub.name} 下线，并收不到新消息。`, `It goes offline from ${row.hub.name} right away and stops receiving new messages.`)}
+        consequences={<p>{L("令牌立即作废，正在进行的任务会被中断。节点记录、消息和资料仍保留在 Hub 上，重新接入即可回来。", "Its token is revoked immediately and tasks in progress are interrupted. The node record, messages and profile stay on the Hub; join again to come back.")}</p>}
+        confirmLabel={L("踢下线", "Disconnect")}
         busy={busy}
         error={error ? <ErrorText error={error} /> : undefined}
         onConfirm={() => void run(() => appApi.kick(hubId, ag.name), "close-action")}
@@ -522,10 +523,10 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
       <ConfirmDialog
         open={action === "delete"}
         onOpenChange={(o) => !o && closeAction()}
-        title={`从 ${row.hub.name} 删除 ${ag.name}？`}
-        description="这个节点会从 Hub 上永久删除。"
-        consequences={<p>节点记录和令牌都会删除，必须重新接入才能回来。已有线程里的消息仍会保留。</p>}
-        confirmLabel="删除"
+        title={L(`从 ${row.hub.name} 删除 ${ag.name}？`, `Delete ${ag.name} from ${row.hub.name}?`)}
+        description={L("这个节点会从 Hub 上永久删除。", "This node will be permanently deleted from the Hub.")}
+        consequences={<p>{L("节点记录和令牌都会删除，必须重新接入才能回来。已有线程里的消息仍会保留。", "The node record and token are deleted; it must join again to come back. Messages in existing threads are kept.")}</p>}
+        confirmLabel={L("删除", "Delete")}
         busy={busy}
         error={error ? <ErrorText error={error} /> : undefined}
         onConfirm={() => void run(() => appApi.removeAgent(hubId, ag.name), "close-panel")}

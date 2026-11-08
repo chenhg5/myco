@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { L } from "@/lib/i18n";
 
 /** Clipboard copy with an execCommand fallback for non-secure contexts. */
 export async function copyText(value: string) {
@@ -35,7 +36,7 @@ export function CopyButton({ value }: { value: string }) {
   const { copied, copy } = useCopy(value);
   return (
     <button type="button" className="app-btn app-btn-small" onClick={() => void copy()}>
-      {copied ? <Check /> : <Copy />}{copied ? "已复制" : "复制"}
+      {copied ? <Check /> : <Copy />}{copied ? L("已复制", "Copied") : L("复制", "Copy")}
     </button>
   );
 }

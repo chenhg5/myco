@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import type { Agent } from "@/api";
 import { agentKind, nodeIcon } from "@/app/nodes";
 import { cn } from "@/lib/utils";
+import { L } from "@/lib/i18n";
 
 const NAME = /^[a-z0-9][a-z0-9._-]*$/;
 
@@ -36,7 +37,7 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
         {value.map((name) => (
           <span key={name} className="app-label editable" title={name}>
             {label(name)}
-            <button type="button" aria-label={`去掉 ${name}`} onClick={() => toggle(name)} disabled={disabled}>×</button>
+            <button type="button" aria-label={L(`去掉 ${name}`, `Remove ${name}`)} onClick={() => toggle(name)} disabled={disabled}>×</button>
           </span>
         ))}
         <input
@@ -47,15 +48,15 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
             if (e.key === "Enter") { e.preventDefault(); add(); }
             if (e.key === "Backspace" && !q && value.length) onChange(value.slice(0, -1));
           }}
-          placeholder={value.length ? "搜索或输入名字" : "任何人（不限制）"}
-          aria-label="搜索节点"
+          placeholder={value.length ? L("搜索或输入名字", "Search or type a name") : L("任何人（不限制）", "Anyone (no limit)")}
+          aria-label={L("搜索节点", "Search nodes")}
           disabled={disabled}
         />
       </div>
       <div className="app-picker-list" role="listbox" aria-multiselectable="true">
         {list.length === 0 && (
           <div className="app-picker-empty">
-            {NAME.test(query) ? <>按回车添加「{query}」</> : "没有匹配的节点"}
+            {NAME.test(query) ? L(`按回车添加「${query}」`, `Press Return to add “${query}”`) : L("没有匹配的节点", "No matching nodes")}
           </div>
         )}
         {list.map((n) => {
@@ -75,7 +76,7 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
               <Icon strokeWidth={1.75} />
               <span className="app-picker-name">{n.display_name || n.name}</span>
               {n.display_name && <span className="app-picker-sub mono">{n.name}</span>}
-              <span className="app-picker-kind">{agentKind(n) === "human" ? "人" : ""}</span>
+              <span className="app-picker-kind">{agentKind(n) === "human" ? L("人", "Human") : ""}</span>
             </button>
           );
         })}

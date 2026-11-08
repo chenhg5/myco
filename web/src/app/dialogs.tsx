@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle } from "lucide-react";
+import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** macOS-style centered sheet. Portals carry .app-portal so the scoped tokens apply. */
@@ -53,9 +54,9 @@ export function ConfirmDialog({ open, onOpenChange, title, description, conseque
       )}
       {error && <div className="app-error-text">{error}</div>}
       <div className="app-modal-actions">
-        <button type="button" className="app-btn" onClick={() => onOpenChange(false)} disabled={busy}>取消</button>
+        <button type="button" className="app-btn" onClick={() => onOpenChange(false)} disabled={busy}>{L("取消", "Cancel")}</button>
         <button type="button" className="app-btn app-btn-danger" onClick={onConfirm} disabled={busy}>
-          {busy ? "处理中…" : confirmLabel}
+          {busy ? L("处理中…", "Working…") : confirmLabel}
         </button>
       </div>
     </Modal>

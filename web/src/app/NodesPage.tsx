@@ -10,30 +10,31 @@ import {
 } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
 import { cn } from "@/lib/utils";
+import { L, locale } from "@/lib/i18n";
 
 function host(url: string) {
   try { return new URL(url).host || url; } catch { return url; }
 }
 
 const STATE_OPTIONS: { value: State | "all"; label: string }[] = [
-  { value: "all", label: "全部" },
-  { value: "working", label: "工作中" },
-  { value: "pending", label: "有待办" },
-  { value: "idle", label: "空闲" },
-  { value: "offline", label: "离线" },
+  { value: "all", get label() { return L("全部", "All"); } },
+  { value: "working", get label() { return L("工作中", "Working"); } },
+  { value: "pending", get label() { return L("有待办", "Pending"); } },
+  { value: "idle", get label() { return L("空闲", "Idle"); } },
+  { value: "offline", get label() { return L("离线", "Offline"); } },
 ];
 
 const KIND_OPTIONS: { value: NodeKind | "all"; label: string }[] = [
-  { value: "all", label: "全部" },
+  { value: "all", get label() { return L("全部", "All"); } },
   { value: "agent", label: "AI" },
   { value: "shell", label: "shell" },
 ];
 
 function tasksOf(row: AgentRow): string {
   return [
-    row.st.in_progress > 0 ? `处理中 ${row.st.in_progress}` : "",
-    row.st.queued > 0 ? `待处理 ${row.st.queued}` : "",
-    row.st.held > 0 ? `已挂起 ${row.st.held}` : "",
+    row.st.in_progress > 0 ? L(`处理中 ${row.st.in_progress}`, `${row.st.in_progress} in progress`) : "",
+    row.st.queued > 0 ? L(`待处理 ${row.st.queued}`, `${row.st.queued} queued`) : "",
+    row.st.held > 0 ? L(`已挂起 ${row.st.held}`, `${row.st.held} held`) : "",
   ].filter(Boolean).join(" · ");
 }
 
@@ -133,11 +134,11 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   }, [nodes, filters.hub]);
 
   const summary = [
-    `${counts.total} 个节点`,
-    counts.working ? `${counts.working} 工作中` : "",
-    counts.pending ? `${counts.pending} 有待办` : "",
-    counts.idle ? `${counts.idle} 空闲` : "",
-    counts.offline ? `${counts.offline} 离线` : "",
+    L(`${counts.total} 个节点`, `${counts.total} node${counts.total === 1 ? "" : "s"}`),
+    counts.working ? L(`${counts.working} 工作中`, `${counts.working} working`) : "",
+    counts.pending ? L(`${counts.pending} 有待办`, `${counts.pending} pending`) : "",
+    counts.idle ? L(`${counts.idle} 空闲`, `${counts.idle} idle`) : "",
+    counts.offline ? L(`${counts.offline} 离线`, `${counts.offline} offline`) : "",
   ].filter(Boolean).join(" · ");
 
   const filtered = useMemo(() => {
@@ -173,7 +174,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
       groupsOf(r.st.agent).forEach((g) => groups.add(g));
       tagsOf(r.st.agent).forEach((t) => tags.add(t));
     }
-    const sort = (x: Set<string>) => [...x].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    const sort = (x: Set<string>) => [...x].sort((a, b) => a.localeCompare(b, locale()));
     return { groups: sort(groups), tags: sort(tags) };
   }, [nodes, filters.hub]);
 
@@ -192,9 +193,9 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   return (
     <div className="app-page">
       <div className="app-page-head">
-        <p className="app-summary">{hubs ? summary : "正在加载…"}</p>
+        <p className="app-summary">{hubs ? summary : L("正在加载…", "Loading…")}</p>
         <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
-          <Plus />添加节点
+          <Plus />{L("添加节点", "Add node")}
         </button>
       </div>
 
@@ -204,32 +205,32 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           <input
             value={filters.query}
             onChange={(e) => set({ query: e.target.value })}
-            placeholder="搜索节点"
+            placeholder={L("搜索节点", "Search nodes")}
           />
         </div>
         <span className="app-select-wrap">
-          <select className={cn("app-select", filters.kind !== "all" && "is-set")} value={filters.kind} onChange={(e) => set({ kind: e.target.value as Filters["kind"] })} aria-label="按类型筛选">
-            {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? "全部类型" : o.label}</option>)}
+          <select className={cn("app-select", filters.kind !== "all" && "is-set")} value={filters.kind} onChange={(e) => set({ kind: e.target.value as Filters["kind"] })} aria-label={L("按类型筛选", "Filter by type")}>
+            {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? L("全部类型", "All types") : o.label}</option>)}
           </select>
           <ChevronDown />
         </span>
         <span className="app-select-wrap">
-          <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as Filters["state"] })} aria-label="按状态筛选">
-            {STATE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? "全部状态" : o.label}</option>)}
+          <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as Filters["state"] })} aria-label={L("按状态筛选", "Filter by status")}>
+            {STATE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? L("全部状态", "All statuses") : o.label}</option>)}
           </select>
           <ChevronDown />
         </span>
         <span className="app-select-wrap">
-          <select className={cn("app-select", filters.label !== "all" && "is-set")} value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label="按分组和标签筛选">
-            <option value="all">分组和标签</option>
+          <select className={cn("app-select", filters.label !== "all" && "is-set")} value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label={L("按分组和标签筛选", "Filter by group and tag")}>
+            <option value="all">{L("分组和标签", "Groups and tags")}</option>
             {labelOptions.groups.length > 0 && (
-              <optgroup label="分组">
+              <optgroup label={L("分组", "Groups")}>
                 {labelOptions.groups.map((g) => <option key={g} value={"group:" + g}>{g}</option>)}
-                <option value="group:">未分组</option>
+                <option value="group:">{L("未分组", "No group")}</option>
               </optgroup>
             )}
             {labelOptions.tags.length > 0 && (
-              <optgroup label="标签">
+              <optgroup label={L("标签", "Tags")}>
                 {labelOptions.tags.map((t) => <option key={t} value={"tag:" + t}>#{t}</option>)}
               </optgroup>
             )}
@@ -237,9 +238,9 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           <ChevronDown />
         </span>
         <span className="app-select-wrap">
-          <select className={cn("app-select", filters.machine !== "all" && "is-set")} value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
-            <option value="all">全部机器</option>
-            <option value={CLOUD_FILTER}>云端</option>
+          <select className={cn("app-select", filters.machine !== "all" && "is-set")} value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label={L("按机器筛选", "Filter by machine")}>
+            <option value="all">{L("全部机器", "All machines")}</option>
+            <option value={CLOUD_FILTER}>{L("云端", "Cloud")}</option>
             {machineGroups.map((g) => (
               <optgroup key={g.hub} label={g.hub}>
                 {g.machines.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -251,23 +252,23 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
       </div>
 
       {!hubs ? (
-        loading && <div className="app-empty-note">正在加载…</div>
+        loading && <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
       ) : !hasUnreachable && hubScoped.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Server /></div>
-          <h2>还没有节点</h2>
-          <p>在 Hub 上接入一个 agent，或者在一台机器上开一个新会话。</p>
+          <h2>{L("还没有节点", "No nodes yet")}</h2>
+          <p>{L("在 Hub 上接入一个 agent，或者在一台机器上开一个新会话。", "Connect an agent to a Hub, or start a new session on a machine.")}</p>
           <div className="app-empty-actions">
             <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
-              <Plus />添加节点
+              <Plus />{L("添加节点", "Add node")}
             </button>
           </div>
         </div>
       ) : filtered.length === 0 && !hasUnreachable ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Server /></div>
-          <h2>没有匹配的节点</h2>
-          <p>换一个搜索或筛选条件试试。</p>
+          <h2>{L("没有匹配的节点", "No matching nodes")}</h2>
+          <p>{L("换一个搜索或筛选条件试试。", "Try a different search or filter.")}</p>
         </div>
       ) : (
         groups.map((g) => (
@@ -277,18 +278,18 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
               <span className="parts">
                 {g.meta && <><span className="sep">·</span><span className="part mono">{host(g.meta.url)}</span></>}
                 {g.meta?.hub_version && <><span className="sep">·</span><span className="part">{ver(g.meta.hub_version)}</span></>}
-                {g.meta?.update_available && <span className="app-update-pill">可更新</span>}
-                {!g.hub.ok && <><span className="sep">·</span><span className="part" style={{ color: "var(--red)" }}>连不上</span></>}
+                {g.meta?.update_available && <span className="app-update-pill">{L("可更新", "Update available")}</span>}
+                {!g.hub.ok && <><span className="sep">·</span><span className="part" style={{ color: "var(--red)" }}>{L("连不上", "Unreachable")}</span></>}
               </span>
             </div>
             <div className="app-list">
               {!g.hub.ok ? (
                 <div className="app-error-row">
                   <AlertTriangle />
-                  <span className="err" title={g.hub.error || undefined}>{g.hub.error || "App 无法连接这个 Hub。"}</span>
+                  <span className="err" title={g.hub.error || undefined}>{g.hub.error || L("App 无法连接这个 Hub。", "The app can’t connect to this Hub.")}</span>
                 </div>
               ) : g.rows.length === 0 ? (
-                <div className="app-empty-note">这个 Hub 上还没有节点。</div>
+                <div className="app-empty-note">{L("这个 Hub 上还没有节点。", "No nodes on this Hub yet.")}</div>
               ) : (
                 g.rows.map((r) => (
                   <NodeRowView

@@ -3,6 +3,7 @@
 // Serves the `app/...` contract with two hubs: one healthy, one unreachable.
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
+import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
 // MOCK_SHELL=mac reserves room for the macOS traffic lights; browser does not.
@@ -267,6 +268,13 @@ const state = {
 };
 
 if (EMPTY) state.hubs = [];
+// MOCK_SHOWCASE=en|zh: the polished demo data for README screenshots.
+const SHOWCASE = process.env.MOCK_SHOWCASE;
+if (SHOWCASE) {
+  const sc = showcase(SHOWCASE, { makeAgent, makeMessage, iso, CONSOLE });
+  state.hubs = sc.hubs;
+  localSessions.splice(0, localSessions.length, ...sc.localSessions);
+}
 
 // Local joins alternate between a healthy runner and a warning, so both
 // states can be seen without restarting the mock.
@@ -365,6 +373,10 @@ const local = {
   },
   device: "glenn-mac",
 };
+if (SHOWCASE) {
+  local.hostname = "glenns-mbp.local";
+  if (local.myco) local.myco.version = "0.17.2";
+}
 
 function totals(agents) {
   const t = { agents: agents.length, working: 0, pending: 0, idle: 0, offline: 0 };
@@ -379,11 +391,11 @@ function agentStatus(a) {
   const state = a.online ? (a.status_text ? "working" : "idle") : "offline";
   return {
     agent: a, state,
-    queued: state === "working" ? 2 : 0,
+    queued: a.queued ?? (state === "working" ? 2 : 0),
     in_progress: state === "working" ? 1 : 0,
     held: 0,
     current: state === "working"
-      ? [makeMessage({ thread_id: "th_release", from: "glenn", to: a.name, body: a.status_text || "处理中…" })]
+      ? [makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" })]
       : [],
   };
 }
@@ -524,14 +536,15 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: "v0.16.8-demo", shell: SHELL });
+    return send(res, 200, { version: SHOWCASE ? "v0.17.2" : "v0.16.8-demo", shell: SHELL });
   }
 
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")
   if (parts[0] === "app" && parts[1] === "update" && parts.length === 2) {
-    const latest = process.env.MOCK_UPDATE === "none" ? "v0.16.8" : "v0.17.2";
+    const current = SHOWCASE ? "v0.17.2" : "v0.16.8-demo";
+    const latest = process.env.MOCK_UPDATE === "none" || SHOWCASE ? current : "v0.17.2";
     if (method === "GET") {
-      return send(res, 200, { current: "v0.16.8-demo", latest, available: latest !== "v0.16.8", can_install: SHELL === "mac" });
+      return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" });
     }
     if (method === "POST") {
       await new Promise((r) => setTimeout(r, 1200));

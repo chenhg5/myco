@@ -3,6 +3,7 @@ import { Link2 } from "lucide-react";
 import { appApi, type Hub, type JoinLink } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
+import { L } from "@/lib/i18n";
 
 /** Pick a hub, create a one-off join link, show the command. */
 export function AddMachineDialog({ open, onOpenChange, hubs }: {
@@ -58,12 +59,12 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
     <Modal
       open={open}
       onOpenChange={(o) => !o && close()}
-      title="添加机器"
-      description="在另一台电脑上接入这个 Hub。"
+      title={L("添加机器", "Add machine")}
+      description={L("在另一台电脑上接入这个 Hub。", "Connect another computer to this Hub.")}
       wide
     >
       {hubs.length === 0 ? (
-        <div className="app-hint">先添加一个 Hub，才能给 Hub 添加机器。</div>
+        <div className="app-hint">{L("先添加一个 Hub，才能给 Hub 添加机器。", "Add a Hub first, then you can add machines to it.")}</div>
       ) : (
         <>
           <label className="app-field">
@@ -76,7 +77,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
             >
               {hubs.map((h) => (
                 <option key={h.id} value={h.id} disabled={!h.ok}>
-                  {h.name}{h.ok ? "" : "（连不上）"}
+                  {h.name}{h.ok ? "" : L("（连不上）", " (unreachable)")}
                 </option>
               ))}
             </select>
@@ -85,7 +86,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
           {!link ? (
             <>
               <div className="app-hint">
-                生成一条入网链接，在要添加的电脑上运行它。链接只能用一次，24 小时内有效。
+                {L("生成一条入网链接，在要添加的电脑上运行它。链接只能用一次，24 小时内有效。", "Create a join link and run it on the computer you want to add. The link works once and expires in 24 hours.")}
               </div>
               <ErrorText error={error} />
               <div className="app-actions">
@@ -95,7 +96,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
                   onClick={() => void generate()}
                   disabled={busy || !hubId}
                 >
-                  {busy ? <><span className="app-spinner" />正在生成…</> : <><Link2 />生成入网链接</>}
+                  {busy ? <><span className="app-spinner" />{L("正在生成…", "Creating…")}</> : <><Link2 />{L("生成入网链接", "Create join link")}</>}
                 </button>
               </div>
             </>
@@ -106,15 +107,15 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
                 <CopyButton value={link.command} />
               </div>
               <div className="app-hint">
-                在要添加的电脑或服务器的终端里运行这条命令。它会装好 myco 并把这台机器加入 Hub，之后会出现在机器页。
+                {L("在要添加的电脑或服务器的终端里运行这条命令。它会装好 myco 并把这台机器加入 Hub，之后会出现在机器页。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}
               </div>
               <ErrorText error={error} />
               <div className="app-modal-actions">
                 <button type="button" className="app-btn" onClick={() => void generate()} disabled={busy}>
-                  {busy ? "正在生成…" : "重新生成"}
+                  {busy ? L("正在生成…", "Creating…") : L("重新生成", "Create new link")}
                 </button>
                 <button type="button" className="app-btn app-btn-primary" onClick={close} disabled={busy}>
-                  完成
+                  {L("完成", "Done")}
                 </button>
               </div>
             </>

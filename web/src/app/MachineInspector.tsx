@@ -7,6 +7,7 @@ import { agentKind, cliName, kindLabel, nodeIcon, osInfo } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
+import { L } from "@/lib/i18n";
 
 export interface MachineRef { hubId: string; machineId: string }
 
@@ -84,7 +85,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
   return (
     <>
       <div className="app-inspector-backdrop" onClick={onClose} />
-      <aside className="app-inspector" role="dialog" aria-label={`${machine.name} 详情`}>
+      <aside className="app-inspector" role="dialog" aria-label={L(`${machine.name} 详情`, `${machine.name} details`)}>
         <div className="app-inspector-head">
           <span className="app-row-icon"><OsIcon strokeWidth={1.75} /></span>
           <div className="titles">
@@ -93,34 +94,34 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
           </div>
           <span className={cn("app-pill", machine.online ? "green" : "red")}>
             <span className={cn("dot", machine.online ? "working" : "offline")} />
-            {machine.online ? "在线" : "离线"}
+            {machine.online ? L("在线", "Online") : L("离线", "Offline")}
           </span>
-          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label="关闭">
+          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>
             <X />
           </button>
         </div>
 
         <div className="app-inspector-body">
           <section className="app-group">
-            <div className="app-group-title"><span className="name">基本信息</span></div>
+            <div className="app-group-title"><span className="name">{L("基本信息", "Details")}</span></div>
             <div className="app-list">
-              <div className="app-kv"><span className="app-kv-label">机器 ID</span><span className="app-kv-value mono">{machine.id}</span></div>
-              <div className="app-kv"><span className="app-kv-label">主机名</span><span className="app-kv-value mono">{machine.hostname}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("机器 ID", "Machine ID")}</span><span className="app-kv-value mono">{machine.id}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("主机名", "Host name")}</span><span className="app-kv-value mono">{machine.hostname}</span></div>
               <div className="app-kv">
-                <span className="app-kv-label">系统</span>
+                <span className="app-kv-label">{L("系统", "System")}</span>
                 <span className="app-kv-value">{[os.label, machine.arch].filter(Boolean).join(" · ")}</span>
               </div>
-              <div className="app-kv"><span className="app-kv-label">myco 版本</span><span className="app-kv-value">{ver(machine.myco_version) || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">最近在线</span><span className="app-kv-value">{machine.online ? "现在" : timeAgo(machine.last_seen_at, now)}</span></div>
-              <div className="app-kv"><span className="app-kv-label">节点数</span><span className="app-kv-value">{machine.agents.length}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("myco 版本", "myco version")}</span><span className="app-kv-value">{ver(machine.myco_version) || "—"}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{machine.online ? L("现在", "Now") : timeAgo(machine.last_seen_at, now)}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("节点数", "Nodes")}</span><span className="app-kv-value">{machine.agents.length}</span></div>
             </div>
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">操作</span></div>
+            <div className="app-group-title"><span className="name">{L("操作", "Actions")}</span></div>
             <div className="app-list">
               <button type="button" className="app-action-row" onClick={openRename}>
-                重命名…<span className="app-chev">›</span>
+                {L("重命名…", "Rename…")}<span className="app-chev">›</span>
               </button>
               <button
                 type="button"
@@ -128,24 +129,24 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
                 onClick={() => onSpawn(target.hubId, target.machineId)}
                 disabled={!machine.can_spawn}
               >
-                在这台机器上开新会话…<span className="app-chev">›</span>
+                {L("在这台机器上开新会话…", "Start a new session on this machine…")}<span className="app-chev">›</span>
               </button>
             </div>
             {!machine.can_spawn && (
               <div className="app-small-note" style={{ marginTop: 8 }}>
-                这台机器的 myco 版本太旧，或者它的 runner 没在运行，暂时不能开新会话。
+                {L("这台机器的 myco 版本太旧，或者它的 runner 没在运行，暂时不能开新会话。", "This machine’s myco is too old, or its runner isn’t running, so it can’t start a new session right now.")}
               </div>
             )}
           </section>
 
           <section className="app-group">
             <div className="app-group-title">
-              <span className="name">节点</span>
-              <span className="parts"><span className="sep">·</span><span className="part">{nodes.length} 个</span></span>
+              <span className="name">{L("节点", "Nodes")}</span>
+              <span className="parts"><span className="sep">·</span><span className="part">{L(`${nodes.length} 个`, `${nodes.length}`)}</span></span>
             </div>
             <div className="app-list">
               {nodes.length === 0 ? (
-                <div className="app-empty-note">这台机器上还没有节点。</div>
+                <div className="app-empty-note">{L("这台机器上还没有节点。", "No nodes on this machine yet.")}</div>
               ) : (
                 nodes.map((r) => {
                   const a = r.st.agent;
@@ -183,11 +184,11 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
       <Modal
         open={renameOpen}
         onOpenChange={(o) => { if (!o && !busy) { setRenameOpen(false); setError(null); } }}
-        title="重命名机器"
-        description="只改这个 App 里显示的名字，不影响那台机器本身。"
+        title={L("重命名机器", "Rename machine")}
+        description={L("只改这个 App 里显示的名字，不影响那台机器本身。", "This only changes the name shown in this app, not the machine itself.")}
       >
         <label className="app-field">
-          <span className="app-field-label">名称</span>
+          <span className="app-field-label">{L("名称", "Name")}</span>
           <input
             className="app-input"
             value={name}
@@ -204,7 +205,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
             onClick={() => { setRenameOpen(false); setError(null); }}
             disabled={busy}
           >
-            取消
+            {L("取消", "Cancel")}
           </button>
           <button
             type="button"
@@ -212,7 +213,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
             onClick={() => void rename()}
             disabled={busy || !name.trim()}
           >
-            {busy ? "保存中…" : "保存"}
+            {busy ? L("保存中…", "Saving…") : L("保存", "Save")}
           </button>
         </div>
       </Modal>
