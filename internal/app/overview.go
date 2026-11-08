@@ -105,7 +105,7 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 	ov := &Overview{GeneratedAt: now}
 	for _, a := range agents {
 		o := s.stateOf(a, counts[a.Name], now)
-		if (viewer == nil || viewer.Name == a.Name) && o.InProgress+o.Held > 0 {
+		if (viewer == nil || viewer.Name == a.Name) && o.InProgress+o.Held+o.Queued > 0 {
 			if o.Current, err = s.messages.ListOpen(ctx, a.Name, 10); err != nil {
 				return nil, err
 			}

@@ -293,6 +293,12 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
 const hostKey = (h?: string) => (h || "").toLowerCase().replace(/\.local$/, "");
 
+function openStatusLabel(status: string): string {
+  if (status === "queued") return L("待处理", "Queued");
+  if (status === "held") return L("已挂起", "Held");
+  return L("处理中", "In progress");
+}
+
 // The command a session keeps running to receive in the window.
 const WAIT_CMD = "myco inbox wait --timeout 55m";
 
@@ -619,10 +625,13 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
                 <span>{L("已挂起", "Held")}<b>{row.st.held}</b></span>
               </div>
-              {current.length === 0 && <div className="app-empty-note">{L("暂无进行中的任务", "No tasks in progress")}</div>}
+              {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
+                ? L("这些消息不在你能看到的范围里。", "These messages are not visible to you.")
+                : L("暂无未完成的任务", "Nothing open")}</div>}
               {current.map((m) => (
                 <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                   <span className="meta">
+                    <span className={cn("app-msg-status", m.status)}>{openStatusLabel(m.status)}</span>
                     <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
                     <span className="time">{timeAgo(m.updated_at, now)}</span>
                   </span>

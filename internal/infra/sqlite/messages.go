@@ -76,7 +76,9 @@ func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[
 }
 
 func (r *MessageRepo) ListOpen(ctx context.Context, recipient domain.AgentName, limit int) ([]*domain.Message, error) {
-	return r.many(ctx, r.db, `WHERE to_agent=? AND status IN ('delivered','acked','held') ORDER BY updated_at DESC LIMIT ?`, recipient, limit)
+	// In progress first (delivered, acked, held), then what waits (queued).
+	return r.many(ctx, r.db, `WHERE to_agent=? AND status IN ('delivered','acked','held','queued')
+		ORDER BY CASE status WHEN 'queued' THEN 1 ELSE 0 END, updated_at DESC LIMIT ?`, recipient, limit)
 }
 
 func (r *MessageRepo) ListRecent(ctx context.Context, agent domain.AgentName, limit int) ([]*domain.Message, error) {

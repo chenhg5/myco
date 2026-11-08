@@ -727,7 +727,8 @@ func TestMessageRepoThreadsAndListings(t *testing.T) {
 	}
 	open, err := r.ListOpen(ctx, "bob", 10)
 	mustNoErr(t, err)
-	if !slices.Equal(ids(open), []string{"root"}) {
+	// In progress first, then what is still queued.
+	if len(open) != 2 || open[0].ID != "root" || open[1].Status != domain.StatusQueued {
 		t.Fatalf("ListOpen: %v", ids(open))
 	}
 }

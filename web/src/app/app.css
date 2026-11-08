@@ -3050,3 +3050,6 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-action-row:disabled:hover, .app-labels-summary:disabled:hover { background: none; }
 .app-devices-head { margin-top: 18px; }
 .app-devices-head .app-group-title { margin: 0; }
+.app-msg-status { font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: var(--pill); color: var(--muted); margin-right: 2px; }
+.app-msg-status.delivered, .app-msg-status.acked { color: var(--accent); }
+.app-msg-status.held { color: var(--warn, #c48a1a); }
