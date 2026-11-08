@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/chenhg5/myco/internal/console"
+	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/web"
 )
 
@@ -41,7 +42,8 @@ func main() {
 		log.Fatal(err)
 	}
 	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI()}
-	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local}
+	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,
+		Update: &console.Updater{Version: version, Bundle: appBundle(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
 	if p, err := local.EnsureCLI(); err != nil {
 		log.Printf("could not install the bundled myco CLI: %v", err)
 	} else if p != "" {
@@ -55,7 +57,7 @@ func main() {
 		return
 	}
 	b.Shell = "mac"
-	if err := runGUI(handler(b), b.SetPendingLink); err != nil {
+	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
 	}
@@ -73,6 +75,23 @@ func bundledCLI() string {
 		return ""
 	}
 	return filepath.Clean(p)
+}
+
+// appBundle is the myco.app the app runs from (…/myco.app/Contents/MacOS/
+// myco-app), or "" when it does not run from a bundle.
+func appBundle() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	b := filepath.Clean(filepath.Join(filepath.Dir(exe), "..", ".."))
+	if !strings.HasSuffix(b, ".app") {
+		return ""
+	}
+	return b
 }
 
 // deviceName names this computer in console tokens: its host name,

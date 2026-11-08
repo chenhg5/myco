@@ -526,6 +526,19 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { version: "v0.16.8-demo", shell: SHELL });
   }
 
+  // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")
+  if (parts[0] === "app" && parts[1] === "update" && parts.length === 2) {
+    const latest = process.env.MOCK_UPDATE === "none" ? "v0.16.8" : "v0.17.2";
+    if (method === "GET") {
+      return send(res, 200, { current: "v0.16.8-demo", latest, available: latest !== "v0.16.8", can_install: SHELL === "mac" });
+    }
+    if (method === "POST") {
+      await new Promise((r) => setTimeout(r, 1200));
+      return send(res, 200, { installed: latest, relaunching: true });
+    }
+    return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+  }
+
   // /app/local[...]
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);

@@ -3,7 +3,7 @@ import {
   AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, Server, Terminal,
 } from "lucide-react";
 import {
-  appApi, type AppInfo, type Hub, type LocalState,
+  appApi, type AppInfo, type AppUpdate, type Hub, type LocalState,
   type LocalTunnel, type StartLocalHubResult,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
@@ -13,6 +13,96 @@ import type { TextSize, ThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 type Section = "hubs" | "appearance" | "about";
+
+type UpdateState =
+  | { step: "checking" }
+  | { step: "checked"; u: AppUpdate }
+  | { step: "installing"; latest: string }
+  | { step: "relaunching"; latest: string }
+  | { step: "failed"; error: unknown; u?: AppUpdate };
+
+// AboutSection shows the app's and the CLI's versions and updates the app.
+function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState | null }) {
+  const [st, setSt] = useState<UpdateState>({ step: "checking" });
+  const check = useCallback(async () => {
+    setSt({ step: "checking" });
+    try {
+      setSt({ step: "checked", u: await appApi.update() });
+    } catch (e) {
+      setSt({ step: "failed", error: e });
+    }
+  }, []);
+  useEffect(() => { void check(); }, [check]);
+
+  const install = async (u: AppUpdate) => {
+    setSt({ step: "installing", latest: u.latest || "" });
+    try {
+      const r = await appApi.installUpdate();
+      setSt({ step: "relaunching", latest: r.installed });
+    } catch (e) {
+      setSt({ step: "failed", error: e, u });
+    }
+  };
+
+  let status: React.ReactNode = null;
+  let action: React.ReactNode = null;
+  switch (st.step) {
+    case "checking":
+      status = <span className="app-about-status"><span className="app-spinner" />正在检查…</span>;
+      break;
+    case "installing":
+      status = <span className="app-about-status"><span className="app-spinner" />正在下载 {st.latest}…</span>;
+      break;
+    case "relaunching":
+      status = <span className="app-about-status ok">已安装 {st.latest}，正在重新打开…</span>;
+      break;
+    case "failed":
+      status = <span className="app-about-status bad">检查失败</span>;
+      action = <button type="button" className="app-btn" onClick={() => void check()}>重试</button>;
+      break;
+    case "checked": {
+      const u = st.u;
+      if (u.error) {
+        status = <span className="app-about-status bad">连不上 GitHub</span>;
+        action = <button type="button" className="app-btn" onClick={() => void check()}>重试</button>;
+      } else if (u.available && u.can_install) {
+        status = <span className="app-about-status new">有新版本 {u.latest}</span>;
+        action = <button type="button" className="app-btn app-btn-primary" onClick={() => void install(u)}>更新并重新打开</button>;
+      } else if (u.available) {
+        status = <span className="app-about-status new">有新版本 {u.latest}，请到 GitHub 下载</span>;
+      } else {
+        status = <span className="app-about-status ok"><Check />已是最新</span>;
+        action = <button type="button" className="app-btn" onClick={() => void check()}>再检查一次</button>;
+      }
+    }
+  }
+  const failure = st.step === "failed" ? st.error : null;
+  const cli = local?.myco;
+
+  return (
+    <>
+      <p className="app-summary">myco App 把多个 Hub 上的节点放进一个窗口。</p>
+      <div className="app-list">
+        <div className="app-kv"><span className="app-kv-label">App 版本</span><span className="app-kv-value mono">{info?.version || "—"}</span></div>
+        <div className="app-kv">
+          <span className="app-kv-label">命令行工具</span>
+          <span className="app-kv-value">
+            {cli ? <><span className="mono">{ver(cli.version)}</span><span className="app-about-path mono">{cli.path}</span></> : "未安装"}
+          </span>
+        </div>
+        <div className="app-kv app-about-update">
+          <span className="app-kv-label">更新</span>
+          <span className="app-kv-value">{status}{action}</span>
+        </div>
+      </div>
+      <ErrorText error={failure} />
+      <p className="app-about-note">
+        更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。
+      </p>
+      <p className="app-about-note">节点、任务和对话都由 Hub 提供，App 只负责显示和转发。</p>
+    </>
+  );
+}
 
 const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", label: "Hub", icon: Server },
@@ -330,22 +420,7 @@ export function SettingsPage({ hubs, info, theme, onTheme, textSize, onTextSize,
           </>
         )}
 
-        {section === "about" && (
-          <>
-            <p className="app-summary">myco App 把多个 Hub 上的节点放进一个窗口。</p>
-            <section className="app-setting-card">
-              <div className="app-kv"><span className="app-kv-label">版本</span><span className="app-kv-value">{info?.version || "—"}</span></div>
-              <div className="app-kv">
-                <span className="app-kv-label">检查更新</span>
-                <span className="app-kv-value" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button type="button" className="app-btn" disabled>检查更新</button>
-                  <span className="app-small-note">即将支持</span>
-                </span>
-              </div>
-            </section>
-            <div className="app-hint">节点、任务和对话都由 Hub 提供。App 只负责显示和转发。</div>
-          </>
-        )}
+        {section === "about" && <AboutSection info={info} local={local} />}
       </div>
 
       <Modal

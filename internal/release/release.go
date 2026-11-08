@@ -221,7 +221,12 @@ func CleanupOld(target string) { _ = os.Remove(target + OldSuffix) }
 // Fetch downloads tag's asset for goos/goarch and verifies it against the
 // release's SHA256SUMS. It returns the verified bytes.
 func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch string) ([]byte, error) {
-	asset := AssetName(goos, goarch)
+	return FetchAsset(ctx, hc, download, tag, AssetName(goos, goarch), 256<<20)
+}
+
+// FetchAsset downloads one named asset of release tag and verifies it
+// against the release's SHA256SUMS.
+func FetchAsset(ctx context.Context, hc *http.Client, download, tag, asset string, max int64) ([]byte, error) {
 	sums, err := fetchAsset(ctx, hc, download, tag, "SHA256SUMS", 1<<20)
 	if err != nil {
 		return nil, fmt.Errorf("checksums for %s: %w", tag, err)
@@ -237,7 +242,7 @@ func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch str
 	if want == "" {
 		return nil, fmt.Errorf("release %s has no %s (unsupported platform?)", tag, asset)
 	}
-	bin, err := fetchAsset(ctx, hc, download, tag, asset, 256<<20)
+	bin, err := fetchAsset(ctx, hc, download, tag, asset, max)
 	if err != nil {
 		return nil, fmt.Errorf("download %s %s: %w", tag, asset, err)
 	}

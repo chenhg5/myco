@@ -63,6 +63,8 @@ jobs:
         run: bin/myco.app/Contents/MacOS/myco-app --version
       - name: zip
         run: ditto -c -k --keepParent bin/myco.app bin/myco-app-macos-arm64.zip
+      - name: the Intel build (as the release builds it)
+        run: GOARCH=amd64 make app && lipo -archs bin/myco.app/Contents/MacOS/myco-app | grep -qx x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: myco-app-macos-arm64

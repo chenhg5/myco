@@ -13,13 +13,13 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      skip: ${{ steps.exists.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
       - name: Resolve version
         id: v
         run: |
@@ -31,14 +31,51 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${{ steps.v.outputs.version }}" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.exists.outputs.skip != 'true'
-        run: go test ./...
-      - if: steps.exists.outputs.skip != 'true'
-        run: make cross VERSION=${{ steps.v.outputs.version }} && (cd bin && sha256sum myco-* > SHA256SUMS)
-      - if: steps.exists.outputs.skip != 'true'
-        name: Smoke-test the linux/amd64 release binary
+
+  # The Mac app for both architectures, zipped (ad-hoc signed until the Apple
+  # signing secrets are configured). The app updates itself from these.
+  app:
+    needs: version
+    if: needs.version.outputs.skip != 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build myco.app (arm64, amd64)
+        run: |
+          mkdir -p dist
+          for arch in arm64 amd64; do
+            GOARCH=$arch make app VERSION=${{ needs.version.outputs.version }}
+            lipo -archs bin/myco.app/Contents/MacOS/myco-app
+            ditto -c -k --keepParent bin/myco.app dist/myco-app-darwin-$arch.zip
+          done
+      - name: the arm64 app runs
+        run: unzip -q dist/myco-app-darwin-arm64.zip -d check && check/myco.app/Contents/MacOS/myco-app --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: dist/*.zip
+
+  release:
+    needs: [version, app]
+    if: needs.version.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: make cross VERSION=${{ needs.version.outputs.version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: bin
+      - run: cd bin && sha256sum myco-* > SHA256SUMS && cat SHA256SUMS
+      - name: Smoke-test the linux/amd64 release binary
         run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh
-      - if: steps.exists.outputs.skip != 'true'
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.v.outputs.version }}" bin/* --target "$GITHUB_SHA" --generate-notes
+        run: gh release create "${{ needs.version.outputs.version }}" bin/* --target "$GITHUB_SHA" --generate-notes

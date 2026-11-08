@@ -157,6 +157,8 @@ type Backend struct {
 	// Version and Shell answer GET /app/info; Shell is "mac" for the app
 	// window (hidden title bar) and "browser" for --serve.
 	Version, Shell string
+	// Update, when set, enables /app/update (the app updating itself).
+	Update *Updater
 
 	pending pendingLink
 }
@@ -187,6 +189,10 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": b.Version, "shell": orStr(b.Shell, "browser")})
 	})
+	if b.Update != nil {
+		m.HandleFunc("GET /app/update", b.getUpdate)
+		m.HandleFunc("POST /app/update", b.postUpdate)
+	}
 	if b.Local != nil {
 		m.HandleFunc("GET /app/local/sessions", b.listLocalSessions)
 		m.HandleFunc("POST /app/hubs/{id}/local-join", b.withHubAndHubTimeout(2*time.Minute, b.localJoin))

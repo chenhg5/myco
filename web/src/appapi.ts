@@ -200,8 +200,21 @@ export async function probeAppMode(): Promise<AppBootstrap | null> {
   }
 }
 
+/** GET /app/update: the app's own version against the latest release. */
+export interface AppUpdate {
+  current: string;
+  latest?: string;
+  available: boolean;
+  can_install: boolean;
+  reason?: string;
+  error?: string;
+}
+
 export const appApi = {
   info: () => request<AppInfo>("GET", "app/info"),
+  update: () => request<AppUpdate>("GET", "app/update"),
+  /** Downloads and installs the latest app, then the app reopens itself. */
+  installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),
   hubs: () => request<Hub[]>("GET", "app/hubs"),
   addHub: (input: NewHub) => request<Hub>("POST", "app/hubs", input),
   /** Adds a hub from the App link printed by the hub installer. */
