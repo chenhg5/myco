@@ -1183,7 +1183,7 @@ func (s *Server) appLinkPage(w http.ResponseWriter, r *http.Request) {
 	esc := html.EscapeString
 	fmt.Fprintf(w, `<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>myco App 连接链接</title>
 <style>body{font:15px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;max-width:560px;margin:15vh auto;padding:0 20px;color:#1c1c21;background:#f4f4f6}
-a.btn{display:inline-block;background:#10b981;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none}p{line-height:1.6}small{color:#85858d}</style>
+a.btn{display:inline-block;background:#3a9a78;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none}p{line-height:1.6}small{color:#85858d}</style>
 <h2>这是 myco App 的连接链接</h2>
 <p>在 myco App 里选择"连接已有的 Hub"，粘贴这个链接即可。</p>
 <p><a class="btn" href="myco://add-hub?link=%s">用 myco App 打开</a></p>

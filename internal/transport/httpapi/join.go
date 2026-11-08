@@ -193,8 +193,8 @@ var joinHTML = htmltemplate.Must(htmltemplate.New("html").Parse(`<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title>加入 myco 网络</title>
 <style>
-:root{--bg:#f7f8fa;--card:#fff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#0f9d6b;--code:#f3f4f6}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--card:#121821;--fg:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--accent:#34d399;--code:#0b1220}}
+:root{--bg:#f7f8fa;--card:#fff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#3a9a78;--code:#f3f4f6}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--card:#121821;--fg:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--accent:#52a685;--code:#0b1220}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 main{max-width:720px;margin:0 auto;padding:32px 16px 48px}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--muted);margin:0 0 24px;word-break:break-all}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
