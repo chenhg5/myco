@@ -1,0 +1,403 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The promo's 3D worlds (Three.js), drawn as a pure function of time: window.seek(t).
+     World 1, 0-19 s: five agents alone in space (Claude Code, Codex, Cursor, a Grok bot,
+     a cloud agent), the camera flying from one to the next; the copy-paste trap with the
+     camera chasing each message; the drop at 14 s where mycelium threads grow out of every
+     window into one core that becomes the logo; a dive through the logo into the app. -->
+<link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/800.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-sc/700.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050706; font-family: Inter, "Noto Sans SC", sans-serif; color: #f2f4f3; }
+canvas { position: absolute; inset: 0; }
+#ui { position: absolute; inset: 0; pointer-events: none; }
+.label { position: absolute; transform: translate(-50%, 0); white-space: nowrap; font-size: 26px; font-weight: 600; color: #cfd8d3; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+.label small { display: block; text-align: center; font-size: 19px; font-weight: 600; color: #7f8a85; margin-top: 2px; }
+.words { position: absolute; left: 0; right: 0; text-align: center; font-weight: 800; letter-spacing: -.025em; }
+.words span { display: inline-block; margin: 0 .14em; }
+#sub { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; }
+#sub span { display: inline-block; max-width: 1500px; padding: 10px 22px; border-radius: 12px; background: rgba(0,0,0,.5); font-size: 30px; font-weight: 600; line-height: 1.35; }
+#flash { position: absolute; inset: 0; background: #fff; }
+</style>
+<script type="importmap">{ "imports": {
+  "three": "./node_modules/three/build/three.module.js",
+  "three/addons/": "./node_modules/three/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="ui">
+  <div id="halo" style="position:absolute;left:310px;top:470px;width:1300px;height:420px;background:radial-gradient(closest-side, rgba(3,6,5,.78), transparent);"></div>
+  <div id="labels"></div>
+  <div class="words" id="kin" style="top:420px;font-size:150px"></div>
+  <div class="words" id="tag" style="top:790px;font-size:50px;font-weight:600"></div>
+  <img id="wordmark" src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;width:330px;margin-left:-165px;top:670px">
+  <div id="netlabels"></div>
+  <div id="endui" style="position:absolute;inset:0"></div>
+  <div id="sub"><span></span></div>
+  <div id="flash"></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const ZH = window.LANG === 'zh';
+const T = (zh, en) => (ZH ? zh : en);
+const TEX = window.TEX || '/tmp/claude-0/promo/tex';
+const $ = (id) => document.getElementById(id);
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const expoOut = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const p4out = (x) => 1 - Math.pow(1 - x, 4);
+const p2io = (x) => (x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+const p3in = (x) => x * x * x;
+const lerp = (a, b, x) => a + (b - a) * x;
+// closed-form damped spring 0 -> 1 (damping ratio z, natural frequency w)
+const spring = (x, z = .75, w = 14) => { if (x <= 0) return 0; const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * x) * (Math.cos(wd * x) + (z * w / wd) * Math.sin(wd * x)); };
+const hash = (i) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1920, 1080); renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.insertBefore(renderer.domElement, $('ui'));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050706);
+scene.fog = new THREE.FogExp2(0x050706, 0.045);
+const camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.05, 200);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1920, 1080), 0.45, 0.4, 0.82);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const loader = new THREE.TextureLoader();
+const load = (f) => new Promise((res, rej) => loader.load(f, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, rej));
+
+// ---------- dust: seeded points for depth ----------
+{
+  const n = 1400, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (hash(i) - .5) * 40; pos[i * 3 + 1] = (hash(i + 9e3) - .5) * 24; pos[i * 3 + 2] = -hash(i + 2e4) * 40 + 8; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x6f9e8a, size: .035, transparent: true, opacity: .55, depthWrite: false })));
+}
+
+// ---------- the five agents ----------
+// world positions, facing slightly toward the origin; labels in two languages
+const AG = [
+  { p: V(-3.4, 1.15, -1.0), ry: .28, name: 'Claude Code', where: T('笔记本', 'MacBook'), pop: 0.5 },
+  { p: V(3.6, 1.35, -3.2), ry: -.32, name: 'Codex', where: T('服务器', 'build server'), pop: 2.0 },
+  { p: V(-3.0, -1.6, -4.4), ry: .36, name: 'Cursor', where: T('Windows 台式机', 'Windows desktop'), pop: 3.5 },
+  { p: V(3.2, -1.45, -0.6), ry: -.28, name: 'Grok', where: T('机器人', 'bot'), pop: 4.5 },
+  { p: V(0.2, 0.1, -7.2), ry: 0, name: 'claude.ai', where: T('云端', 'cloud'), pop: 5.5 },
+];
+const panels = [];
+const labelsEl = $('labels');
+const CORE = V(0, 0, -3.6);
+
+// camera shots: [time, position, lookAt]; moves between shots use expo-out (fast start, long tail)
+const look = (i, d = 3.2, side = 0) => { const a = AG[i]; const n = V(Math.sin(a.ry), 0, Math.cos(a.ry)); return [a.p.clone().add(n.multiplyScalar(d)).add(V(side, .1, 0)), a.p.clone()]; };
+let SHOTS;
+
+// ---------- the copy-paste trap ----------
+const HOPS = [[0, 1, 8.3, 8.95], [1, 3, 9.35, 9.95], [3, 2, 10.35, 10.9], [2, 4, 11.25, 11.7], [4, 0, 12.05, 12.4], [0, 3, 12.55, 12.85], [3, 1, 12.95, 13.2], [1, 2, 13.25, 13.45], [2, 0, 13.5, 13.68]];
+const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fee table', 'hero text', 'deploy ok?', 'tests?', 'copy…'];
+const chips = [];
+function chipTexture(text) {
+  const c = document.createElement('canvas'); c.width = 640; c.height = 112; const x = c.getContext('2d');
+  x.fillStyle = '#f2f4f3'; x.beginPath(); x.roundRect(4, 4, 632, 104, 26); x.fill();
+  x.fillStyle = '#0d110f'; x.font = '600 50px Inter, sans-serif'; x.textBaseline = 'middle'; x.fillText(text, 34, 58);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const hopCurve = (a, b, i) => { const A = AG[a].p, B = AG[b].p; const m = A.clone().add(B).multiplyScalar(.5).add(V(0, 1.4 + hash(i) * .8, 1.2)); return new THREE.QuadraticBezierCurve3(A.clone().add(V(0, 0, .2)), m, B.clone().add(V(0, 0, .2))); };
+
+// ---------- mycelium threads into the core ----------
+const threads = [];
+const knots = [];
+function buildThreads() {
+  AG.forEach((a, i) => {
+    for (let k = 0; k < 4; k++) {
+      const s = i * 10 + k;
+      const pts = [a.p.clone()];
+      for (let j = 1; j < 4; j++) {
+        const f = j / 4;
+        pts.push(a.p.clone().lerp(CORE, f).add(V((hash(s + j) - .5) * 1.6 * (1 - f), (hash(s + j + 50) - .5) * 1.4 * (1 - f), (hash(s + j + 90) - .5) * 1.2)));
+      }
+      pts.push(CORE.clone());
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const geo = new THREE.TubeGeometry(curve, 120, k === 0 ? .022 : .012, 8, false);
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x58d39e).multiplyScalar(k === 0 ? .85 : .6), transparent: true, opacity: 0 });
+      const m = new THREE.Mesh(geo, mat); scene.add(m);
+      threads.push({ m, geo, curve, i, k, n: geo.index.count });
+    }
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(.06, 24, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9ff0c8).multiplyScalar(1.1) }));
+    knot.visible = false; scene.add(knot); knots.push(knot);
+  });
+}
+
+// ---------- the logo at the core ----------
+let logo;
+
+// ---------- world 2: agents handing work to each other (43.8-50.3 s) ----------
+const NET = V(0, 0, -40);
+const NODES = [
+  { k: 'fe', p: V(-2.6, .9, .6), b: T('前端', 'Frontend'), s: 'Claude Code' },
+  { k: 'be', p: V(2.7, 1.0, -.8), b: T('后端', 'Backend'), s: 'Codex' },
+  { k: 'rv', p: V(.1, 2.3, -2.2), b: T('代码审查', 'Reviewer'), s: 'Codex' },
+  { k: 'cu', p: V(-3.0, -1.5, -1.6), b: T('组件', 'Components'), s: 'Cursor' },
+  { k: 'gr', p: V(3.1, -1.4, .9), b: T('值班', 'On-call'), s: 'Grok bot' },
+  { k: 'rs', p: V(.2, -2.3, -.4), b: T('调研', 'Research'), s: 'claude.ai' },
+].map((n) => ({ ...n, p: n.p.add(NET) }));
+const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.5, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.4, 'LGTM ✓'],
+  ['gr', 'be', 47.2, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.0, T('费率对比', 'fee table')], ['cu', 'fe', 48.8, 'PlanCard ✓']];
+const nodeObjs = []; const edges = {}; const pulses = [];
+const netLabels = $('netlabels');
+function edgeCurve(a, b) {
+  const A = a.p, B = b.p; const m = A.clone().add(B).multiplyScalar(.5);
+  const off = m.clone().sub(NET).normalize().multiplyScalar(.9).add(V(0, .4, 0));
+  return new THREE.QuadraticBezierCurve3(A.clone(), m.add(off), B.clone());
+}
+function buildNet() {
+  NODES.forEach((n) => {
+    const g = new THREE.Group(); g.position.copy(n.p);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(.26, 48, 48), new THREE.MeshBasicMaterial({ color: 0x0c1814 }));
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(.31, 48, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x58d39e).multiplyScalar(1.1), side: THREE.BackSide, transparent: true }));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(.07, 24, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xbff5dc).multiplyScalar(.9) }));
+    g.add(halo); g.add(core); g.add(dot); scene.add(g);
+    const el = document.createElement('div'); el.className = 'label'; el.innerHTML = `${n.b}<small>${n.s}</small>`; netLabels.appendChild(el);
+    nodeObjs.push({ n, g, halo, el });
+  });
+  const byK = Object.fromEntries(NODES.map((n) => [n.k, n]));
+  for (let i = 0; i < NODES.length; i++) for (let j = i + 1; j < NODES.length; j++) {
+    const c = edgeCurve(NODES[i], NODES[j]);
+    const geo = new THREE.TubeGeometry(c, 80, .012, 6, false);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0x3f9c78), transparent: true, opacity: 0 }));
+    scene.add(m); edges[NODES[i].k + NODES[j].k] = { c, m, geo, n: geo.index.count, i };
+  }
+  PKTS.forEach(([a, b, at, label]) => {
+    const fwd = edges[a + b], rev = edges[b + a]; const e = fwd || rev;
+    const trail = [];
+    for (let q = 0; q < 6; q++) { const s = new THREE.Mesh(new THREE.SphereGeometry(.08 * (1 - q * .13), 16, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xd8ffef).multiplyScalar(1.25 - q * .15), transparent: true })); s.visible = false; scene.add(s); trail.push(s); }
+    const el = document.createElement('div'); el.className = 'label'; el.style.cssText = 'font-size:24px;padding:6px 14px;border-radius:10px;background:rgba(10,20,16,.85);box-shadow:0 0 0 1px rgba(88,211,158,.45);color:#d6f5e6';
+    el.textContent = label; netLabels.appendChild(el);
+    pulses.push({ e, rev: !fwd, at, trail, el, to: b });
+  });
+}
+let logo2;
+
+// ---------- build ----------
+window.ready = (async () => {
+  const texs = await Promise.all([0, 1, 2, 3, 4].map((i) => load(`file://${TEX}/w${i}.png`)));
+  texs.forEach((tex, i) => {
+    const a = AG[i]; const w = tex.image.width / 500, h = tex.image.height / 500;
+    const g = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, toneMapped: false, side: THREE.DoubleSide });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    // a soft green rim light behind each window
+    const rim = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.012, h * 1.02), new THREE.MeshBasicMaterial({ color: 0x2b6e55, transparent: true, opacity: 0 }));
+    rim.position.z = -.02;
+    g.add(rim); g.add(plane); g.position.copy(a.p); g.rotation.y = a.ry; scene.add(g);
+    const el = document.createElement('div'); el.className = 'label'; el.innerHTML = `${a.name}<small>${a.where}</small>`; labelsEl.appendChild(el);
+    panels.push({ g, plane, rim, mat, w, h, el });
+  });
+  HOPS.forEach(([a, b], i) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: chipTexture(CARRY[i]), transparent: true, opacity: 0, depthTest: false, toneMapped: false, color: new THREE.Color(.72, .72, .72) }));
+    s.scale.set(1.15, .2, 1); s.renderOrder = 10; scene.add(s); chips.push({ s, curve: hopCurve(a, b, i) });
+  });
+  buildThreads();
+  buildNet();
+  const lt = await load(`file://${TEX}/logo.png`);
+  logo = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), new THREE.MeshBasicMaterial({ map: lt, transparent: true, opacity: 0, toneMapped: false, color: new THREE.Color(1, 1, 1), depthTest: false }));
+  logo.renderOrder = 20; logo.position.copy(CORE).add(V(0, .45, 0));
+  logo2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: lt, transparent: true, opacity: 0, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15), depthTest: false }));
+  logo2.renderOrder = 20; logo2.position.copy(NET).add(V(0, .9, 0)); scene.add(logo2); scene.add(logo);
+  const wide = [V(0, .3, 6.2), V(0, 0, -2.6)];
+  SHOTS = [
+    [0.0, ...look(0, 2.6, -.4)],
+    [2.0, ...look(1, 3.0, .3)],
+    [3.5, ...look(2, 3.0, -.3)],
+    [4.5, ...look(3, 2.7, .3)],
+    [5.5, ...look(4, 3.4, 0)],
+    [6.6, ...wide],
+  ];
+  await document.fonts.ready;
+})();
+
+// camera between shots: a fast move (0.55 s, expo-out) after each shot's time
+function shotCamera(t) {
+  let pos = SHOTS[0][1].clone(), tgt = SHOTS[0][2].clone();
+  for (let i = 1; i < SHOTS.length; i++) {
+    const [at, p, q] = SHOTS[i]; const dur = i === SHOTS.length - 1 ? 1.4 : .55;
+    const x = i === SHOTS.length - 1 ? p2io(seg(t, at, at + dur)) : expoOut(seg(t, at - .08, at + dur));
+    pos.lerp(p, x); tgt.lerp(q, x);
+  }
+  return [pos, tgt];
+}
+
+const vTmp = new THREE.Vector3();
+function project(p) { vTmp.copy(p).project(camera); return { x: (vTmp.x * .5 + .5) * 1920, y: (-vTmp.y * .5 + .5) * 1080, z: vTmp.z }; }
+
+function wordsIn(el, words, t0, step = .07) {
+  el.innerHTML = words.map((w, i) => { const p = seg(window.__t, t0 + i * step, t0 + i * step + .14); return `<span style="opacity:${p};filter:blur(${(1 - p) * 8}px)">${w}</span>`; }).join(ZH ? '' : ' ');
+}
+
+window.seek = (t) => {
+  window.__t = t;
+  // ----- camera -----
+  let [pos, tgt] = shotCamera(t);
+  // the trap: the camera chases each message with a little lag
+  if (t >= 8.2 && t < 14) {
+    const wideP = SHOTS[SHOTS.length - 1][1], wideT = SHOTS[SHOTS.length - 1][2];
+    let follow = null;
+    for (let h = 0; h < HOPS.length; h++) { const [, , s0, s1] = HOPS[h]; if (t >= s0 - .1 && t <= s1 + .25) follow = chips[h].curve.getPoint(clamp(p2io(seg(t - .06, s0, s1)))); }
+    const k = seg(t, 8.2, 8.8) * (1 - seg(t, 13.6, 14));
+    const fp = follow || wideT;
+    tgt = wideT.clone().lerp(fp, .55 * k);
+    pos = wideP.clone().add(V((fp.x - wideT.x) * .25 * k, (fp.y - wideT.y) * .2 * k, -1.2 * k * seg(t, 8.2, 11)));
+    // shake grows into the drop
+    const sh = seg(t, 11.5, 13.9) * .06;
+    pos.add(V(Math.sin(t * 47) * sh, Math.cos(t * 39) * sh, 0));
+    // anticipation: pull back just before the drop
+    pos.z += p3in(seg(t, 13.55, 14)) * 1.6;
+  }
+  // the drop and the core: slow orbit, then the dive into the logo
+  if (t >= 14) {
+    const orbit = (t - 14) * .07;
+    const r = lerp(9.5, 6.6, p4out(seg(t, 14, 15.6)));
+    pos = V(Math.sin(orbit) * r, .35 + .2 * Math.sin(t * .5), CORE.z + Math.cos(orbit) * r);
+    tgt = CORE.clone();
+    const dive = p3in(seg(t, 17.6, 18.55));
+    pos.lerp(CORE.clone().add(V(0, 0, .05)), dive);
+  }
+  // world 2 (43.8-50.3) and the end (58+): orbit the network
+  if (t >= 43.8 && t < 50.4 || t >= 58) {
+    const tt = t >= 58 ? t - 58 + 6.6 : t - 43.8;
+    const ang = -.5 + tt * .075;
+    const r = t >= 58 ? lerp(10.5, 12.5, p2io(seg(t, 58, 61))) : lerp(16, 10.5, expoOut(seg(t, 43.8, 44.9)));
+    pos = NET.clone().add(V(Math.sin(ang) * r, .8 + Math.sin(tt * .4) * .3, Math.cos(ang) * r));
+    tgt = NET.clone().add(V(0, t >= 58 ? .4 : 0, 0));
+  }
+  camera.position.copy(pos); camera.lookAt(tgt);
+  camera.fov = t < 19 ? 38 + 10 * p3in(seg(t, 17.6, 18.55)) : 38; camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+
+  // ----- panels -----
+  const collapse = seg(t, 14.15, 15.0);
+  panels.forEach((P, i) => {
+    const a = AG[i];
+    const s = spring(t - a.pop, .72, 13) * (1 - p3in(collapse) * .96);
+    const drift = V(Math.sin(t * .6 + i) * .05, Math.cos(t * .5 + i * 2) * .05, 0);
+    P.g.position.copy(a.p).add(drift);
+    P.g.scale.setScalar(Math.max(.001, s));
+    const vis = clamp((t - a.pop) * 6) * (1 - collapse);
+    P.mat.opacity = vis;
+    // "waiting": the rim warms and pulses during the trap
+    const wait = seg(t, 8.4 + i * .25, 8.9 + i * .25) * (1 - seg(t, 13.9, 14.1));
+    P.rim.material.color.setRGB(lerp(.17, .55, wait), lerp(.43, .38, wait), lerp(.33, .12, wait));
+    P.rim.material.opacity = vis * (.18 + .5 * wait * (.6 + .4 * Math.sin(t * 7 + i)));
+    // label under the window while it is introduced
+    const lp = project(a.p.clone().add(V(0, -P.h / 2 - .12, 0).applyAxisAngle(V(0, 1, 0), 0)).add(drift));
+    const lv = seg(t, a.pop + .25, a.pop + .5) * (1 - seg(t, 7.6, 8.0)) * (lp.z < 1 ? 1 : 0);
+    P.el.style.opacity = lv; P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px';
+  });
+
+  // ----- messages in flight -----
+  chips.forEach((c, h) => {
+    const [, , s0, s1] = HOPS[h];
+    const p = p2io(seg(t, s0, s1)); const on = t >= s0 - .12 && t <= s1 + .08;
+    c.s.material.opacity = on ? seg(t, s0 - .12, s0) * (1 - seg(t, s1, s1 + .08)) : 0;
+    c.s.position.copy(c.curve.getPoint(p));
+  });
+
+  // ----- threads grow, knots run along them -----
+  threads.forEach((th) => {
+    const g = p4out(seg(t, 14.0 + th.k * .05, 15.1 + th.k * .08));
+    th.geo.setDrawRange(0, Math.floor(th.n * g));
+    th.m.material.opacity = g > 0 ? (th.k === 0 ? .9 : .45) * (1 - .55 * seg(t, 15.4, 16.2)) * (1 - seg(t, 17.9, 18.4)) : 0;
+  });
+  knots.forEach((kn, i) => {
+    const c = threads[i * 4].curve; const p = p4out(seg(t, 14.6, 15.5));
+    kn.visible = t >= 14.6 && t < 18.4; kn.position.copy(c.getPoint(p));
+    kn.scale.setScalar(1 + .6 * Math.exp(-Math.pow((t - 15.5) * 4, 2)));
+  });
+
+  // ----- the logo -----
+  if (logo) {
+    const lp = spring(t - 15.2, .7, 11);
+    logo.material.opacity = clamp((t - 15.2) * 3);
+    logo.scale.setScalar(Math.max(.001, lp));
+    logo.quaternion.copy(camera.quaternion);
+    logo.rotateZ((1 - clamp(lp)) * -1.2);
+  }
+  bloom.strength = .38 + .35 * Math.exp(-Math.pow((t - 14.0) * 3, 2)) + .15 * seg(t, 15.2, 15.6) * (1 - seg(t, 16, 17)) + .5 * p3in(seg(t, 17.9, 18.55));
+
+  // ----- world 2: nodes, threads, pulses -----
+  const netOn = (t >= 43.8 && t < 50.4) || t >= 58;
+  const gather = p3in(seg(t, 58.0, 58.9)); // the end: every node is drawn into the logo
+  nodeObjs.forEach((o, i) => {
+    const s = netOn ? spring(t - 43.85 - i * .07, .72, 13) * (1 - gather) : 0;
+    o.g.position.copy(o.n.p).lerp(NET, gather); o.g.scale.setScalar(Math.max(.001, t >= 58 ? 1 - gather : s));
+    const hit = pulses.some((p) => p.to === o.n.k && t > p.at + .7 && t < p.at + 1.25);
+    o.halo.material.color.setRGB(.3 * (1 + .6 * hit), .8 * (1 + .35 * hit), .58 * (1 + .5 * hit));
+    const lp = project(o.n.p.clone().add(V(0, -.55, 0)));
+    o.el.style.opacity = netOn && t < 58 ? seg(t, 44.1 + i * .07, 44.4 + i * .07) * (1 - seg(t, 50.0, 50.3)) : 0;
+    o.el.style.left = lp.x + 'px'; o.el.style.top = lp.y + 'px';
+  });
+  Object.values(edges).forEach((e) => {
+    const g = p4out(seg(t, 44.0 + e.i * .05, 45.0 + e.i * .05));
+    e.geo.setDrawRange(0, Math.floor(e.n * (t >= 58 ? 1 : g)));
+    e.m.material.opacity = netOn ? (t >= 58 ? .55 * (1 - gather) : .55 * g * (1 - seg(t, 50.0, 50.4))) : 0;
+  });
+  pulses.forEach((p) => {
+    const x = seg(t, p.at, p.at + .8); const on = netOn && t < 58 && x > 0 && x < 1;
+    p.trail.forEach((s, q) => { const y = clamp(p4out(x) - q * .03); s.visible = on && y > 0; s.position.copy(p.e.c.getPoint(p.rev ? 1 - y : y)); });
+    const lp = project(p.e.c.getPoint(p.rev ? 1 - p4out(x) : p4out(x)).add(V(0, .35, 0)));
+    p.el.style.opacity = on ? seg(x, 0, .15) * (1 - seg(x, .85, 1)) : 0; p.el.style.left = lp.x + 'px'; p.el.style.top = lp.y + 'px';
+  });
+  if (logo) logo.visible = t < 18.6;
+  if (logo2) { const lp = spring(t - 58.6, .7, 11); logo2.material.opacity = t >= 58.6 ? clamp((t - 58.6) * 4) : 0; logo2.scale.setScalar(Math.max(.001, lp)); logo2.quaternion.copy(camera.quaternion); logo2.rotateZ((1 - clamp(lp)) * -1.2); }
+  if (t >= 58) bloom.strength = .38 + .3 * Math.exp(-Math.pow((t - 58.75) * 3.5, 2));
+  if (t >= 43.8 && t < 50.4) bloom.strength = .38;
+
+  composer.render();
+
+  // ----- the end card -----
+  const eu = $('endui');
+  if (t >= 59.0) {
+    const wp = seg(t, 59.0, 59.35), pp = seg(t, 60.4, 60.75), up = seg(t, 61.0, 61.3);
+    eu.innerHTML = `<div id="halo2" style="position:absolute;left:310px;top:520px;width:1300px;height:470px;background:radial-gradient(closest-side, rgba(3,6,5,.8), transparent)"></div>
+      <img src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;width:330px;margin-left:-165px;top:600px;opacity:${wp};filter:blur(${(1 - wp) * 10}px)">
+      <div class="words" style="top:715px;font-size:46px;font-weight:600;color:#d5ddd9"></div>
+      <div class="words" style="top:810px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
+        <span style="padding:16px 34px;border-radius:999px;background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
+        <span style="padding:16px 34px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.4)">${T('Windows 版', 'Windows')}</span></div>
+      <div class="words" style="top:925px;font-size:28px;font-weight:600;color:#9aa49f;opacity:${up};font-family:'JetBrains Mono',monospace">github.com/chenhg5/myco</div>`;
+    wordsIn(eu.querySelectorAll('.words')[0], T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), 59.6, .08);
+  } else eu.innerHTML = '';
+
+  // ----- type and overlays -----
+  const kin = $('kin');
+  const beatWords = [[12.0, T('复制。', 'Copy.')], [12.5, T('粘贴。', 'Paste.')], [13.0, T('等待。', 'Wait.')]];
+  kin.innerHTML = '';
+  for (const [at, w] of beatWords) if (t >= at && t < at + .5) { const p = seg(t, at, at + .12); kin.innerHTML = `<span style="opacity:${p};filter:blur(${(1 - p) * 10}px);transform:scale(${lerp(1.25, 1, p4out(p))})">${w}</span>`; }
+  if (t >= 13.5 && t < 14) { const p = seg(t, 13.5, 13.62); kin.innerHTML = `<span style="font-size:110px;opacity:${p * (1 - seg(t, 13.88, 14))};filter:blur(${(1 - p) * 8}px)">${T('复制。粘贴。等待。', 'Copy. Paste. Wait.')}</span>`; }
+  $('halo').style.opacity = seg(t, 15.4, 15.9) * (1 - seg(t, 17.6, 17.9));
+  const wm = $('wordmark'); const wp = seg(t, 15.6, 15.95);
+  wm.style.opacity = wp * (1 - seg(t, 17.6, 17.9)); wm.style.filter = `blur(${(1 - wp) * 10}px)`;
+  const tg = $('tag'); if (t >= 15.9 && t < 17.9) { wordsIn(tg, T('一个 App，连起 你所有的 agent', 'One app for every agent, on every machine.').split(' '), 16.0, .08); tg.style.opacity = 1 - seg(t, 17.55, 17.85); tg.style.filter = `blur(${seg(t, 17.55, 17.85) * 8}px)`; } else tg.innerHTML = '';
+  const L = window.LINES || []; const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
+  const sub = $('sub'); sub.firstElementChild.textContent = ln ? ln.text : '';
+  sub.style.opacity = ln ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
+  $('flash').style.opacity = 0;
+};
+</script>
+</body>
+</html>

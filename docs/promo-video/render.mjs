@@ -32,40 +32,47 @@ const LINES = script.lines.map((l, i) => {
   return { at: l.at, dur: +(durs[i] / tempo).toFixed(3), tempo, text: l[LANG], file: join(VO, `${String(i).padStart(2, '0')}.${ext}`) };
 });
 
-async function page() {
-  const b = await chromium.launch();
+async function page(film = process.env.FILM || 'film.html') {
+  const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--allow-file-access-from-files', '--ignore-gpu-blocklist'] });
   const p = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   await p.addInitScript(([lang, assets, other, lines]) => { window.LANG = lang; window.ASSETS = assets; window.ASSETS_OTHER = other; window.LINES = lines; },
     [LANG, 'file://' + join(WORK, 'assets', LANG), 'file://' + join(WORK, 'assets', OTHER), LINES]);
   p.on('pageerror', (e) => console.error('page error:', e.message));
   p.on('console', (m) => { if (m.type() === 'error') console.error('console:', m.text()); });
-  await p.goto('file://' + join(DIR, 'film.html'));
+  await p.goto('file://' + join(DIR, film));
   await p.evaluate(() => window.ready);
   return { b, p };
 }
 
+// the 3D worlds (film3d.html) and the app (film.html) share the clock; each frame comes from one of them
+const is3d = (t) => t < 18.5 || (t >= 43.85 && t < 50.2) || t >= 58.1;
+async function pages() {
+  const a = await page('film3d.html'); const b = await page('film.html');
+  return { pick: (t) => (is3d(t) ? a.p : b.p), close: async () => { await a.b.close(); await b.b.close(); } };
+}
 const mode = process.argv[2];
 if (mode === 'stills') {
-  const { b, p } = await page();
+  const P = await pages();
   const dir = join(WORK, `stills-${LANG}`); mkdirSync(dir, { recursive: true });
   for (const s of process.argv.slice(3)) {
-    await p.evaluate((t) => window.seek(t), +s); await p.waitForTimeout(50);
+    const p = P.pick(+s); await p.evaluate((t) => window.seek(t), +s); await p.waitForTimeout(50);
     await p.screenshot({ path: join(dir, `t${s}.png`) });
   }
-  await b.close();
+  await P.close();
 } else if (mode === 'film') {
-  const { b, p } = await page();
+  const P = await pages();
   const n = Math.ceil(TOTAL * FPS);
   const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', join(OUT, 'video.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
   const t0 = Date.now();
   for (let f = 0; f < n; f++) {
+    const p = P.pick(f / FPS);
     await p.evaluate((t) => window.seek(t), f / FPS);
     const buf = await p.screenshot({ type: 'jpeg', quality: 93 });
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
     if (f % 300 === 0) console.error(`frame ${f}/${n} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
-  ff.stdin.end(); await new Promise((r) => ff.on('close', r)); await b.close();
+  ff.stdin.end(); await new Promise((r) => ff.on('close', r)); await P.close();
   console.log('video', n, 'frames');
 } else if (mode === 'mix') {
   const { b, p } = await page();

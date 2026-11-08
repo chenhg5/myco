@@ -23,7 +23,7 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 #stage { position: absolute; inset: 0; overflow: hidden; perspective: 1800px; }
 .abs { position: absolute; }
 #glow { position: absolute; width: 1600px; height: 1600px; border-radius: 50%; left: 160px; top: -260px;
-  background: radial-gradient(closest-side, rgba(82,166,133,.20), rgba(82,166,133,.05) 55%, transparent 72%); }
+  background: radial-gradient(closest-side, rgba(82,166,133,.10), rgba(82,166,133,.03) 55%, transparent 72%); }
 #grain { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px); background-size: 4px 4px; }
 
 /* product windows (hook) */
@@ -57,7 +57,7 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .mask { position: absolute; background: #1a1a1e; }
 .reg { position: absolute; overflow: hidden; }
 .reg img { position: absolute; width: 1280px; height: 800px; }
-.hl { position: absolute; border-radius: 12px; box-shadow: 0 0 0 3px var(--green), 0 0 40px rgba(82,166,133,.55); }
+.hl { position: absolute; border-radius: 12px; box-shadow: 0 0 0 2px rgba(82,166,133,.85), 0 0 24px rgba(82,166,133,.25); }
 #typed { position: absolute; font-size: 14px; color: #f2f4f3; white-space: nowrap; overflow: hidden; }
 .badge { position: absolute; padding: 10px 18px; border-radius: 999px; background: rgba(82,166,133,.16); color: #8fd3b4; font-weight: 600; font-size: 22px;
   box-shadow: 0 0 0 1px rgba(82,166,133,.45); white-space: nowrap; }
@@ -71,7 +71,7 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .pkt i { display: block; width: 18px; height: 18px; border-radius: 50%; background: #c8f0dd; box-shadow: 0 0 24px 8px rgba(82,166,133,.8); }
 .pkt em { position: absolute; left: 24px; top: -14px; font-style: normal; white-space: nowrap; font-size: 18px; padding: 4px 10px; border-radius: 8px; background: rgba(20,26,24,.9); color: #cfe9dd; box-shadow: 0 0 0 1px rgba(82,166,133,.4); }
 
-#word2 { position: absolute; left: 0; right: 0; text-align: center; top: 52px; font-size: 64px; font-weight: 800; letter-spacing: -.02em; z-index: 20; }
+#word2 { position: absolute; left: 0; right: 0; text-align: center; top: 40px; font-size: 56px; font-weight: 800; letter-spacing: -.02em; z-index: 20; }
 #end { position: absolute; inset: 0; }
 #end .pill { display: inline-block; margin: 0 10px; padding: 16px 30px; border-radius: 999px; font-size: 26px; font-weight: 600; }
 #sub { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; z-index: 90; }
@@ -154,6 +154,9 @@ const eo = (x) => 1 - Math.pow(1 - x, 3);
 const eio = (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 const back = (x) => { const c = 1.6; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
 const lerp = (a, b, x) => a + (b - a) * x;
+const p4out = (x) => 1 - Math.pow(1 - x, 4);
+const expoOut = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const p3in = (x) => x * x * x;
 const beatPulse = (t, from, to) => (t >= from && t < to ? Math.exp(-((t * 2) % 1) * 7) : 0); // 120 BPM
 
 // ---------- hook ----------
@@ -165,8 +168,9 @@ W.forEach((w, i) => { w.querySelector('[data-tag]').textContent = TAGS[i]; });
 const center = (w) => { const r = { x: parseFloat(w.style.left) + parseFloat(w.style.width) / 2, y: parseFloat(w.style.top) + parseFloat(w.style.height) / 2 }; return r; };
 const WC = W.map(center);
 // the copy-paste chaos: (from, to, start, end)
-const HOPS = [[0, 1, 8.3, 9.2], [1, 3, 9.6, 10.4], [3, 2, 10.8, 11.5], [2, 4, 11.8, 12.3], [4, 0, 12.45, 12.9], [0, 3, 13.0, 13.4], [3, 1, 13.45, 13.85]];
-const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fees table', 'hero text', 'deploy ok?'];
+// the same hops as film3d.html (the 3D hook); the sound cues follow them
+const HOPS = [[0, 1, 8.3, 8.95], [1, 3, 9.35, 9.95], [3, 2, 10.35, 10.9], [2, 4, 11.25, 11.7], [4, 0, 12.05, 12.4], [0, 3, 12.55, 12.85], [3, 1, 12.95, 13.2], [1, 2, 13.25, 13.45], [2, 0, 13.5, 13.68]];
+const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fee table', 'hero text', 'deploy ok?', 'tests?', 'copy…'];
 
 function hook(t) {
   const on = t < 15.4;
@@ -284,16 +288,23 @@ function clickAt(t, at, ax, ay) { const s = toScreen(ax, ay); ripple(s.x, s.y, s
 
 function frameMotion(t) {
   const f = $('frame');
-  const on = t >= 17.9 && t < 58.6;
+  const on = (t >= 18.45 && t < 43.85) || (t >= 50.2 && t < 58.1);
   f.style.display = on ? '' : 'none';
   if (!on) return false;
-  // fly in (18), beat bumps in the montage, fly out (58)
-  const inP = eo(seg(t, 17.9, 18.9)), outP = eio(seg(t, 58.0, 58.6));
-  const bump = beatPulse(t, 50, 58) * .015;
-  const ry = lerp(28, 0, inP), ty = lerp(500, 0, inP) - outP * 700;
-  const mont = eio(seg(t, 49.9, 50.4)) * (1 - eio(seg(t, 57.8, 58.2)));
-  f.style.opacity = Math.min(1, inP * 1.4) * (1 - outP);
-  f.style.transform = `translateY(${ty + 70 * mont}px) rotateX(${ry}deg) scale(${(1 + bump) * lerp(.92, 1, inP) * (1 - .2 * mont)})`;
+  let tx = 0, sc = 1, op = 1, blur = 0, clip = 'none';
+  // out of the logo dive: an iris opens from the centre, the app lands slightly large and settles
+  if (t < 19.2) { const p = seg(t, 18.45, 18.85); clip = `circle(${lerp(2, 75, p4out(p))}% at 50% 50%)`; sc = lerp(1.08, 1, expoOut(seg(t, 18.45, 19.2))); }
+  // into the network: the frame darkens and falls away
+  if (t >= 43.4 && t < 44) { const p = seg(t, 43.4, 43.85); op = 1 - p; sc = 1 - .06 * p3in(p); blur = 8 * p; }
+  // the montage: a whip in from the right, a smaller stage with the label above it
+  const mont = t >= 50.2 ? 1 : 0;
+  if (mont) {
+    const p = seg(t, 50.2, 50.45); tx = lerp(900, 0, expoOut(p)); blur = Math.max(blur, 14 * (1 - p)); sc = .84;
+    const q = seg(t, 57.75, 58.1); sc *= 1 - .3 * p3in(q); op = 1 - q;
+  }
+  f.style.opacity = op; f.style.clipPath = clip;
+  f.style.transform = `translate(${tx}px, ${mont ? 70 : 0}px) scale(${sc})`;
+  f.style.filter = blur > .1 ? `blur(${blur}px)` : 'none';
   return true;
 }
 
@@ -323,63 +334,89 @@ function conversation(t, base) {
   const d = document.createElement('div'); d.innerHTML = html; cam.appendChild(d);
 }
 
+// a second capture over the first, revealed by a circle from (cx, cy) in app px
+function flood(name, p, cx, cy) {
+  if (p <= 0) return;
+  const d = document.createElement('div');
+  d.style.cssText = `position:absolute;left:0;top:0;width:1280px;height:800px;clip-path:circle(${p4out(p) * 1600}px at ${cx}px ${cy}px)`;
+  d.appendChild(img(name).cloneNode()); cam.appendChild(d);
+}
+// motion blur from the camera's own speed (screen px per frame)
+function camBlur(t, ks) {
+  const a = keyframes(t, ks), b = keyframes(t - 1 / 30, ks);
+  const k = K0 * a[2], kb = K0 * b[2];
+  const v = Math.hypot(a[0] * k - b[0] * kb, a[1] * k - b[1] * kb) + Math.abs(k - kb) * 160;
+  cam.style.filter = v > 6 ? `blur(${Math.min(6, (v - 6) * .15)}px)` : 'none';
+}
+
 function appShots(t) {
+  cam.style.filter = 'none';
   if (!frameMotion(t)) { $('word2').style.opacity = 0; return; }
   let ks, after = null;
-  if (t < 26) { // see
+  if (t < 26) { // see: rows, then a dive through the Add node button
     show('nodes-dark');
-    ks = [[18, 640, 400, 1], [20.2, 640, 400, 1], [21.4, 600, 255, 1.7], [23.0, 600, 255, 1.7], [24.0, 600, 470, 1.7], [25.2, 640, 400, 1]];
-    CAM = camera(...keyframes(t, ks));
-    hlRect(312, 193, 906, 58, seg(t, 21.4, 21.8) * (1 - seg(t, 23.0, 23.3)));
-    hlRect(312, 437, 906, 58, seg(t, 24.0, 24.3) * (1 - seg(t, 25.0, 25.3)));
-  } else if (t < 28.2) { // add: pick a session
+    ks = [[18.45, 640, 400, 1], [20.2, 640, 400, 1], [20.75, 600, 255, 1.7], [22.9, 600, 255, 1.7], [23.45, 600, 470, 1.7], [24.6, 600, 470, 1.7], [25.1, 1135, 72, 1.6], [25.8, 1135, 72, 1.75], [26.0, 1135, 72, 3.2]];
+    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
+    hlRect(312, 193, 906, 58, seg(t, 20.8, 21.1) * (1 - seg(t, 22.8, 23.0)));
+    hlRect(312, 437, 906, 58, seg(t, 23.5, 23.8) * (1 - seg(t, 24.5, 24.7)));
+    const b = toScreen(1135, 72);
+    setCursor(lerp(1700, b.x, p4out(seg(t, 25.0, 25.55))), lerp(900, b.y, p4out(seg(t, 25.0, 25.55))), seg(t, 24.95, 25.1) * (1 - seg(t, 25.85, 25.95)), Math.abs(t - 25.7) < .07);
+    clickAt(t, 25.7, 1135, 72); after = 'cursor';
+  } else if (t < 28.35) { // add: the dialog lands slightly large; pick a session, join
     show('add-node-dark');
-    CAM = camera(...keyframes(t, [[26, 640, 400, 1], [26.6, 640, 400, 1.25]]));
-    hlRect(356, 346, 566, 58, seg(t, 27.0, 27.2));
+    ks = [[26, 640, 380, 1.4], [26.5, 640, 400, 1.25]];
+    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
+    hlRect(356, 346, 566, 58, seg(t, 27.0, 27.15));
     const a = toScreen(560, 380), b = toScreen(876, 604);
-    const p1 = eio(seg(t, 26.3, 26.9)), p2 = eio(seg(t, 27.3, 27.85));
+    const p1 = p4out(seg(t, 26.3, 26.85)), p2 = p4out(seg(t, 27.3, 27.8));
     const x = t < 27.3 ? lerp(1500, a.x, p1) : lerp(a.x, b.x, p2), y = t < 27.3 ? lerp(950, a.y, p1) : lerp(a.y, b.y, p2);
-    setCursor(x, y, seg(t, 26.2, 26.4), Math.abs(t - 27.0) < .08 || Math.abs(t - 28.0) < .08);
+    setCursor(x, y, seg(t, 26.2, 26.35) * (1 - seg(t, 28.15, 28.3)), Math.abs(t - 27.0) < .07 || Math.abs(t - 28.0) < .07);
     clickAt(t, 27.0, 560, 380); clickAt(t, 28.0, 876, 604);
+    flood('added', seg(t, 28.0, 28.35), 876, 604); // iris from the Join click onto the new node
     after = 'cursor';
   } else if (t < 30.0) { // the new node
     show('added');
-    CAM = camera(...keyframes(t, [[28.2, 640, 520, 1.25], [29.0, 700, 588, 1.6]]));
-    const p = seg(t, 28.25, 28.7);
+    ks = [[28.35, 700, 520, 1.25], [28.9, 700, 588, 1.6]];
+    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
+    const p = seg(t, 28.4, 28.8);
     hlRect(312, 558, 906, 60, p);
     overlay(`<div class="badge" style="left:1010px;top:574px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${p}">${T('已加入', 'Joined')}</div>`);
-  } else if (t < 34.0) { // invite sentence
+    // whip out
+    const w = seg(t, 29.8, 30.0); cam.style.filter = w > 0 ? `blur(${w * 16}px)` : cam.style.filter; cam.style.transform += ` translateX(${-p3in(w) * 300}px)`;
+  } else if (t < 34.0) { // invite sentence: whip in, copy
     show('invite');
-    CAM = camera(...keyframes(t, [[30.0, 640, 400, 1.1], [30.8, 640, 438, 1.55], [33.4, 640, 438, 1.62]]));
-    hlRect(356, 402, 566, 72, seg(t, 30.8, 31.2));
-    const b = toScreen(880, 438);
-    setCursor(lerp(1600, b.x, eio(seg(t, 31.0, 31.6))), lerp(900, b.y, eio(seg(t, 31.0, 31.6))), seg(t, 30.9, 31.1) * (1 - seg(t, 33.0, 33.3)), Math.abs(t - 31.8) < .08);
-    clickAt(t, 31.8, 880, 438);
-    overlay(`<div class="badge" style="left:800px;top:478px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${seg(t, 31.85, 32.1) * (1 - seg(t, 33.2, 33.5))}">✓ ${T('已复制，发给那边的 agent', 'Copied — paste it to that agent')}</div>`);
-    after = 'cursor';
-  } else if (t < 44.0) { // a task, and the work coming back
-    ks = [[34, 760, 420, 1.12], [37.0, 760, 330, 1.12], [38.4, 640, 400, 1.38], [39.8, 760, 420, 1.12], [41.0, 900, 560, 1.3], [43.6, 900, 560, 1.32]];
+    ks = [[30.0, 640, 438, 1.55], [33.4, 640, 438, 1.62]];
     CAM = camera(...keyframes(t, ks));
+    const w = 1 - seg(t, 30.0, 30.2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform = `translateX(${p3in(w) * 300}px) ` + cam.style.transform; }
+    hlRect(356, 402, 566, 72, seg(t, 30.6, 30.9));
+    const b = toScreen(880, 438);
+    setCursor(lerp(1600, b.x, p4out(seg(t, 31.0, 31.55))), lerp(900, b.y, p4out(seg(t, 31.0, 31.55))), seg(t, 30.9, 31.05) * (1 - seg(t, 33.0, 33.2)), Math.abs(t - 31.8) < .07);
+    clickAt(t, 31.8, 880, 438);
+    overlay(`<div class="badge" style="left:800px;top:478px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${seg(t, 31.85, 32.0) * (1 - seg(t, 33.2, 33.4))}">✓ ${T('已复制，发给那边的 agent', 'Copied — paste it to that agent')}</div>`);
+    const bs = seg(t, 33.8, 34.0); if (bs > 0) { cam.style.filter = `blur(${bs * 8}px)`; cam.style.opacity = 1 - bs; } else cam.style.opacity = 1;
+    after = 'cursor';
+  } else if (t < 44.0) { // a task, and the work coming back (blur swap in)
+    cam.style.opacity = 1;
+    ks = [[34, 760, 420, 1.12], [37.0, 760, 330, 1.12], [37.6, 640, 400, 1.38], [39.6, 640, 400, 1.38], [40.2, 760, 470, 1.12], [41.0, 900, 560, 1.3], [43.6, 900, 560, 1.32]];
+    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
     conversation(t);
-    const pb = seg(t, 41.0, 41.4) * (1 - seg(t, 43.5, 43.9));
+    const bi = 1 - seg(t, 34.0, 34.15); if (bi > 0) cam.style.filter = `blur(${bi * 8}px)`;
+    const pb = seg(t, 41.0, 41.3) * (1 - seg(t, 43.2, 43.5));
     overlay(`<div class="badge" style="left:340px;top:560px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${pb}">${T('同一个会话，上下文都在', 'Same session · context kept')}</div>`);
-  } else if (t < 50) { // together: handled by the network scene
-    $('frame').style.display = 'none';
-  } else { // montage: one beat each
-    const m = Math.floor((t - 50) / 2);
-    const names = ['filtered', 'machines-list', 'nodes', 'other:nodes-dark'];
-    const name = names[clamp(m, 0, 3)];
-    show(name);
-    const local = (t - 50) % 2;
-    CAM = camera(640, 400, 1.06 - .06 * eo(clamp(local / 2)));
-    if (name === 'filtered') hlRect(902, 117, 146, 32, seg(local, .1, .3));
-    const w = $('word2');
+  } else { // montage: four beats, each a real change in the app
+    const m = clamp(Math.floor((t - 50.2) / 1.95), 0, 3);
+    const local = t - 50.2 - m * 1.95;
     const words = [T('分组和标签', 'Groups & tags'), T('机器', 'Machines'), T('浅色 / 深色', 'Light / Dark'), T('中文 / English', 'English / 中文')];
-    w.textContent = words[clamp(m, 0, 3)];
-    w.style.opacity = seg(local, 0, .15) * (1 - seg(local, 1.8, 2)) * (1 - seg(t, 57.9, 58));
-    w.style.transform = `translateX(${(1 - eo(seg(local, 0, .25))) * -40}px)`;
+    if (m === 0) { show('filtered'); ks = [[0, 980, 135, 2.0], [1.95, 760, 250, 1.35]]; CAM = camera(...keyframes(local, [[0.15, 980, 135, 2.0], [0.9, 760, 250, 1.35]])); hlRect(902, 117, 146, 32, seg(local, .1, .3) * (1 - seg(local, .9, 1.1))); }
+    if (m === 1) { show('machines-list'); CAM = camera(...keyframes(local, [[0, 640, 300, 1.5], [1.95, 640, 300, 1.38]])); }
+    if (m === 2) { show('nodes-dark'); CAM = camera(640, 400, 1.0); flood('nodes', seg(local, .45, 1.0), 1250, 40); } // colour flood from the corner
+    if (m === 3) { show('nodes-dark'); CAM = camera(640, 400, 1.0); const q = seg(local, .45, .7); if (q > 0) { const d = document.createElement('div'); d.style.cssText = `position:absolute;inset:0;opacity:${q};filter:blur(${(1 - q) * 8}px)`; d.appendChild(img('other:nodes-dark').cloneNode()); cam.appendChild(d); } }
+    const bsw = clamp(1 - local / .18); if (m > 0 && bsw > 0) cam.style.filter = `blur(${bsw * 8}px)`; // blur swap between beats
+    const w = $('word2'); w.textContent = words[m];
+    const wp = seg(local, 0, .14);
+    w.style.opacity = wp * (1 - seg(t, 57.7, 57.95)); w.style.filter = `blur(${(1 - wp) * 8}px)`; w.style.transform = 'none';
   }
-  if (t < 50 || t >= 58) $('word2').style.opacity = 0;
+  if (t < 50.2 || t >= 58) $('word2').style.opacity = 0;
   if (after !== 'cursor') { setCursor(0, 0, 0); ripple(0, 0, 0); }
 }
 
@@ -392,8 +429,8 @@ const NODES = [
   { k: 'gr', x: 1450, y: 660, b: T('值班', 'On-call'), s: 'Grok bot', g: '✦' },
   { k: 'rs', x: 960, y: 760, b: T('调研', 'Research'), s: 'claude.ai', g: '☁' },
 ];
-const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.6, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.6, 'LGTM ✓'],
-  ['gr', 'be', 47.4, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.2, T('费率对比', 'fee table')], ['cu', 'fe', 48.9, 'PlanCard ✓']];
+const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.5, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.4, 'LGTM ✓'],
+  ['gr', 'be', 47.2, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.0, T('费率对比', 'fee table')], ['cu', 'fe', 48.8, 'PlanCard ✓']];
 function together(t) {
   const net = $('net'); const on = t >= 43.8 && t < 50.3;
   net.style.display = on ? '' : 'none'; if (!on) return;
@@ -446,7 +483,7 @@ function subtitles(t) {
 function flash(t) {
   const f = $('flash');
   let o = 0;
-  for (const at of [14.0, 50.0, 58.0]) o = Math.max(o, (t >= at ? Math.exp(-(t - at) * 9) : 0) * (at === 50 ? .35 : .85));
+  
   f.style.opacity = o;
 }
 function glow(t) {
@@ -460,12 +497,12 @@ function glow(t) {
 window.CUES = [
   ...POP.map((at) => [at, 'pop', .8]),
   ...HOPS.flatMap(([, , s0, s1]) => [[s0, 'click', .5], [s1, 'tick', .7]]),
-  [17.9, 'whoosh', .9], [26.0, 'whoosh', .6], [27.0, 'click', .9], [28.0, 'click', .9], [28.25, 'pop', .9],
-  [30.0, 'whoosh', .6], [31.8, 'click', .9], [34.0, 'whoosh', .6],
+  [17.7, 'whoosh', .7], [25.7, 'click', .9], [25.85, 'whoosh', .55], [27.0, 'click', .9], [28.0, 'click', .9], [28.1, 'pop', .8],
+  [29.85, 'whoosh', .55], [31.8, 'click', .9], [33.85, 'whoosh', .4], [50.2, 'whoosh', .6],
   ...Array.from({ length: 14 }, (_, i) => [34.4 + i * .07, 'tick', .45]),
   [35.6, 'send', .9], [36.3, 'tick', .6], [37.0, 'ding', .7], [40.0, 'pop', .6], [43.8, 'whoosh', .7],
   ...PKTS.map(([, , at]) => [at, 'zip', .8]),
-  [52.0, 'whoosh', .45], [54.0, 'whoosh', .45], [56.0, 'whoosh', .45], [58.2, 'shimmer', .8],
+  [52.15, 'whoosh', .35], [54.1, 'whoosh', .35], [56.05, 'whoosh', .35], [58.7, 'shimmer', .6],
 ];
 
 window.seek = (t) => {
