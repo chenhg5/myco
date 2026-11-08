@@ -208,6 +208,36 @@ func (s *AgentService) Remove(ctx context.Context, name string, dryRun bool) (*d
 	return a, nil
 }
 
+// Kick signs an agent out: its token stops working at once (a fresh one is
+// issued and thrown away), and it counts as offline. Its record, labels,
+// aliases and queued messages stay; messages it had leased return to the
+// queue when their lease runs out. It comes back by joining again (`myco
+// join` in the session, or the runner re-enrolling with the machine's
+// credentials), which issues a new token.
+func (s *AgentService) Kick(ctx context.Context, name string, dryRun bool) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if dryRun {
+		return a, nil
+	}
+	_, hash, err := s.tokens.Issue()
+	if err != nil {
+		return nil, err
+	}
+	a.RotateToken(hash)
+	if err := s.agents.Save(ctx, a); err != nil {
+		return nil, err
+	}
+	// Offline right away, not after the online window runs out.
+	a.LastSeenAt = time.Time{}
+	if err := s.agents.Touch(ctx, a.Name, a.LastSeenAt); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
 // Bind updates the calling agent's session binding (empty fields unchanged).
 // Runners call it when a harness session is created so the hub can always
 // find the agent's session again.

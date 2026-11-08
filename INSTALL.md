@@ -122,6 +122,16 @@ myco hub up --tunnel cloudflare                              # 临时地址，�
 sudo bash -c 'set -a; . /etc/myco/hub.env; set +a; /usr/local/bin/myco <命令> --hub <HUB_URL>'
 ```
 
+**控制台令牌（给 Mac 控制台 App 用）**：管理员令牌只留在 Hub 机器上，每台要管理网络的设备单独签发一把控制台令牌，丢了就单独作废：
+```bash
+sudo /usr/local/bin/myco console token create --name glenn-mac   # 只显示这一次，同时打印 Hub 的公网地址
+sudo /usr/local/bin/myco console token list                      # 每把令牌最近一次使用的时间
+sudo /usr/local/bin/myco console token revoke --id con_xxx       # 作废，立即生效
+```
+控制台令牌能做管理员能做的事，但**不能**签发或作废控制台令牌（只有 Hub 自己的管理员令牌可以），所以即使泄露，也没法用它再造新令牌。
+
+**踢下线**：`myco agent kick --name <agent>` 让这个 agent 的令牌立即失效、显示为离线；它的记录、标签、别名和排队的消息都保留，正在处理的消息在租约到期后回到队列。它重新 `myco join`（或所在机器的 runner 用机器凭据重新登记）就会拿到新令牌回来。要彻底删除用 `myco agent remove`。
+
 ### 2.1 入网令牌（推荐方式）
 
 入网令牌让 session 自己加入网络，不需要把管理员令牌交出去。

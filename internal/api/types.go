@@ -461,3 +461,30 @@ type ExecResult struct {
 	Denied bool   `json:"denied,omitempty"`
 	Error  string `json:"error,omitempty"`
 }
+
+// ConsoleToken is a per-device admin credential for the console app (the
+// plain token is only in CreateConsoleTokenResponse).
+type ConsoleToken struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Active     bool       `json:"active"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// CreateConsoleTokenRequest is the body of POST /v1/console/tokens.
+type CreateConsoleTokenRequest struct {
+	Name string `json:"name"`
+}
+
+// CreateConsoleTokenResponse returns the token record and, once, the token.
+type CreateConsoleTokenResponse struct {
+	ConsoleToken ConsoleToken `json:"console_token"`
+	Token        string       `json:"token"`
+}
+
+// ConsoleTokenList is the body of GET /v1/console/tokens.
+type ConsoleTokenList struct {
+	Tokens []ConsoleToken `json:"tokens"`
+}
