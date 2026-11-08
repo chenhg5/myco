@@ -28,6 +28,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 // Name is the harness name of machine nodes.
@@ -38,7 +39,7 @@ const Name = "machine"
 var SpawnableCLIs = []string{"claude", "codex", "pi", "kiro", "cursor", "gemini", "opencode"}
 
 // credentialDirs are never valid working directories for a spawned session.
-var credentialDirs = []string{".ssh", ".gnupg", ".aws", ".myco"}
+var credentialDirs = osutil.CredentialDirs
 
 // Policy is the machine's local spawn policy (machine.yaml).
 type Policy struct {
@@ -192,14 +193,7 @@ func (n *Node) access(requested string) (harness.Access, error) {
 }
 
 func (n *Node) expand(p string) string {
-	p = strings.TrimSpace(p)
-	if p == "~" {
-		return n.Policy.Home
-	}
-	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		return filepath.Join(n.Policy.Home, rest)
-	}
-	return p
+	return osutil.ExpandHome(strings.TrimSpace(p), n.Policy.Home)
 }
 
 // dir resolves the working directory: absolute, symlinks resolved, existing,
@@ -229,7 +223,7 @@ func (n *Node) dir(requested string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if real == root || strings.HasPrefix(real, root+string(filepath.Separator)) {
+		if osutil.Within(real, root) {
 			inside = true
 			break
 		}
@@ -238,11 +232,11 @@ func (n *Node) dir(requested string) (string, error) {
 		return "", fmt.Errorf("directory %s is outside the allowed directories on machine %s (%s); the machine's owner can change spawn.dirs in ~/.myco/machine.yaml",
 			requested, n.Machine, strings.Join(roots, ", "))
 	}
-	for _, c := range credentialDirs {
-		bad := filepath.Join(n.Policy.Home, c)
-		if real == bad || strings.HasPrefix(real, bad+string(filepath.Separator)) {
-			return "", fmt.Errorf("refusing to start a session inside a credentials directory (%s)", c)
-		}
+	// By path component of the resolved directory, not by prefix of Home:
+	// Home may itself be a symlink (or an 8.3 short name on Windows), and
+	// then no resolved path would ever start with it.
+	if osutil.InCredentialDir(real) {
+		return "", fmt.Errorf("refusing to start a session inside a credentials directory (%s)", strings.Join(credentialDirs, ", "))
 	}
 	return real, nil
 }

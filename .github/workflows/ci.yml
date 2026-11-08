@@ -23,6 +23,28 @@ jobs:
       - name: Smoke test (real binary, separate processes)
         run: make smoke
 
+  windows:
+    # Native Windows: build and the tests that do not need a POSIX shell
+    # (tests driving fake CLIs written as sh scripts skip themselves here).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: vet
+        run: go vet ./...
+      - name: build
+        run: go build -o bin/myco.exe ./cmd/myco
+      - name: tests
+        run: go test ./...
+      - name: the binary runs
+        shell: pwsh
+        run: |
+          bin/myco.exe --version
+          $env:MYCO_NO_UPDATE_CHECK = "1"
+          bin/myco.exe version --offline
+
   web:
     runs-on: ubuntu-latest
     steps:

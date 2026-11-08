@@ -10,6 +10,7 @@ import (
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness/execnode"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 func enrollmentCommands() *Command {
@@ -218,7 +219,7 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 				fmt.Fprintf(w, "agent %s %s; credentials saved to %s\n", res.Agent.Name, verb, e.cfgPath)
 				if exec {
 					fmt.Fprintf(w, "exec node: commands from %s will run here as %s in %s\n",
-						strings.Join(res.Agent.AllowFrom, ", "), orDefault(e.in.Getenv("USER"), "this user"), res.Agent.Binding.Workdir)
+						strings.Join(res.Agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), res.Agent.Binding.Workdir)
 					fmt.Fprintln(w, "a running `myco runner service` picks it up within 30s; otherwise run: myco runner service install")
 				}
 			})

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 func newShell(t *testing.T, command string, args ...string) harness.Harness {
@@ -30,12 +31,13 @@ func TestNewRequiresCommand(t *testing.T) {
 	if err != nil || h.Name() != "shell" || h.Name() != Name {
 		t.Fatalf("New: %v %v", h, err)
 	}
-	if got := h.(*shell).opts.Binary; got != "/bin/sh" {
-		t.Fatalf("default binary = %q, want /bin/sh", got)
+	if got := h.(*shell).opts.Binary; got != harness.DefaultShell() {
+		t.Fatalf("default binary = %q, want %s", got, harness.DefaultShell())
 	}
 }
 
 func TestRunPromptOnStdinStdoutIsReply(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	h := newShell(t, `tr a-z A-Z`)
 	res, err := h.Run(context.Background(), harness.Request{Prompt: "hello\nworld\n"})
 	if err != nil {
@@ -50,6 +52,7 @@ func TestRunPromptOnStdinStdoutIsReply(t *testing.T) {
 }
 
 func TestRunEnvWorkdirAndArgs(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	dir := t.TempDir()
 	h := newShell(t, `printf '%s|%s|%s|%s|%s' "$0" "$1" "$2" "$MYCO_FROM" "$(pwd)"; echo noise >&2`, "first arg", "x;y")
 	res, err := h.Run(context.Background(), harness.Request{
@@ -66,6 +69,7 @@ func TestRunEnvWorkdirAndArgs(t *testing.T) {
 }
 
 func TestRunNonZeroExitIsError(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	h := newShell(t, `echo partial; echo "it broke" >&2; exit 3`)
 	res, err := h.Run(context.Background(), harness.Request{Prompt: "x"})
 	if err == nil {
@@ -90,6 +94,7 @@ func TestRunMissingBinary(t *testing.T) {
 }
 
 func TestRunTimeoutAndCancel(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	h := newShell(t, `exec sleep 30`)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -117,8 +122,8 @@ func TestCheck(t *testing.T) {
 		t.Fatal("shell should implement harness.Checker")
 	}
 	got := c.Check(context.Background())
-	if got.Error != "" || got.Version != "ok" || got.Binary != "/bin/sh" {
-		t.Fatalf("Check = %+v, want version ok from /bin/sh -c 'echo ok'", got)
+	if got.Error != "" || got.Version != "ok" || got.Binary != harness.DefaultShell() {
+		t.Fatalf("Check = %+v, want version ok from %s", got, harness.DefaultShell())
 	}
 	bad, _ := New(harness.Options{Command: "cat", Binary: filepath.Join(t.TempDir(), "nope")})
 	if got := bad.(harness.Checker).Check(context.Background()); got.Error == "" {

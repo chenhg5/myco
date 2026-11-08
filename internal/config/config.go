@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 // Env variable names.
@@ -174,9 +175,9 @@ func FindBySession(dir, sessionID string) (Profile, bool) {
 // ReadEnvFile parses KEY=VALUE lines (blank lines, # comments and an
 // optional "export " prefix allowed; values may be quoted).
 func ReadEnvFile(path string) ([]string, error) {
-	if strings.HasPrefix(path, "~/") {
+	if _, ok := osutil.HomeRelative(path); ok {
 		home, _ := os.UserHomeDir()
-		path = filepath.Join(home, path[2:])
+		path = osutil.ExpandHome(path, home)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {

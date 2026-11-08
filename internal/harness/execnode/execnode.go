@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -38,7 +39,24 @@ const (
 )
 
 // DefaultInheritEnv are the variables copied from the runner by default.
-var DefaultInheritEnv = []string{"PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ"}
+var DefaultInheritEnv = defaultInheritEnv()
+
+func defaultInheritEnv() []string {
+	if runtime.GOOS == "windows" {
+		// Without SystemRoot, PATHEXT and friends, most Windows programs
+		// (PowerShell included) fail to start in a clean environment.
+		// .NET (so PowerShell) also wants the processor and module
+		// variables, or it starts very slowly.
+		return []string{"PATH", "PATHEXT", "SystemRoot", "SystemDrive", "windir", "ComSpec",
+			"USERPROFILE", "USERNAME", "USERDOMAIN", "COMPUTERNAME", "HOMEDRIVE", "HOMEPATH",
+			"APPDATA", "LOCALAPPDATA", "ProgramData", "ALLUSERSPROFILE", "PUBLIC",
+			"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles",
+			"CommonProgramFiles(x86)", "CommonProgramW6432", "PSModulePath",
+			"NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "OS",
+			"TEMP", "TMP", "TZ"}
+	}
+	return []string{"PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ"}
+}
 
 // blockedEnv never reaches commands, even if passed in by the runner.
 var blockedEnv = []string{"MYCO_TOKEN", "MYCO_CONFIG", "MYCO_ADMIN_TOKEN", "MYCO_ENROLL_TOKEN"}
@@ -71,7 +89,7 @@ func New(opts harness.Options) (harness.Harness, error) {
 		n.shell = opts.Binary
 	}
 	if n.shell == "" {
-		n.shell = "/bin/sh"
+		n.shell = harness.DefaultShell()
 	}
 	if len(n.spec.InheritEnv) == 0 {
 		n.spec.InheritEnv = DefaultInheritEnv
@@ -89,7 +107,7 @@ func (n *node) ExecutesBody() bool { return true }
 
 // Check implements harness.Checker for the shell.
 func (n *node) Check(ctx context.Context) harness.Check {
-	return harness.CheckBinary(ctx, n.shell, "-c", "echo ok")
+	return harness.CheckBinary(ctx, n.shell, harness.ShellArgs(n.shell, "echo ok")...)
 }
 
 // Run executes req.Body. Refusals and failing commands are results, not
@@ -131,7 +149,7 @@ func (n *node) run(ctx context.Context, cmdline string, req harness.Request) api
 	runCtx, cancel := context.WithTimeout(ctx, n.timeout)
 	defer cancel()
 	out, err := harness.Exec(runCtx, harness.Process{
-		Binary: n.shell, Args: []string{"-c", cmdline}, Workdir: req.Workdir,
+		Binary: n.shell, Args: harness.ShellArgs(n.shell, cmdline), Workdir: req.Workdir,
 		Env: n.env(req.Env), CleanEnv: true, MaxOutput: n.spec.MaxOutput,
 	})
 	res := api.ExecResult{ExitCode: out.ExitCode, Stdout: out.Stdout, Stderr: out.Stderr, Truncated: out.Truncated}

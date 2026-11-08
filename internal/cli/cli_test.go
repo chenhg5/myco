@@ -21,6 +21,8 @@ import (
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
+	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 type harnessT struct {
@@ -190,7 +192,7 @@ func TestDetectBinding(t *testing.T) {
 
 func TestProfilesAndRunnerAll(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
 	_, out, _ := admin.run("enrollment", "create", "--name-prefix", "mac-", "--format", "json")
@@ -223,7 +225,11 @@ func TestProfilesAndRunnerAll(t *testing.T) {
 	for _, n := range []string{"mac-a", "mac-b"} {
 		p := filepath.Join(home, ".myco", "agents", n+".yaml")
 		data, _ := os.ReadFile(p)
-		data = []byte(strings.Replace(string(data), "harness: claude\n    workdir", "harness: shell\n    command: 'echo handled-by-$MYCO_FROM'\n    workdir", 1))
+		cmd := `echo handled-by-$MYCO_FROM`
+		if osutil.Windows { // PowerShell
+			cmd = `Write-Output "handled-by-$env:MYCO_FROM"`
+		}
+		data = []byte(strings.Replace(string(data), "harness: claude\n    workdir", "harness: shell\n    command: '"+cmd+"'\n    workdir", 1))
 		os.WriteFile(p, data, 0o600)
 	}
 	admin.env["MYCO_CONFIG"] = filepath.Join(home, ".myco", "config.yaml")
@@ -245,7 +251,7 @@ func TestProfilesAndRunnerAll(t *testing.T) {
 
 func TestHarnessListAndDoctor(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "c.yaml")}}
 	code, out, _ := h.run("harness", "list", "--format", "json")
@@ -272,7 +278,7 @@ func TestHarnessListAndDoctor(t *testing.T) {
 
 func TestRotateKeepsBindingAndLoginWritesProfile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
 	if code, _, e := admin.run("agent", "register", "--name", "cx", "--harness", "codex", "--session-id", "sess-9", "--environment", "mac", "--description", "keep me", "--no-save"); code != 0 {
@@ -311,7 +317,7 @@ func TestReadEnvFile(t *testing.T) {
 
 func TestRunnerEnvCapture(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("ANTHROPIC_BASE_URL", "https://llm.example.com/anthropic")
 	t.Setenv("ANTHROPIC_API_KEY", "sk-secret value")
 	t.Setenv("UNRELATED", "x")
@@ -326,7 +332,7 @@ func TestRunnerEnvCapture(t *testing.T) {
 	}
 	envFile := filepath.Join(home, ".myco", "env", "mac-claude.env")
 	st, err := os.Stat(envFile)
-	if err != nil || st.Mode().Perm() != 0o600 {
+	if err != nil || (osutil.UnixPermissions && st.Mode().Perm() != 0o600) {
 		t.Fatalf("env file perms: %v %v", st, err)
 	}
 	vars, err := config.ReadEnvFile(envFile)
@@ -341,7 +347,7 @@ func TestRunnerEnvCapture(t *testing.T) {
 
 func TestLabelsAndBroadcast(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "admin.yaml")}}
 	_, out, _ := admin.run("enrollment", "create", "--name-prefix", "mac-", "--label", "machine=mac", "--format", "json")
@@ -412,7 +418,7 @@ func TestLabelsAndBroadcast(t *testing.T) {
 
 func TestAttachments(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	mk := func(name string) *harnessT {
 		h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
@@ -482,7 +488,7 @@ func TestAttachments(t *testing.T) {
 
 func TestOverviewAndUIServer(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	mk := func(name string) *harnessT {
 		h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
@@ -563,7 +569,7 @@ func TestOverviewAndUIServer(t *testing.T) {
 
 func TestAliasesAndDisplayNames(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	mk := func(name string) *harnessT {
 		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
@@ -689,8 +695,9 @@ func TestTableAlignsWideCharacters(t *testing.T) {
 }
 
 func TestExecNode(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
 	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "boss.yaml")}}
@@ -777,7 +784,7 @@ func TestExecNodeLoginOnAnotherMachine(t *testing.T) {
 	json.Unmarshal([]byte(out), &reg)
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	work := filepath.Join(home, "exec")
 	os.Mkdir(work, 0o700)
 	node := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
@@ -813,7 +820,7 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 	general, execTok := token("--name-prefix", "wsl-"), token("--name-prefix", "wsl-", "--harness", "exec", "--allow-from", "boss", "--max-uses", "1")
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	work := filepath.Join(home, "exec")
 	os.Mkdir(work, 0o700)
 	node := func(tok string) *harnessT {
@@ -839,14 +846,18 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(adminHome, "a.yaml")}}
 	done := make(chan [3]any, 1)
 	go func() {
-		c, o, e := boss.run("exec", "--to", "wsl-shell", "--cmd", "pwd", "--timeout", "20s", "--format", "text")
+		pwd := "pwd"
+		if osutil.Windows {
+			pwd = "(Get-Location).Path"
+		}
+		c, o, e := boss.run("exec", "--to", "wsl-shell", "--cmd", pwd, "--timeout", "20s", "--format", "text")
 		done <- [3]any{c, o, e}
 	}()
 	runner := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
 	for {
 		select {
 		case r := <-done:
-			if r[0].(int) != 0 || strings.TrimSpace(r[1].(string)) != work {
+			if r[0].(int) != 0 || !sameDir(strings.TrimSpace(r[1].(string)), work) {
 				t.Fatalf("exec via enrolled node: %v", r)
 			}
 			return
@@ -859,7 +870,7 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 
 func TestJoinLinks(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
@@ -922,7 +933,7 @@ func TestJoinLinks(t *testing.T) {
 		}
 	}
 	mpath := filepath.Join(home, ".myco", "machine.yaml")
-	if st, err := os.Stat(mpath); err != nil || st.Mode().Perm() != 0o600 {
+	if st, err := os.Stat(mpath); err != nil || (osutil.UnixPermissions && st.Mode().Perm() != 0o600) {
 		t.Fatalf("machine.yaml: %v %v", st, err)
 	}
 	if _, out, _ := admin.run("link", "list", "--format", "json"); !strings.Contains(out, `"uses": 1`) || !strings.Contains(out, `"machine": "test-box"`) {
@@ -964,7 +975,7 @@ func TestJoinLinks(t *testing.T) {
 	json.Unmarshal([]byte(out), &link)
 	execTok := strings.TrimPrefix(link.JoinURL, hub+"/j/")
 	home2 := t.TempDir()
-	t.Setenv("HOME", home2)
+	testutil.SetHome(t, home2)
 	ex := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": execTok, "USER": "glenn"}}
 	code, out, e = ex.run("machine", "join", "--machine", "box2", "--no-service", "--workdir", home2, "--format", "text")
 	if code != 0 || !strings.Contains(out, "exec node box2-shell ready: tasks from boss run here as glenn") {
@@ -977,7 +988,7 @@ func TestJoinLinks(t *testing.T) {
 	// Revoking a link stops new machines but not the ones that joined.
 	_, out, _ = admin.run("link", "list", "--format", "json")
 	admin.run("link", "revoke", "--id", strings.Split(strings.Split(out, `"id": "`)[1], `"`)[0], "--force")
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	if code, _, _ := m.run("machine", "join", "--machine", "other", "--no-service"); code != ExitPermission {
 		t.Fatalf("revoked link must not add machines, exit %d", code)
 	}
@@ -994,7 +1005,7 @@ func TestJoinLinks(t *testing.T) {
 // /etc/myco/hub.env: `sudo myco link create` needs no flags.
 func TestAdminFromHubEnv(t *testing.T) {
 	hub := newHub(t)
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	f := writeFile(t, t.TempDir(), "hub.env", "MYCO_ADMIN_TOKEN=admin-token-123456\nMYCO_HUB="+hub+"\n")
 	old := hubEnvPath
 	hubEnvPath = f
@@ -1006,8 +1017,9 @@ func TestAdminFromHubEnv(t *testing.T) {
 }
 
 func TestProgressStatusAndSteer(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	mk := func(name string) *harnessT {
 		return &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, name+".yaml")}}
@@ -1102,7 +1114,7 @@ func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return 
 // sessions: the runner takes over when the session's transcript is here.
 func TestRunnerSurvivesMachineRename(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "a.yaml")}}
@@ -1141,6 +1153,7 @@ func TestRunnerSurvivesMachineRename(t *testing.T) {
 // hub serve --tunnel: the tunnel's URL becomes the hub's public URL (health
 // and join links). The tunnel CLIs are faked with scripts on PATH.
 func TestHubServeWithTunnels(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	bin := t.TempDir()
 	os.WriteFile(filepath.Join(bin, "cloudflared"), []byte("#!/bin/sh\necho 'INF Requesting new quick Tunnel on trycloudflare.com...' >&2\necho 'INF |  https://fake-quick-tunnel.trycloudflare.com  |' >&2\nexec sleep 60\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "tailscale"), []byte(`#!/bin/sh
@@ -1206,7 +1219,7 @@ func TestHubEnvFile(t *testing.T) {
 	if tokenFromFile(string(b)) != tok || !strings.Contains(string(b), "MYCO_HUB=http://127.0.0.1:8888") {
 		t.Fatalf("hub.env after re-run:\n%s", b)
 	}
-	if st, _ := os.Stat(filepath.Join(dir, "hub.env")); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(filepath.Join(dir, "hub.env")); osutil.UnixPermissions && st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", st.Mode().Perm())
 	}
 	if tokenFromFile("  plain-token-value \n") != "plain-token-value" {
@@ -1216,7 +1229,7 @@ func TestHubEnvFile(t *testing.T) {
 
 func TestUpdateAllowFrom(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
 	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "boss.yaml")}}
@@ -1254,7 +1267,7 @@ func TestUpdateAllowFrom(t *testing.T) {
 
 func TestExecAllowAnyoneNeedsRiskFlag(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	hub := newHub(t)
 	admin := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456"}}
 	stranger := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(home, "s.yaml")}}

@@ -32,6 +32,8 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/hubserver"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
+	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 const adminToken = "integration-admin-token-0123456789"
@@ -323,7 +325,7 @@ func (e *cliEnv) must(c context.Context, args ...string) string {
 // and attachments under ~/.myco.
 func isolatedHome(t *testing.T) string {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	return home
 }
 
@@ -403,7 +405,7 @@ func TestExecNodeEnforcesSendersAndAllowList(t *testing.T) {
 			}
 		}
 	}
-	if r := run("echo hello from ci"); r.code != 0 || !strings.Contains(r.out, "hello from ci") {
+	if r := run("echo 'hello from ci'"); r.code != 0 || !strings.Contains(r.out, "hello from ci") {
 		t.Fatalf("allowed command: exit %d %s", r.code, r.out)
 	}
 	r := run("cat /etc/hostname")
@@ -494,6 +496,7 @@ esac
 // node), its runner serves the node, another agent spawns a session in a
 // directory there, and the new agent then answers by resuming that session.
 func TestAgentSpawnEndToEnd(t *testing.T) {
+	testutil.NeedsPOSIXShell(t) // fakePi
 	home := isolatedHome(t)
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "pi"), []byte(fakePi), 0o755); err != nil {
@@ -581,7 +584,7 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 // this platform, like GitHub does.
 func fakeReleases(t *testing.T, tag string, bin []byte, sum string) *httptest.Server {
 	t.Helper()
-	asset := "myco-" + runtime.GOOS + "-" + runtime.GOARCH
+	asset := release.AssetName(runtime.GOOS, runtime.GOARCH)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/latest":
@@ -677,7 +680,7 @@ func TestUpgradeReplacesBinaryAfterVerifying(t *testing.T) {
 	if b, _ := os.ReadFile(target); string(b) != string(newBin) {
 		t.Fatalf("binary not replaced: %s", out)
 	}
-	if st, _ := os.Stat(target); st.Mode().Perm() != 0o755 {
+	if st, _ := os.Stat(target); osutil.UnixPermissions && st.Mode().Perm() != 0o755 {
 		t.Fatalf("mode %v", st.Mode())
 	}
 

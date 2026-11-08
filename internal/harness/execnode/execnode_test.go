@@ -10,6 +10,8 @@ import (
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 func run(t *testing.T, spec harness.ExecSpec, from, body string, env ...string) api.ExecResult {
@@ -30,6 +32,7 @@ func run(t *testing.T, spec harness.ExecSpec, from, body string, env ...string) 
 }
 
 func TestExecRunsAndReportsExitCode(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	spec := harness.ExecSpec{Senders: []string{"boss"}}
 	res := run(t, spec, "boss", `echo out; echo err >&2; exit 3`)
 	if res.ExitCode != 3 || res.Stdout != "out\n" || res.Stderr != "err\n" || res.Denied {
@@ -81,6 +84,7 @@ func TestExecAllowlist(t *testing.T) {
 }
 
 func TestExecEnvironmentIsClean(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	t.Setenv("MYCO_TOKEN", "secret-from-runner-env")
 	t.Setenv("SOME_RUNNER_SECRET", "x")
 	res := run(t, harness.ExecSpec{Senders: []string{"boss"}}, "boss", "env",
@@ -111,13 +115,13 @@ func TestExecTimeoutTruncationAndAudit(t *testing.T) {
 	if len(lines) != 3 || !strings.Contains(lines[0], `"command":"sleep 5"`) || !strings.Contains(lines[2], `"from":"mallory"`) || !strings.Contains(lines[2], `"denied":true`) {
 		t.Fatalf("audit log:\n%s", b)
 	}
-	if st, _ := os.Stat(audit); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(audit); osutil.UnixPermissions && st.Mode().Perm() != 0o600 {
 		t.Fatalf("audit log mode %v", st.Mode().Perm())
 	}
 }
 
 func TestExecAnySenderWhenExplicit(t *testing.T) {
-	if res := run(t, harness.ExecSpec{Senders: []string{"*"}}, "anyone-at-all", "echo ok"); res.Denied || res.Stdout != "ok\n" {
+	if res := run(t, harness.ExecSpec{Senders: []string{"*"}}, "anyone-at-all", "echo ok"); res.Denied || strings.TrimRight(res.Stdout, "\r\n") != "ok" {
 		t.Fatalf("explicit * must admit every sender: %+v", res)
 	}
 }

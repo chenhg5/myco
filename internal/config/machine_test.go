@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/testutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,7 +12,7 @@ import (
 )
 
 func TestMachineNeverJoined(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	m, err := LoadMachine(DefaultPath())
 	if m != nil || err != nil {
 		t.Fatalf("LoadMachine before join = %+v, %v; want nil, nil", m, err)
@@ -18,7 +20,7 @@ func TestMachineNeverJoined(t *testing.T) {
 }
 
 func TestMachineRoundTripAndPermissions(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	def := DefaultPath()
 	in := &Machine{
 		Hub: "https://hub", Machine: "vps", EnrollToken: "myco_enroll",
@@ -35,10 +37,10 @@ func TestMachineRoundTripAndPermissions(t *testing.T) {
 		t.Fatalf("round trip:\n in=%+v\nout=%+v", in, out)
 	}
 	path := MachinePath(def)
-	if p := perm(t, path); p != 0o600 {
+	if p := perm(t, path); osutil.UnixPermissions && p != 0o600 {
 		t.Errorf("machine.yaml mode = %o, want 600 (holds the enroll token)", p)
 	}
-	if p := perm(t, filepath.Dir(path)); p != 0o700 {
+	if p := perm(t, filepath.Dir(path)); osutil.UnixPermissions && p != 0o700 {
 		t.Errorf("config dir mode = %o, want 700", p)
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
@@ -59,7 +61,7 @@ func TestMachineRoundTripAndPermissions(t *testing.T) {
 }
 
 func TestLoadMachineMalformed(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	def := DefaultPath()
 	writeFile(t, MachinePath(def), "hub: [x\n")
 	if m, err := LoadMachine(def); err == nil || m != nil {

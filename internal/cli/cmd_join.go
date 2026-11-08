@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/execnode"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 // The join flow, for people who should not have to copy tokens around:
@@ -262,7 +263,7 @@ node right away.`,
 				}
 				out["exec_node"] = agent
 				notes = append(notes, fmt.Sprintf("exec node %s ready: tasks from %s run here as %s in %s",
-					agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(e.in.Getenv("USER"), "this user"), agent.Binding.Workdir))
+					agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), agent.Binding.Workdir))
 			}
 			if res.Harness != execnode.Name && !cloud && !dry {
 				if a, err := e.ensureMachineNode(); err != nil {
@@ -356,7 +357,7 @@ func execBinding(e *env, name, workdir string) (api.Binding, error) {
 	if st, err := os.Stat(wd); err != nil || !st.IsDir() {
 		return api.Binding{}, errorf("not_found", ExitNotFound, "create it first, or pass another --workdir", "workdir %s does not exist", wd)
 	}
-	host, user := hostname(), orDefault(e.in.Getenv("USER"), "user")
+	host, user := hostname(), orDefault(osutil.UserName(e.in.Getenv), "user")
 	return api.Binding{Harness: execnode.Name, Environment: orDefault(e.in.String("environment"), host), Workdir: wd,
 		SessionID: "exec:" + host + ":" + user + ":" + name}, nil
 }
@@ -561,9 +562,9 @@ func sameDir(a, b string) bool {
 	ra, err1 := filepath.EvalSymlinks(a)
 	rb, err2 := filepath.EvalSymlinks(b)
 	if err1 == nil && err2 == nil {
-		return ra == rb
+		return osutil.SamePath(ra, rb) // case-insensitive on Windows
 	}
-	return filepath.Clean(a) == filepath.Clean(b)
+	return osutil.SamePath(a, b)
 }
 
 // readCodexMeta reads the session id and cwd from a rollout's first line

@@ -14,6 +14,7 @@ import (
 	"testing/iotest"
 
 	"github.com/chenhg5/myco/internal/domain"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 func readAll(t *testing.T, s FS, id string) string {
@@ -148,6 +149,7 @@ func TestInvalidIDsCannotEscapeDir(t *testing.T) {
 }
 
 func TestPermissions(t *testing.T) {
+	testutil.NeedsUnixPermissions(t)
 	s := FS{Dir: filepath.Join(t.TempDir(), "blobs")}
 	if _, _, err := s.Put(context.Background(), "file_perm1", bytes.NewReader([]byte("secret")), 100); err != nil {
 		t.Fatal(err)

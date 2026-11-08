@@ -89,6 +89,7 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 			if err != nil {
 				return err
 			}
+			release.CleanupOld(path)
 			out["path"] = path
 			if e.in.Bool("dry-run") {
 				return e.dryRun(out)
@@ -164,6 +165,11 @@ func restartMycoServices() (restarted, notes []string) {
 				restarted = append(restarted, id.Description)
 			}
 		}
+	}
+	if runtime.GOOS == "windows" {
+		// No service manager integration on Windows yet: the runner and hub
+		// run in a terminal, and keep the old binary until restarted.
+		return nil, []string{"restart any running `myco runner start` / `myco hub` processes to use the new version"}
 	}
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		if _, err := exec.LookPath("systemctl"); err == nil {

@@ -82,7 +82,8 @@ func TestSpawnHappyPath(t *testing.T) {
 	if res.Denied || res.Error != "" {
 		t.Fatalf("spawn failed: %+v", res)
 	}
-	want := filepath.Join(r.home, "code/app")
+	// The resolved path (on Windows the temp dir is an 8.3 short name).
+	want, _ := filepath.EvalSymlinks(filepath.Join(r.home, "code", "app"))
 	if res.Agent != "wsl-reviewer" || res.SessionID != "sess-1" || res.Workdir != want || res.Access != "workspace" || res.Reply != "ready" {
 		t.Fatalf("result: %+v", res)
 	}
@@ -228,5 +229,25 @@ func TestRefusalsAndFailuresAreResults(t *testing.T) {
 	}
 	if r.spawned != 0 {
 		t.Fatalf("spawned signal on failure: %d", r.spawned)
+	}
+}
+
+// Home itself may be a symlink (or a Windows short name): resolved working
+// directories never start with it, so credential directories must still be
+// refused by what they are, not by prefix.
+func TestCredentialDirsWhenHomeIsASymlink(t *testing.T) {
+	r := newRig(t)
+	link := filepath.Join(t.TempDir(), "home-link")
+	if err := os.Symlink(r.home, link); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	r.node.Policy.Home = link
+	for _, dir := range []string{"~/.ssh/keys", "~/.myco"} {
+		if res := r.run(t, "lead", api.SpawnRequest{Dir: dir}); !res.Denied || !strings.Contains(res.Error, "credentials directory") {
+			t.Errorf("dir %q with a symlinked home: %+v, want denied", dir, res)
+		}
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/code/app"}); res.Denied {
+		t.Errorf("an ordinary directory under a symlinked home: %+v", res)
 	}
 }
