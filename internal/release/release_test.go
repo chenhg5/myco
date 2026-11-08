@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chenhg5/myco/internal/osutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -252,17 +253,59 @@ func TestGetRetriesTransientErrors(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	b, err := get(context.Background(), srv.Client(), srv.URL+"/x", 10)
+	b, err := get(context.Background(), srv.Client(), srv.URL+"/x", 10, "")
 	if err != nil || string(b) != "ok" || calls != 3 {
 		t.Fatalf("after two 504s: %q %v (calls %d)", b, err, calls)
 	}
 	calls = 0
-	if _, err := get(context.Background(), srv.Client(), srv.URL+"/missing", 10); err == nil || calls != 1 {
+	if _, err := get(context.Background(), srv.Client(), srv.URL+"/missing", 10, ""); err == nil || calls != 1 {
 		t.Fatalf("a 404 must not be retried: %v (calls %d)", err, calls)
 	}
 	calls = -100 // always 504
-	_, err = get(context.Background(), srv.Client(), srv.URL+"/x", 10)
+	_, err = get(context.Background(), srv.Client(), srv.URL+"/x", 10, "")
 	if err == nil || !strings.Contains(err.Error(), "after 4 attempts") {
 		t.Fatalf("giving up: %v", err)
+	}
+}
+
+// A release download link that keeps answering 504 falls back to the
+// release API's asset link (sent with Accept: application/octet-stream).
+func TestFetchFallsBackToReleaseAPI(t *testing.T) {
+	defer func(r int, b time.Duration, a, f string) { getRetries, getBackoff, tagAPI, fallbackBase = r, b, a, f }(getRetries, getBackoff, tagAPI, fallbackBase)
+	getRetries, getBackoff = 1, time.Millisecond
+	bin := []byte("new myco")
+	sum := sha256.Sum256(bin)
+	asset := AssetName("linux", "amd64")
+	sums := hex.EncodeToString(sum[:]) + "  " + asset + "\n"
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/download/"):
+			w.WriteHeader(http.StatusGatewayTimeout)
+		case r.URL.Path == "/tags/v9.0.0":
+			fmt.Fprintf(w, `{"assets":[{"name":"SHA256SUMS","url":"%[1]s/assets/1"},{"name":%[2]q,"url":"%[1]s/assets/2"}]}`, srv.URL, asset)
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			if r.Header.Get("Accept") != "application/octet-stream" {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				return
+			}
+			if r.URL.Path == "/assets/1" {
+				io.WriteString(w, sums)
+			} else {
+				w.Write(bin)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	tagAPI, fallbackBase = srv.URL+"/tags", srv.URL+"/download"
+	got, err := Fetch(context.Background(), srv.Client(), srv.URL+"/download", "v9.0.0", "linux", "amd64")
+	if err != nil || string(got) != string(bin) {
+		t.Fatalf("Fetch = %q, %v", got, err)
+	}
+	// A mirror (not the GitHub base) gets no fallback.
+	if _, err := Fetch(context.Background(), srv.Client(), srv.URL+"/download/", "v9.0.0", "linux", "amd64"); err == nil {
+		t.Fatal("a mirror should not fall back to the GitHub API")
 	}
 }

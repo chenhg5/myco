@@ -51,7 +51,18 @@ fi
 
 echo "==> downloading $URL"
 tmp="$(mktemp)"
-curl -fsSL "$URL" -o "$tmp"
+if ! curl -fsSL --retry 3 "$URL" -o "$tmp"; then
+  # github.com's download links answer 504 now and then; the release API's
+  # link for the same asset goes straight to the storage host.
+  echo "==> retrying through the GitHub release API"
+  if [[ "$VERSION" == "latest" ]]; then API="https://api.github.com/repos/$REPO/releases/latest"
+  else API="https://api.github.com/repos/$REPO/releases/tags/$VERSION"; fi
+  ASSET_URL="$(curl -fsSL "$API" | awk -v want="myco-linux-$ARCH" '
+    /"url": *"[^"]*\/releases\/assets\/[0-9]+"/ { match($0, /https:[^"]+/); u = substr($0, RSTART, RLENGTH) }
+    /"name":/ && index($0, "\"" want "\"") { print u; exit }')"
+  [[ -n "$ASSET_URL" ]] || { echo "cannot find myco-linux-$ARCH in $API" >&2; exit 1; }
+  curl -fsSL --retry 3 -H "Accept: application/octet-stream" "$ASSET_URL" -o "$tmp"
+fi
 install -m 0755 "$tmp" /usr/local/bin/myco
 rm -f "$tmp"
 /usr/local/bin/myco version

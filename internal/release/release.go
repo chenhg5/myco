@@ -29,6 +29,10 @@ const (
 	DefaultAPI = "https://api.github.com/repos/chenhg5/myco/releases/latest"
 	// DefaultDownload is where release assets live: <base>/<tag>/<asset>.
 	DefaultDownload = "https://github.com/chenhg5/myco/releases/download"
+	// DefaultTagAPI lists a release's assets (<base>/<tag>); used when a
+	// DefaultDownload link fails: each asset's API link redirects straight
+	// to the storage host, which works when github.com's links answer 504.
+	DefaultTagAPI = "https://api.github.com/repos/chenhg5/myco/releases/tags"
 	// EnvAPI and EnvDownload override them (mirrors, tests).
 	EnvAPI      = "MYCO_RELEASE_API"
 	EnvDownload = "MYCO_RELEASE_DOWNLOAD"
@@ -218,7 +222,7 @@ func CleanupOld(target string) { _ = os.Remove(target + OldSuffix) }
 // release's SHA256SUMS. It returns the verified bytes.
 func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch string) ([]byte, error) {
 	asset := AssetName(goos, goarch)
-	sums, err := get(ctx, hc, download+"/"+tag+"/SHA256SUMS", 1<<20)
+	sums, err := fetchAsset(ctx, hc, download, tag, "SHA256SUMS", 1<<20)
 	if err != nil {
 		return nil, fmt.Errorf("checksums for %s: %w", tag, err)
 	}
@@ -233,7 +237,7 @@ func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch str
 	if want == "" {
 		return nil, fmt.Errorf("release %s has no %s (unsupported platform?)", tag, asset)
 	}
-	bin, err := get(ctx, hc, download+"/"+tag+"/"+asset, 256<<20)
+	bin, err := fetchAsset(ctx, hc, download, tag, asset, 256<<20)
 	if err != nil {
 		return nil, fmt.Errorf("download %s %s: %w", tag, asset, err)
 	}
@@ -242,6 +246,54 @@ func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch str
 		return nil, fmt.Errorf("checksum mismatch for %s %s: got %s, want %s", tag, asset, got, want)
 	}
 	return bin, nil
+}
+
+// tagAPI and fallbackBase are DefaultTagAPI and DefaultDownload; tests
+// point them elsewhere.
+var (
+	tagAPI       = DefaultTagAPI
+	fallbackBase = DefaultDownload
+)
+
+// fetchAsset downloads <download>/<tag>/<name>. From GitHub (the default
+// download base) it falls back to the release API's link for the asset.
+func fetchAsset(ctx context.Context, hc *http.Client, download, tag, name string, max int64) ([]byte, error) {
+	b, err := get(ctx, hc, download+"/"+tag+"/"+name, max, "")
+	if err == nil || download != fallbackBase || ctx.Err() != nil {
+		return b, err
+	}
+	u, aerr := assetAPIURL(ctx, hc, tag, name)
+	if aerr != nil {
+		return nil, fmt.Errorf("%w; release API fallback: %v", err, aerr)
+	}
+	b, aerr = get(ctx, hc, u, max, "application/octet-stream")
+	if aerr != nil {
+		return nil, fmt.Errorf("%w; release API fallback: %v", err, aerr)
+	}
+	return b, nil
+}
+
+// assetAPIURL finds the API link of a release's asset.
+func assetAPIURL(ctx context.Context, hc *http.Client, tag, name string) (string, error) {
+	raw, err := get(ctx, hc, tagAPI+"/"+tag, 4<<20, "application/vnd.github+json")
+	if err != nil {
+		return "", err
+	}
+	var rel struct {
+		Assets []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"assets"`
+	}
+	if err := json.Unmarshal(raw, &rel); err != nil {
+		return "", fmt.Errorf("release %s: %w", tag, err)
+	}
+	for _, a := range rel.Assets {
+		if a.Name == name && a.URL != "" {
+			return a.URL, nil
+		}
+	}
+	return "", fmt.Errorf("release %s has no asset %s", tag, name)
 }
 
 // getRetries and getBackoff bound retries of transient download failures:
@@ -253,12 +305,12 @@ var (
 
 // get downloads url, retrying network errors and 5xx answers (up to
 // getRetries more times, waiting a little longer each time).
-func get(ctx context.Context, hc *http.Client, url string, max int64) ([]byte, error) {
+func get(ctx context.Context, hc *http.Client, url string, max int64, accept string) ([]byte, error) {
 	var err error
 	for attempt := 0; ; attempt++ {
 		var b []byte
 		var retry bool
-		b, retry, err = getOnce(ctx, hc, url, max)
+		b, retry, err = getOnce(ctx, hc, url, max, accept)
 		if err == nil || !retry || attempt >= getRetries || ctx.Err() != nil {
 			if err != nil && attempt > 0 {
 				err = fmt.Errorf("%w (after %d attempts)", err, attempt+1)
@@ -273,12 +325,15 @@ func get(ctx context.Context, hc *http.Client, url string, max int64) ([]byte, e
 	}
 }
 
-func getOnce(ctx context.Context, hc *http.Client, url string, max int64) (b []byte, retry bool, err error) {
+func getOnce(ctx context.Context, hc *http.Client, url string, max int64, accept string) (b []byte, retry bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, false, err
 	}
 	req.Header.Set("User-Agent", "myco-upgrade")
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, true, err
