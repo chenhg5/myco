@@ -7,6 +7,7 @@
 - **管理员操作**：创建入网令牌、注册和删除 agent → [第 2 节](#2-管理员操作)
 - **客户端（agent 接入）**：每个要加入网络的 session 都做一次 → [第 3 节](#3-客户端安装-myco) 和 [第 4 节](#4-接入网络按你的类型选一节)
 - **升级与版本**：`myco version` 看版本，`myco upgrade` 升级 → [第 8 节](#8-升级与版本)
+- **Mac 控制台 App**：多个 Hub、机器和节点的图形界面 → [第 9 节](#9-mac-控制台-app预览)
 
 文档里的 `<HUB_URL>` 指 Hub 的地址，比如 `https://1-2-3-4.sslip.io`。
 
@@ -649,3 +650,18 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 - 不想重启服务：加 `--no-restart`。
 - Hub 和各台机器分别升级：Hub 所在机器执行 `sudo myco upgrade`（或 `myco upgrade`，如果是 `hub up` 开的），每台机器执行 `myco upgrade`。v0.16.6 之前的版本还没有这个命令，第一次请用原来的安装脚本升级。
 
+
+## 9. Mac 控制台 App（预览）
+
+一个菜单栏 App，可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网链接和二维码（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
+
+- **构建**：`make app` 生成 `bin/myco.app`（需要在 macOS 上，带 Go 和 Xcode 命令行工具）。CI 每次推送也会构建一份，在 Actions 的 Artifacts 里下载（还没签名，第一次打开要右键选"打开"）。
+- **接入 Hub**：在 Hub 机器上签发一把控制台令牌，填进 App 的"添加 Hub"，令牌存在钥匙串里：
+  ```bash
+  sudo /usr/local/bin/myco console token create --name <设备名>
+  ```
+- **机器和节点**：
+  - 机器是运行节点的电脑或服务器，按机器自己的稳定 ID（哈希后上报）唯一识别，同一台设备重新加入、改主机名都还是同一台（v0.16.9 起，需要那台机器升级 myco）。
+  - claude.ai、Codex cloud 等云端会话跑在临时 sandbox 里，不算机器。
+  - 节点分为 AI、shell、人三类；每个节点显示它用的 CLI 和模型（runner 上报：节点配置的 `runner.model`，或 CLI 自己设置里的默认模型）。
+- **在机器上开新会话**：App 里选机器 → CLI → 目录。以管理员身份发起，不受那台机器节点 allow-from 的限制；目录范围和权限上限仍由那台机器的 `machine.yaml` 决定。需要那台机器是用入网链接接入的、myco 是 v0.16.5 以上，且 runner 在运行。
