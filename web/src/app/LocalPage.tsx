@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ver } from "./nodes";
 import {
-  AlertTriangle, Check, Cloud, Copy, ExternalLink, Terminal, Waypoints,
+  AlertTriangle, Cloud, ExternalLink, Terminal, Waypoints,
 } from "lucide-react";
 import {
   appApi, errorMessage, type LocalState, type StartLocalHubInput, type StartLocalHubResult,
 } from "@/appapi";
+import { CopyButton } from "@/app/copy";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { cn } from "@/lib/utils";
 
@@ -35,40 +37,6 @@ const CHOICES: { key: Choice; title: string; desc: string; missing?: string }[] 
     desc: "不对外公开，只有同一局域网里的电脑能连上。",
   },
 ];
-
-function useCopy(value: string) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number | null>(null);
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
-  const copy = useCallback(async () => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-      await navigator.clipboard.writeText(value);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = value;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); } catch { /* ignore */ }
-      document.body.removeChild(ta);
-    }
-    setCopied(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setCopied(false), 1500);
-  }, [value]);
-  return { copied, copy };
-}
-
-function CopyButton({ value }: { value: string }) {
-  const { copied, copy } = useCopy(value);
-  return (
-    <button type="button" className="app-btn app-btn-small" onClick={() => void copy()}>
-      {copied ? <Check /> : <Copy />}{copied ? "已复制" : "复制"}
-    </button>
-  );
-}
 
 function UrlRow({ label, value }: { label: string; value: string }) {
   return (
@@ -286,7 +254,7 @@ export function LocalPage({ refreshKey, onRefresh, onViewHub }: {
             {hub.version && (
               <div className="app-kv">
                 <span className="app-kv-label">版本</span>
-                <span className="app-kv-value">v{hub.version}</span>
+                <span className="app-kv-value">{ver(hub.version)}</span>
               </div>
             )}
           </div>

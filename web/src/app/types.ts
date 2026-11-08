@@ -7,9 +7,14 @@ export interface AgentRow {
   st: AgentStatus;
 }
 
+/** Node kinds that are shown in the UI; `machine` nodes never are. */
+export type NodeKind = "agent" | "shell" | "human";
+
 export interface Filters {
   query: string;
   hub: string;
+  /** "all", "cloud" (cloud sessions), or `m:<hubId>:<machineId>`. */
   machine: string;
   state: State | "all";
+  kind: NodeKind | "all";
 }

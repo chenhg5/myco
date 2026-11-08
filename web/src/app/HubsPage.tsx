@@ -1,5 +1,7 @@
 import type { Hub, HubOverview } from "@/appapi";
+import { ver } from "./nodes";
 import { Plus } from "lucide-react";
+import { agentKind } from "@/app/nodes";
 import { cn } from "@/lib/utils";
 
 function host(url: string) {
@@ -13,7 +15,10 @@ export function HubsPage({ hubs, hubsOv, onAdd, onRemove, onOpenHub }: {
   onRemove: (hub: Hub) => void;
   onOpenHub: (hub: Hub) => void;
 }) {
-  const agentCount = (id: string) => hubsOv?.find((h) => h.id === id)?.overview?.agents.length;
+  // Machine nodes (`xxx-machine`) are not nodes.
+  const agentCount = (id: string) => hubsOv
+    ?.find((h) => h.id === id)
+    ?.overview?.agents.filter((st) => agentKind(st.agent) !== "machine").length;
   return (
     <div className="app-page">
       <p className="app-summary">已添加 {hubs.length} 个 Hub</p>
@@ -35,7 +40,7 @@ export function HubsPage({ hubs, hubsOv, onAdd, onRemove, onOpenHub }: {
                 <span className="app-row-title">{h.name}</span>
                 <span className="app-row-sub">
                   <span className="txt mono">{host(h.url)}</span>
-                  {h.hub_version && <><span className="sep">·</span><span className="txt">v{h.hub_version}</span></>}
+                  {h.hub_version && <><span className="sep">·</span><span className="txt">{ver(h.hub_version)}</span></>}
                   {h.update_available && <span className="app-update-pill">可更新</span>}
                   <span className="sep">·</span>
                   {online

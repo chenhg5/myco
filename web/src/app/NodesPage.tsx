@@ -1,11 +1,15 @@
 import { useEffect, useMemo } from "react";
-import { AlertTriangle, ChevronDown, Search, Server } from "lucide-react";
+import { ver } from "./nodes";
+import { AlertTriangle, ChevronDown, Plus, Search, Server } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
-import type { AgentRow } from "@/app/types";
-import { harnessInfo, stateMeta } from "@/components/status";
-import { cn, timeAgo } from "@/lib/utils";
-import type { Filters } from "@/app/types";
+import type { AgentRow, Filters, NodeKind } from "@/app/types";
+import {
+  CLOUD_FILTER, agentKind, cliName, isCloud, machineFilterValue, machineLabel, nodeIcon,
+  parseMachineFilter,
+} from "@/app/nodes";
+import { stateMeta } from "@/components/status";
+import { cn } from "@/lib/utils";
 
 function host(url: string) {
   try { return new URL(url).host || url; } catch { return url; }
@@ -19,10 +23,12 @@ const STATE_OPTIONS: { value: State | "all"; label: string }[] = [
   { value: "offline", label: "离线" },
 ];
 
-export function machineOf(row: AgentRow): string | undefined {
-  const l = row.st.agent.labels.find((x) => x.startsWith("machine="));
-  return l ? l.slice("machine=".length) : undefined;
-}
+const KIND_OPTIONS: { value: NodeKind | "all"; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "agent", label: "AI" },
+  { value: "shell", label: "shell" },
+  { value: "human", label: "人" },
+];
 
 function tasksOf(row: AgentRow): string {
   return [
@@ -32,34 +38,42 @@ function tasksOf(row: AgentRow): string {
   ].filter(Boolean).join(" · ");
 }
 
-export function AgentRowView({ row, now, onClick, showHub }: {
+/** One node row: kind icon, name, state · CLI + model · machine. */
+export function NodeRowView({ row, highlight, onClick }: {
   row: AgentRow;
-  now: number;
+  highlight?: boolean;
   onClick: () => void;
-  /** Show the hub name in the subtitle instead of the machine (machines page). */
-  showHub?: boolean;
 }) {
-  const ag = row.st.agent;
+  const a = row.st.agent;
+  const kind = agentKind(a);
   const state = stateMeta[row.st.state];
-  const Icon = harnessInfo(ag.binding.harness).icon;
-  const where = showHub ? row.hub.name : machineOf(row);
+  const Icon = nodeIcon(a);
+  const machine = machineLabel(row);
+  const model = a.runtime?.model;
   const tasks = tasksOf(row);
   return (
     <button
       type="button"
-      className={cn("app-row", row.st.state === "offline" && "offline")}
+      className={cn("app-row", row.st.state === "offline" && "offline", highlight && "is-new")}
       onClick={onClick}
-      title={ag.display_name || ag.name}
+      title={a.display_name || a.name}
     >
       <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
       <span className="app-row-main">
-        <span className="app-row-title">{ag.display_name || ag.name}</span>
+        <span className="app-row-title">{a.display_name || a.name}</span>
         <span className="app-row-sub">
           <span className={cn("dot", row.st.state)} />
           <span>{state.label}</span>
-          {where && <><span className="sep">·</span><span className="txt">{where}</span></>}
           <span className="sep">·</span>
-          <span className="txt">{timeAgo(ag.last_seen_at, now)}</span>
+          {kind === "human" ? (
+            <span className="txt">人</span>
+          ) : (
+            <>
+              <span className="txt">{cliName(a)}</span>
+              {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}
+            </>
+          )}
+          {machine && <><span className="sep">·</span><span className="txt">{machine}</span></>}
         </span>
       </span>
       <span className="app-row-trail">
@@ -70,34 +84,50 @@ export function AgentRowView({ row, now, onClick, showHub }: {
   );
 }
 
-export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, now, onOpen }: {
+export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd }: {
   rows: AgentRow[];
   hubs: HubOverview[] | undefined;
   hubMeta: Hub[];
   loading: boolean;
   filters: Filters;
   onFilters: (f: Filters) => void;
-  now: number;
+  highlight: { hubId: string; name: string } | null;
   onOpen: (row: AgentRow) => void;
+  onAdd: () => void;
 }) {
-  const machines = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => { const m = machineOf(r); if (m) set.add(m); });
-    return [...set].sort();
-  }, [rows]);
+  // Machine nodes (`xxx-machine`) are not nodes.
+  const nodes = useMemo(() => rows.filter((r) => agentKind(r.st.agent) !== "machine"), [rows]);
+
+  // Real machines, grouped by hub, for the machine filter.
+  const machineGroups = useMemo(() => {
+    return (hubs || [])
+      .map((h) => ({
+        hub: h.name,
+        machines: (h.overview?.machines || []).map((m) => ({
+          value: machineFilterValue(h.id, m.id),
+          label: m.name,
+        })),
+      }))
+      .filter((g) => g.machines.length > 0);
+  }, [hubs]);
+  const machineValues = useMemo(
+    () => machineGroups.flatMap((g) => g.machines.map((m) => m.value)),
+    [machineGroups],
+  );
 
   // A machine that disappeared from the data must not stay selected.
   useEffect(() => {
-    if (filters.machine !== "all" && !machines.includes(filters.machine)) {
+    if (filters.machine === "all" || filters.machine === CLOUD_FILTER) return;
+    if (!machineValues.includes(filters.machine)) {
       onFilters({ ...filters, machine: "all" });
     }
-  }, [machines, filters, onFilters]);
+  }, [machineValues, filters, onFilters]);
 
   const counts = useMemo(() => {
-    const c = { total: rows.length, working: 0, pending: 0, idle: 0, offline: 0 };
-    rows.forEach((r) => { c[r.st.state] += 1; });
+    const c = { total: nodes.length, working: 0, pending: 0, idle: 0, offline: 0 };
+    nodes.forEach((r) => { c[r.st.state] += 1; });
     return c;
-  }, [rows]);
+  }, [nodes]);
 
   const summary = [
     `${counts.total} 个节点`,
@@ -110,14 +140,24 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
 
   const filtered = useMemo(() => {
     const q = filters.query.trim().toLowerCase();
-    return rows.filter((r) =>
-      (filters.hub === "all" || r.hub.id === filters.hub) &&
-      (filters.machine === "all" || machineOf(r) === filters.machine) &&
-      (filters.state === "all" || r.st.state === filters.state) &&
-      (!q || [r.st.agent.name, r.st.agent.display_name, r.st.agent.description]
-        .filter(Boolean).some((x) => String(x).toLowerCase().includes(q))),
-    );
-  }, [rows, filters]);
+    const machineFilter = parseMachineFilter(filters.machine);
+    return nodes.filter((r) => {
+      const a = r.st.agent;
+      const machineOk = filters.machine === "all"
+        ? true
+        : filters.machine === CLOUD_FILTER
+          ? isCloud(a)
+          : !!machineFilter && r.hub.id === machineFilter.hubId && a.machine_id === machineFilter.machineId;
+      return (filters.hub === "all" || r.hub.id === filters.hub) &&
+        (filters.kind === "all" || agentKind(a) === filters.kind) &&
+        machineOk &&
+        (filters.state === "all" || r.st.state === filters.state) &&
+        (!q || [
+          a.name, a.display_name, a.description, cliName(a), a.runtime?.model, machineLabel(r),
+          ...a.labels,
+        ].filter(Boolean).some((x) => String(x).toLowerCase().includes(q)));
+    });
+  }, [nodes, filters]);
 
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
 
@@ -129,7 +169,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
 
   return (
     <div className="app-page">
-      <p className="app-summary">{hubs ? summary : "正在加载…"}</p>
+      <div className="app-page-head">
+        <p className="app-summary">{hubs ? summary : "正在加载…"}</p>
+        <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
+          <Plus />添加节点
+        </button>
+      </div>
 
       <div className="app-toolbar">
         <div className="app-search">
@@ -137,8 +182,22 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
           <input
             value={filters.query}
             onChange={(e) => set({ query: e.target.value })}
-            placeholder="搜索名称、显示名或描述"
+            placeholder="搜索名称、CLI、模型或机器"
           />
+        </div>
+        <div className="seg seg-sm" role="tablist" aria-label="类型筛选">
+          {KIND_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="tab"
+              aria-selected={filters.kind === o.value}
+              className={cn("seg-btn", filters.kind === o.value && "active")}
+              onClick={() => set({ kind: o.value })}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
         <div className="seg seg-sm" role="tablist" aria-label="状态筛选">
           {STATE_OPTIONS.map((o) => (
@@ -164,7 +223,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
         <span className="app-select-wrap">
           <select className="app-select" value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
             <option value="all">全部机器</option>
-            {machines.map((m) => <option key={m} value={m}>{m}</option>)}
+            <option value={CLOUD_FILTER}>云端</option>
+            {machineGroups.map((g) => (
+              <optgroup key={g.hub} label={g.hub}>
+                {g.machines.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </optgroup>
+            ))}
           </select>
           <ChevronDown />
         </span>
@@ -175,8 +239,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
       ) : groups.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Server /></div>
-          <h2>{rows.length ? "没有匹配的节点" : "还没有节点"}</h2>
-          <p>{rows.length ? "换一个搜索或筛选条件试试。" : "在任意 Hub 上接入一个 agent 后，它会出现在这里。"}</p>
+          <h2>{nodes.length ? "没有匹配的节点" : "还没有节点"}</h2>
+          <p>{nodes.length ? "换一个搜索或筛选条件试试。" : "在任意 Hub 上接入一个 agent 后，它会出现在这里。"}</p>
         </div>
       ) : (
         groups.map((g) => (
@@ -185,7 +249,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
               <span className="name">{g.hub.name}</span>
               <span className="parts">
                 {g.meta && <><span className="sep">·</span><span className="part mono">{host(g.meta.url)}</span></>}
-                {g.meta?.hub_version && <><span className="sep">·</span><span className="part">v{g.meta.hub_version}</span></>}
+                {g.meta?.hub_version && <><span className="sep">·</span><span className="part">{ver(g.meta.hub_version)}</span></>}
                 {g.meta?.update_available && <span className="app-update-pill">可更新</span>}
                 {!g.hub.ok && <><span className="sep">·</span><span className="part" style={{ color: "var(--red)" }}>连不上</span></>}
               </span>
@@ -200,7 +264,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
                 <div className="app-empty-note">这个 Hub 上还没有节点。</div>
               ) : (
                 g.rows.map((r) => (
-                  <AgentRowView key={r.st.agent.id} row={r} now={now} onClick={() => onOpen(r)} />
+                  <NodeRowView
+                    key={r.st.agent.id}
+                    row={r}
+                    highlight={highlight?.hubId === r.hub.id && highlight.name === r.st.agent.name}
+                    onClick={() => onOpen(r)}
+                  />
                 ))
               )}
             </div>

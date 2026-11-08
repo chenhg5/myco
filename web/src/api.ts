@@ -1,11 +1,38 @@
 // Types mirror internal/api (the hub's JSON contract).
 export interface Binding { harness?: string; session_id?: string; environment?: string; workdir?: string }
 export interface Delivery { mode: string; url?: string; has_secret?: boolean; params?: Record<string, string> }
+
+/** What a node is. `machine` is a machine node (`xxx-machine`), not shown as a node. */
+export type AgentKind = "agent" | "shell" | "human" | "machine";
+export type RuntimeAccess = "readonly" | "workspace" | "full";
+export type ModelSource = "configured" | "cli-config" | "observed" | "default";
+/** What the node actually runs; absent on nodes reported by old runners. */
+export interface Runtime {
+  cli: string;
+  cli_version?: string;
+  model?: string;
+  model_source?: ModelSource;
+  access?: RuntimeAccess;
+}
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   status_text?: string; status_at?: string; capabilities: string[]; labels: string[];
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
+  kind?: AgentKind; machine_id?: string; runtime?: Runtime;
+}
+/** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
+export interface Machine {
+  id: string; name: string; hostname: string;
+  os: "darwin" | "linux" | "windows" | "cloud";
+  arch?: string; myco_version?: string;
+  online: boolean; last_seen_at?: string;
+  /** False when the runner is too old or not running; such a machine cannot spawn. */
+  can_spawn: boolean;
+  /** Names of the nodes on it (machine nodes excluded). */
+  agents: string[];
+  /** Its runners predate machine reporting: grouped by host name, cannot be renamed. */
+  legacy?: boolean;
 }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
@@ -18,7 +45,7 @@ export interface AgentStatus { agent: Agent; state: State; queued: number; in_pr
 export interface Overview {
   generated_at: string; viewer: { kind: "agent" | "admin"; name?: string }; online_window_seconds: number;
   totals: { agents: number; working: number; pending: number; idle: number; offline: number };
-  agents: AgentStatus[]; recent: Message[];
+  agents: AgentStatus[]; machines?: Machine[]; recent: Message[];
 }
 export interface Session {
   hub: string; version: string; agent?: string; admin: boolean;

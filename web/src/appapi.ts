@@ -1,4 +1,4 @@
-import type { Message, Overview } from "@/api";
+import type { Agent, Machine, Message, Overview, RuntimeAccess } from "@/api";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 export interface Hub {
@@ -26,6 +26,29 @@ export interface AppOverview {
 
 export interface NewHub { name: string; url: string; token: string }
 export interface ProfileInput { display_name?: string; description?: string }
+
+/** CLIs that a machine can be asked to start a new session with. */
+export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode";
+export interface SpawnInput {
+  cli: SpawnCli;
+  /** Directory on that machine; `~/...` is that machine's home directory. */
+  dir: string;
+  name?: string;
+  description?: string;
+  model?: string;
+  access?: RuntimeAccess;
+}
+export interface SpawnResult {
+  agent: Agent;
+  session_id: string;
+  cli: string;
+  workdir: string;
+  access: RuntimeAccess;
+  /** The new session's first reply. */
+  reply: string;
+}
+export interface JoinLinkInput { uses?: number; expires_hours?: number }
+export interface JoinLink { join_url: string; command: string }
 
 /** How the App window is hosted: native macOS shell or a plain browser. */
 export type Shell = "mac" | "browser";
@@ -148,6 +171,15 @@ export const appApi = {
     request<void>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/kick`),
   removeAgent: (hubId: string, name: string) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}`),
+
+  /** Starts a session on a machine; the machine may take up to two minutes. */
+  spawn: (hubId: string, machineId: string, input: SpawnInput) =>
+    request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
+  renameMachine: (hubId: string, machineId: string, name: string) =>
+    request<Machine>("PATCH", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}`, { name }),
+  /** Creates a one-off enrollment link for adding another machine to this hub. */
+  createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
+    request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
 
   local: () => request<LocalState>("GET", "app/local"),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
