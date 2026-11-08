@@ -330,11 +330,6 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           <span className={cn("app-pill", pillClass[row.st.state])}>
             <span className={cn("dot", row.st.state)} />{state.label}
           </span>
-          {(kind === "agent" || kind === "shell") && (
-            <button type="button" className="app-btn app-btn-plain" onClick={() => onMessage(row)} aria-label="发消息" title="发消息">
-              <MessageSquare />
-            </button>
-          )}
           <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label="关闭">
             <X />
           </button>
@@ -418,7 +413,14 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">和你的对话</span></div>
+            <div className="app-group-title">
+              <span className="name">和你的对话</span>
+              {(kind === "agent" || kind === "shell") && (
+                <button type="button" className="app-group-action" onClick={() => onMessage(row)}>
+                  <MessageSquare />发消息
+                </button>
+              )}
+            </div>
             <div className="app-list"><MessageRows row={row} now={now} mine onThread={onThread} /></div>
           </section>
 
