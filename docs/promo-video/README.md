@@ -36,3 +36,12 @@ LANG_FILM=zh node render.mjs film && LANG_FILM=zh node render.mjs mix     # $WOR
 ```
 
 The agents' marks are their owners' trademarks, shown to name the products myco works with: Claude and Cursor from simple-icons 16.36.0, OpenAI from simple-icons 13.21.0, Grok from grok.com.
+
+The repository copies are re-encoded for size (CRF 26), with an 8-second animated preview for the READMEs:
+
+```bash
+ffmpeg -i $WORK/out-zh/myco-promo-zh.mp4 -c:v libx264 -preset slow -crf 26 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart docs/assets/myco-promo-zh.mp4
+ffmpeg -ss 18 -t 8 -i $WORK/out-zh/myco-promo-zh.mp4 -vf "fps=15,scale=960:-1:flags=lanczos" -c:v libwebp -quality 72 -loop 0 -an docs/assets/myco-promo-preview-zh.webp
+```
+
+(English: `myco-promo.mp4` and `myco-promo-preview.webp`.)

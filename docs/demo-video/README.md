@@ -1,6 +1,6 @@
 # Demo video source
 
-`docs/assets/myco-demo.mp4` (English) and `docs/assets/myco-demo-zh.mp4` (Chinese), and the README GIFs, are rendered from these files. Every frame is drawn by
+This is the earlier demo film, replaced in the READMEs by the one-minute film in [`docs/promo-video`](../promo-video/). Its rendered videos are no longer kept in the repo (see git history before this change); render them from these files if needed. Every frame is drawn by
 `film.html` as a pure function of time; `render.mjs` steps through it with Playwright and pipes the frames
 to ffmpeg. The team sequence uses messages from a real myco run (three Claude Code agents and an exec
 node), shortened.

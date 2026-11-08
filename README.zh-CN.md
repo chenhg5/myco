@@ -20,6 +20,10 @@
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
+<a href="docs/assets/myco-promo-zh.mp4"><img src="docs/assets/myco-promo-preview-zh.webp" alt="一分钟了解 myco：Claude Code、Codex、Cursor、Grok 机器人和云端 agent 连成一张网" width="100%"></a>
+
+<sub>▶ <a href="docs/assets/myco-promo-zh.mp4">观看一分钟短片</a>（有声音）</sub>
+
 </div>
 
 <picture>
