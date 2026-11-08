@@ -60,6 +60,105 @@ const studioThread = [
   makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
 ];
 
+// The App talks as "@console:<device>"; a thread counts as a conversation
+// only when it has one of these messages.
+const CONSOLE = `@console:${"glenn-mac"}`;
+
+const consoleThreads = {
+  th_console_release: [
+    makeMessage({ thread_id: "th_console_release", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: "整理 v0.16.8 的发布说明，列出主要变化和升级注意事项。", created_at: iso(7200), updated_at: iso(7200) }),
+    makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "progress", status: "done", body: "正在读取 git log 和 CHANGELOG…", created_at: iso(7000), updated_at: iso(7000) }),
+    makeMessage({
+      thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done",
+      body: [
+        "## v0.16.8 发布说明",
+        "",
+        "本次发布主要包含：",
+        "",
+        "- 对话页支持 Markdown 表格与代码块",
+        "- 本机会话一键接入",
+        "",
+        "| 项目 | 变化 |",
+        "| --- | --- |",
+        "| App | 新增对话 |",
+        "| Hub | 修复 runner 重连 |",
+        "",
+        "升级前请先跑一遍：",
+        "",
+        "```bash",
+        "make check",
+        "```",
+        "",
+        "详情见 [发布页](https://example.com/releases/v0.16.8)。",
+        "",
+        '<img src=x onerror=alert(1)>',
+      ].join("\n"),
+      created_at: iso(6600), updated_at: iso(6600),
+    }),
+  ],
+  th_console_exec: [
+    makeMessage({ thread_id: "th_console_exec", from: CONSOLE, to: "ios-shell", type: "task", status: "done", body: "跑一遍 iOS 测试套件，把结果贴给我。", created_at: iso(9000), updated_at: iso(9000) }),
+    makeMessage({
+      thread_id: "th_console_exec", from: "ios-shell", to: CONSOLE, type: "reply", status: "done",
+      body: JSON.stringify({
+        exit_code: 0,
+        stdout: "Test Suite 'All tests' passed.\nExecuted 128 tests, with 0 failures (0 unexpected) in 41.8 seconds",
+        stderr: "",
+        duration_ms: 41820,
+      }, null, 2),
+      created_at: iso(8700), updated_at: iso(8700),
+    }),
+  ],
+  th_console_fail: [
+    makeMessage({ thread_id: "th_console_fail", from: CONSOLE, to: "docs-claude", type: "task", status: "done", body: "把 README 里的截图更新一下。", created_at: iso(15000), updated_at: iso(15000) }),
+    makeMessage({
+      thread_id: "th_console_fail", from: "docs-claude", to: CONSOLE, type: "event", status: "failed",
+      body: "任务失败：docs-claude 的会话已退出（exit 1）。",
+      created_at: iso(14700), updated_at: iso(14700),
+    }),
+  ],
+  th_console_attach: [
+    makeMessage({ thread_id: "th_console_attach", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: "把最新的构建日志发我。", created_at: iso(18600), updated_at: iso(18600) }),
+    makeMessage({
+      thread_id: "th_console_attach", from: "pm-codex", to: CONSOLE, type: "reply", status: "done",
+      body: "构建日志见附件，最后一行是 BUILD SUCCESSFUL。",
+      attachments: [{ file_id: "f_demo_build", name: "build-0.16.8.log", size: 18432, sha256: "demo", content_type: "text/plain" }],
+      created_at: iso(18300), updated_at: iso(18300),
+    }),
+  ],
+  th_console_busy: [
+    makeMessage({ thread_id: "th_console_busy", from: CONSOLE, to: "ios-shell", type: "task", status: "delivered", body: "在后台跑性能测试，完成后告诉我。", created_at: iso(180), updated_at: iso(120) }),
+    makeMessage({ thread_id: "th_console_busy", from: "ios-shell", to: CONSOLE, type: "progress", status: "done", body: "已经跑完 3/5 个场景…", created_at: iso(60), updated_at: iso(60) }),
+  ],
+};
+
+// Claude Code / Codex transcripts on this computer, newest first. Two are
+// already joined (one here, one on another Hub).
+const localSessions = [
+  {
+    cli: "claude", session_id: "7c1d9f4e-2a6b-4c18-9e0d-4a1f2b3c5d6e",
+    workdir: "/Users/glenn/code/myco", last_active: iso(120),
+    title: "让 App 支持对话列表",
+  },
+  {
+    cli: "codex", session_id: "019f20c1-a446-7812-bbc8-ce4ac3b889f6",
+    workdir: "/Users/glenn/code/app-web", last_active: iso(900),
+    title: "整理 App 第二版上线清单",
+  },
+  {
+    cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    workdir: "/Users/glenn/code/infra", last_active: iso(3600),
+    title: "检查 Hub 的隧道配置",
+    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780" },
+  },
+  {
+    cli: "codex", session_id: "019f0f11-3c2b-7a10-8d4e-9f8a7b6c5d4e",
+    workdir: "/Users/glenn/code/notes", last_active: iso(7200),
+    joined: { agent: "glenn-mac-codex-ab12", hub: "https://other-hub.example.com" },
+  },
+];
+
+
 const state = {
   hubs: [
     {
@@ -70,7 +169,7 @@ const state = {
       ok: true,
       hub_version: "0.16.6",
       update_available: true,
-      threads: { th_release: studioThread },
+      threads: { th_release: studioThread, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
@@ -167,6 +266,92 @@ const state = {
 };
 
 if (EMPTY) state.hubs = [];
+
+// Local joins alternate between a healthy runner and a warning, so both
+// states can be seen without restarting the mock.
+let joinCount = 0;
+let replySeq = 0;
+
+function consoleReply() {
+  replySeq += 1;
+  const form = (replySeq - 1) % 4;
+  if (form === 0) {
+    return {
+      body: [
+        "## 已完成",
+        "",
+        "我检查了当前工作区，主要结论如下：",
+        "",
+        "| 检查项 | 结果 |",
+        "| --- | --- |",
+        "| 类型检查 | 通过 |",
+        "| 单元测试 | 通过 |",
+        "",
+        "```bash",
+        "npm run build && make check",
+        "```",
+        "",
+        "还有一处建议：发布前再跑一遍完整的集成测试。",
+      ].join("\n"),
+    };
+  }
+  if (form === 1) {
+    return {
+      body: JSON.stringify({
+        exit_code: 0,
+        stdout: "go test ./...\nok  github.com/chenhg5/myco/internal/app\nok  github.com/chenhg5/myco/internal/console",
+        stderr: "",
+        duration_ms: 12340,
+      }, null, 2),
+    };
+  }
+  if (form === 2) {
+    return {
+      body: "处理好了。改动集中在 console 的 session 读取和 App 的对话页面，类型检查和构建都已经通过。\n\n需要我继续把发布说明也写好吗？",
+    };
+  }
+  return {
+    body: "跑完了，日志在附件里。最后一行是 BUILD SUCCESSFUL。",
+    attachments: [{ file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" }],
+  };
+}
+
+// A task gets a progress note after 3s and a reply after 6s.
+function scheduleReply(hub, threadId, agent, taskId) {
+  const later = (ms, fn) => { const t = setTimeout(fn, ms); if (typeof t.unref === "function") t.unref(); };
+  later(3000, () => {
+    const msgs = hub.threads[threadId];
+    if (!msgs) return;
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done",
+      body: "正在处理…", created_at: iso(0), updated_at: iso(0),
+    }));
+  });
+  later(6000, () => {
+    const msgs = hub.threads[threadId];
+    if (!msgs) return;
+    const r = consoleReply();
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
+      body: r.body, ...(r.attachments ? { attachments: r.attachments } : {}),
+      reply_to: taskId, created_at: iso(0), updated_at: iso(0),
+    }));
+    const task = msgs.find((m) => m.id === taskId);
+    if (task) {
+      task.status = "done";
+      task.updated_at = iso(0);
+    }
+  });
+}
+
+function conversationAgent(msgs) {
+  for (const m of msgs) {
+    for (const n of [m.from, m.to]) {
+      if (n && !n.startsWith("@console:")) return n;
+    }
+  }
+  return "";
+}
 
 // This machine: myco ships with the App, cloudflared is present, Tailscale is not.
 const local = {
@@ -344,6 +529,11 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
 
+    // /app/local/sessions — Claude Code / Codex transcripts on this computer.
+    if (parts.length === 3 && parts[2] === "sessions" && method === "GET") {
+      return send(res, 200, { sessions: localSessions });
+    }
+
     if (parts.length === 3 && parts[2] === "myco" && method === "POST") {
       if (!local.myco) {
         await sleep(2000);
@@ -442,6 +632,128 @@ const server = http.createServer(async (req, res) => {
       state.hubs = state.hubs.filter((h) => h.id !== hub.id);
       if (hub.id === "hub_local" && local.hub) local.hub.added = false;
       return send(res, 204);
+    }
+
+    // /app/hubs/{id}/local-join — make a session on this computer an agent.
+    if (parts.length === 4 && parts[3] === "local-join" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = await readBody(req);
+      const s = localSessions.find((x) => x.cli === body?.cli && x.session_id === body?.session_id);
+      if (!s) {
+        return fail(res, 400, "invalid_argument", "pick a session from the list (its directory must exist)");
+      }
+      if (s.joined) return fail(res, 409, "already_joined", "这个会话已经加入过了。");
+
+      await sleep(2000);
+      joinCount += 1;
+      state.counter += 1;
+      const suffix = s.session_id.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-4) || String(state.counter);
+      const name = `${local.device}-${s.cli}-${suffix}`;
+      const machine = (hub.machines || []).find((m) => m.can_spawn);
+      const agent = makeAgent({
+        name,
+        display_name: typeof body.display_name === "string" && body.display_name.trim() ? body.display_name.trim() : undefined,
+        description: "从本机会话加入",
+        kind: "agent",
+        machine_id: machine?.id,
+        runtime: {
+          cli: s.cli, cli_version: CLI_VERSIONS[s.cli], model: CLI_MODELS[s.cli],
+          model_source: "default", access: "workspace",
+        },
+        labels: [`machine=${local.device}`],
+        binding: { harness: s.cli, workdir: s.workdir, session_id: s.session_id },
+        created_at: iso(0), last_seen_at: iso(0),
+      });
+      hub.agents.push(agent);
+      s.joined = { agent: name, hub: hub.url };
+      const runner = joinCount % 2 === 1
+        ? "running"
+        : "not running: start the myco runner on this computer";
+      return send(res, 200, { agent: name, created: true, runner });
+    }
+
+    // /app/hubs/{id}/conversations — the console's threads, newest first.
+    if (parts.length === 4 && parts[3] === "conversations" && method === "GET") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const agentFilter = url.searchParams.get("agent") || "";
+      const before = Number(url.searchParams.get("before") || 0);
+      const list = Object.entries(hub.threads || {})
+        .map(([threadId, msgs]) => {
+          if (!msgs.some((m) => m.from.startsWith("@console:"))) return null;
+          const agent = conversationAgent(msgs);
+          if (agentFilter && agent !== agentFilter) return null;
+          if (q && !(
+            agent.toLowerCase().includes(q) ||
+            msgs.some((m) => (m.body || "").toLowerCase().includes(q))
+          )) return null;
+          const last = msgs[msgs.length - 1];
+          const updated = last.updated_at || last.created_at;
+          if (before && new Date(updated).getTime() >= before) return null;
+          return {
+            thread_id: threadId, agent, updated_at: updated,
+            first: msgs[0], last, messages: msgs.length,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      return send(res, 200, { conversations: list.slice(0, 30) });
+    }
+
+    // /app/hubs/{id}/messages — a task from the console.
+    if (parts.length === 4 && parts[3] === "messages" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = await readBody(req);
+      const to = typeof body?.to === "string" ? body.to.trim() : "";
+      const text = typeof body?.body === "string" ? body.body.trim() : "";
+      const target = (hub.agents || []).find(
+        (a) => a.name === to && (a.kind === "agent" || a.kind === "shell"),
+      );
+      if (!target) return fail(res, 404, "not_found", `没有名为 ${to} 的 AI 或 shell 节点`);
+      if (!text) return fail(res, 400, "invalid_argument", "body 不能为空。");
+      const threadId = typeof body.thread_id === "string" && body.thread_id.trim()
+        ? body.thread_id.trim()
+        : `th_c_${state.counter += 1}`;
+      const msg = makeMessage({
+        thread_id: threadId, from: CONSOLE, to, type: "task", status: "queued",
+        body: text, created_at: iso(0), updated_at: iso(0),
+      });
+      if (!hub.threads) hub.threads = {};
+      if (!hub.threads[threadId]) hub.threads[threadId] = [];
+      hub.threads[threadId].push(msg);
+      hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
+      scheduleReply(hub, threadId, to, msg.id);
+      return send(res, 201, msg);
+    }
+
+    // /app/hubs/{id}/messages/{mid}/steer — correct an unfinished task.
+    if (parts.length === 6 && parts[3] === "messages" && parts[5] === "steer" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = await readBody(req);
+      const text = typeof body?.body === "string" ? body.body.trim() : "";
+      if (!text) return fail(res, 400, "invalid_argument", "body 不能为空。");
+      let msgs = null;
+      let task = null;
+      for (const arr of Object.values(hub.threads || {})) {
+        const found = arr.find((m) => m.id === parts[4]);
+        if (found) { msgs = arr; task = found; break; }
+      }
+      if (!msgs || !task) return fail(res, 404, "not_found", "没有这条消息");
+      if (!task.from.startsWith("@console:")) {
+        return fail(res, 403, "permission_denied", "只有从 App 发出的任务可以这样修正。");
+      }
+      if (!["queued", "delivered", "acked", "held"].includes(task.status)) {
+        return fail(res, 409, "task_finished", "这个任务已经结束了。");
+      }
+      const steer = makeMessage({
+        thread_id: task.thread_id, from: CONSOLE, to: task.to, type: "steer", status: "done",
+        body: text, reply_to: task.id, created_at: iso(0), updated_at: iso(0),
+      });
+      msgs.push(steer);
+      task.status = "delivered";
+      task.updated_at = iso(0);
+      scheduleReply(hub, task.thread_id, task.to, task.id);
+      return send(res, 201, steer);
     }
 
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {
