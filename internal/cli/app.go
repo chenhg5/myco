@@ -17,6 +17,8 @@ import (
 	"github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/release"
 )
 
 // Version is set at build time via -ldflags "-X .../cli.Version=...".
@@ -26,6 +28,12 @@ var Version = "dev"
 func Main(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if osutil.Windows {
+		// A Windows upgrade leaves the previous binary as myco.exe.old.
+		if self, err := os.Executable(); err == nil {
+			release.CleanupOld(self)
+		}
+	}
 	return Run(ctx, args, os.Stdin, os.Stdout, os.Stderr, os.Getenv, isTerminal(os.Stdout))
 }
 
@@ -310,11 +318,9 @@ func safePath(p string) error {
 	if err != nil {
 		return err
 	}
-	for _, bad := range []string{"/.ssh/", "/.gnupg/", "/.aws/", "/.myco/"} {
-		if strings.Contains(abs+"/", bad) {
-			return errorf("permission_denied", ExitPermission, "send content from a regular file",
-				"refusing to read %s: it is inside a credentials directory", p)
-		}
+	if osutil.InCredentialDir(abs) {
+		return errorf("permission_denied", ExitPermission, "send content from a regular file",
+			"refusing to read %s: it is inside a credentials directory", p)
 	}
 	return nil
 }

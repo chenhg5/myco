@@ -10,12 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 // Name is the registry key of the user-configurable template harness.
@@ -75,9 +75,7 @@ func Build(name string, spec harness.TemplateSpec, opts harness.Options) (harnes
 			var out []string
 			for _, p := range spec.Transcripts {
 				p = strings.ReplaceAll(p, "%s", id)
-				if strings.HasPrefix(p, "~/") {
-					p = filepath.Join(home, p[2:])
-				}
+				p = osutil.ExpandHome(p, home)
 				out = append(out, p)
 			}
 			return out

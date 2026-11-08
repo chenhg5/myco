@@ -22,7 +22,7 @@ func New(opts harness.Options) (harness.Harness, error) {
 		return nil, errors.New(`shell harness needs a command (runner.command in config, or --command)`)
 	}
 	if opts.Binary == "" {
-		opts.Binary = "/bin/sh"
+		opts.Binary = harness.DefaultShell()
 	}
 	return &shell{opts: opts}, nil
 }
@@ -30,7 +30,11 @@ func New(opts harness.Options) (harness.Harness, error) {
 func (s *shell) Name() string { return Name }
 
 func (s *shell) Run(ctx context.Context, req harness.Request) (harness.Result, error) {
-	args := append([]string{"-c", s.opts.Command, "myco-shell"}, s.opts.Args...)
+	extra := s.opts.Args
+	if harness.IsPOSIXShell(s.opts.Binary) {
+		extra = append([]string{"myco-shell"}, extra...) // $0
+	}
+	args := harness.ShellArgs(s.opts.Binary, s.opts.Command, extra...)
 	out, err := harness.Exec(ctx, harness.Process{
 		Binary: s.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: req.Env,
 	})
@@ -39,5 +43,5 @@ func (s *shell) Run(ctx context.Context, req harness.Request) (harness.Result, e
 
 // Check implements harness.Checker for the shell itself.
 func (s *shell) Check(ctx context.Context) harness.Check {
-	return harness.CheckBinary(ctx, s.opts.Binary, "-c", "echo ok")
+	return harness.CheckBinary(ctx, s.opts.Binary, harness.ShellArgs(s.opts.Binary, "echo ok")...)
 }

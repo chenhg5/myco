@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 func agentSpawnCommand() *Command {
@@ -116,13 +118,18 @@ func remoteDir(dir string) string {
 	if err != nil || home == "" || home == "/" {
 		return dir
 	}
-	if dir == home {
+	if !filepath.IsAbs(dir) || !osutil.Within(dir, home) {
+		return dir
+	}
+	rest, err := filepath.Rel(home, dir)
+	if err != nil {
+		return dir
+	}
+	if rest == "." {
 		return "~"
 	}
-	if rest, ok := strings.CutPrefix(dir, home+"/"); ok {
-		return "~/" + rest
-	}
-	return dir
+	// Forward slashes: the other machine may not share this OS.
+	return "~/" + filepath.ToSlash(rest)
 }
 
 // findMachineNode resolves --on: the machine node's own name, or a machine

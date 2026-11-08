@@ -16,6 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
+	"github.com/chenhg5/myco/internal/osutil"
 )
 
 // spawnBinary is the executable each spawnable CLI needs on PATH.
@@ -51,7 +52,7 @@ func (e *env) ensureMachineNode() (*api.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	host, user := hostname(), orDefault(e.in.Getenv("USER"), "user")
+	host, user := hostname(), orDefault(osutil.UserName(e.in.Getenv), "user")
 	b := api.Binding{Harness: machinenode.Name, Environment: host, Workdir: home,
 		SessionID: "machine:" + host + ":" + user}
 	c, err := client.New(m.Hub, m.EnrollToken)

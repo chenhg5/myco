@@ -16,6 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
+	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -250,13 +251,13 @@ func doctorProfile(ctx context.Context, p config.Profile, add func(scope, check,
 	}
 	if rc.EnvFile != "" {
 		path := rc.EnvFile
-		if strings.HasPrefix(path, "~/") {
+		if _, ok := osutil.HomeRelative(path); ok {
 			home, _ := os.UserHomeDir()
-			path = filepath.Join(home, path[2:])
+			path = osutil.ExpandHome(path, home)
 		}
 		if vars, err := config.ReadEnvFile(path); err != nil {
 			add(scope, "env_file", "fail", err.Error(), "fix runner.env_file")
-		} else if st, _ := os.Stat(path); st != nil && st.Mode().Perm()&0o077 != 0 {
+		} else if st, _ := os.Stat(path); osutil.UnixPermissions && st != nil && st.Mode().Perm()&0o077 != 0 {
 			add(scope, "env_file", "warn", fmt.Sprintf("%s is readable by others (%v)", path, st.Mode().Perm()), "chmod 600 "+path)
 		} else {
 			names := make([]string, 0, len(vars))

@@ -182,3 +182,52 @@ func TestReplaceIsAtomic(t *testing.T) {
 		}
 	}
 }
+
+func TestAssetNameWindows(t *testing.T) {
+	if got := AssetName("windows", "amd64"); got != "myco-windows-amd64.exe" {
+		t.Errorf("AssetName(windows) = %q", got)
+	}
+	if got := AssetName("darwin", "arm64"); got != "myco-darwin-arm64" {
+		t.Errorf("AssetName(darwin) = %q", got)
+	}
+}
+
+// swapWindows only renames, so its logic can be checked on any OS.
+func TestSwapWindows(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "myco.exe")
+	tmp := filepath.Join(dir, ".myco-upgrade-1")
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target+OldSuffix, []byte("older"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tmp, []byte("new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := swapWindows(tmp, target); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "new" {
+		t.Errorf("target = %q, want new", b)
+	}
+	if b, _ := os.ReadFile(target + OldSuffix); string(b) != "old" {
+		t.Errorf("old = %q, want the previous binary", b)
+	}
+	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
+		t.Error("temp file left behind")
+	}
+	CleanupOld(target)
+	if _, err := os.Stat(target + OldSuffix); !os.IsNotExist(err) {
+		t.Error("CleanupOld left the old binary")
+	}
+
+	// A failed swap puts the original back.
+	if err := swapWindows(filepath.Join(dir, "missing"), target); err == nil {
+		t.Fatal("want an error for a missing temp file")
+	}
+	if b, _ := os.ReadFile(target); string(b) != "new" {
+		t.Errorf("after a failed swap target = %q, want it restored", b)
+	}
+}

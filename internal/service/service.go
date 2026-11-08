@@ -94,7 +94,7 @@ func (id ID) orDefault() ID {
 }
 
 // ErrUnsupported is returned on platforms without a supported manager.
-var ErrUnsupported = errors.New("no supported service manager on this platform (launchd on macOS, systemd on Linux)")
+var ErrUnsupported = errors.New("no supported service manager on this platform (launchd on macOS, systemd on Linux); on Windows run `myco runner start` in a terminal for now")
 
 // Detect returns the runner service's manager for this OS.
 func Detect(home string, r Runner) (Manager, error) { return DetectID(home, r, RunnerID) }

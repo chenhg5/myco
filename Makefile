@@ -24,9 +24,10 @@ vet:
 	gofmt -l . | (! grep .) && go vet ./...
 
 cross:
-	@for os in linux darwin; do for arch in amd64 arm64; do \
+	@for os in linux darwin windows; do for arch in amd64 arm64; do \
+		ext=; [ $$os = windows ] && ext=.exe; \
 		echo "building $$os/$$arch"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags '$(LDFLAGS)' -o bin/myco-$$os-$$arch ./cmd/myco || exit 1; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags '$(LDFLAGS)' -o bin/myco-$$os-$$arch$$ext ./cmd/myco || exit 1; \
 	done; done
 
 clean:

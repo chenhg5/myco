@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -197,7 +198,21 @@ func (c *Checker) Run(ctx context.Context) {
 }
 
 // AssetName is the release asset for an OS and architecture.
-func AssetName(goos, goarch string) string { return "myco-" + goos + "-" + goarch }
+func AssetName(goos, goarch string) string {
+	name := "myco-" + goos + "-" + goarch
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// OldSuffix marks the binary a Windows upgrade moved aside: a running .exe
+// cannot be overwritten or deleted, only renamed. CleanupOld removes it
+// once that process has exited.
+const OldSuffix = ".old"
+
+// CleanupOld removes target+OldSuffix if a previous upgrade left one.
+func CleanupOld(target string) { _ = os.Remove(target + OldSuffix) }
 
 // Fetch downloads tag's asset for goos/goarch and verifies it against the
 // release's SHA256SUMS. It returns the verified bytes.
@@ -281,8 +296,41 @@ func Replace(target string, bin []byte) error {
 		os.Remove(tmp)
 		return err
 	}
+	if runtime.GOOS == "windows" {
+		return swapWindows(tmp, target)
+	}
 	if err := os.Rename(tmp, target); err != nil {
 		os.Remove(tmp)
+		if errors.Is(err, os.ErrPermission) {
+			return fmt.Errorf("%w: %v", ErrNotWritable, err)
+		}
+		return err
+	}
+	return nil
+}
+
+// swapWindows replaces target with tmp on Windows, where the running binary
+// can be renamed but not overwritten: target moves to target.old (removed by
+// the next run), tmp takes its place, and a failure moves target back.
+func swapWindows(tmp, target string) error {
+	old := target + OldSuffix
+	_ = os.Remove(old)
+	moved := false
+	if _, err := os.Stat(target); err == nil {
+		if err := os.Rename(target, old); err != nil {
+			os.Remove(tmp)
+			if errors.Is(err, os.ErrPermission) {
+				return fmt.Errorf("%w: %v", ErrNotWritable, err)
+			}
+			return err
+		}
+		moved = true
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		os.Remove(tmp)
+		if moved {
+			_ = os.Rename(old, target)
+		}
 		if errors.Is(err, os.ErrPermission) {
 			return fmt.Errorf("%w: %v", ErrNotWritable, err)
 		}
