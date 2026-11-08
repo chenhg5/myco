@@ -55,6 +55,12 @@ function cliIcon(cli: string) {
 
 /** Opens a new session, joins one already on this computer, or hands a link
  *  to another computer. */
+// One sentence for the agent on the other computer: install and register
+// the machine (safe to re-run if myco is already there), then join the session.
+function inviteSentence(command: string): string {
+  return `接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入。`;
+}
+
 export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onSpawned, onJoined }: {
   target: SpawnTarget | null;
   hubs: Hub[];
@@ -437,21 +443,14 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           {link && (
             <>
               <div className="app-field">
-                <span className="app-field-label">发给那台电脑上的 agent（Claude Code / Codex 会话里直接说）：</span>
+                <span className="app-field-label">把这句话发给那台电脑上的 agent（Claude Code / Codex 会话），它会自己装好 myco 并加入：</span>
                 <div className="app-command">
-                  <code>接入 myco：{link.join_url}</code>
-                  <CopyButton value={`接入 myco：${link.join_url}`} />
-                </div>
-              </div>
-              <div className="app-field">
-                <span className="app-field-label">那台电脑还没装 myco？先在它的终端运行：</span>
-                <div className="app-command">
-                  <code>{link.command}</code>
-                  <CopyButton value={link.command} />
+                  <code>{inviteSentence(link.command)}</code>
+                  <CopyButton value={inviteSentence(link.command)} />
                 </div>
               </div>
               <div className="app-small-note" style={{ marginTop: 10 }}>
-                链接 7 天内有效，可加入 5 台机器。
+                链接 7 天内有效，可加入 5 台机器。没有 agent 的话，在那台电脑的终端里照着这句话运行两条命令也一样。
               </div>
               <div className="app-modal-actions">
                 <button type="button" className="app-btn" onClick={() => void makeLink(true)} disabled={linkBusy}>

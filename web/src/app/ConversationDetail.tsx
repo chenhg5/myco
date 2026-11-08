@@ -32,11 +32,13 @@ function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
 }
 
-export function ConversationDetail({ target, rows, now, onBack }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation }: {
   target: ConversationTarget;
   rows: AgentRow[];
   now: number;
   onBack: () => void;
+  // Starts a new conversation of yours with the agent (from a read-only thread).
+  onNewConversation: (hubId: string, agent: string) => void;
 }) {
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -122,6 +124,14 @@ export function ConversationDetail({ target, rows, now, onBack }: {
         : { dot: "idle", label: "空闲" };
   const steerOn = steerMode && !!openTask;
 
+  // A thread you take no part in (two nodes working together) is only
+  // shown: writing into it would land in their conversation, not yours.
+  const observed = !!messages && messages.length > 0 &&
+    !messages.some((m) => isConsole(m.from) || isConsole(m.to));
+  const parties = observed
+    ? [...new Set(messages.flatMap((m) => [m.from, m.to]))].filter((n) => n && !n.startsWith("@"))
+    : [];
+
   const nameOf = (from: string): string => {
     if (isConsole(from)) return "你";
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
@@ -161,17 +171,18 @@ export function ConversationDetail({ target, rows, now, onBack }: {
           <ArrowLeft />
         </button>
         <div className="conv-head-titles">
-          <h2>{agentName}</h2>
+          <h2>{observed ? parties.map(nameOf).join(" ↔ ") : agentName}</h2>
           <p>
+            {observed && <>其他节点之间的消息 · </>}
             {target.hubName}
             {cli && <> · {cli}</>}
             {model && <> · <span className="mono">{model}</span></>}
           </p>
         </div>
-        <span className="conv-head-state">
+        {!observed && <span className="conv-head-state">
           <span className={cn("dot", state.dot)} />
           {messages === null ? "加载中" : state.label}
-        </span>
+        </span>}
       </header>
 
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -203,7 +214,8 @@ export function ConversationDetail({ target, rows, now, onBack }: {
                   </div>
                 );
               }
-              const mine = isConsole(m.from);
+              // In an observed thread, the node you opened is on the right.
+              const mine = observed ? m.from === target.agent : isConsole(m.from);
               return (
                 <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} key={m.id}>
                   <div className="conv-msg-name">{nameOf(m.from)}</div>
@@ -233,6 +245,14 @@ export function ConversationDetail({ target, rows, now, onBack }: {
         </div>
       </div>
 
+      {observed ? (
+        <div className="conv-observe">
+          <span>这是节点之间的协作记录，你只能查看。</span>
+          <button type="button" className="app-btn" onClick={() => onNewConversation(target.hubId, target.agent)}>
+            给 {agentName} 发任务
+          </button>
+        </div>
+      ) : (
       <div className="conv-compose">
         {openTask && (
           <div className="conv-working">
@@ -279,6 +299,7 @@ export function ConversationDetail({ target, rows, now, onBack }: {
         </div>
         <ErrorText error={sendError} />
       </div>
+      )}
     </div>
   );
 }

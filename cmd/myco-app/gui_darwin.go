@@ -17,8 +17,9 @@ import (
 //go:embed build/darwin/tray-template.png
 var trayIcon []byte
 
-// runGUI opens the console as a menu-bar app: no Dock icon, a tray menu,
-// and a window that hides instead of closing (quit from the menu).
+// runGUI opens the console as a regular Mac app (Dock icon, menu bar with
+// Edit so copy and paste work) plus a menu-bar icon; closing the window
+// hides it, and the app keeps running until quit.
 func runGUI(h http.Handler, onLink func(string)) error {
 	app := application.New(application.Options{
 		Name:        "myco",
@@ -26,7 +27,7 @@ func runGUI(h http.Handler, onLink func(string)) error {
 		// Served in-process to the webview: no network port is opened.
 		Assets: application.AssetOptions{Handler: h},
 		Mac: application.MacOptions{
-			ActivationPolicy: application.ActivationPolicyAccessory,
+			ActivationPolicy: application.ActivationPolicyRegular,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 	})
@@ -63,6 +64,12 @@ func runGUI(h http.Handler, onLink func(string)) error {
 			show()
 		}
 	})
+
+	appMenu := app.NewMenu()
+	appMenu.AddRole(application.AppMenu)
+	appMenu.AddRole(application.EditMenu)
+	appMenu.AddRole(application.WindowMenu)
+	app.Menu.Set(appMenu)
 
 	menu := app.NewMenu()
 	menu.Add("Open myco").OnClick(func(*application.Context) { show() })

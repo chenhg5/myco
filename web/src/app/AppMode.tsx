@@ -20,7 +20,7 @@ import { NodesPage } from "@/app/NodesPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { Welcome } from "@/app/Welcome";
 import { LogoWordmark } from "@/components/brand";
-import { useThemeMode } from "@/lib/theme";
+import { useTextSize, useThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 5000;
@@ -73,6 +73,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   initialInfo: AppInfo | null;
 }) {
   const [theme, setTheme] = useThemeMode();
+  const [textSize, setTextSize] = useTextSize();
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -353,6 +354,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             rows={rows}
             now={now}
             onBack={() => setConv(null)}
+            onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
           />
         ) : (
           <div className="app-scroll">
@@ -407,6 +409,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 info={info}
                 theme={theme}
                 onTheme={setTheme}
+                textSize={textSize}
+                onTextSize={setTextSize}
                 refreshKey={localTick}
                 sectionRequest={hubSettingsRequest}
                 onRefresh={refresh}

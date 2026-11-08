@@ -14,19 +14,32 @@ type Action = null | "profile" | "allow" | "kick" | "delete";
 
 const pillClass: Record<string, string> = { working: "green", pending: "amber", idle: "", offline: "" };
 
-function MessageRows({ row, now, onThread }: {
+const isConsole = (name: string) => name.startsWith("@console:");
+
+// MessageRows lists the node's recent threads, one row per thread: either
+// the ones you (the console) take part in, or its exchanges with other
+// nodes, which you can only read.
+function MessageRows({ row, now, mine, onThread }: {
   row: AgentRow;
   now: number;
+  mine: boolean;
   onThread: (hubId: string, threadId: string, agent: string) => void;
 }) {
-  const msgs = (row.hub.overview?.recent || []).filter((m) => m.from === row.st.agent.name || m.to === row.st.agent.name).slice(0, 8);
-  if (!msgs.length) return <div className="app-empty-note">最近没有消息</div>;
+  const name = row.st.agent.name;
+  const seen = new Set<string>();
+  const msgs = (row.hub.overview?.recent || [])
+    .filter((m) => m.from === name || m.to === name)
+    .filter((m) => (isConsole(m.from) || isConsole(m.to)) === mine)
+    .filter((m) => (seen.has(m.thread_id) ? false : (seen.add(m.thread_id), true)))
+    .slice(0, 6);
+  if (!msgs.length) return <div className="app-empty-note">{mine ? "你还没有和它对话" : "最近没有和其他节点的往来"}</div>;
+  const label = (n: string) => (isConsole(n) ? "你" : n === name ? (row.st.agent.display_name || n) : n);
   return (
     <>
       {msgs.map((m) => (
-        <button key={m.id} type="button" className="app-msg" onClick={() => onThread(row.hub.id, m.thread_id, row.st.agent.name)}>
+        <button key={m.id} type="button" className="app-msg" onClick={() => onThread(row.hub.id, m.thread_id, name)}>
           <span className="meta">
-            <span className="who">{m.from}</span>→<span className="who">{m.to}</span>
+            <span className="who">{label(m.from)}</span>→<span className="who">{label(m.to)}</span>
             <span className="time">{timeAgo(m.updated_at, now)}</span>
           </span>
           <span className="body">{m.body}</span>
@@ -200,7 +213,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
               {current.map((m) => (
                 <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                   <span className="meta">
-                    <span className="who">{m.from}</span>→<span className="who">{m.to}</span>
+                    <span className="who">{isConsole(m.from) ? "你" : m.from}</span>→<span className="who">{isConsole(m.to) ? "你" : m.to}</span>
                     <span className="time">{timeAgo(m.updated_at, now)}</span>
                   </span>
                   <span className="body">{m.body}</span>
@@ -210,8 +223,16 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           </section>
 
           <section className="app-group">
-            <div className="app-group-title"><span className="name">最近消息</span></div>
-            <div className="app-list"><MessageRows row={row} now={now} onThread={onThread} /></div>
+            <div className="app-group-title"><span className="name">和你的对话</span></div>
+            <div className="app-list"><MessageRows row={row} now={now} mine onThread={onThread} /></div>
+          </section>
+
+          <section className="app-group">
+            <div className="app-group-title">
+              <span className="name">与其他节点的往来</span>
+              <span className="app-group-note">只读</span>
+            </div>
+            <div className="app-list"><MessageRows row={row} now={now} mine={false} onThread={onThread} /></div>
           </section>
 
           <section className="app-group">

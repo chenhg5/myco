@@ -43,3 +43,27 @@ export function useThemeMode() {
   }, [mode]);
   return [mode, setMode] as const;
 }
+
+/** Text size of the App window (the whole page is scaled). */
+export type TextSize = "small" | "standard" | "large";
+
+const SIZE_KEY = "myco-text-size";
+export const TEXT_SCALE: Record<TextSize, number> = { small: 1, standard: 1.08, large: 1.16 };
+
+function storedSize(): TextSize {
+  try {
+    const v = localStorage.getItem(SIZE_KEY);
+    if (v === "small" || v === "standard" || v === "large") return v;
+  } catch { /* storage unavailable */ }
+  return "standard";
+}
+
+export function useTextSize() {
+  const [size, setSize] = useState<TextSize>(storedSize);
+  useEffect(() => {
+    document.documentElement.style.setProperty("zoom", String(TEXT_SCALE[size]));
+    try { localStorage.setItem(SIZE_KEY, size); } catch { /* storage unavailable */ }
+    return () => { document.documentElement.style.removeProperty("zoom"); };
+  }, [size]);
+  return [size, setSize] as const;
+}

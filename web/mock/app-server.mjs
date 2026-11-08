@@ -246,6 +246,7 @@ const state = {
         makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
         makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
         makeMessage({ thread_id: "th_ios", from: "glenn", to: "ios-shell", type: "task", body: "请跑一遍 iOS 测试套件，附上日志。", created_at: iso(240), updated_at: iso(240) }),
+        makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done", body: "v0.16.8 发布说明已整理好。", created_at: iso(6800), updated_at: iso(6800) }),
       ],
     },
     {

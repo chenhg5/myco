@@ -9,7 +9,7 @@ import {
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
-import type { ThemeMode } from "@/lib/theme";
+import type { TextSize, ThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 type Section = "hubs" | "appearance" | "about";
@@ -18,6 +18,12 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", label: "Hub", icon: Server },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "about", label: "关于", icon: Info },
+];
+
+const SIZES: { size: TextSize; label: string }[] = [
+  { size: "small", label: "小" },
+  { size: "standard", label: "标准" },
+  { size: "large", label: "大" },
 ];
 
 const THEMES: { mode: ThemeMode; label: string }[] = [
@@ -59,11 +65,13 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, info, theme, onTheme, refreshKey, sectionRequest, onRefresh, onAddHub }: {
+export function SettingsPage({ hubs, info, theme, onTheme, textSize, onTextSize, refreshKey, sectionRequest, onRefresh, onAddHub }: {
   hubs: Hub[];
   info: AppInfo | null;
   theme: ThemeMode;
   onTheme: (mode: ThemeMode) => void;
+  textSize: TextSize;
+  onTextSize: (size: TextSize) => void;
   /** Bumped by the App poll so the local hub state stays current. */
   refreshKey: number;
   /** Bumped when the Hub switcher asks for the Hub section. */
@@ -299,6 +307,25 @@ export function SettingsPage({ hubs, info, theme, onTheme, refreshKey, sectionRe
                 ))}
               </div>
               <div className="app-hint">跟随系统时，App 会随 macOS 的浅色/深色切换。</div>
+            </section>
+            <p className="app-summary">文字大小</p>
+            <section className="app-setting-card">
+              <div className="seg seg-fill" role="tablist" aria-label="文字大小">
+                {SIZES.map((t) => (
+                  <button
+                    key={t.size}
+                    type="button"
+                    role="tab"
+                    aria-selected={textSize === t.size}
+                    className={cn("seg-btn", textSize === t.size && "active")}
+                    onClick={() => onTextSize(t.size)}
+                  >
+                    {textSize === t.size && <Check />}
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="app-hint">整个窗口一起放大或缩小。</div>
             </section>
           </>
         )}

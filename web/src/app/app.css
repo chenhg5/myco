@@ -521,6 +521,10 @@ textarea.app-input {
   font-weight: 500;
   white-space: nowrap;
 }
+.app-group-note {
+  margin-left: auto;
+  color: var(--faint);
+}
 .app-group-title .parts {
   display: flex;
   align-items: center;
@@ -2728,4 +2732,19 @@ textarea.app-input {
     padding: 0 6px;
     font-size: 11.5px;
   }
+}
+
+/* a thread between other nodes: read-only */
+.conv-observe {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 0.5px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.conv-observe .app-btn {
+  margin-left: auto;
+  flex: none;
 }
