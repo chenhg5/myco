@@ -42,7 +42,7 @@ body { background: transparent; font-family: Inter, sans-serif; padding: 20px; d
   <div class="bar"><span class="dots"><i></i><i></i><i></i></span>ssh build-01 — codex</div>
   <div class="mono" style="padding:18px 22px">
     <div style="border:1.5px solid #3a3a3a;border-radius:10px;padding:12px 18px;margin-bottom:14px">
-      <div><img class="logo" src="LOGOS/openai.png"> <b>&gt;_ OpenAI Codex</b> <span class="dim">(v0.52.0)</span></div>
+      <div><img class="logo" src="LOGOS/codex.png"> <b>OpenAI Codex</b> <span class="dim">(v0.52.0)</span></div>
       <div class="dim" style="margin-top:6px">model: gpt-6-sol &nbsp; directory: ~/srv/website-api</div>
     </div>
     <div>› add a /api/plans endpoint</div>
@@ -79,13 +79,16 @@ body { background: transparent; font-family: Inter, sans-serif; padding: 20px; d
   </div>
 </div>
 
-<!-- claude.ai (a cloud agent) -->
-<div class="win" id="w4" style="width:520px;background:#262624;color:#e9e6dc">
-  <div class="bar" style="background:#1f1e1d"><span class="dots"><i></i><i></i><i></i></span>claude.ai</div>
-  <div style="padding:20px 22px;font-size:18px;line-height:1.5">
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px"><span style="width:30px;height:30px;border-radius:8px;background:#d97757;display:inline-flex;align-items:center;justify-content:center"><img src="LOGOS/claude.png" style="width:20px;height:20px"></span><b>Claude</b><span class="dim" style="font-size:15px">· cloud session</span></div>
-    <div class="dim">Research: payment providers in the EU</div>
-    <div class="warn" style="margin-top:6px">Drafting the comparison…</div>
+<!-- Gemini CLI on a cloud VM -->
+<div class="win" id="w4" style="width:600px;background:#0f1117">
+  <div class="bar" style="background:#1a1c23"><span class="dots"><i></i><i></i><i></i></span>ssh cloud-vm — gemini</div>
+  <div class="mono" style="padding:18px 22px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><img src="LOGOS/gemini.png" style="width:30px;height:30px">
+      <b style="font-size:26px;background:linear-gradient(90deg,#4796e3,#9177c7,#ca6673);-webkit-background-clip:text;color:transparent;font-family:Inter,sans-serif">Gemini CLI</b></div>
+    <div class="dim">Tips: /help for commands</div>
+    <div style="margin-top:8px">&gt; Compare EU payment providers</div>
+    <div><span class="ok">✓</span> GoogleSearch <span class="dim">— 12 results</span></div>
+    <div class="warn">⠋ Drafting the comparison…</div>
   </div>
 </div>
 <script>

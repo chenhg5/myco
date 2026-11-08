@@ -473,7 +473,7 @@ function endCard(t) {
 function subtitles(t) {
   const s = $('sub').firstElementChild; const L = window.LINES || [];
   const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
-  s.textContent = ln ? ln.text : ''; s.parentElement.style.opacity = ln ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
+  s.textContent = ln && window.SUBS ? ln.text : ''; s.parentElement.style.opacity = ln && window.SUBS ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
 }
 function flash(t) {
   const f = $('flash');
