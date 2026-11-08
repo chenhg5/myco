@@ -1,34 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link2 } from "lucide-react";
-import qrcode from "qrcode-generator";
 import { appApi, type Hub, type JoinLink } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 
-/** Renders a QR code as inline SVG; falls back to nothing if encoding fails. */
-function QrCode({ text }: { text: string }) {
-  const markup = useMemo(() => {
-    try {
-      const qr = qrcode(0, "M");
-      qr.addData(text);
-      qr.make();
-      const n = qr.getModuleCount();
-      let path = "";
-      for (let r = 0; r < n; r += 1) {
-        for (let c = 0; c < n; c += 1) {
-          if (qr.isDark(r, c)) path += `M${c} ${r}h1v1h-1z`;
-        }
-      }
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="入网链接二维码"><rect width="${n}" height="${n}" fill="#fff"/><path d="${path}" fill="#111"/></svg>`;
-    } catch {
-      return "";
-    }
-  }, [text]);
-  if (!markup) return null;
-  return <div className="app-qr" dangerouslySetInnerHTML={{ __html: markup }} />;
-}
-
-/** Pick a hub, create a one-off join link, show the command and its QR code. */
+/** Pick a hub, create a one-off join link, show the command. */
 export function AddMachineDialog({ open, onOpenChange, hubs }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -129,9 +105,8 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
                 <code>{link.command}</code>
                 <CopyButton value={link.command} />
               </div>
-              <QrCode text={link.join_url} />
               <div className="app-hint">
-                在要添加的电脑上运行这条命令，或者用手机扫描二维码。之后回到这台电脑，机器会出现在机器页。
+                在要添加的电脑或服务器的终端里运行这条命令。它会装好 myco 并把这台机器加入 Hub，之后会出现在机器页。
               </div>
               <ErrorText error={error} />
               <div className="app-modal-actions">

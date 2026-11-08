@@ -1081,7 +1081,7 @@ textarea.app-input {
   opacity: 0.6;
 }
 
-/* "Add machine": command block and QR. */
+/* "Add machine": command block. */
 .app-command {
   display: flex;
   align-items: center;
@@ -1101,21 +1101,6 @@ textarea.app-input {
   user-select: text;
   overflow-wrap: anywhere;
 }
-.app-qr {
-  width: 168px;
-  max-width: 100%;
-  margin: 14px auto 0;
-  padding: 10px;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 0 0 0.5px var(--line);
-}
-.app-qr svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .app-success {
   display: flex;
   align-items: center;

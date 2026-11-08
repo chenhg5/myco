@@ -35,7 +35,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
       <div className="app-page-head">
         <p className="app-summary">{summary}</p>
         <button type="button" className="app-btn app-btn-primary" onClick={onAdd} disabled={hubs.length === 0}>
-          <Plus />添加机器…
+          <Plus />添加机器
         </button>
       </div>
 
@@ -48,7 +48,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
           <p>机器是运行节点的地方。添加一台机器后，就能在上面开新会话。</p>
           <div className="app-empty-actions">
             <button type="button" className="app-btn app-btn-primary" onClick={onAdd} disabled={hubs.length === 0}>
-              <Plus />添加机器…
+              <Plus />添加机器
             </button>
           </div>
         </div>
