@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chenhg5/myco/internal/release"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -81,6 +83,7 @@ Host header are rejected (DNS rebinding).`,
 			}
 			ui := &uiServer{hub: hub, agentName: e.cfg.Agent, agent: agentC, admin: adminC, key: key, port: port}
 			srv := &http.Server{Handler: ui.routes(), ReadHeaderTimeout: 10 * time.Second}
+			go ui.watchVersions(e.in.Ctx)
 			url := fmt.Sprintf("http://127.0.0.1:%d/?key=%s", port, key)
 			fmt.Fprintf(e.in.Stderr, "myco dashboard: %s\n(read-only; only this machine can open it; Ctrl-C to stop)\n", url)
 			if e.in.Bool("open") {
@@ -105,6 +108,28 @@ type uiServer struct {
 	agent, admin   *client.Client
 	key            string
 	port           int
+
+	vmu        sync.RWMutex // versions, refreshed in the background
+	hubVersion string
+	hubKnown   bool
+	latest     string
+}
+
+// watchVersions refreshes the hub's version and the latest release in the
+// background (hourly), so /api/session never waits for the network.
+func (u *uiServer) watchVersions(ctx context.Context) {
+	for {
+		if h, err := hubHealth(ctx, u.hub, 5*time.Second); err == nil {
+			u.vmu.Lock()
+			u.hubVersion, u.hubKnown, u.latest = h.ServerVersion, h.ServerVersion != "", h.LatestVersion
+			u.vmu.Unlock()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Hour):
+		}
+	}
 }
 
 const uiCookie = "myco_ui"
@@ -181,6 +206,15 @@ func uiErr(w http.ResponseWriter, err error) {
 
 func (u *uiServer) session(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"hub": u.hub, "version": Version, "admin": u.admin != nil}
+	u.vmu.RLock()
+	if u.hubKnown {
+		out["hub_version"] = u.hubVersion
+	}
+	if u.latest != "" {
+		out["latest_version"] = u.latest
+		out["update_available"] = release.Newer(u.latest, Version) || (u.hubKnown && release.Newer(u.latest, u.hubVersion))
+	}
+	u.vmu.RUnlock()
 	if u.agent != nil {
 		out["agent"] = u.agentName
 	}

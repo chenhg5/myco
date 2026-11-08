@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/chenhg5/myco/internal/release"
 	"io"
 	"time"
 
@@ -103,10 +104,50 @@ func schemaCommand(root *Command) *Command {
 func versionCommand() *Command {
 	return &Command{
 		Name:    "version",
-		Summary: "Print the myco version",
-		Run: func(in *Invocation) error {
-			fmt.Fprintln(in.Stdout, Version)
-			return nil
-		},
+		Summary: "Print the myco version, the hub's version and the latest release",
+		Long: `Prints this machine's myco version, the version of the hub it talks to and the newest published
+release (from the hub's daily check, or GitHub directly), each waited for at most a few seconds.
+'myco --version' prints only this machine's version.`,
+		Flags: []Flag{{Name: "offline", Kind: Bool, Help: "Only print this machine's version (no network)"}},
+		Run: handler(func(e *env) error {
+			out := map[string]any{"version": Version}
+			if e.in.Bool("offline") {
+				return e.p.Print(out, func(w io.Writer) { fmt.Fprintln(w, Version) })
+			}
+			hubLatest := ""
+			if hub := knownHub(e.in.Getenv); hub != "" {
+				hubInfo := map[string]any{"url": hub}
+				if h, err := hubHealth(e.in.Ctx, hub, 3*time.Second); err != nil {
+					hubInfo["error"] = toError(err, "").Message
+				} else {
+					hubInfo["version"] = orDefault(h.ServerVersion, "unknown (older than v0.16.6)")
+					hubInfo["update_available"] = h.UpdateAvailable
+					hubLatest = h.LatestVersion
+				}
+				out["hub"] = hubInfo
+			}
+			latest, err := latestRelease(e.in.Ctx, e.in.Getenv, hubLatest, 5*time.Second)
+			if err == nil && latest != "" {
+				out["latest"] = latest
+				out["update_available"] = release.Newer(latest, Version)
+			}
+			return e.p.Print(out, func(w io.Writer) {
+				fmt.Fprintf(w, "myco    %s (this machine)\n", Version)
+				if h, ok := out["hub"].(map[string]any); ok {
+					if msg, bad := h["error"]; bad {
+						fmt.Fprintf(w, "hub     unreachable: %s\n", msg)
+					} else {
+						fmt.Fprintf(w, "hub     %s (%s)\n", h["version"], h["url"])
+					}
+				}
+				if latest != "" {
+					line := "latest  " + latest
+					if release.Newer(latest, Version) {
+						line += "  -> run `myco upgrade`"
+					}
+					fmt.Fprintln(w, line)
+				}
+			})
+		}),
 	}
 }

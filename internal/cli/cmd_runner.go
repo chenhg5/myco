@@ -63,6 +63,7 @@ notes are never auto-answered. Logs go to stderr.`,
 				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
 			}
+			e.watchVersions(log)
 			if !e.in.Bool("all") {
 				r, err := e.buildRunner(e.cfgPath, e.cfg, shared, e.overrides(), log)
 				if err != nil {

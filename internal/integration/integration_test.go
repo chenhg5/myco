@@ -13,11 +13,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/chenhg5/myco/internal/release"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -571,5 +574,183 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 	_, err = h.client(plain.Token).Enroll(c, api.EnrollRequest{Binding: api.Binding{Harness: "machine", SessionID: "machine:h:u", Environment: "h"}}, false)
 	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" {
 		t.Fatalf("plain enrollment created a machine node: %v", err)
+	}
+}
+
+// fakeReleases serves a release API (latest = tag) and the release assets for
+// this platform, like GitHub does.
+func fakeReleases(t *testing.T, tag string, bin []byte, sum string) *httptest.Server {
+	t.Helper()
+	asset := "myco-" + runtime.GOOS + "-" + runtime.GOARCH
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/latest":
+			fmt.Fprintf(w, `{"tag_name":%q}`, tag)
+		case "/dl/" + tag + "/SHA256SUMS":
+			fmt.Fprintf(w, "%s  %s\n", sum, asset)
+		case "/dl/" + tag + "/" + asset:
+			w.Write(bin)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func setVersion(t *testing.T, v string) {
+	old := cli.Version
+	cli.Version = v
+	t.Cleanup(func() { cli.Version = old })
+}
+
+// The hub reports its build and the newest release; version and doctor show
+// what is out of date.
+func TestHubReportsVersionsAndClientsWarn(t *testing.T) {
+	home := isolatedHome(t)
+	setVersion(t, "v0.16.6")
+	c := ctx(t)
+	rel := fakeReleases(t, "v0.16.7", nil, "")
+	check := &release.Checker{API: rel.URL + "/api/latest", HTTP: rel.Client()}
+	h, err := hubserver.Build(hubserver.Options{DBPath: filepath.Join(t.TempDir(), "hub.db"), AdminToken: adminToken,
+		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Version: "v0.16.5", UpdateCheck: check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h.Handler)
+	t.Cleanup(func() { srv.Close(); h.Close() })
+	x := &hub{t: t, url: srv.URL}
+
+	health, err := x.client("").Health(c)
+	if err != nil || health.ServerVersion != "v0.16.5" || health.LatestVersion != "" || health.UpdateAvailable {
+		t.Fatalf("before the first check: %v %+v", err, health)
+	}
+	if err := check.Check(c); err != nil {
+		t.Fatal(err)
+	}
+	health, _ = x.client("").Health(c)
+	if health.LatestVersion != "v0.16.7" || !health.UpdateAvailable {
+		t.Fatalf("after the check: %+v", health)
+	}
+
+	e := newCLI(t, x, filepath.Join(home, "a.yaml"))
+	e.must(c, "agent", "register", "--name", "alice")
+	out := e.must(c, "version")
+	for _, want := range []string{`"version": "v0.16.6"`, `"version": "v0.16.5"`, `"latest": "v0.16.7"`, `"update_available": true`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("version output lacks %s:\n%s", want, out)
+		}
+	}
+	_, out, _ = e.run(c, "doctor")
+	for _, want := range []string{"the hub runs v0.16.5, older than this machine's v0.16.6", "myco v0.16.7 is available"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+// myco upgrade: verified download, atomic replace, nothing changed on a bad
+// checksum, and dev builds are not replaced without an explicit version.
+func TestUpgradeReplacesBinaryAfterVerifying(t *testing.T) {
+	home := isolatedHome(t)
+	setVersion(t, "v0.16.6")
+	c := ctx(t)
+	newBin := []byte("#!/bin/sh\necho v0.16.7\n")
+	sum := sha256.Sum256(newBin)
+	rel := fakeReleases(t, "v0.16.7", newBin, hex.EncodeToString(sum[:]))
+	target := filepath.Join(t.TempDir(), "myco")
+	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e := &cliEnv{t: t, env: map[string]string{"HOME": home, "MYCO_FORMAT": "json", "PATH": os.Getenv("PATH"),
+		release.EnvAPI: rel.URL + "/api/latest", release.EnvDownload: rel.URL + "/dl", cli.EnvUpgradeTarget: target}}
+
+	out := e.must(c, "upgrade", "--check")
+	if !strings.Contains(out, `"update_available": true`) || !strings.Contains(out, `"target": "v0.16.7"`) {
+		t.Fatalf("check: %s", out)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "old binary" {
+		t.Fatal("--check must not change anything")
+	}
+	out = e.must(c, "upgrade", "--no-restart")
+	if b, _ := os.ReadFile(target); string(b) != string(newBin) {
+		t.Fatalf("binary not replaced: %s", out)
+	}
+	if st, _ := os.Stat(target); st.Mode().Perm() != 0o755 {
+		t.Fatalf("mode %v", st.Mode())
+	}
+
+	// A tampered download is refused and the binary stays as it was.
+	os.WriteFile(target, []byte("old binary"), 0o755)
+	tampered := fakeReleases(t, "v0.16.7", newBin, strings.Repeat("a", 64))
+	e.env[release.EnvAPI], e.env[release.EnvDownload] = tampered.URL+"/api/latest", tampered.URL+"/dl"
+	code, _, errOut := e.run(c, "upgrade", "--no-restart")
+	if code == 0 || !strings.Contains(errOut, "checksum mismatch") {
+		t.Fatalf("tampered upgrade: exit %d %s", code, errOut)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "old binary" {
+		t.Fatal("a failed upgrade changed the binary")
+	}
+
+	// Up to date: nothing to do. Dev builds need an explicit version.
+	setVersion(t, "v0.16.7")
+	if out := e.must(c, "upgrade", "--no-restart"); !strings.Contains(out, `"update_available": false`) {
+		t.Fatalf("up to date: %s", out)
+	}
+	setVersion(t, "dev")
+	if code, _, _ := e.run(c, "upgrade", "--no-restart"); code != cli.ExitUsage {
+		t.Fatalf("dev build: exit %d", code)
+	}
+}
+
+// Ordinary commands never wait for the version check: with a hub that
+// accepts connections but never answers health checks, a command that does
+// not need the hub still returns at once; notices come from the cache, at
+// most once a day, and only on a terminal.
+func TestUpdateNoticesNeverBlock(t *testing.T) {
+	home := isolatedHome(t)
+	setVersion(t, "v0.16.6")
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // never answers
+	}))
+	t.Cleanup(hang.Close)
+	cfg := filepath.Join(home, ".myco", "config.yaml")
+	os.MkdirAll(filepath.Dir(cfg), 0o700)
+	os.WriteFile(cfg, []byte("hub: "+hang.URL+"\n"), 0o600)
+
+	run := func(tty bool) (time.Duration, string) {
+		var out, errb bytes.Buffer
+		start := time.Now()
+		cli.Run(context.Background(), []string{"schema", "--all"}, strings.NewReader(""), &out, &errb,
+			func(k string) string { return map[string]string{"HOME": home, "PATH": os.Getenv("PATH")}[k] }, tty)
+		return time.Since(start), errb.String()
+	}
+	if d, _ := run(true); d > 2*time.Second {
+		t.Fatalf("a command waited %s for the update check", d)
+	}
+
+	// A cached newer release is shown once, then not again for a day.
+	cache := filepath.Join(home, ".myco", "update-check.json")
+	os.WriteFile(cache, []byte(`{"hub":"`+hang.URL+`","hub_version":"v0.16.6","hub_known":true,"latest":"v0.16.9","checked_at":"`+
+		time.Now().Format(time.RFC3339)+`"}`), 0o600)
+	if _, errOut := run(false); strings.Contains(errOut, "notice") {
+		t.Fatal("notice printed without a terminal")
+	}
+	if _, errOut := run(true); !strings.Contains(errOut, "myco v0.16.9 is available") {
+		t.Fatalf("no notice: %q", errOut)
+	}
+	if _, errOut := run(true); strings.Contains(errOut, "notice") {
+		t.Fatal("notice repeated within a day")
+	}
+	// MYCO_NO_UPDATE_CHECK=1 silences everything.
+	os.WriteFile(cache, []byte(`{"latest":"v0.16.9"}`), 0o600)
+	var errb bytes.Buffer
+	cli.Run(context.Background(), []string{"schema", "--all"}, strings.NewReader(""), io.Discard, &errb,
+		func(k string) string {
+			return map[string]string{"HOME": home, release.EnvNoCheck: "1"}[k]
+		}, true)
+	if strings.Contains(errb.String(), "notice") {
+		t.Fatal("notice despite MYCO_NO_UPDATE_CHECK=1")
 	}
 }

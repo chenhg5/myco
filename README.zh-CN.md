@@ -70,6 +70,8 @@ myco broadcast send --selector "group=review" --body "请审查 PR #42" --wait 3
 myco ui --open
 ```
 
+**保持最新：** `myco version` 查看本机、Hub 和最新版本；`myco upgrade` 升级并重启本机服务（用 `install-hub.sh` 装的服务器用 `sudo myco upgrade`）。
+
 > 更多场景（claude.ai 云端会话、exec 节点、别名、webhook、GitHub 唤醒）见 **[INSTALL.md](INSTALL.md)**。
 
 ## 为什么需要 myco

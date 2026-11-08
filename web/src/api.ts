@@ -20,7 +20,10 @@ export interface Overview {
   totals: { agents: number; working: number; pending: number; idle: number; offline: number };
   agents: AgentStatus[]; recent: Message[];
 }
-export interface Session { hub: string; version: string; agent?: string; admin: boolean }
+export interface Session {
+  hub: string; version: string; agent?: string; admin: boolean;
+  hub_version?: string; latest_version?: string; update_available?: boolean;
+}
 export type ViewAs = "agent" | "admin";
 
 async function get<T>(path: string): Promise<T> {

@@ -54,6 +54,11 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return e.Exit
 	}
 	inv := cmdkit.NewInvocation(ctx, cmd, values, pos, stdin, stdout, stderr, getenv)
+	notice := tty && getenv != nil && wantsUpdateNotice(cmd.Path())
+	if notice {
+		startUpdateRefresh(getenv) // background only; never waited for
+		defer printUpdateNotice(stderr, getenv)
+	}
 	err = cmd.Run(inv)
 	var dry dryRunDone
 	var status exitStatus

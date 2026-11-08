@@ -96,6 +96,9 @@ export default function App() {
       setSession(s);
       if (!s.agent && s.admin) setViewAs("admin");
     }).catch((e) => setError(String(e.message || e)));
+    // Versions are looked up in the background by `myco ui`; pick them up later.
+    const t = setInterval(() => { api.session().then(setSession).catch(() => {}); }, 60_000);
+    return () => clearInterval(t);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -333,7 +336,18 @@ export default function App() {
           </Tabs>
 
           <footer className="pb-6 pt-2 text-center text-xs text-muted-foreground/70">
-            myco {session?.version} · 只读视图 · 数据来自 Hub 的 /v1/overview
+            myco {session?.version}
+            {session?.hub_version ? <> · Hub {session.hub_version}</> : null}
+            {" "}· 只读视图 · 数据来自 Hub 的 /v1/overview
+            {session?.update_available && session.latest_version ? (
+              <div className="mt-2">
+                <Tip content="在要升级的机器上运行 myco upgrade（Hub 所在机器用 sudo myco upgrade）">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium text-foreground/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />新版本 {session.latest_version} 可用 · <span className="font-mono">myco upgrade</span>
+                  </span>
+                </Tip>
+              </div>
+            ) : null}
           </footer>
         </main>
 

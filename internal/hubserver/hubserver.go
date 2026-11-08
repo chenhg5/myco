@@ -20,6 +20,7 @@ import (
 	"github.com/chenhg5/myco/internal/infra/sqlite"
 	"github.com/chenhg5/myco/internal/infra/tunnel"
 	"github.com/chenhg5/myco/internal/infra/wake"
+	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/transport/httpapi"
 	"github.com/chenhg5/myco/internal/transport/ingress"
 )
@@ -46,6 +47,11 @@ type Options struct {
 	// Tunnel, if set, publishes the hub (listening on localhost) at a
 	// public URL, which then becomes its public URL.
 	Tunnel tunnel.Tunnel
+	// Version is this hub's myco build, reported at /v1/health.
+	Version string
+	// UpdateCheck, if set, looks for newer releases in the background
+	// (Run starts it); the result is reported at /v1/health.
+	UpdateCheck *release.Checker
 }
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
@@ -112,6 +118,11 @@ func Build(o Options) (*Hub, error) {
 	srv := httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...)
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
+	var latest func() string
+	if o.UpdateCheck != nil {
+		latest = o.UpdateCheck.Latest
+	}
+	srv.SetVersion(o.Version, latest)
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
 	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL}, nil
 }
@@ -127,6 +138,9 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer hub.Close()
 	go hub.Dispatcher.Run(ctx)
+	if o.UpdateCheck != nil {
+		go o.UpdateCheck.Run(ctx) // background only: never in a request path
+	}
 	go hub.Files.Run(ctx, time.Hour)
 	h := hub.Handler
 	ln, err := net.Listen("tcp", o.Addr)

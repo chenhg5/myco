@@ -11,6 +11,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
 	"github.com/chenhg5/myco/internal/infra/tunnel"
+	"github.com/chenhg5/myco/internal/release"
 )
 
 func hubCommands() *Command {
@@ -39,6 +40,7 @@ func hubCommands() *Command {
 			{Name: "tunnel", Kind: Enum, Values: tunnel.Kinds, Help: "Publish the hub through cloudflare (cloudflared) or tailscale (Funnel); its URL becomes --public-url"},
 			{Name: "tunnel-hostname", Kind: String, Help: "cloudflare: your hostname, e.g. hub.example.com (empty = temporary trycloudflare.com URL)"},
 			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
+			{Name: "no-update-check", Kind: Bool, Help: "Do not look for new myco releases (default: once a day in the background; also MYCO_NO_UPDATE_CHECK=1)"},
 		},
 		Run: func(in *Invocation) error {
 			tok := in.Getenv(config.EnvAdminToken)
@@ -72,9 +74,13 @@ func hubCommands() *Command {
 					return errorf("invalid_argument", ExitUsage, "", "%v", err)
 				}
 			}
+			var check *release.Checker
+			if !in.Bool("no-update-check") && !release.Disabled(in.Getenv) {
+				check = &release.Checker{API: release.APIURL(in.Getenv), Log: newLogger(in.String("log-level"))}
+			}
 			return hubserver.Run(in.Ctx, hubserver.Options{
-				Tunnel: tun,
-				Addr:   in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
+				Tunnel: tun, Version: Version, UpdateCheck: check,
+				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),

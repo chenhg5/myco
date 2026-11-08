@@ -289,6 +289,14 @@ type Health struct {
 	Version string `json:"version"`
 	// PublicURL is the hub's URL as clients see it (e.g. its tunnel), when known.
 	PublicURL string `json:"public_url,omitempty"`
+	// ServerVersion is the hub's myco build (Version is the wire contract).
+	// Hubs older than v0.16.6 leave it out.
+	ServerVersion string `json:"server_version,omitempty"`
+	// LatestVersion is the newest published release the hub knows of (its
+	// daily background check; empty when disabled or not checked yet), and
+	// UpdateAvailable says it is newer than ServerVersion.
+	LatestVersion   string `json:"latest_version,omitempty"`
+	UpdateAvailable bool   `json:"update_available,omitempty"`
 }
 
 // Enrollment is the public view of an enrollment (the token is never shown

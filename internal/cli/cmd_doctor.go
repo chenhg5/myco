@@ -16,6 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
+	"github.com/chenhg5/myco/internal/release"
 )
 
 func harnessCommands() *Command {
@@ -153,11 +154,24 @@ func doctorProfile(ctx context.Context, p config.Profile, add func(scope, check,
 		return
 	}
 	start := time.Now()
-	if _, err := c.Health(ctx); err != nil {
+	health, err := c.Health(ctx)
+	if err != nil {
 		add(scope, "hub", "fail", toError(err, "").Message, "check the URL, TLS and network policy (allowed domains)")
 		return
 	}
 	add(scope, "hub", "ok", fmt.Sprintf("%s reachable in %s", cfg.Hub, time.Since(start).Round(time.Millisecond)), "")
+	const upgradeHub = "on the hub's machine: sudo myco upgrade (or re-run install-hub.sh)"
+	switch {
+	case health.ServerVersion == "":
+		add(scope, "hub version", "warn", "the hub does not report its version: it runs myco older than v0.16.6", upgradeHub)
+	case release.Newer(Version, health.ServerVersion):
+		add(scope, "hub version", "warn", fmt.Sprintf("the hub runs %s, older than this machine's %s", health.ServerVersion, Version), upgradeHub)
+	default:
+		add(scope, "hub version", "ok", "the hub runs "+health.ServerVersion, "")
+	}
+	if release.Newer(health.LatestVersion, Version) {
+		add(scope, "update", "warn", fmt.Sprintf("myco %s is available (this machine has %s)", health.LatestVersion, Version), "myco upgrade")
+	}
 	if cfg.Token == "" {
 		add(scope, "identity", "warn", "no agent token", "enroll or register this agent")
 		return

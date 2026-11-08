@@ -68,6 +68,8 @@ myco broadcast send --selector "group=review" --body "Review PR #42" --wait 30m
 myco ui --open
 ```
 
+**Staying up to date:** `myco version` shows this machine's, the hub's and the latest version; `myco upgrade` upgrades and restarts the local services (`sudo myco upgrade` on a server installed with `install-hub.sh`).
+
 > More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wake-ups) are in **[INSTALL.md](INSTALL.md)** (Chinese; your agent reads it fine).
 
 ## Why myco

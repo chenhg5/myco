@@ -18,6 +18,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
+	"github.com/chenhg5/myco/internal/release"
 )
 
 // Server is the hub's HTTP adapter.
@@ -27,7 +28,9 @@ type Server struct {
 	messages   *app.MessageService
 	adminToken string
 	log        *slog.Logger
-	publicURL  atomic.Value // string
+	publicURL  atomic.Value  // string
+	version    string        // this hub's myco build
+	latest     func() string // newest known release ("" = unknown)
 	mux        *http.ServeMux
 	ingress    map[string]Ingress
 	files      *app.FileService
@@ -76,7 +79,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL()})
+		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version}
+		if s.latest != nil {
+			h.LatestVersion = s.latest()
+			h.UpdateAvailable = release.Newer(h.LatestVersion, s.version)
+		}
+		writeJSON(w, http.StatusOK, h)
 	})
 
 	// Administration (admin token).
@@ -381,6 +389,12 @@ func (s *Server) publicBase(r *http.Request) string {
 // SetPublicURL sets the hub URL used in join links.
 // It is safe to call while serving (a tunnel may change it).
 func (s *Server) SetPublicURL(u string) { s.publicURL.Store(u) }
+
+// SetVersion records the hub's build and where to read the newest known
+// release from (a background checker; nil = never checked).
+func (s *Server) SetVersion(version string, latest func() string) {
+	s.version, s.latest = version, latest
+}
 
 // PublicURL is the configured public URL ("" if unknown).
 func (s *Server) PublicURL() string { u, _ := s.publicURL.Load().(string); return u }

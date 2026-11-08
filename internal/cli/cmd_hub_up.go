@@ -59,6 +59,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
 			{Name: "port", Kind: Int, Default: "7777", Help: "Local port (the hub only listens on 127.0.0.1)"},
 			{Name: "no-service", Kind: Bool, Help: "Do not install a service; print the command to run instead"},
+			{Name: "no-update-check", Kind: Bool, Help: "Do not look for new myco releases"},
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("tunnel"); err != nil {
@@ -80,6 +81,9 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			args := []string{"hub", "serve", "--addr", "127.0.0.1:" + strconv.Itoa(port), "--db", filepath.Join(dir, "hub.db"),
 				"--admin-token-file", filepath.Join(dir, "hub.env"), "--files-dir", filepath.Join(dir, "files"), "--log-level", "info"}
+			if e.in.Bool("no-update-check") {
+				args = append(args, "--no-update-check")
+			}
 			if kind != "none" {
 				args = append(args, "--tunnel", kind)
 				if h := e.in.String("hostname"); h != "" {
