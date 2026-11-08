@@ -1,9 +1,6 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import { appApi, type Hub } from "@/appapi";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ErrorNote, Modal } from "@/app/dialogs";
+import { ErrorText, Modal } from "@/app/dialogs";
 
 export function AddHubDialog({ open, onOpenChange, onAdded }: {
   open: boolean;
@@ -41,29 +38,28 @@ export function AddHubDialog({ open, onOpenChange, onAdded }: {
       title="添加 Hub"
       description="Hub 会先验证控制台令牌，再把它保存到钥匙串。令牌之后不会再出现在这个窗口里。"
     >
-      <form className="space-y-3" onSubmit={submit}>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">名称</span>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="工作室 Mac" autoFocus required />
+      <form onSubmit={submit}>
+        <label className="app-field">
+          <span className="app-field-label">名称</span>
+          <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="工作室 Mac" autoFocus required />
         </label>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">地址</span>
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.20:7780" className="font-mono text-xs" required />
+        <label className="app-field">
+          <span className="app-field-label">地址</span>
+          <input className="app-input mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.20:7780" required />
         </label>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">控制台令牌</span>
-          <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="myco_console_…" className="font-mono text-xs" autoComplete="off" required />
+        <label className="app-field">
+          <span className="app-field-label">控制台令牌</span>
+          <input className="app-input mono" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="myco_console_…" autoComplete="off" required />
         </label>
-        <div className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          在 Hub 所在机器上运行 <code className="rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">myco console token create --name {name.trim() || "<设备名>"}</code> 获取控制台令牌。
+        <div className="app-hint">
+          在 Hub 所在机器上运行 <code>myco console token create --name {name.trim() || "<设备名>"}</code> 获取控制台令牌。
         </div>
-        {error !== null && <ErrorNote error={error} />}
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={() => change(false)} disabled={busy}>取消</Button>
-          <Button type="submit" size="sm" disabled={busy || !name.trim() || !url.trim() || !token.trim()}>
-            {busy && <Loader2 className="animate-spin" />}
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => change(false)} disabled={busy}>取消</button>
+          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !name.trim() || !url.trim() || !token.trim()}>
             {busy ? "验证中…" : "添加 Hub"}
-          </Button>
+          </button>
         </div>
       </form>
     </Modal>
