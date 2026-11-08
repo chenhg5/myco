@@ -8,6 +8,7 @@ import {
 } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
+import { NodePicker } from "@/app/NodePicker";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -254,7 +255,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
   const [action, setAction] = useState<Action>(null);
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
-  const [allowFrom, setAllowFrom] = useState("");
+  const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -264,7 +265,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
     setBusy(false);
     setDisplayName(ag?.display_name || "");
     setDescription(ag?.description || "");
-    setAllowFrom((ag?.allow_from || []).join(", "));
+    setAllowFrom(ag?.allow_from || []);
     // Only reset when a different agent is opened, not on every 5s poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row?.hub.id, ag?.id]);
@@ -309,7 +310,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
     "close-action",
   );
   const saveAllowFrom = () => void run(
-    () => appApi.updateAllowFrom(hubId, ag.name, allowFrom.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)),
+    () => appApi.updateAllowFrom(hubId, ag.name, allowFrom),
     "close-action",
   );
 
@@ -491,12 +492,15 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
         open={action === "allow"}
         onOpenChange={(o) => !o && closeAction()}
         title="允许谁派任务"
-        description="只有这些来源可以给它发消息。留空表示任何人都可以。"
+        description="只有选中的节点可以给它派任务。一个都不选表示任何节点都可以。你在 App 里发的消息不受这个限制。"
       >
-        <label className="app-field">
-          <span className="app-field-label">允许的来源（逗号分隔）</span>
-          <input className="app-input mono" value={allowFrom} onChange={(e) => setAllowFrom(e.target.value)} placeholder="glenn, pm-codex" />
-        </label>
+        <NodePicker
+          nodes={(row.hub.overview?.agents || []).map((x) => x.agent)
+            .filter((x) => x.name !== ag.name && agentKind(x) !== "machine")}
+          value={allowFrom}
+          onChange={setAllowFrom}
+          disabled={busy}
+        />
         <ErrorText error={error} />
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>取消</button>

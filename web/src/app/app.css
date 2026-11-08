@@ -2955,3 +2955,50 @@ button.app-label:hover { filter: brightness(0.95); }
 }
 .app-group-action:hover { background: var(--nav-hover); }
 .app-group-action svg { width: 13px; height: 13px; }
+
+/* NodePicker: chips of picked nodes over a list to tick */
+.app-picker { margin-bottom: 12px; }
+.app-picker.is-disabled { opacity: 0.6; }
+.app-picker-list {
+  margin-top: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 10px;
+  box-shadow: 0 0 0 0.5px var(--line);
+  background: var(--card);
+  padding: 3px;
+}
+.app-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.app-picker-row:hover { background: var(--nav-hover); }
+.app-picker-row > svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.app-picker-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.app-picker-row.on .app-picker-check { background: var(--accent); box-shadow: none; color: #fff; }
+.app-picker-check svg { width: 11px; height: 11px; }
+.app-picker-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-picker-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-picker-kind { margin-left: auto; font-size: 11px; color: var(--muted); }
+.app-picker-empty { padding: 10px; font-size: 12px; color: var(--muted); }
