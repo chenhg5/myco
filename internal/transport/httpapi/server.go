@@ -6,6 +6,8 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -120,6 +122,9 @@ func (s *Server) routes() {
 	// A machine joins with a link; /j/{token} serves the link's script/page.
 	m.HandleFunc("POST /v1/join", s.join)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
+	// An app link opened in a browser: say how to use it (never echoes
+	// whether the token is valid).
+	m.HandleFunc("GET /c/{token}", s.appLinkPage)
 
 	// Discovery (admin or any agent).
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
@@ -1160,4 +1165,23 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	writeJSON(w, http.StatusOK, in)
+}
+
+// appLinkPage answers an app link (https://<hub>/c/<console token>) opened
+// in a browser: open it in the myco app, or paste it there.
+func (s *Server) appLinkPage(w http.ResponseWriter, r *http.Request) {
+	link := s.publicBase(r) + "/c/" + r.PathValue("token")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Robots-Tag", "noindex")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	esc := html.EscapeString
+	fmt.Fprintf(w, `<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>myco App 连接链接</title>
+<style>body{font:15px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;max-width:560px;margin:15vh auto;padding:0 20px;color:#1c1c21;background:#f4f4f6}
+a.btn{display:inline-block;background:#10b981;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none}p{line-height:1.6}small{color:#85858d}</style>
+<h2>这是 myco App 的连接链接</h2>
+<p>在 myco App 里选择"连接已有的 Hub"，粘贴这个链接即可。</p>
+<p><a class="btn" href="myco://add-hub?link=%s">用 myco App 打开</a></p>
+<p><small>这个链接带有管理这个 Hub 的权限，不要发到公开的地方。</small></p></html>`, esc(url.QueryEscape(link)))
 }

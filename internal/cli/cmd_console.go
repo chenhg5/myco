@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -105,6 +106,44 @@ does, except manage console tokens; revoke it on its own if the device is lost.`
 			return e.p.Print(t, func(w io.Writer) { fmt.Fprintf(w, "console token %s (%s) revoked\n", t.ID, t.Name) })
 		}),
 	}
+	link := &Command{
+		Name:     "link",
+		Summary:  "Print an app link: paste it into the myco app to add this hub (shown once)",
+		Mutating: true,
+		Long: `Issues a console token and prints it as one link with the hub's address,
+https://<hub>/c/<token>. Paste it into the myco app ("连接已有的 Hub"). Like the token itself it
+gives admin access to the hub (except managing console tokens): do not post it publicly, and
+revoke it with 'myco console token revoke' if it leaks.`,
+		Examples: []string{
+			"sudo myco console link                  # on a server installed with install-hub.sh",
+			"sudo myco console link --name work-mac",
+		},
+		Flags: []Flag{
+			{Name: "name", Kind: String, Default: "app", Help: "Device the link is for (names the console token)"},
+			adminFlag,
+		},
+		Run: handler(func(e *env) error {
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			res, err := c.CreateConsoleToken(e.in.Ctx, e.in.String("name"))
+			if err != nil {
+				return err
+			}
+			hub, _ := e.hubURL()
+			if h, err := c.Health(e.in.Ctx); err == nil && h.PublicURL != "" {
+				hub = h.PublicURL
+			}
+			l := strings.TrimRight(hub, "/") + "/c/" + res.Token
+			out := map[string]any{"link": l, "hub": hub, "console_token": res.ConsoleToken}
+			return e.p.Print(out, func(w io.Writer) {
+				fmt.Fprintf(w, "App link for %s (shown only this once):\n\n  %s\n\n", hub, l)
+				fmt.Fprintln(w, "Paste it into the myco app (连接已有的 Hub). It gives admin access to this hub: keep it private.")
+				fmt.Fprintf(w, "Revoke it with: myco console token revoke --id %s\n", res.ConsoleToken.ID)
+			})
+		}),
+	}
 	token := (&Command{Name: "token", Summary: "Console tokens: per-device admin credentials for the console app"}).Add(create, list, revoke)
-	return (&Command{Name: "console", Summary: "The console app's access to this hub (admin)"}).Add(token)
+	return (&Command{Name: "console", Summary: "The console app's access to this hub (admin)"}).Add(link, token)
 }

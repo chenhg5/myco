@@ -37,6 +37,28 @@ type Local struct {
 	// Dirs are searched after PATH (default: ~/.local/bin, Homebrew's and
 	// /usr/local/bin).
 	Dirs []string
+	// Bundled is the myco CLI shipped inside the app ("" = none): used when
+	// no other is installed, and installed into ~/.local/bin by EnsureCLI.
+	Bundled string
+}
+
+// EnsureCLI installs the app's bundled myco CLI into ~/.local/bin when no
+// myco is installed, so the local hub, local agents and the terminal all
+// have one. It returns the installed path ("" if nothing was done).
+func (l *Local) EnsureCLI() (string, error) {
+	if l.Bundled == "" || l.find("myco", l.in(l.binDirs(), "myco")...) != "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(l.Bundled)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(l.Home, ".local", "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	target := filepath.Join(dir, exeName("myco"))
+	return target, release.Replace(target, b)
 }
 
 func (l *Local) lookPath(name string) (string, error) {
@@ -82,7 +104,17 @@ func exeName(name string) string {
 	return name
 }
 
-func (l *Local) mycoPath() string { return l.find("myco", l.in(l.binDirs(), "myco")...) }
+func (l *Local) mycoPath() string {
+	if p := l.find("myco", l.in(l.binDirs(), "myco")...); p != "" {
+		return p
+	}
+	if l.Bundled != "" {
+		if _, err := os.Stat(l.Bundled); err == nil {
+			return l.Bundled
+		}
+	}
+	return ""
+}
 
 func (l *Local) cloudflaredPath() string {
 	return l.find("cloudflared", l.in(l.binDirs(), "cloudflared")...)

@@ -200,6 +200,9 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		if strings.HasPrefix(path, "/j/") {
 			path = "/j/<redacted>" // join links carry a credential
 		}
+		if strings.HasPrefix(path, "/c/") {
+			path = "/c/<redacted>" // app links carry a console token
+		}
 		log.Debug("request", "method", r.Method, "path", path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
 	})
 }

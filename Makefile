@@ -49,6 +49,8 @@ app:
 	rm -rf bin/myco.app bin/myco.iconset
 	mkdir -p bin/myco.app/Contents/MacOS bin/myco.app/Contents/Resources bin/myco.iconset
 	cp bin/myco-app bin/myco.app/Contents/MacOS/myco-app
+	# The app ships the myco CLI and installs it into ~/.local/bin on first run.
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco.app/Contents/Resources/myco ./cmd/myco
 	sed 's/@VERSION@/$(APP_VERSION)/g' cmd/myco-app/build/darwin/Info.plist > bin/myco.app/Contents/Info.plist
 	for s in 16 32 128 256 512; do \
 		sips -z $$s $$s cmd/myco-app/build/darwin/icon-1024.png --out bin/myco.iconset/icon_$${s}x$${s}.png >/dev/null; \
@@ -57,8 +59,10 @@ app:
 	iconutil -c icns bin/myco.iconset -o bin/myco.app/Contents/Resources/myco.icns
 	rm -rf bin/myco.iconset
 	if [ -n "$$MYCO_SIGN_IDENTITY" ]; then \
+		codesign --force --options runtime --timestamp --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app/Contents/Resources/myco && \
 		codesign --force --options runtime --timestamp --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app; \
 	else \
+		codesign --force --sign - bin/myco.app/Contents/Resources/myco && \
 		codesign --force --sign - bin/myco.app; \
 	fi
 	codesign --verify --strict bin/myco.app && echo "built bin/myco.app ($(APP_VERSION))"

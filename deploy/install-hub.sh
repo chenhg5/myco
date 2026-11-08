@@ -177,11 +177,22 @@ echo "Admin token:  stored in /etc/myco/hub.env (root only; never paste it into 
 
 # First install: create a join link right away so adding machines is one paste.
 JOIN_URL=""
+APP_LINK=""
 if [[ -n "${NEW_TOKEN:-}" ]]; then
   LINK_JSON="$(/usr/local/bin/myco link create --note "created by install-hub.sh" --format json 2>/dev/null || true)"
   JOIN_URL="$(printf '%s' "$LINK_JSON" | sed -n 's/.*"join_url": *"\([^"]*\)".*/\1/p' | head -1)"
+  APP_JSON="$(/usr/local/bin/myco console link --name app --format json 2>/dev/null || true)"
+  APP_LINK="$(printf '%s' "$APP_JSON" | sed -n 's/.*"link": *"\([^"]*\)".*/\1/p' | head -1)"
 fi
 echo
+if [[ -n "$APP_LINK" ]]; then
+  echo "Add this hub to the myco app (连接已有的 Hub), paste this link (admin access: keep it private):"
+  echo "  $APP_LINK"
+  echo
+else
+  echo "To add this hub to the myco app, make an app link: sudo /usr/local/bin/myco console link"
+  echo
+fi
 if [[ -n "$JOIN_URL" ]]; then
   echo "Add a computer or server (macOS / Linux / WSL), run this on it:"
   echo "  curl -fsSL $JOIN_URL | bash"

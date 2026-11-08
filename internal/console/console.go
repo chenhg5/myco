@@ -156,6 +156,8 @@ type Backend struct {
 	// Version and Shell answer GET /app/info; Shell is "mac" for the app
 	// window (hidden title bar) and "browser" for --serve.
 	Version, Shell string
+
+	pending pendingLink
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -190,6 +192,9 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/hub", b.startLocal)
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 	}
+	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
+	})
 	m.HandleFunc("GET /app/hubs", b.listHubs)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
@@ -380,9 +385,18 @@ func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Backend) addHub(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Name, URL, Token string }
+	var in struct{ Name, URL, Token, Link string }
 	if !decode(w, r, &in) {
 		return
+	}
+	if strings.TrimSpace(in.Link) != "" {
+		u, tok, err := ParseAppLink(in.Link)
+		if err != nil {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: err.Error(),
+				Suggestion: "在 Hub 服务器上运行 sudo myco console link 生成一个"})
+			return
+		}
+		in.URL, in.Token = u, tok
 	}
 	in.Name, in.Token = strings.TrimSpace(in.Name), strings.TrimSpace(in.Token)
 	u, err := normalizeURL(in.URL)
@@ -422,6 +436,19 @@ func (b *Backend) addHub(w http.ResponseWriter, r *http.Request) {
 			Message:    "this is an agent token, not a console token",
 			Suggestion: "on the hub machine run: myco console token create --name <device>"})
 		return
+	}
+	// The same hub again (say, a new link): keep one entry, new token.
+	if hubs, err := b.Store.List(); err == nil {
+		for _, h := range hubs {
+			if h.URL == u {
+				if err := b.Secrets.Set(h.ID, in.Token); err != nil {
+					writeErr(w, fmt.Errorf("cannot save the token in the keychain: %w", err))
+					return
+				}
+				writeJSON(w, http.StatusOK, HubStatus{Hub: h, OK: true})
+				return
+			}
+		}
 	}
 	h, err := b.Store.Add(in.Name, u)
 	if err != nil {

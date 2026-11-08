@@ -5,6 +5,7 @@ package main
 import (
 	_ "embed"
 	"net/http"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -18,7 +19,7 @@ var trayIcon []byte
 
 // runGUI opens the console as a menu-bar app: no Dock icon, a tray menu,
 // and a window that hides instead of closing (quit from the menu).
-func runGUI(h http.Handler) error {
+func runGUI(h http.Handler, onLink func(string)) error {
 	app := application.New(application.Options{
 		Name:        "myco",
 		Description: "Manage your myco hubs and agents",
@@ -54,6 +55,14 @@ func runGUI(h http.Handler) error {
 		window.Focus()
 	}
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { show() })
+	// myco://add-hub?link=… (an app link's "open in the app" button): the
+	// UI picks it up and offers to add the hub.
+	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		if u := e.Context().URL(); strings.HasPrefix(u, "myco://") {
+			onLink(u)
+			show()
+		}
+	})
 
 	menu := app.NewMenu()
 	menu.Add("Open myco").OnClick(func(*application.Context) { show() })

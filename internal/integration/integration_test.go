@@ -1085,3 +1085,35 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 		t.Fatalf("spawn without a machine node: %v", err)
 	}
 }
+
+// `myco console link` prints one link with the hub's address and a fresh
+// console token; opened in a browser the hub explains how to use it.
+func TestConsoleAppLink(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	adminCLI := newCLI(t, h, filepath.Join(home, "admin.yaml"))
+	out := adminCLI.must(c, "console", "link", "--name", "work-mac")
+	var res struct{ Link, Hub string }
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("console link: %s", out)
+	}
+	base, tok, ok := strings.Cut(res.Link, "/c/")
+	if !ok || base != h.url || !strings.HasPrefix(tok, app.ConsoleTokenPrefix) {
+		t.Fatalf("link %q", res.Link)
+	}
+	if _, err := h.client(tok).ListEnrollments(c); err != nil {
+		t.Fatalf("the link's token must work: %v", err)
+	}
+	for _, path := range []string{"/c/" + tok, "/c/" + app.ConsoleTokenPrefix + "made-up"} {
+		resp, err := http.Get(h.url + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || !strings.Contains(string(body), "myco://add-hub?link=") || resp.Header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s: %d %s", path, resp.StatusCode, body)
+		}
+	}
+}

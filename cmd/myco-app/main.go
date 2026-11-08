@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/console"
@@ -39,8 +40,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version,
-		Local: &console.Local{Home: home, Device: deviceName()}}
+	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI()}
+	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local}
+	if p, err := local.EnsureCLI(); err != nil {
+		log.Printf("could not install the bundled myco CLI: %v", err)
+	} else if p != "" {
+		log.Printf("installed the myco CLI at %s", p)
+	}
 	if *serve != "" {
 		b.Shell = "browser"
 		if err := runServe(*serve, handler(b)); err != nil {
@@ -49,10 +55,24 @@ func main() {
 		return
 	}
 	b.Shell = "mac"
-	if err := runGUI(handler(b)); err != nil {
+	if err := runGUI(handler(b), b.SetPendingLink); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
 	}
+}
+
+// bundledCLI is the myco CLI inside the app bundle
+// (myco.app/Contents/Resources/myco), or "" when not running from one.
+func bundledCLI() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	p := filepath.Join(filepath.Dir(exe), "..", "Resources", "myco")
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return filepath.Clean(p)
 }
 
 // deviceName names this computer in console tokens: its host name,
