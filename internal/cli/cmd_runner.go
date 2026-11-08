@@ -225,13 +225,30 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		env = append(env, "MYCO_BIN="+self, "PATH="+filepath.Dir(self)+string(os.PathListSeparator)+e.in.Getenv("PATH"))
 	}
 	if rc.EnvFile != "" {
-		extra, err := config.ReadEnvFile(rc.EnvFile)
-		if err != nil {
+		if _, err := config.ReadEnvFile(rc.EnvFile); err != nil {
 			return nil, errorf("invalid_config", ExitUsage, "fix runner.env_file in "+cfgPath, "runner.env_file: %v", err)
 		}
-		env = append(extra, env...) // myco's own variables win
 	}
 	alog := log.With("agent", me.Name)
+	// The env file is read again before every turn, and so is the profile's
+	// runner.env_file setting: re-running `myco runner env capture`, or
+	// adding env_file to the profile, applies to the next message without
+	// restarting the runner.
+	envFunc := func() []string {
+		file := rc.EnvFile
+		if c, err := config.Load(cfgPath); err == nil && c.Runner.EnvFile != "" {
+			file = c.Runner.EnvFile
+		}
+		if file == "" {
+			return env
+		}
+		extra, err := config.ReadEnvFile(file)
+		if err != nil {
+			alog.Warn("cannot read runner.env_file; running without it", "env_file", file, "err", err)
+			return env
+		}
+		return append(extra, env...) // myco's own variables win
+	}
 	if execSpec != nil {
 		allow := "any command"
 		if len(execSpec.Allow) > 0 {
@@ -251,7 +268,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.
-		Env: env,
+		Env: env, EnvFunc: envFunc,
 	}, alog), nil
 }
 

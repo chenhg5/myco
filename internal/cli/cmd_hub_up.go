@@ -134,12 +134,8 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if err != nil {
 				return errorf("unsupported", ExitError, "run it under your own process manager: myco hub up --no-service", "%v", err)
 			}
-			spec := service.Spec{Binary: bin, Args: args, Env: map[string]string{}, LogPath: filepath.Join(dir, "hub.log")}
-			for _, k := range serviceEnvKeys {
-				if v := e.in.Getenv(k); v != "" {
-					spec.Env[k] = v
-				}
-			}
+			spec := service.Spec{Binary: bin, Args: args, LogPath: filepath.Join(dir, "hub.log")}
+			spec.Env, _ = serviceEnv(e.in.Getenv) // the hub reaches GitHub for update checks
 			plan, err := m.PlanInstall(spec)
 			if err != nil {
 				return err

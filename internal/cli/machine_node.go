@@ -152,7 +152,12 @@ func (e *env) machineNode(me *api.Agent, c *client.Client, sh runnerShared) (har
 				if err != nil {
 					return "", err
 				}
-				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model}
+				// The first turn ran with the machine node's env_file (provider
+				// settings such as ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY, captured
+				// with `myco runner env capture --agent <machine node>`); later
+				// turns need the same, or the session cannot log in.
+				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
+					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
 				return res.Agent.Name, saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
 			},
 			Spawned: func() {
@@ -165,4 +170,14 @@ func (e *env) machineNode(me *api.Agent, c *client.Client, sh runnerShared) (har
 			},
 		},
 	}, nil
+}
+
+// machineEnvFile is the machine node's runner.env_file, which spawned
+// sessions inherit ("" if it has none).
+func machineEnvFile(defaultPath, machineNode string) string {
+	cfg, err := config.Load(config.ProfilePath(defaultPath, machineNode))
+	if err != nil {
+		return ""
+	}
+	return cfg.Runner.EnvFile
 }
