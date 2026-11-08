@@ -17,4 +17,6 @@ export interface Filters {
   machine: string;
   state: State | "all";
   kind: NodeKind | "all";
+  /** "all", "group:<name>", "group:" (no group) or "tag:<name>". */
+  label: string;
 }

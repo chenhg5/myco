@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -40,6 +41,9 @@ func appZip(t *testing.T, files map[string]string) []byte {
 // The app checks the latest release, downloads its zip, verifies it
 // against SHA256SUMS, swaps the bundle and asks the window to relaunch.
 func TestAppUpdate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the app updates itself on macOS only")
+	}
 	zipped := appZip(t, map[string]string{
 		"myco.app/Contents/MacOS/myco-app": "new app",
 		"myco.app/Contents/Info.plist":     "plist",

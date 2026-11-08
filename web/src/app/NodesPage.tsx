@@ -5,7 +5,7 @@ import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
 import {
-  CLOUD_FILTER, agentKind, cliName, isCloud, machineFilterValue, machineLabel, nodeIcon,
+  CLOUD_FILTER, agentKind, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, tagsOf,
   parseMachineFilter,
 } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
@@ -58,7 +58,12 @@ export function NodeRowView({ row, highlight, onClick }: {
     >
       <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
       <span className="app-row-main">
-        <span className="app-row-title">{a.display_name || a.name}</span>
+        <span className="app-row-titleline">
+          <span className="app-row-title">{a.display_name || a.name}</span>
+          {groupsOf(a).map((g) => <span key={"g" + g} className="app-label group">{g}</span>)}
+          {tagsOf(a).slice(0, 3).map((t) => <span key={"t" + t} className="app-label">#{t}</span>)}
+          {tagsOf(a).length > 3 && <span className="app-label">+{tagsOf(a).length - 3}</span>}
+        </span>
         <span className="app-row-sub">
           <span className={cn("dot", row.st.state)} />
           <span>{state.label}</span>
@@ -147,6 +152,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           : !!machineFilter && r.hub.id === machineFilter.hubId && a.machine_id === machineFilter.machineId;
       return (filters.hub === "all" || r.hub.id === filters.hub) &&
         (filters.kind === "all" || agentKind(a) === filters.kind) &&
+        matchesLabelFilter(a, filters.label) &&
         machineOk &&
         (filters.state === "all" || r.st.state === filters.state) &&
         (!q || [
@@ -157,6 +163,19 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   }, [nodes, filters]);
 
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
+
+  // Groups and tags in use (in the hubs in view), for the label filter.
+  const labelOptions = useMemo(() => {
+    const groups = new Set<string>();
+    const tags = new Set<string>();
+    for (const r of nodes) {
+      if (filters.hub !== "all" && r.hub.id !== filters.hub) continue;
+      groupsOf(r.st.agent).forEach((g) => groups.add(g));
+      tagsOf(r.st.agent).forEach((t) => tags.add(t));
+    }
+    const sort = (x: Set<string>) => [...x].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    return { groups: sort(groups), tags: sort(tags) };
+  }, [nodes, filters.hub]);
 
   const scopedHubs = (hubs || []).filter((h) => filters.hub === "all" || h.id === filters.hub);
   const hasUnreachable = scopedHubs.some((h) => !h.ok);
@@ -216,6 +235,23 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
             </button>
           ))}
         </div>
+        <span className="app-select-wrap">
+          <select className="app-select" value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label="按分组和标签筛选">
+            <option value="all">全部分组和标签</option>
+            {labelOptions.groups.length > 0 && (
+              <optgroup label="分组">
+                {labelOptions.groups.map((g) => <option key={g} value={"group:" + g}>{g}</option>)}
+                <option value="group:">未分组</option>
+              </optgroup>
+            )}
+            {labelOptions.tags.length > 0 && (
+              <optgroup label="标签">
+                {labelOptions.tags.map((t) => <option key={t} value={"tag:" + t}>#{t}</option>)}
+              </optgroup>
+            )}
+          </select>
+          <ChevronDown />
+        </span>
         <span className="app-select-wrap">
           <select className="app-select" value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
             <option value="all">全部机器</option>

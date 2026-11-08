@@ -9,8 +9,9 @@ import (
 
 // Labels group agents. A label is either a bare tag ("gpu") or key=value
 // ("team=loops"). A key may carry several values, so groups are just labels
-// such as group=loops and group=release on the same agent.
-var labelPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,62}(=[A-Za-z0-9._/:@-]{1,63})?$`)
+// such as group=loops and group=release on the same agent. Letters of any
+// script are allowed (group=官网改版); keys and tags have no capitals.
+var labelPattern = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}][\p{Ll}\p{Lo}\p{N}._/-]{0,62}(=[\p{L}\p{N}._/:@-]{1,63})?$`)
 
 // MaxLabels bounds labels per agent.
 const MaxLabels = 32
@@ -77,7 +78,7 @@ type selTerm struct {
 	op         string // has | not | eq | ne
 }
 
-var selKey = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,62}$`)
+var selKey = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}][\p{Ll}\p{Lo}\p{N}._/-]{0,62}$`)
 
 // ParseSelector parses a selector; an empty string matches every agent.
 func ParseSelector(s string) (Selector, error) {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -189,6 +190,15 @@ func TestBackendManagesHubsAndAgents(t *testing.T) {
 	}
 	if code, _, _ := r.do("PUT", "/app/hubs/"+id+"/agents/worker/allow_from", map[string]any{}); code != 400 {
 		t.Fatalf("allow_from missing: %d", code)
+	}
+	// Group and tags: move to another group (the app removes the old one), add a tag.
+	r.do("PUT", "/app/hubs/"+id+"/agents/worker/labels", map[string]any{"add": []string{"group=旧"}})
+	code, m, _ = r.do("PUT", "/app/hubs/"+id+"/agents/worker/labels", map[string]any{"add": []string{"group=官网改版", "前端"}, "remove": []string{"group=旧"}})
+	if code != 200 || fmt.Sprint(m["labels"]) != "[group=官网改版 前端]" {
+		t.Fatalf("labels: %d %v", code, m)
+	}
+	if code, m, _ := r.do("PUT", "/app/hubs/"+id+"/agents/worker/labels", map[string]any{"add": []string{"Bad Tag"}}); code != 400 {
+		t.Fatalf("bad label: %d %v", code, m)
 	}
 	a, err := r.admin.GetAgent(ctx, "worker")
 	if err != nil || a.DisplayName != "Worker" || a.Description != "new" || len(a.AllowFrom) != 1 {

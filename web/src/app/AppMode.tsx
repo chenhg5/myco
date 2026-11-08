@@ -84,7 +84,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
   const [page, setPage] = useState<Page>("nodes");
-  const [filters, setFilters] = useState<Filters>({ query: "", hub: "all", machine: "all", state: "all", kind: "all" });
+  const [filters, setFilters] = useState<Filters>({ query: "", hub: "all", machine: "all", state: "all", kind: "all", label: "all" });
   const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
   const [machineInspect, setMachineInspect] = useState<MachineRef | null>(null);
   const [spawnTarget, setSpawnTarget] = useState<SpawnTarget | null>(null);

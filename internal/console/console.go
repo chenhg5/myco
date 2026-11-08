@@ -234,6 +234,19 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	// Groups (group=…) and tags (bare labels) of a node.
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/labels", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.LabelsRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		a, err := c.SetLabels(r.Context(), r.PathValue("name"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/allow_from", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
 			AllowFrom *[]string `json:"allow_from"`

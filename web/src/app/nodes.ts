@@ -150,3 +150,27 @@ export function parseMachineFilter(value: string): { hubId: string; machineId: s
   if (i <= 0) return null;
   return { hubId: body.slice(0, i), machineId: body.slice(i + 1) };
 }
+
+/** A node's groups: its `group=…` labels. */
+export function groupsOf(a: Agent): string[] {
+  return (a.labels || []).filter((l) => l.startsWith("group=")).map((l) => l.slice(6));
+}
+
+/** A node's tags: its bare labels (key=value labels such as machine=… are not tags). */
+export function tagsOf(a: Agent): string[] {
+  return (a.labels || []).filter((l) => !l.includes("="));
+}
+
+/** The label filter: "all", "group:<name>", "group:" (no group) or "tag:<name>". */
+export function matchesLabelFilter(a: Agent, value: string): boolean {
+  if (value === "all") return true;
+  if (value === "group:") return groupsOf(a).length === 0;
+  if (value.startsWith("group:")) return groupsOf(a).includes(value.slice(6));
+  if (value.startsWith("tag:")) return tagsOf(a).includes(value.slice(4));
+  return true;
+}
+
+/** Turns what someone typed into a label value: no spaces, lower-case Latin letters. */
+export function cleanLabel(s: string): string {
+  return s.trim().replace(/\s+/g, "-").toLowerCase();
+}

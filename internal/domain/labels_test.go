@@ -6,6 +6,16 @@ func TestLabelsAndSelector(t *testing.T) {
 	if _, err := ParseLabels([]string{"Team=x"}); err == nil {
 		t.Fatal("uppercase key must be rejected")
 	}
+	// Letters of any script: groups and tags in Chinese.
+	if zh, err := ParseLabels([]string{"group=官网改版", "前端", "owner=Glenn"}); err != nil || len(zh) != 3 {
+		t.Fatalf("unicode labels: %v %v", zh, err)
+	}
+	if s, err := ParseSelector("group=官网改版,前端"); err != nil || !s.Matches(&Agent{Labels: []string{"group=官网改版", "前端"}}) {
+		t.Fatalf("unicode selector: %v", err)
+	}
+	if _, err := ParseLabels([]string{"has space", "a=b c"}); err == nil {
+		t.Fatal("spaces must be rejected")
+	}
 	l, err := ParseLabels([]string{"group=loops", "gpu", "group=release", "gpu", " machine=mac "})
 	if err != nil || len(l) != 4 || l[0] != "gpu" {
 		t.Fatalf("parse: %v %v", l, err)

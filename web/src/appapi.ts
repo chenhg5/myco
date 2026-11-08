@@ -250,6 +250,9 @@ export const appApi = {
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Adds and removes labels (group=… and tags) of a node. */
+  setLabels: (hubId: string, name: string, change: { add?: string[]; remove?: string[] }) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/labels`, change),
   updateAllowFrom: (hubId: string, name: string, allowFrom: string[]) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, { allow_from: allowFrom }),
   kick: (hubId: string, name: string) =>

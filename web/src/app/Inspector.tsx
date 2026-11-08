@@ -4,7 +4,7 @@ import { appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
-  machineOfRow, modelSourceLabel, nodeIcon,
+  cleanLabel, groupsOf, machineOfRow, modelSourceLabel, nodeIcon, tagsOf,
 } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { stateMeta } from "@/components/status";
@@ -45,6 +45,95 @@ function MessageRows({ row, now, mine, onThread }: {
           <span className="body">{m.body}</span>
         </button>
       ))}
+    </>
+  );
+}
+
+// LabelsEditor sets the node's group (one group=… label) and its tags (bare
+// labels). Other key=value labels, such as machine=…, are left alone.
+function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+  const ag = row.st.agent;
+  const groups = groupsOf(ag);
+  const tags = tagsOf(ag);
+  const [group, setGroup] = useState(groups[0] || "");
+  const [tag, setTag] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => {
+    setGroup(groupsOf(row.st.agent)[0] || "");
+    setTag("");
+    setError(null);
+  }, [row.hub.id, row.st.agent.name, row.st.agent.labels.join(",")]);
+
+  const known = [...new Set((row.hub.overview?.agents || []).flatMap((x) => groupsOf(x.agent)))].sort();
+
+  const change = async (add: string[], remove: string[]) => {
+    if (!add.length && !remove.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.setLabels(row.hub.id, ag.name, { add, remove });
+      await onRefresh();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveGroup = () => {
+    const g = cleanLabel(group);
+    if (g === (groups[0] || "") && groups.length <= 1) return;
+    void change(g ? ["group=" + g] : [], groups.filter((x) => x !== g).map((x) => "group=" + x));
+  };
+  const addTag = () => {
+    const t = cleanLabel(tag);
+    if (!t || tags.includes(t)) { setTag(""); return; }
+    void change([t], []).then(() => setTag(""));
+  };
+
+  return (
+    <>
+      <div className="app-list">
+        <div className="app-kv app-labels-row">
+          <span className="app-kv-label">分组</span>
+          <span className="app-kv-value">
+            <input
+              className="app-label-input"
+              value={group}
+              list={`groups-${row.hub.id}`}
+              placeholder="未分组"
+              disabled={busy}
+              aria-label="分组"
+              onChange={(e) => setGroup(e.target.value)}
+              onBlur={saveGroup}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur(); }}
+            />
+            <datalist id={`groups-${row.hub.id}`}>{known.map((g) => <option key={g} value={g} />)}</datalist>
+          </span>
+        </div>
+        <div className="app-kv app-labels-row">
+          <span className="app-kv-label">标签</span>
+          <span className="app-kv-value app-label-list">
+            {tags.map((t) => (
+              <span key={t} className="app-label editable">
+                #{t}
+                <button type="button" aria-label={`去掉标签 ${t}`} disabled={busy} onClick={() => void change([], [t])}>×</button>
+              </span>
+            ))}
+            <input
+              className="app-label-input small"
+              value={tag}
+              placeholder="+ 标签"
+              disabled={busy}
+              aria-label="添加标签"
+              onChange={(e) => setTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addTag(); }}
+              onBlur={() => tag.trim() && addTag()}
+            />
+          </span>
+        </div>
+      </div>
+      <ErrorText error={error} />
     </>
   );
 }
@@ -199,6 +288,14 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 </span>
               </div>
             </div>
+          </section>
+
+          <section className="app-group">
+            <div className="app-group-title">
+              <span className="name">分组和标签</span>
+              <span className="app-group-note">用来筛选节点</span>
+            </div>
+            <LabelsEditor row={row} onRefresh={onRefresh} />
           </section>
 
           <section className="app-group">

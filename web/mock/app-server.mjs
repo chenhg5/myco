@@ -190,7 +190,7 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
-          labels: ["machine=studio-mac", "group=release", "role=pm"], capabilities: ["review", "release"],
+          labels: ["machine=studio-mac", "group=官网改版", "role=pm", "review", "release"], capabilities: ["review", "release"],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" },
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
@@ -207,7 +207,7 @@ const state = {
           kind: "shell", machine_id: "m_bench",
           runtime: { cli: "shell", access: "workspace" },
           status_text: "正在运行 make test-ios", status_at: iso(45),
-          labels: ["machine=bench-01", "group=ios"], capabilities: ["build", "test"],
+          labels: ["machine=bench-01", "group=ios", "ci"], capabilities: ["build", "test"],
           binding: { harness: "shell", environment: "Linux 6.8", workdir: "~/code/app-ios" },
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
@@ -885,6 +885,15 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
+        return send(res, 200, agent);
+      }
+      if (parts.length === 6 && parts[5] === "labels" && method === "PUT") {
+        const body = await readBody(req);
+        const add = (body?.add || []).map(String), remove = (body?.remove || []).map(String);
+        if ([...add].some((l) => /\s|[A-Z]/.test(l.split("=")[0]))) return fail(res, 400, "invalid_argument", "invalid label");
+        let labels = [...new Set([...(agent.labels || []), ...add])];
+        labels = labels.filter((l) => !remove.some((r) => l === r || (!r.includes("=") && l.startsWith(r + "=")))).sort();
+        agent.labels = labels;
         return send(res, 200, agent);
       }
       if (parts.length === 6 && parts[5] === "allow_from" && method === "PUT") {

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -168,7 +169,7 @@ func installBundle(bundle string, zipped []byte) error {
 		return err
 	}
 	fresh := filepath.Join(tmp, "myco.app")
-	if st, err := os.Stat(filepath.Join(fresh, "Contents", "MacOS", "myco-app")); err != nil || st.Mode()&0o111 == 0 {
+	if st, err := os.Stat(filepath.Join(fresh, "Contents", "MacOS", "myco-app")); err != nil || (osutil.UnixPermissions && st.Mode()&0o111 == 0) {
 		return errors.New("the downloaded app is incomplete (no Contents/MacOS/myco-app)")
 	}
 	old := filepath.Join(tmp, "old.app")
