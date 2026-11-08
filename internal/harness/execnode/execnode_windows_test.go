@@ -43,3 +43,20 @@ func TestExecPowerShellEnvironmentIsClean(t *testing.T) {
 		t.Fatalf("expected context and Windows basics:\n%s", res.Stdout)
 	}
 }
+
+// Timeouts and the output cap through PowerShell (generous limits: it can
+// take a second or two to start on a busy machine).
+func TestExecPowerShellTimeoutAndTruncation(t *testing.T) {
+	spec := harness.ExecSpec{Senders: []string{"boss"}, Timeout: "3s"}
+	start := time.Now()
+	if res := run(t, spec, "boss", "Start-Sleep -Seconds 60"); !res.TimedOut || res.ExitCode != ExitTimedOut {
+		t.Fatalf("timeout: %+v", res)
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Errorf("a timed-out command took %s to be killed", d)
+	}
+	spec = harness.ExecSpec{Senders: []string{"boss"}, MaxOutput: 10}
+	if res := run(t, spec, "boss", "Write-Output '0123456789abcdef'"); !res.Truncated || res.Stdout != "0123456789" {
+		t.Fatalf("truncation: %+v", res)
+	}
+}

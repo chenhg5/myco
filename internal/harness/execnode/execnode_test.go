@@ -98,6 +98,7 @@ func TestExecEnvironmentIsClean(t *testing.T) {
 }
 
 func TestExecTimeoutTruncationAndAudit(t *testing.T) {
+	testutil.NeedsPOSIXShell(t) // a 200ms timeout is shorter than PowerShell takes to start
 	audit := filepath.Join(t.TempDir(), "logs", "node.exec.jsonl")
 	spec := harness.ExecSpec{Senders: []string{"boss"}, Timeout: "200ms", MaxOutput: 10, AuditLog: audit}
 	if res := run(t, spec, "boss", "sleep 5"); !res.TimedOut || res.ExitCode != ExitTimedOut {
