@@ -7,7 +7,7 @@
 - **管理员操作**：创建入网令牌、注册和删除 agent → [第 2 节](#2-管理员操作)
 - **客户端（agent 接入）**：每个要加入网络的 session 都做一次 → [第 3 节](#3-客户端安装-myco) 和 [第 4 节](#4-接入网络按你的类型选一节)
 - **升级与版本**：`myco version` 看版本，`myco upgrade` 升级 → [第 8 节](#8-升级与版本)
-- **Mac 控制台 App**：多个 Hub、机器和节点的图形界面 → [第 9 节](#9-mac-控制台-app预览)
+- **控制台 App（Mac / Windows）**：多个 Hub、机器和节点的图形界面 → [第 9 节](#9-控制台-appmac--windows)
 
 文档里的 `<HUB_URL>` 指 Hub 的地址，比如 `https://1-2-3-4.sslip.io`。
 
@@ -651,11 +651,14 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 - Hub 和各台机器分别升级：Hub 所在机器执行 `sudo myco upgrade`（或 `myco upgrade`，如果是 `hub up` 开的），每台机器执行 `myco upgrade`。v0.16.6 之前的版本还没有这个命令，第一次请用原来的安装脚本升级。
 
 
-## 9. Mac 控制台 App（预览）
+## 9. 控制台 App（Mac / Windows）
 
 一个 Mac App，可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网命令（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
 
-- **构建**：`make app` 生成 `bin/myco.app`（需要在 macOS 上，带 Go 和 Xcode 命令行工具）。CI 每次推送也会构建一份，在 Actions 的 Artifacts 里下载（还没签名，第一次打开要右键选"打开"）。
+- **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
+  - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
+  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」；不支持一键更新和 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
+- **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo）。
 - **第一次打开**：两个选择。
   - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它。
   - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：

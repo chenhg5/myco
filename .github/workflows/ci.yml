@@ -44,6 +44,11 @@ jobs:
           bin/myco.exe --version
           $env:MYCO_NO_UPDATE_CHECK = "1"
           bin/myco.exe version --offline
+      - name: the console app builds and runs
+        shell: pwsh
+        run: |
+          go build -tags production -o bin/myco-app.exe ./cmd/myco-app
+          bin/myco-app.exe --version
 
   app-macos:
     # The console app: built natively (cgo + the system WebKit) and kept as a

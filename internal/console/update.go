@@ -139,7 +139,11 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, fmt.Errorf("cannot find the latest release: %w", err))
 		return
 	}
-	zipped, err := release.FetchAsset(ctx, hc, u.Download, latest, AppAsset(u.arch()), appZipMax)
+	// The signed universal build when the release has it, else this Mac's own.
+	zipped, err := release.FetchAsset(ctx, hc, u.Download, latest, AppAsset("universal"), appZipMax)
+	if err != nil && strings.Contains(err.Error(), "has no") {
+		zipped, err = release.FetchAsset(ctx, hc, u.Download, latest, AppAsset(u.arch()), appZipMax)
+	}
 	if err != nil {
 		writeErr(w, err)
 		return

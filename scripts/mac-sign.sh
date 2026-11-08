@@ -8,6 +8,8 @@
 #   MYCO_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" scripts/mac-sign.sh v0.17.2
 #
 # Output in dist/: myco.app (stapled), myco-app-darwin-universal.zip, myco.dmg.
+# With MYCO_UPLOAD=1 it adds myco.dmg and the zip to the GitHub release
+# <version> (with gh) and their lines to the release's SHA256SUMS.
 set -eu
 VERSION=${1:?usage: scripts/mac-sign.sh <version>}
 : "${MYCO_SIGN_IDENTITY:?set MYCO_SIGN_IDENTITY to the Developer ID Application identity}"
@@ -52,3 +54,12 @@ xcrun stapler staple dist/myco.dmg
 spctl --assess --type execute -vv dist/myco.app
 spctl --assess --type open --context context:primary-signature -vv dist/myco.dmg
 echo "SIGNED dist/myco.dmg dist/myco-app-darwin-universal.zip"
+
+if [ "${MYCO_UPLOAD:-}" = 1 ]; then
+  echo "==> uploading to the $VERSION release"
+  gh release download "$VERSION" --pattern SHA256SUMS --dir dist --clobber
+  (cd dist && grep -v -e ' myco.dmg$' -e ' myco-app-darwin-universal.zip$' SHA256SUMS > SHA256SUMS.new || true
+   shasum -a 256 myco.dmg myco-app-darwin-universal.zip >> SHA256SUMS.new && mv SHA256SUMS.new SHA256SUMS)
+  gh release upload "$VERSION" dist/myco.dmg dist/myco-app-darwin-universal.zip dist/SHA256SUMS --clobber
+  echo "UPLOADED myco.dmg myco-app-darwin-universal.zip SHA256SUMS"
+fi

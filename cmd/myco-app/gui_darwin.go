@@ -19,6 +19,9 @@ import (
 //go:embed build/darwin/tray-template.png
 var trayIcon []byte
 
+// guiShell tells the page it runs in the Mac window (hidden title bar).
+const guiShell = "mac"
+
 // runGUI opens the console as a regular Mac app (Dock icon, menu bar with
 // Edit so copy and paste work) plus a menu-bar icon; closing the window
 // hides it, and the app keeps running until quit. setRelaunch receives how
