@@ -27,7 +27,7 @@ type fakeCLI struct {
 
 func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...string) ([]byte, error) {
 	f.calls = append(f.calls, args)
-	if !slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "PATH=") && strings.Contains(kv, ".local/bin") }) {
+	if !slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "PATH=") && strings.Contains(kv, filepath.Join(".local", "bin")) }) {
 		f.r.t.Errorf("myco must run with the usual install dirs on PATH: %v", env)
 	}
 	switch strings.Join(args[:2], " ") {
@@ -92,7 +92,7 @@ func TestLocalHub(t *testing.T) {
 	if code, m, _ := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"}); code != 409 || m["error"] != "not_configured" {
 		t.Fatalf("start without myco: %d %v", code, m)
 	}
-	if code, m, _ := r.do("POST", "/app/local/myco", nil); code != 200 || !strings.HasSuffix(m["path"].(string), "/.local/bin/myco") || f.installs != 1 {
+	if code, m, _ := r.do("POST", "/app/local/myco", nil); code != 200 || !strings.HasPrefix(filepath.Base(m["path"].(string)), "myco") || filepath.Base(filepath.Dir(m["path"].(string))) != "bin" || f.installs != 1 {
 		t.Fatalf("install: %d %v", code, m)
 	}
 	r.do("POST", "/app/local/myco", nil)

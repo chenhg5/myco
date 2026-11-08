@@ -69,9 +69,17 @@ func (l *Local) binDirs() []string {
 func (l *Local) in(dirs []string, name string) []string {
 	var out []string
 	for _, d := range dirs {
-		out = append(out, filepath.Join(d, name))
+		out = append(out, filepath.Join(d, exeName(name)))
 	}
 	return out
+}
+
+// exeName adds .exe on Windows.
+func exeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 func (l *Local) mycoPath() string { return l.find("myco", l.in(l.binDirs(), "myco")...) }
@@ -283,7 +291,7 @@ func installLatest(ctx context.Context, dir string) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	target := filepath.Join(dir, "myco")
+	target := filepath.Join(dir, exeName("myco"))
 	return target, release.Replace(target, bin)
 }
 
