@@ -19,6 +19,7 @@ import { NewConversationDialog, type NewConversationTarget } from "@/app/NewConv
 import { NodesPage } from "@/app/NodesPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { Welcome } from "@/app/Welcome";
+import { LogoWordmark } from "@/components/brand";
 import { useThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +93,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
   const [conv, setConv] = useState<ConversationTarget | null>(null);
   const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
+  /** Bumped to make the settings page show its Hub section. */
+  const [hubSettingsRequest, setHubSettingsRequest] = useState(0);
 
   // The boot probe already carries app/info; retry once in case it failed.
   useEffect(() => {
@@ -221,6 +224,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("nodes");
   };
 
+  const openHubSettings = () => {
+    setHubSettingsRequest((n) => n + 1);
+    setPage("settings");
+  };
+
   const startLocal = async () => {
     const r = await appApi.startLocalHub({ tunnel: "none" });
     await refresh();
@@ -238,8 +246,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const meta = PAGE_META[page];
-  const connected = hubs.filter((h) => h.ok).length;
-  const allConnected = hubs.length > 0 && connected === hubs.length;
   const isMac = info?.shell === "mac";
 
   if (hubs.length === 0) {
@@ -261,12 +267,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       {!collapsed && (
         <aside className="app-sidebar">
           <div className="app-sidebar-head" style={dragStyle}>
-            <HubSwitcher
-              hubs={namedHubs}
-              value={filters.hub}
-              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
-              onAdd={() => setConnectOpen(true)}
-            />
+            <div className="brand">
+              <LogoWordmark className="app-brand-wordmark" />
+            </div>
           </div>
 
           <nav className="app-nav">
@@ -298,13 +301,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <Settings strokeWidth={1.75} />
               <span>设置</span>
             </button>
-            <div
-              className="app-sidebar-status"
-              title={namedHubs.map((h) => `${h.name}：${h.ok ? "已连接" : "连不上"}`).join("\n")}
-            >
-              <span className="dot" style={{ background: allConnected ? "var(--green)" : "var(--red)" }} />
-              <span>{connected} 个 Hub 已连接</span>
-            </div>
+            <HubSwitcher
+              hubs={namedHubs}
+              hubsOv={namedOv?.hubs}
+              value={filters.hub}
+              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
+              onAdd={() => setConnectOpen(true)}
+              onSettings={openHubSettings}
+            />
           </div>
         </aside>
       )}
@@ -322,10 +326,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </button>
           {collapsed && (
             <HubSwitcher
+              variant="pill"
               hubs={namedHubs}
+              hubsOv={namedOv?.hubs}
               value={filters.hub}
               onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
               onAdd={() => setConnectOpen(true)}
+              onSettings={openHubSettings}
             />
           )}
           <nav className="app-crumbs" aria-label="位置">
@@ -401,6 +408,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 theme={theme}
                 onTheme={setTheme}
                 refreshKey={localTick}
+                sectionRequest={hubSettingsRequest}
                 onRefresh={refresh}
                 onAddHub={() => setConnectOpen(true)}
               />
