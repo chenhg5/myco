@@ -244,28 +244,58 @@ func Fetch(ctx context.Context, hc *http.Client, download, tag, goos, goarch str
 	return bin, nil
 }
 
+// getRetries and getBackoff bound retries of transient download failures:
+// GitHub's release downloads answer 502/503/504 now and then.
+var (
+	getRetries = 5
+	getBackoff = 3 * time.Second
+)
+
+// get downloads url, retrying network errors and 5xx answers (up to
+// getRetries more times, waiting a little longer each time).
 func get(ctx context.Context, hc *http.Client, url string, max int64) ([]byte, error) {
+	var err error
+	for attempt := 0; ; attempt++ {
+		var b []byte
+		var retry bool
+		b, retry, err = getOnce(ctx, hc, url, max)
+		if err == nil || !retry || attempt >= getRetries || ctx.Err() != nil {
+			if err != nil && attempt > 0 {
+				err = fmt.Errorf("%w (after %d attempts)", err, attempt+1)
+			}
+			return b, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(getBackoff * time.Duration(attempt+1)):
+		}
+	}
+}
+
+func getOnce(ctx context.Context, hc *http.Client, url string, max int64) (b []byte, retry bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	req.Header.Set("User-Agent", "myco-upgrade")
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
+		return nil, resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests,
+			fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	b, err = io.ReadAll(io.LimitReader(resp.Body, max+1))
 	if err != nil {
-		return nil, err
+		return nil, true, err // cut off mid-download
 	}
 	if int64(len(b)) > max {
-		return nil, fmt.Errorf("GET %s: response larger than %d bytes", url, max)
+		return nil, false, fmt.Errorf("GET %s: response larger than %d bytes", url, max)
 	}
-	return b, nil
+	return b, false, nil
 }
 
 // ErrNotWritable means the binary's directory cannot be written by this user.

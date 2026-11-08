@@ -233,3 +233,36 @@ func TestSwapWindows(t *testing.T) {
 		t.Errorf("after a failed swap target = %q, want it restored", b)
 	}
 }
+
+// GitHub's release downloads answer 504 now and then: get retries 5xx
+// (with backoff) but not 4xx.
+func TestGetRetriesTransientErrors(t *testing.T) {
+	defer func(r int, b time.Duration) { getRetries, getBackoff = r, b }(getRetries, getBackoff)
+	getRetries, getBackoff = 3, time.Millisecond
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch {
+		case r.URL.Path == "/missing":
+			http.NotFound(w, r)
+		case calls <= 2:
+			w.WriteHeader(http.StatusGatewayTimeout)
+		default:
+			w.Write([]byte("ok"))
+		}
+	}))
+	defer srv.Close()
+	b, err := get(context.Background(), srv.Client(), srv.URL+"/x", 10)
+	if err != nil || string(b) != "ok" || calls != 3 {
+		t.Fatalf("after two 504s: %q %v (calls %d)", b, err, calls)
+	}
+	calls = 0
+	if _, err := get(context.Background(), srv.Client(), srv.URL+"/missing", 10); err == nil || calls != 1 {
+		t.Fatalf("a 404 must not be retried: %v (calls %d)", err, calls)
+	}
+	calls = -100 // always 504
+	_, err = get(context.Background(), srv.Client(), srv.URL+"/x", 10)
+	if err == nil || !strings.Contains(err.Error(), "after 4 attempts") {
+		t.Fatalf("giving up: %v", err)
+	}
+}

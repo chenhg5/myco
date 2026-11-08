@@ -279,7 +279,7 @@ func (b *Backend) installMyco(w http.ResponseWriter, r *http.Request) {
 }
 
 func installLatest(ctx context.Context, dir string) (string, error) {
-	hc := &http.Client{Timeout: 5 * time.Minute}
+	hc := &http.Client{Timeout: 30 * time.Minute} // slow links: 15 MB at 40 KB/s is ~7 minutes
 	tag, err := release.Latest(ctx, hc, release.APIURL(os.Getenv))
 	if err != nil {
 		return "", err

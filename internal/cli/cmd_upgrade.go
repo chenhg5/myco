@@ -45,7 +45,7 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 			{Name: "no-restart", Kind: Bool, Help: "Replace the binary but do not restart services"},
 		},
 		Run: handler(func(e *env) error {
-			hc := &http.Client{Timeout: 5 * time.Minute}
+			hc := &http.Client{Timeout: 30 * time.Minute} // slow links: 15 MB at 40 KB/s is ~7 minutes
 			target := e.in.String("version")
 			if target != "" {
 				if _, ok := release.Parse(target); !ok {
@@ -94,6 +94,7 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 			if e.in.Bool("dry-run") {
 				return e.dryRun(out)
 			}
+			fmt.Fprintf(e.in.Stderr, "==> downloading myco %s for %s/%s (checked against SHA256SUMS; on a slow link this takes a few minutes)\n", target, runtime.GOOS, runtime.GOARCH)
 			bin, err := release.Fetch(e.in.Ctx, hc, release.DownloadURL(e.in.Getenv), target, runtime.GOOS, runtime.GOARCH)
 			if err != nil {
 				return errorf("upgrade_failed", ExitError, "nothing was changed; try again, or pass --version", "%v", err)
