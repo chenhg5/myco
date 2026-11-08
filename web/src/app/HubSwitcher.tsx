@@ -1,26 +1,121 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
-import type { Hub } from "@/appapi";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Check, ChevronDown, ChevronUp, Layers, Plus, Settings,
+} from "lucide-react";
+import type { Hub, HubOverview } from "@/appapi";
 import { cn } from "@/lib/utils";
 
-/** Workspace-style dropdown: all hubs, one hub, or add another. */
-export function HubSwitcher({ hubs, value, onChange, onAdd }: {
+/** The switcher sits at the sidebar bottom ("sidebar") or, when the sidebar
+ *  is collapsed, as a compact pill in the title bar ("pill"). */
+type Variant = "sidebar" | "pill";
+
+type Entry =
+  | { key: string; kind: "all" }
+  | { key: string; kind: "hub"; hub: Hub }
+  | { key: string; kind: "add" }
+  | { key: string; kind: "settings" };
+
+function initial(name: string): string {
+  const ch = Array.from(name.trim())[0] || "?";
+  return /[a-z]/.test(ch) ? ch.toUpperCase() : ch;
+}
+
+/** Stable, soft colour per hub id. */
+function colorIndex(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 8;
+}
+
+function Avatar({ name, id, all }: { name?: string; id?: string; all?: boolean }) {
+  if (all) {
+    return <span className="app-hub-avatar is-all"><Layers /></span>;
+  }
+  return (
+    <span className={cn("app-hub-avatar", `c${colorIndex(id || name || "")}`)}>
+      {initial(name || "")}
+    </span>
+  );
+}
+
+function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | undefined {
+  const o = hubsOv?.find((h) => h.id === id)?.overview;
+  return o ? o.agents.length : undefined;
+}
+
+/** Hub picker: all hubs, one hub, add another, or open Hub settings. */
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, variant = "sidebar" }: {
   hubs: Hub[];
+  hubsOv?: HubOverview[];
   /** "all" or a hub id. */
   value: string;
   onChange: (value: string) => void;
   onAdd: () => void;
+  onSettings: () => void;
+  variant?: Variant;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
   const selected = hubs.find((h) => h.id === value);
+  const connected = hubs.filter((h) => h.ok).length;
+
+  const entries = useMemo<Entry[]>(() => [
+    { key: "all", kind: "all" },
+    ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
+    { key: "add", kind: "add" },
+    { key: "settings", kind: "settings" },
+  ], [hubs]);
+
+  const selectedIndex = (): number => {
+    if (value === "all") return 0;
+    const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);
+    return i >= 0 ? i : 0;
+  };
+
+  const close = (focusTrigger = false) => {
+    setOpen(false);
+    if (focusTrigger) triggerRef.current?.focus();
+  };
+
+  const pick = (next: string) => { onChange(next); close(); };
+
+  const run = (i: number) => {
+    const e = entries[i];
+    if (!e) return;
+    if (e.kind === "all") pick("all");
+    else if (e.kind === "hub") pick(e.hub.id);
+    else if (e.kind === "add") { close(); onAdd(); }
+    else if (e.kind === "settings") { close(); onSettings(); }
+  };
+
+  const toggle = () => {
+    if (open) { close(); return; }
+    setActive(selectedIndex());
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    itemRefs.current[active]?.focus();
+    // Focus the selected row when the menu opens; arrow keys move it after.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(true);
+      }
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -29,63 +124,144 @@ export function HubSwitcher({ hubs, value, onChange, onAdd }: {
     };
   }, [open]);
 
-  const pick = (next: string) => { onChange(next); setOpen(false); };
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      const next = (active + step + entries.length) % entries.length;
+      setActive(next);
+      itemRefs.current[next]?.focus();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const focused = itemRefs.current.findIndex((el) => el === document.activeElement);
+      run(focused >= 0 ? focused : active);
+    }
+  };
 
-  const allOnline = hubs.length > 0 && hubs.every((h) => h.ok);
-  const dot = selected ? (selected.ok ? "working" : "offline") : allOnline ? "working" : "offline";
+  const sub = selected
+    ? selected.ok
+      ? `已连接${nodeCount(hubsOv, selected.id) === undefined ? "" : ` · ${nodeCount(hubsOv, selected.id)} 个节点`}`
+      : "连不上"
+    : `${hubs.length} 个 Hub · ${connected} 个已连接`;
+
+  const dotClass = selected
+    ? selected.ok ? "working" : "down"
+    : connected === hubs.length ? "working" : connected === 0 ? "down" : "pending";
+
+  const label = selected ? selected.name : "全部 Hub";
 
   return (
-    <div className="app-hub-switch" ref={ref}>
+    <div className={cn("app-hub-switch", variant === "pill" && "is-pill")} ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
-        className={cn("app-hub-btn", open && "open")}
+        className={cn(
+          variant === "pill" ? "app-hub-pill" : "app-hub-trigger",
+          open && "open",
+        )}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        aria-label={`切换 Hub：${label}`}
+        title={selected ? (selected.ok ? selected.url : `${selected.url}（连不上）`) : "所有 Hub"}
+        onClick={toggle}
       >
-        <span className={cn("dot", dot)} />
-        <span className="app-hub-label">{selected ? selected.name : "全部 Hub"}</span>
-        <ChevronDown className="app-hub-chev" />
+        <Avatar
+          name={selected?.name}
+          id={selected?.id}
+          all={!selected}
+        />
+        {variant === "pill" ? (
+          <span className="app-hub-pill-name">{label}</span>
+        ) : (
+          <span className="app-hub-info">
+            <span className="app-hub-name-row">
+              <span className="app-hub-name">{label}</span>
+              {open ? <ChevronDown className="app-hub-chevron" /> : <ChevronUp className="app-hub-chevron" />}
+            </span>
+            <span className="app-hub-sub">
+              <span className={cn("dot", dotClass)} />
+              <span className="app-hub-sub-text">{sub}</span>
+            </span>
+          </span>
+        )}
       </button>
 
       {open && (
-        <div className="app-hub-menu" role="menu" aria-label="选择 Hub">
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={value === "all"}
-            className={cn("app-hub-menu-item", value === "all" && "active")}
-            onClick={() => pick("all")}
-          >
-            <span className="app-hub-menu-name">全部 Hub</span>
-            <span className="app-hub-menu-count">{hubs.length}</span>
-            {value === "all" && <Check className="app-hub-menu-check" />}
-          </button>
-          {hubs.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={value === h.id}
-              className={cn("app-hub-menu-item", value === h.id && "active")}
-              onClick={() => pick(h.id)}
-              title={h.ok ? h.url : `${h.url}（连不上）`}
-            >
-              <span className={cn("dot", h.ok ? "working" : "offline")} />
-              <span className="app-hub-menu-name">{h.name}</span>
-              {value === h.id && <Check className="app-hub-menu-check" />}
-            </button>
-          ))}
-          <div className="app-hub-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="app-hub-menu-item"
-            onClick={() => { setOpen(false); onAdd(); }}
-          >
-            <Plus className="app-hub-menu-icon" />
-            <span className="app-hub-menu-name">添加 Hub…</span>
-          </button>
+        <div
+          className={cn("app-hub-menu", variant === "pill" ? "down" : "up")}
+          role="menu"
+          aria-label="选择 Hub"
+          onKeyDown={onMenuKeyDown}
+        >
+          {entries.map((e, i) => {
+            if (e.kind === "all") {
+              return (
+                <button
+                  key={e.key}
+                  ref={(el) => { itemRefs.current[i] = el; }}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={value === "all"}
+                  className={cn(
+                    "app-hub-menu-item",
+                    value === "all" && "active",
+                    active === i && "is-active",
+                  )}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => pick("all")}
+                >
+                  <Avatar all />
+                  <span className="app-hub-menu-name">全部 Hub</span>
+                  {value === "all" && <Check className="app-hub-menu-check" />}
+                </button>
+              );
+            }
+            if (e.kind === "hub") {
+              return (
+                <button
+                  key={e.key}
+                  ref={(el) => { itemRefs.current[i] = el; }}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={value === e.hub.id}
+                  className={cn(
+                    "app-hub-menu-item",
+                    value === e.hub.id && "active",
+                    active === i && "is-active",
+                  )}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => pick(e.hub.id)}
+                  title={e.hub.ok ? e.hub.url : `${e.hub.url}（连不上）`}
+                >
+                  <Avatar name={e.hub.name} id={e.hub.id} />
+                  <span className="app-hub-menu-name">{e.hub.name}</span>
+                  <span className={cn("dot", e.hub.ok ? "working" : "down")} />
+                  {value === e.hub.id && <Check className="app-hub-menu-check" />}
+                </button>
+              );
+            }
+            const Icon = e.kind === "add" ? Plus : Settings;
+            return (
+              <Fragment key={e.key}>
+                {e.kind === "add" && <div className="app-hub-menu-sep" />}
+                <button
+                  ref={(el) => { itemRefs.current[i] = el; }}
+                  type="button"
+                  role="menuitem"
+                  className={cn("app-hub-menu-item", active === i && "is-active")}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => run(i)}
+                >
+                  <span className="app-hub-menu-icon-wrap"><Icon /></span>
+                  <span className="app-hub-menu-name">
+                    {e.kind === "add" ? "添加 Hub…" : "Hub 设置…"}
+                  </span>
+                </button>
+              </Fragment>
+            );
+          })}
         </div>
       )}
     </div>

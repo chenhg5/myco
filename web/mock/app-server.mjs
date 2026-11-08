@@ -163,7 +163,7 @@ const state = {
   hubs: [
     {
       id: "hub_studio",
-      name: "Studio Mac",
+      name: "Glenn 的 MacBook Pro 本机 Hub",
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,

@@ -59,13 +59,15 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, info, theme, onTheme, refreshKey, onRefresh, onAddHub }: {
+export function SettingsPage({ hubs, info, theme, onTheme, refreshKey, sectionRequest, onRefresh, onAddHub }: {
   hubs: Hub[];
   info: AppInfo | null;
   theme: ThemeMode;
   onTheme: (mode: ThemeMode) => void;
   /** Bumped by the App poll so the local hub state stays current. */
   refreshKey: number;
+  /** Bumped when the Hub switcher asks for the Hub section. */
+  sectionRequest?: number;
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
 }) {
@@ -79,6 +81,12 @@ export function SettingsPage({ hubs, info, theme, onTheme, refreshKey, onRefresh
   const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
   const [stopOpen, setStopOpen] = useState(false);
   const [publicOpen, setPublicOpen] = useState(false);
+
+  // "Hub 设置…" in the switcher should land on the Hub list, even when this
+  // page was last left on another section.
+  useEffect(() => {
+    if (sectionRequest) setSection("hubs");
+  }, [sectionRequest]);
 
   const reloadLocal = useCallback(async () => {
     try {

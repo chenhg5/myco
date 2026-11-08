@@ -107,6 +107,10 @@
 .app-sidebar-head .brand svg {
   flex: none;
 }
+.app-brand-wordmark {
+  height: 16px;
+  width: auto;
+}
 .app-nav {
   flex: 1;
   min-height: 0;
@@ -170,19 +174,6 @@
   flex: none;
   padding: 8px 10px 10px;
   border-top: 1px solid var(--line);
-}
-.app-sidebar-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 8px 0;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.app-sidebar-status .dot {
-  width: 6px;
-  height: 6px;
 }
 
 .app-main {
@@ -1417,74 +1408,202 @@ textarea.app-input {
 .app-hub-switch {
   position: relative;
   flex: none;
-  padding: 0 10px 6px;
 }
-.app-hub-btn {
+.app-sidebar-foot .app-hub-switch {
+  padding-top: 6px;
+}
+.app-hub-switch.is-pill {
+  display: flex;
+  min-width: 0;
+}
+
+/* Sidebar bottom trigger: avatar plus two lines of text. */
+.app-hub-trigger {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
+  min-width: 0;
+  padding: 7px 8px;
   border: 0;
-  border-radius: 7px;
-  background: var(--pill);
+  border-radius: 8px;
+  background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.app-hub-btn:hover,
-.app-hub-btn.open {
-  background: var(--pill-hover);
+.app-hub-trigger:hover,
+.app-hub-trigger.open {
+  background: var(--nav-hover);
 }
-.app-hub-btn:focus-visible {
+.app-hub-trigger:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--ring);
 }
-.app-hub-btn .dot {
-  width: 6px;
-  height: 6px;
+.app-hub-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.app-hub-label {
+.app-hub-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.app-hub-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
 }
-.app-hub-chev {
-  width: 14px;
-  height: 14px;
+.app-hub-chevron {
+  width: 13px;
+  height: 13px;
   flex: none;
   color: var(--muted);
 }
+.app-hub-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.app-hub-sub .dot {
+  width: 6px;
+  height: 6px;
+}
+.app-hub-sub-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Avatar: first character of the hub name on a soft, id-derived colour. */
+.app-hub-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.app-hub-avatar svg {
+  width: 14px;
+  height: 14px;
+}
+.app-hub-avatar.is-all {
+  background: var(--pill);
+  color: var(--muted);
+}
+.app-hub-avatar.c0 { background: #e3f0e6; color: #2f6b43; }
+.app-hub-avatar.c1 { background: #e4edf9; color: #2d5b91; }
+.app-hub-avatar.c2 { background: #f7eedc; color: #8a6420; }
+.app-hub-avatar.c3 { background: #efe7f7; color: #65448f; }
+.app-hub-avatar.c4 { background: #f9e7ea; color: #924052; }
+.app-hub-avatar.c5 { background: #e0f0ef; color: #276b67; }
+.app-hub-avatar.c6 { background: #e7e9f8; color: #444e96; }
+.app-hub-avatar.c7 { background: #eaedf1; color: #4b5866; }
+.dark .app-hub-avatar.c0 { background: rgba(94, 180, 120, 0.18); color: #9ad8ac; }
+.dark .app-hub-avatar.c1 { background: rgba(90, 150, 220, 0.18); color: #9cc3f0; }
+.dark .app-hub-avatar.c2 { background: rgba(220, 170, 80, 0.18); color: #e7c27f; }
+.dark .app-hub-avatar.c3 { background: rgba(160, 120, 220, 0.2); color: #c6acef; }
+.dark .app-hub-avatar.c4 { background: rgba(220, 110, 130, 0.18); color: #efa5b2; }
+.dark .app-hub-avatar.c5 { background: rgba(80, 180, 175, 0.18); color: #94d6d1; }
+.dark .app-hub-avatar.c6 { background: rgba(120, 135, 230, 0.2); color: #b0b9f2; }
+.dark .app-hub-avatar.c7 { background: rgba(150, 165, 180, 0.18); color: #b9c4cf; }
+
+/* Collapsed sidebar: a compact pill in the title bar. */
+.app-hub-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 160px;
+  height: 26px;
+  padding: 0 9px 0 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.app-hub-pill:hover,
+.app-hub-pill.open {
+  background: var(--pill-hover);
+}
+.app-hub-pill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.app-hub-pill .app-hub-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 9.5px;
+}
+.app-hub-pill .app-hub-avatar svg {
+  width: 10px;
+  height: 10px;
+}
+.app-hub-pill-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The menu opens upward from the sidebar and downward from the pill. */
 .app-hub-menu {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  top: calc(100% - 2px);
   z-index: 40;
-  max-height: 60vh;
+  max-height: 320px;
   overflow-y: auto;
   padding: 5px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--card);
   box-shadow: var(--pop-shadow);
   animation: app-fade 0.12s ease-out;
 }
+.app-hub-menu.up {
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+}
+.app-hub-menu.down {
+  left: 0;
+  top: calc(100% + 6px);
+  width: 260px;
+  max-width: calc(100vw - 24px);
+}
 .app-hub-menu-item {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
-  height: 28px;
+  height: 34px;
   padding: 0 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--fg-2);
   font: inherit;
@@ -1493,7 +1612,10 @@ textarea.app-input {
   white-space: nowrap;
   cursor: pointer;
 }
-.app-hub-menu-item:hover {
+.app-hub-menu-item:hover,
+.app-hub-menu-item.is-active,
+.app-hub-menu-item:focus-visible {
+  outline: none;
   background: var(--nav-hover);
   color: var(--fg);
 }
@@ -1501,13 +1623,22 @@ textarea.app-input {
   color: var(--fg);
   font-weight: 500;
 }
-.app-hub-menu-item:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--ring);
+.app-hub-menu-item .app-hub-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 10.5px;
+}
+.app-hub-menu-item .app-hub-avatar svg {
+  width: 12px;
+  height: 12px;
 }
 .app-hub-menu .dot {
   width: 6px;
   height: 6px;
+}
+.dot.down {
+  background: var(--red);
 }
 .app-hub-menu-name {
   flex: 1;
@@ -1515,17 +1646,24 @@ textarea.app-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.app-hub-menu-count {
-  flex: none;
-  color: var(--muted);
-  font-size: 11px;
-}
-.app-hub-menu-check,
-.app-hub-menu-icon {
+.app-hub-menu-check {
   width: 14px;
   height: 14px;
   flex: none;
+  color: var(--accent);
+}
+.app-hub-menu-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
   color: var(--muted);
+}
+.app-hub-menu-icon-wrap svg {
+  width: 14px;
+  height: 14px;
 }
 .app-hub-menu-sep {
   height: 1px;
@@ -1875,28 +2013,6 @@ textarea.app-input {
     width: auto;
     padding: 0 10px;
   }
-}
-
-/* The switcher lives in the top row, clear of the traffic lights. */
-.app-sidebar-head .app-hub-switch {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-}
-.app-sidebar-head .app-hub-menu {
-  left: 0;
-  right: 0;
-}
-/* No sidebar: keep the switcher reachable in the title bar. */
-.app-crumbbar .app-hub-switch {
-  flex: none;
-  width: min(190px, 42vw);
-  padding: 0;
-}
-.app-crumbbar .app-hub-menu {
-  left: 0;
-  right: auto;
-  width: 230px;
 }
 
 /* ---------- add node: local sessions & link ---------- */
