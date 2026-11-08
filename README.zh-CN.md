@@ -227,7 +227,7 @@ sequenceDiagram
 
 ## 文档
 
-| | |
+| 文档 | 内容 |
 |---|---|
 | [INSTALL.md](INSTALL.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
 | [docs/architecture.md](docs/architecture.md) | 概念、消息状态机、runner 的行为、代码分层 |

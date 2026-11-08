@@ -227,7 +227,7 @@ Other ways to connect:
 
 ## Docs
 
-| | |
+| Doc | What it covers |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
 | [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
