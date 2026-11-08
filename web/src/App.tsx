@@ -16,6 +16,9 @@ import { HarnessBadge, StateBadge } from "@/components/status";
 import { CopyText } from "@/components/copy";
 import { LogoSymbol, LogoWordmark } from "@/components/brand";
 import { cn, timeAgo } from "@/lib/utils";
+import { useTheme } from "@/lib/theme";
+import { probeAppMode, type Hub } from "@/appapi";
+import AppMode from "@/app/AppMode";
 
 const POLL_MS = 5000;
 const UNDERLINE = "relative gap-2 rounded-none bg-transparent px-0 pb-2.5 pt-0 text-sm text-muted-foreground shadow-none hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 data-[state=active]:after:opacity-100";
@@ -34,15 +37,6 @@ function matches(a: AgentStatus, selector: string): boolean {
     if (t.startsWith("!")) return vals(t.slice(1)).length === 0;
     return vals(t).length > 0;
   });
-}
-
-function useTheme() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    try { localStorage.setItem("myco-theme", dark ? "dark" : "light"); } catch { /* storage unavailable */ }
-  }, [dark]);
-  return [dark, setDark] as const;
 }
 
 function StatCell({ label, value, dot, active, onClick }: {
@@ -76,7 +70,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export default function App() {
+function HubApp() {
   const [dark, setDark] = useTheme();
   const [session, setSession] = useState<Session | null>(null);
   const [viewAs, setViewAs] = useState<ViewAs>("agent");
@@ -463,4 +457,27 @@ export default function App() {
       </div>
     </TooltipProvider>
   );
+}
+
+/**
+ * Root: probe for the App backend (`GET app/hubs`). A 200 means the window is
+ * hosted by cmd/myco-app and gets the multi-hub UI; anything else keeps the
+ * classic single-hub `myco ui` behaviour untouched.
+ */
+export default function App() {
+  const [mode, setMode] = useState<"probing" | "hub" | "app">("probing");
+  const [hubs, setHubs] = useState<Hub[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    probeAppMode().then((h) => {
+      if (cancelled) return;
+      if (h) { setHubs(h); setMode("app"); } else { setMode("hub"); }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (mode === "probing") return null;
+  if (mode === "app") return <AppMode initialHubs={hubs} />;
+  return <HubApp />;
 }

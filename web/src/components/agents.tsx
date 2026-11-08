@@ -12,7 +12,7 @@ function shortId(s?: string, n = 10) {
   return s.length > n + 2 ? `${s.slice(0, n)}…` : s;
 }
 
-function Counters({ a, compact }: { a: AgentStatus; compact?: boolean }) {
+export function Counters({ a, compact }: { a: AgentStatus; compact?: boolean }) {
   const items = [
     { icon: Loader2, n: a.in_progress, label: "处理中", cls: "text-working", spin: a.in_progress > 0 },
     { icon: Inbox, n: a.queued, label: "待处理", cls: "text-pending" },

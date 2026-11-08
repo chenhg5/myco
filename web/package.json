@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "dev:app": "node mock/app-server.mjs & vite"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.2",
