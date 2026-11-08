@@ -356,6 +356,7 @@ function conversationAgent(msgs) {
 
 // This machine: myco ships with the App, cloudflared is present, Tailscale is not.
 const local = {
+  hostname: "Studio.local",
   myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
   hub: null,
   tools: {
@@ -556,6 +557,10 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, local.myco);
     }
 
+    if (parts.length === 3 && parts[2] === "runner" && method === "POST") {
+      await new Promise((r) => setTimeout(r, 600));
+      return send(res, 200, { runner: "running" });
+    }
     if (parts.length === 3 && parts[2] === "hub" && method === "POST") {
       const body = await readBody(req);
       const tunnel = body?.tunnel;

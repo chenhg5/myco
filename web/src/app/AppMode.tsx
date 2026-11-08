@@ -42,19 +42,24 @@ function readPendingLink(): Promise<string> {
 type Page = "conversations" | "nodes" | "machines" | "settings";
 
 const PAGE_META: Record<Page, { group: string; label: string }> = {
-  conversations: { group: "工作", label: "对话" },
-  nodes: { group: "工作", label: "节点" },
-  machines: { group: "工作", label: "机器" },
+  conversations: { group: "消息", label: "对话" },
+  nodes: { group: "管理", label: "节点" },
+  machines: { group: "管理", label: "机器" },
   settings: { group: "App", label: "设置" },
 };
 
 const NAV: { group: string; items: { page: Page; label: string; icon: typeof LayoutGrid }[] }[] = [
   {
-    group: "工作",
+    group: "管理",
     items: [
-      { page: "conversations", label: "对话", icon: MessageSquare },
       { page: "nodes", label: "节点", icon: LayoutGrid },
       { page: "machines", label: "机器", icon: Monitor },
+    ],
+  },
+  {
+    group: "消息",
+    items: [
+      { page: "conversations", label: "对话", icon: MessageSquare },
     ],
   },
 ];

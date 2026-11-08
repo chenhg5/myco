@@ -200,6 +200,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/myco", b.installMyco)
 		m.HandleFunc("POST /app/local/hub", b.startLocal)
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
+		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 	}
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})

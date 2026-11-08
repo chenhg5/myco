@@ -7,6 +7,7 @@ import {
   cleanLabel, groupsOf, machineOfRow, modelSourceLabel, nodeIcon, tagsOf,
 } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
+import { CopyButton } from "@/app/copy";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -49,92 +50,194 @@ function MessageRows({ row, now, mine, onThread }: {
   );
 }
 
-// LabelsEditor sets the node's group (one group=… label) and its tags (bare
-// labels). Other key=value labels, such as machine=…, are left alone.
+// LabelsEditor shows the node's group (a group=… label) and tags (bare
+// labels), and edits them in a dialog. Other key=value labels, such as
+// machine=…, are left alone.
 function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const groups = groupsOf(ag);
   const tags = tagsOf(ag);
-  const [group, setGroup] = useState(groups[0] || "");
+  const [open, setOpen] = useState(false);
+  const [group, setGroup] = useState("");
+  const [draftTags, setDraftTags] = useState<string[]>([]);
   const [tag, setTag] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  useEffect(() => {
-    setGroup(groupsOf(row.st.agent)[0] || "");
+
+  const others = (row.hub.overview?.agents || []).map((x) => x.agent);
+  const knownGroups = [...new Set(others.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const knownTags = [...new Set(others.flatMap(tagsOf))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+
+  const start = () => {
+    setGroup(groups[0] || "");
+    setDraftTags(tags);
     setTag("");
     setError(null);
-  }, [row.hub.id, row.st.agent.name, row.st.agent.labels.join(",")]);
-
-  const known = [...new Set((row.hub.overview?.agents || []).flatMap((x) => groupsOf(x.agent)))].sort();
-
-  const change = async (add: string[], remove: string[]) => {
-    if (!add.length && !remove.length) return;
+    setOpen(true);
+  };
+  const addTag = (t: string) => {
+    const v = cleanLabel(t);
+    if (v && !draftTags.includes(v)) setDraftTags([...draftTags, v]);
+    setTag("");
+  };
+  const save = async () => {
+    const g = cleanLabel(group);
+    const finalTags = cleanLabel(tag) ? [...new Set([...draftTags, cleanLabel(tag)])] : draftTags;
+    const add = [...(g && !groups.includes(g) ? ["group=" + g] : []), ...finalTags.filter((t) => !tags.includes(t))];
+    const remove = [...groups.filter((x) => x !== g).map((x) => "group=" + x), ...tags.filter((t) => !finalTags.includes(t))];
+    if (!add.length && !remove.length) { setOpen(false); return; }
     setBusy(true);
     setError(null);
     try {
       await appApi.setLabels(row.hub.id, ag.name, { add, remove });
       await onRefresh();
+      setOpen(false);
     } catch (e) {
       setError(e);
     } finally {
       setBusy(false);
     }
   };
-  const saveGroup = () => {
-    const g = cleanLabel(group);
-    if (g === (groups[0] || "") && groups.length <= 1) return;
-    void change(g ? ["group=" + g] : [], groups.filter((x) => x !== g).map((x) => "group=" + x));
-  };
-  const addTag = () => {
-    const t = cleanLabel(tag);
-    if (!t || tags.includes(t)) { setTag(""); return; }
-    void change([t], []).then(() => setTag(""));
-  };
 
   return (
     <>
-      <div className="app-list">
-        <div className="app-kv app-labels-row">
-          <span className="app-kv-label">分组</span>
-          <span className="app-kv-value">
-            <input
-              className="app-label-input"
-              value={group}
-              list={`groups-${row.hub.id}`}
-              placeholder="未分组"
-              disabled={busy}
-              aria-label="分组"
-              onChange={(e) => setGroup(e.target.value)}
-              onBlur={saveGroup}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur(); }}
-            />
-            <datalist id={`groups-${row.hub.id}`}>{known.map((g) => <option key={g} value={g} />)}</datalist>
-          </span>
-        </div>
-        <div className="app-kv app-labels-row">
-          <span className="app-kv-label">标签</span>
-          <span className="app-kv-value app-label-list">
-            {tags.map((t) => (
+      <button type="button" className="app-labels-summary" onClick={start}>
+        <span className="app-labels-chips">
+          {groups.length === 0 && tags.length === 0 && <span className="app-labels-empty">未分组，没有标签</span>}
+          {groups.map((g) => <span key={"g" + g} className="app-label group">{g}</span>)}
+          {tags.map((t) => <span key={"t" + t} className="app-label">#{t}</span>)}
+        </span>
+        <span className="app-labels-edit">编辑<span className="app-chev">›</span></span>
+      </button>
+
+      <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title="分组和标签" description="分组和标签只用来在 App 里整理和筛选节点。">
+        <label className="app-field">
+          <span className="app-field-label">分组</span>
+          <input className="app-input" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="不分组" disabled={busy} />
+        </label>
+        {knownGroups.length > 0 && (
+          <div className="app-label-picks">
+            {knownGroups.map((g) => (
+              <button key={g} type="button" className={cn("app-label group", cleanLabel(group) === g && "picked")} onClick={() => setGroup(g)}>{g}</button>
+            ))}
+          </div>
+        )}
+        <div className="app-field">
+          <span className="app-field-label">标签</span>
+          <div className="app-tag-box">
+            {draftTags.map((t) => (
               <span key={t} className="app-label editable">
                 #{t}
-                <button type="button" aria-label={`去掉标签 ${t}`} disabled={busy} onClick={() => void change([], [t])}>×</button>
+                <button type="button" aria-label={`去掉标签 ${t}`} onClick={() => setDraftTags(draftTags.filter((x) => x !== t))}>×</button>
               </span>
             ))}
             <input
-              className="app-label-input small"
               value={tag}
-              placeholder="+ 标签"
-              disabled={busy}
-              aria-label="添加标签"
               onChange={(e) => setTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addTag(); }}
-              onBlur={() => tag.trim() && addTag()}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tag); }
+                if (e.key === "Backspace" && !tag && draftTags.length) setDraftTags(draftTags.slice(0, -1));
+              }}
+              placeholder={draftTags.length ? "" : "输入后按回车"}
+              aria-label="添加标签"
+              disabled={busy}
             />
-          </span>
+          </div>
         </div>
-      </div>
-      <ErrorText error={error} />
+        {knownTags.filter((t) => !draftTags.includes(t)).length > 0 && (
+          <div className="app-label-picks">
+            {knownTags.filter((t) => !draftTags.includes(t)).map((t) => (
+              <button key={t} type="button" className="app-label" onClick={() => addTag(t)}>+ #{t}</button>
+            ))}
+          </div>
+        )}
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>取消</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy}>
+            {busy ? "正在保存…" : "保存"}
+          </button>
+        </div>
+      </Modal>
     </>
+  );
+}
+
+const hostKey = (h?: string) => (h || "").toLowerCase().replace(/\.local$/, "");
+
+// OfflineCard says why a node is offline and how to bring it back: on this
+// computer, restart the runner; on another one, the command to run there;
+// a cloud session comes back when its session continues.
+function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRefresh: () => Promise<void> }) {
+  const ag = row.st.agent;
+  const machine = machineOfRow(row);
+  const [hostname, setHostname] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => {
+    let off = false;
+    setNote("");
+    setError(null);
+    appApi.local().then((l) => { if (!off) setHostname(l.hostname); }).catch(() => {});
+    return () => { off = true; };
+  }, [row.hub.id, ag.name]);
+  const here = !!machine?.hostname && !!hostname && hostKey(machine.hostname) === hostKey(hostname);
+
+  const restart = async () => {
+    setBusy(true);
+    setError(null);
+    setNote("");
+    try {
+      const r = await appApi.restartRunner();
+      if (r.runner !== "running") throw new Error(r.runner);
+      setNote("runner 已重启，通常半分钟内会重新上线。");
+      window.setTimeout(() => void onRefresh(), 8000);
+      window.setTimeout(() => void onRefresh(), 30000);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const seen = ag.last_seen_at ? timeAgo(ag.last_seen_at, now) : "";
+  return (
+    <section className="app-offline">
+      <div className="app-offline-head">
+        <span className="dot offline" />
+        <b>离线</b>
+        {seen && <span>· 最后一次连接 Hub 是 {seen}</span>}
+      </div>
+      <p>
+        在线是指它最近 90 秒内连过 Hub：节点所在机器上的 runner 会每隔几秒替它连一次。
+        离线时发给它的任务会先排队，上线后自动送达。
+      </p>
+      {isCloud(ag) ? (
+        <p>这是云端会话，会话结束就会离线。回到那个会话继续对话，它就会重新上线。</p>
+      ) : here ? (
+        <>
+          <p>它在这台电脑上。重启这里的 runner，它就会重新连上 Hub。</p>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void restart()} disabled={busy}>
+            {busy ? <><span className="app-spinner" />正在重启…</> : "重启本机的 runner"}
+          </button>
+        </>
+      ) : (
+        <>
+          <p>
+            {machine ? <>它在「{machine.name}」上。</> : null}
+            在那台机器的终端里运行下面这条命令（启动 runner；已经在运行就重启它）。机器关机或睡眠时，开机后会自动上线。
+          </p>
+          <div className="app-command">
+            <code>myco runner service restart || myco runner service install</code>
+            <CopyButton value="myco runner service restart || myco runner service install" />
+          </div>
+        </>
+      )}
+      {note && <p className="app-offline-ok">{note}</p>}
+      <ErrorText error={error} />
+    </section>
   );
 }
 
@@ -243,6 +346,8 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
             </button>
           )}
 
+          {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
+
           <section className="app-group">
             <div className="app-group-title"><span className="name">运行</span></div>
             <div className="app-list">
@@ -291,10 +396,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           </section>
 
           <section className="app-group">
-            <div className="app-group-title">
-              <span className="name">分组和标签</span>
-              <span className="app-group-note">用来筛选节点</span>
-            </div>
+            <div className="app-group-title"><span className="name">分组和标签</span></div>
             <LabelsEditor row={row} onRefresh={onRefresh} />
           </section>
 

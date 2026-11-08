@@ -251,6 +251,9 @@ type LocalStatus struct {
 	Hub    *LocalHub        `json:"hub"`
 	Tools  map[string]*Tool `json:"tools"`
 	Device string           `json:"device"`
+	// Hostname is this computer's host name, as runners report it for
+	// their machine (so the app can tell which nodes run here).
+	Hostname string `json:"hostname,omitempty"`
 }
 
 func toolAt(p string) *Tool {
@@ -263,6 +266,7 @@ func toolAt(p string) *Tool {
 func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 	l := b.Local
 	st := LocalStatus{Tools: map[string]*Tool{"cloudflared": toolAt(l.cloudflaredPath()), "tailscale": toolAt(l.tailscalePath())}, Device: l.Device}
+	st.Hostname, _ = os.Hostname()
 	if p := l.mycoPath(); p != "" {
 		st.Myco = &Tool{Path: p}
 		if out, err := l.run(ctx, "version", "--offline"); err == nil {
@@ -461,6 +465,26 @@ func (b *Backend) stopLocal(w http.ResponseWriter, r *http.Request) {
 // ensureRunner makes sure this computer's runner service is running (it
 // serves every local agent), installing it if needed. It returns "running"
 // or why it is not.
+// restartRunner starts this computer's runner service, or restarts it when
+// it is running (it then picks up every agent profile here again).
+func (l *Local) restartRunner(ctx context.Context) string {
+	out, err := l.run(ctx, "runner", "service", "status")
+	var st struct {
+		Running bool `json:"running"`
+	}
+	if err == nil && json.Unmarshal(out, &st) == nil && st.Running {
+		if _, err := l.run(ctx, "runner", "service", "restart"); err != nil {
+			return "the runner service could not restart: " + errText(err) + " (run `myco runner service restart` in a terminal)"
+		}
+		return "running"
+	}
+	return l.ensureRunner(ctx)
+}
+
+func (b *Backend) postLocalRunner(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"runner": b.Local.restartRunner(r.Context())})
+}
+
 func (l *Local) ensureRunner(ctx context.Context) string {
 	out, err := l.run(ctx, "runner", "service", "status")
 	var st struct {

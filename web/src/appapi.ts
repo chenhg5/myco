@@ -119,6 +119,8 @@ export interface LocalState {
   hub: LocalHub | null;
   tools: LocalTools;
   device: string;
+  /** This computer's host name, as its runners report it for their machine. */
+  hostname?: string;
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
 export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string }
@@ -270,6 +272,8 @@ export const appApi = {
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
 
   local: () => request<LocalState>("GET", "app/local"),
+  /** Starts this computer's runner service, or restarts it when running. */
+  restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */

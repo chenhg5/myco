@@ -204,40 +204,24 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           <input
             value={filters.query}
             onChange={(e) => set({ query: e.target.value })}
-            placeholder="搜索名称、CLI、模型或机器"
+            placeholder="搜索节点"
           />
         </div>
-        <div className="seg seg-sm" role="tablist" aria-label="类型筛选">
-          {KIND_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="tab"
-              aria-selected={filters.kind === o.value}
-              className={cn("seg-btn", filters.kind === o.value && "active")}
-              onClick={() => set({ kind: o.value })}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-        <div className="seg seg-sm" role="tablist" aria-label="状态筛选">
-          {STATE_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="tab"
-              aria-selected={filters.state === o.value}
-              className={cn("seg-btn", filters.state === o.value && "active")}
-              onClick={() => set({ state: o.value })}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
         <span className="app-select-wrap">
-          <select className="app-select" value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label="按分组和标签筛选">
-            <option value="all">全部分组和标签</option>
+          <select className={cn("app-select", filters.kind !== "all" && "is-set")} value={filters.kind} onChange={(e) => set({ kind: e.target.value as Filters["kind"] })} aria-label="按类型筛选">
+            {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? "全部类型" : o.label}</option>)}
+          </select>
+          <ChevronDown />
+        </span>
+        <span className="app-select-wrap">
+          <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as Filters["state"] })} aria-label="按状态筛选">
+            {STATE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? "全部状态" : o.label}</option>)}
+          </select>
+          <ChevronDown />
+        </span>
+        <span className="app-select-wrap">
+          <select className={cn("app-select", filters.label !== "all" && "is-set")} value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label="按分组和标签筛选">
+            <option value="all">分组和标签</option>
             {labelOptions.groups.length > 0 && (
               <optgroup label="分组">
                 {labelOptions.groups.map((g) => <option key={g} value={"group:" + g}>{g}</option>)}
@@ -253,7 +237,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           <ChevronDown />
         </span>
         <span className="app-select-wrap">
-          <select className="app-select" value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
+          <select className={cn("app-select", filters.machine !== "all" && "is-set")} value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
             <option value="all">全部机器</option>
             <option value={CLOUD_FILTER}>云端</option>
             {machineGroups.map((g) => (

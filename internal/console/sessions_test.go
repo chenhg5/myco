@@ -76,6 +76,7 @@ func TestLocalJoin(t *testing.T) {
 	work := t.TempDir()
 	var calls [][]string
 	var runnerRunning bool
+	var restarts int
 	run := func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 		calls = append(calls, args)
 		get := func(k string) string {
@@ -102,6 +103,9 @@ func TestLocalJoin(t *testing.T) {
 		case "runner":
 			if args[2] == "status" {
 				return json.Marshal(map[string]any{"running": runnerRunning})
+			}
+			if args[2] == "restart" {
+				restarts++
 			}
 			runnerRunning = true
 			return []byte(`{}`), nil
@@ -131,6 +135,10 @@ func TestLocalJoin(t *testing.T) {
 	a, err := r.admin.GetAgent(context.Background(), "test-mac-claude-ef12")
 	if err != nil || !slices.Contains(a.Labels, "machine=test-mac") {
 		t.Fatalf("joined agent: %v %+v", err, a)
+	}
+	// "Bring it back online": the runner here restarts (it is running now).
+	if code, m, _ := r.do("POST", "/app/local/runner", nil); code != 200 || m["runner"] != "running" || restarts != 1 {
+		t.Fatalf("restart runner: %d %v (restarts %d)", code, m, restarts)
 	}
 	// The one-time enrollment is used up.
 	enrs, _ := r.admin.ListEnrollments(context.Background())
