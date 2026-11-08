@@ -152,6 +152,11 @@ type Agent struct {
 	EnrolledBy string
 	CreatedAt  time.Time
 	LastSeenAt time.Time
+	// MachineID is the machine the agent runs on ("" until its runner
+	// reports it); Runtime is its CLI and model as reported by the runner.
+	// Both are set only through SetMachine / SetRuntime.
+	MachineID string
+	Runtime   Runtime
 }
 
 // AgentSpec is the mutable profile of an agent.

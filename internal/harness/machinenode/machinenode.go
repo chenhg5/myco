@@ -149,8 +149,18 @@ func (n *Node) senderAllowed(from string) bool {
 			senders = cur
 		}
 	}
+	// The hub sends as "@admin" when an administrator starts a session from
+	// the console. Agent names cannot contain "@", and the hub is what
+	// vouches for every sender anyway; the directory and access rules
+	// below still apply.
+	if from == AdminSender {
+		return true
+	}
 	return len(senders) == 0 || slices.Contains(senders, from) || slices.Contains(senders, "*")
 }
+
+// AdminSender is the hub's sender for administrators (app.AdminSender).
+const AdminSender = "@admin"
 
 // Check validates a request against the policy and resolves it.
 func (n *Node) Check(sr api.SpawnRequest) (Plan, error) {

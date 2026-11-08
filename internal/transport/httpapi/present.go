@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
+	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
 )
 
@@ -29,6 +30,19 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	}
 	for _, n := range a.AllowFrom {
 		out.AllowFrom = append(out.AllowFrom, string(n))
+	}
+	out.Kind, out.MachineID = a.Kind(), a.MachineID
+	if rt := a.Runtime; rt != (domain.Runtime{}) {
+		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access}
+	}
+	return out
+}
+
+func machineDTO(v *app.MachineView) api.Machine {
+	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
+		Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{}}
+	for _, a := range v.Agents {
+		out.Agents = append(out.Agents, string(a))
 	}
 	return out
 }

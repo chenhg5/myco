@@ -254,11 +254,64 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, res)
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/spawn", b.withHubTimeout(6*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.SpawnRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.SpawnOnMachine(r.Context(), r.PathValue("mid"), in, 5*time.Minute)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("PATCH /app/hubs/{id}/machines/{mid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if err := c.RenameMachine(r.Context(), r.PathValue("mid"), in.Name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("mid"), "name": strings.TrimSpace(in.Name)})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/links", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Uses         int `json:"uses"`
+			ExpiresHours int `json:"expires_hours"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if in.Uses <= 0 {
+			in.Uses = 1
+		}
+		if in.ExpiresHours <= 0 {
+			in.ExpiresHours = 24
+		}
+		res, err := c.CreateEnrollment(r.Context(), api.CreateEnrollmentRequest{Kind: "link", MaxUses: in.Uses,
+			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}, false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"join_url": res.JoinURL, "command": "curl -fsSL " + res.JoinURL + " | bash"})
+	}))
 	return m
 }
 
 // withHub resolves {id} to a hub client and bounds the call.
 func (b *Backend) withHub(h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
+	return b.withHubTimeout(b.timeout(), h)
+}
+
+// withHubTimeout is withHub with its own bound (starting a session takes
+// minutes).
+func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hub, err := b.find(r.PathValue("id"))
 		if err != nil {
@@ -270,7 +323,7 @@ func (b *Backend) withHub(h func(http.ResponseWriter, *http.Request, *client.Cli
 			writeErr(w, err)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), b.timeout())
+		ctx, cancel := context.WithTimeout(r.Context(), d)
 		defer cancel()
 		h(w, r.WithContext(ctx), c)
 	}

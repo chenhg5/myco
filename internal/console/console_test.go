@@ -260,3 +260,37 @@ func TestKeychainRoundTrip(t *testing.T) {
 		t.Fatal("deleted token still there")
 	}
 }
+
+func TestBackendMachinesAndLinks(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "glenn-mac"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wc, _ := client.New(r.hubURL, reg.Token)
+	if err := wc.ReportMachine(ctx, api.MachineReport{Fingerprint: strings.Repeat("ef", 16), Name: "glenn-mac", OS: "darwin"}); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := r.admin.Machines(ctx)
+	if err != nil || len(ms) != 1 {
+		t.Fatalf("machines: %v %+v", err, ms)
+	}
+	code, m, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
+	if code != 201 {
+		t.Fatalf("add hub: %d %v", code, m)
+	}
+	id := m["id"].(string)
+
+	if code, m, _ := r.do("PATCH", "/app/hubs/"+id+"/machines/"+ms[0].ID, map[string]string{"name": "Glenn 的 Mac"}); code != 200 || m["name"] != "Glenn 的 Mac" {
+		t.Fatalf("rename: %d %v", code, m)
+	}
+	// No machine node on it: the hub's reason and suggestion come through.
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/machines/"+ms[0].ID+"/spawn", map[string]string{"cli": "claude", "dir": "~/code"}); code != 409 || m["error"] != "invalid_state" || m["suggestion"] == nil {
+		t.Fatalf("spawn without a machine node: %d %v", code, m)
+	}
+	code, m, _ = r.do("POST", "/app/hubs/"+id+"/links", map[string]any{})
+	if code != 200 || !strings.Contains(m["join_url"].(string), "/j/") || !strings.HasPrefix(m["command"].(string), "curl -fsSL ") {
+		t.Fatalf("links: %d %v", code, m)
+	}
+}

@@ -124,6 +124,7 @@ func Build(o Options) (*Hub, error) {
 	}
 	srv.SetVersion(o.Version, latest)
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
+	srv.SetMachines(app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow))
 	srv.SetConsole(app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock))
 	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL}, nil
 }

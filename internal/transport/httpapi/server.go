@@ -36,7 +36,12 @@ type Server struct {
 	files      *app.FileService
 	overview   *app.OverviewService
 	console    *app.ConsoleService
+	machines   *app.MachineService
 }
+
+// SetMachines enables machine reporting, /v1/machines and machines in the
+// admin overview.
+func (s *Server) SetMachines(m *app.MachineService) { s.machines = m }
 
 // SetConsole enables console tokens (per-device admin credentials) and the
 // /v1/console/tokens endpoints.
@@ -96,6 +101,11 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
 	m.HandleFunc("POST /v1/agents/{name}/kick", s.admin(s.kickAgent))
+	m.HandleFunc("GET /v1/machines", s.admin(s.listMachines))
+	m.HandleFunc("PATCH /v1/machines/{id}", s.admin(s.renameMachine))
+	m.HandleFunc("POST /v1/machines/{id}/spawn", s.admin(s.spawnOnMachine))
+	m.HandleFunc("PUT /v1/me/machine", s.agent(s.reportMachine))
+	m.HandleFunc("PUT /v1/me/runtime", s.agent(s.reportRuntime))
 	// Console tokens: only the hub's own admin token manages them, so a
 	// leaked console token cannot mint more.
 	m.HandleFunc("POST /v1/console/tokens", s.masterAdmin(s.createConsoleToken))
@@ -722,9 +732,22 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	out := api.Overview{GeneratedAt: ov.GeneratedAt, Viewer: v, OnlineWindowSeconds: int(s.agents.OnlineWindow().Seconds()),
 		Agents: make([]api.AgentStatus, 0, len(ov.Agents)), Recent: messageList(ov.Recent).Messages}
 	aliasMap, _ := s.agents.AliasMap(r.Context())
+	var where map[domain.AgentName]string
+	if viewer == nil && s.machines != nil { // admin view
+		if views, w, err := s.machines.List(r.Context()); err == nil {
+			where = w
+			out.Machines = make([]api.Machine, 0, len(views))
+			for _, v := range views {
+				out.Machines = append(out.Machines, machineDTO(v))
+			}
+		}
+	}
 	for _, a := range ov.Agents {
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
 		st.Agent.Aliases = aliasMap[a.Agent.Name]
+		if id, ok := where[a.Agent.Name]; ok {
+			st.Agent.MachineID = id
+		}
 		if len(a.Current) > 0 {
 			st.Current = messageList(a.Current).Messages
 		}
@@ -1023,4 +1046,118 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+func (s *Server) machinesEnabled(w http.ResponseWriter) bool {
+	if s.machines == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "machines are not enabled on this hub"))
+		return false
+	}
+	return true
+}
+
+func (s *Server) listMachines(w http.ResponseWriter, r *http.Request) {
+	if !s.machinesEnabled(w) {
+		return
+	}
+	views, _, err := s.machines.List(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.MachineList{Machines: make([]api.Machine, 0, len(views))}
+	for _, v := range views {
+		out.Machines = append(out.Machines, machineDTO(v))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) renameMachine(w http.ResponseWriter, r *http.Request) {
+	if !s.machinesEnabled(w) {
+		return
+	}
+	var in api.RenameMachineRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	m, err := s.machines.Rename(r.Context(), r.PathValue("id"), in.Name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": m.ID, "name": m.Name})
+}
+
+// spawnOnMachine starts a session on a machine for an administrator and
+// returns the machine's answer (api.SpawnResult).
+func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
+	if !s.machinesEnabled(w) {
+		return
+	}
+	var in api.SpawnRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	body, _ := json.Marshal(in)
+	wait := waitParam(r)
+	if wait <= 0 {
+		wait = 5 * time.Minute
+	}
+	reply, err := s.machines.Spawn(r.Context(), r.PathValue("id"), body, wait)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if reply == nil {
+		writeError(w, domain.Errf(domain.CodeInvalidState, "the machine did not answer in time").
+			WithSuggestion("the session may still be starting; check the node list in a minute"))
+		return
+	}
+	var res api.SpawnResult
+	if err := json.Unmarshal([]byte(reply.Body), &res); err != nil {
+		// A failure reply (the runner could not run the machine node).
+		writeError(w, domain.Errf(domain.CodeInvalidState, "the machine could not start the session: %s", strings.TrimSpace(reply.Body)))
+		return
+	}
+	switch {
+	case res.Denied:
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "%s", res.Error))
+	case res.Error != "":
+		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
+	default:
+		writeJSON(w, http.StatusOK, res)
+	}
+}
+
+func (s *Server) reportMachine(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.machinesEnabled(w) {
+		return
+	}
+	var in api.MachineReport
+	if !decode(w, r, &in) {
+		return
+	}
+	m, err := s.machines.Report(r.Context(), a, domain.MachineReport{Fingerprint: in.Fingerprint, Name: in.Name,
+		Hostname: in.Hostname, OS: in.OS, Arch: in.Arch, MycoVersion: in.MycoVersion})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"machine_id": m.ID, "name": m.Name})
+}
+
+func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	if !s.machinesEnabled(w) {
+		return
+	}
+	var in api.Runtime
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+		ModelSource: in.ModelSource, Access: in.Access}); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, in)
 }

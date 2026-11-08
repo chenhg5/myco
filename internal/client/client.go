@@ -614,3 +614,31 @@ func (c *Client) RevokeConsoleToken(ctx context.Context, id string) (*api.Consol
 	var out api.ConsoleToken
 	return &out, c.do(ctx, http.MethodDelete, "/v1/console/tokens/"+esc(id), nil, nil, &out)
 }
+
+// ReportMachine tells the hub which machine the caller runs on.
+func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
+	return c.do(ctx, http.MethodPut, "/v1/me/machine", nil, r, nil)
+}
+
+// ReportRuntime tells the hub the caller's CLI and model.
+func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
+	return c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
+}
+
+// Machines lists machines (admin).
+func (c *Client) Machines(ctx context.Context) ([]api.Machine, error) {
+	var out api.MachineList
+	return out.Machines, c.do(ctx, http.MethodGet, "/v1/machines", nil, nil, &out)
+}
+
+// RenameMachine changes a machine's display name (admin).
+func (c *Client) RenameMachine(ctx context.Context, id, name string) error {
+	return c.do(ctx, http.MethodPatch, "/v1/machines/"+esc(id), nil, api.RenameMachineRequest{Name: name}, nil)
+}
+
+// SpawnOnMachine starts a session on machine id (admin) and waits for it.
+func (c *Client) SpawnOnMachine(ctx context.Context, id string, req api.SpawnRequest, wait time.Duration) (*api.SpawnResult, error) {
+	var out api.SpawnResult
+	q := url.Values{"wait_seconds": {strconv.Itoa(int(wait.Seconds()))}}
+	return &out, c.do(ctx, http.MethodPost, "/v1/machines/"+esc(id)+"/spawn", q, req, &out)
+}

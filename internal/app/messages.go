@@ -81,6 +81,12 @@ type SendOutput struct {
 
 // Send queues a task or note from sender.
 func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in SendInput) (*SendOutput, error) {
+	return s.send(ctx, sender, in, false)
+}
+
+// send stores a message; asAdmin skips the recipient's allow_from (used only
+// for MachineService.Spawn, sent as AdminSender).
+func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in SendInput, asAdmin bool) (*SendOutput, error) {
 	to, err := domain.ParseAgentName(in.To)
 	if err != nil {
 		return nil, err
@@ -107,7 +113,7 @@ func (s *MessageService) Send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	to = recipient.Name // messages always store the real name
-	if !recipient.Accepts(sender.Name) {
+	if !asAdmin && !recipient.Accepts(sender.Name) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
 			WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
 	}

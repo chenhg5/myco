@@ -172,6 +172,9 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 		}
 	}
+	if !sh.once {
+		e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, log)
+	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
 		return nil, err

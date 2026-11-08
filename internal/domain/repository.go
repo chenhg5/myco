@@ -17,6 +17,9 @@ type AgentRepository interface {
 	Touch(ctx context.Context, name AgentName, at time.Time) error
 	// FindBySession returns the agent bound to (harness, sessionID).
 	FindBySession(ctx context.Context, harness, sessionID string) (*Agent, error)
+	// SetMachine and SetRuntime record what the agent's runner reports.
+	SetMachine(ctx context.Context, name AgentName, machineID string) error
+	SetRuntime(ctx context.Context, name AgentName, rt Runtime) error
 }
 
 // EnrollmentRepository persists enrollments.

@@ -578,6 +578,39 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("spawn outside home: exit %d %s", code, errOut)
 	}
 
+	// The admin (console) starts sessions on the machine too: its runner
+	// reported the machine, the machine node makes it able to, and the
+	// node's allow_from (only lead) does not apply; its directory rules do.
+	var boxID string
+	for i := 0; i < 50 && boxID == ""; i++ {
+		ms, err := h.admin().Machines(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ms {
+			if m.CanSpawn && !m.Legacy && m.Name == "box" {
+				boxID = m.ID
+			}
+		}
+		if boxID == "" {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if boxID == "" {
+		t.Fatal("the box machine never reported itself with a usable machine node")
+	}
+	res, err := h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: filepath.Join(home, "proj"), Name: "rev2"}, 20*time.Second)
+	if err != nil || !strings.HasPrefix(res.Agent, "box-") || res.Reply != "ready key=k1" {
+		t.Fatalf("admin spawn: %v %+v", err, res)
+	}
+	_, err = h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: t.TempDir()}, 20*time.Second)
+	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" || !strings.Contains(e.Message, "outside the allowed") {
+		t.Fatalf("admin spawn outside the machine's directories: %v", err)
+	}
+	if _, err := h.client("").SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: "~"}, time.Second); err == nil {
+		t.Fatal("spawn without a token")
+	}
+
 	// Only a machine's own credentials can create a machine node.
 	plain, err := h.admin().CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "x-"}, false)
 	if err != nil {
@@ -932,5 +965,123 @@ func TestKickSignsAnAgentOut(t *testing.T) {
 	}
 	if _, err := h.admin().KickAgent(c, "nobody", false); err == nil {
 		t.Fatal("kicking an unknown agent must fail")
+	}
+}
+
+// Machines are identified by the fingerprint their runners report: the same
+// device is one machine however many agents, joins or host names it has;
+// agents of runners that have not reported yet are grouped by host name;
+// people are not on machines; machine nodes are not listed as a machine's
+// agents but make it able to start sessions.
+func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	tok := map[string]string{}
+	for _, r := range []api.RegisterRequest{
+		{Name: "mac-claude", Binding: api.Binding{Harness: "claude", Environment: "Glenns-MacBook.local"}},
+		{Name: "mac-codex", Binding: api.Binding{Harness: "codex", Environment: "glenns-macbook"}},
+		{Name: "old-codex", Binding: api.Binding{Harness: "codex", Environment: "192.168.1.210"}},
+		{Name: "cloud-a", Binding: api.Binding{Harness: "claude-cloud", Environment: "claude-cloud_default"}},
+		{Name: "vps-shell", Binding: api.Binding{Harness: "exec", Environment: "srv1"}},
+		{Name: "glenn"},
+	} {
+		tok[r.Name] = h.register(r)
+	}
+	// Before any report: grouped by host name (case and ".local" ignored).
+	ms, err := h.admin().Machines(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := func(ms []api.Machine) map[string]api.Machine {
+		out := map[string]api.Machine{}
+		for _, m := range ms {
+			out[m.Name] = m
+		}
+		return out
+	}
+	m := byName(ms)
+	if len(ms) != 3 || len(m["Glenns-MacBook.local"].Agents) != 2 || !m["Glenns-MacBook.local"].Legacy || len(m["srv1"].Agents) != 1 {
+		t.Fatalf("legacy grouping: %+v", ms)
+	}
+	for _, x := range ms {
+		for _, a := range x.Agents {
+			if a == "glenn" {
+				t.Fatal("a person is not on a machine")
+			}
+		}
+	}
+
+	// Both Mac agents report the same fingerprint (new runners), one even
+	// after a host name change: one machine, named after its join name.
+	fp := strings.Repeat("ab", 16)
+	r1 := api.MachineReport{Fingerprint: fp, Name: "glenn-mac", Hostname: "Glenns-MacBook.local", OS: "darwin", Arch: "arm64", MycoVersion: "v0.16.9"}
+	if err := h.client(tok["mac-claude"]).ReportMachine(c, r1); err != nil {
+		t.Fatal(err)
+	}
+	r2 := r1
+	r2.Hostname, r2.Name = "Glenns-MacBook-2.local", "something-else"
+	if err := h.client(tok["mac-codex"]).ReportMachine(c, r2); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.client(tok["mac-claude"]).ReportRuntime(c, api.Runtime{CLI: "claude", CLIVersion: "2.1.240", Model: "claude-opus-5-5", ModelSource: "configured", Access: "workspace"}); err != nil {
+		t.Fatal(err)
+	}
+	ms, _ = h.admin().Machines(c)
+	m = byName(ms)
+	mac, ok := m["glenn-mac"]
+	if !ok || mac.Legacy || len(mac.Agents) != 2 || mac.OS != "darwin" || mac.Hostname != "Glenns-MacBook-2.local" || len(ms) != 3 {
+		t.Fatalf("one machine for one device: %+v", ms)
+	}
+	if err := h.client(tok["old-codex"]).ReportMachine(c, api.MachineReport{Fingerprint: "x"}); err == nil {
+		t.Fatal("a too-short fingerprint must be refused")
+	}
+	if err := h.client(tok["cloud-a"]).ReportMachine(c, api.MachineReport{Fingerprint: strings.Repeat("cd", 16)}); err == nil {
+		t.Fatal("a cloud session must not create a machine")
+	}
+
+	// The overview (admin) carries machines, kinds and runtimes.
+	ov, err := h.admin().Overview(c, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ov.Machines) != 3 {
+		t.Fatalf("overview machines: %+v", ov.Machines)
+	}
+	kinds := map[string]string{}
+	for _, a := range ov.Agents {
+		kinds[a.Agent.Name] = a.Agent.Kind
+		if a.Agent.Name == "mac-claude" && (a.Agent.MachineID != mac.ID || a.Agent.Runtime == nil || a.Agent.Runtime.Model != "claude-opus-5-5") {
+			t.Fatalf("mac-claude in the overview: %+v", a.Agent)
+		}
+		if a.Agent.Name == "old-codex" && !strings.HasPrefix(a.Agent.MachineID, "env:") {
+			t.Fatalf("a legacy agent still gets its (legacy) machine: %+v", a.Agent)
+		}
+		if (a.Agent.Name == "cloud-a" || a.Agent.Name == "glenn") && a.Agent.MachineID != "" {
+			t.Fatalf("cloud sessions and people are not on machines: %+v", a.Agent)
+		}
+	}
+	if kinds["vps-shell"] != "shell" || kinds["glenn"] != "human" || kinds["cloud-a"] != "agent" {
+		t.Fatalf("kinds: %v", kinds)
+	}
+	// An agent's own overview does not list machines.
+	if ov, _ := h.client(tok["mac-claude"]).Overview(c, 5); len(ov.Machines) != 0 {
+		t.Fatal("machines are for the admin view")
+	}
+
+	// Renaming: real machines yes, legacy ones say what to do.
+	if err := h.admin().RenameMachine(c, mac.ID, "Glenn 的 Mac"); err != nil {
+		t.Fatal(err)
+	}
+	err = h.admin().RenameMachine(c, m["srv1"].ID, "VPS")
+	if e, ok := client.AsError(err); !ok || e.Code != "invalid_state" {
+		t.Fatalf("renaming a legacy machine: %v", err)
+	}
+	if err := h.client(tok["mac-claude"]).RenameMachine(c, mac.ID, "x"); err == nil {
+		t.Fatal("an agent renamed a machine")
+	}
+	// No machine node: sessions cannot be started there.
+	_, err = h.admin().SpawnOnMachine(c, mac.ID, api.SpawnRequest{CLI: "claude", Dir: "~"}, 5*time.Second)
+	if e, ok := client.AsError(err); !ok || e.Code != "invalid_state" || !strings.Contains(e.Suggestion, "runner") {
+		t.Fatalf("spawn without a machine node: %v", err)
 	}
 }

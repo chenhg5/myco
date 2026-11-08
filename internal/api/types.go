@@ -52,6 +52,63 @@ type Agent struct {
 	Online       bool       `json:"online"`
 	CreatedAt    time.Time  `json:"created_at"`
 	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
+	// Kind is agent (an AI session), shell (exec/shell node), human, or
+	// machine (a machine's node for starting sessions: not shown as a node).
+	Kind string `json:"kind,omitempty"`
+	// MachineID is the machine it runs on (also "env:<host>" for machines
+	// whose runners predate machine reporting).
+	MachineID string `json:"machine_id,omitempty"`
+	// Runtime is its CLI and model, as its runner reports them.
+	Runtime *Runtime `json:"runtime,omitempty"`
+}
+
+// Runtime is what an agent runs on.
+type Runtime struct {
+	CLI        string `json:"cli,omitempty"`
+	CLIVersion string `json:"cli_version,omitempty"`
+	Model      string `json:"model,omitempty"`
+	// ModelSource: configured (the agent's runner.model), cli-config (the
+	// CLI's own settings), observed (seen in its last turn), or default.
+	ModelSource string `json:"model_source,omitempty"`
+	Access      string `json:"access,omitempty"`
+}
+
+// Machine is a computer, server or cloud environment agents run on.
+type Machine struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Hostname    string     `json:"hostname,omitempty"`
+	OS          string     `json:"os,omitempty"`
+	Arch        string     `json:"arch,omitempty"`
+	MycoVersion string     `json:"myco_version,omitempty"`
+	Online      bool       `json:"online"`
+	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+	// CanSpawn: its machine node is online, so sessions can be started on it.
+	CanSpawn bool `json:"can_spawn"`
+	// Legacy: its runners predate machine reporting (grouped by host name).
+	Legacy bool     `json:"legacy,omitempty"`
+	Agents []string `json:"agents"`
+}
+
+// MachineList is the body of GET /v1/machines.
+type MachineList struct {
+	Machines []Machine `json:"machines"`
+}
+
+// MachineReport is the body of PUT /v1/me/machine (sent by runners).
+type MachineReport struct {
+	// Fingerprint is a hash of the machine's own stable ID (never the ID).
+	Fingerprint string `json:"fingerprint"`
+	Name        string `json:"name,omitempty"`
+	Hostname    string `json:"hostname,omitempty"`
+	OS          string `json:"os,omitempty"`
+	Arch        string `json:"arch,omitempty"`
+	MycoVersion string `json:"myco_version,omitempty"`
+}
+
+// RenameMachineRequest is the body of PATCH /v1/machines/{id}.
+type RenameMachineRequest struct {
+	Name string `json:"name"`
 }
 
 // Message is the public view of a message.
@@ -404,6 +461,8 @@ type OverviewTotals struct {
 
 // Overview is a network snapshot for dashboards.
 type Overview struct {
+	// Machines are only in the admin view.
+	Machines            []Machine      `json:"machines,omitempty"`
 	GeneratedAt         time.Time      `json:"generated_at"`
 	Viewer              Viewer         `json:"viewer"`
 	OnlineWindowSeconds int            `json:"online_window_seconds"`

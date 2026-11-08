@@ -81,6 +81,17 @@ CREATE TABLE IF NOT EXISTS aliases (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_aliases_target ON aliases(target);
+CREATE TABLE IF NOT EXISTS machines (
+  id               TEXT PRIMARY KEY,
+  fingerprint_hash TEXT NOT NULL UNIQUE,
+  name             TEXT NOT NULL DEFAULT '',
+  hostname         TEXT NOT NULL DEFAULT '',
+  os               TEXT NOT NULL DEFAULT '',
+  arch             TEXT NOT NULL DEFAULT '',
+  myco_version     TEXT NOT NULL DEFAULT '',
+  created_at       INTEGER NOT NULL,
+  last_seen_at     INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS console_tokens (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
@@ -148,6 +159,10 @@ var agentColumnsV2 = [][2]string{
 	{"display_name", "TEXT NOT NULL DEFAULT ''"},
 	{"status_text", "TEXT NOT NULL DEFAULT ''"},
 	{"status_at", "INTEGER NOT NULL DEFAULT 0"},
+	// Reported by runners (v0.16.9): the machine the agent runs on, and
+	// its CLI and model.
+	{"machine_id", "TEXT NOT NULL DEFAULT ''"},
+	{"runtime", "TEXT NOT NULL DEFAULT '{}'"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

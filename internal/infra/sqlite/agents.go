@@ -19,15 +19,16 @@ func NewAgentRepo(db *sql.DB) *AgentRepo { return &AgentRepo{db: db} }
 var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
-  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at`
+  harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at,
+  machine_id, runtime`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt))
+		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -116,16 +117,19 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 		a                           domain.Agent
 		caps, allow, params, labels string
 		created, lastSeen, statusAt int64
+		runtime                     string
 	)
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
-		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt); err != nil {
+		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt,
+		&a.MachineID, &runtime); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)
 	_ = json.Unmarshal([]byte(allow), &a.AllowFrom)
 	_ = json.Unmarshal([]byte(params), &d.Params)
 	_ = json.Unmarshal([]byte(labels), &a.Labels)
+	_ = json.Unmarshal([]byte(runtime), &a.Runtime)
 	a.CreatedAt, a.LastSeenAt, a.StatusAt = fromMS(created), fromMS(lastSeen), fromMS(statusAt)
 	return &a, nil
 }
@@ -151,4 +155,29 @@ func nonNil[T any](s []T) []T {
 func labelsJSON(l []string) string {
 	b, _ := json.Marshal(nonNil(l))
 	return string(b)
+}
+
+func runtimeJSON(rt domain.Runtime) string {
+	b, _ := json.Marshal(rt)
+	return string(b)
+}
+
+func (r *AgentRepo) SetMachine(ctx context.Context, name domain.AgentName, machineID string) error {
+	return r.setColumn(ctx, name, "machine_id", machineID)
+}
+
+func (r *AgentRepo) SetRuntime(ctx context.Context, name domain.AgentName, rt domain.Runtime) error {
+	return r.setColumn(ctx, name, "runtime", runtimeJSON(rt))
+}
+
+// setColumn updates one of the runner-reported columns (fixed names only).
+func (r *AgentRepo) setColumn(ctx context.Context, name domain.AgentName, col string, v any) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE agents SET `+col+`=? WHERE name=?`, v, name)
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeNotFound, "agent %s not found", name)
+	}
+	return nil
 }
