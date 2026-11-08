@@ -97,6 +97,7 @@ Hub 也可以跑在你自己的电脑上（Mac、Linux、家里的小主机）�
 myco hub up --tunnel cloudflare --hostname hub.example.com   # 自己的域名，地址固定（推荐）
 myco hub up --tunnel tailscale                               # https://<机器名>.<tailnet>.ts.net，地址固定
 myco hub up --tunnel cloudflare                              # 临时地址，试用
+myco hub up --tunnel none                                    # 不穿透：只给本机和同一局域网的电脑用
 ```
 
 | 方式 | 准备工作 | 地址 |
@@ -110,6 +111,12 @@ myco hub up --tunnel cloudflare                              # 临时地址，�
 - 快速隧道的地址重启就变：入网链接、已登记机器保存的 Hub 地址都会失效，只适合试用。长期使用请用命名隧道或 Tailscale。
 - **这台电脑要一直开着、不能睡眠**，否则整个网络就断了。Mac 上在"系统设置 → 电池/能源"里关闭自动睡眠。
 - claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。
+- **只在局域网用**（`--tunnel none`，App 里"在这台电脑上开始"默认就是这个）：Hub 监听所有网卡，同一个局域网（同一个 Wi-Fi、同一个公司内网）里的电脑能直接连。在这台电脑上生成的邀请链接、入网链接会自动用本机的局域网地址（如 `http://192.168.1.20:7777/...`），而不是 `127.0.0.1`。注意：
+  - 局域网里是明文 HTTP，令牌会在局域网里明文传输，只在信得过的网络里用；跨网络、给云端会话用，请用上面的穿透方式。
+  - 局域网地址由路由器分配，可能会变；变了以后，已加入的机器要用新地址重新加入。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个。
+  - Mac 第一次会弹出"是否允许 myco 接受传入的网络连接"，要选允许。
+  - 只想给本机用：`myco hub up --tunnel none --local-only`（只监听 127.0.0.1）。
+  - v0.18.2 及之前用 `--tunnel none` 开的 Hub 只监听 127.0.0.1，升级后重新执行一次 `myco hub up --tunnel none` 才能让局域网访问。
 - 停止：`myco hub down`（数据保留，`myco hub up` 再次启动）。日志在 `~/.myco/hub/hub.log`。
 - 也可以不用 `hub up`，直接运行：`myco hub serve --tunnel tailscale --admin-token-file ~/.myco/hub/hub.env ...`。
 

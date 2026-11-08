@@ -62,6 +62,8 @@ type Hub struct {
 	Close      func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
 	SetPublicURL func(string)
+	// SetLAN makes links created from this machine use its LAN address.
+	SetLAN func(bool)
 }
 
 // DefaultWakers are the push delivery modes shipped with myco.
@@ -144,7 +146,7 @@ func Build(o Options) (*Hub, error) {
 		}
 		return ""
 	})
-	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL}, nil
+	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -169,6 +171,11 @@ func Run(ctx context.Context, o Options) error {
 	}
 	srv := &http.Server{Handler: logRequests(h, o.Log), ReadHeaderTimeout: 10 * time.Second}
 	o.Log.Info("myco hub listening", "addr", ln.Addr().String(), "db", o.DBPath)
+	if ta, ok := ln.Addr().(*net.TCPAddr); ok && ta.IP.IsUnspecified() && o.Tunnel == nil {
+		// Reachable on the LAN: links made over localhost get the LAN address
+		// (unless --public-url names another).
+		hub.SetLAN(true)
+	}
 	if o.Tunnel != nil {
 		local := "http://" + ln.Addr().String()
 		public, err := o.Tunnel.Prepare(ctx, local)

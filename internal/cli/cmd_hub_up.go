@@ -21,6 +21,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/infra/tunnel"
+	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/service"
 )
 
@@ -54,10 +55,11 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			"myco hub up --tunnel tailscale --dry-run   # show what would be installed",
 		},
 		Flags: []Flag{
-			{Name: "tunnel", Kind: Enum, Values: append([]string{"none"}, tunnel.Kinds...), Required: true, Help: "cloudflare, tailscale, or none (reachable on this machine/LAN only)"},
+			{Name: "tunnel", Kind: Enum, Values: append([]string{"none"}, tunnel.Kinds...), Required: true, Help: "cloudflare, tailscale, or none (reachable on this machine and its local network only)"},
 			{Name: "hostname", Kind: String, Help: "cloudflare: your hostname on Cloudflare, e.g. hub.example.com (empty = temporary URL)"},
 			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
-			{Name: "port", Kind: Int, Default: "7777", Help: "Local port (the hub only listens on 127.0.0.1)"},
+			{Name: "port", Kind: Int, Default: "7777", Help: "Port (with a tunnel the hub listens on 127.0.0.1 only; with --tunnel none on every interface, so the LAN can reach it)"},
+			{Name: "local-only", Kind: Bool, Help: "--tunnel none: listen on 127.0.0.1 only (this machine; no LAN access)"},
 			{Name: "no-service", Kind: Bool, Help: "Do not install a service; print the command to run instead"},
 			{Name: "no-update-check", Kind: Bool, Help: "Do not look for new myco releases"},
 		},
@@ -79,7 +81,14 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if real, err := filepath.EvalSymlinks(bin); err == nil {
 				bin = real
 			}
-			args := []string{"hub", "serve", "--addr", "127.0.0.1:" + strconv.Itoa(port), "--db", filepath.Join(dir, "hub.db"),
+			// Without a tunnel, other computers on the network reach the hub
+			// directly; with one, only the tunnel (and this machine) does.
+			listen := "127.0.0.1:" + strconv.Itoa(port)
+			lan := kind == "none" && !e.in.Bool("local-only")
+			if lan {
+				listen = "0.0.0.0:" + strconv.Itoa(port)
+			}
+			args := []string{"hub", "serve", "--addr", listen, "--db", filepath.Join(dir, "hub.db"),
 				"--admin-token-file", filepath.Join(dir, "hub.env"), "--files-dir", filepath.Join(dir, "files"), "--log-level", "info"}
 			if e.in.Bool("no-update-check") {
 				args = append(args, "--no-update-check")
@@ -151,6 +160,11 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			reachable := kind == "none" || waitHealth(e.in.Ctx, public, 90*time.Second) == nil
 			out["public_url"], out["reachable"], out["service"] = public, reachable, plan.Manager
+			if lan {
+				if ip := osutil.LANAddr(); ip != "" {
+					out["lan_url"] = "http://" + ip + ":" + strconv.Itoa(port)
+				}
+			}
 
 			// 5. A join link on first setup.
 			if created {
@@ -162,6 +176,9 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "\nHub URL: %s\n", public)
+				if l, ok := out["lan_url"].(string); ok {
+					fmt.Fprintf(w, "On your local network: %s (links made on this machine use it; other computers need to be on the same network)\n", l)
+				}
 				if !reachable {
 					fmt.Fprintln(w, "WARNING: not reachable through the tunnel yet (DNS can take a few minutes); check: curl "+public+"/v1/health")
 				}

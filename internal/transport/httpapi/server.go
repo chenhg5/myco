@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
+	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -29,20 +31,23 @@ type Server struct {
 	messages   *app.MessageService
 	adminToken string
 	log        *slog.Logger
-	publicURL  atomic.Value  // string
-	version    string        // this hub's myco build
-	latest     func() string // newest known release ("" = unknown)
-	mux        *http.ServeMux
-	ingress    map[string]Ingress
-	files      *app.FileService
-	overview   *app.OverviewService
-	console    *app.ConsoleService
-	machines   *app.MachineService
-	members    *app.MemberService
-	audit      *app.AuditService
-	namesMu    sync.Mutex
-	names      map[string]string // member id -> name (see ownerName)
-	namesAt    time.Time
+	publicURL  atomic.Value // string
+	// lan: the hub listens on every interface without a public URL, so
+	// links made over localhost use this machine's LAN address instead.
+	lan      atomic.Bool
+	version  string        // this hub's myco build
+	latest   func() string // newest known release ("" = unknown)
+	mux      *http.ServeMux
+	ingress  map[string]Ingress
+	files    *app.FileService
+	overview *app.OverviewService
+	console  *app.ConsoleService
+	machines *app.MachineService
+	members  *app.MemberService
+	audit    *app.AuditService
+	namesMu  sync.Mutex
+	names    map[string]string // member id -> name (see ownerName)
+	namesAt  time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -560,8 +565,39 @@ func (s *Server) publicBase(r *http.Request) string {
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	return scheme + "://" + r.Host
+	host := r.Host
+	if s.lan.Load() && isLoopbackHost(host) {
+		// Asked from this machine (the app, the CLI): a link for others must
+		// name this machine's LAN address, not 127.0.0.1.
+		if ip := osutil.LANAddr(); ip != "" {
+			if _, port, err := net.SplitHostPort(host); err == nil {
+				host = net.JoinHostPort(ip, port)
+			} else {
+				host = ip
+			}
+		}
+	}
+	return scheme + "://" + host
 }
+
+// isLoopbackHost reports whether a Host header names this machine only.
+func isLoopbackHost(host string) bool {
+	h := host
+	if hh, _, err := net.SplitHostPort(host); err == nil {
+		h = hh
+	}
+	h = strings.Trim(h, "[]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// SetLAN says the hub is reachable on the local network (it listens on every
+// interface and has no public URL): links made from this machine then carry
+// its LAN address.
+func (s *Server) SetLAN(on bool) { s.lan.Store(on) }
 
 // SetPublicURL sets the hub URL used in join links.
 // It is safe to call while serving (a tunnel may change it).
