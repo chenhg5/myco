@@ -45,6 +45,9 @@ export interface SpawnInput {
   access?: RuntimeAccess;
   /** A shell node's allowed senders (cli "exec"): agents that may send it commands. */
   allow_from?: string[];
+  /** copy this session (same CLI, on that machine) instead of starting an empty one */
+  fork_from?: string;
+  display_name?: string;
 }
 export interface SpawnResult {
   agent: Agent;
@@ -74,6 +77,8 @@ export interface LocalJoinInput {
   session_id: string;
   workdir: string;
   display_name?: string;
+  /** join a copy of the session (default in the app): the original stays the user's */
+  fork?: boolean;
 }
 export interface LocalJoinResult {
   agent: string;
@@ -298,7 +303,7 @@ export const appApi = {
 
   local: () => request<LocalState>("GET", "app/local"),
   /** cc-switch's Claude providers on this computer (names and hosts only). */
-  providers: () => request<ProviderList>("GET", "app/local/providers"),
+  providers: (app: "claude" | "codex" = "claude") => request<ProviderList>("GET", `app/local/providers?app=${app}`),
   /** A node's provider setting, if the node runs on this computer. */
   agentProvider: (name: string, hubId: string) =>
     request<AgentProvider>("GET", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`),

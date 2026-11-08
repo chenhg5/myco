@@ -132,17 +132,27 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	if err != nil {
 		return failed(plan, "cannot prepare %s: %v", plan.CLI, err)
 	}
+	if _, ok := h.(harness.Forker); sr.ForkFrom != "" && !ok {
+		return denied("%v", harness.ErrForkUnsupported)
+	}
 	timeout := n.FirstTurnTimeout
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	out, err := h.Run(turnCtx, harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env})
+	first := harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env}
+	if sr.ForkFrom != "" {
+		first.SessionID, first.Fork = sr.ForkFrom, true
+	}
+	out, err := h.Run(turnCtx, first)
 	if err != nil {
+		if sr.ForkFrom != "" {
+			return failed(plan, "copying session %s failed: %v", sr.ForkFrom, err)
+		}
 		return failed(plan, "starting the %s session failed: %v", plan.CLI, err)
 	}
-	if out.SessionID == "" {
+	if out.SessionID == "" || (sr.ForkFrom != "" && out.SessionID == sr.ForkFrom) {
 		return failed(plan, "%s did not report a session id, so the session could not be joined", plan.CLI)
 	}
 	name, err := n.Deps.Enroll(ctx, plan, sr, out.SessionID)
@@ -302,7 +312,11 @@ func slug(s string) string {
 
 func (n *Node) firstPrompt(from string, p Plan, sr api.SpawnRequest) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "[myco] This session was started by agent %q through myco on machine %s, in %s.\n", from, n.Machine, p.Workdir)
+	if sr.ForkFrom != "" {
+		fmt.Fprintf(&b, "[myco] This session is a copy of session %s, made by %q through myco on machine %s, in %s. You keep everything from the original conversation; the original continues separately.\n", sr.ForkFrom, from, n.Machine, p.Workdir)
+	} else {
+		fmt.Fprintf(&b, "[myco] This session was started by agent %q through myco on machine %s, in %s.\n", from, n.Machine, p.Workdir)
+	}
 	fmt.Fprintf(&b, "It will join the myco network as agent %q; other agents will send it tasks later, and each one resumes this session.\n", p.Name)
 	if d := strings.TrimSpace(sr.Description); d != "" {
 		fmt.Fprintf(&b, "Its role: %s\n", d)

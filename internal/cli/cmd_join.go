@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/osutil"
 )
@@ -386,6 +388,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			`myco join --description "reviews PRs for the web app" --display-name "Web reviewer"`,
 			"myco join --harness codex --session-id 0199a1b2-...   # if detection fails",
 			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
+			"myco join --fork                                      # join a copy; keep using this session yourself",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Agent name (default: <machine>-<cli>-<short session id>)"},
@@ -395,6 +398,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "harness", Kind: String, Help: "claude or codex (default: detected)"},
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
+			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
 		},
 		Run: handler(func(e *env) error {
 			mf, err := config.LoadMachine(e.defaultPath)
@@ -446,6 +450,17 @@ Safe to re-run: the same session gets the same agent back.`,
 			if err != nil {
 				return err
 			}
+			forkedFrom := ""
+			if e.in.Bool("fork") && !e.in.Bool("dry-run") {
+				// The copy, not this session, becomes the agent: the person
+				// keeps using the original without the runner stepping in.
+				id, err := forkSession(e, b, e.in.String("name"))
+				if err != nil {
+					return err
+				}
+				forkedFrom, b.SessionID = b.SessionID, id
+				how += ", copied to a new session"
+			}
 			name := e.in.String("name")
 			if name == "" && prefix != "" {
 				name = prefix + shortHarness(b.Harness) + "-" + slug(b.SessionID, 4)
@@ -453,6 +468,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			desc := e.in.String("description")
 			if desc == "" {
 				desc = fmt.Sprintf("%s session on %s in %s", shortHarness(b.Harness), orDefault(machineName(m), b.Environment), b.Workdir)
+			}
+			if forkedFrom != "" && e.in.String("description") == "" {
+				desc += " (copy of session " + forkedFrom + ")"
 			}
 			dry := e.in.Bool("dry-run")
 			res, err := e.enroll(hub, tok, api.EnrollRequest{Name: name, DisplayName: e.in.String("display-name"), Description: desc,
@@ -625,4 +643,32 @@ func readCodexMeta(path string) (id, cwd string) {
 		return "", ""
 	}
 	return line.Payload.ID, line.Payload.Cwd
+}
+
+// forkSession copies session b into a new one with a short first turn and
+// returns the copy's id.
+func forkSession(e *env, b api.Binding, name string) (string, error) {
+	h, err := builtin.Registry().New(b.Harness, harness.Options{})
+	if err != nil {
+		return "", err
+	}
+	if _, ok := h.(harness.Forker); !ok {
+		return "", errorf("invalid_argument", ExitUsage, "join without --fork", "%v", harness.ErrForkUnsupported)
+	}
+	ctx, cancel := context.WithTimeout(e.in.Ctx, 5*time.Minute)
+	defer cancel()
+	prompt := "[myco] This session is a copy of session " + b.SessionID + ", made to join the myco network"
+	if name != "" {
+		prompt += " as agent " + name
+	}
+	prompt += ". You keep everything from the original conversation; the original continues separately with its owner. " +
+		"Other agents will send you tasks later, and each one resumes this copy.\nDo not start any work yet. Reply with one short line confirming you are ready.\n"
+	out, err := h.Run(ctx, harness.Request{Prompt: prompt, SessionID: b.SessionID, Fork: true, Workdir: b.Workdir})
+	if err != nil {
+		return "", errorf("fork_failed", ExitError, "join without --fork, or check that the CLI works here", "copying session %s failed: %v", b.SessionID, err)
+	}
+	if out.SessionID == "" || out.SessionID == b.SessionID {
+		return "", errorf("fork_failed", ExitError, "join without --fork", "%s did not report a new session id for the copy", b.Harness)
+	}
+	return out.SessionID, nil
 }

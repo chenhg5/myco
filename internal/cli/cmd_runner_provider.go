@@ -34,16 +34,17 @@ func runnerProviderCommands() *Command {
 		Summary: "List the model providers an agent can be pinned to (from cc-switch)",
 		Long: `Reads cc-switch's providers (~/.cc-switch) read-only. Keys are never printed. Pin one to an agent
 with: myco runner provider set --agent <name> --provider cc-switch:<id>`,
-		Examples: []string{"myco runner provider list", "myco runner provider list --format json"},
+		Examples: []string{"myco runner provider list", "myco runner provider list --cli codex"},
+		Flags:    []Flag{{Name: "cli", Kind: Enum, Values: []string{"claude", "codex"}, Default: "claude", Help: "Whose providers: Claude Code or Codex"}},
 		Run: handler(func(e *env) error {
-			ps, err := provider.List(provider.Dir(), "claude")
+			ps, err := provider.List(provider.Dir(), e.in.String("cli"))
 			if err != nil {
 				return errorf("not_found", ExitNotFound, "install cc-switch, or put provider variables in the agent's env file: myco runner env capture",
 					"%v", err)
 			}
 			return e.p.Print(map[string]any{"providers": ps}, func(w io.Writer) {
 				if len(ps) == 0 {
-					fmt.Fprintln(w, "cc-switch has no Claude providers")
+					fmt.Fprintf(w, "cc-switch has no %s providers\n", e.in.String("cli"))
 				}
 				for _, p := range ps {
 					cur := ""
@@ -66,7 +67,7 @@ with: myco runner provider set --agent <name> --provider cc-switch:<id>`,
 		Long: `--provider cc-switch:<id> pins a cc-switch provider: it is read again before every run, so key
 changes made in cc-switch apply, and nothing secret is copied. --provider machine removes the pin
 (the CLI then uses whatever this machine is set to). Applies from the agent's next message; no
-restart needed. Claude Code agents only, for now.`,
+restart needed. Claude Code and Codex agents.`,
 		Examples: []string{
 			"myco runner provider set --agent mac-claude-docs --provider cc-switch:deepseek",
 			"myco runner provider set --agent mac-claude-docs --provider machine",
@@ -93,10 +94,11 @@ restart needed. Claude Code agents only, for now.`,
 				ref = ""
 				out["provider"] = "machine"
 			default:
-				if h := profileHarness(cfg); h != "claude" {
-					return errorf("invalid_argument", ExitUsage, "", "pinned providers are supported for Claude Code agents only (this agent runs %s)", h)
+				h := profileHarness(cfg)
+				if providerCLIs[h] == "" {
+					return errorf("invalid_argument", ExitUsage, "", "pinned providers are supported for Claude Code and Codex agents (this agent runs %s)", h)
 				}
-				p, err := provider.Resolve(provider.Dir(), ref, "claude")
+				p, err := provider.Resolve(provider.Dir(), ref, providerCLIs[h])
 				if err != nil {
 					return errorf("not_found", ExitNotFound, "myco runner provider list", "%v", err)
 				}

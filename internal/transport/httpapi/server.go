@@ -1272,6 +1272,9 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		if res.CLI == "exec" {
 			kind = "shell node, commands from " + strings.Join(in.AllowFrom, ", ")
 		}
+		if in.ForkFrom != "" {
+			kind += " copy of session " + in.ForkFrom
+		}
 		s.record(r, "machine.spawn", res.Agent, kind+" in "+res.Workdir+" ("+r.PathValue("id")+")")
 		writeJSON(w, http.StatusOK, res)
 	}

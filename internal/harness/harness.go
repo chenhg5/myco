@@ -32,6 +32,10 @@ type Request struct {
 	// SessionID resumes a previous conversation when non-empty and the
 	// harness supports sessions.
 	SessionID string
+	// Fork copies SessionID into a new session instead of resuming it (the
+	// original is left untouched); Result.SessionID is the copy. Harnesses
+	// that cannot fork return ErrForkUnsupported.
+	Fork bool
 	// Workdir is the working directory for the process.
 	Workdir string
 	// Env holds extra KEY=VALUE pairs (MYCO_* context) for the process.
@@ -51,6 +55,12 @@ type Request struct {
 	Provider *ProviderSettings
 }
 
+// ErrForkUnsupported: the harness cannot copy a session.
+var ErrForkUnsupported = errors.New("this agent CLI cannot copy (fork) a session; only Claude Code and Codex can")
+
+// Forker marks harnesses that can copy a session (Request.Fork).
+type Forker interface{ CanFork() }
+
 // ProviderAware marks harnesses that apply Request.Provider themselves;
 // for others the runner adds its variables to Request.Env.
 type ProviderAware interface{ AppliesProvider() }
@@ -59,6 +69,8 @@ type ProviderAware interface{ AppliesProvider() }
 type ProviderSettings struct {
 	Env   map[string]string
 	Model string
+	// ConfigArgs are CLI arguments that pin the provider (Codex: -c key=value).
+	ConfigArgs []string
 }
 
 // EnvList returns p's variables as KEY=VALUE pairs (nil-safe).

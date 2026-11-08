@@ -52,7 +52,11 @@ type ManualProvider struct {
 func (l *Local) defaultConfig() string { return filepath.Join(l.Home, ".myco", "config.yaml") }
 
 func (b *Backend) listProviders(w http.ResponseWriter, r *http.Request) {
-	ps, err := provider.List(provider.DirIn(b.Local.Home), "claude")
+	app := r.URL.Query().Get("app")
+	if app != "codex" {
+		app = "claude"
+	}
+	ps, err := provider.List(provider.DirIn(b.Local.Home), app)
 	switch {
 	case errors.Is(err, provider.ErrNoCCSwitch):
 		writeJSON(w, http.StatusOK, ProviderList{Providers: []provider.Provider{}})
@@ -103,8 +107,10 @@ func (b *Backend) agentProvider(p config.Profile) AgentProvider {
 	if out.Provider == "" && cfg.Runner.EnvFile != "" {
 		if vals, err := config.ReadEnvFile(cfg.Runner.EnvFile); err == nil {
 			for _, kv := range vals {
-				if v, ok := strings.CutPrefix(kv, "ANTHROPIC_BASE_URL="); ok {
-					out.Provider, out.EnvHost = "env_file", hostOf(v)
+				for _, k := range []string{"ANTHROPIC_BASE_URL=", "OPENAI_BASE_URL="} {
+					if v, ok := strings.CutPrefix(kv, k); ok {
+						out.Provider, out.EnvHost = "env_file", hostOf(v)
+					}
 				}
 			}
 		}
@@ -146,8 +152,9 @@ func (b *Backend) putAgentProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := p.Config
-	if cur := b.agentProvider(p); cur.Harness != "claude" {
-		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "only Claude Code agents can pick a provider for now"})
+	cur := b.agentProvider(p)
+	if cur.Harness != "claude" && cur.Harness != "codex" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "only Claude Code and Codex agents can pick a provider"})
 		return
 	}
 	switch {
@@ -166,6 +173,12 @@ func (b *Backend) putAgentProvider(w http.ResponseWriter, r *http.Request) {
 		if m.Model != "" {
 			vars["ANTHROPIC_MODEL"] = m.Model
 		}
+		if cur.Harness == "codex" { // an OpenAI-compatible endpoint
+			vars = map[string]string{"OPENAI_BASE_URL": m.BaseURL, "OPENAI_API_KEY": m.APIKey}
+			if m.Model != "" {
+				vars["OPENAI_MODEL"] = m.Model
+			}
+		}
 		if err := writeProviderEnv(file, cfg.Agent, vars); err != nil {
 			writeErr(w, err)
 			return
@@ -181,7 +194,7 @@ func (b *Backend) putAgentProvider(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	default:
-		pr, err := provider.Resolve(provider.DirIn(b.Local.Home), in.Provider, "claude")
+		pr, err := provider.Resolve(provider.DirIn(b.Local.Home), in.Provider, cur.Harness)
 		if err != nil {
 			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: err.Error()})
 			return
@@ -231,7 +244,8 @@ func writeProviderEnv(path, agent string, vars map[string]string) error {
 }
 
 func isProviderVar(k string) bool {
-	return strings.HasPrefix(k, "ANTHROPIC_") || strings.HasPrefix(k, "CLAUDE_CODE_USE_") || k == "CLAUDE_CODE_OAUTH_TOKEN"
+	return strings.HasPrefix(k, "ANTHROPIC_") || strings.HasPrefix(k, "CLAUDE_CODE_USE_") || k == "CLAUDE_CODE_OAUTH_TOKEN" ||
+		strings.HasPrefix(k, "OPENAI_")
 }
 
 func quoteEnvValue(v string) string {

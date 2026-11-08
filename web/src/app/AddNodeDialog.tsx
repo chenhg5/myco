@@ -98,6 +98,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
   const sessionsReq = useRef(false);
   const [selected, setSelected] = useState<LocalSession | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [forkJoin, setForkJoin] = useState(true);
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState<unknown>(null);
   const [joined, setJoined] = useState<LocalJoinResult | null>(null);
@@ -253,6 +254,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
         cli: selected.cli,
         session_id: selected.session_id,
         workdir: selected.workdir,
+        fork: forkJoin,
         ...(displayName.trim() ? { display_name: displayName.trim() } : {}),
       });
       setJoined(r);
@@ -416,9 +418,21 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                       disabled={joinBusy || !selected}
                     />
                   </label>
+                  <div className="app-field">
+                    <span className="app-field-label">{L("加入方式", "How to join")}</span>
+                    <div className="seg seg-fill" role="tablist">
+                      <button type="button" role="tab" aria-selected={forkJoin} className={cn("seg-btn", forkJoin && "active")} onClick={() => setForkJoin(true)} disabled={joinBusy}>{L("复制一份加入（推荐）", "Join a copy (recommended)")}</button>
+                      <button type="button" role="tab" aria-selected={!forkJoin} className={cn("seg-btn", !forkJoin && "active")} onClick={() => setForkJoin(false)} disabled={joinBusy}>{L("直接加入", "Join this session")}</button>
+                    </div>
+                    <span className="app-small-note">
+                      {forkJoin
+                        ? L("新节点带着这个会话的全部上下文，你原来的会话照常用，两边互不打扰。", "The new node keeps this session’s whole context; you keep using your session, and neither gets in the other’s way.")
+                        : L("这个会话本身成为节点：别人的任务会接着它跑。你在终端里用它时，runner 会先让开。", "This session itself becomes the node: tasks continue it. While you use it in a terminal, the runner waits.")}
+                    </span>
+                  </div>
                   <ErrorText error={joinError} />
                   {joinBusy && (
-                    <div className="app-progress"><span className="app-spinner" />{L("正在加入…", "Joining…")}</div>
+                    <div className="app-progress"><span className="app-spinner" />{forkJoin ? L("正在复制会话并加入，可能要一分钟…", "Copying the session and joining; this can take a minute…") : L("正在加入…", "Joining…")}</div>
                   )}
                   <div className="app-modal-actions">
                     <button type="button" className="app-btn" onClick={close} disabled={joinBusy}>{L("取消", "Cancel")}</button>

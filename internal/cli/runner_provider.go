@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/config"
@@ -21,7 +22,7 @@ type providerChoice struct {
 }
 
 // providerCLIs maps harnesses to the cc-switch app whose providers they take.
-var providerCLIs = map[string]string{"claude": "claude"}
+var providerCLIs = map[string]string{"claude": "claude", "codex": "codex"}
 
 // resolveProvider picks the provider for cli: the pinned cc-switch provider
 // (ref), else provider variables from the agent's env file, else whatever
@@ -31,14 +32,14 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 	var ch providerChoice
 	if ref != "" {
 		if !supported {
-			ch.warn = "pinned providers are supported for claude only; using the machine's setting"
+			ch.warn = "pinned providers are supported for Claude Code and Codex only; using the machine's setting"
 		} else if p, err := provider.Resolve(provider.Dir(), ref, app); err != nil {
 			ch = providerChoice{name: strings.TrimPrefix(ref, provider.RefPrefix), source: "missing", warn: err.Error() + "; using the machine's setting"}
 			if errors.Is(err, provider.ErrNotFound) {
 				ch.warn = "the pinned cc-switch provider no longer exists; using the machine's setting"
 			}
 		} else {
-			return providerChoice{settings: &harness.ProviderSettings{Env: p.Env, Model: p.Model},
+			return providerChoice{settings: &harness.ProviderSettings{Env: p.Env, Model: p.Model, ConfigArgs: p.CodexArgs},
 				name: p.Name, source: "pinned", model: orStr(p.Model, p.Env["ANTHROPIC_MODEL"])}
 		}
 	}
@@ -49,16 +50,30 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 			env := map[string]string{}
 			for _, kv := range vars {
 				k, v, _ := strings.Cut(kv, "=")
-				if isProviderVar(k) {
+				if isProviderVar(k) && app == "claude" || strings.HasPrefix(k, "OPENAI_") && app == "codex" {
 					env[k] = v
 				}
 			}
 			if len(env) > 0 {
 				name := "env file"
-				if u, err := url.Parse(env["ANTHROPIC_BASE_URL"]); err == nil && u.Host != "" {
+				base, model := env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_MODEL"]
+				ps := &harness.ProviderSettings{Env: env}
+				if app == "codex" {
+					// OPENAI_BASE_URL / OPENAI_API_KEY drive Codex's built-in
+					// openai provider; OPENAI_MODEL is ours (set in the app).
+					base, model = env["OPENAI_BASE_URL"], env["OPENAI_MODEL"]
+					ps.ConfigArgs = []string{"-c", `model_provider="openai"`}
+					if base != "" {
+						ps.ConfigArgs = append(ps.ConfigArgs, "-c", "openai_base_url="+strconv.Quote(base))
+					}
+					if model != "" {
+						ps.ConfigArgs = append(ps.ConfigArgs, "-c", "model="+strconv.Quote(model))
+					}
+				}
+				if u, err := url.Parse(base); err == nil && u.Host != "" {
 					name = u.Host
 				}
-				return providerChoice{settings: &harness.ProviderSettings{Env: env}, name: name, source: "env_file", model: env["ANTHROPIC_MODEL"]}
+				return providerChoice{settings: ps, name: name, source: "env_file", model: model}
 			}
 		}
 	}

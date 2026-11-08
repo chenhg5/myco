@@ -526,6 +526,10 @@ type SpawnRequest struct {
 	// the machine joins the node with.
 	AllowFrom   []string `json:"allow_from,omitempty"`
 	EnrollToken string   `json:"enroll_token,omitempty"`
+	// ForkFrom copies an existing session (of the same CLI, on that machine)
+	// into the new agent instead of starting an empty one: it keeps the
+	// original's context, and the original is left untouched.
+	ForkFrom string `json:"fork_from,omitempty"`
 }
 
 // SpawnResult is a machine node's answer to a SpawnRequest.

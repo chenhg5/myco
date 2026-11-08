@@ -66,6 +66,9 @@ func transcriptPatterns(id string) []string {
 
 func (c *claude) Name() string { return Name }
 
+// CanFork implements harness.Forker (claude --resume <id> --fork-session).
+func (c *claude) CanFork() {}
+
 // AppliesProvider implements harness.ProviderAware (via --settings).
 func (c *claude) AppliesProvider() {}
 
@@ -165,6 +168,9 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	args := []string{"-p", "--output-format", "stream-json", "--verbose"}
 	if req.SessionID != "" {
 		args = append(args, "--resume", req.SessionID)
+		if req.Fork {
+			args = append(args, "--fork-session")
+		}
 	}
 	if c.opts.Model != "" {
 		args = append(args, "--model", c.opts.Model)
@@ -192,6 +198,9 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	})
 	traceEvents("claude", out.Stdout)
 	res, final, ok := parseStream(out.Stdout)
+	if req.Fork && res.SessionID == req.SessionID && runErr == nil {
+		return res, fmt.Errorf("claude did not create a copy of session %s", req.SessionID)
+	}
 	if parent := os.Getenv("CLAUDE_CODE_SESSION_ID"); parent != "" && res.SessionID == parent && req.SessionID != parent {
 		// Never let the agent adopt the session the runner itself runs in.
 		return harness.Result{}, fmt.Errorf("claude attached to the runner's own session %s; run the runner outside Claude Code or report this", parent)

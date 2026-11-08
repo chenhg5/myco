@@ -66,6 +66,12 @@ type event struct {
 	} `json:"item"`
 }
 
+// CanFork implements harness.Forker (codex exec fork <id>).
+func (c *codex) CanFork() {}
+
+// AppliesProvider implements harness.ProviderAware (-c overrides).
+func (c *codex) AppliesProvider() {}
+
 func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, error) {
 	dir, err := os.MkdirTemp("", "myco-codex-")
 	if err != nil {
@@ -80,20 +86,30 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		args = append(args, "-m", c.opts.Model)
 	}
 	args = append(args, accessArgs[c.opts.Access]...)
+	env := req.Env
+	if p := req.Provider; p != nil {
+		// -c overrides beat ~/.codex/config.toml for this run only; the key
+		// travels in the environment (the provider's env_key).
+		args = append(args, p.ConfigArgs...)
+		env = append(p.EnvList(), env...)
+	}
 	args = append(args, c.opts.Args...)
-	if req.SessionID != "" {
+	switch {
+	case req.SessionID != "" && req.Fork:
+		args = append(args, "fork", req.SessionID)
+	case req.SessionID != "":
 		args = append(args, "resume", req.SessionID)
 	}
 	args = append(args, "-")
 
 	out, runErr := harness.Exec(ctx, harness.Process{
-		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: req.Env,
+		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: env,
 	})
 	res, failure := parseEvents(out.Stdout)
 	if b, err := os.ReadFile(lastMsg); err == nil && strings.TrimSpace(string(b)) != "" {
 		res.Output = strings.TrimSpace(string(b))
 	}
-	if req.SessionID != "" && res.SessionID == "" {
+	if req.SessionID != "" && res.SessionID == "" && !req.Fork {
 		res.SessionID = req.SessionID
 	}
 	if runErr != nil && strings.Contains(runErr.Error()+failure, "already has an active writer") {

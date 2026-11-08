@@ -279,3 +279,29 @@ func TestSpawnShellNode(t *testing.T) {
 		t.Fatalf("ran a first turn or did not enroll: %+v %+v", r.cli.got, r.enrolled)
 	}
 }
+
+type forkCLI struct{ *fakeCLI }
+
+func (forkCLI) CanFork() {}
+
+// Copying a session forks it in the first turn; CLIs that cannot fork are refused.
+func TestSpawnForksASession(t *testing.T) {
+	r := newRig(t)
+	req := api.SpawnRequest{CLI: "claude", Dir: "~/code/app", Name: "reviewer-2", ForkFrom: "sess-orig"}
+	if res := r.run(t, "lead", req); !res.Denied || !strings.Contains(res.Error, "cannot copy") {
+		t.Fatalf("non-forking CLI: %+v", res)
+	}
+	r.node.Deps.NewHarness = func(cli string, opts harness.Options) (harness.Harness, error) { return forkCLI{r.cli}, nil }
+	res := r.run(t, "lead", req)
+	if res.Denied || res.Error != "" || res.SessionID != "sess-1" {
+		t.Fatalf("fork: %+v", res)
+	}
+	if !r.cli.got.Fork || r.cli.got.SessionID != "sess-orig" || !strings.Contains(r.cli.got.Prompt, "copy of session sess-orig") {
+		t.Fatalf("first turn: %+v", r.cli.got)
+	}
+	// A CLI that resumed the original instead of copying it is a failure.
+	r.cli.out.SessionID = "sess-orig"
+	if res := r.run(t, "lead", req); res.Error == "" {
+		t.Fatalf("no copy made: %+v", res)
+	}
+}

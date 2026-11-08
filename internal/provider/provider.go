@@ -34,6 +34,8 @@ type Provider struct {
 	Env map[string]string `json:"-"`
 	// Model is the settings-level model, if the provider sets one.
 	Model string `json:"model,omitempty"`
+	// CodexArgs are `codex -c` overrides (Codex providers); their key is in Env.
+	CodexArgs []string `json:"-"`
 }
 
 // RefPrefix marks a cc-switch provider reference.
@@ -176,14 +178,22 @@ func listLegacy(path, app string) ([]Provider, error) {
 	return out, nil
 }
 
-// fill decodes a Claude-style settings object ({"env": {...}, "model": ...}).
+// fill decodes a provider's settings: Claude-style {"env": {...}, "model"}
+// or Codex-style {"auth": {"OPENAI_API_KEY"}, "config": "<config.toml>"}.
 func fill(p *Provider, cfg []byte) {
 	p.Ref = RefPrefix + p.ID
 	var s struct {
-		Env   map[string]any `json:"env"`
-		Model string         `json:"model"`
+		Env    map[string]any `json:"env"`
+		Model  string         `json:"model"`
+		Auth   map[string]any `json:"auth"`
+		Config string         `json:"config"`
 	}
 	_ = json.Unmarshal(cfg, &s)
+	if p.App == "codex" {
+		key, _ := s.Auth["OPENAI_API_KEY"].(string)
+		p.CodexArgs, p.Env, p.Host, p.Model = CodexOverrides(s.Config, key)
+		return
+	}
 	p.Model = s.Model
 	p.Env = map[string]string{}
 	for k, v := range s.Env {

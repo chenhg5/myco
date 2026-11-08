@@ -256,6 +256,8 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 		Workdir     string `json:"workdir"`
 		DisplayName string `json:"display_name"`
 		Description string `json:"description"`
+		// Fork joins a copy of the session (the original stays the user's).
+		Fork bool `json:"fork"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -278,6 +280,11 @@ func (b *Backend) localJoin(w http.ResponseWriter, r *http.Request, c *client.Cl
 		return
 	}
 	args := []string{"join", "--harness", in.CLI, "--session-id", in.SessionID, "--name", name}
+	if in.Fork {
+		// The copy gets its own name; the original session stays the user's.
+		name += "-copy"
+		args = []string{"join", "--harness", in.CLI, "--session-id", in.SessionID, "--name", name, "--fork"}
+	}
 	if in.DisplayName != "" {
 		args = append(args, "--display-name", in.DisplayName)
 	}

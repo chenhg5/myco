@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MessageSquare, X } from "lucide-react";
+import { Check, MessageSquare, X } from "lucide-react";
 import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Member } from "@/api";
@@ -15,7 +15,7 @@ import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 
-type Action = null | "profile" | "allow" | "kick" | "delete" | "owner";
+type Action = null | "profile" | "allow" | "kick" | "delete" | "owner" | "copy";
 
 const pillClass: Record<string, string> = { working: "green", pending: "amber", idle: "", offline: "" };
 
@@ -199,13 +199,14 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     return () => { off = true; };
   }, [row.hub.id, ag.name]);
 
-  const editable = !!local?.local && local.harness === "claude";
+  const codex = (rt?.cli || ag.binding.harness) === "codex";
+  const editable = !!local?.local && (local.harness === "claude" || local.harness === "codex");
   const start = async () => {
     setError(null);
     setChoice(local?.provider || "");
     setManual({ base_url: "", api_key: "", model: "" });
     setOpen(true);
-    try { setList(await appApi.providers()); } catch (e) { setError(e); }
+    try { setList(await appApi.providers(codex ? "codex" : "claude")); } catch (e) { setError(e); }
   };
   const save = async () => {
     setBusy(true);
@@ -241,13 +242,13 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       </span>
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
-        description={L("后台唤醒这个节点时，它的 Claude Code 用哪个服务商（地址、密钥和模型）。只影响这个节点，密钥只保存在这台电脑上。", "Which provider (endpoint, key and model) this node's Claude Code uses when it is woken in the background. Only this node is affected; keys stay on this computer.")}>
+        description={L(`后台唤醒这个节点时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个节点，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this node's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this node is affected; keys stay on this computer.`)}>
         <div className="app-provider-list" role="radiogroup">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
             <span>
               <b>{L("跟随本机设置", "Follow this computer")}</b>
-              <small>{current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`) : L("用这台电脑上 Claude Code 自己的设置", "Uses Claude Code's own settings on this computer")}</small>
+              <small>{current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`) : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}</small>
             </span>
           </label>
           {list?.providers.map((p) => (
@@ -263,13 +264,13 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} />
             <span>
               <b>{L("手动填写", "Enter by hand")}</b>
-              <small>{local?.env_host ? L(`现在是 ${local.env_host}`, `Now ${local.env_host}`) : L("Anthropic 兼容的地址和密钥", "An Anthropic-compatible endpoint and key")}</small>
+              <small>{local?.env_host ? L(`现在是 ${local.env_host}`, `Now ${local.env_host}`) : codex ? L("OpenAI 兼容的地址和密钥", "An OpenAI-compatible endpoint and key") : L("Anthropic 兼容的地址和密钥", "An Anthropic-compatible endpoint and key")}</small>
             </span>
           </label>
         </div>
         {choice === "env_file" && (
           <div className="app-provider-manual">
-            <input className="app-input" placeholder="https://api.example.com/anthropic" value={manual.base_url} onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} />
+            <input className="app-input" placeholder={codex ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} value={manual.base_url} onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} />
             <input className="app-input" type="password" placeholder={L("密钥", "Key")} value={manual.api_key} onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} autoComplete="off" />
             <input className="app-input" placeholder={L("模型（可选）", "Model (optional)")} value={manual.model} onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} />
           </div>
@@ -418,6 +419,8 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
   const [action, setAction] = useState<Action>(null);
   const [people, setPeople] = useState<Member[]>([]);
   const [newOwner, setNewOwner] = useState("");
+  const [copyName, setCopyName] = useState("");
+  const [copied, setCopied] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
@@ -453,6 +456,27 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
   const machineObj = machineOfRow(row);
   const mayManage = canManage(row.hub, ag.owner_id);
   const me = row.hub.me;
+  // Copy: fork the session into a new node on the same machine and folder.
+  const forkable = kind === "agent" && (ag.binding.harness === "claude" || ag.binding.harness === "codex") &&
+    !!ag.binding.session_id && !!ag.binding.workdir && !!machineObj?.can_spawn && canManage(row.hub, machineObj?.owner_id);
+  const openCopy = () => {
+    const names = new Set((row.hub.overview?.agents || []).map((x) => x.agent.name));
+    let n = 2;
+    while (names.has(`${ag.name}-${n}`)) n++;
+    setCopyName(`${ag.name}-${n}`);
+    setCopied("");
+    openAction("copy");
+  };
+  const copyNode = () => void run(async () => {
+    if (!machineObj) return;
+    const r = await appApi.spawn(hubId, machineObj.id, {
+      cli: ag.binding.harness as "claude" | "codex", dir: ag.binding.workdir || "", fork_from: ag.binding.session_id,
+      name: copyName.trim(), description: ag.description || undefined,
+      display_name: ag.display_name ? `${ag.display_name} ${L("副本", "copy")}` : undefined,
+      ...(rt?.access ? { access: rt.access } : {}),
+    });
+    setCopied(r.agent.name || copyName);
+  }, "stay");
   const openOwner = () => {
     setNewOwner(ag.owner || "");
     appApi.members(hubId).then((r) => setPeople(r.members)).catch(() => {});
@@ -556,7 +580,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                   )}
                 </span>
               </div>
-              {kind === "agent" && !isCloud(ag) && (rt?.cli || ag.binding.harness) === "claude" && <ProviderRow row={row} onRefresh={onRefresh} />}
+              {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
               <div className="app-kv">
                 <span className="app-kv-label">{L("权限", "Access")}</span>
                 <span className="app-kv-value">{accessLabel(rt?.access)}</span>
@@ -654,6 +678,11 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
               <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
                 {L("允许谁派任务…", "Who can give tasks…")}<span className="app-chev">›</span>
               </button>
+              {forkable && (
+                <button type="button" className="app-action-row" onClick={openCopy}>
+                  {L("复制一个…", "Make a copy…")}<span className="app-chev">›</span>
+                </button>
+              )}
               <button type="button" className="app-action-row danger" onClick={() => openAction("kick")} disabled={!mayManage}>
                 {L("踢下线", "Disconnect")}<span className="app-chev">›</span>
               </button>
@@ -664,6 +693,33 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           </section>
         </div>
       </aside>
+
+      <Modal
+        open={action === "copy"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("复制节点", "Copy this node")}
+        description={L("在同一台机器、同一个目录里，从它的会话复制出一个新节点：带着全部上下文，之后两边各干各的。复制要跑一轮对话，可能需要一两分钟。", "Copies its session into a new node on the same machine and folder: it keeps the whole context, then the two work separately. Copying runs one turn, which can take a minute or two.")}
+      >
+        {copied ? (
+          <>
+            <div className="app-success"><Check />{L(`已复制为 ${copied}`, `Copied as ${copied}`)}</div>
+            <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={closeAction}>{L("完成", "Done")}</button></div>
+          </>
+        ) : (
+          <>
+            <label className="app-field">
+              <span className="app-field-label">{L("新节点的名字", "Name of the copy")}</span>
+              <input className="app-input mono" value={copyName} onChange={(e) => setCopyName(e.target.value)} disabled={busy} />
+            </label>
+            <ErrorText error={error} />
+            {busy && <div className="app-progress"><span className="app-spinner" />{L("正在复制会话…", "Copying the session…")}</div>}
+            <div className="app-modal-actions">
+              <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+              <button type="button" className="app-btn app-btn-primary" onClick={copyNode} disabled={busy || !copyName.trim()}>{busy ? L("正在复制…", "Copying…") : L("复制", "Copy")}</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Modal
         open={action === "owner"}

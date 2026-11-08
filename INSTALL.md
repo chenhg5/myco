@@ -275,7 +275,7 @@ myco runner provider set --agent <agent 名> --provider cc-switch:<id>  # 固定
 myco runner provider set --agent <agent 名> --provider machine         # 恢复跟随本机
 myco runner provider show --agent <agent 名>                         # 看下一次会用哪个
 ```
-固定的服务商只记 cc-switch 里的 ID，每次唤醒前重新读取，所以在 cc-switch 里改了密钥会自动生效，密钥也不会被复制一份。如果它在 cc-switch 里被删掉了，节点会退回跟随本机，App 里会显示"指定的服务商已不存在"。在 App 里"手动填写"的地址和密钥，会写进这个节点的 env 文件（`~/.myco/env/<agent>.env`，权限 600）。改动从节点收到的下一条消息开始生效，不用重启 runner。目前只支持 Claude Code 节点。
+固定的服务商只记 cc-switch 里的 ID，每次唤醒前重新读取，所以在 cc-switch 里改了密钥会自动生效，密钥也不会被复制一份。如果它在 cc-switch 里被删掉了，节点会退回跟随本机，App 里会显示"指定的服务商已不存在"。在 App 里"手动填写"的地址和密钥，会写进这个节点的 env 文件（`~/.myco/env/<agent>.env`，权限 600）。改动从节点收到的下一条消息开始生效，不用重启 runner。支持 Claude Code 和 Codex 节点（`myco runner provider list --cli codex`）：Codex 的服务商通过 `codex -c` 参数逐次覆盖，只覆盖和服务商有关的设置（地址、模型、密钥），不动权限和其他配置，也不影响会话续接。
 
 **后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
@@ -592,6 +592,13 @@ spawn:
   myco runner env capture --agent <机器名>-machine     # 写入 ~/.myco/env/<机器名>-machine.env（权限 600），只显示变量名
   ```
   之后 spawn 出来的会话第一轮就用这些变量，登记后也会继承同一个文件（v0.16.8 起；更早的版本要对新会话再 capture 一次）。
+
+### 4.12.1 复制会话（fork）
+
+不想让 agent 接着用你正在用的会话时，可以复制一份再加入：新节点带着原会话的全部上下文，之后两边各干各的，原会话不受影响（Claude Code 和 Codex）。
+- 加入本机会话：App 里"添加节点 → 本机的 agent"默认就是"复制一份加入"；命令行在会话里运行 `myco join --fork`。
+- 复制已有节点：节点详情 → "复制一个…"，在同一台机器、同一个目录里复制出一个新节点（需要那台机器能新建会话）。
+- 复制要跑一轮很短的对话，会消耗一次模型调用。
 
 ### 4.13 一台机器加入多个 Hub
 

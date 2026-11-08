@@ -195,7 +195,7 @@ func (b *Backend) Handler() http.Handler {
 	}
 	if b.Local != nil {
 		m.HandleFunc("GET /app/local/sessions", b.listLocalSessions)
-		m.HandleFunc("POST /app/hubs/{id}/local-join", b.withHubAndHubTimeout(2*time.Minute, b.localJoin))
+		m.HandleFunc("POST /app/hubs/{id}/local-join", b.withHubAndHubTimeout(6*time.Minute, b.localJoin))
 		m.HandleFunc("GET /app/local", b.getLocal)
 		m.HandleFunc("POST /app/local/myco", b.installMyco)
 		m.HandleFunc("POST /app/local/hub", b.startLocal)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chenhg5/myco/internal/provider"
@@ -65,5 +66,28 @@ func TestLegacyConfig(t *testing.T) {
 	ps, err := provider.List(dir, "claude")
 	if err != nil || len(ps) != 1 || ps[0].Ref != "cc-switch:k" || !ps[0].Current || ps[0].Host != "api.moonshot.cn" {
 		t.Fatalf("legacy: %+v %v", ps, err)
+	}
+}
+
+func TestCodexOverrides(t *testing.T) {
+	cfg := `model_provider = "custom"
+model = "gpt-5.2"
+approval_policy = "never"   # not a provider setting: ignored
+[model_providers.custom]
+name = "custom"
+base_url = "https://api.relay.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+[mcp_servers.x]
+command = "evil"
+`
+	args, env, host, model := provider.CodexOverrides(cfg, "sk-1")
+	got := strings.Join(args, " ")
+	want := `-c model="gpt-5.2" -c model_provider="custom" -c model_providers.custom={name="custom",base_url="https://api.relay.example/v1",wire_api="responses",env_key="MYCO_CODEX_API_KEY",requires_openai_auth=false}`
+	if got != want || env[provider.CodexKeyEnv] != "sk-1" || host != "api.relay.example" || model != "gpt-5.2" {
+		t.Fatalf("args: %s\nenv: %v host %q model %q", got, env, host, model)
+	}
+	if strings.Contains(got, "approval") || strings.Contains(got, "evil") {
+		t.Fatal("non-provider settings must not pass")
 	}
 }
