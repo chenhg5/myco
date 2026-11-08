@@ -72,6 +72,7 @@ export function NodeRowView({ row, highlight, onClick }: {
           <span className="txt">{cliName(a)}</span>
           {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}
           {machine && <><span className="sep">·</span><span className="txt">{machine}</span></>}
+          {a.owner && row.hub.me && a.owner_id !== row.hub.me.member?.id && <><span className="sep">·</span><span className="txt">{L(`${a.owner} 的`, `${a.owner}’s`)}</span></>}
         </span>
       </span>
       <span className="app-row-trail">
@@ -154,6 +155,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
       return (filters.hub === "all" || r.hub.id === filters.hub) &&
         (filters.kind === "all" || agentKind(a) === filters.kind) &&
         matchesLabelFilter(a, filters.label) &&
+        (!filters.owner || filters.owner === "all" ||
+          (filters.owner === "mine" ? !!r.hub.me?.member && a.owner_id === r.hub.me.member.id : a.owner === filters.owner)) &&
         machineOk &&
         (filters.state === "all" || r.st.state === filters.state) &&
         (!q || [
@@ -164,6 +167,13 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   }, [nodes, filters]);
 
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
+
+  // People who own nodes in view (hubs with members), for the owner filter.
+  const owners = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of nodes) if (r.hub.me && r.st.agent.owner) s.add(r.st.agent.owner);
+    return [...s].sort();
+  }, [nodes]);
 
   // Groups and tags in use (in the hubs in view), for the label filter.
   const labelOptions = useMemo(() => {
@@ -214,6 +224,16 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           </select>
           <ChevronDown />
         </span>
+        {owners.length > 1 && (
+          <span className="app-select-wrap">
+            <select className={cn("app-select", (filters.owner || "all") !== "all" && "is-set")} value={filters.owner || "all"} onChange={(e) => set({ owner: e.target.value })} aria-label={L("按主人筛选", "Filter by owner")}>
+              <option value="all">{L("所有人的", "Everyone’s")}</option>
+              <option value="mine">{L("我的", "Mine")}</option>
+              {owners.map((o) => <option key={o} value={o}>{L(`${o} 的`, `${o}’s`)}</option>)}
+            </select>
+            <ChevronDown />
+          </span>
+        )}
         <span className="app-select-wrap">
           <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as Filters["state"] })} aria-label={L("按状态筛选", "Filter by status")}>
             {STATE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === "all" ? L("全部状态", "All statuses") : o.label}</option>)}

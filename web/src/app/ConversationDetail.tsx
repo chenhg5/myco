@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, Paperclip } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { cliName } from "@/app/nodes";
+import { cliName, isMe, personLabel } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
@@ -101,7 +101,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
-  const consoleTasks = (messages || []).filter((m) => m.type === "task" && isConsole(m.from));
+  const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub));
   const lastTask = consoleTasks[consoleTasks.length - 1];
   const answered = !!lastTask && (messages || []).some((m) =>
     (m.type === "reply" || m.type === "event") &&
@@ -128,13 +128,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A thread you take no part in (two nodes working together) is only
   // shown: writing into it would land in their conversation, not yours.
   const observed = !!messages && messages.length > 0 &&
-    !messages.some((m) => isConsole(m.from) || isConsole(m.to));
+    !messages.some((m) => isMe(m.from, row?.hub) || isMe(m.to, row?.hub));
   const parties = observed
     ? [...new Set(messages.flatMap((m) => [m.from, m.to]))].filter((n) => n && !n.startsWith("@"))
     : [];
 
   const nameOf = (from: string): string => {
-    if (isConsole(from)) return L("你", "You");
+    if (isConsole(from)) return personLabel(from, row?.hub);
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
     return r?.st.agent.display_name || from;
   };
@@ -216,7 +216,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 );
               }
               // In an observed thread, the node you opened is on the right.
-              const mine = observed ? m.from === target.agent : isConsole(m.from);
+              const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub);
               return (
                 <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} key={m.id}>
                   <div className="conv-msg-name">{nameOf(m.from)}</div>

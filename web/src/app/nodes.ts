@@ -3,6 +3,7 @@ import {
 } from "lucide-react";
 import type { Agent, Machine, ModelSource, RuntimeAccess } from "@/api";
 import type { AgentRow, NodeKind } from "@/app/types";
+import type { HubOverview } from "@/appapi";
 import { L } from "@/lib/i18n";
 
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
@@ -175,4 +176,38 @@ export function matchesLabelFilter(a: Agent, value: string): boolean {
 /** Turns what someone typed into a label value: no spaces, lower-case Latin letters. */
 export function cleanLabel(s: string): string {
   return s.trim().replace(/\s+/g, "-").toLowerCase();
+}
+
+const CONSOLE = "@console:";
+
+/** Whether a sender/recipient is this app's person on the hub (any person,
+ *  on hubs without members). */
+export function isMe(name: string, hub?: HubOverview): boolean {
+  if (!name.startsWith(CONSOLE)) return false;
+  const me = hub?.me?.member;
+  if (!me) return true;
+  const who = name.slice(CONSOLE.length);
+  // Before members, tasks were signed with the device; they were the owner's.
+  return who === me.name || (me.role === "owner" && !(hub?.me && knownPeople(hub).has(who)));
+}
+
+function knownPeople(hub: HubOverview): Set<string> {
+  const s = new Set<string>();
+  for (const a of hub.overview?.agents || []) if (a.agent.owner) s.add(a.agent.owner);
+  if (hub.me?.member) s.add(hub.me.member.name);
+  return s;
+}
+
+/** "你", a person's name (for messages from the app), or the node name. */
+export function personLabel(name: string, hub?: HubOverview): string {
+  if (isMe(name, hub)) return L("你", "You");
+  if (name.startsWith(CONSOLE)) return name.slice(CONSOLE.length);
+  return name;
+}
+
+/** Whether this app may manage a node or machine owned by ownerId. */
+export function canManage(hub: HubOverview | undefined, ownerId?: string): boolean {
+  const me = hub?.me;
+  if (!me) return true; // hubs without members: every app is the admin
+  return me.can_manage || (!!me.member && !!ownerId && ownerId === me.member.id);
 }

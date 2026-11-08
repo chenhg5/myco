@@ -100,6 +100,26 @@ CREATE TABLE IF NOT EXISTS console_tokens (
   last_used_at INTEGER NOT NULL DEFAULT 0,
   revoked_at   INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS members (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL DEFAULT '',
+  role         TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  removed_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         TEXT NOT NULL UNIQUE,
+  at         INTEGER NOT NULL,
+  actor      TEXT NOT NULL DEFAULT '',
+  actor_name TEXT NOT NULL DEFAULT '',
+  actor_kind TEXT NOT NULL DEFAULT '',
+  action     TEXT NOT NULL,
+  target     TEXT NOT NULL DEFAULT '',
+  detail     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -125,13 +145,24 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"},
-		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
+		{"owner", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"}}); err != nil {
+	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"},
+		{"from_owner", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	for table, cols := range map[string][][2]string{
+		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
+		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
+	} {
+		if err := addColumns(db, table, cols); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
 	}
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
@@ -163,6 +194,8 @@ var agentColumnsV2 = [][2]string{
 	// its CLI and model.
 	{"machine_id", "TEXT NOT NULL DEFAULT ''"},
 	{"runtime", "TEXT NOT NULL DEFAULT '{}'"},
+	// Members (v0.18): the person who added the agent.
+	{"owner", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

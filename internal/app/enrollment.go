@@ -44,6 +44,8 @@ type CreateEnrollmentInput struct {
 	MaxUses      int
 	TTL          time.Duration
 	DryRun       bool
+	// Owner is the member creating it; what joins through it is theirs.
+	Owner string
 }
 
 // Create issues a new enrollment and returns its plain token (once).
@@ -69,7 +71,7 @@ func (s *EnrollmentService) Create(ctx context.Context, in CreateEnrollmentInput
 	}
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
 		Kind: in.Kind, NamePrefix: in.NamePrefix, Harness: in.Harness, AllowFrom: allow, Capabilities: caps, Labels: labels,
-		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL,
+		Note: in.Note, MaxUses: in.MaxUses, TTL: in.TTL, Owner: in.Owner,
 	}, s.clock.Now())
 	if err != nil {
 		return nil, "", err
@@ -160,7 +162,7 @@ func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinI
 		return nil, err
 	}
 	e, err := domain.NewEnrollment(s.ids.New("enr"), s.tokens.Hash(plain), domain.EnrollmentSpec{
-		Kind: domain.EnrollmentMachine, ParentID: link.ID, Machine: machine, NamePrefix: machine + "-",
+		Kind: domain.EnrollmentMachine, ParentID: link.ID, Machine: machine, NamePrefix: machine + "-", Owner: link.Owner,
 		Harness: link.Harness, AllowFrom: link.AllowFrom, Capabilities: link.Capabilities, Labels: labels,
 		Note: "machine " + machine + " (joined via " + link.ID + ")",
 	}, s.clock.Now())
@@ -308,6 +310,7 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 		return nil, err
 	}
 	a.EnrolledBy = e.ID
+	a.Owner = e.Owner
 	if in.DryRun {
 		return &RegisterOutput{Agent: a, Created: true}, nil
 	}
@@ -344,4 +347,9 @@ func (s *EnrollmentService) authenticate(ctx context.Context, token string) (*do
 			WithSuggestion("check MYCO_HUB points at the hub that created it; list valid ones with: myco enrollment list")
 	}
 	return e, err
+}
+
+// Get returns an enrollment by id.
+func (s *EnrollmentService) Get(ctx context.Context, id string) (*domain.Enrollment, error) {
+	return s.enrollments.Get(ctx, id)
 }

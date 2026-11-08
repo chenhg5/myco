@@ -20,6 +20,8 @@ type Machine struct {
 	MycoVersion     string
 	CreatedAt       time.Time
 	LastSeenAt      time.Time
+	// Owner is the member whose machine this is (from the link it joined with).
+	Owner string
 }
 
 // MachineReport is what a runner says about its machine.

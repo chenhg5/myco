@@ -99,6 +99,7 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 		}
 		m.BroadcastID = out.ID
 		m.Attachments = atts
+		m.FromOwner = s.ownerName(ctx, sender)
 		out.Messages = append(out.Messages, m)
 	}
 	if in.DryRun {

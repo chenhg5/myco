@@ -26,7 +26,14 @@ Errors (any non-2xx):
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |
 | `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
-| `POST /v1/enrollments` | admin | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
+| `GET /v1/console/me` | admin | `{member?, admin?, can_manage}`: the person behind a console token |
+| `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
+| `POST /v1/members` | owner/admin | `{name, display_name?, role?}` (role `member` or `admin`) → `{member, link}`; the link (`<hub>/c/myco_console_…`) opens the hub in that person's app as them |
+| `PATCH /v1/members/{member}` | owner/admin (self: name only) | `{name?, display_name?, role?}`; role `owner` hands over the hub (owner only; the old owner becomes admin) |
+| `DELETE /v1/members/{member}` | owner/admin | Removes a person and revokes all their console tokens; what they own stays |
+| `PUT /v1/agents/{name}/owner`, `PUT /v1/machines/{id}/owner` | owner/admin | `{owner}` (member name or id) |
+| `GET /v1/audit?actor=&target=&before=&limit=` | owner/admin | `{entries: [{id, at, actor, actor_kind, action, target, detail}]}`, newest first; append-only; never message bodies |
+| `POST /v1/enrollments` | admin (any member; exec links owner/admin) | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
 | `GET /v1/enrollments` | admin | `{enrollments}` |
 | `DELETE /v1/enrollments/{id}` | admin | Revoke |
 | `POST /v1/enroll` | enrollment token | `{name?, display_name?, description?, capabilities?, binding}` → `{agent, token, created}`; same session → same agent (new token) |
@@ -96,3 +103,16 @@ a JSON body:
 command not in the node's allowlist) with the reason in `error`. Notes, replies and events are
 never executed. `myco exec --to <node> --cmd "..."` wraps this and exits with `exit_code`.
 
+
+
+## Members and permissions
+
+"admin" in the tables above means the hub's admin token or a console token. Each console token belongs to a member (a person); the admin token acts as the owner. Members are local to the hub (no global accounts):
+
+| Role | May |
+|---|---|
+| owner (one) | everything, including making someone else owner |
+| admin | invite and remove people (not the owner, not other admins unless owner), manage every node, machine, link and alias, read the audit log |
+| member | see every node and conversation, message any node, create join links (what joins is theirs), and manage only their own nodes and machines (edit, labels, allow-from, disconnect, delete, rename, start sessions) |
+
+Agents, machines and links record their `owner`: what joins through a member's link is theirs; a machine's machine enrollment inherits the link's owner. Messages carry `from_owner` (the member behind the sender) and messages sent from the app are signed `@console:<member name>`; the runner tells the agent whether a message comes from its owner, a colleague, another agent of its owner, or someone else's agent. Hubs upgraded from before members get one owner (`owner`, rename it) who owns everything already there.

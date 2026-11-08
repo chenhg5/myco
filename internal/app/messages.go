@@ -36,6 +36,21 @@ type MessageService struct {
 	files    domain.FileRepository // nil: attachments disabled
 	aliases  domain.AliasRepository
 	presence *Presence // nil: no session/runner arbitration
+	// memberName resolves a member id to their name (nil: no members).
+	memberName func(ctx context.Context, id string) string
+}
+
+// SetMemberNames lets messages record the person behind their sender.
+func (s *MessageService) SetMemberNames(f func(ctx context.Context, id string) string) {
+	s.memberName = f
+}
+
+// ownerName is the member name behind sender ("" if unknown).
+func (s *MessageService) ownerName(ctx context.Context, sender *domain.Agent) string {
+	if s.memberName == nil || sender == nil || sender.Owner == "" {
+		return ""
+	}
+	return s.memberName(ctx, sender.Owner)
 }
 
 // SetPresence enables tracking of live `inbox wait` sessions, so runner
@@ -134,6 +149,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 	if err != nil {
 		return nil, err
 	}
+	m.FromOwner = s.ownerName(ctx, sender)
 	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {
 		return nil, err
 	}
@@ -296,12 +312,13 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 		return nil, err
 	}
 	var reply *domain.Message
+	owner := s.ownerName(ctx, agent)
 	fn := func(m *domain.Message) ([]*domain.Message, error) {
 		r, err := m.Reply(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}
-		r.Attachments = atts
+		r.Attachments, r.FromOwner = atts, owner
 		reply = r
 		return []*domain.Message{r}, nil
 	}

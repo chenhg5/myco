@@ -58,6 +58,9 @@ type Enrollment struct {
 	// machine's name (machine enrollments only).
 	ParentID string
 	Machine  string
+	// Owner is the member who created it; agents and machines that join
+	// through it are theirs (machine enrollments inherit the link's owner).
+	Owner string
 }
 
 // EnrollmentSpec configures a new enrollment.
@@ -73,6 +76,7 @@ type EnrollmentSpec struct {
 	Note         string
 	MaxUses      int
 	TTL          time.Duration
+	Owner        string
 }
 
 // NewEnrollment validates and builds an enrollment.
@@ -108,7 +112,7 @@ func NewEnrollment(id, tokenHash string, s EnrollmentSpec, now time.Time) (*Enro
 	}
 	e := &Enrollment{ID: id, TokenHash: tokenHash, NamePrefix: s.NamePrefix, Harness: s.Harness,
 		AllowFrom: s.AllowFrom, Capabilities: s.Capabilities, Labels: s.Labels, Note: s.Note, MaxUses: s.MaxUses, CreatedAt: now,
-		Kind: s.Kind, ParentID: s.ParentID, Machine: s.Machine}
+		Kind: s.Kind, ParentID: s.ParentID, Machine: s.Machine, Owner: s.Owner}
 	if s.TTL > 0 {
 		e.ExpiresAt = now.Add(s.TTL)
 	}

@@ -45,7 +45,7 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 	switch {
 	case domain.IsCode(err, domain.CodeNotFound):
 		m = &domain.Machine{ID: s.ids.New("mch"), FingerprintHash: r.Fingerprint, Name: defaultMachineName(r),
-			Hostname: r.Hostname, OS: r.OS, Arch: r.Arch, MycoVersion: r.MycoVersion, CreatedAt: now, LastSeenAt: now}
+			Hostname: r.Hostname, OS: r.OS, Arch: r.Arch, MycoVersion: r.MycoVersion, CreatedAt: now, LastSeenAt: now, Owner: a.Owner}
 		if err := s.machines.Create(ctx, m); err != nil {
 			if !domain.IsCode(err, domain.CodeConflict) {
 				return nil, err
@@ -61,6 +61,9 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 		m.Hostname, m.OS, m.Arch, m.MycoVersion, m.LastSeenAt = r.Hostname, r.OS, r.Arch, r.MycoVersion, now
 		if m.Name == "" {
 			m.Name = defaultMachineName(r)
+		}
+		if m.Owner == "" {
+			m.Owner = a.Owner
 		}
 		if err := s.machines.Save(ctx, m); err != nil {
 			return nil, err
@@ -241,4 +244,19 @@ func (s *MachineService) SpawnNode(ctx context.Context, id string) (domain.Agent
 			WithSuggestion("its myco must be v0.16.5 or newer, joined with a link, and its runner running (myco runner service status)")
 	}
 	return node, nil
+}
+
+// Get returns a machine by id.
+func (s *MachineService) Get(ctx context.Context, id string) (*domain.Machine, error) {
+	return s.machines.Get(ctx, id)
+}
+
+// SetOwner gives a machine to a member.
+func (s *MachineService) SetOwner(ctx context.Context, id, memberID string) (*domain.Machine, error) {
+	m, err := s.machines.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	m.Owner = memberID
+	return m, s.machines.Save(ctx, m)
 }

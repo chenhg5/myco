@@ -1135,14 +1135,14 @@ func TestConsoleConversations(t *testing.T) {
 	worker, other := h.client(workerTok), h.client(otherTok)
 
 	sent, err := con.ConsoleSend(c, api.SendRequest{To: "worker", Body: "请把 README 的安装一节改短"})
-	if err != nil || sent.Message.From != "@console:glenn-mac" {
+	if err != nil || sent.Message.From != "@console:owner" {
 		t.Fatalf("console send (worker only allows lead): %v %+v", err, sent)
 	}
 	if _, err := con.ConsoleSend(c, api.SendRequest{To: "other", Body: "检查一下 CI"}); err != nil {
 		t.Fatal(err)
 	}
 	msgs, err := worker.Pull(c, 10, 0)
-	if err != nil || len(msgs) != 1 || msgs[0].From != "@console:glenn-mac" {
+	if err != nil || len(msgs) != 1 || msgs[0].From != "@console:owner" {
 		t.Fatalf("worker pull: %v %+v", err, msgs)
 	}
 	if _, err := con.ConsoleSteer(c, sent.Message.ID, "只改安装一节"); err != nil {
@@ -1175,7 +1175,7 @@ func TestConsoleConversations(t *testing.T) {
 	if _, err := other.ConsoleSend(c, api.SendRequest{To: "worker", Body: "x"}); err == nil {
 		t.Fatal("an agent sent as the console")
 	}
-	if _, err := other.Send(c, api.SendRequest{To: "@console:glenn-mac", Body: "x"}, false); err == nil {
+	if _, err := other.Send(c, api.SendRequest{To: "@console:owner", Body: "x"}, false); err == nil {
 		t.Fatal("an agent messaged the console directly")
 	}
 	lead := h.client(h.register(api.RegisterRequest{Name: "lead2"}))

@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { MessageSquare, X } from "lucide-react";
 import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
+import type { Member } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
-  cleanLabel, groupsOf, machineOfRow, modelSourceLabel, nodeIcon, tagsOf,
+  canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
 } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
@@ -14,7 +15,7 @@ import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 
-type Action = null | "profile" | "allow" | "kick" | "delete";
+type Action = null | "profile" | "allow" | "kick" | "delete" | "owner";
 
 const pillClass: Record<string, string> = { working: "green", pending: "amber", idle: "", offline: "" };
 
@@ -33,11 +34,11 @@ function MessageRows({ row, now, mine, onThread }: {
   const seen = new Set<string>();
   const msgs = (row.hub.overview?.recent || [])
     .filter((m) => m.from === name || m.to === name)
-    .filter((m) => (isConsole(m.from) || isConsole(m.to)) === mine)
+    .filter((m) => (isMe(m.from, row.hub) || isMe(m.to, row.hub)) === mine)
     .filter((m) => (seen.has(m.thread_id) ? false : (seen.add(m.thread_id), true)))
     .slice(0, 6);
   if (!msgs.length) return <div className="app-empty-note">{mine ? L("你还没有和它对话", "No conversation with it yet") : L("最近没有和其他节点的往来", "No recent exchanges with other nodes")}</div>;
-  const label = (n: string) => (isConsole(n) ? L("你", "You") : n === name ? (row.st.agent.display_name || n) : n);
+  const label = (n: string) => (isConsole(n) ? personLabel(n, row.hub) : n === name ? (row.st.agent.display_name || n) : n);
   return (
     <>
       {msgs.map((m) => (
@@ -56,7 +57,7 @@ function MessageRows({ row, now, mine, onThread }: {
 // LabelsEditor shows the node's group (a group=… label) and tags (bare
 // labels), and edits them in a dialog. Other key=value labels, such as
 // machine=…, are left alone.
-function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: () => Promise<void>; readOnly?: boolean }) {
   const ag = row.st.agent;
   const groups = groupsOf(ag);
   const tags = tagsOf(ag);
@@ -104,7 +105,7 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
 
   return (
     <>
-      <button type="button" className="app-labels-summary" onClick={start}>
+      <button type="button" className="app-labels-summary" onClick={start} disabled={readOnly}>
         <span className="app-labels-chips">
           {groups.length === 0 && tags.length === 0 && <span className="app-labels-empty">{L("未分组，没有标签", "No group, no tags")}</span>}
           {groups.map((g) => <span key={"g" + g} className="app-label group">{g}</span>)}
@@ -415,6 +416,8 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
 }) {
   const ag = row?.st.agent;
   const [action, setAction] = useState<Action>(null);
+  const [people, setPeople] = useState<Member[]>([]);
+  const [newOwner, setNewOwner] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
@@ -448,6 +451,13 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
   const rt = ag.runtime;
   const machine = machineLabel(row);
   const machineObj = machineOfRow(row);
+  const mayManage = canManage(row.hub, ag.owner_id);
+  const me = row.hub.me;
+  const openOwner = () => {
+    setNewOwner(ag.owner || "");
+    appApi.members(hubId).then((r) => setPeople(r.members)).catch(() => {});
+    openAction("owner");
+  };
 
   const openAction = (a: Exclude<Action, null>) => { setError(null); setAction(a); };
   const closeAction = () => { if (!busy) { setAction(null); setError(null); } };
@@ -510,6 +520,18 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 <span className="app-kv-label">{L("类型", "Type")}</span>
                 <span className="app-kv-value">{kindLabel(kind)}</span>
               </div>
+              {ag.owner && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("主人", "Owner")}</span>
+                  <span className="app-kv-value">
+                    {me?.can_manage ? (
+                      <button type="button" className="app-kv-link" onClick={openOwner}>
+                        {ag.owner}{me.member?.id === ag.owner_id ? L("（你）", " (you)") : ""}<span className="app-chev">›</span>
+                      </button>
+                    ) : <>{ag.owner}{me?.member?.id === ag.owner_id ? L("（你）", " (you)") : ""}</>}
+                  </span>
+                </div>
+              )}
               {kind !== "human" && row.st.receiving && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
@@ -562,7 +584,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
 
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("分组和标签", "Group and tags")}</span></div>
-            <LabelsEditor row={row} onRefresh={onRefresh} />
+            <LabelsEditor row={row} onRefresh={onRefresh} readOnly={!mayManage} />
           </section>
 
           <section className="app-group">
@@ -577,7 +599,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
               {current.map((m) => (
                 <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                   <span className="meta">
-                    <span className="who">{isConsole(m.from) ? L("你", "You") : m.from}</span>→<span className="who">{isConsole(m.to) ? L("你", "You") : m.to}</span>
+                    <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
                     <span className="time">{timeAgo(m.updated_at, now)}</span>
                   </span>
                   <span className="body">{m.body}</span>
@@ -623,22 +645,45 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("操作", "Actions")}</span></div>
             <div className="app-list">
-              <button type="button" className="app-action-row" onClick={() => openAction("profile")}>
+              {!mayManage && (
+                <div className="app-empty-note">{L(`这是 ${ag.owner || L("别人", "someone else")} 的节点，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, `This node belongs to ${ag.owner || "someone else"}; only they or an admin can change it.`)}</div>
+              )}
+              <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
                 {L("修改显示名和描述…", "Edit display name and description…")}<span className="app-chev">›</span>
               </button>
-              <button type="button" className="app-action-row" onClick={() => openAction("allow")}>
+              <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
                 {L("允许谁派任务…", "Who can give tasks…")}<span className="app-chev">›</span>
               </button>
-              <button type="button" className="app-action-row danger" onClick={() => openAction("kick")}>
+              <button type="button" className="app-action-row danger" onClick={() => openAction("kick")} disabled={!mayManage}>
                 {L("踢下线", "Disconnect")}<span className="app-chev">›</span>
               </button>
-              <button type="button" className="app-action-row danger" onClick={() => openAction("delete")}>
+              <button type="button" className="app-action-row danger" onClick={() => openAction("delete")} disabled={!mayManage}>
                 {L("删除", "Delete")}<span className="app-chev">›</span>
               </button>
             </div>
           </section>
         </div>
       </aside>
+
+      <Modal
+        open={action === "owner"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("转交节点", "Give this node to someone")}
+        description={L("新主人可以修改、踢下线和删除它；它收到的消息会说明是谁的 agent。", "The new owner can change, disconnect and delete it; messages it sends say whose agent it is.")}
+      >
+        <label className="app-field">
+          <span className="app-field-label">{L("主人", "Owner")}</span>
+          <select className="app-select-field" value={newOwner} onChange={(e) => setNewOwner(e.target.value)} disabled={busy}>
+            {people.map((p) => <option key={p.id} value={p.name}>{p.display_name ? `${p.display_name} (@${p.name})` : p.name}</option>)}
+          </select>
+        </label>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" disabled={busy || !newOwner || newOwner === ag.owner}
+            onClick={() => void run(() => appApi.setAgentOwner(hubId, ag.name, newOwner), "close-action")}>{L("转交", "Give")}</button>
+        </div>
+      </Modal>
 
       <Modal
         open={action === "profile"}

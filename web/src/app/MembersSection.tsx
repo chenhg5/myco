@@ -1,0 +1,302 @@
+import { useCallback, useEffect, useState } from "react";
+import { UserPlus } from "lucide-react";
+import { appApi, type HubOverview } from "@/appapi";
+import type { AuditEntry, Member, MemberRole } from "@/api";
+import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
+import { CopyButton } from "@/app/copy";
+import { L, locale } from "@/lib/i18n";
+import { cn, timeAgo } from "@/lib/utils";
+
+export function roleLabel(r: MemberRole): string {
+  if (r === "owner") return L("所有者", "Owner");
+  if (r === "admin") return L("管理员", "Admin");
+  return L("成员", "Member");
+}
+
+/** Hubs that know about members (newer hubs); the first is shown by default. */
+function memberHubs(hubsOv?: HubOverview[]) {
+  return (hubsOv || []).filter((h) => h.ok && h.me);
+}
+
+function HubPicker({ hubs, value, onChange }: { hubs: HubOverview[]; value: string; onChange: (id: string) => void }) {
+  if (hubs.length < 2) return null;
+  return (
+    <select className="app-select-field app-members-hub" value={value} onChange={(e) => onChange(e.target.value)}>
+      {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+    </select>
+  );
+}
+
+function NoMembers({ hubsOv }: { hubsOv?: HubOverview[] }) {
+  const any = (hubsOv || []).some((h) => h.ok);
+  return (
+    <section className="app-setting-card">
+      <p className="app-small-note">
+        {any
+          ? L("这里的 Hub 还不支持多人。把 Hub 升级到最新版本后，就可以邀请同事、给每个人分配角色。", "These Hubs don’t support several people yet. Upgrade the Hub to the latest version to invite colleagues and give each a role.")
+          : L("没有连上的 Hub。", "No Hub is connected.")}
+      </p>
+    </section>
+  );
+}
+
+/** Settings → 成员: the people on a hub, invites, roles, removal. */
+export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void> }) {
+  const hubs = memberHubs(hubsOv);
+  const [hubId, setHubId] = useState("");
+  const hub = hubs.find((h) => h.id === hubId) || hubs[0];
+  const me = hub?.me;
+  const [members, setMembers] = useState<Member[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", display_name: "", role: "member" as MemberRole });
+  const [link, setLink] = useState<{ name: string; link: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<unknown>(null);
+  const [removing, setRemoving] = useState<Member | null>(null);
+  const [renaming, setRenaming] = useState<Member | null>(null);
+  const [newName, setNewName] = useState({ name: "", display_name: "" });
+
+  const load = useCallback(async () => {
+    if (!hub) return;
+    try {
+      setMembers((await appApi.members(hub.id)).members);
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+  }, [hub?.id]);
+  useEffect(() => { setMembers(null); void load(); }, [load]);
+
+  if (!hub || !me) return <NoMembers hubsOv={hubsOv} />;
+  const manages = me.can_manage;
+  const iAm = (m: Member) => me.member?.id === m.id;
+
+  const act = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      await fn();
+      await load();
+      return true;
+    } catch (e) {
+      setFormError(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const invite = async () => {
+    let res: { member: Member; link: string } | undefined;
+    const ok = await act(async () => { res = await appApi.inviteMember(hub.id, { name: form.name.trim(), display_name: form.display_name.trim() || undefined, role: form.role }); });
+    if (ok && res) setLink({ name: res.member.display_name || res.member.name, link: res.link });
+  };
+  const setRole = (m: Member, role: MemberRole) => void act(() => appApi.updateMember(hub.id, m.name, { role })).then(() => onRefresh());
+
+  return (
+    <>
+      <div className="app-members-head">
+        <HubPicker hubs={hubs} value={hub.id} onChange={setHubId} />
+        <span className="app-small-note">
+          {me.member ? L(`你是 ${me.member.display_name || me.member.name}（${roleLabel(me.member.role)}）`, `You are ${me.member.display_name || me.member.name} (${roleLabel(me.member.role)})`) : L("你用的是 Hub 的管理员令牌", "You are using the Hub’s admin token")}
+        </span>
+        {manages && (
+          <button type="button" className="app-btn app-btn-primary app-members-invite" onClick={() => { setForm({ name: "", display_name: "", role: "member" }); setLink(null); setFormError(null); setInviteOpen(true); }}>
+            <UserPlus />{L("邀请同事", "Invite a colleague")}
+          </button>
+        )}
+      </div>
+
+      <section className="app-setting-card app-members">
+        <ErrorText error={error} />
+        {members === null && !error && <div className="app-small-note">{L("正在加载…", "Loading…")}</div>}
+        {members?.map((m) => (
+          <div key={m.id} className="app-member-row">
+            <span className="app-member-avatar">{(m.display_name || m.name).slice(0, 1).toUpperCase()}</span>
+            <div className="app-member-name">
+              <b>{m.display_name || m.name}{iAm(m) && <span className="app-member-you">{L("你", "You")}</span>}</b>
+              <small>@{m.name} · {L(`${timeAgo(m.created_at, Date.now())}加入`, `joined ${timeAgo(m.created_at, Date.now())}`)}</small>
+            </div>
+            {manages && m.role !== "owner" && !iAm(m) ? (
+              <select className="app-select-field app-member-role" value={m.role} disabled={busy} onChange={(e) => setRole(m, e.target.value as MemberRole)}>
+                <option value="member">{roleLabel("member")}</option>
+                <option value="admin">{roleLabel("admin")}</option>
+                {me.member?.role === "owner" || me.admin ? <option value="owner">{L("转为所有者", "Make owner")}</option> : null}
+              </select>
+            ) : (
+              <span className={cn("app-member-badge", m.role)}>{roleLabel(m.role)}</span>
+            )}
+            <div className="app-member-actions">
+              {(iAm(m) || manages) && (
+                <button type="button" className="app-btn app-btn-plain app-btn-small" onClick={() => { setRenaming(m); setNewName({ name: m.name, display_name: m.display_name || "" }); setFormError(null); }}>
+                  {L("改名", "Rename")}
+                </button>
+              )}
+              {manages && m.role !== "owner" && !iAm(m) && (
+                <button type="button" className="app-btn app-btn-plain app-btn-small app-danger-text" onClick={() => { setRemoving(m); setFormError(null); }}>
+                  {L("移除", "Remove")}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        <p className="app-hint">
+          {L("每个人都能看到所有节点和对话、给任何节点发消息；只能管理自己加进来的节点和机器。所有者和管理员可以管理所有人的。", "Everyone sees every node and conversation and can message any node, but manages only the nodes and machines they added. The owner and admins manage everyone’s.")}
+        </p>
+      </section>
+
+      <Modal open={inviteOpen} onOpenChange={(o) => !busy && setInviteOpen(o)} title={L("邀请同事", "Invite a colleague")}
+        description={link ? undefined : L("对方用这个链接在自己的 myco App 里打开这个 Hub，身份就是他自己。", "They open this Hub in their own myco app with the link, as themselves.")}>
+        {link ? (
+          <>
+            <p className="app-modal-note">{L(`把这个链接私下发给 ${link.name}，让他在 myco App 里「添加 Hub」时粘贴。链接只能给他一个人用，移除他之后就失效。`, `Send this link privately to ${link.name} and ask them to paste it under “Add Hub” in the myco app. It is for them only and stops working when you remove them.`)}</p>
+            <div className="app-command"><code>{link.link}</code><CopyButton value={link.link} /></div>
+            <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={() => setInviteOpen(false)}>{L("完成", "Done")}</button></div>
+          </>
+        ) : (
+          <form onSubmit={(e) => { e.preventDefault(); void invite(); }}>
+            <label className="app-field">
+              <span className="app-field-label">{L("用户名", "Handle")}</span>
+              <input className="app-input mono" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="laohu" disabled={busy} required autoFocus />
+            </label>
+            <label className="app-field">
+              <span className="app-field-label">{L("名字（可选）", "Name (optional)")}</span>
+              <input className="app-input" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder={L("老胡", "Lao Hu")} disabled={busy} />
+            </label>
+            <div className="app-field">
+              <span className="app-field-label">{L("角色", "Role")}</span>
+              <div className="seg seg-fill" role="tablist">
+                {(["member", "admin"] as MemberRole[]).map((r) => (
+                  <button key={r} type="button" role="tab" aria-selected={form.role === r} className={cn("seg-btn", form.role === r && "active")} onClick={() => setForm({ ...form, role: r })} disabled={busy}>{roleLabel(r)}</button>
+                ))}
+              </div>
+              <span className="app-small-note">{form.role === "admin" ? L("管理员可以管理所有人的节点、机器和成员。", "Admins manage everyone’s nodes, machines and members.") : L("成员只能管理自己加进来的节点和机器。", "Members manage only the nodes and machines they add.")}</span>
+            </div>
+            <ErrorText error={formError} />
+            <div className="app-modal-actions">
+              <button type="button" className="app-btn" onClick={() => setInviteOpen(false)} disabled={busy}>{L("取消", "Cancel")}</button>
+              <button type="submit" className="app-btn app-btn-primary" disabled={busy || !form.name.trim()}>{busy ? L("正在生成…", "Creating…") : L("生成邀请链接", "Create invite link")}</button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal open={!!renaming} onOpenChange={(o) => !busy && !o && setRenaming(null)} title={L("改名", "Rename")}
+        description={L("用户名会显示为他从 App 发出的消息的署名。", "The handle is shown as the sender of what they send from the app.")}>
+        <form onSubmit={(e) => { e.preventDefault(); if (renaming) void act(() => appApi.updateMember(hub.id, renaming.name, { name: newName.name.trim(), display_name: newName.display_name.trim() })).then((ok) => { if (ok) { setRenaming(null); void onRefresh(); } }); }}>
+          <label className="app-field">
+            <span className="app-field-label">{L("用户名", "Handle")}</span>
+            <input className="app-input mono" value={newName.name} onChange={(e) => setNewName({ ...newName, name: e.target.value })} disabled={busy} required />
+          </label>
+          <label className="app-field">
+            <span className="app-field-label">{L("名字", "Name")}</span>
+            <input className="app-input" value={newName.display_name} onChange={(e) => setNewName({ ...newName, display_name: e.target.value })} disabled={busy} />
+          </label>
+          <ErrorText error={formError} />
+          <div className="app-modal-actions">
+            <button type="button" className="app-btn" onClick={() => setRenaming(null)} disabled={busy}>{L("取消", "Cancel")}</button>
+            <button type="submit" className="app-btn app-btn-primary" disabled={busy || !newName.name.trim()}>{L("保存", "Save")}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!removing}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={L(`移除 ${removing?.display_name || removing?.name || ""}？`, `Remove ${removing?.display_name || removing?.name || ""}?`)}
+        description={L("他的 App 会立即连不上这个 Hub。他加进来的节点和机器会保留，可以在节点详情里转给别人。", "Their app loses access to this Hub right away. The nodes and machines they added stay; you can give them to someone else in the node details.")}
+        confirmLabel={L("移除", "Remove")}
+        busy={busy}
+        error={formError ? <ErrorText error={formError} /> : undefined}
+        onConfirm={() => { if (removing) void act(() => appApi.removeMember(hub.id, removing.name)).then((ok) => ok && setRemoving(null)); }}
+      />
+    </>
+  );
+}
+
+const ACTIONS: Record<string, () => string> = {
+  "member.invite": () => L("邀请成员", "Invited"),
+  "member.update": () => L("修改成员", "Changed member"),
+  "member.remove": () => L("移除成员", "Removed member"),
+  "agent.register": () => L("登记节点", "Registered node"),
+  "agent.rotate_token": () => L("重新签发节点令牌", "Reissued node token"),
+  "agent.remove": () => L("删除节点", "Deleted node"),
+  "agent.kick": () => L("踢下线", "Disconnected node"),
+  "agent.labels": () => L("改分组和标签", "Changed group and tags"),
+  "agent.update": () => L("修改节点", "Changed node"),
+  "agent.owner": () => L("转交节点", "Gave node away"),
+  "machine.rename": () => L("机器改名", "Renamed machine"),
+  "machine.owner": () => L("转交机器", "Gave machine away"),
+  "machine.spawn": () => L("在机器上新建", "Started on a machine"),
+  "link.create": () => L("生成入网链接", "Created join link"),
+  "link.revoke": () => L("撤销链接", "Revoked link"),
+  "alias.set": () => L("设置别名", "Set alias"),
+  "alias.remove": () => L("删除别名", "Removed alias"),
+  "console_token.create": () => L("生成 App 链接", "Created app link"),
+  "message.task": () => L("派任务", "Sent a task"),
+  "message.note": () => L("发消息", "Sent a message"),
+};
+
+/** Settings → 审计: who did what (owner and admins). */
+export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
+  const hubs = memberHubs(hubsOv).filter((h) => h.me?.can_manage);
+  const [hubId, setHubId] = useState("");
+  const hub = hubs.find((h) => h.id === hubId) || hubs[0];
+  const [actor, setActor] = useState("");
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [more, setMore] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [people, setPeople] = useState<Member[]>([]);
+
+  const load = useCallback(async (before?: number) => {
+    if (!hub) return;
+    try {
+      const r = await appApi.audit(hub.id, { actor, before, limit: 100 });
+      setEntries((prev) => (before && prev ? [...prev, ...r.entries] : r.entries));
+      setMore(r.entries.length === 100);
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+  }, [hub?.id, actor]);
+  useEffect(() => { setEntries(null); void load(); }, [load]);
+  useEffect(() => { if (hub) appApi.members(hub.id, true).then((r) => setPeople(r.members)).catch(() => {}); }, [hub?.id]);
+
+  if (!hub) {
+    return memberHubs(hubsOv).length ? (
+      <section className="app-setting-card"><p className="app-small-note">{L("只有所有者和管理员能看审计日志。", "Only the owner and admins can read the audit log.")}</p></section>
+    ) : <NoMembers hubsOv={hubsOv} />;
+  }
+  const fmt = new Intl.DateTimeFormat(locale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <>
+      <div className="app-members-head">
+        <HubPicker hubs={hubs} value={hub.id} onChange={setHubId} />
+        <select className="app-select-field app-members-hub" value={actor} onChange={(e) => setActor(e.target.value)} aria-label={L("按人筛选", "Filter by person")}>
+          <option value="">{L("所有人", "Everyone")}</option>
+          {people.map((p) => <option key={p.id} value={p.name}>{p.display_name || p.name}</option>)}
+          <option value="admin">{L("Hub 管理员令牌", "Hub admin token")}</option>
+        </select>
+      </div>
+      <section className="app-setting-card app-audit">
+        <ErrorText error={error} />
+        {entries?.length === 0 && <div className="app-small-note">{L("还没有记录。", "Nothing recorded yet.")}</div>}
+        {entries?.map((e) => (
+          <div key={e.id} className="app-audit-row">
+            <span className="app-audit-time">{fmt.format(new Date(e.at))}</span>
+            <span className="app-audit-who">{e.actor === "admin" ? L("管理员令牌", "Admin token") : e.actor}</span>
+            <span className="app-audit-what">
+              <b>{ACTIONS[e.action]?.() || e.action}</b>
+              {e.target && <span className="mono"> {e.target}</span>}
+              {e.detail && <small>{e.detail}</small>}
+            </span>
+          </div>
+        ))}
+        {entries && more && entries.length > 0 && (
+          <button type="button" className="app-btn app-btn-small app-audit-more" onClick={() => void load(new Date(entries[entries.length - 1].at).getTime())}>{L("更早的记录", "Older entries")}</button>
+        )}
+        <p className="app-hint">{L("记录管理操作和从 App 派出的任务，不记录消息内容。只追加，不能修改。", "Records administrative actions and tasks sent from the app, never message contents. Append-only.")}</p>
+      </section>
+    </>
+  );
+}

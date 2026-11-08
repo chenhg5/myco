@@ -187,7 +187,7 @@ const state = {
       ],
       agents: [
         makeAgent({
-          name: "pm-codex", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
+          name: "pm-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
           kind: "agent", machine_id: "m_studio",
           runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
@@ -196,7 +196,7 @@ const state = {
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
-          name: "docs-claude", description: "保持 README 和 docs/ 与代码同步。",
+          name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。",
           kind: "agent", machine_id: "m_studio",
           runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly", provider: "DeepSeek", provider_source: "machine" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
@@ -204,7 +204,7 @@ const state = {
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
         makeAgent({
-          name: "ios-shell", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
+          name: "ios-shell", owner: "matthew", owner_id: "mem_matthew", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
           kind: "shell", machine_id: "m_bench",
           runtime: { cli: "shell", access: "workspace" },
           status_text: "正在运行 make test-ios", status_at: iso(45),
@@ -213,23 +213,23 @@ const state = {
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
         makeAgent({
-          name: "glenn", display_name: "Glenn", description: "人。负责发任务和验收。",
+          name: "glenn", owner: "glenn", owner_id: "mem_glenn", display_name: "Glenn", description: "人。负责发任务和验收。",
           kind: "human", binding: { harness: "human" },
           labels: ["role=human"], status_at: iso(3),
         }),
         makeAgent({
-          name: "release-cloud", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
+          name: "release-cloud", owner: "glenn", owner_id: "mem_glenn", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           kind: "agent", runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "default", access: "readonly" },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),
         makeAgent({
-          name: "review-cloud", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
+          name: "review-cloud", owner: "matthew", owner_id: "mem_matthew", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
           kind: "agent", runtime: { cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly" },
           labels: ["group=release"], binding: { harness: "codex-cloud", environment: "Codex 云端" },
         }),
         makeAgent({
-          name: "legacy-codex", description: "旧版 runner，还没有上报运行信息。",
+          name: "legacy-codex", owner: "laohu", owner_id: "mem_laohu", description: "旧版 runner，还没有上报运行信息。",
           kind: "agent", machine_id: "m_bench",
           labels: ["machine=bench-01"], online: true, status_at: iso(20),
           binding: { harness: "codex", environment: "Linux 6.8", workdir: "~/code/legacy" },
@@ -433,11 +433,31 @@ function overviewFor(h) {
   };
 }
 
+// People on the first hub (members): you are the owner; MOCK_ME=laohu views as a member.
+const people = [
+  { id: "mem_glenn", name: "glenn", display_name: "Glenn", role: "owner", created_at: iso(86400 * 30) },
+  { id: "mem_laohu", name: "laohu", display_name: "老胡", role: "member", created_at: iso(86400 * 3) },
+  { id: "mem_matthew", name: "matthew", display_name: "Matthew", role: "admin", created_at: iso(86400 * 2) },
+];
+const meName = process.env.MOCK_ME || "glenn";
+const audit = [
+  { id: "a1", at: iso(60), actor: "laohu", actor_kind: "member", action: "message.task", target: "pm-codex", detail: "msg_x1" },
+  { id: "a2", at: iso(900), actor: "matthew", actor_kind: "member", action: "machine.spawn", target: "studio-app-shell", detail: "shell node, commands from pm-codex in ~/code/app (m_studio)" },
+  { id: "a3", at: iso(3600), actor: "glenn", actor_kind: "member", action: "member.invite", target: "matthew", detail: "role admin" },
+  { id: "a4", at: iso(86400 * 3), actor: "glenn", actor_kind: "member", action: "member.invite", target: "laohu", detail: "role member" },
+  { id: "a5", at: iso(86400 * 3 + 60), actor: "admin", actor_kind: "admin", action: "link.create", target: "enr_abc", detail: "link" },
+];
+function whoami(h) {
+  if (h.id !== "hub_studio") return undefined;
+  const m = people.find((p) => p.name === meName);
+  return { member: m, can_manage: m.role !== "member" };
+}
+
 function appOverview() {
   return {
     generated_at: iso(0),
     hubs: state.hubs.map((h) => h.ok
-      ? { id: h.id, name: h.name, ok: true, overview: overviewFor(h) }
+      ? { id: h.id, name: h.name, ok: true, overview: overviewFor(h), me: whoami(h) }
       : { id: h.id, name: h.name, ok: false, error: h.error }),
   };
 }
@@ -939,6 +959,34 @@ const server = http.createServer(async (req, res) => {
         access,
         reply: `环境已就绪。我在 ${dir} 里，随时可以开始工作。`,
       });
+    }
+
+    if (parts.length === 4 && parts[3] === "members" && method === "GET") return send(res, 200, { members: people });
+    if (parts.length === 4 && parts[3] === "members" && method === "POST") {
+      const body = await readBody(req);
+      const m = { id: "mem_" + body.name, name: body.name, display_name: body.display_name, role: body.role || "member", created_at: iso(0) };
+      people.push(m);
+      return send(res, 201, { member: m, link: "https://hub.example.com/c/myco_console_" + Math.random().toString(36).slice(2, 18) });
+    }
+    if (parts.length === 5 && parts[3] === "members" && method === "PATCH") {
+      const body = await readBody(req);
+      const m = people.find((p) => p.name === decodeURIComponent(parts[4]));
+      if (!m) return fail(res, 404, "not_found", "member not found");
+      Object.assign(m, Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined && v !== "")));
+      return send(res, 200, m);
+    }
+    if (parts.length === 5 && parts[3] === "members" && method === "DELETE") {
+      const i = people.findIndex((p) => p.name === decodeURIComponent(parts[4]));
+      const [m] = people.splice(i, 1);
+      return send(res, 200, { ...m, removed: true });
+    }
+    if (parts.length === 4 && parts[3] === "audit") return send(res, 200, { entries: audit });
+    if (parts.length === 6 && parts[3] === "agents" && parts[5] === "owner" && method === "PUT") {
+      const body = await readBody(req);
+      const a = hub.agents.find((x) => x.name === decodeURIComponent(parts[4]));
+      const m = people.find((p) => p.name === body.owner);
+      if (a && m) { a.owner = m.name; a.owner_id = m.id; }
+      return send(res, 200, a);
     }
 
     if (parts.length >= 5 && parts[3] === "agents") {

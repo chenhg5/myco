@@ -283,7 +283,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
-	return runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
+	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots,
 		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),

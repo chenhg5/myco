@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,11 @@ type Server struct {
 	overview   *app.OverviewService
 	console    *app.ConsoleService
 	machines   *app.MachineService
+	members    *app.MemberService
+	audit      *app.AuditService
+	namesMu    sync.Mutex
+	names      map[string]string // member id -> name (see ownerName)
+	namesAt    time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -117,6 +123,16 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
+	// Members (people) and the audit log. Console tokens act as their member;
+	// handlers check what that member may do.
+	m.HandleFunc("GET /v1/console/me", s.admin(s.whoami))
+	m.HandleFunc("GET /v1/members", s.admin(s.listMembers))
+	m.HandleFunc("POST /v1/members", s.admin(s.inviteMember))
+	m.HandleFunc("PATCH /v1/members/{member}", s.admin(s.updateMember))
+	m.HandleFunc("DELETE /v1/members/{member}", s.admin(s.removeMember))
+	m.HandleFunc("PUT /v1/agents/{name}/owner", s.admin(s.setAgentOwner))
+	m.HandleFunc("PUT /v1/machines/{id}/owner", s.admin(s.setMachineOwner))
+	m.HandleFunc("GET /v1/audit", s.admin(s.listAudit))
 	m.HandleFunc("POST /v1/enrollments", s.admin(s.createEnrollment))
 	m.HandleFunc("GET /v1/enrollments", s.admin(s.listEnrollments))
 	m.HandleFunc("DELETE /v1/enrollments/{id}", s.admin(s.revokeEnrollment))
@@ -277,8 +293,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	if !s.mayManage(w, r, "register agents directly (add nodes through a link instead)") {
+		return
+	}
 	dry := dryRun(r)
-	out, err := s.agents.Register(r.Context(), app.RegisterInput{
+	out, err := s.agents.Register(r.Context(), app.RegisterInput{Owner: s.ownerIDFor(r.Context(), s.actorOf(r)),
 		Name: req.Name, DisplayName: req.DisplayName, Description: req.Description, Capabilities: req.Capabilities,
 		AllowFrom: req.AllowFrom, Labels: req.Labels, Binding: bindingFromAPI(req.Binding), RotateToken: req.RotateToken, DryRun: dry,
 		Delivery: domain.Delivery{Mode: req.Delivery.Mode, URL: req.Delivery.URL, Secret: req.Delivery.Secret, Params: req.Delivery.Params},
@@ -291,25 +310,44 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	if out.Created && !dry {
 		status = http.StatusCreated
 	}
+	if !dry {
+		action := "agent.register"
+		if !out.Created {
+			action = "agent.rotate_token"
+		}
+		s.record(r, action, string(out.Agent.Name), "")
+	}
 	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
 }
 
 func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
+	if !s.mayOwnAgent(w, r, r.PathValue("name"), "remove") {
+		return
+	}
 	dry := dryRun(r)
 	a, err := s.agents.Remove(r.Context(), r.PathValue("name"), dry)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	if !dry {
+		s.record(r, "agent.remove", string(a.Name), "")
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "removed": !dry, "dry_run": dry})
 }
 
 func (s *Server) kickAgent(w http.ResponseWriter, r *http.Request) {
+	if !s.mayOwnAgent(w, r, r.PathValue("name"), "disconnect") {
+		return
+	}
 	dry := dryRun(r)
 	a, err := s.agents.Kick(r.Context(), r.PathValue("name"), dry)
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if !dry {
+		s.record(r, "agent.kick", string(a.Name), "")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "kicked": !dry, "dry_run": dry})
 }
@@ -319,11 +357,12 @@ func (s *Server) createConsoleToken(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	t, plain, err := s.console.Create(r.Context(), in.Name)
+	t, plain, err := s.console.CreateFor(r.Context(), s.ownerIDFor(r.Context(), s.actorOf(r)), in.Name)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	s.record(r, "console_token.create", t.Name, "")
 	writeJSON(w, http.StatusCreated, api.CreateConsoleTokenResponse{ConsoleToken: consoleDTO(t), Token: plain})
 }
 
@@ -455,13 +494,21 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dry := dryRun(r)
+	actor := s.actorOf(r)
+	if req.Harness == "exec" && !actor.Manages() {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub's owner or an admin can create links for exec nodes"))
+		return
+	}
 	e, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
 		Kind: req.Kind, NamePrefix: req.NamePrefix, Harness: req.Harness, AllowFrom: req.AllowFrom, Capabilities: req.Capabilities, Labels: req.Labels,
-		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry,
+		Note: req.Note, MaxUses: req.MaxUses, TTL: time.Duration(req.TTLSeconds) * time.Second, DryRun: dry, Owner: s.ownerIDFor(r.Context(), actor),
 	})
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if !dry {
+		s.record(r, "link.create", e.ID, strings.TrimSpace(e.Kind+" "+e.Harness+" "+e.Note))
 	}
 	status := http.StatusCreated
 	if dry {
@@ -531,19 +578,34 @@ func (s *Server) listEnrollments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	actor := s.actorOf(r)
 	out := api.EnrollmentList{Enrollments: make([]api.Enrollment, 0, len(list))}
 	for _, e := range list {
+		if !actor.Owns(e.Owner) { // members see their own links
+			continue
+		}
 		out.Enrollments = append(out.Enrollments, enrollmentDTO(e, s.agents.Now()))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) revokeEnrollment(w http.ResponseWriter, r *http.Request) {
+	cur, err := s.enroll.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !s.mayOwn(w, r, cur.Owner, "revoke links of") {
+		return
+	}
 	dry := dryRun(r)
 	e, err := s.enroll.Revoke(r.Context(), r.PathValue("id"), dry)
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if !dry {
+		s.record(r, "link.revoke", e.ID, e.Note)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"enrollment": enrollmentDTO(e, s.agents.Now()), "revoked": !dry, "dry_run": dry})
 }
@@ -587,6 +649,10 @@ func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agen
 }
 
 func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
+	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the labels of") {
+		return
+	}
+	s.record(r, "agent.labels", r.PathValue("name"), "")
 	s.setLabels(w, r, r.PathValue("name"))
 }
 
@@ -604,6 +670,19 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if admin {
+		var what []string
+		if req.DisplayName != nil {
+			what = append(what, "display name")
+		}
+		if req.Description != nil {
+			what = append(what, "description")
+		}
+		if req.AllowFrom != nil {
+			what = append(what, "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
+		}
+		s.record(r, "agent.update", string(a.Name), strings.Join(what, "; "))
 	}
 	dto := s.agentDTO(a)
 	s.enrich(r.Context(), &dto)
@@ -630,6 +709,9 @@ func (s *Server) myProfile(w http.ResponseWriter, r *http.Request, a *domain.Age
 }
 
 func (s *Server) adminProfile(w http.ResponseWriter, r *http.Request) {
+	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit") {
+		return
+	}
 	s.updateProfile(w, r, r.PathValue("name"), true)
 }
 
@@ -651,21 +733,33 @@ func (s *Server) setAlias(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	if !s.mayManage(w, r, "change aliases") {
+		return
+	}
 	dry := dryRun(r)
 	a, err := s.agents.SetAlias(r.Context(), r.PathValue("alias"), req.Target, dry)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	if !dry {
+		s.record(r, "alias.set", r.PathValue("alias"), "→ "+req.Target)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"alias": aliasDTO(a), "dry_run": dry})
 }
 
 func (s *Server) removeAlias(w http.ResponseWriter, r *http.Request) {
+	if !s.mayManage(w, r, "change aliases") {
+		return
+	}
 	dry := dryRun(r)
 	a, err := s.agents.RemoveAlias(r.Context(), r.PathValue("alias"), dry)
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if !dry {
+		s.record(r, "alias.remove", r.PathValue("alias"), "")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"alias": aliasDTO(a), "removed": !dry, "dry_run": dry})
 }
@@ -747,7 +841,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			where = w
 			out.Machines = make([]api.Machine, 0, len(views))
 			for _, v := range views {
-				out.Machines = append(out.Machines, machineDTO(v))
+				out.Machines = append(out.Machines, s.machineDTO(v))
 			}
 		}
 	}
@@ -1086,7 +1180,7 @@ func (s *Server) listMachines(w http.ResponseWriter, r *http.Request) {
 	}
 	out := api.MachineList{Machines: make([]api.Machine, 0, len(views))}
 	for _, v := range views {
-		out.Machines = append(out.Machines, machineDTO(v))
+		out.Machines = append(out.Machines, s.machineDTO(v))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -1099,11 +1193,15 @@ func (s *Server) renameMachine(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	if !s.mayOwnMachine(w, r, r.PathValue("id"), "rename") {
+		return
+	}
 	m, err := s.machines.Rename(r.Context(), r.PathValue("id"), in.Name)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	s.record(r, "machine.rename", m.ID, "→ "+m.Name)
 	writeJSON(w, http.StatusOK, map[string]string{"id": m.ID, "name": m.Name})
 }
 
@@ -1118,6 +1216,9 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.EnrollToken = ""
+	if !s.mayOwnMachine(w, r, r.PathValue("id"), "start sessions on") {
+		return
+	}
 	if in.CLI == "exec" {
 		// A shell node: the machine joins it with a one-use exec enrollment
 		// made here, by the admin, carrying who may send it commands.
@@ -1132,7 +1233,7 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		}
 		_, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
 			NamePrefix: strings.TrimSuffix(string(node), "machine"), Harness: "exec", AllowFrom: in.AllowFrom,
-			Note: "shell node added from the console", MaxUses: 1, TTL: 10 * time.Minute,
+			Note: "shell node added from the console", MaxUses: 1, TTL: 10 * time.Minute, Owner: s.ownerIDFor(r.Context(), s.actorOf(r)),
 		})
 		if err != nil {
 			writeError(w, err)
@@ -1167,6 +1268,11 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	case res.Error != "":
 		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
 	default:
+		kind := orNone(res.CLI)
+		if res.CLI == "exec" {
+			kind = "shell node, commands from " + strings.Join(in.AllowFrom, ", ")
+		}
+		s.record(r, "machine.spawn", res.Agent, kind+" in "+res.Workdir+" ("+r.PathValue("id")+")")
 		writeJSON(w, http.StatusOK, res)
 	}
 }
@@ -1239,7 +1345,8 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	out, err := s.messages.SendFromConsole(r.Context(), s.consoleDevice(r), app.SendInput{
+	name, memberID := s.consoleIdentity(r)
+	out, err := s.messages.SendFromMember(r.Context(), name, memberID, app.SendInput{
 		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
 		Attachments: req.Attachments,
 	})
@@ -1251,7 +1358,25 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 	if out.Duplicate {
 		status = http.StatusOK
 	}
+	if !out.Duplicate {
+		s.record(r, "message."+string(out.Message.Type), string(out.Message.To), out.Message.ID)
+	}
 	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, ViaAlias: string(out.ViaAlias)})
+}
+
+// consoleIdentity is the sender name and member id for what a console
+// sends: the member, or the owner for the hub's admin token.
+func (s *Server) consoleIdentity(r *http.Request) (string, string) {
+	a := s.actorOf(r)
+	if a.Member != nil {
+		return a.Member.Name, a.Member.ID
+	}
+	if s.members != nil {
+		if o, err := s.members.Owner(r.Context()); err == nil {
+			return o.Name, o.ID
+		}
+	}
+	return s.consoleDevice(r), ""
 }
 
 func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
@@ -1259,7 +1384,8 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	m, err := s.messages.SteerFromConsole(r.Context(), s.consoleDevice(r), r.PathValue("id"), req.Body)
+	name, _ := s.consoleIdentity(r)
+	m, err := s.messages.SteerFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"), req.Body)
 	if err != nil {
 		writeError(w, err)
 		return

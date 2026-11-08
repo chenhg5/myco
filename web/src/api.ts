@@ -25,6 +25,8 @@ export interface Agent {
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
+  /** the person who added it (member name) */
+  owner?: string; owner_id?: string;
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
 export interface Machine {
@@ -38,11 +40,15 @@ export interface Machine {
   agents: string[];
   /** Its runners predate machine reporting: grouped by host name, cannot be renamed. */
   legacy?: boolean;
+  /** whose machine it is (member name) */
+  owner?: string; owner_id?: string;
 }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
   id: string; from: string; to: string; thread_id: string; reply_to?: string; type: string; body: string;
   status: string; attempts: number; error?: string; broadcast_id?: string; attachments?: Attachment[];
+  /** the person behind the sender (member name) */
+  from_owner?: string;
   created_at: string; updated_at: string;
 }
 export type State = "working" | "pending" | "idle" | "offline";
@@ -79,3 +85,10 @@ export const api = {
   overview: (as: ViewAs) => get<Overview>(`api/overview?as=${as}`),
   thread: (id: string, as: ViewAs) => get<{ messages: Message[] }>(`api/threads/${encodeURIComponent(id)}?as=${as}`),
 };
+
+/** A person on a hub. Members manage what they own; owner and admins manage everything. */
+export type MemberRole = "owner" | "admin" | "member";
+export interface Member { id: string; name: string; display_name?: string; role: MemberRole; created_at: string; removed?: boolean }
+/** Who this app is on a hub (absent on hubs without members). */
+export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean }
+export interface AuditEntry { id: string; at: string; actor: string; actor_kind: "member" | "admin" | "agent"; action: string; target?: string; detail?: string }

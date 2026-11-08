@@ -32,17 +32,26 @@ func IsConsoleSender(name domain.AgentName) bool {
 // other agents out) does not apply. Exec nodes still check their senders
 // on their own machine.
 func (s *MessageService) SendFromConsole(ctx context.Context, device string, in SendInput) (*SendOutput, error) {
-	return s.send(ctx, &domain.Agent{Name: ConsoleSender(device)}, in, true)
+	return s.SendFromMember(ctx, device, "", in)
 }
 
-// SteerFromConsole corrects a task a console sent.
-func (s *MessageService) SteerFromConsole(ctx context.Context, device, id, body string) (*domain.Message, error) {
+// SendFromMember sends as a member writing in the app ("@console:<name>").
+func (s *MessageService) SendFromMember(ctx context.Context, name, memberID string, in SendInput) (*SendOutput, error) {
+	return s.send(ctx, &domain.Agent{Name: ConsoleSender(name), Owner: memberID}, in, true)
+}
+
+// SteerFromConsole corrects a task sent from the app: by the member who sent
+// it (any of their devices), or by someone who manages the hub.
+func (s *MessageService) SteerFromConsole(ctx context.Context, name string, manages bool, id, body string) (*domain.Message, error) {
 	m, err := s.messages.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if !IsConsoleSender(m.From) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "only tasks sent from the console can be corrected here")
+	}
+	if !manages && m.From != ConsoleSender(name) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only the person who sent this task can correct it")
 	}
 	// Any of the administrator's devices may correct the conversation.
 	return s.Steer(ctx, &domain.Agent{Name: m.From}, id, body, false)

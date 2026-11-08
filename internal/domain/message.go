@@ -81,8 +81,11 @@ type Message struct {
 	BroadcastID string
 	// Attachments reference uploaded files.
 	Attachments []Attachment
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// FromOwner is the person behind the sender when it was sent: the
+	// member who wrote it in the app, or the sending agent's owner.
+	FromOwner string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewMessage builds a queued message. An empty threadID starts a new thread.

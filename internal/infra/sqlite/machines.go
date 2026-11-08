@@ -16,11 +16,11 @@ func NewMachineRepo(db *sql.DB) *MachineRepo { return &MachineRepo{db: db} }
 
 var _ domain.MachineRepository = (*MachineRepo)(nil)
 
-const machineCols = `id, fingerprint_hash, name, hostname, os, arch, myco_version, created_at, last_seen_at`
+const machineCols = `id, fingerprint_hash, name, hostname, os, arch, myco_version, created_at, last_seen_at, owner`
 
 func (r *MachineRepo) Create(ctx context.Context, m *domain.Machine) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO machines (`+machineCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
-		m.ID, m.FingerprintHash, m.Name, m.Hostname, m.OS, m.Arch, m.MycoVersion, ms(m.CreatedAt), ms(m.LastSeenAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO machines (`+machineCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		m.ID, m.FingerprintHash, m.Name, m.Hostname, m.OS, m.Arch, m.MycoVersion, ms(m.CreatedAt), ms(m.LastSeenAt), m.Owner)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "machine already exists")
 	}
@@ -28,8 +28,8 @@ func (r *MachineRepo) Create(ctx context.Context, m *domain.Machine) error {
 }
 
 func (r *MachineRepo) Save(ctx context.Context, m *domain.Machine) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE machines SET name=?, hostname=?, os=?, arch=?, myco_version=?, last_seen_at=? WHERE id=?`,
-		m.Name, m.Hostname, m.OS, m.Arch, m.MycoVersion, ms(m.LastSeenAt), m.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE machines SET name=?, hostname=?, os=?, arch=?, myco_version=?, last_seen_at=?, owner=? WHERE id=?`,
+		m.Name, m.Hostname, m.OS, m.Arch, m.MycoVersion, ms(m.LastSeenAt), m.Owner, m.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -77,7 +77,7 @@ func scanMachine(s scanner) (*domain.Machine, error) {
 		m             domain.Machine
 		created, seen int64
 	)
-	if err := s.Scan(&m.ID, &m.FingerprintHash, &m.Name, &m.Hostname, &m.OS, &m.Arch, &m.MycoVersion, &created, &seen); err != nil {
+	if err := s.Scan(&m.ID, &m.FingerprintHash, &m.Name, &m.Hostname, &m.OS, &m.Arch, &m.MycoVersion, &created, &seen, &m.Owner); err != nil {
 		return nil, err
 	}
 	m.CreatedAt, m.LastSeenAt = fromMS(created), fromMS(seen)

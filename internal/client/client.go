@@ -684,3 +684,74 @@ func (c *Client) Conversations(ctx context.Context, agent, query string, before 
 	var out api.ConversationList
 	return out.Conversations, c.do(ctx, http.MethodGet, "/v1/console/conversations", q, nil, &out)
 }
+
+// Whoami says which member a console token belongs to.
+func (c *Client) Whoami(ctx context.Context) (*api.Whoami, error) {
+	var out api.Whoami
+	return &out, c.do(ctx, http.MethodGet, "/v1/console/me", nil, nil, &out)
+}
+
+// Members lists the hub's members (all=true includes removed ones).
+func (c *Client) Members(ctx context.Context, all bool) ([]api.Member, error) {
+	var out api.MemberList
+	var q url.Values
+	if all {
+		q = url.Values{"all": {"1"}}
+	}
+	return out.Members, c.do(ctx, http.MethodGet, "/v1/members", q, nil, &out)
+}
+
+// InviteMember adds a person and returns their app link (once).
+func (c *Client) InviteMember(ctx context.Context, req api.InviteRequest) (*api.InviteResponse, error) {
+	var out api.InviteResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/members", nil, req, &out)
+}
+
+// UpdateMember renames a member or changes their role.
+func (c *Client) UpdateMember(ctx context.Context, member string, req api.MemberUpdateRequest) (*api.Member, error) {
+	var out api.Member
+	return &out, c.do(ctx, http.MethodPatch, "/v1/members/"+esc(member), nil, req, &out)
+}
+
+// RemoveMember takes a person off the hub and revokes their app access.
+func (c *Client) RemoveMember(ctx context.Context, member string) (*api.Member, error) {
+	var out api.Member
+	return &out, c.do(ctx, http.MethodDelete, "/v1/members/"+esc(member), nil, nil, &out)
+}
+
+// SetAgentOwner gives an agent to a member (owner or admin).
+func (c *Client) SetAgentOwner(ctx context.Context, agent, member string) (*api.Agent, error) {
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, "/v1/agents/"+esc(agent)+"/owner", nil, api.OwnerRequest{Owner: member}, &out)
+}
+
+// SetMachineOwner gives a machine to a member (owner or admin).
+func (c *Client) SetMachineOwner(ctx context.Context, id, member string) error {
+	return c.do(ctx, http.MethodPut, "/v1/machines/"+esc(id)+"/owner", nil, api.OwnerRequest{Owner: member}, nil)
+}
+
+// AuditFilter narrows Audit.
+type AuditFilter struct {
+	Actor, Target string
+	Before        time.Time
+	Limit         int
+}
+
+// Audit reads the audit log, newest first (owner or admin).
+func (c *Client) Audit(ctx context.Context, f AuditFilter) ([]api.AuditEntry, error) {
+	q := url.Values{}
+	if f.Actor != "" {
+		q.Set("actor", f.Actor)
+	}
+	if f.Target != "" {
+		q.Set("target", f.Target)
+	}
+	if !f.Before.IsZero() {
+		q.Set("before", strconv.FormatInt(f.Before.UnixMilli(), 10))
+	}
+	if f.Limit > 0 {
+		q.Set("limit", strconv.Itoa(f.Limit))
+	}
+	var out api.AuditList
+	return out.Entries, c.do(ctx, http.MethodGet, "/v1/audit", q, nil, &out)
+}

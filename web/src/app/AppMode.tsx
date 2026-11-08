@@ -419,6 +419,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             {page === "settings" && (
               <SettingsPage
                 hubs={namedHubs}
+                hubsOv={namedOv?.hubs}
                 info={info}
                 theme={theme}
                 onTheme={setTheme}

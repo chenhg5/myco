@@ -55,6 +55,9 @@ type Agent struct {
 	// Kind is agent (an AI session), shell (exec/shell node), human, or
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
+	// Owner is the member who added it (their name); OwnerID their id.
+	Owner   string `json:"owner,omitempty"`
+	OwnerID string `json:"owner_id,omitempty"`
 	// MachineID is the machine it runs on (also "env:<host>" for machines
 	// whose runners predate machine reporting).
 	MachineID string `json:"machine_id,omitempty"`
@@ -94,6 +97,9 @@ type Machine struct {
 	// Legacy: its runners predate machine reporting (grouped by host name).
 	Legacy bool     `json:"legacy,omitempty"`
 	Agents []string `json:"agents"`
+	// Owner is the member whose machine it is (name); OwnerID their id.
+	Owner   string `json:"owner,omitempty"`
+	OwnerID string `json:"owner_id,omitempty"`
 }
 
 // MachineList is the body of GET /v1/machines.
@@ -119,22 +125,25 @@ type RenameMachineRequest struct {
 
 // Message is the public view of a message.
 type Message struct {
-	ID             string       `json:"id"`
-	From           string       `json:"from"`
-	To             string       `json:"to"`
-	ThreadID       string       `json:"thread_id"`
-	ReplyTo        string       `json:"reply_to,omitempty"`
-	Type           string       `json:"type"`
-	Body           string       `json:"body"`
-	Status         string       `json:"status"`
-	Attempts       int          `json:"attempts"`
-	Error          string       `json:"error,omitempty"`
-	IdempotencyKey string       `json:"idempotency_key,omitempty"`
-	BroadcastID    string       `json:"broadcast_id,omitempty"`
-	Attachments    []Attachment `json:"attachments,omitempty"`
-	LeaseUntil     *time.Time   `json:"lease_until,omitempty"`
-	CreatedAt      time.Time    `json:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at"`
+	ID             string `json:"id"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	ThreadID       string `json:"thread_id"`
+	ReplyTo        string `json:"reply_to,omitempty"`
+	Type           string `json:"type"`
+	Body           string `json:"body"`
+	Status         string `json:"status"`
+	Attempts       int    `json:"attempts"`
+	Error          string `json:"error,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	BroadcastID    string `json:"broadcast_id,omitempty"`
+	// FromOwner is the person behind the sender: the member who wrote it in
+	// the app, or the sending agent's owner (member name).
+	FromOwner   string       `json:"from_owner,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	LeaseUntil  *time.Time   `json:"lease_until,omitempty"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
 }
 
 // RegisterRequest is the body of POST /v1/agents.
@@ -371,7 +380,9 @@ type Health struct {
 // Enrollment is the public view of an enrollment (the token is never shown
 // again after creation).
 type Enrollment struct {
-	ID           string     `json:"id"`
+	ID string `json:"id"`
+	// Owner is the member who created it (id); what joins through it is theirs.
+	OwnerID      string     `json:"owner_id,omitempty"`
 	NamePrefix   string     `json:"name_prefix"`
 	Harness      string     `json:"harness,omitempty"`
 	AllowFrom    []string   `json:"allow_from"`
@@ -592,4 +603,69 @@ type ConversationList struct {
 // SteerRequest is the body of POST /v1/console/messages/{id}/steer.
 type SteerRequest struct {
 	Body string `json:"body"`
+}
+
+// Member is a person using the hub (GET /v1/members).
+type Member struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name,omitempty"`
+	Role        string    `json:"role"` // owner | admin | member
+	CreatedAt   time.Time `json:"created_at"`
+	Removed     bool      `json:"removed,omitempty"`
+}
+
+// MemberList wraps members.
+type MemberList struct {
+	Members []Member `json:"members"`
+}
+
+// InviteRequest is the body of POST /v1/members.
+type InviteRequest struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Role        string `json:"role,omitempty"` // admin | member (default)
+}
+
+// InviteResponse returns the new member and, once, their app link.
+type InviteResponse struct {
+	Member Member `json:"member"`
+	// Link opens the hub in the invitee's myco app as them (keep it private).
+	Link string `json:"link"`
+}
+
+// MemberUpdateRequest is the body of PATCH /v1/members/{member}.
+type MemberUpdateRequest struct {
+	Name        string  `json:"name,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Role        string  `json:"role,omitempty"`
+}
+
+// OwnerRequest gives an agent or machine to a member (name or id).
+type OwnerRequest struct {
+	Owner string `json:"owner"`
+}
+
+// Whoami is GET /v1/console/me: the person behind a console token.
+type Whoami struct {
+	Member *Member `json:"member,omitempty"` // nil for the hub's admin token
+	Admin  bool    `json:"admin,omitempty"`  // the hub's admin token
+	// CanManage: owner or admin (manage members and every node).
+	CanManage bool `json:"can_manage"`
+}
+
+// AuditEntry is one administrative action.
+type AuditEntry struct {
+	ID        string    `json:"id"`
+	At        time.Time `json:"at"`
+	Actor     string    `json:"actor"`      // member, agent or "admin"
+	ActorKind string    `json:"actor_kind"` // member | admin | agent
+	Action    string    `json:"action"`
+	Target    string    `json:"target,omitempty"`
+	Detail    string    `json:"detail,omitempty"`
+}
+
+// AuditList wraps audit entries, newest first.
+type AuditList struct {
+	Entries []AuditEntry `json:"entries"`
 }

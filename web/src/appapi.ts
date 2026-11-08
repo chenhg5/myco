@@ -1,4 +1,4 @@
-import type { Agent, Machine, Message, Overview, RuntimeAccess } from "@/api";
+import type { Agent, AuditEntry, Machine, Member, MemberRole, Message, Overview, RuntimeAccess, Whoami } from "@/api";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 export interface Hub {
@@ -17,6 +17,8 @@ export interface HubOverview {
   ok: boolean;
   error?: string;
   overview?: Overview;
+  /** who this app is on the hub (absent on hubs without members) */
+  me?: Whoami;
 }
 
 export interface AppOverview {
@@ -273,6 +275,26 @@ export const appApi = {
   /** Creates a one-off enrollment link for adding another machine to this hub. */
   createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
+
+  members: (hubId: string, all = false) =>
+    request<{ members: Member[] }>("GET", `app/hubs/${enc(hubId)}/members${all ? "?all=1" : ""}`),
+  /** Adds a person; the link opens the hub in their app as them (shown once). */
+  inviteMember: (hubId: string, input: { name: string; display_name?: string; role?: MemberRole }) =>
+    request<{ member: Member; link: string }>("POST", `app/hubs/${enc(hubId)}/members`, input),
+  updateMember: (hubId: string, member: string, input: { name?: string; display_name?: string; role?: MemberRole }) =>
+    request<Member>("PATCH", `app/hubs/${enc(hubId)}/members/${enc(member)}`, input),
+  removeMember: (hubId: string, member: string) =>
+    request<Member>("DELETE", `app/hubs/${enc(hubId)}/members/${enc(member)}`),
+  setAgentOwner: (hubId: string, name: string, owner: string) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/owner`, { owner }),
+  setMachineOwner: (hubId: string, machineId: string, owner: string) =>
+    request<{ ok: boolean }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/owner`, { owner }),
+  audit: (hubId: string, q: { actor?: string; target?: string; before?: number; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, String(v));
+    const qs = p.toString();
+    return request<{ entries: AuditEntry[] }>("GET", `app/hubs/${enc(hubId)}/audit${qs ? `?${qs}` : ""}`);
+  },
 
   local: () => request<LocalState>("GET", "app/local"),
   /** cc-switch's Claude providers on this computer (names and hosts only). */

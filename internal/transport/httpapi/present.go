@@ -32,6 +32,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		out.AllowFrom = append(out.AllowFrom, string(n))
 	}
 	out.Kind, out.MachineID = a.Kind(), a.MachineID
+	out.OwnerID, out.Owner = a.Owner, s.ownerName(a.Owner)
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource}
@@ -39,9 +40,10 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	return out
 }
 
-func machineDTO(v *app.MachineView) api.Machine {
+func (s *Server) machineDTO(v *app.MachineView) api.Machine {
 	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
-		Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{}}
+		Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
+		OwnerID: v.Owner, Owner: s.ownerName(v.Owner)}
 	for _, a := range v.Agents {
 		out.Agents = append(out.Agents, string(a))
 	}
@@ -75,7 +77,7 @@ func enrollmentDTO(e *domain.Enrollment, now time.Time) api.Enrollment {
 	out := api.Enrollment{ID: e.ID, NamePrefix: e.NamePrefix, Harness: e.Harness, Capabilities: nonNil(e.Capabilities), Labels: nonNil(e.Labels),
 		AllowFrom: make([]string, 0, len(e.AllowFrom)), Note: e.Note, MaxUses: e.MaxUses, Uses: e.Uses,
 		ExpiresAt: timePtr(e.ExpiresAt), RevokedAt: timePtr(e.RevokedAt), CreatedAt: e.CreatedAt,
-		Active: e.Usable(now, true) == nil, Kind: e.Kind, ParentID: e.ParentID, Machine: e.Machine}
+		Active: e.Usable(now, true) == nil, Kind: e.Kind, ParentID: e.ParentID, Machine: e.Machine, OwnerID: e.Owner}
 	for _, n := range e.AllowFrom {
 		out.AllowFrom = append(out.AllowFrom, string(n))
 	}
@@ -100,6 +102,7 @@ func messageDTO(m *domain.Message) api.Message {
 		ID: m.ID, From: string(m.From), To: string(m.To), ThreadID: m.ThreadID, ReplyTo: m.ReplyTo,
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		FromOwner: m.FromOwner,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)

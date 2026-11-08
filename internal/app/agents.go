@@ -47,6 +47,8 @@ type RegisterInput struct {
 	// of failing with a conflict.
 	RotateToken bool
 	DryRun      bool
+	// Owner is the member registering it (new agents only).
+	Owner string
 }
 
 // RegisterOutput is the result of a registration. Token is the plain
@@ -106,6 +108,7 @@ func (s *AgentService) Register(ctx context.Context, in RegisterInput) (*Registe
 	if err != nil {
 		return nil, err
 	}
+	a.Owner = in.Owner
 	if err := s.wakers.Validate(a); err != nil {
 		return nil, err
 	}
@@ -318,5 +321,15 @@ func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayNa
 			return nil, err
 		}
 	}
+	return a, s.agents.Save(ctx, a)
+}
+
+// SetOwner gives an agent to a member.
+func (s *AgentService) SetOwner(ctx context.Context, name, memberID string) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	a.Owner = memberID
 	return a, s.agents.Save(ctx, a)
 }

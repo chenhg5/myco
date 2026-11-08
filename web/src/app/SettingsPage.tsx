@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, Server, Terminal,
+  AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
-  appApi, type AppInfo, type AppUpdate, type Hub, type LocalState,
+  appApi, type AppInfo, type AppUpdate, type Hub, type HubOverview, type LocalState,
   type LocalTunnel, type StartLocalHubResult,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
+import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-type Section = "hubs" | "appearance" | "about";
+type Section = "hubs" | "members" | "audit" | "appearance" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -109,6 +110,8 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
 
 const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", label: "Hub", icon: Server },
+  { key: "members", get label() { return L("成员", "People"); }, icon: Users },
+  { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
@@ -168,8 +171,9 @@ const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: bo
 type TunnelChoice = 0 | 1 | 2;
 
 /** Settings: hubs (including the local one), appearance and about. */
-export function SettingsPage({ hubs, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub }: {
+export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onTextSize, langChoice, onLangChoice, refreshKey, sectionRequest, onRefresh, onAddHub }: {
   hubs: Hub[];
+  hubsOv?: HubOverview[];
   info: AppInfo | null;
   theme: ThemeMode;
   onTheme: (mode: ThemeMode) => void;
@@ -459,6 +463,8 @@ export function SettingsPage({ hubs, info, theme, onTheme, textSize, onTextSize,
         )}
 
         {section === "about" && <AboutSection info={info} local={local} />}
+        {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
+        {section === "audit" && <AuditSection hubsOv={hubsOv} />}
       </div>
 
       <Modal

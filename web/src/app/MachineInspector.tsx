@@ -107,6 +107,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("机器 ID", "Machine ID")}</span><span className="app-kv-value mono">{machine.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("主机名", "Host name")}</span><span className="app-kv-value mono">{machine.hostname}</span></div>
+              {machine.owner && <div className="app-kv"><span className="app-kv-label">{L("主人", "Owner")}</span><span className="app-kv-value">{machine.owner}</span></div>}
               <div className="app-kv">
                 <span className="app-kv-label">{L("系统", "System")}</span>
                 <span className="app-kv-value">{[os.label, machine.arch].filter(Boolean).join(" · ")}</span>

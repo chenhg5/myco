@@ -347,6 +347,84 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("mid"), "name": strings.TrimSpace(in.Name)})
 	}))
+	// Members (people on the hub), owners and the audit log.
+	m.HandleFunc("GET /app/hubs/{id}/members", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		ms, err := c.Members(r.Context(), r.URL.Query().Get("all") == "1")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.MemberList{Members: ms})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/members", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.InviteRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.InviteMember(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
+	}))
+	m.HandleFunc("PATCH /app/hubs/{id}/members/{member}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.MemberUpdateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.UpdateMember(r.Context(), r.PathValue("member"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/members/{member}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.RemoveMember(r.Context(), r.PathValue("member"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/owner", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.OwnerRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		a, err := c.SetAgentOwner(r.Context(), r.PathValue("name"), in.Owner)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/machines/{mid}/owner", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.OwnerRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		if err := c.SetMachineOwner(r.Context(), r.PathValue("mid"), in.Owner); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/audit", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		f := client.AuditFilter{Actor: q.Get("actor"), Target: q.Get("target")}
+		f.Limit, _ = strconv.Atoi(q.Get("limit"))
+		if ms, err := strconv.ParseInt(q.Get("before"), 10, 64); err == nil && ms > 0 {
+			f.Before = time.UnixMilli(ms)
+		}
+		list, err := c.Audit(r.Context(), f)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.AuditList{Entries: list})
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/links", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
 			Uses         int `json:"uses"`
@@ -560,6 +638,8 @@ type HubOverview struct {
 	OK       bool          `json:"ok"`
 	Error    string        `json:"error,omitempty"`
 	Overview *api.Overview `json:"overview,omitempty"`
+	// Me is who this app is on the hub (nil for hubs without members).
+	Me *api.Whoami `json:"me,omitempty"`
 }
 
 func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
@@ -584,6 +664,9 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out[i].OK, out[i].Overview = true, ov
+		if me, err := c.Whoami(ctx); err == nil {
+			out[i].Me = me
+		}
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"generated_at": time.Now().UTC(), "hubs": out})
 }

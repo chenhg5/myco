@@ -16,11 +16,11 @@ func NewConsoleTokenRepo(db *sql.DB) *ConsoleTokenRepo { return &ConsoleTokenRep
 
 var _ domain.ConsoleTokenRepository = (*ConsoleTokenRepo)(nil)
 
-const consoleCols = `id, name, token_hash, created_at, last_used_at, revoked_at`
+const consoleCols = `id, name, token_hash, created_at, last_used_at, revoked_at, member_id`
 
 func (r *ConsoleTokenRepo) Create(ctx context.Context, t *domain.ConsoleToken) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO console_tokens (`+consoleCols+`) VALUES (?,?,?,?,?,?)`,
-		t.ID, t.Name, t.TokenHash, ms(t.CreatedAt), ms(t.LastUsedAt), ms(t.RevokedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO console_tokens (`+consoleCols+`) VALUES (?,?,?,?,?,?,?)`,
+		t.ID, t.Name, t.TokenHash, ms(t.CreatedAt), ms(t.LastUsedAt), ms(t.RevokedAt), t.MemberID)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "console token already exists")
 	}
@@ -28,8 +28,8 @@ func (r *ConsoleTokenRepo) Create(ctx context.Context, t *domain.ConsoleToken) e
 }
 
 func (r *ConsoleTokenRepo) Save(ctx context.Context, t *domain.ConsoleToken) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE console_tokens SET last_used_at=?, revoked_at=? WHERE id=?`,
-		ms(t.LastUsedAt), ms(t.RevokedAt), t.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE console_tokens SET last_used_at=?, revoked_at=?, member_id=? WHERE id=?`,
+		ms(t.LastUsedAt), ms(t.RevokedAt), t.MemberID, t.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -77,7 +77,7 @@ func scanConsoleToken(s scanner) (*domain.ConsoleToken, error) {
 		t                      domain.ConsoleToken
 		created, used, revoked int64
 	)
-	if err := s.Scan(&t.ID, &t.Name, &t.TokenHash, &created, &used, &revoked); err != nil {
+	if err := s.Scan(&t.ID, &t.Name, &t.TokenHash, &created, &used, &revoked, &t.MemberID); err != nil {
 		return nil, err
 	}
 	t.CreatedAt, t.LastUsedAt, t.RevokedAt = fromMS(created), fromMS(used), fromMS(revoked)

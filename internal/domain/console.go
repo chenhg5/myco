@@ -10,8 +10,10 @@ import (
 // console app). It can do what the admin token can, except manage console
 // tokens; the admin token itself never leaves the hub machine.
 type ConsoleToken struct {
-	ID         string
-	Name       string
+	ID   string
+	Name string
+	// MemberID is the person this device credential belongs to.
+	MemberID   string
 	TokenHash  string
 	CreatedAt  time.Time
 	LastUsedAt time.Time

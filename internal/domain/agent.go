@@ -157,6 +157,8 @@ type Agent struct {
 	// Both are set only through SetMachine / SetRuntime.
 	MachineID string
 	Runtime   Runtime
+	// Owner is the member who added the agent ("" on hubs without members).
+	Owner string
 }
 
 // AgentSpec is the mutable profile of an agent.

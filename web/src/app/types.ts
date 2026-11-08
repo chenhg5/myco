@@ -19,4 +19,6 @@ export interface Filters {
   kind: NodeKind | "all";
   /** "all", "group:<name>", "group:" (no group) or "tag:<name>". */
   label: string;
+  /** "all", "mine" (nodes you own) or a member name. */
+  owner?: string;
 }

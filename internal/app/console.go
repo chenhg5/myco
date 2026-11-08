@@ -33,6 +33,12 @@ func NewConsoleService(repo domain.ConsoleTokenRepository, tokens TokenIssuer, i
 // Create issues a console token for a device. The plain token is returned
 // only here.
 func (s *ConsoleService) Create(ctx context.Context, name string) (*domain.ConsoleToken, string, error) {
+	return s.CreateFor(ctx, "", name)
+}
+
+// CreateFor issues a console token belonging to member memberID ("" = the
+// hub's owner, assigned when the hub starts).
+func (s *ConsoleService) CreateFor(ctx context.Context, memberID, name string) (*domain.ConsoleToken, string, error) {
 	name, err := domain.ParseConsoleName(name)
 	if err != nil {
 		return nil, "", err
@@ -42,7 +48,7 @@ func (s *ConsoleService) Create(ctx context.Context, name string) (*domain.Conso
 		return nil, "", err
 	}
 	plain = ConsoleTokenPrefix + strings.TrimPrefix(plain, "myco_")
-	t := &domain.ConsoleToken{ID: s.ids.New("con"), Name: name, TokenHash: s.tokens.Hash(plain), CreatedAt: s.clock.Now()}
+	t := &domain.ConsoleToken{ID: s.ids.New("con"), Name: name, MemberID: memberID, TokenHash: s.tokens.Hash(plain), CreatedAt: s.clock.Now()}
 	if err := s.repo.Create(ctx, t); err != nil {
 		return nil, "", err
 	}
@@ -67,6 +73,26 @@ func (s *ConsoleService) Revoke(ctx context.Context, id string) (*domain.Console
 		}
 	}
 	return t, nil
+}
+
+// RevokeMember revokes every active console token of a member and says how
+// many it revoked.
+func (s *ConsoleService) RevokeMember(ctx context.Context, memberID string) (int, error) {
+	list, err := s.repo.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, t := range list {
+		if t.MemberID == memberID && t.Active() {
+			t.RevokedAt = s.clock.Now()
+			if err := s.repo.Save(ctx, t); err != nil {
+				return n, err
+			}
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Authenticate reports whether plain is an active console token.

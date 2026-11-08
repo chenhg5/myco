@@ -126,7 +126,23 @@ func Build(o Options) (*Hub, error) {
 	srv.SetVersion(o.Version, latest)
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
 	srv.SetMachines(app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow))
-	srv.SetConsole(app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock))
+	consoleSvc := app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock)
+	srv.SetConsole(consoleSvc)
+	// Members: the people using this hub. An existing hub gets an owner who
+	// owns everything already there.
+	audit := app.NewAuditService(sqlite.NewAuditRepo(db), ids, clock, o.Log)
+	members := app.NewMemberService(sqlite.NewMemberRepo(db), consoleSvc, audit, ids, clock)
+	if _, err := members.Bootstrap(context.Background(), o.Log); err != nil {
+		db.Close()
+		return nil, err
+	}
+	srv.SetMembers(members, audit)
+	messages.SetMemberNames(func(ctx context.Context, id string) string {
+		if m, err := members.Get(ctx, id); err == nil {
+			return m.Name
+		}
+		return ""
+	})
 	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL}, nil
 }
 
