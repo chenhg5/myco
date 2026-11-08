@@ -486,9 +486,9 @@ const fakePi = `#!/bin/sh
 sess=pi-sess-1
 case " $* " in
   *" --session "*) printf '{"type":"session","id":"%s"}\n' "$sess"
-                   printf '{"type":"message_end","message":{"role":"assistant","content":"resumed %s in %s"}}\n' "$sess" "$PWD" ;;
+                   printf '{"type":"message_end","message":{"role":"assistant","content":"resumed %s in %s key=%s"}}\n' "$sess" "$PWD" "$FAKE_PROVIDER_KEY" ;;
   *)               printf '{"type":"session","id":"%s"}\n' "$sess"
-                   printf '{"type":"message_end","message":{"role":"assistant","content":"ready"}}\n' ;;
+                   printf '{"type":"message_end","message":{"role":"assistant","content":"ready key=%s"}}\n' "$FAKE_PROVIDER_KEY" ;;
 esac
 `
 
@@ -531,6 +531,14 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("machine node: %v %+v", err, node)
 	}
 
+	// Provider settings (like ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY) are
+	// captured once for the machine node; spawned sessions use them on the
+	// first turn and inherit them afterwards. The runner itself never has
+	// the variable, so only the env file can provide it.
+	t.Setenv("FAKE_PROVIDER_KEY", "k1")
+	box.must(c, "runner", "env", "capture", "--agent", "box-machine", "--var", "FAKE_PROVIDER_KEY")
+	os.Unsetenv("FAKE_PROVIDER_KEY")
+
 	// The machine's runner serves the node (and, later, the spawned agent).
 	rctx, stop := context.WithCancel(c)
 	done := make(chan struct{})
@@ -544,7 +552,7 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("spawn output: %s", out)
 	}
 	r := sp.Result
-	if r.Agent != "box-rev" || r.SessionID != "pi-sess-1" || r.CLI != "pi" || r.Access != "workspace" || r.Reply != "ready" ||
+	if r.Agent != "box-rev" || r.SessionID != "pi-sess-1" || r.CLI != "pi" || r.Access != "workspace" || r.Reply != "ready key=k1" ||
 		r.Workdir != filepath.Join(home, "proj") {
 		t.Fatalf("spawn result: %+v", r)
 	}
@@ -555,8 +563,8 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 
 	// The new agent is served right away and resumes the spawned session.
 	out = lead.must(c, "message", "send", "--to", "box-rev", "--body", "status?", "--wait", "20s")
-	if !strings.Contains(out, "resumed pi-sess-1 in "+filepath.Join(home, "proj")) {
-		t.Fatalf("the spawned agent did not resume its session: %s", out)
+	if !strings.Contains(out, "resumed pi-sess-1 in "+filepath.Join(home, "proj")+" key=k1") {
+		t.Fatalf("the spawned agent did not resume its session with the machine's provider settings: %s", out)
 	}
 
 	// The machine's rules: senders outside allow_from, and directories

@@ -564,6 +564,11 @@ spawn:
 - 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
 - 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。
 - 列出所有机器节点：`myco agent list --selector harness=machine`。
+- **用环境变量登录的 CLI**（比如 Claude Code 用 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` 接第三方服务）：后台 runner 不读 shell 配置，要在那台机器上、能正常用 claude 的终端里给机器节点抓一次变量：
+  ```bash
+  myco runner env capture --agent <机器名>-machine     # 写入 ~/.myco/env/<机器名>-machine.env（权限 600），只显示变量名
+  ```
+  之后 spawn 出来的会话第一轮就用这些变量，登记后也会继承同一个文件（v0.16.8 起；更早的版本要对新会话再 capture 一次）。
 
 ## 5. 接入后的自检
 
