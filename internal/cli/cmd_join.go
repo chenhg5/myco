@@ -227,103 +227,114 @@ node right away.`,
 				return errorf("not_configured", ExitUsage, "pass --link <join link>, or run the link's script: curl -fsSL <link> | bash",
 					"no join link given")
 			}
-			cloud := e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") != ""
-			name := e.in.String("machine")
-			if name == "" {
-				name = hostname()
-				if cloud {
-					name = "cloud"
-				}
-			}
-			c, err := client.New(hub, tok)
-			if err != nil {
-				return err
-			}
-			dry := e.in.Bool("dry-run")
-			res, err := c.Join(e.in.Ctx, name, dry)
-			if err != nil {
-				return err
-			}
-			if dry {
-				return e.dryRun(map[string]any{"action": "machine_join", "hub": hub, "machine": res})
-			}
-			// Another hub's link adds a membership; this machine stays in the
-			// hubs it already joined. Local policy (spawn) is kept.
-			m := config.MachineHub{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
-				Harness: res.Harness, AllowFrom: res.AllowFrom}
-			mf, err := config.LoadMachine(e.defaultPath)
-			if err != nil {
-				return err
-			}
-			if mf == nil {
-				mf = &config.Machine{}
-			}
-			mf.Put(m)
-			if err := config.SaveMachine(e.defaultPath, mf); err != nil {
-				return err
-			}
-			out := map[string]any{"machine": m.Machine, "hub": hub, "created": res.Created, "labels": res.Labels,
-				"config": config.MachinePath(e.defaultPath)}
-
-			var notes []string
-			if res.Harness == execnode.Name {
-				agent, err := e.joinExecNode(m, e.in.String("workdir"))
-				if err != nil {
-					return err
-				}
-				out["exec_node"] = agent
-				notes = append(notes, fmt.Sprintf("exec node %s ready: tasks from %s run here as %s in %s",
-					agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), agent.Binding.Workdir))
-			}
-			if res.Harness != execnode.Name && !cloud && !dry {
-				if _, hubs, _ := e.machineNodeHubs(); !slices.ContainsFunc(hubs, func(h config.MachineHub) bool { return config.SameHub(h.Hub, hub) }) {
-					// spawning disabled here
-				} else if a, err := e.ensureMachineNode(m); err != nil {
-					notes = append(notes, "machine node not created ("+toError(err, "").Message+"): `myco agent spawn` will not reach this machine")
-				} else if a != nil {
-					out["machine_node"] = a.Name
-					who := "any agent on the hub"
-					if len(a.AllowFrom) > 0 {
-						who = strings.Join(a.AllowFrom, ", ")
-					}
-					notes = append(notes, fmt.Sprintf("machine node %s ready: %s can start new sessions here with `myco agent spawn --on %s --dir <dir>`", a.Name, who, m.Machine))
-				}
-			}
-			switch {
-			case cloud:
-				notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command.")
-			case e.in.Bool("no-service"):
-				notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
-			default:
-				if sr, err := e.installService(3, "info", false); err != nil {
-					notes = append(notes, "could not install the background service ("+toError(err, "").Message+"); keep `myco runner start --all` running instead, e.g. in tmux")
-				} else {
-					out["service"] = sr.Plan.Manager
-					notes = append(notes, "background runner installed ("+sr.Plan.Manager+"); it wakes this machine's agents when messages arrive")
-				}
-			}
-			out["clis"] = detectCLIs()
-			return e.p.Print(out, func(w io.Writer) {
-				verb := "joined"
-				if !res.Created {
-					verb = "re-joined (new credentials issued)"
-				}
-				fmt.Fprintf(w, "==> machine %q %s %s (labels: %s)\n", m.Machine, verb, hub, strings.Join(res.Labels, ", "))
-				for _, n := range notes {
-					fmt.Fprintln(w, "==> "+n)
-				}
-				if res.Harness != execnode.Name && !cloud {
-					fmt.Fprintln(w)
-					fmt.Fprintln(w, "Next: in any Claude Code or Codex session on this machine, say \"接入 myco\", or run:")
-					fmt.Fprintln(w, "  myco join")
-					if found := detectCLIs(); len(found) > 0 {
-						fmt.Fprintf(w, "(found here: %s)\n", strings.Join(found, ", "))
-					}
-				}
-			})
+			return e.joinMachine(hub, tok, nil)
 		}),
 	}
 	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join)
+}
+
+// joinMachine trades join link token tok of hub for this machine's
+// credentials, sets up its machine node and the runner service, and prints
+// the result. extra (may be nil) adds fields to the output and lines to the
+// text (e.g. who joined, for an invite).
+func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []string) error {
+	cloud := e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") != ""
+	name := e.in.String("machine")
+	if name == "" {
+		name = hostname()
+		if cloud {
+			name = "cloud"
+		}
+	}
+	c, err := client.New(hub, tok)
+	if err != nil {
+		return err
+	}
+	dry := e.in.Bool("dry-run")
+	res, err := c.Join(e.in.Ctx, name, dry)
+	if err != nil {
+		return err
+	}
+	if dry {
+		return e.dryRun(map[string]any{"action": "machine_join", "hub": hub, "machine": res})
+	}
+	// Another hub's link adds a membership; this machine stays in the
+	// hubs it already joined. Local policy (spawn) is kept.
+	m := config.MachineHub{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
+		Harness: res.Harness, AllowFrom: res.AllowFrom}
+	mf, err := config.LoadMachine(e.defaultPath)
+	if err != nil {
+		return err
+	}
+	if mf == nil {
+		mf = &config.Machine{}
+	}
+	mf.Put(m)
+	if err := config.SaveMachine(e.defaultPath, mf); err != nil {
+		return err
+	}
+	out := map[string]any{"machine": m.Machine, "hub": hub, "created": res.Created, "labels": res.Labels,
+		"config": config.MachinePath(e.defaultPath)}
+
+	var notes []string
+	if extra != nil {
+		notes = extra(out)
+	}
+	if res.Harness == execnode.Name {
+		agent, err := e.joinExecNode(m, e.in.String("workdir"))
+		if err != nil {
+			return err
+		}
+		out["exec_node"] = agent
+		notes = append(notes, fmt.Sprintf("exec node %s ready: tasks from %s run here as %s in %s",
+			agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), agent.Binding.Workdir))
+	}
+	if res.Harness != execnode.Name && !cloud && !dry {
+		if _, hubs, _ := e.machineNodeHubs(); !slices.ContainsFunc(hubs, func(h config.MachineHub) bool { return config.SameHub(h.Hub, hub) }) {
+			// spawning disabled here
+		} else if a, err := e.ensureMachineNode(m); err != nil {
+			notes = append(notes, "machine node not created ("+toError(err, "").Message+"): `myco agent spawn` will not reach this machine")
+		} else if a != nil {
+			out["machine_node"] = a.Name
+			who := "any agent on the hub"
+			if len(a.AllowFrom) > 0 {
+				who = strings.Join(a.AllowFrom, ", ")
+			}
+			notes = append(notes, fmt.Sprintf("machine node %s ready: %s can start new sessions here with `myco agent spawn --on %s --dir <dir>`", a.Name, who, m.Machine))
+		}
+	}
+	switch {
+	case cloud:
+		notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command.")
+	case e.in.Bool("no-service"):
+		notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
+	default:
+		if sr, err := e.installService(3, "info", false); err != nil {
+			notes = append(notes, "could not install the background service ("+toError(err, "").Message+"); keep `myco runner start --all` running instead, e.g. in tmux")
+		} else {
+			out["service"] = sr.Plan.Manager
+			notes = append(notes, "background runner installed ("+sr.Plan.Manager+"); it wakes this machine's agents when messages arrive")
+		}
+	}
+	out["clis"] = detectCLIs()
+	return e.p.Print(out, func(w io.Writer) {
+		verb := "joined"
+		if !res.Created {
+			verb = "re-joined (new credentials issued)"
+		}
+		fmt.Fprintf(w, "==> machine %q %s %s (labels: %s)\n", m.Machine, verb, hub, strings.Join(res.Labels, ", "))
+		for _, n := range notes {
+			fmt.Fprintln(w, "==> "+n)
+		}
+		if res.Harness != execnode.Name && !cloud {
+			fmt.Fprintln(w)
+			fmt.Fprintln(w, "Next: in any Claude Code or Codex session on this machine, say \"接入 myco\", or run:")
+			fmt.Fprintln(w, "  myco join")
+			if found := detectCLIs(); len(found) > 0 {
+				fmt.Fprintf(w, "(found here: %s)\n", strings.Join(found, ", "))
+			}
+		}
+	})
 }
 
 // detectCLIs lists the agent CLIs installed here.

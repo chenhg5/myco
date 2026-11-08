@@ -180,7 +180,8 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, api.InviteResponse{Member: memberDTO(m), Link: s.publicBase(r) + "/c/" + plain})
+	link := s.publicBase(r) + "/c/" + plain
+	writeJSON(w, http.StatusCreated, api.InviteResponse{Member: memberDTO(m), Link: link, Command: "curl -fsSL " + link + " | bash"})
 }
 
 func (s *Server) updateMember(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +385,8 @@ func (s *Server) createPairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "device.link", "", "valid until "+exp.UTC().Format(time.RFC3339))
-	writeJSON(w, http.StatusCreated, api.PairingLink{Link: s.publicBase(r) + "/c/" + plain, ExpiresAt: exp})
+	link := s.publicBase(r) + "/c/" + plain
+	writeJSON(w, http.StatusCreated, api.PairingLink{Link: link, ExpiresAt: exp, Command: "curl -fsSL " + link + " | bash"})
 }
 
 func (s *Server) myDevices(w http.ResponseWriter, r *http.Request) {

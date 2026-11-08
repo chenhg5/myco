@@ -50,7 +50,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
   const [error, setError] = useState<unknown>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [form, setForm] = useState({ name: "", display_name: "", role: "member" as MemberRole });
-  const [link, setLink] = useState<{ name: string; link: string } | null>(null);
+  const [link, setLink] = useState<{ name: string; link: string; command: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<unknown>(null);
   const [removing, setRemoving] = useState<Member | null>(null);
@@ -87,9 +87,9 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
     }
   };
   const invite = async () => {
-    let res: { member: Member; link: string } | undefined;
+    let res: { member: Member; link: string; command?: string } | undefined;
     const ok = await act(async () => { res = await appApi.inviteMember(hub.id, { name: form.name.trim(), display_name: form.display_name.trim() || undefined, role: form.role }); });
-    if (ok && res) setLink({ name: res.member.display_name || res.member.name, link: res.link });
+    if (ok && res) setLink({ name: res.member.display_name || res.member.name, link: res.link, command: res.command || inviteCommand(res.link) });
   };
   const setRole = (m: Member, role: MemberRole) => void act(() => appApi.updateMember(hub.id, m.name, { role })).then(() => onRefresh());
 
@@ -148,11 +148,15 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
       <DevicesCard hubId={hub.id} currentId={me.device?.id} />
 
       <Modal open={inviteOpen} onOpenChange={(o) => !busy && setInviteOpen(o)} title={L("邀请成员", "Invite a member")}
-        description={link ? undefined : L("对方用这个链接在自己的 myco App 里打开这个 Hub，身份就是他自己。", "They open this Hub in their own myco app with the link, as themselves.")}>
+        description={link ? undefined : L("对方用这个链接以自己的身份加入这个 Hub：可以让自己的 agent 执行一条命令，不用装 App；也可以在 myco App 里打开。", "They join this Hub as themselves with the link: their agent runs one command, no app needed; or they open it in the myco app.")}>
         {link ? (
           <>
-            <p className="app-modal-note">{L(`把这个链接私下发给 ${link.name}，让他在 myco App 里「添加 Hub」时粘贴。链接只能用一次，24 小时内有效；他打开后，他的 App 会拿到自己的凭据，链接随即作废。`, `Send this link privately to ${link.name} and ask them to paste it under “Add Hub” in the myco app. It works once, within 24 hours: their app gets its own credential and the link stops working.`)}</p>
+            <p className="app-modal-note">{L(`私下发给 ${link.name}，二选一：`, `Send this privately to ${link.name}; either way works:`)}</p>
+            <div className="app-field-label" style={{ marginTop: 12 }}>{L("不用装 App：让对方的 agent（Claude Code、Codex）执行", "No app: their agent (Claude Code, Codex) runs")}</div>
+            <div className="app-command"><code>{link.command}</code><CopyButton value={link.command} /></div>
+            <div className="app-field-label" style={{ marginTop: 12 }}>{L("或者在 myco App 里「添加 Hub」时粘贴", "Or paste it under “Add Hub” in the myco app")}</div>
             <div className="app-command"><code>{link.link}</code><CopyButton value={link.link} /></div>
+            <p className="app-modal-note">{L("只能用一次，24 小时内有效。命令会装好 myco，以对方的身份把那台电脑和执行命令的 agent 接进来，都归对方管；以后想用 App，在那台电脑上运行 myco member pair 拿新链接。", "It works once, within 24 hours. The command installs myco and joins that computer and the agent running it as them, theirs to manage; for the app later, they run myco member pair there.")}</p>
             <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={() => setInviteOpen(false)}>{L("完成", "Done")}</button></div>
           </>
         ) : (
@@ -184,7 +188,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
       </Modal>
 
       <Modal open={!!renaming} onOpenChange={(o) => !busy && !o && setRenaming(null)} title={L("改名", "Rename")}
-        description={L("用户名会显示为他从 App 发出的消息的署名。", "The handle is shown as the sender of what they send from the app.")}>
+        description={L("用户名会显示为对方从 App 发出的消息的署名。", "The handle is shown as the sender of what they send from the app.")}>
         <form onSubmit={(e) => { e.preventDefault(); if (renaming) void act(() => appApi.updateMember(hub.id, renaming.name, { name: newName.name.trim(), display_name: newName.display_name.trim() })).then((ok) => { if (ok) { setRenaming(null); void onRefresh(); } }); }}>
           <label className="app-field">
             <span className="app-field-label">{L("用户名", "Handle")}</span>
@@ -206,7 +210,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={L(`移除 ${removing?.display_name || removing?.name || ""}？`, `Remove ${removing?.display_name || removing?.name || ""}?`)}
-        description={L("他的 App 会立即连不上这个 Hub。他加进来的节点和机器会保留，可以在节点详情里转给别人。", "Their app loses access to this Hub right away. The nodes and machines they added stay; you can give them to someone else in the node details.")}
+        description={L("对方的 App 和命令行凭据会立即失效。对方加进来的节点和机器会保留，可以在节点详情里转给别人。", "Their app and command-line credentials stop working right away. The nodes and machines they added stay; you can give them to someone else in the node details.")}
         confirmLabel={L("移除", "Remove")}
         busy={busy}
         error={formError ? <ErrorText error={formError} /> : undefined}
@@ -311,7 +315,7 @@ export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
 function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [link, setLink] = useState<{ link: string; expires_at: string } | null>(null);
+  const [link, setLink] = useState<{ link: string; expires_at: string; command?: string } | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<Device | null>(null);
@@ -376,7 +380,9 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
         {link && (
           <>
             <div className="app-command"><code>{link.link}</code><CopyButton value={link.link} /></div>
-            <p className="app-modal-note">{L("链接只能用一次，24 小时内有效。别发到公开的地方。", "It works once, within 24 hours. Don’t post it anywhere public.")}</p>
+            <div className="app-field-label" style={{ marginTop: 12 }}>{L("另一台电脑不装 App，也可以让那里的 agent 执行：", "Or, on a computer without the app, have its agent run:")}</div>
+            <div className="app-command"><code>{link.command || inviteCommand(link.link)}</code><CopyButton value={link.command || inviteCommand(link.link)} /></div>
+            <p className="app-modal-note">{L("链接只能用一次，24 小时内有效（App 和命令二选一）。别发到公开的地方。", "It works once, within 24 hours (app or command, not both). Don’t post it anywhere public.")}</p>
           </>
         )}
         <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={() => { setLinkOpen(false); void load(); }} disabled={busy}>{L("完成", "Done")}</button></div>
@@ -395,4 +401,9 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
       />
     </>
   );
+}
+
+/** The one-liner that uses a one-time hub link on the command line. */
+function inviteCommand(link: string): string {
+  return `curl -fsSL ${link} | bash`;
 }

@@ -28,11 +28,12 @@ Errors (any non-2xx):
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `GET /v1/console/me` | admin | `{member?, admin?, can_manage}`: the person behind a console token |
 | `POST /v1/console/pair` | — (the code is the proof) | `{code, device}` → `{token, device, member}`: trades a one-time pairing code (`myco_pair_…`, from an invite or an add-device link; once, within 24 h) for the device's own console token |
-| `POST /v1/console/me/pairings` | admin | → `{link, expires_at}`: a one-time link to add another device of the caller (the owner, for the admin token) |
+| `POST /v1/console/me/pairings` | admin | → `{link, expires_at, command}`: a one-time link to add another device of the caller (the owner, for the admin token) |
 | `GET /v1/console/me/devices`, `DELETE /v1/console/me/devices/{id}` | admin | The caller's devices (console tokens); removing one revokes it |
+| `GET /c/{code}` | — | A one-time link's page: a browser gets both choices (app or command), `curl` gets the script that runs `myco member accept`, an agent (Accept `text/markdown`) gets a short guide. Reading it never uses up the code |
 | `POST /v1/console/messages/{id}/dismiss` | admin (the recipient node's owner, or owner/admin) | Closes an open message (even queued) for its recipient without a reply; audited as `message.dismiss` |
 | `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
-| `POST /v1/members` | owner/admin | `{name, display_name?, role?}` (role `member` or `admin`) → `{member, link}`; the link (`<hub>/c/myco_pair_…`, once, within 24 h) signs that person's app in as them |
+| `POST /v1/members` | owner/admin | `{name, display_name?, role?}` (role `member` or `admin`) → `{member, link, command}`; the link (`<hub>/c/myco_pair_…`, once, within 24 h) signs that person's app in as them, or, as `command` (`curl -fsSL <link> \| bash`, which runs `myco member accept`), joins their machine and agent session as them without the app |
 | `PATCH /v1/members/{member}` | owner/admin (self: name only) | `{name?, display_name?, role?}`; role `owner` hands over the hub (owner only; the old owner becomes admin) |
 | `DELETE /v1/members/{member}` | owner/admin | Removes a person and revokes all their console tokens; what they own stays |
 | `PUT /v1/agents/{name}/owner`, `PUT /v1/machines/{id}/owner` | owner/admin | `{owner}` (member name or id) |

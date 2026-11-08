@@ -282,10 +282,28 @@ func (e *env) adminClient() (*client.Client, error) {
 		tok = e.readHubEnv()[config.EnvAdminToken] // on the hub's own machine
 	}
 	if tok == "" {
+		tok = e.memberToken(hub) // a person who accepted an invite here
+	}
+	if tok == "" {
 		return nil, errorf("not_configured", ExitUsage,
-			"set MYCO_ADMIN_TOKEN or pass --admin-token-file <path> (on the hub's own server: sudo /usr/local/bin/myco ...)", "admin token required for this command")
+			"set MYCO_ADMIN_TOKEN or pass --admin-token-file <path> (on the hub's own server: sudo /usr/local/bin/myco ...); a member joins with their invite link: curl -fsSL <link> | bash",
+			"admin or member credentials required for this command")
 	}
 	return client.New(hub, tok)
+}
+
+// memberToken is the person's own credential for hub stored by `myco member
+// accept` ("" if none).
+func (e *env) memberToken(hub string) string {
+	m, err := config.LoadMachine(e.defaultPath)
+	if err != nil || m == nil {
+		return ""
+	}
+	h, ok := m.For(hub)
+	if !ok {
+		return ""
+	}
+	return h.MemberToken
 }
 
 // readBody resolves --body / --body-file (use "-" for stdin).

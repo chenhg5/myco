@@ -14,6 +14,10 @@ import (
 // the script a join link serves).
 const EnvJoinToken = "MYCO_JOIN_TOKEN"
 
+// EnvInviteCode carries an invite's one-time code to `myco member accept`
+// (set by the invite link's script).
+const EnvInviteCode = "MYCO_INVITE_CODE"
+
 // MachineHub is this machine's membership of one hub: the hub and the
 // machine's own enrollment token there, which sessions use to join.
 type MachineHub struct {
@@ -23,6 +27,10 @@ type MachineHub struct {
 	NamePrefix  string   `yaml:"name_prefix" json:"name_prefix"`
 	Harness     string   `yaml:"harness,omitempty" json:"harness,omitempty"`
 	AllowFrom   []string `yaml:"allow_from,omitempty" json:"allow_from,omitempty"`
+	// MemberToken is the person's own credential on this hub when they
+	// joined with an invite on the command line (`myco member accept`): a
+	// device token like the app's, used by commands that act as them.
+	MemberToken string `yaml:"member_token,omitempty" json:"-"`
 }
 
 // Machine is this machine's memberships, written by `myco machine join`:
@@ -66,16 +74,27 @@ func (m *Machine) For(hub string) (MachineHub, bool) {
 func (m *Machine) Put(h MachineHub) {
 	switch {
 	case m.Hub == "" || SameHub(m.Hub, h.Hub):
+		h.MemberToken = orKeep(h.MemberToken, m.MemberToken, SameHub(m.Hub, h.Hub))
 		m.MachineHub = h
 		return
 	}
 	for i := range m.Others {
 		if SameHub(m.Others[i].Hub, h.Hub) {
+			h.MemberToken = orKeep(h.MemberToken, m.Others[i].MemberToken, true)
 			m.Others[i] = h
 			return
 		}
 	}
 	m.Others = append(m.Others, h)
+}
+
+// orKeep is v, or old when v is empty and old belongs to the same hub (a
+// re-join keeps the person's credential).
+func orKeep(v, old string, same bool) string {
+	if v == "" && same {
+		return old
+	}
+	return v
 }
 
 // SameHub compares hub URLs, ignoring a trailing slash and letter case.

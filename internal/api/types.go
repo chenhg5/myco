@@ -636,6 +636,9 @@ type InviteResponse struct {
 	Member Member `json:"member"`
 	// Link opens the hub in the invitee's myco app as them (keep it private).
 	Link string `json:"link"`
+	// Command joins as them without the app: their agent runs it on their
+	// machine (curl -fsSL <link> | bash). Same one-time code as Link.
+	Command string `json:"command"`
 }
 
 // MemberUpdateRequest is the body of PATCH /v1/members/{member}.
@@ -694,6 +697,9 @@ type PairResponse struct {
 type PairingLink struct {
 	Link      string    `json:"link"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// Command uses the same one-time code on the command line instead of
+	// the app (myco member accept on another machine).
+	Command string `json:"command"`
 }
 
 // DeviceList is GET /v1/console/me/devices: the member's devices.

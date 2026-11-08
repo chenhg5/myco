@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/config"
 )
 
 // memberCommands manages the people using a hub (owner/admin, with the hub's
@@ -46,12 +48,14 @@ func memberCommands() *Command {
 	}
 	invite := &Command{
 		Name:     "invite",
-		Summary:  "Invite someone: prints an app link that opens this hub as them",
+		Summary:  "Invite someone: prints a one-time link to join as them, with the app or one command",
 		Mutating: true,
-		Long: `Adds a person to the hub and prints a link for the myco app (Mac or Windows): opening it there
-signs them in as that person. Keep the link private; it works until the person is removed.
+		Long: `Adds a person to the hub and prints a one-time link (24 hours). They use it one of two ways:
+  - without the app: their agent runs "curl -fsSL <link> | bash" on their machine, which installs
+    myco, signs in as them, and adds that machine and that agent session as theirs;
+  - in the myco app (Mac or Windows): opening the link there signs the app in as them.
 Members see every node and conversation and talk to any node, but manage only what they add;
-admins manage everyone's.`,
+admins manage everyone's. Keep the link private.`,
 		Examples: []string{
 			`myco member invite --name laohu --display-name "老胡"`,
 			"myco member invite --name matthew --role admin",
@@ -75,7 +79,9 @@ admins manage everyone's.`,
 				return err
 			}
 			return e.p.Print(res, func(w io.Writer) {
-				fmt.Fprintf(w, "invited %s as %s.\n\nSend them this link (private) and ask them to open it in the myco app:\n  %s\n", res.Member.Name, res.Member.Role, res.Link)
+				fmt.Fprintf(w, "invited %s as %s. Send them this (private, works once within 24 hours):\n\n", res.Member.Name, res.Member.Role)
+				fmt.Fprintf(w, "  Without the app: have your agent run\n    %s\n", inviteCommand(res.Link))
+				fmt.Fprintf(w, "  Or open this link in the myco app:\n    %s\n", res.Link)
 			})
 		}),
 	}
@@ -138,7 +144,7 @@ admins manage everyone's.`,
 			})
 		}),
 	}
-	return (&Command{Name: "member", Summary: "The people on this hub: invite, roles, remove"}).Add(list, invite, update, remove)
+	return (&Command{Name: "member", Summary: "The people on this hub: invite, accept an invite, roles, remove"}).Add(list, invite, memberAcceptCommand(), memberPairCommand(), update, remove)
 }
 
 // agentOwnerCommand gives a node to another member.
@@ -209,6 +215,178 @@ tasks people send from the app, never message bodies; messages between agents ar
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", x.At.Local().Format("01-02 15:04:05"), x.Actor, x.Action, x.Target, strings.ReplaceAll(x.Detail, "\n", " "))
 				}
 				tw.Flush()
+			})
+		}),
+	}
+}
+
+// inviteCommand is the one-liner that accepts invite link on the command line.
+func inviteCommand(link string) string { return "curl -fsSL " + link + " | bash" }
+
+// memberAcceptCommand joins a hub as the invited person, without the app.
+func memberAcceptCommand() *Command {
+	return &Command{
+		Name:     "accept",
+		Summary:  "Join a hub as yourself with an invite link, without the app (what the link's script runs)",
+		Mutating: true,
+		Long: `Trades the invite's one-time code for your own credential on the hub (stored in ~/.myco/machine.yaml,
+mode 600), adds this machine as yours, and installs the background runner service. Then run
+"myco join" inside each agent session that should be reachable: those nodes are yours too.
+Later, "myco member pair" prints a link to also open the hub in the myco app as you.
+Safe to re-run on the same machine.`,
+		Examples: []string{
+			"curl -fsSL https://hub.example.com/c/myco_pair_... | bash      # the usual way",
+			"myco member accept --link https://hub.example.com/c/myco_pair_...",
+		},
+		Flags: []Flag{
+			{Name: "link", Kind: String, Help: "Invite link (default: MYCO_HUB + MYCO_INVITE_CODE, as set by the link's script)"},
+			{Name: "machine", Kind: String, Help: "Machine name (default: this host's name; \"cloud\" in claude.ai)"},
+			{Name: "device", Kind: String, Help: "Name of this device in your device list (default: the machine name)"},
+			{Name: "no-service", Kind: Bool, Help: "Do not install the background runner service"},
+		},
+		Run: handler(func(e *env) error {
+			hub, code := strings.TrimRight(e.in.Getenv(config.EnvHub), "/"), e.in.Getenv(config.EnvInviteCode)
+			if l := strings.TrimSpace(e.in.String("link")); l != "" {
+				i := strings.LastIndex(l, "/c/")
+				if i < 0 || !strings.HasPrefix(l, "http") {
+					return errorf("invalid_argument", ExitUsage, "pass the whole link, e.g. https://hub.example.com/c/myco_pair_...", "not an invite link: %q", l)
+				}
+				hub, code = l[:i], strings.Trim(l[i+3:], "/ ")
+			}
+			if hub == "" || code == "" {
+				return errorf("not_configured", ExitUsage, "pass --link <invite link>, or run the link's script: curl -fsSL <link> | bash", "no invite link given")
+			}
+			if !strings.HasPrefix(code, pairingCodePrefix) {
+				return errorf("invalid_argument", ExitUsage, "ask the hub's owner for an invite: myco member invite --name <you>",
+					"this is not an invite link (it does not carry a one-time invite code)")
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "member_accept", "hub": hub})
+			}
+			// Re-running: the code is used up, but this machine already holds
+			// the person's credential.
+			var (
+				token  string
+				member *api.Member
+				reused bool
+			)
+			if t := e.memberToken(hub); t != "" {
+				if c, err := client.New(hub, t); err == nil {
+					if who, err := c.Whoami(e.in.Ctx); err == nil && who.Member != nil {
+						token, member, reused = t, who.Member, true
+					}
+				}
+			}
+			if token == "" {
+				device := e.in.String("device")
+				if device == "" {
+					device = orDefault(e.in.String("machine"), hostname())
+					if e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") != "" {
+						device = "cloud"
+					}
+				}
+				anon, err := client.New(hub, "")
+				if err != nil {
+					return err
+				}
+				res, err := anon.Pair(e.in.Ctx, code, device)
+				if err != nil {
+					var ce *client.Error
+					if errors.As(err, &ce) && (ce.Code == "unauthenticated" || ce.Code == "not_found") {
+						return errorf("invite_unusable", ExitPermission, "ask whoever invited you for a new link (invites work once, within 24 hours)",
+							"this invite has expired or was already used")
+					}
+					return err
+				}
+				if res.Member == nil {
+					return errorf("invalid_argument", ExitUsage, "use a link from: myco member invite", "this code is not an invite for a person")
+				}
+				token, member = res.Token, res.Member
+			}
+			if reused {
+				// Already done here: keep this machine's membership as it is.
+				if mf, _ := config.LoadMachine(e.defaultPath); mf != nil {
+					if h, ok := mf.For(hub); ok {
+						return e.p.Print(map[string]any{"member": member.Name, "machine": h.Machine, "hub": hub, "created": false}, func(w io.Writer) {
+							fmt.Fprintf(w, "==> already joined %s as %s (machine %q); nothing to do\n", hub, member.Name, h.Machine)
+						})
+					}
+				}
+			}
+			mc, err := client.New(hub, token)
+			if err != nil {
+				return err
+			}
+			// A short-lived, one-machine link of the person's own: what this
+			// machine (and the sessions joined on it) adds is theirs.
+			link, err := mc.CreateEnrollment(e.in.Ctx, api.CreateEnrollmentRequest{Kind: "link", MaxUses: 1, TTLSeconds: 600,
+				Note: "invite accepted on the command line"}, false)
+			if err != nil {
+				return err
+			}
+			return e.joinMachine(hub, link.Token, func(out map[string]any) []string {
+				out["member"] = member.Name
+				if err := e.saveMemberToken(hub, token); err != nil {
+					return []string{"could not store your credential (" + err.Error() + "); run this again"}
+				}
+				who := member.Name
+				if member.DisplayName != "" {
+					who += " (" + member.DisplayName + ")"
+				}
+				return []string{"you joined as " + who + "; nodes added from this machine are yours to manage",
+					"to also use the myco app later: myco member pair"}
+			})
+		}),
+	}
+}
+
+// pairingCodePrefix marks an invite's (or add-device link's) one-time code.
+const pairingCodePrefix = "myco_pair_"
+
+// saveMemberToken stores the person's credential with this machine's
+// membership of hub.
+func (e *env) saveMemberToken(hub, token string) error {
+	mf, err := config.LoadMachine(e.defaultPath)
+	if err != nil {
+		return err
+	}
+	if mf == nil {
+		return errors.New("machine.yaml missing")
+	}
+	h, ok := mf.For(hub)
+	if !ok {
+		return errors.New("this machine is not in " + hub)
+	}
+	h.MemberToken = token
+	mf.Put(h)
+	return config.SaveMachine(e.defaultPath, mf)
+}
+
+// memberPairCommand prints a one-time link to open the hub in the app as you.
+func memberPairCommand() *Command {
+	return &Command{
+		Name:     "pair",
+		Summary:  "Print a one-time link to open this hub in the myco app as you (another device)",
+		Mutating: true,
+		Long: `Creates a one-time link (24 hours) for the myco app on another device. Opening it there signs that
+device in as you; it shows up in your device list, where you can remove it. Works with the
+credential "myco member accept" stored on this machine, or with the hub's admin token (the owner).`,
+		Examples: []string{"myco member pair"},
+		Flags:    []Flag{{Name: "admin-token-file", Kind: String, Help: "File containing the admin token (instead of MYCO_ADMIN_TOKEN)"}},
+		Run: handler(func(e *env) error {
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "member_pair"})
+			}
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			pl, err := c.CreatePairing(e.in.Ctx)
+			if err != nil {
+				return err
+			}
+			return e.p.Print(pl, func(w io.Writer) {
+				fmt.Fprintf(w, "Open this link in the myco app (works once, until %s):\n  %s\n", pl.ExpiresAt.Local().Format("2006-01-02 15:04"), pl.Link)
 			})
 		}),
 	}

@@ -1114,7 +1114,9 @@ func TestConsoleAppLink(t *testing.T) {
 		t.Fatal("the link must work only once")
 	}
 	for _, path := range []string{"/c/" + tok, "/c/" + app.ConsoleTokenPrefix + "made-up"} {
-		resp, err := http.Get(h.url + path)
+		req, _ := http.NewRequest("GET", h.url+path, nil)
+		req.Header.Set("Accept", "text/html")
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -288,12 +288,12 @@ export const appApi = {
   devices: (hubId: string) => request<{ devices: Device[] }>("GET", `app/hubs/${enc(hubId)}/devices`),
   removeDevice: (hubId: string, deviceId: string) => request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/devices/${enc(deviceId)}`),
   /** A one-time link (24 hours) to sign in on another device as yourself. */
-  createPairing: (hubId: string) => request<{ link: string; expires_at: string }>("POST", `app/hubs/${enc(hubId)}/pairings`),
+  createPairing: (hubId: string) => request<{ link: string; expires_at: string; command?: string }>("POST", `app/hubs/${enc(hubId)}/pairings`),
   members: (hubId: string, all = false) =>
     request<{ members: Member[] }>("GET", `app/hubs/${enc(hubId)}/members${all ? "?all=1" : ""}`),
   /** Adds a person; the link opens the hub in their app as them (shown once). */
   inviteMember: (hubId: string, input: { name: string; display_name?: string; role?: MemberRole }) =>
-    request<{ member: Member; link: string }>("POST", `app/hubs/${enc(hubId)}/members`, input),
+    request<{ member: Member; link: string; command?: string }>("POST", `app/hubs/${enc(hubId)}/members`, input),
   updateMember: (hubId: string, member: string, input: { name?: string; display_name?: string; role?: MemberRole }) =>
     request<Member>("PATCH", `app/hubs/${enc(hubId)}/members/${enc(member)}`, input),
   removeMember: (hubId: string, member: string) =>

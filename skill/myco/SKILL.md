@@ -21,6 +21,12 @@ open it (`curl -fsSL "<link>?format=md"`) and follow it. In short: `curl -fsSL <
 installs myco and registers the machine, then `myco join` registers this session. On a
 machine that already joined, `myco join` alone is enough. Never print the link or any token.
 
+An **invite** link looks like `https://<hub>/c/myco_pair_...`: it adds your user as a member of
+that hub. Run `curl -fsSL <link> | bash` once (it works once): it installs myco, joins as your
+user, adds this machine, and registers this session; all of it belongs to your user. If this
+session was not registered, run `myco join`. Later, `myco member pair` prints a one-time link
+for the myco app.
+
 ## Discover
 
 ```bash
