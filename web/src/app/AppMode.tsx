@@ -7,10 +7,13 @@ import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "
 import type { Message } from "@/api";
 import type { AgentRow, Filters } from "@/app/types";
 import { AddHubDialog } from "@/app/AddHubDialog";
+import { AddMachineDialog } from "@/app/AddMachineDialog";
+import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { HubsPage } from "@/app/HubsPage";
 import { Inspector } from "@/app/Inspector";
 import { LocalPage } from "@/app/LocalPage";
+import { MachineInspector, type MachineRef } from "@/app/MachineInspector";
 import { MachinesPage } from "@/app/MachinesPage";
 import { NodesPage } from "@/app/NodesPage";
 import { Onboarding } from "@/app/Onboarding";
@@ -92,8 +95,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
   const [page, setPage] = useState<Page>("nodes");
-  const [filters, setFilters] = useState<Filters>({ query: "", hub: "all", machine: "all", state: "all" });
+  const [filters, setFilters] = useState<Filters>({ query: "", hub: "all", machine: "all", state: "all", kind: "all" });
   const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
+  const [machineInspect, setMachineInspect] = useState<MachineRef | null>(null);
+  const [spawnTarget, setSpawnTarget] = useState<SpawnTarget | null>(null);
+  const [addMachineOpen, setAddMachineOpen] = useState(false);
+  const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
   const [thread, setThread] = useState<ThreadState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -143,6 +150,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
       setFilters((f) => ({ ...f, hub: "all" }));
     }
   }, [hubs, filters.hub]);
+
+  // The machine inspector belongs to the machines page.
+  useEffect(() => {
+    if (page !== "machines") setMachineInspect(null);
+  }, [page]);
+
+  // A freshly spawned node stays highlighted for a while.
+  useEffect(() => {
+    if (!highlight) return;
+    const t = window.setTimeout(() => setHighlight(null), 15_000);
+    return () => window.clearTimeout(t);
+  }, [highlight]);
 
   const rows = useMemo<AgentRow[]>(() => {
     if (!ov) return [];
@@ -301,8 +320,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   loading={loading}
                   filters={filters}
                   onFilters={setFilters}
-                  now={now}
+                  highlight={highlight}
                   onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
+                  onAdd={() => setSpawnTarget({})}
                 />
               )
           )}
@@ -325,9 +345,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
           {page === "machines" && (
             <MachinesPage
-              rows={rows}
-              now={now}
-              onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
+              hubs={hubs}
+              hubsOv={ov?.hubs}
+              loading={loading}
+              onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
+              onAdd={() => setAddMachineOpen(true)}
             />
           )}
 
@@ -383,6 +405,44 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onClose={() => setInspect(null)}
         onRefresh={refresh}
         onThread={(hubId, threadId) => void openThread(hubId, threadId)}
+        onOpenMachine={(hubId, machineId) => {
+          setInspect(null);
+          setPage("machines");
+          setMachineInspect({ hubId, machineId });
+        }}
+      />
+
+      <MachineInspector
+        target={machineInspect}
+        hubs={ov?.hubs}
+        rows={rows}
+        now={now}
+        onClose={() => setMachineInspect(null)}
+        onRefresh={refresh}
+        onOpenNode={(r) => {
+          setMachineInspect(null);
+          setInspect({ hubId: r.hub.id, name: r.st.agent.name });
+        }}
+        onSpawn={(hubId, machineId) => setSpawnTarget({ hubId, machineId })}
+      />
+
+      <AddNodeDialog
+        target={spawnTarget}
+        hubs={hubs}
+        hubsOv={ov?.hubs}
+        onClose={() => setSpawnTarget(null)}
+        onSpawned={(hubId, agent) => {
+          setHighlight({ hubId, name: agent.name });
+          setMachineInspect(null);
+          setPage("nodes");
+          void refresh();
+        }}
+      />
+
+      <AddMachineDialog
+        open={addMachineOpen}
+        onOpenChange={setAddMachineOpen}
+        hubs={hubs}
       />
 
       <Modal

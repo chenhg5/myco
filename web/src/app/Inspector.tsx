@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
+import {
+  accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
+  machineOfRow, modelSourceLabel, nodeIcon,
+} from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { harnessInfo, stateMeta } from "@/components/status";
+import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 
 type Action = null | "profile" | "allow" | "kick" | "delete";
@@ -28,12 +32,13 @@ function MessageRows({ row, now, onThread }: { row: AgentRow; now: number; onThr
   );
 }
 
-export function Inspector({ row, now, onClose, onRefresh, onThread }: {
+export function Inspector({ row, now, onClose, onRefresh, onThread, onOpenMachine }: {
   row: AgentRow | null;
   now: number;
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onThread: (hubId: string, threadId: string) => void;
+  onOpenMachine: (hubId: string, machineId: string) => void;
 }) {
   const ag = row?.st.agent;
   const [action, setAction] = useState<Action>(null);
@@ -65,8 +70,11 @@ export function Inspector({ row, now, onClose, onRefresh, onThread }: {
 
   const hubId = row.hub.id;
   const state = stateMeta[row.st.state];
-  const Icon = harnessInfo(ag.binding.harness).icon;
-  const machine = ag.labels.find((l) => l.startsWith("machine="))?.slice("machine=".length);
+  const kind = agentKind(ag);
+  const Icon = nodeIcon(ag);
+  const rt = ag.runtime;
+  const machine = machineLabel(row);
+  const machineObj = machineOfRow(row);
 
   const openAction = (a: Exclude<Action, null>) => { setError(null); setAction(a); };
   const closeAction = () => { if (!busy) { setAction(null); setError(null); } };
@@ -119,6 +127,53 @@ export function Inspector({ row, now, onClose, onRefresh, onThread }: {
 
         <div className="app-inspector-body">
           <section className="app-group">
+            <div className="app-group-title"><span className="name">运行</span></div>
+            <div className="app-list">
+              <div className="app-kv">
+                <span className="app-kv-label">类型</span>
+                <span className="app-kv-value">{kindLabel(kind)}</span>
+              </div>
+              <div className="app-kv">
+                <span className="app-kv-label">CLI</span>
+                <span className="app-kv-value">
+                  {kind === "human" ? "—" : <>{cliName(ag)}{cliVersion(ag) ? ` ${cliVersion(ag)}` : ""}</>}
+                </span>
+              </div>
+              <div className="app-kv">
+                <span className="app-kv-label">模型</span>
+                <span className="app-kv-value">
+                  {rt?.model || "—"}
+                  {rt?.model && modelSourceLabel(rt.model_source) && (
+                    <span className="app-kv-note">（{modelSourceLabel(rt.model_source)}）</span>
+                  )}
+                </span>
+              </div>
+              <div className="app-kv">
+                <span className="app-kv-label">权限</span>
+                <span className="app-kv-value">{accessLabel(rt?.access)}</span>
+              </div>
+              <div className="app-kv">
+                <span className="app-kv-label">机器</span>
+                <span className="app-kv-value">
+                  {machineObj ? (
+                    <button
+                      type="button"
+                      className="app-kv-link"
+                      onClick={() => onOpenMachine(hubId, machineObj.id)}
+                    >
+                      {machineObj.name}<span className="app-chev">›</span>
+                    </button>
+                  ) : isCloud(ag) ? (
+                    cloudLabel(ag)
+                  ) : (
+                    machine || "—"
+                  )}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="app-group">
             <div className="app-group-title"><span className="name">当前工作</span></div>
             <div className="app-list">
               <div className="app-counts">
@@ -149,7 +204,6 @@ export function Inspector({ row, now, onClose, onRefresh, onThread }: {
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">会话 ID</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
-              <div className="app-kv"><span className="app-kv-label">环境</span><span className="app-kv-value">{ag.binding.environment || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">工作目录</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">投递方式</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
               <div className="app-kv"><span className="app-kv-label">入网令牌</span><span className="app-kv-value mono">{ag.enrolled_by || "管理员注册"}</span></div>

@@ -1,0 +1,143 @@
+import {
+  Bot, Cloud, Code2, Laptop, Monitor, Server, Sparkles, SquareTerminal, Terminal, UserRound,
+} from "lucide-react";
+import type { Agent, Machine, ModelSource, RuntimeAccess } from "@/api";
+import type { AgentRow, NodeKind } from "@/app/types";
+
+/** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
+export type Kind = NodeKind | "machine";
+
+const CLI_META: Record<string, { label: string; icon: typeof Bot }> = {
+  claude: { label: "Claude Code", icon: Sparkles },
+  "claude-cloud": { label: "Claude Code", icon: Sparkles },
+  codex: { label: "Codex", icon: Code2 },
+  "codex-cloud": { label: "Codex", icon: Code2 },
+  pi: { label: "Pi", icon: Bot },
+  kiro: { label: "Kiro", icon: Bot },
+  cursor: { label: "Cursor", icon: Code2 },
+  gemini: { label: "Gemini CLI", icon: Sparkles },
+  opencode: { label: "OpenCode", icon: SquareTerminal },
+  shell: { label: "Shell", icon: Terminal },
+  exec: { label: "Exec", icon: SquareTerminal },
+  human: { label: "人", icon: UserRound },
+};
+
+export function agentKind(a: Agent): Kind {
+  if (a.kind) return a.kind;
+  const h = a.binding.harness || "";
+  if (h === "machine") return "machine";
+  if (h === "shell" || h === "exec") return "shell";
+  if (h === "human") return "human";
+  return "agent";
+}
+
+/** A cloud session (claude.ai, Codex cloud) has no machine and cannot spawn. */
+export function isCloud(a: Agent): boolean {
+  const cli = a.runtime?.cli || a.binding.harness || "";
+  return !a.machine_id && cli.endsWith("-cloud");
+}
+
+export function cliName(a: Agent): string {
+  const cli = a.runtime?.cli || a.binding.harness;
+  return cli ? CLI_META[cli]?.label || cli : "未上报";
+}
+
+export function cliVersion(a: Agent): string | undefined {
+  return a.runtime?.cli_version;
+}
+
+export function cliIcon(a: Agent) {
+  const cli = a.runtime?.cli || a.binding.harness || "";
+  return CLI_META[cli]?.icon || Bot;
+}
+
+/** Icon for a node row / inspector head, by kind. */
+export function nodeIcon(a: Agent) {
+  const kind = agentKind(a);
+  if (kind === "human") return UserRound;
+  if (kind === "machine") return Server;
+  if (kind === "shell") return Terminal;
+  return cliIcon(a);
+}
+
+/** How a cloud session is shown where a machine name would go. */
+export function cloudLabel(a: Agent): string {
+  const cli = a.runtime?.cli || a.binding.harness || "";
+  if (cli.startsWith("claude")) return "云端（claude.ai）";
+  if (cli.startsWith("codex")) return "云端（Codex）";
+  return "云端";
+}
+
+export function machinesOfHub(hub: AgentRow["hub"]): Machine[] {
+  return hub.overview?.machines || [];
+}
+
+export function machineOfRow(row: AgentRow): Machine | undefined {
+  const id = row.st.agent.machine_id;
+  if (!id) return undefined;
+  return machinesOfHub(row.hub).find((m) => m.id === id);
+}
+
+/**
+ * The machine column of a node: a real machine name, a cloud label, or
+ * nothing for a human (who has no machine).
+ */
+export function machineLabel(row: AgentRow): string | undefined {
+  const a = row.st.agent;
+  if (isCloud(a)) return cloudLabel(a);
+  const m = machineOfRow(row);
+  if (m) return m.name;
+  return a.machine_id || undefined;
+}
+
+export function kindLabel(kind: Kind): string {
+  if (kind === "agent") return "AI";
+  if (kind === "shell") return "Shell";
+  if (kind === "human") return "人";
+  return "机器节点";
+}
+
+export function modelSourceLabel(source?: ModelSource): string | undefined {
+  if (source === "configured") return "配置";
+  if (source === "observed") return "实际使用";
+  if (source === "default") return "CLI 默认";
+  return undefined;
+}
+
+export function accessLabel(access?: RuntimeAccess): string {
+  if (access === "readonly") return "只读";
+  if (access === "workspace") return "工作区";
+  if (access === "full") return "完全";
+  return "—";
+}
+
+export function osInfo(os: Machine["os"]): { label: string; icon: typeof Monitor } {
+  if (os === "darwin") return { label: "macOS", icon: Laptop };
+  if (os === "linux") return { label: "Linux", icon: Terminal };
+  if (os === "windows") return { label: "Windows", icon: Monitor };
+  return { label: "云端", icon: Cloud };
+}
+
+export function machineSubtitle(m: Machine): string {
+  return [
+    osInfo(m.os).label,
+    m.arch,
+    m.myco_version ? `v${m.myco_version}` : "",
+    `${m.agents} 个节点`,
+  ].filter(Boolean).join(" · ");
+}
+
+/** Filter value for cloud sessions, alongside "all" and real machine ids. */
+export const CLOUD_FILTER = "cloud";
+
+export function machineFilterValue(hubId: string, machineId: string): string {
+  return `m:${hubId}:${machineId}`;
+}
+
+export function parseMachineFilter(value: string): { hubId: string; machineId: string } | null {
+  if (!value.startsWith("m:")) return null;
+  const body = value.slice(2);
+  const i = body.indexOf(":");
+  if (i <= 0) return null;
+  return { hubId: body.slice(0, i), machineId: body.slice(i + 1) };
+}

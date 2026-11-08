@@ -10,6 +10,16 @@ const SHELL = process.env.MOCK_SHELL === "browser" ? "browser" : "mac";
 const iso = (offsetSec = 0) => new Date(Date.now() - offsetSec * 1000).toISOString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// CLI metadata used when a session is spawned from the App.
+const CLI_MODELS = {
+  claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
+  cursor: "cursor-auto", gemini: "gemini-3-pro", opencode: "claude-opus-5-5",
+};
+const CLI_VERSIONS = {
+  claude: "2.1.240", codex: "0.52.0", pi: "1.8.0", kiro: "0.4.2",
+  cursor: "0.48.0", gemini: "0.12.0", opencode: "0.6.1",
+};
+
 function makeAgent(over) {
   const base = {
     id: "ag_" + Math.random().toString(36).slice(2, 10),
@@ -17,6 +27,7 @@ function makeAgent(over) {
     description: "",
     capabilities: [],
     labels: [],
+    kind: "agent",
     binding: { harness: "claude", session_id: "sess_" + Math.random().toString(36).slice(2, 12) },
     delivery: { mode: "pull" },
     allow_from: [],
@@ -56,26 +67,76 @@ const state = {
       hub_version: "0.16.6",
       update_available: true,
       threads: { th_release: studioThread },
+      machines: [
+        {
+          id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
+          myco_version: "0.16.8", online: true, last_seen_at: iso(5), can_spawn: true,
+        },
+        {
+          id: "m_bench", name: "Bench Linux", hostname: "bench-01", os: "linux", arch: "x86_64",
+          myco_version: "0.9.4", online: true, last_seen_at: iso(30), can_spawn: false,
+        },
+        {
+          id: "m_office", name: "Office PC", hostname: "office-pc", os: "windows", arch: "amd64",
+          myco_version: "0.16.6", online: true, last_seen_at: iso(90), can_spawn: true,
+        },
+      ],
       agents: [
         makeAgent({
           name: "pm-codex", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
+          kind: "agent", machine_id: "m_studio",
+          runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=release", "role=pm"], capabilities: ["review", "release"],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" },
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
-          name: "ios-shell", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
-          status_text: "正在运行 make test-ios", status_at: iso(45),
-          labels: ["machine=bench-01", "group=ios"], capabilities: ["build", "test"],
-          binding: { harness: "shell", environment: "macOS 26.1", workdir: "~/code/app-ios" },
-          delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
-        }),
-        makeAgent({
           name: "docs-claude", description: "保持 README 和 docs/ 与代码同步。",
+          kind: "agent", machine_id: "m_studio",
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
           online: false, last_seen_at: iso(5400), status_at: iso(5400),
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
+        }),
+        makeAgent({
+          name: "ios-shell", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
+          kind: "shell", machine_id: "m_bench",
+          runtime: { cli: "shell", access: "workspace" },
+          status_text: "正在运行 make test-ios", status_at: iso(45),
+          labels: ["machine=bench-01", "group=ios"], capabilities: ["build", "test"],
+          binding: { harness: "shell", environment: "Linux 6.8", workdir: "~/code/app-ios" },
+          delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
+        }),
+        makeAgent({
+          name: "glenn", display_name: "Glenn", description: "人。负责发任务和验收。",
+          kind: "human", binding: { harness: "human" },
+          labels: ["role=human"], status_at: iso(3),
+        }),
+        makeAgent({
+          name: "release-cloud", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
+          kind: "agent", runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "default", access: "readonly" },
+          status_text: "正在整理发布说明", status_at: iso(60),
+          labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
+        }),
+        makeAgent({
+          name: "review-cloud", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
+          kind: "agent", runtime: { cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly" },
+          labels: ["group=release"], binding: { harness: "codex-cloud", environment: "Codex 云端" },
+        }),
+        makeAgent({
+          name: "legacy-codex", description: "旧版 runner，还没有上报运行信息。",
+          kind: "agent", machine_id: "m_bench",
+          labels: ["machine=bench-01"], online: true, status_at: iso(20),
+          binding: { harness: "codex", environment: "Linux 6.8", workdir: "~/code/legacy" },
+        }),
+        makeAgent({
+          name: "studio-mac-machine", display_name: "Studio Mac", kind: "machine", machine_id: "m_studio",
+          labels: ["machine=studio-mac"], binding: { harness: "machine" },
+        }),
+        makeAgent({
+          name: "bench-01-machine", display_name: "Bench Linux", kind: "machine", machine_id: "m_bench",
+          labels: ["machine=bench-01"], binding: { harness: "machine" },
         }),
       ],
       recent: [
@@ -148,6 +209,11 @@ function overviewFor(h) {
     online_window_seconds: 120,
     totals: totals(h.agents),
     agents: h.agents.map(agentStatus),
+    // Real machines only; cloud sessions are not machines.
+    machines: (h.machines || []).map((m) => ({
+      ...m,
+      agents: h.agents.filter((a) => a.kind !== "machine" && a.machine_id === m.id).length,
+    })),
     recent: h.recent,
   };
 }
@@ -335,6 +401,102 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
+    }
+
+    // /app/hubs/{id}/links — a one-off enrollment link for adding a machine.
+    if (parts.length === 4 && parts[3] === "links" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = await readBody(req);
+      const uses = Number.isInteger(body?.uses) ? body.uses : 1;
+      const hours = Number.isInteger(body?.expires_hours) ? body.expires_hours : 24;
+      state.counter += 1;
+      const joinUrl = `${hub.url.replace(/\/+$/, "")}/join/demo-${state.counter}`;
+      return send(res, 200, {
+        join_url: joinUrl,
+        command: `curl -fsSL ${joinUrl} | bash`,
+        uses,
+        expires_hours: hours,
+      });
+    }
+
+    // /app/hubs/{id}/machines/{mid}
+    if (parts.length === 5 && parts[3] === "machines") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const machine = (hub.machines || []).find((m) => m.id === parts[4]);
+      if (!machine) return fail(res, 404, "not_found", "没有这台机器");
+      if (method === "PATCH") {
+        const body = await readBody(req);
+        const name = typeof body?.name === "string" ? body.name.trim() : "";
+        if (!name) return fail(res, 400, "invalid_request", "name 不能为空。");
+        machine.name = name;
+        const agents = hub.agents.filter((a) => a.kind !== "machine" && a.machine_id === machine.id).length;
+        return send(res, 200, { ...machine, agents });
+      }
+    }
+
+    // /app/hubs/{id}/machines/{mid}/spawn — start a session on that machine.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "spawn" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const machine = (hub.machines || []).find((m) => m.id === parts[4]);
+      if (!machine) return fail(res, 404, "not_found", "没有这台机器");
+      if (!machine.can_spawn) {
+        return fail(res, 403, "machine_cannot_spawn", "这台机器不能开新会话。",
+          "它的 myco 版本太旧，或者 runner 没在运行。");
+      }
+      const body = await readBody(req);
+      if (!body || !(body.cli in CLI_MODELS)) {
+        return fail(res, 400, "invalid_request", "cli 必须是 claude、codex、pi、kiro、cursor、gemini 或 opencode。");
+      }
+      const dir = typeof body.dir === "string" ? body.dir.trim() : "";
+      if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
+      if (dir === "/etc" || dir.startsWith("/etc/")) {
+        return fail(res, 403, "dir_not_allowed", "目录不在允许范围内。");
+      }
+      const access = body.access === undefined ? "workspace" : body.access;
+      if (!["readonly", "workspace", "full"].includes(access)) {
+        return fail(res, 400, "invalid_request", "access 必须是 readonly、workspace 或 full。");
+      }
+
+      await sleep(3000);
+
+      state.counter += 1;
+      const wanted = typeof body.name === "string" ? body.name.trim() : "";
+      const stem = wanted || `${body.cli}-${state.counter}`;
+      let name = stem;
+      let n = 2;
+      while (hub.agents.some((a) => a.name === name)) { name = `${stem}-${n}`; n += 1; }
+
+      const model = typeof body.model === "string" ? body.model.trim() : "";
+      const osLabel = { darwin: "macOS", linux: "Linux", windows: "Windows", cloud: "云端" }[machine.os] || machine.os;
+      const agent = makeAgent({
+        name,
+        description: typeof body.description === "string" ? body.description : "",
+        kind: "agent",
+        machine_id: machine.id,
+        runtime: {
+          cli: body.cli,
+          cli_version: CLI_VERSIONS[body.cli],
+          model: model || CLI_MODELS[body.cli],
+          model_source: model ? "configured" : "default",
+          access,
+        },
+        status_text: "刚启动，等待任务",
+        status_at: iso(0),
+        created_at: iso(0),
+        last_seen_at: iso(0),
+        labels: [`machine=${machine.name.toLowerCase().replace(/\s+/g, "-")}`],
+        binding: { harness: body.cli, environment: osLabel, workdir: dir },
+      });
+      hub.agents.push(agent);
+
+      return send(res, 200, {
+        agent,
+        session_id: agent.binding.session_id,
+        cli: body.cli,
+        workdir: dir,
+        access,
+        reply: `环境已就绪。我在 ${dir} 里，随时可以开始工作。`,
+      });
     }
 
     if (parts.length >= 5 && parts[3] === "agents") {

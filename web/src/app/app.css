@@ -92,8 +92,9 @@
   align-items: center;
   padding: 0 14px;
 }
-/* macOS traffic lights float over the top-left 80px. */
+/* macOS traffic lights float over the top-left 80px; their centre sits at y=26. */
 .app-shell.shell-mac .app-sidebar-head {
+  height: 52px;
   padding-left: 80px;
 }
 .app-sidebar-head .brand {
@@ -198,6 +199,10 @@
   gap: 6px;
   padding: 0 10px;
   user-select: none;
+}
+/* Align with the sidebar head and the traffic lights. */
+.app-shell.shell-mac .app-crumbbar {
+  height: 52px;
 }
 /* Collapsed in the macOS shell: keep the traffic lights clear. */
 .app-shell.shell-mac.collapsed .app-crumbbar {
@@ -414,6 +419,21 @@ textarea.app-input {
   font-size: 12px;
   margin: 0 2px 12px;
 }
+.app-page-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  margin: 0 2px 12px;
+}
+.app-page-head .app-summary {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.app-page-head .app-btn {
+  flex: none;
+}
 
 /* ---------- toolbar ---------- */
 .app-toolbar {
@@ -618,6 +638,14 @@ textarea.app-input {
 .app-row-sub .sep {
   color: var(--faint);
   flex: none;
+}
+.app-row-sub .mono {
+  font-size: 10.5px;
+}
+/* A node that was just spawned. */
+.app-row.is-new {
+  box-shadow: inset 2px 0 0 var(--green);
+  animation: app-highlight 1.6s ease-in-out 3;
 }
 .app-row-trail {
   display: flex;
@@ -861,6 +889,31 @@ textarea.app-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.app-kv-note {
+  color: var(--muted);
+}
+.app-kv-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.app-kv-link:hover {
+  color: var(--accent);
+}
+.app-kv-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+  border-radius: 4px;
+}
+.app-kv-link .app-chev {
+  font-size: 14px;
+}
 .app-counts {
   display: flex;
   gap: 14px;
@@ -961,6 +1014,13 @@ textarea.app-input {
 .app-action-row.danger:hover {
   background: var(--red-soft);
 }
+.app-action-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.app-action-row:disabled:hover {
+  background: transparent;
+}
 
 /* ---------- local hub ---------- */
 .app-actions {
@@ -994,6 +1054,94 @@ textarea.app-input {
   border-top-color: var(--accent);
   animation: app-spin 0.7s linear infinite;
 }
+/* Full-width native select inside dialogs. */
+.app-select-field {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.app-select-field:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.app-select-field:disabled {
+  opacity: 0.6;
+}
+.app-input:disabled {
+  opacity: 0.6;
+}
+
+/* "Add machine": command block and QR. */
+.app-command {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--pill);
+}
+.app-command code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.app-qr {
+  width: 168px;
+  max-width: 100%;
+  margin: 14px auto 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.app-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.app-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.app-success svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.app-reply {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .app-choice {
   display: flex;
   align-items: flex-start;
@@ -1240,6 +1388,10 @@ textarea.app-input {
 }
 @keyframes app-spin {
   to { transform: rotate(360deg); }
+}
+@keyframes app-highlight {
+  0%, 100% { background: var(--green-soft); }
+  50% { background: var(--card); }
 }
 
 .app-pill.amber {
