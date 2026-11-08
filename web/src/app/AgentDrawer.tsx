@@ -105,7 +105,7 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
               <StateBadge state={cur.state} />
             </div>
             {ag.display_name && <div className="mt-0.5 font-mono text-xs text-muted-foreground"><CopyText text={ag.name} display={ag.name} /></div>}
-            <SheetDescription className="mt-1.5 text-sm text-muted-foreground">{ag.description || "No description"}</SheetDescription>
+            <SheetDescription className="mt-1.5 text-sm text-muted-foreground">{ag.description || "（没有描述）"}</SheetDescription>
             {ag.status_text && <div className="mt-3"><StatusLine text={ag.status_text} at={ag.status_at} now={now} /></div>}
             <div className="mt-3 flex flex-wrap gap-1.5">
               <HarnessBadge harness={ag.binding.harness} />
@@ -118,12 +118,12 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
             {error !== null && <ErrorNote error={error} />}
 
             <section>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current work</h4>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">当前工作</h4>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { k: "In progress", v: cur.in_progress, c: "text-working" },
-                  { k: "Queued", v: cur.queued, c: "text-pending" },
-                  { k: "Held", v: cur.held, c: "text-idle" },
+                  { k: "处理中", v: cur.in_progress, c: "text-working" },
+                  { k: "待处理", v: cur.queued, c: "text-pending" },
+                  { k: "已挂起", v: cur.held, c: "text-idle" },
                 ].map((x) => (
                   <Card key={x.k} className="p-3 text-center">
                     <div className={cn("text-xl font-semibold tabular-nums", x.v ? x.c : "text-muted-foreground/60")}>{x.v}</div>
@@ -146,7 +146,7 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
               )}
               {recent.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent messages</h4>
+                  <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">最近消息</h4>
                   <Card className="divide-y overflow-hidden">
                     {recent.map((m) => <MessageRow key={m.id} m={m} now={now} onOpen={() => onThread(hubId, m.thread_id)} />)}
                   </Card>
@@ -155,31 +155,31 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
             </section>
 
             <section>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identity</h4>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">身份与绑定</h4>
               <div className="divide-y rounded-xl border bg-card px-4">
                 <Field label="Agent ID"><CopyText text={ag.id} /></Field>
-                <Field label="Session">{ag.binding.session_id ? <CopyText text={ag.binding.session_id} /> : "—"}</Field>
-                <Field label="Environment">{ag.binding.environment || "—"}</Field>
-                <Field label="Workdir"><span className="font-mono text-xs">{ag.binding.workdir || "—"}</span></Field>
-                <Field label="Delivery">{ag.delivery.mode}</Field>
-                <Field label="Enrolled by">{ag.enrolled_by ? <span className="font-mono text-xs">{ag.enrolled_by}</span> : "admin"}</Field>
-                <Field label="Last seen">{timeAgo(ag.last_seen_at, now)}</Field>
-                <Field label="Created">{new Date(ag.created_at).toLocaleString()}</Field>
+                <Field label="会话 ID">{ag.binding.session_id ? <CopyText text={ag.binding.session_id} /> : "—"}</Field>
+                <Field label="环境">{ag.binding.environment || "—"}</Field>
+                <Field label="工作目录"><span className="font-mono text-xs">{ag.binding.workdir || "—"}</span></Field>
+                <Field label="投递方式">{ag.delivery.mode}</Field>
+                <Field label="入网令牌">{ag.enrolled_by ? <span className="font-mono text-xs">{ag.enrolled_by}</span> : "admin"}</Field>
+                <Field label="最近在线">{timeAgo(ag.last_seen_at, now)}</Field>
+                <Field label="注册时间">{new Date(ag.created_at).toLocaleString()}</Field>
               </div>
               <div className="mt-2 flex flex-wrap gap-1"><Labels labels={ag.labels} max={32} /></div>
             </section>
 
             <section>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manage</h4>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">管理</h4>
               <Card className="space-y-4 p-4">
                 {editing ? (
                   <div className="space-y-2">
                     <label className="block space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Display name</span>
+                      <span className="text-xs font-medium text-muted-foreground">显示名</span>
                       <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={ag.name} />
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Description</span>
+                      <span className="text-xs font-medium text-muted-foreground">描述</span>
                       <textarea
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -188,19 +188,19 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
                       />
                     </label>
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={busy}>取消</Button>
                       <Button size="sm" onClick={() => void saveProfile()} disabled={busy}>
-                        {busy && <Loader2 className="animate-spin" />}Save
+                        {busy && <Loader2 className="animate-spin" />}保存
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium">Profile</div>
-                      <div className="truncate text-xs text-muted-foreground">Display name and description shown on every hub.</div>
+                      <div className="text-sm font-medium">资料</div>
+                      <div className="truncate text-xs text-muted-foreground">显示名和描述会在所有 Hub 上生效。</div>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil />Edit</Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil />编辑</Button>
                   </div>
                 )}
 
@@ -208,33 +208,33 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
                   {editingAllow ? (
                     <div className="space-y-2">
                       <label className="block space-y-1">
-                        <span className="text-xs font-medium text-muted-foreground">Allowed senders (comma separated)</span>
-                        <Input value={allowFrom} onChange={(e) => setAllowFrom(e.target.value)} placeholder="glenn, pm-codex  (empty = anyone)" className="font-mono text-xs" />
+                        <span className="text-xs font-medium text-muted-foreground">允许的来源（逗号分隔）</span>
+                        <Input value={allowFrom} onChange={(e) => setAllowFrom(e.target.value)} placeholder="glenn, pm-codex（留空 = 任何人）" className="font-mono text-xs" />
                       </label>
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingAllow(false); setAllowFrom((ag.allow_from || []).join(", ")); }} disabled={busy}>Cancel</Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingAllow(false); setAllowFrom((ag.allow_from || []).join(", ")); }} disabled={busy}>取消</Button>
                         <Button size="sm" onClick={() => void saveAllowFrom()} disabled={busy}>
-                          {busy && <Loader2 className="animate-spin" />}Save
+                          {busy && <Loader2 className="animate-spin" />}保存
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium">Allow-from</div>
-                        <div className="truncate text-xs text-muted-foreground">{ag.allow_from.length ? ag.allow_from.join(", ") : "Anyone can send to this agent"}</div>
+                        <div className="text-sm font-medium">允许来源</div>
+                        <div className="truncate text-xs text-muted-foreground">{ag.allow_from.length ? ag.allow_from.join(", ") : "任何人都可以给它发消息"}</div>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => setEditingAllow(true)}><Pencil />Edit</Button>
+                      <Button variant="outline" size="sm" onClick={() => setEditingAllow(true)}><Pencil />编辑</Button>
                     </div>
                   )}
                 </div>
 
                 <div className="flex flex-wrap gap-2 border-t pt-4">
                   <Button variant="outline" size="sm" onClick={() => { setConfirmError(null); setConfirm("kick"); }} disabled={busy}>
-                    <LogOut />Kick offline
+                    <LogOut />踢下线
                   </Button>
                   <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => { setConfirmError(null); setConfirm("delete"); }} disabled={busy}>
-                    <Trash2 />Delete agent
+                    <Trash2 />删除节点
                   </Button>
                 </div>
               </Card>
@@ -246,10 +246,10 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
       <ConfirmDialog
         open={confirm === "kick"}
         onOpenChange={(o) => !o && setConfirm(null)}
-        title={`Kick ${ag.name} off ${hubName}?`}
-        description="The agent's token is revoked immediately. Its node record, messages and profile stay on the hub, so it can come back by enrolling again."
-        consequences={<p>It stops receiving messages until it re-enrolls with a new token. Running work is interrupted.</p>}
-        confirmLabel="Kick offline"
+        title={`将 ${ag.name} 从 ${hubName} 踢下线？`}
+        description="会立即作废它的令牌。节点记录、消息和资料都保留在 Hub 上，重新接入即可回来。"
+        consequences={<p>重新接入前它收不到任何消息，正在进行的任务会被中断。</p>}
+        confirmLabel="踢下线"
         busy={busy}
         error={confirmError !== null ? errorMessage(confirmError) : undefined}
         onConfirm={() => { setConfirmError(null); void run(() => appApi.kick(hubId, ag.name), "close").catch((e) => setConfirmError(e)); }}
@@ -257,10 +257,10 @@ export function AgentDrawer({ row, now, onClose, onRefresh, onThread }: {
       <ConfirmDialog
         open={confirm === "delete"}
         onOpenChange={(o) => !o && setConfirm(null)}
-        title={`Delete ${ag.name} from ${hubName}?`}
-        description="This permanently removes the agent from the hub."
-        consequences={<p>The agent record and its token are gone. It cannot rejoin unless it is enrolled again from scratch. Message history in existing threads is kept.</p>}
-        confirmLabel="Delete agent"
+        title={`从 ${hubName} 删除 ${ag.name}？`}
+        description="会从 Hub 上永久删除这个节点。"
+        consequences={<p>节点记录和令牌都会被删除，必须重新接入才能回来。已有线程里的消息仍会保留。</p>}
+        confirmLabel="删除节点"
         busy={busy}
         error={confirmError !== null ? errorMessage(confirmError) : undefined}
         onConfirm={() => { setConfirmError(null); void run(() => appApi.removeAgent(hubId, ag.name), "close").catch((e) => setConfirmError(e)); }}

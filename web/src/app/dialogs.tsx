@@ -21,7 +21,7 @@ export function Modal({ open, onOpenChange, title, description, children }: {
           <div className="mt-4">{children}</div>
           <Dialog.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none">
             <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">关闭</span>
           </Dialog.Close>
         </Dialog.Content>
       </Dialog.Portal>
@@ -50,9 +50,9 @@ export function ConfirmDialog({ open, onOpenChange, title, description, conseque
       )}
       {error && <div className="mt-3 text-sm text-destructive">{error}</div>}
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+        <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
         <Button size="sm" className={cn("bg-destructive text-destructive-foreground hover:bg-destructive/90")} onClick={onConfirm} disabled={busy}>
-          {busy ? "Working…" : confirmLabel}
+          {busy ? "处理中…" : confirmLabel}
         </Button>
       </div>
     </Modal>

@@ -19,7 +19,7 @@ export function HubsSidebar({ hubs, ov, selected, onSelect, onAdd, onRemove }: {
   return (
     <aside className="flex shrink-0 flex-col border-b md:w-60 md:border-b-0 md:border-r">
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hubs</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hub</span>
         <span className="text-xs tabular-nums text-muted-foreground">{hubs.length}</span>
       </div>
       <div className="flex gap-2 overflow-x-auto px-3 pb-3 scrollbar-thin md:flex-1 md:flex-col md:overflow-y-auto md:overflow-x-hidden">
@@ -32,7 +32,7 @@ export function HubsSidebar({ hubs, ov, selected, onSelect, onAdd, onRemove }: {
           )}
         >
           <Server className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">All hubs</span>
+          <span className="font-medium">全部 Hub</span>
         </button>
         {hubs.map((h) => {
           const active = selected === h.id;
@@ -50,19 +50,19 @@ export function HubsSidebar({ hubs, ov, selected, onSelect, onAdd, onRemove }: {
                   <span className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{h.name}</span>
                     {h.update_available && (
-                      <span className="shrink-0 rounded-full border border-brand/40 bg-brand/10 px-1.5 text-[10px] font-medium text-brand">update</span>
+                      <span className="shrink-0 rounded-full border border-brand/40 bg-brand/10 px-1.5 text-[10px] font-medium text-brand">可更新</span>
                     )}
                   </span>
                   <span className="block truncate font-mono text-[11px] text-muted-foreground">{host(h.url)}</span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     {h.ok ? (
                       <>
-                        <span className="truncate">{h.hub_version ? `v${h.hub_version}` : "connected"}</span>
-                        {counts.get(h.id) !== undefined && <span className="tabular-nums">· {counts.get(h.id)} agents</span>}
+                        <span className="truncate">{h.hub_version ? `v${h.hub_version}` : "已连接"}</span>
+                        {counts.get(h.id) !== undefined && <span className="tabular-nums">· {counts.get(h.id)} 个节点</span>}
                       </>
                     ) : (
                       <span className="inline-flex min-w-0 items-center gap-1 text-destructive">
-                        <TriangleAlert className="h-3 w-3 shrink-0" /><span className="truncate">{h.error || "unreachable"}</span>
+                        <TriangleAlert className="h-3 w-3 shrink-0" /><span className="truncate">{h.error || "连不上"}</span>
                       </span>
                     )}
                   </span>
@@ -71,8 +71,8 @@ export function HubsSidebar({ hubs, ov, selected, onSelect, onAdd, onRemove }: {
               <button
                 type="button"
                 onClick={() => onRemove(h)}
-                aria-label={`Remove ${h.name}`}
-                title="Remove hub"
+                aria-label={`移除 ${h.name}`}
+                title="移除 Hub"
                 className="rounded p-1 text-muted-foreground/60 opacity-0 transition hover:bg-accent hover:text-destructive focus:opacity-100 group-hover:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -83,7 +83,7 @@ export function HubsSidebar({ hubs, ov, selected, onSelect, onAdd, onRemove }: {
       </div>
       <div className="hidden border-t p-3 md:block">
         <Button variant="outline" size="sm" className="w-full" onClick={onAdd}>
-          <Plus /> Add hub
+          <Plus /> 添加 Hub
         </Button>
       </div>
     </aside>

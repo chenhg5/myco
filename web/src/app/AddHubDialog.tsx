@@ -38,31 +38,31 @@ export function AddHubDialog({ open, onOpenChange, onAdded }: {
     <Modal
       open={open}
       onOpenChange={change}
-      title="Add a hub"
-      description="The hub verifies the console token before saving it in the keychain. The token never reaches this window again."
+      title="添加 Hub"
+      description="Hub 会先验证控制台令牌，再把它保存到钥匙串。令牌之后不会再出现在这个窗口里。"
     >
       <form className="space-y-3" onSubmit={submit}>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Name</span>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Studio Mac" autoFocus required />
+          <span className="text-xs font-medium text-muted-foreground">名称</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="工作室 Mac" autoFocus required />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Address</span>
+          <span className="text-xs font-medium text-muted-foreground">地址</span>
           <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.20:7780" className="font-mono text-xs" required />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Console token</span>
+          <span className="text-xs font-medium text-muted-foreground">控制台令牌</span>
           <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="myco_console_…" className="font-mono text-xs" autoComplete="off" required />
         </label>
         <div className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          Run <code className="rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">myco console token create --name {name.trim() || "<device>"}</code> on the hub machine to get a token.
+          在 Hub 所在机器上运行 <code className="rounded bg-background px-1 py-0.5 font-mono text-[11px] text-foreground">myco console token create --name {name.trim() || "<设备名>"}</code> 获取控制台令牌。
         </div>
         {error !== null && <ErrorNote error={error} />}
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={() => change(false)} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => change(false)} disabled={busy}>取消</Button>
           <Button type="submit" size="sm" disabled={busy || !name.trim() || !url.trim() || !token.trim()}>
             {busy && <Loader2 className="animate-spin" />}
-            {busy ? "Verifying…" : "Add hub"}
+            {busy ? "验证中…" : "添加 Hub"}
           </Button>
         </div>
       </form>

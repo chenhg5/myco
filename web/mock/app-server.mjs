@@ -37,9 +37,9 @@ function makeMessage(over) {
 }
 
 const studioThread = [
-  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "Cut v0.16.8: bump VERSION, run make check, tag and push.", created_at: iso(900), updated_at: iso(900) }),
-  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "Branch release/v0.16.8 is green. Waiting for your go-ahead to tag.", created_at: iso(600), updated_at: iso(600) }),
-  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "Go ahead, tag it.", created_at: iso(300), updated_at: iso(300) }),
+  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "发布 v0.16.8：改 VERSION，跑 make check，打 tag 并推送。", created_at: iso(900), updated_at: iso(900) }),
+  makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
+  makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
 ];
 
 const state = {
@@ -55,30 +55,30 @@ const state = {
       threads: { th_release: studioThread },
       agents: [
         makeAgent({
-          name: "pm-codex", display_name: "PM (Codex)", description: "Plans releases and reviews pull requests.",
-          status_text: "Reviewing the multihub branch", status_at: iso(180),
+          name: "pm-codex", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
+          status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=release", "role=pm"], capabilities: ["review", "release"],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" },
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
-          name: "ios-shell", display_name: "iOS Shell", description: "Builds and tests the iOS app on demand.",
-          status_text: "Running make test-ios", status_at: iso(45),
+          name: "ios-shell", display_name: "iOS Shell", description: "按需构建和测试 iOS App。",
+          status_text: "正在运行 make test-ios", status_at: iso(45),
           labels: ["machine=bench-01", "group=ios"], capabilities: ["build", "test"],
           binding: { harness: "shell", environment: "macOS 26.1", workdir: "~/code/app-ios" },
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
         makeAgent({
-          name: "docs-claude", description: "Keeps README and docs/ in sync with the code.",
+          name: "docs-claude", description: "保持 README 和 docs/ 与代码同步。",
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
           online: false, last_seen_at: iso(5400), status_at: iso(5400),
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
       ],
       recent: [
-        makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "Go ahead, tag it.", created_at: iso(300), updated_at: iso(300) }),
-        makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "Branch release/v0.16.8 is green. Waiting for your go-ahead to tag.", created_at: iso(600), updated_at: iso(600) }),
-        makeMessage({ thread_id: "th_ios", from: "glenn", to: "ios-shell", type: "task", body: "Please run the iOS suite and attach the log.", created_at: iso(240), updated_at: iso(240) }),
+        makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
+        makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
+        makeMessage({ thread_id: "th_ios", from: "glenn", to: "ios-shell", type: "task", body: "请跑一遍 iOS 测试套件，附上日志。", created_at: iso(240), updated_at: iso(240) }),
       ],
     },
     {
@@ -115,7 +115,7 @@ function agentStatus(a) {
     in_progress: state === "working" ? 1 : 0,
     held: 0,
     current: state === "working"
-      ? [makeMessage({ thread_id: "th_release", from: "glenn", to: a.name, body: a.status_text || "Working…" })]
+      ? [makeMessage({ thread_id: "th_release", from: "glenn", to: a.name, body: a.status_text || "处理中…" })]
       : [],
   };
 }
@@ -180,14 +180,14 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST") {
       const body = await readBody(req);
       if (!body || typeof body.name !== "string" || typeof body.url !== "string" || typeof body.token !== "string") {
-        return fail(res, 400, "invalid_request", "name, url and token are required");
+        return fail(res, 400, "invalid_request", "name、url 和 token 为必填项");
       }
       if (body.token.trim().length < 8 || !body.token.startsWith("myco_")) {
-        return fail(res, 401, "invalid_token", "The hub rejected that console token.",
-          "Create a new one on the hub machine with myco console token create --name <device>.");
+        return fail(res, 401, "invalid_token", "Hub 拒绝了这个控制台令牌。",
+          "请在 Hub 所在机器上运行 myco console token create --name <设备名> 重新创建。");
       }
       if (state.hubs.some((h) => h.url === body.url.trim())) {
-        return fail(res, 409, "already_exists", "That hub address is already added.");
+        return fail(res, 409, "already_exists", "这个 Hub 地址已经添加过了。");
       }
       state.counter += 1;
       const hub = {
@@ -198,19 +198,19 @@ const server = http.createServer(async (req, res) => {
       state.hubs.push(hub);
       return send(res, 201, hubView(hub));
     }
-    return fail(res, 405, "method_not_allowed", `Method ${method} not allowed`);
+    return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
   }
 
   // /app/overview
   if (parts[0] === "app" && parts[1] === "overview" && parts.length === 2) {
-    if (method !== "GET") return fail(res, 405, "method_not_allowed", `Method ${method} not allowed`);
+    if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, appOverview());
   }
 
   // /app/hubs/{id}[/...]
   if (parts[0] === "app" && parts[1] === "hubs" && parts.length >= 3) {
     const hub = state.hubs.find((h) => h.id === parts[2]);
-    if (!hub) return fail(res, 404, "not_found", "No such hub");
+    if (!hub) return fail(res, 404, "not_found", "没有这个 Hub");
 
     if (parts.length === 3 && method === "DELETE") {
       state.hubs = state.hubs.filter((h) => h.id !== hub.id);
@@ -218,14 +218,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {
-      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub is unreachable");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
     if (parts.length >= 5 && parts[3] === "agents") {
-      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub is unreachable");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const agent = hub.agents.find((a) => a.name === parts[4]);
-      if (!agent) return fail(res, 404, "not_found", `No agent named ${parts[4]}`);
+      if (!agent) return fail(res, 404, "not_found", `没有名为 ${parts[4]} 的节点`);
 
       if (parts.length === 5 && method === "DELETE") {
         hub.agents = hub.agents.filter((a) => a.name !== agent.name);
@@ -240,7 +240,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (parts.length === 6 && parts[5] === "allow_from" && method === "PUT") {
         const body = await readBody(req);
-        if (!Array.isArray(body?.allow_from)) return fail(res, 400, "invalid_request", "allow_from must be an array of strings");
+        if (!Array.isArray(body?.allow_from)) return fail(res, 400, "invalid_request", "allow_from 必须是字符串数组");
         agent.allow_from = body.allow_from.map(String);
         return send(res, 200, agent);
       }
@@ -251,10 +251,10 @@ const server = http.createServer(async (req, res) => {
         return send(res, 204);
       }
     }
-    return fail(res, 404, "not_found", `No route for ${method} ${url.pathname}`);
+    return fail(res, 404, "not_found", `没有匹配的路由：${method} ${url.pathname}`);
   }
 
-  return fail(res, 404, "not_found", `No route for ${method} ${url.pathname}`);
+  return fail(res, 404, "not_found", `没有匹配的路由：${method} ${url.pathname}`);
 });
 
 server.listen(PORT, "127.0.0.1", () => {

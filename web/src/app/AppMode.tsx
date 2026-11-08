@@ -132,17 +132,17 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
               <CircleDot className="h-3 w-3" />App
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
-              <Tip content={error ? "Cannot reach the app backend" : fresh ? `Refreshes every ${POLL_MS / 1000} seconds` : "Data may be stale"}>
+              <Tip content={error ? "无法连接 App 后端" : fresh ? `每 ${POLL_MS / 1000} 秒自动刷新` : "数据可能已过期"}>
                 <span className={cn("mr-1 hidden items-center gap-2 text-xs sm:inline-flex", error ? "text-destructive" : "text-muted-foreground")}>
                   {error ? <WifiOff className="h-3.5 w-3.5" /> : <span className={cn("h-1.5 w-1.5 rounded-full", fresh ? "bg-working shadow-[0_0_0_3px_hsl(var(--working)/0.15)]" : "bg-offline")} />}
-                  {hubs.length ? `${up}/${hubs.length} hubs` : "no hubs"}
+                  {hubs.length ? `${up}/${hubs.length} 个 Hub` : "未添加 Hub"}
                   {ov ? ` · ${timeAgo(ov.generated_at, now)}` : ""}
                 </span>
               </Tip>
-              <Button variant="ghost" size="icon" onClick={() => void refresh()} aria-label="Refresh">
+              <Button variant="ghost" size="icon" onClick={() => void refresh()} aria-label="刷新">
                 <RefreshCw className={cn(loading && "animate-spin")} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setDark(!dark)} aria-label="Toggle theme">
+              <Button variant="ghost" size="icon" onClick={() => setDark(!dark)} aria-label="切换主题">
                 {dark ? <Sun /> : <Moon />}
               </Button>
             </div>
@@ -159,13 +159,13 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
             onRemove={(hub) => { setRemoveError(null); setRemoveTarget(hub); }}
           />
 
-          <main className="min-w-0 flex-1 overflow-y-auto scrollbar-thin">
-            <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6">
+          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin">
+            <div className="mx-auto min-w-0 max-w-6xl space-y-6 px-4 py-6 md:px-6">
               {error !== null && (
                 <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/5 p-4 text-sm">
                   <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                   <div className="min-w-0">
-                    <div className="font-medium text-destructive">Cannot load app data</div>
+                    <div className="font-medium text-destructive">无法获取 App 数据</div>
                     <div className="mt-0.5 break-words text-muted-foreground">{errorMessage(error)}</div>
                   </div>
                 </Card>
@@ -176,19 +176,19 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
                   <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border bg-gradient-to-b from-card to-muted">
                     <Server className="h-5 w-5 text-muted-foreground" />
                   </span>
-                  <h2 className="mt-4 text-lg font-semibold">Connect your first hub</h2>
+                  <h2 className="mt-4 text-lg font-semibold">连接第一个 Hub</h2>
                   <p className="mt-1.5 text-sm text-muted-foreground">
-                    This app aggregates the agents of every hub you add. Each hub stays independent; the console token is stored in your keychain and never shown again.
+                    这个 App 会汇总你添加的所有 Hub 上的 agent。每个 Hub 相互独立；控制台令牌保存在钥匙串里，不会再显示。
                   </p>
                   <div className="mt-5 rounded-lg border bg-muted/40 p-4 text-left">
                     <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <Terminal className="h-3.5 w-3.5" />On the hub machine, create a console token:
+                      <Terminal className="h-3.5 w-3.5" />在 Hub 所在机器上创建控制台令牌：
                     </div>
                     <code className="mt-2 block break-all rounded-md bg-background px-3 py-2 font-mono text-xs">
-                      myco console token create --name {`<device name>`}
+                      myco console token create --name {`<设备名>`}
                     </code>
                   </div>
-                  <Button className="mt-5" onClick={() => setAddOpen(true)}><Plus />Add hub</Button>
+                  <Button className="mt-5" onClick={() => setAddOpen(true)}><Plus />添加 Hub</Button>
                 </Card>
               ) : !ov ? (
                 <div className="space-y-4">
@@ -208,8 +208,8 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
                     onOpen={(r) => setOpen({ hubId: r.hub.id, name: r.st.agent.name })}
                   />
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-4 text-xs text-muted-foreground/70">
-                    <span>Every 5 seconds, paused while the window is hidden. Data comes from each hub's /v1/overview.</span>
-                    <Button variant="outline" size="sm" className="md:hidden" onClick={() => setAddOpen(true)}><Plus />Add hub</Button>
+                    <span>每 5 秒自动刷新，窗口不可见时暂停。数据来自各 Hub 的 /v1/overview。</span>
+                    <Button variant="outline" size="sm" className="md:hidden" onClick={() => setAddOpen(true)}><Plus />添加 Hub</Button>
                   </div>
                 </>
               )}
@@ -222,10 +222,10 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
         <ConfirmDialog
           open={!!removeTarget}
           onOpenChange={(o) => !o && setRemoveTarget(null)}
-          title={removeTarget ? `Remove ${removeTarget.name}?` : ""}
-          description="The hub is removed from this app only. Nothing changes on the hub itself, and its agents keep running."
-          consequences={<p>You will stop seeing this hub's agents and can only re-add it with its console token.</p>}
-          confirmLabel="Remove hub"
+          title={removeTarget ? `移除 ${removeTarget.name}？` : ""}
+          description="只会从这个 App 里移除。Hub 本身和它上面的 agent 都不受影响，仍在照常运行。"
+          consequences={<p>你将看不到这个 Hub 的节点，之后只能凭控制台令牌重新添加。</p>}
+          confirmLabel="移除 Hub"
           busy={removeBusy}
           error={removeError !== null ? errorMessage(removeError) : undefined}
           onConfirm={() => void removeHub()}
@@ -247,7 +247,7 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
             <SheetContent className="max-w-2xl">
               <div className="border-b p-6 pr-12">
                 <div className="mb-1 text-xs text-muted-foreground">{thread.hubName}</div>
-                <SheetTitle className="text-lg font-semibold">Thread</SheetTitle>
+                <SheetTitle className="text-lg font-semibold">对话线程</SheetTitle>
                 <SheetDescription className="mt-1 font-mono text-xs">{thread.id}</SheetDescription>
               </div>
               <div className="flex-1 space-y-4 overflow-y-auto p-6 scrollbar-thin">
@@ -255,7 +255,7 @@ export default function AppMode({ initialHubs }: { initialHubs: Hub[] }) {
                 {!thread.messages ? (
                   Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20" />)
                 ) : thread.messages.length === 0 ? (
-                  !thread.error && <p className="text-sm text-muted-foreground">This thread has no messages.</p>
+                  !thread.error && <p className="text-sm text-muted-foreground">这个线程还没有消息。</p>
                 ) : (
                   thread.messages.map((m) => <MessageBubble key={m.id} m={m} />)
                 )}
