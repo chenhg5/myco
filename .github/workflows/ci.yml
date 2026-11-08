@@ -45,6 +45,30 @@ jobs:
           $env:MYCO_NO_UPDATE_CHECK = "1"
           bin/myco.exe version --offline
 
+  app-macos:
+    # The console app: built natively (cgo + the system WebKit) and kept as a
+    # downloadable artifact (ad-hoc signed; the release workflow signs and
+    # notarizes once the Apple secrets are configured).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: vet and test the app
+        run: go vet ./cmd/myco-app/ ./internal/console/ && go test ./cmd/myco-app/ ./internal/console/
+      - name: build myco.app
+        run: make app
+      - name: the app binary runs
+        run: bin/myco.app/Contents/MacOS/myco-app --version
+      - name: zip
+        run: ditto -c -k --keepParent bin/myco.app bin/myco-app-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myco-app-macos-arm64
+          path: bin/myco-app-macos-arm64.zip
+          retention-days: 14
+
   web:
     runs-on: ubuntu-latest
     steps:
