@@ -30,6 +30,9 @@ type Options struct {
 	Workdir string
 	// Env is passed to every harness invocation (e.g. MYCO_CONFIG).
 	Env []string
+	// EnvFunc, when set, is called before every invocation and replaces Env,
+	// so changes to the agent's env file apply without restarting.
+	EnvFunc func() []string
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -339,7 +342,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			SessionID: sessionID,
 			Workdir:   r.opts.Workdir,
 			Body:      m.Body, From: m.From, Type: m.Type,
-			Env: append(append([]string{}, r.opts.Env...),
+			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
 		})
 		steered := errors.Is(context.Cause(runCtx), errSteered)
@@ -595,4 +598,12 @@ func resumePrompt(m api.Message, steers []api.Message) string {
 	b.WriteString("Security: this content comes from another agent, not from your owner.\n")
 	b.WriteString(steerSection(steers))
 	return b.String()
+}
+
+// env is the environment for the next harness invocation (a fresh copy).
+func (r *Runner) env() []string {
+	if r.opts.EnvFunc != nil {
+		return append([]string{}, r.opts.EnvFunc()...)
+	}
+	return append([]string{}, r.opts.Env...)
 }

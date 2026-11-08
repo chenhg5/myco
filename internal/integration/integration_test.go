@@ -30,6 +30,7 @@ import (
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/cli"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/hubserver"
 	"github.com/chenhg5/myco/internal/infra/sqlite"
 	"github.com/chenhg5/myco/internal/osutil"
@@ -763,5 +764,56 @@ func TestUpdateNoticesNeverBlock(t *testing.T) {
 		}, true)
 	if strings.Contains(errb.String(), "notice") {
 		t.Fatal("notice despite MYCO_NO_UPDATE_CHECK=1")
+	}
+}
+
+// The runner reads the agent's env file before every turn: adding
+// runner.env_file to the profile (or re-capturing it) applies to the next
+// message without restarting the runner.
+func TestRunnerPicksUpEnvFileWithoutRestart(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	alice := newCLI(t, h, filepath.Join(home, "alice.yaml"))
+	workerCfg := filepath.Join(home, "worker.yaml")
+	worker := newCLI(t, h, workerCfg)
+	alice.must(c, "agent", "register", "--name", "alice")
+	worker.must(c, "agent", "register", "--name", "worker", "--harness", "shell")
+
+	rctx, stop := context.WithCancel(c)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		worker.run(rctx, "runner", "start", "--harness", "shell", "--command", `echo "key=$PROVIDER_KEY"`, "--workdir", t.TempDir(), "--log-level", "error")
+	}()
+	t.Cleanup(func() { stop(); <-done })
+
+	ask := func() string {
+		return alice.must(c, "message", "send", "--to", "worker", "--body", "key?", "--wait", "20s")
+	}
+	if out := ask(); !strings.Contains(out, "key=") || strings.Contains(out, "key=k1") {
+		t.Fatalf("before the env file: %s", out)
+	}
+	envFile := filepath.Join(home, "worker.env")
+	if err := os.WriteFile(envFile, []byte("PROVIDER_KEY=k1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(workerCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Runner.EnvFile = envFile
+	if err := config.Save(workerCfg, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if out := ask(); !strings.Contains(out, "key=k1") {
+		t.Fatalf("the running runner did not pick up the new env file: %s", out)
+	}
+	if err := os.WriteFile(envFile, []byte("PROVIDER_KEY=k2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := ask(); !strings.Contains(out, "key=k2") {
+		t.Fatalf("a re-captured env file did not apply: %s", out)
 	}
 }
