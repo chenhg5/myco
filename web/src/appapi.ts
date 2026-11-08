@@ -31,7 +31,8 @@ export interface PendingLink { link: string }
 export interface ProfileInput { display_name?: string; description?: string }
 
 /** CLIs that a machine can be asked to start a new session with. */
-export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode";
+/** An agent CLI to start a session with, or "shell": a command run for every message. */
+export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "shell";
 export interface SpawnInput {
   cli: SpawnCli;
   /** Directory on that machine; `~/...` is that machine's home directory. */
@@ -40,6 +41,8 @@ export interface SpawnInput {
   description?: string;
   model?: string;
   access?: RuntimeAccess;
+  /** A shell node's command line (cli "shell"). */
+  command?: string;
 }
 export interface SpawnResult {
   agent: Agent;

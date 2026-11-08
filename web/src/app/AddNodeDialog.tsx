@@ -19,7 +19,7 @@ type Tab = "local" | "link" | "new";
 const TABS: { value: Tab; label: string }[] = [
   { value: "local", get label() { return L("本机的 agent", "Agent on this computer"); } },
   { value: "link", get label() { return L("其他电脑上的 agent", "Agent on another computer"); } },
-  { value: "new", get label() { return L("在机器上开新会话", "New session on a machine"); } },
+  { value: "new", get label() { return L("在机器上新建", "New on a machine"); } },
 ];
 
 const CLIS: { value: SpawnCli; label: string }[] = [
@@ -30,6 +30,7 @@ const CLIS: { value: SpawnCli; label: string }[] = [
   { value: "cursor", label: "Cursor" },
   { value: "gemini", label: "Gemini CLI" },
   { value: "opencode", label: "OpenCode" },
+  { value: "shell", get label() { return L("命令（shell 节点）", "Command (shell node)"); } },
 ];
 
 const ACCESS: { value: RuntimeAccess; label: string }[] = [
@@ -53,6 +54,8 @@ function dirName(dir: string): string {
 function cliIcon(cli: string) {
   return cli === "codex" ? Code2 : Sparkles;
 }
+
+const isShell = (cli: string) => cli === "shell";
 
 /** Opens a new session, joins one already on this computer, or hands a link
  *  to another computer. */
@@ -80,6 +83,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("");
+  const [command, setCommand] = useState("");
   const [access, setAccess] = useState<RuntimeAccess>("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -122,6 +126,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
     setDir("");
     setName("");
     setDescription("");
+    setCommand("");
     setModel("");
     setAccess("workspace");
     setBusy(false);
@@ -208,18 +213,26 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hubId || !machineId || !dir.trim()) return;
+    if (!hubId || !machineId || !dir.trim() || (isShell(cli) && !command.trim())) return;
     setBusy(true);
     setError(null);
     try {
-      const r = await appApi.spawn(hubId, machineId, {
-        cli,
-        dir: dir.trim(),
-        ...(name.trim() ? { name: name.trim() } : {}),
-        ...(description.trim() ? { description: description.trim() } : {}),
-        ...(model.trim() ? { model: model.trim() } : {}),
-        access,
-      });
+      const r = await appApi.spawn(hubId, machineId, isShell(cli)
+        ? {
+          cli,
+          dir: dir.trim(),
+          command: command.trim(),
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(description.trim() ? { description: description.trim() } : {}),
+        }
+        : {
+          cli,
+          dir: dir.trim(),
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          ...(model.trim() ? { model: model.trim() } : {}),
+          access,
+        });
       setResult(r);
       onSpawned(hubId, r.agent);
     } catch (err) {
@@ -471,7 +484,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               <Check />
               <span>{L(`已启动 ${result.agent.display_name || result.agent.name}`, `Started ${result.agent.display_name || result.agent.name}`)}</span>
             </div>
-            <div className="app-reply">{result.reply}</div>
+            {result.reply && <div className="app-reply">{result.reply}</div>}
             <div className="app-hint">{L("新节点已经加到节点列表里，会用绿色标记一会儿。", "The new node was added to the node list and is highlighted in green for a moment.")}</div>
             <div className="app-modal-actions">
               <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
@@ -517,7 +530,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             )}
 
             <label className="app-field">
-              <span className="app-field-label">CLI</span>
+              <span className="app-field-label">{L("类型", "Type")}</span>
               <select
                 className="app-select-field"
                 value={cli}
@@ -540,6 +553,29 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               />
             </label>
 
+            {isShell(cli) && (
+              <>
+                <label className="app-field">
+                  <span className="app-field-label">{L("命令", "Command")}</span>
+                  <input
+                    className="app-input mono"
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    placeholder="./scripts/build.sh"
+                    disabled={busy}
+                    required
+                  />
+                </label>
+                <div className="app-small-note">
+                  {L("每收到一条消息就在这个目录里运行一次：消息内容从标准输入传进去，命令的输出就是回复。", "Runs once in this folder for every message: the message arrives on standard input, and the command's output is the reply.")}
+                </div>
+                <div className="app-warn">
+                  <AlertTriangle />
+                  <span>{L("命令能做那台机器上用户能做的任何事，所以只有那台机器在本地允许完全权限（~/.myco/machine.yaml 里 spawn.max_access: full）时才能添加。", "A command can do anything that machine's user can, so it can only be added where that machine allows full access locally (spawn.max_access: full in ~/.myco/machine.yaml).")}</span>
+                </div>
+              </>
+            )}
+
             <label className="app-field">
               <span className="app-field-label">{L("名称（可选）", "Name (optional)")}</span>
               <input
@@ -561,6 +597,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               />
             </label>
 
+            {!isShell(cli) && (<>
             <label className="app-field">
               <span className="app-field-label">{L("模型（可选）", "Model (optional)")}</span>
               <input
@@ -596,11 +633,12 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                 <span>{L("完全权限可以让它读写那台机器上的任何文件，需要在那台机器上本地允许。", "Full access lets it read and write any file on that machine, and must be allowed locally on that machine.")}</span>
               </div>
             )}
+            </>)}
 
             <ErrorText error={error} />
             {busy && (
               <div className="app-progress">
-                <span className="app-spinner" />{L("正在那台机器上启动会话，可能需要一两分钟…", "Starting the session on that machine. This can take a minute or two…")}
+                <span className="app-spinner" />{isShell(cli) ? L("正在那台机器上添加…", "Adding it on that machine…") : L("正在那台机器上启动会话，可能需要一两分钟…", "Starting the session on that machine. This can take a minute or two…")}
               </div>
             )}
             <div className="app-modal-actions">
@@ -608,9 +646,9 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               <button
                 type="submit"
                 className="app-btn app-btn-primary"
-                disabled={busy || !hubId || !machineId || !dir.trim()}
+                disabled={busy || !hubId || !machineId || !dir.trim() || (isShell(cli) && !command.trim())}
               >
-                {busy ? L("正在启动…", "Starting…") : L("开始会话", "Start session")}
+                {busy ? L("正在启动…", "Starting…") : isShell(cli) ? L("添加节点", "Add node") : L("开始会话", "Start session")}
               </button>
             </div>
           </form>

@@ -38,6 +38,9 @@ const Name = "machine"
 // sessions, so the new agent resumes the same conversation every time).
 var SpawnableCLIs = []string{"claude", "codex", "pi", "kiro", "cursor", "gemini", "opencode"}
 
+// ShellCLI spawns a shell node: a command run for every message, no session.
+const ShellCLI = "shell"
+
 // credentialDirs are never valid working directories for a spawned session.
 var credentialDirs = osutil.CredentialDirs
 
@@ -55,6 +58,8 @@ type Policy struct {
 type Plan struct {
 	CLI, Name, Workdir string
 	Access             harness.Access
+	// Command is a shell node's command line.
+	Command string
 }
 
 // Deps are the effects a spawn needs, injected by the CLI layer.
@@ -110,6 +115,16 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	plan, err := n.Check(sr)
 	if err != nil {
 		return denied("%v", err)
+	}
+	if plan.CLI == ShellCLI { // no session to start: join with the command
+		name, err := n.Deps.Enroll(ctx, plan, sr, "")
+		if err != nil {
+			return failed(plan, "joining the shell node failed: %v", err)
+		}
+		if n.Deps.Spawned != nil {
+			n.Deps.Spawned()
+		}
+		return api.SpawnResult{Agent: name, CLI: plan.CLI, Workdir: plan.Workdir, Access: string(plan.Access)}
 	}
 	if n.Deps.Installed != nil && !n.Deps.Installed(plan.CLI) {
 		return denied("%s is not installed on machine %s", plan.CLI, n.Machine)
@@ -168,8 +183,11 @@ func (n *Node) Check(sr api.SpawnRequest) (Plan, error) {
 	if cli == "" {
 		cli = "claude"
 	}
+	if cli == ShellCLI {
+		return n.checkShell(sr)
+	}
 	if !slices.Contains(SpawnableCLIs, cli) {
-		return Plan{}, fmt.Errorf("cannot spawn %q: supported CLIs are %s", cli, strings.Join(SpawnableCLIs, ", "))
+		return Plan{}, fmt.Errorf("cannot spawn %q: supported CLIs are %s, or shell", cli, strings.Join(SpawnableCLIs, ", "))
 	}
 	access, err := n.access(sr.Access)
 	if err != nil {
@@ -303,4 +321,29 @@ func denied(format string, args ...any) api.SpawnResult {
 
 func failed(p Plan, format string, args ...any) api.SpawnResult {
 	return api.SpawnResult{CLI: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Error: fmt.Sprintf(format, args...)}
+}
+
+// checkShell validates a shell node: its command runs with the runner
+// user's full rights, so the machine must allow full access.
+func (n *Node) checkShell(sr api.SpawnRequest) (Plan, error) {
+	cmd := strings.TrimSpace(sr.Command)
+	if cmd == "" {
+		return Plan{}, errors.New("a shell node needs the command to run for each message")
+	}
+	if strings.ContainsRune(cmd, 0) || len(cmd) > 4096 {
+		return Plan{}, errors.New("the command must be under 4096 characters")
+	}
+	if n.Policy.MaxAccess != harness.AccessFull {
+		limit := n.Policy.MaxAccess
+		if limit == "" {
+			limit = harness.AccessWorkspace
+		}
+		return Plan{}, fmt.Errorf("a shell node runs its command with full rights, but machine %s allows at most %s; the machine's owner can allow it with spawn.max_access: full in ~/.myco/machine.yaml",
+			n.Machine, limit)
+	}
+	dir, err := n.dir(sr.Dir)
+	if err != nil {
+		return Plan{}, err
+	}
+	return Plan{CLI: ShellCLI, Name: n.name(sr.Name, ShellCLI, dir), Workdir: dir, Access: harness.AccessFull, Command: cmd}, nil
 }

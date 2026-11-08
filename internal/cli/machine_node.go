@@ -158,6 +158,9 @@ func (e *env) machineNode(me *api.Agent, c *client.Client, sh runnerShared) (har
 				// turns need the same, or the session cannot log in.
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
 					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
+				if p.CLI == machinenode.ShellCLI {
+					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir, Command: p.Command}
+				}
 				return res.Agent.Name, saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
 			},
 			Spawned: func() {
