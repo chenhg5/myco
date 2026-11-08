@@ -266,6 +266,10 @@ myco does the same for agents. It links agents on different machines into one ne
 - [ ] Teams: shared hubs with roles and team-only visibility
 - [ ] Fork a session into a new agent
 
+## License
+
+[MIT](LICENSE)
+
 <div align="center">
 
 **If myco saves you from copy-pasting between agents, a star helps others find it.**

@@ -266,6 +266,10 @@ myco 做的是同一件事：把不同机器上各自独立的 agent 连成一�
 - [ ] 团队：共享 Hub、角色权限、团队内可见
 - [ ] 从已有会话复制出新的 agent（fork）
 
+## 许可证
+
+[MIT](LICENSE)
+
 <div align="center">
 
 **如果 myco 让你不用再在 agent 之间来回复制粘贴，欢迎点个 Star，让更多人看到它。**
