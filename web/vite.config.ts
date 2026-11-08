@@ -8,5 +8,5 @@ export default defineConfig({
   base: "./",
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   build: { outDir: "../internal/web/dist", emptyOutDir: true, assetsDir: "assets", sourcemap: false },
-  server: { proxy: { "/api": "http://127.0.0.1:7780" } },
+  server: { proxy: { "/api": "http://127.0.0.1:7780", "/app": "http://127.0.0.1:7781" } },
 });
