@@ -58,6 +58,11 @@ type MessageRepository interface {
 	// ListRecent returns the most recently updated messages; with agent set,
 	// only those it sent or received.
 	ListRecent(ctx context.Context, agent AgentName, limit int) ([]*Message, error)
+	// ListThreads returns the ids of threads with a message from or to a
+	// sender starting with senderPrefix, most recently updated first;
+	// optionally only threads with agent in them, or a message containing
+	// query. before (unix ms, 0 = now) pages back.
+	ListThreads(ctx context.Context, senderPrefix string, agent AgentName, query string, before int64, limit int) ([]ThreadRef, error)
 	// CreateMany stores several new messages atomically.
 	CreateMany(ctx context.Context, ms []*Message) error
 	// ListDue returns (without claiming) up to limit messages deliverable to
@@ -72,4 +77,10 @@ type MessageRepository interface {
 	// the messages for which claim returned true.
 	// With types set, only messages of those types are considered.
 	ClaimDue(ctx context.Context, recipient AgentName, now time.Time, limit int, types []MessageType, claim func(*Message) bool) ([]*Message, error)
+}
+
+// ThreadRef is a thread and when it was last updated.
+type ThreadRef struct {
+	ID        string
+	UpdatedAt time.Time
 }

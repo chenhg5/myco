@@ -642,3 +642,35 @@ func (c *Client) SpawnOnMachine(ctx context.Context, id string, req api.SpawnReq
 	q := url.Values{"wait_seconds": {strconv.Itoa(int(wait.Seconds()))}}
 	return &out, c.do(ctx, http.MethodPost, "/v1/machines/"+esc(id)+"/spawn", q, req, &out)
 }
+
+// ConsoleSend sends a message as the administrator from the console app
+// (admin or console token); the sender is "@console:<device>".
+func (c *Client) ConsoleSend(ctx context.Context, req api.SendRequest) (*api.SendResponse, error) {
+	var out api.SendResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages", nil, req, &out)
+}
+
+// ConsoleSteer corrects a task sent from the console.
+func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Message, error) {
+	var out api.Message
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body}, &out)
+}
+
+// Conversations lists the console's threads (admin or console token).
+func (c *Client) Conversations(ctx context.Context, agent, query string, before int64, limit int) ([]api.Conversation, error) {
+	q := url.Values{}
+	if agent != "" {
+		q.Set("agent", agent)
+	}
+	if query != "" {
+		q.Set("q", query)
+	}
+	if before > 0 {
+		q.Set("before", strconv.FormatInt(before, 10))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out api.ConversationList
+	return out.Conversations, c.do(ctx, http.MethodGet, "/v1/console/conversations", q, nil, &out)
+}

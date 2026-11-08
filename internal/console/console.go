@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -272,6 +273,43 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/messages", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.SendRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.ConsoleSend(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, res.Message)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/steer", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.SteerRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.ConsoleSteer(r.Context(), r.PathValue("mid"), in.Body)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/conversations", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+		cs, err := c.Conversations(r.Context(), q.Get("agent"), q.Get("q"), before, 0)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if cs == nil {
+			cs = []api.Conversation{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
 	}))
 	m.HandleFunc("PATCH /app/hubs/{id}/machines/{mid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {

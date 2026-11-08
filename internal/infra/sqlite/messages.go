@@ -252,3 +252,44 @@ func scanMessage(s scanner) (*domain.Message, error) {
 	m.LeaseUntil, m.CreatedAt, m.UpdatedAt = fromMS(lease), fromMS(created), fromMS(updated)
 	return &m, nil
 }
+
+func (r *MessageRepo) ListThreads(ctx context.Context, senderPrefix string, agent domain.AgentName, query string, before int64, limit int) ([]domain.ThreadRef, error) {
+	like := escapeLike(senderPrefix) + "%"
+	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages
+		WHERE thread_id IN (SELECT thread_id FROM messages WHERE from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
+	args := []any{like, like}
+	if agent != "" {
+		q += ` AND thread_id IN (SELECT thread_id FROM messages WHERE from_agent=? OR to_agent=?)`
+		args = append(args, agent, agent)
+	}
+	if query != "" {
+		q += ` AND thread_id IN (SELECT thread_id FROM messages WHERE body LIKE ? ESCAPE '\')`
+		args = append(args, "%"+escapeLike(query)+"%")
+	}
+	q += ` GROUP BY thread_id`
+	if before > 0 {
+		q += ` HAVING u < ?`
+		args = append(args, before)
+	}
+	q += ` ORDER BY u DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	var out []domain.ThreadRef
+	for rows.Next() {
+		var id string
+		var u int64
+		if err := rows.Scan(&id, &u); err != nil {
+			return nil, internal(err)
+		}
+		out = append(out, domain.ThreadRef{ID: id, UpdatedAt: fromMS(u)})
+	}
+	return out, internal(rows.Err())
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
+}

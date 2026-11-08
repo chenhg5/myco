@@ -547,3 +547,24 @@ type CreateConsoleTokenResponse struct {
 type ConsoleTokenList struct {
 	Tokens []ConsoleToken `json:"tokens"`
 }
+
+// Conversation is a thread the console (the administrator, from the app)
+// takes part in.
+type Conversation struct {
+	ThreadID  string    `json:"thread_id"`
+	Agent     string    `json:"agent,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+	First     Message   `json:"first"`
+	Last      Message   `json:"last"`
+	Messages  int       `json:"messages"`
+}
+
+// ConversationList is the body of GET /v1/console/conversations.
+type ConversationList struct {
+	Conversations []Conversation `json:"conversations"`
+}
+
+// SteerRequest is the body of POST /v1/console/messages/{id}/steer.
+type SteerRequest struct {
+	Body string `json:"body"`
+}

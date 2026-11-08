@@ -112,6 +112,10 @@ func (s *Server) routes() {
 	// leaked console token cannot mint more.
 	m.HandleFunc("POST /v1/console/tokens", s.masterAdmin(s.createConsoleToken))
 	m.HandleFunc("GET /v1/console/tokens", s.masterAdmin(s.listConsoleTokens))
+	// The administrator talking to agents from the console app.
+	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
+	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
+	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	m.HandleFunc("POST /v1/enrollments", s.admin(s.createEnrollment))
 	m.HandleFunc("GET /v1/enrollments", s.admin(s.listEnrollments))
@@ -1184,4 +1188,65 @@ a.btn{display:inline-block;background:#10b981;color:#fff;padding:9px 16px;border
 <p>在 myco App 里选择"连接已有的 Hub"，粘贴这个链接即可。</p>
 <p><a class="btn" href="myco://add-hub?link=%s">用 myco App 打开</a></p>
 <p><small>这个链接带有管理这个 Hub 的权限，不要发到公开的地方。</small></p></html>`, esc(url.QueryEscape(link)))
+}
+
+// consoleDevice names the caller for console messages: the console token's
+// device, or "admin" for the hub's own admin token.
+func (s *Server) consoleDevice(r *http.Request) string {
+	if s.console != nil && !s.isMasterAdmin(r) {
+		if t, ok := s.console.Authenticate(r.Context(), bearer(r)); ok {
+			return t.Name
+		}
+	}
+	return "admin"
+}
+
+func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
+	var req api.SendRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	out, err := s.messages.SendFromConsole(r.Context(), s.consoleDevice(r), app.SendInput{
+		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
+		Attachments: req.Attachments,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusCreated
+	if out.Duplicate {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, ViaAlias: string(out.ViaAlias)})
+}
+
+func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
+	var req api.SteerRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	m, err := s.messages.SteerFromConsole(r.Context(), s.consoleDevice(r), r.PathValue("id"), req.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, messageDTO(m))
+}
+
+func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	cs, err := s.messages.Conversations(r.Context(), q.Get("agent"), q.Get("q"), before, limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.ConversationList{Conversations: make([]api.Conversation, 0, len(cs))}
+	for _, c := range cs {
+		out.Conversations = append(out.Conversations, api.Conversation{ThreadID: c.ThreadID, Agent: string(c.Agent), UpdatedAt: c.UpdatedAt,
+			First: messageDTO(c.First), Last: messageDTO(c.Last), Messages: c.Messages})
+	}
+	writeJSON(w, http.StatusOK, out)
 }

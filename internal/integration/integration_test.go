@@ -1117,3 +1117,70 @@ func TestConsoleAppLink(t *testing.T) {
 		}
 	}
 }
+
+// The administrator talks to agents from the console app: as
+// "@console:<device>", past allow_from; conversations list the threads,
+// with search and an agent filter; tasks can be corrected (steer).
+func TestConsoleConversations(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	workerTok := h.register(api.RegisterRequest{Name: "worker", AllowFrom: []string{"lead"}})
+	otherTok := h.register(api.RegisterRequest{Name: "other"})
+	h.register(api.RegisterRequest{Name: "lead"})
+	ct, err := h.admin().CreateConsoleToken(c, "glenn-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	con := h.client(ct.Token)
+	worker, other := h.client(workerTok), h.client(otherTok)
+
+	sent, err := con.ConsoleSend(c, api.SendRequest{To: "worker", Body: "请把 README 的安装一节改短"})
+	if err != nil || sent.Message.From != "@console:glenn-mac" {
+		t.Fatalf("console send (worker only allows lead): %v %+v", err, sent)
+	}
+	if _, err := con.ConsoleSend(c, api.SendRequest{To: "other", Body: "检查一下 CI"}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := worker.Pull(c, 10, 0)
+	if err != nil || len(msgs) != 1 || msgs[0].From != "@console:glenn-mac" {
+		t.Fatalf("worker pull: %v %+v", err, msgs)
+	}
+	if _, err := con.ConsoleSteer(c, sent.Message.ID, "只改安装一节"); err != nil {
+		t.Fatalf("steer: %v", err)
+	}
+	if _, err := worker.Reply(c, sent.Message.ID, "改好了：```bash\nmyco join\n```", false); err != nil {
+		t.Fatal(err)
+	}
+
+	cs, err := con.Conversations(c, "", "", 0, 0)
+	if err != nil || len(cs) != 2 || cs[0].Agent != "worker" || cs[0].Messages != 3 || cs[0].Last.Type != "reply" || cs[0].First.Body != "请把 README 的安装一节改短" {
+		t.Fatalf("conversations: %v %+v", err, cs)
+	}
+	if cs, _ := con.Conversations(c, "other", "", 0, 0); len(cs) != 1 || cs[0].Agent != "other" {
+		t.Fatalf("agent filter: %+v", cs)
+	}
+	if cs, _ := con.Conversations(c, "", "myco join", 0, 0); len(cs) != 1 || cs[0].Agent != "worker" {
+		t.Fatalf("search: %+v", cs)
+	}
+	if cs, _ := con.Conversations(c, "", "100%", 0, 0); len(cs) != 0 {
+		t.Fatalf("LIKE wildcards must be literal: %+v", cs)
+	}
+	// Same conversation, next message: the same thread.
+	next, err := con.ConsoleSend(c, api.SendRequest{To: "worker", Body: "再加一个例子", ThreadID: sent.Message.ThreadID})
+	if err != nil || next.Message.ThreadID != sent.Message.ThreadID {
+		t.Fatalf("follow-up: %v %+v", err, next)
+	}
+
+	// Agents cannot use the console routes, nor write to the console.
+	if _, err := other.ConsoleSend(c, api.SendRequest{To: "worker", Body: "x"}); err == nil {
+		t.Fatal("an agent sent as the console")
+	}
+	if _, err := other.Send(c, api.SendRequest{To: "@console:glenn-mac", Body: "x"}, false); err == nil {
+		t.Fatal("an agent messaged the console directly")
+	}
+	lead := h.client(h.register(api.RegisterRequest{Name: "lead2"}))
+	task, _ := lead.Send(c, api.SendRequest{To: "other", Body: "y"}, false)
+	if _, err := con.ConsoleSteer(c, task.Message.ID, "z"); err == nil {
+		t.Fatal("the console corrected an agent's task")
+	}
+}
