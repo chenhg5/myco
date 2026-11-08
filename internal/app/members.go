@@ -163,7 +163,9 @@ func (s *MemberService) Invite(ctx context.Context, by Actor, in InviteInput) (*
 	if err := s.repo.Create(ctx, m); err != nil {
 		return nil, "", err
 	}
-	_, plain, err := s.console.CreateFor(ctx, m.ID, name+" (invite)")
+	// The link carries a one-time code (24 hours): the invitee's app trades
+	// it for its own token, so the link is worthless once used.
+	plain, _, err := s.console.CreatePairing(ctx, m.ID)
 	if err != nil {
 		return nil, "", err
 	}

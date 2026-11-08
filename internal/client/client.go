@@ -755,3 +755,28 @@ func (c *Client) Audit(ctx context.Context, f AuditFilter) ([]api.AuditEntry, er
 	var out api.AuditList
 	return out.Entries, c.do(ctx, http.MethodGet, "/v1/audit", q, nil, &out)
 }
+
+// Pair trades a one-time pairing code (from an app link) for this device's
+// own console token. The client needs no token.
+func (c *Client) Pair(ctx context.Context, code, device string) (*api.PairResponse, error) {
+	var out api.PairResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/pair", nil, api.PairRequest{Code: code, Device: device}, &out)
+}
+
+// CreatePairing makes a one-time app link for adding another device of the
+// caller (the owner, for the hub's admin token).
+func (c *Client) CreatePairing(ctx context.Context) (*api.PairingLink, error) {
+	var out api.PairingLink
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/me/pairings", nil, nil, &out)
+}
+
+// Devices lists the caller's devices (console tokens).
+func (c *Client) Devices(ctx context.Context) ([]api.ConsoleToken, error) {
+	var out api.DeviceList
+	return out.Devices, c.do(ctx, http.MethodGet, "/v1/console/me/devices", nil, nil, &out)
+}
+
+// RemoveDevice revokes one of the caller's devices.
+func (c *Client) RemoveDevice(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/console/me/devices/"+esc(id), nil, nil, nil)
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { UserPlus } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
-import type { AuditEntry, Member, MemberRole } from "@/api";
+import type { AuditEntry, Device, Member, MemberRole } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { L, locale } from "@/lib/i18n";
@@ -33,7 +33,7 @@ function NoMembers({ hubsOv }: { hubsOv?: HubOverview[] }) {
     <section className="app-setting-card">
       <p className="app-small-note">
         {any
-          ? L("这里的 Hub 还不支持多人。把 Hub 升级到最新版本后，就可以邀请同事、给每个人分配角色。", "These Hubs don’t support several people yet. Upgrade the Hub to the latest version to invite colleagues and give each a role.")
+          ? L("这里的 Hub 还不支持多人。把 Hub 升级到最新版本后，就可以邀请成员、给每个人分配角色。", "These Hubs don’t support several people yet. Upgrade the Hub to the latest version to invite colleagues and give each a role.")
           : L("没有连上的 Hub。", "No Hub is connected.")}
       </p>
     </section>
@@ -102,7 +102,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
         </span>
         {manages && (
           <button type="button" className="app-btn app-btn-primary app-members-invite" onClick={() => { setForm({ name: "", display_name: "", role: "member" }); setLink(null); setFormError(null); setInviteOpen(true); }}>
-            <UserPlus />{L("邀请同事", "Invite a colleague")}
+            <UserPlus />{L("邀请成员", "Invite a member")}
           </button>
         )}
       </div>
@@ -145,11 +145,13 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
         </p>
       </section>
 
-      <Modal open={inviteOpen} onOpenChange={(o) => !busy && setInviteOpen(o)} title={L("邀请同事", "Invite a colleague")}
+      <DevicesCard hubId={hub.id} currentId={me.device?.id} />
+
+      <Modal open={inviteOpen} onOpenChange={(o) => !busy && setInviteOpen(o)} title={L("邀请成员", "Invite a member")}
         description={link ? undefined : L("对方用这个链接在自己的 myco App 里打开这个 Hub，身份就是他自己。", "They open this Hub in their own myco app with the link, as themselves.")}>
         {link ? (
           <>
-            <p className="app-modal-note">{L(`把这个链接私下发给 ${link.name}，让他在 myco App 里「添加 Hub」时粘贴。链接只能给他一个人用，移除他之后就失效。`, `Send this link privately to ${link.name} and ask them to paste it under “Add Hub” in the myco app. It is for them only and stops working when you remove them.`)}</p>
+            <p className="app-modal-note">{L(`把这个链接私下发给 ${link.name}，让他在 myco App 里「添加 Hub」时粘贴。链接只能用一次，24 小时内有效；他打开后，他的 App 会拿到自己的凭据，链接随即作废。`, `Send this link privately to ${link.name} and ask them to paste it under “Add Hub” in the myco app. It works once, within 24 hours: their app gets its own credential and the link stops working.`)}</p>
             <div className="app-command"><code>{link.link}</code><CopyButton value={link.link} /></div>
             <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={() => setInviteOpen(false)}>{L("完成", "Done")}</button></div>
           </>
@@ -233,6 +235,9 @@ const ACTIONS: Record<string, () => string> = {
   "alias.set": () => L("设置别名", "Set alias"),
   "alias.remove": () => L("删除别名", "Removed alias"),
   "console_token.create": () => L("生成 App 链接", "Created app link"),
+  "device.add": () => L("添加设备", "Added a device"),
+  "device.remove": () => L("移除设备", "Removed a device"),
+  "device.link": () => L("生成设备链接", "Created a device link"),
   "message.task": () => L("派任务", "Sent a task"),
   "message.note": () => L("发消息", "Sent a message"),
 };
@@ -297,6 +302,97 @@ export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
         )}
         <p className="app-hint">{L("记录管理操作和从 App 派出的任务，不记录消息内容。只追加，不能修改。", "Records administrative actions and tasks sent from the app, never message contents. Append-only.")}</p>
       </section>
+    </>
+  );
+}
+
+/** 我的设备: this person's apps on the hub, a one-time link to add another,
+ *  and removing one (its credential stops working). */
+function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }) {
+  const [devices, setDevices] = useState<Device[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [link, setLink] = useState<{ link: string; expires_at: string } | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<Device | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setDevices((await appApi.devices(hubId)).devices);
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+  }, [hubId]);
+  useEffect(() => { setDevices(null); void load(); }, [load]);
+
+  const makeLink = async () => {
+    setLink(null);
+    setLinkOpen(true);
+    setBusy(true);
+    setError(null);
+    try { setLink(await appApi.createPairing(hubId)); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!removing) return;
+    setBusy(true);
+    try {
+      await appApi.removeDevice(hubId, removing.id);
+      setRemoving(null);
+      await load();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const fmt = (iso?: string) => (iso ? timeAgo(iso, Date.now()) : L("从未", "never"));
+  return (
+    <>
+      <div className="app-members-head app-devices-head">
+        <span className="app-group-title"><span className="name">{L("我的设备", "My devices")}</span></span>
+        <button type="button" className="app-btn app-btn-small app-members-invite" onClick={() => void makeLink()}>{L("添加另一台设备", "Add another device")}</button>
+      </div>
+      <section className="app-setting-card app-members">
+        {!linkOpen && <ErrorText error={error} />}
+        {devices?.map((d) => (
+          <div key={d.id} className="app-member-row">
+            <div className="app-member-name">
+              <b>{d.name}{d.id === currentId && <span className="app-member-you">{L("这台设备", "This device")}</span>}</b>
+              <small>{L(`添加于 ${fmt(d.created_at)} · 最近使用 ${fmt(d.last_used_at)}`, `added ${fmt(d.created_at)} · last used ${fmt(d.last_used_at)}`)}</small>
+            </div>
+            <div className="app-member-actions">
+              <button type="button" className="app-btn app-btn-plain app-btn-small app-danger-text" onClick={() => setRemoving(d)}>{L("移除", "Remove")}</button>
+            </div>
+          </div>
+        ))}
+        <p className="app-hint">{L("每台设备有自己的凭据，存在这台设备的钥匙串里。设备丢了或不用了，在这里移除，它就再也连不上这个 Hub。", "Each device has its own credential, kept in that device’s keychain. If a device is lost or retired, remove it here and it can no longer reach this Hub.")}</p>
+      </section>
+
+      <Modal open={linkOpen} onOpenChange={(o) => !busy && setLinkOpen(o)} title={L("添加另一台设备", "Add another device")}
+        description={L("在另一台设备（比如 Windows 电脑）的 myco App 里「添加 Hub」时粘贴这个链接，它会以你的身份连上这个 Hub。", "Paste this link under “Add Hub” in the myco app on your other device (a Windows PC, say); it connects to this Hub as you.")}>
+        {busy && !link && <div className="app-progress"><span className="app-spinner" />{L("正在生成链接…", "Creating link…")}</div>}
+        <ErrorText error={linkOpen ? error : null} />
+        {link && (
+          <>
+            <div className="app-command"><code>{link.link}</code><CopyButton value={link.link} /></div>
+            <p className="app-modal-note">{L("链接只能用一次，24 小时内有效。别发到公开的地方。", "It works once, within 24 hours. Don’t post it anywhere public.")}</p>
+          </>
+        )}
+        <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={() => { setLinkOpen(false); void load(); }} disabled={busy}>{L("完成", "Done")}</button></div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!removing}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={L(`移除「${removing?.name || ""}」？`, `Remove “${removing?.name || ""}”?`)}
+        description={removing?.id === currentId
+          ? L("这就是你现在用的这台设备：移除后这个 App 会立即连不上这个 Hub，要用新的链接重新添加。", "This is the device you are using: this app loses access to this Hub right away, and you need a new link to add it again.")
+          : L("那台设备上的 App 会立即连不上这个 Hub。", "The app on that device loses access to this Hub right away.")}
+        confirmLabel={L("移除", "Remove")}
+        busy={busy}
+        onConfirm={() => void remove()}
+      />
     </>
   );
 }

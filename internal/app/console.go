@@ -8,6 +8,13 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
+// PairingCodePrefix marks one-time pairing codes (app links that a device
+// exchanges for its own console token).
+const PairingCodePrefix = "myco_pair_"
+
+// PairingTTL is how long a pairing link works.
+const PairingTTL = 24 * time.Hour
+
 // ConsoleTokenPrefix marks console tokens, so they are easy to recognise
 // (and to tell apart from agent tokens) in logs and secret scanners.
 const ConsoleTokenPrefix = "myco_console_"
@@ -19,10 +26,11 @@ const consoleTouchEvery = time.Minute
 // the console app, revocable one by one, so the hub's admin token never has
 // to leave the hub machine.
 type ConsoleService struct {
-	repo   domain.ConsoleTokenRepository
-	tokens TokenIssuer
-	ids    IDGenerator
-	clock  Clock
+	repo     domain.ConsoleTokenRepository
+	pairings domain.ConsolePairingRepository
+	tokens   TokenIssuer
+	ids      IDGenerator
+	clock    Clock
 }
 
 // NewConsoleService wires the console token use cases.
@@ -109,4 +117,54 @@ func (s *ConsoleService) Authenticate(ctx context.Context, plain string) (*domai
 		_ = s.repo.Save(ctx, t) // best effort: a failed touch must not deny access
 	}
 	return t, true
+}
+
+// SetPairings enables one-time pairing codes.
+func (s *ConsoleService) SetPairings(repo domain.ConsolePairingRepository) { s.pairings = repo }
+
+// CreatePairing issues a one-time code for memberID, valid for PairingTTL.
+// The plain code is returned only here.
+func (s *ConsoleService) CreatePairing(ctx context.Context, memberID string) (string, time.Time, error) {
+	if s.pairings == nil {
+		return "", time.Time{}, domain.Errf(domain.CodeNotFound, "pairing links are not enabled on this hub")
+	}
+	plain, _, err := s.tokens.Issue()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	plain = PairingCodePrefix + strings.TrimPrefix(plain, "myco_")
+	now := s.clock.Now()
+	p := &domain.ConsolePairing{ID: s.ids.New("pair"), CodeHash: s.tokens.Hash(plain), MemberID: memberID, CreatedAt: now, ExpiresAt: now.Add(PairingTTL)}
+	return plain, p.ExpiresAt, s.pairings.Create(ctx, p)
+}
+
+// Pair exchanges a pairing code (once) for a new console token of its
+// member, named after the device.
+func (s *ConsoleService) Pair(ctx context.Context, code, device string) (*domain.ConsoleToken, string, error) {
+	if s.pairings == nil || !strings.HasPrefix(code, PairingCodePrefix) {
+		return nil, "", domain.Errf(domain.CodeInvalidArgument, "not a pairing link")
+	}
+	if strings.TrimSpace(device) == "" {
+		device = "device"
+	}
+	p, err := s.pairings.Use(ctx, s.tokens.Hash(code), s.clock.Now())
+	if err != nil {
+		return nil, "", err
+	}
+	return s.CreateFor(ctx, p.MemberID, device)
+}
+
+// Devices lists a member's active console tokens (their devices).
+func (s *ConsoleService) Devices(ctx context.Context, memberID string) ([]*domain.ConsoleToken, error) {
+	list, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []*domain.ConsoleToken
+	for _, t := range list {
+		if t.MemberID == memberID && t.Active() {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }

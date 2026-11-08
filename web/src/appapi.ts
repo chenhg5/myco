@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Machine, Member, MemberRole, Message, Overview, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Device, Machine, Member, MemberRole, Message, Overview, RuntimeAccess, Whoami } from "@/api";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 export interface Hub {
@@ -281,6 +281,11 @@ export const appApi = {
   createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
 
+  /** This person's devices on a hub (each has its own credential). */
+  devices: (hubId: string) => request<{ devices: Device[] }>("GET", `app/hubs/${enc(hubId)}/devices`),
+  removeDevice: (hubId: string, deviceId: string) => request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/devices/${enc(deviceId)}`),
+  /** A one-time link (24 hours) to sign in on another device as yourself. */
+  createPairing: (hubId: string) => request<{ link: string; expires_at: string }>("POST", `app/hubs/${enc(hubId)}/pairings`),
   members: (hubId: string, all = false) =>
     request<{ members: Member[] }>("GET", `app/hubs/${enc(hubId)}/members${all ? "?all=1" : ""}`),
   /** Adds a person; the link opens the hub in their app as them (shown once). */

@@ -3048,3 +3048,5 @@ button.app-label:hover { filter: brightness(0.95); }
 @media (max-width: 560px) { .app-audit-row { grid-template-columns: 1fr; gap: 2px; } }
 .app-action-row:disabled, .app-labels-summary:disabled { opacity: .5; cursor: not-allowed; }
 .app-action-row:disabled:hover, .app-labels-summary:disabled:hover { background: none; }
+.app-devices-head { margin-top: 18px; }
+.app-devices-head .app-group-title { margin: 0; }

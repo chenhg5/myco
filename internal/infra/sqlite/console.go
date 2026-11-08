@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/chenhg5/myco/internal/domain"
 )
@@ -82,4 +83,38 @@ func scanConsoleToken(s scanner) (*domain.ConsoleToken, error) {
 	}
 	t.CreatedAt, t.LastUsedAt, t.RevokedAt = fromMS(created), fromMS(used), fromMS(revoked)
 	return &t, nil
+}
+
+// ConsolePairingRepo implements domain.ConsolePairingRepository.
+type ConsolePairingRepo struct{ db *sql.DB }
+
+// NewConsolePairingRepo returns a SQLite-backed pairing code store.
+func NewConsolePairingRepo(db *sql.DB) *ConsolePairingRepo { return &ConsolePairingRepo{db: db} }
+
+var _ domain.ConsolePairingRepository = (*ConsolePairingRepo)(nil)
+
+func (r *ConsolePairingRepo) Create(ctx context.Context, p *domain.ConsolePairing) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO console_pairings (id, code_hash, member_id, created_at, expires_at, used_at) VALUES (?,?,?,?,?,?)`,
+		p.ID, p.CodeHash, p.MemberID, ms(p.CreatedAt), ms(p.ExpiresAt), ms(p.UsedAt))
+	return internal(err)
+}
+
+func (r *ConsolePairingRepo) Use(ctx context.Context, hash string, now time.Time) (*domain.ConsolePairing, error) {
+	res, err := r.db.ExecContext(ctx, `UPDATE console_pairings SET used_at=? WHERE code_hash=? AND used_at=0 AND expires_at>?`, ms(now), hash, ms(now))
+	if err != nil {
+		return nil, internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, domain.Errf(domain.CodeNotFound, "this link has expired or was already used").
+			WithSuggestion("ask for a new one (they work once, within 24 hours)")
+	}
+	var p domain.ConsolePairing
+	var created, expires, used int64
+	err = r.db.QueryRowContext(ctx, `SELECT id, code_hash, member_id, created_at, expires_at, used_at FROM console_pairings WHERE code_hash=?`, hash).
+		Scan(&p.ID, &p.CodeHash, &p.MemberID, &created, &expires, &used)
+	if err != nil {
+		return nil, internal(err)
+	}
+	p.CreatedAt, p.ExpiresAt, p.UsedAt = fromMS(created), fromMS(expires), fromMS(used)
+	return &p, nil
 }

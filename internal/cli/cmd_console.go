@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -108,18 +107,17 @@ does, except manage console tokens; revoke it on its own if the device is lost.`
 	}
 	link := &Command{
 		Name:     "link",
-		Summary:  "Print an app link: paste it into the myco app to add this hub (shown once)",
+		Summary:  "Print a one-time app link: open it in the myco app to add this hub (works once, for 24 hours)",
 		Mutating: true,
-		Long: `Issues a console token and prints it as one link with the hub's address,
-https://<hub>/c/<token>. Paste it into the myco app ("连接已有的 Hub"). Like the token itself it
-gives admin access to the hub (except managing console tokens): do not post it publicly, and
-revoke it with 'myco console token revoke' if it leaks.`,
+		Long: `Prints https://<hub>/c/<one-time code>. Paste it into the myco app ("连接已有的 Hub"): the app
+trades the code for its own credential for that device, so the link stops working once used (or
+after 24 hours). It signs in as the hub's owner; invite other people with: myco member invite.
+Each device gets its own credential; list and remove them in the app (设置 → 成员 → 我的设备).`,
 		Examples: []string{
 			"sudo myco console link                  # on a server installed with install-hub.sh",
-			"sudo myco console link --name work-mac",
 		},
 		Flags: []Flag{
-			{Name: "name", Kind: String, Default: "app", Help: "Device the link is for (names the console token)"},
+			{Name: "name", Kind: String, Help: "Unused (kept for older scripts): devices are named by the app"},
 			adminFlag,
 		},
 		Run: handler(func(e *env) error {
@@ -127,20 +125,16 @@ revoke it with 'myco console token revoke' if it leaks.`,
 			if err != nil {
 				return err
 			}
-			res, err := c.CreateConsoleToken(e.in.Ctx, e.in.String("name"))
+			res, err := c.CreatePairing(e.in.Ctx)
 			if err != nil {
 				return err
 			}
 			hub, _ := e.hubURL()
-			if h, err := c.Health(e.in.Ctx); err == nil && h.PublicURL != "" {
-				hub = h.PublicURL
-			}
-			l := strings.TrimRight(hub, "/") + "/c/" + res.Token
-			out := map[string]any{"link": l, "hub": hub, "console_token": res.ConsoleToken}
+			// The hub builds the link from its public URL when it knows it.
+			out := map[string]any{"link": res.Link, "hub": hub, "expires_at": res.ExpiresAt}
 			return e.p.Print(out, func(w io.Writer) {
-				fmt.Fprintf(w, "App link for %s (shown only this once):\n\n  %s\n\n", hub, l)
-				fmt.Fprintln(w, "Paste it into the myco app (连接已有的 Hub). It gives admin access to this hub: keep it private.")
-				fmt.Fprintf(w, "Revoke it with: myco console token revoke --id %s\n", res.ConsoleToken.ID)
+				fmt.Fprintf(w, "App link (works once, until %s):\n\n  %s\n\n", res.ExpiresAt.Local().Format("2006-01-02 15:04"), res.Link)
+				fmt.Fprintln(w, "Paste it into the myco app (连接已有的 Hub). It signs in as this hub's owner: keep it private.")
 			})
 		}),
 	}

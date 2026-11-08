@@ -654,6 +654,8 @@ type OwnerRequest struct {
 type Whoami struct {
 	Member *Member `json:"member,omitempty"` // nil for the hub's admin token
 	Admin  bool    `json:"admin,omitempty"`  // the hub's admin token
+	// Device is this console token (this app on this device).
+	Device *ConsoleToken `json:"device,omitempty"`
 	// CanManage: owner or admin (manage members and every node).
 	CanManage bool `json:"can_manage"`
 }
@@ -672,4 +674,29 @@ type AuditEntry struct {
 // AuditList wraps audit entries, newest first.
 type AuditList struct {
 	Entries []AuditEntry `json:"entries"`
+}
+
+// PairRequest is the body of POST /v1/console/pair: a device trading a
+// one-time pairing code (from an app link) for its own console token.
+type PairRequest struct {
+	Code   string `json:"code"`
+	Device string `json:"device"`
+}
+
+// PairResponse returns the device's console token (once) and who it is.
+type PairResponse struct {
+	Token  string       `json:"token"`
+	Device ConsoleToken `json:"device"`
+	Member *Member      `json:"member,omitempty"`
+}
+
+// PairingLink is a one-time app link (POST /v1/console/me/pairings).
+type PairingLink struct {
+	Link      string    `json:"link"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// DeviceList is GET /v1/console/me/devices: the member's devices.
+type DeviceList struct {
+	Devices []ConsoleToken `json:"devices"`
 }

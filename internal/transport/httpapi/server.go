@@ -126,6 +126,11 @@ func (s *Server) routes() {
 	// Members (people) and the audit log. Console tokens act as their member;
 	// handlers check what that member may do.
 	m.HandleFunc("GET /v1/console/me", s.admin(s.whoami))
+	// Devices: a one-time link adds a device; each device has its own token.
+	m.HandleFunc("POST /v1/console/pair", s.pair)
+	m.HandleFunc("POST /v1/console/me/pairings", s.admin(s.createPairing))
+	m.HandleFunc("GET /v1/console/me/devices", s.admin(s.myDevices))
+	m.HandleFunc("DELETE /v1/console/me/devices/{id}", s.admin(s.removeMyDevice))
 	m.HandleFunc("GET /v1/members", s.admin(s.listMembers))
 	m.HandleFunc("POST /v1/members", s.admin(s.inviteMember))
 	m.HandleFunc("PATCH /v1/members/{member}", s.admin(s.updateMember))

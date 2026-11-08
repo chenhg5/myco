@@ -90,5 +90,7 @@ export const api = {
 export type MemberRole = "owner" | "admin" | "member";
 export interface Member { id: string; name: string; display_name?: string; role: MemberRole; created_at: string; removed?: boolean }
 /** Who this app is on a hub (absent on hubs without members). */
-export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean }
+/** One device (app) of a person on a hub: its own credential. */
+export interface Device { id: string; name: string; active: boolean; created_at: string; last_used_at?: string }
+export interface Whoami { member?: Member; admin?: boolean; can_manage: boolean; /** this app on this device */ device?: Device }
 export interface AuditEntry { id: string; at: string; actor: string; actor_kind: "member" | "admin" | "agent"; action: string; target?: string; detail?: string }

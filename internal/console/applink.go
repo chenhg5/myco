@@ -22,7 +22,7 @@ func ParseAppLink(raw string) (hubURL, token string, err error) {
 	}
 	base, tok, ok := strings.Cut(u.EscapedPath(), "/c/")
 	tok = strings.Trim(tok, "/")
-	if !ok || !strings.HasPrefix(tok, app.ConsoleTokenPrefix) || strings.Contains(tok, "/") {
+	if !ok || !(strings.HasPrefix(tok, app.ConsoleTokenPrefix) || strings.HasPrefix(tok, app.PairingCodePrefix)) || strings.Contains(tok, "/") {
 		return "", "", errors.New("这不是 App 连接链接：应该形如 https://你的服务器/c/myco_console_…")
 	}
 	if u.User != nil {

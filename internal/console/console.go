@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
+	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/release"
 )
@@ -347,6 +348,30 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("mid"), "name": strings.TrimSpace(in.Name)})
 	}))
+	// This person's devices on a hub, and one-time links to add another.
+	m.HandleFunc("GET /app/hubs/{id}/devices", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		list, err := c.Devices(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.DeviceList{Devices: list})
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/devices/{did}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if err := c.RemoveDevice(r.Context(), r.PathValue("did")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/pairings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.CreatePairing(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
+	}))
 	// Members (people on the hub), owners and the audit log.
 	m.HandleFunc("GET /app/hubs/{id}/members", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		ms, err := c.Members(r.Context(), r.URL.Query().Get("all") == "1")
@@ -570,6 +595,23 @@ func (b *Backend) addHub(w http.ResponseWriter, r *http.Request) {
 	if nc == nil {
 		nc = client.New
 	}
+	// A one-time link: trade its code for this device's own token, so the
+	// link is worthless afterwards.
+	if strings.HasPrefix(in.Token, app.PairingCodePrefix) {
+		pc, err := nc(u, "")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 3*b.timeout())
+		res, err := pc.Pair(ctx, in.Token, b.deviceName())
+		cancel()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		in.Token = res.Token
+	}
 	c, err := nc(u, in.Token)
 	if err != nil {
 		writeErr(w, err)
@@ -752,4 +794,15 @@ func errText(err error) string {
 		return ce.Message
 	}
 	return err.Error()
+}
+
+// deviceName names this device's console tokens on hubs.
+func (b *Backend) deviceName() string {
+	if b.Local != nil && b.Local.Device != "" {
+		return b.Local.Device
+	}
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return strings.TrimSuffix(h, ".local")
+	}
+	return "myco app"
 }

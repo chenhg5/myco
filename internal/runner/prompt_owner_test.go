@@ -26,8 +26,8 @@ func TestPromptKnowsWhoIsBehindAMessage(t *testing.T) {
 		m          api.Message
 		want, deny string
 	}{
-		{api.Message{From: "@console:laohu", FromOwner: "laohu"}, "from your owner (laohu", "colleague"},
-		{api.Message{From: "@console:glenn", FromOwner: "glenn"}, "from glenn, a person on this network who is not your owner (your owner is laohu)", "from your owner ("},
+		{api.Message{From: "@console:laohu", FromOwner: "laohu"}, "from your owner (laohu", "another member"},
+		{api.Message{From: "@console:glenn", FromOwner: "glenn"}, "from glenn, another member of this network, not your owner (your owner is laohu)", "from your owner ("},
 		{api.Message{From: "laohu-codex", FromOwner: "laohu"}, "another agent of your owner (laohu)", "ask your owner first"},
 		{api.Message{From: "matthew-claude", FromOwner: "matthew"}, "which belongs to matthew (not your owner)", "from your owner ("},
 	}

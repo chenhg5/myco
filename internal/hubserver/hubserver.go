@@ -127,6 +127,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
 	srv.SetMachines(app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow))
 	consoleSvc := app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock)
+	consoleSvc.SetPairings(sqlite.NewConsolePairingRepo(db))
 	srv.SetConsole(consoleSvc)
 	// Members: the people using this hub. An existing hub gets an owner who
 	// owns everything already there.

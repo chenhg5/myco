@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -30,13 +31,48 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 
 	// Inviting laohu gives him an app link of his own.
 	inv, err := admin.InviteMember(c, api.InviteRequest{Name: "laohu", DisplayName: "老胡"})
-	if err != nil || inv.Member.Role != "member" || !strings.Contains(inv.Link, "/c/myco_console_") {
+	if err != nil || inv.Member.Role != "member" || !strings.Contains(inv.Link, "/c/myco_pair_") {
 		t.Fatalf("invite: %v %+v", err, inv)
 	}
-	laohu := h.client(inv.Link[strings.Index(inv.Link, "/c/")+3:])
+	// The link is a one-time code: his app trades it for its own token.
+	code := inv.Link[strings.Index(inv.Link, "/c/")+3:]
+	paired, err := h.client("").Pair(c, code, "laohu-mac")
+	if err != nil || paired.Member == nil || paired.Member.Name != "laohu" || !strings.HasPrefix(paired.Token, "myco_console_") {
+		t.Fatalf("pair: %v %+v", err, paired)
+	}
+	if _, err := h.client("").Pair(c, code, "someone-else"); err == nil {
+		t.Fatal("a pairing link must work only once")
+	}
+	if _, err := h.client(code).Whoami(c); err == nil {
+		t.Fatal("the pairing code itself must not be a credential")
+	}
+	laohu := h.client(paired.Token)
 	who, err := laohu.Whoami(c)
-	if err != nil || who.Member == nil || who.Member.Name != "laohu" || who.CanManage {
+	if err != nil || who.Member == nil || who.Member.Name != "laohu" || who.CanManage || who.Device == nil || who.Device.Name != "laohu-mac" {
 		t.Fatalf("whoami: %v %+v", err, who)
+	}
+
+	// He adds his Windows PC with a link of his own, and later removes it.
+	pl, err := laohu.CreatePairing(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	win, err := h.client("").Pair(c, pl.Link[strings.Index(pl.Link, "/c/")+3:], "laohu-pc")
+	if err != nil || win.Member.Name != "laohu" {
+		t.Fatalf("second device: %v %+v", err, win)
+	}
+	devs, err := laohu.Devices(c)
+	if err != nil || len(devs) != 2 {
+		t.Fatalf("devices: %v %+v", err, devs)
+	}
+	if err := laohu.RemoveDevice(c, win.Device.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.client(win.Token).Whoami(c); err == nil {
+		t.Fatal("a removed device must lose access")
+	}
+	if err := laohu.RemoveDevice(c, mustFirstDevice(t, admin)); err == nil {
+		t.Fatal("removing someone else's device must fail")
 	}
 
 	// What laohu adds through his own link is his.
@@ -98,7 +134,7 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 		got = append(got, e.Actor+" "+e.Action+" "+e.Target)
 	}
 	all := strings.Join(got, "\n")
-	for _, want := range []string{"admin member.invite laohu", "laohu link.create", "laohu agent.labels laohu-claude", "laohu agent.kick laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
+	for _, want := range []string{"admin member.invite laohu", "laohu device.add laohu-mac", "laohu device.remove laohu-pc", "laohu link.create", "laohu agent.labels laohu-claude", "laohu agent.kick laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("audit lacks %q:\n%s", want, all)
 		}
@@ -120,4 +156,14 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 	if _, err := admin.RemoveMember(c, "glenn"); err == nil {
 		t.Fatal("the owner cannot be removed")
 	}
+}
+
+// mustFirstDevice returns the owner's first device id (creating one).
+func mustFirstDevice(t *testing.T, admin *client.Client) string {
+	t.Helper()
+	ct, err := admin.CreateConsoleToken(context.Background(), "glenn-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ct.ConsoleToken.ID
 }

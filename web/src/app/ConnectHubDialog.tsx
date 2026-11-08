@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronDown, Link2 } from "lucide-react";
+import { confirmNameLater } from "@/app/NamePrompt";
 import { appApi, type Hub } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -46,6 +47,8 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
     setError(null);
     try {
       const hub = await appApi.addHubByLink({ link: link.trim() });
+      // Joined through a one-time link (an invite): confirm the name there.
+      if (link.includes("/c/myco_pair_")) confirmNameLater(hub.id);
       onAdded(hub);
       onOpenChange(false);
     } catch (err) {

@@ -1099,11 +1099,19 @@ func TestConsoleAppLink(t *testing.T) {
 		t.Fatalf("console link: %s", out)
 	}
 	base, tok, ok := strings.Cut(res.Link, "/c/")
-	if !ok || base != h.url || !strings.HasPrefix(tok, app.ConsoleTokenPrefix) {
+	if !ok || base != h.url || !strings.HasPrefix(tok, app.PairingCodePrefix) {
 		t.Fatalf("link %q", res.Link)
 	}
-	if _, err := h.client(tok).ListEnrollments(c); err != nil {
-		t.Fatalf("the link's token must work: %v", err)
+	// The link carries a one-time code: the app trades it for its own token.
+	paired, err := h.client("").Pair(c, tok, "work-mac")
+	if err != nil {
+		t.Fatalf("pairing: %v", err)
+	}
+	if _, err := h.client(paired.Token).ListEnrollments(c); err != nil {
+		t.Fatalf("the paired token must work: %v", err)
+	}
+	if _, err := h.client("").Pair(c, tok, "again"); err == nil {
+		t.Fatal("the link must work only once")
 	}
 	for _, path := range []string{"/c/" + tok, "/c/" + app.ConsoleTokenPrefix + "made-up"} {
 		resp, err := http.Get(h.url + path)

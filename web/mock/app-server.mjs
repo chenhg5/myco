@@ -447,10 +447,15 @@ const audit = [
   { id: "a4", at: iso(86400 * 3), actor: "glenn", actor_kind: "member", action: "member.invite", target: "laohu", detail: "role member" },
   { id: "a5", at: iso(86400 * 3 + 60), actor: "admin", actor_kind: "admin", action: "link.create", target: "enr_abc", detail: "link" },
 ];
+const devices = [
+  { id: "con_mac", name: "glenns-mbp", active: true, created_at: iso(86400 * 30), last_used_at: iso(5) },
+  { id: "con_win", name: "glenn-pc", active: true, created_at: iso(86400 * 2), last_used_at: iso(7200) },
+];
+if (process.env.MOCK_OWNER_UNNAMED) { people[0].name = "owner"; people[0].display_name = ""; }
 function whoami(h) {
   if (h.id !== "hub_studio") return undefined;
-  const m = people.find((p) => p.name === meName);
-  return { member: m, can_manage: m.role !== "member" };
+  const m = people.find((p) => p.id === "mem_" + meName);
+  return { member: m, can_manage: m.role !== "member", device: devices[0] };
 }
 
 function appOverview() {
@@ -962,11 +967,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (parts.length === 4 && parts[3] === "members" && method === "GET") return send(res, 200, { members: people });
+    if (parts.length === 4 && parts[3] === "devices" && method === "GET") return send(res, 200, { devices });
+    if (parts.length === 5 && parts[3] === "devices" && method === "DELETE") {
+      const i = devices.findIndex((d) => d.id === parts[4]);
+      if (i >= 0) devices.splice(i, 1);
+      return send(res, 200, { ok: true });
+    }
+    if (parts.length === 4 && parts[3] === "pairings" && method === "POST") {
+      return send(res, 201, { link: "https://hub.example.com/c/myco_pair_" + Math.random().toString(36).slice(2, 18), expires_at: new Date(Date.now() + 86400e3).toISOString() });
+    }
     if (parts.length === 4 && parts[3] === "members" && method === "POST") {
       const body = await readBody(req);
       const m = { id: "mem_" + body.name, name: body.name, display_name: body.display_name, role: body.role || "member", created_at: iso(0) };
       people.push(m);
-      return send(res, 201, { member: m, link: "https://hub.example.com/c/myco_console_" + Math.random().toString(36).slice(2, 18) });
+      return send(res, 201, { member: m, link: "https://hub.example.com/c/myco_pair_" + Math.random().toString(36).slice(2, 18) });
     }
     if (parts.length === 5 && parts[3] === "members" && method === "PATCH") {
       const body = await readBody(req);

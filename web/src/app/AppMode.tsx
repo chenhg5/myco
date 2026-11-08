@@ -8,6 +8,7 @@ import type { AgentRow, Filters } from "@/app/types";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
+import { NamePrompt } from "@/app/NamePrompt";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { ConversationsPage, type ConversationRow } from "@/app/ConversationsPage";
 import { HubSwitcher } from "@/app/HubSwitcher";
@@ -437,6 +438,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         )}
       </div>
 
+      <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <ConnectHubDialog
         open={connectOpen}
         onOpenChange={closeConnect}

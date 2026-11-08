@@ -46,3 +46,24 @@ type ConsoleTokenRepository interface {
 	List(ctx context.Context) ([]*ConsoleToken, error)
 	Save(ctx context.Context, t *ConsoleToken) error
 }
+
+// ConsolePairing is a one-time code that lets a device get its own console
+// token for a member (an invite, or adding another device). The code is
+// handed out as a link; the device exchanges it once, before it expires,
+// so a link that leaks later is worthless.
+type ConsolePairing struct {
+	ID        string
+	CodeHash  string
+	MemberID  string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    time.Time
+}
+
+// ConsolePairingRepository persists pairing codes.
+type ConsolePairingRepository interface {
+	Create(ctx context.Context, p *ConsolePairing) error
+	// Use marks the code with hash as used if it is unused and unexpired at
+	// now, and returns it; otherwise a not-found error.
+	Use(ctx context.Context, hash string, now time.Time) (*ConsolePairing, error)
+}

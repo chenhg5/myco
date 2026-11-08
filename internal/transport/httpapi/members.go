@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -136,6 +137,10 @@ func (s *Server) membersEnabled(w http.ResponseWriter) bool {
 func (s *Server) whoami(w http.ResponseWriter, r *http.Request) {
 	a := s.actorOf(r)
 	out := api.Whoami{Admin: a.Admin, CanManage: a.Manages()}
+	if t := s.currentDevice(r); t != nil {
+		d := consoleDTO(t)
+		out.Device = &d
+	}
 	if a.Member != nil {
 		d := memberDTO(a.Member)
 		out.Member = &d
@@ -327,4 +332,92 @@ func (s *Server) forgetNames() {
 	s.namesMu.Lock()
 	s.namesAt = time.Time{}
 	s.namesMu.Unlock()
+}
+
+// currentDevice is the console token of the request (nil for the admin token).
+func (s *Server) currentDevice(r *http.Request) *domain.ConsoleToken {
+	if s.console == nil || s.isMasterAdmin(r) {
+		return nil
+	}
+	t, ok := s.console.Authenticate(r.Context(), bearer(r))
+	if !ok {
+		return nil
+	}
+	return t
+}
+
+// pair trades a one-time pairing code for a device's own console token
+// (no other credential needed: the code is the proof).
+func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
+	if s.console == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "console tokens are not enabled on this hub"))
+		return
+	}
+	var in api.PairRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	t, plain, err := s.console.Pair(r.Context(), strings.TrimSpace(in.Code), in.Device)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.PairResponse{Token: plain, Device: consoleDTO(t)}
+	if s.members != nil {
+		if m, err := s.members.Get(r.Context(), t.MemberID); err == nil {
+			d := memberDTO(m)
+			out.Member = &d
+			if s.audit != nil {
+				s.audit.Record(r.Context(), app.Actor{Member: m}, "device.add", t.Name, "")
+			}
+		}
+	}
+	writeJSON(w, http.StatusCreated, out)
+}
+
+// createPairing makes a one-time link for the caller to add another device.
+func (s *Server) createPairing(w http.ResponseWriter, r *http.Request) {
+	owner := s.ownerIDFor(r.Context(), s.actorOf(r))
+	plain, exp, err := s.console.CreatePairing(r.Context(), owner)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.record(r, "device.link", "", "valid until "+exp.UTC().Format(time.RFC3339))
+	writeJSON(w, http.StatusCreated, api.PairingLink{Link: s.publicBase(r) + "/c/" + plain, ExpiresAt: exp})
+}
+
+func (s *Server) myDevices(w http.ResponseWriter, r *http.Request) {
+	list, err := s.console.Devices(r.Context(), s.ownerIDFor(r.Context(), s.actorOf(r)))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.DeviceList{Devices: make([]api.ConsoleToken, 0, len(list))}
+	for _, t := range list {
+		out.Devices = append(out.Devices, consoleDTO(t))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// removeMyDevice revokes one of the caller's devices.
+func (s *Server) removeMyDevice(w http.ResponseWriter, r *http.Request) {
+	list, err := s.console.Devices(r.Context(), s.ownerIDFor(r.Context(), s.actorOf(r)))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	for _, t := range list {
+		if t.ID == r.PathValue("id") {
+			got, err := s.console.Revoke(r.Context(), t.ID)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			s.record(r, "device.remove", t.Name, "")
+			writeJSON(w, http.StatusOK, consoleDTO(got))
+			return
+		}
+	}
+	writeError(w, domain.Errf(domain.CodeNotFound, "no such device of yours"))
 }

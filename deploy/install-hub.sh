@@ -197,7 +197,7 @@ if [[ -n "${NEW_TOKEN:-}" ]]; then
 fi
 echo
 if [[ -n "$APP_LINK" ]]; then
-  echo "Add this hub to the myco app (连接已有的 Hub), paste this link (admin access: keep it private):"
+  echo "Add this hub to the myco app (连接已有的 Hub), paste this link (works once, within 24 hours; keep it private):"
   echo "  $APP_LINK"
   echo
 else

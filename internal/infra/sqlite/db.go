@@ -100,6 +100,14 @@ CREATE TABLE IF NOT EXISTS console_tokens (
   last_used_at INTEGER NOT NULL DEFAULT 0,
   revoked_at   INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS console_pairings (
+  id         TEXT PRIMARY KEY,
+  code_hash  TEXT NOT NULL UNIQUE,
+  member_id  TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at    INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS members (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL UNIQUE,

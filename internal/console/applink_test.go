@@ -1,6 +1,7 @@
 package console_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,5 +81,32 @@ func TestEnsureCLIInstallsTheBundledOne(t *testing.T) {
 	}
 	if p2, err := l.EnsureCLI(); err != nil || p2 != "" {
 		t.Fatalf("an installed CLI must be left alone: %q %v", p2, err)
+	}
+}
+
+// A one-time link: the app trades its code for this device's own token and
+// stores that; the link then stops working.
+func TestAddHubByPairingLink(t *testing.T) {
+	r := newRig(t)
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: &console.Local{Home: t.TempDir(), Device: "glenn-pc"}}
+	r.app.Config.Handler = b.Handler()
+	pl, err := r.admin.CreatePairing(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, m, _ := r.do("POST", "/app/hubs", map[string]string{"link": pl.Link})
+	if code != 201 {
+		t.Fatalf("add by pairing link: %d %v", code, m)
+	}
+	id := m["id"].(string)
+	if tok := r.secrets.m[id]; !strings.HasPrefix(tok, "myco_console_") {
+		t.Fatalf("stored %q, want the device's own console token", tok)
+	}
+	if code, _, _ := r.do("POST", "/app/hubs", map[string]string{"link": pl.Link}); code == 200 || code == 201 {
+		t.Fatal("a used link must not work again")
+	}
+	devs, err := r.admin.Devices(context.Background())
+	if err != nil || len(devs) == 0 || devs[len(devs)-1].Name != "glenn-pc" {
+		t.Fatalf("devices: %v %+v", err, devs)
 	}
 }
