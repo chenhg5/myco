@@ -815,6 +815,9 @@ textarea.app-input {
   position: fixed;
   left: 50%;
   top: 50%;
+  /* Centred by this transform; the app-pop animation only overrides it
+     while it runs, so it must also be set here. */
+  transform: translate(-50%, -50%);
   z-index: 61;
   width: calc(100% - 48px);
   max-width: 380px;
