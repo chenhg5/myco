@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in myco does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove tokens, private hub URLs and pairing links before posting. Security issues go to SECURITY.md instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Commands, App steps, or a minimal setup.
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: myco version for the CLI; the hub version from /v1/health; the app version if relevant.
+      placeholder: "CLI v0.18.1, hub v0.18.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part
+      multiple: true
+      options: [Hub, CLI, Runner, App (macOS), App (Windows), Web console, Docs]
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, and which agent CLI the agent runs (Claude Code, Codex, ...).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      render: shell
