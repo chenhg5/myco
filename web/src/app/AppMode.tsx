@@ -1,38 +1,48 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Laptop, LayoutGrid, ListTodo, Monitor, PanelLeft, RefreshCw, Server, Settings, WifiOff,
+  LayoutGrid, Monitor, PanelLeft, RefreshCw, Settings, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow, Filters } from "@/app/types";
-import { AddHubDialog } from "@/app/AddHubDialog";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
-import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { HubsPage } from "@/app/HubsPage";
+import { ConnectHubDialog } from "@/app/ConnectHubDialog";
+import { ErrorText, Modal } from "@/app/dialogs";
+import { HubSwitcher } from "@/app/HubSwitcher";
+import { useHubNames } from "@/app/hubNames";
 import { Inspector } from "@/app/Inspector";
-import { LocalPage } from "@/app/LocalPage";
 import { MachineInspector, type MachineRef } from "@/app/MachineInspector";
 import { MachinesPage } from "@/app/MachinesPage";
 import { NodesPage } from "@/app/NodesPage";
-import { Onboarding } from "@/app/Onboarding";
-import { TasksPage } from "@/app/TasksPage";
-import { LogoSymbol, LogoWordmark } from "@/components/brand";
-import { useThemeMode, type ThemeMode } from "@/lib/theme";
+import { SettingsPage } from "@/app/SettingsPage";
+import { Welcome } from "@/app/Welcome";
+import { useThemeMode } from "@/lib/theme";
 import { cn, timeAgo } from "@/lib/utils";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
 
-type Page = "nodes" | "tasks" | "hubs" | "machines" | "local";
+// One request at a time: React StrictMode mounts the window twice in dev and
+// the backend hands a pending link out only once.
+let pendingInFlight: Promise<string> | null = null;
+function readPendingLink(): Promise<string> {
+  if (pendingInFlight) return pendingInFlight;
+  const p = appApi.pendingLink()
+    .then((r) => r?.link || "")
+    .catch(() => "")
+    .finally(() => { if (pendingInFlight === p) pendingInFlight = null; });
+  pendingInFlight = p;
+  return p;
+}
+
+type Page = "nodes" | "machines" | "settings";
 
 const PAGE_META: Record<Page, { group: string; label: string }> = {
   nodes: { group: "工作", label: "节点" },
-  tasks: { group: "工作", label: "任务" },
-  hubs: { group: "网络", label: "Hub" },
-  machines: { group: "网络", label: "机器" },
-  local: { group: "本机", label: "本机 Hub" },
+  machines: { group: "工作", label: "机器" },
+  settings: { group: "App", label: "设置" },
 };
 
 const NAV: { group: string; items: { page: Page; label: string; icon: typeof LayoutGrid }[] }[] = [
@@ -40,26 +50,9 @@ const NAV: { group: string; items: { page: Page; label: string; icon: typeof Lay
     group: "工作",
     items: [
       { page: "nodes", label: "节点", icon: LayoutGrid },
-      { page: "tasks", label: "任务", icon: ListTodo },
-    ],
-  },
-  {
-    group: "网络",
-    items: [
-      { page: "hubs", label: "Hub", icon: Server },
       { page: "machines", label: "机器", icon: Monitor },
     ],
   },
-  {
-    group: "本机",
-    items: [{ page: "local", label: "本机 Hub", icon: Laptop }],
-  },
-];
-
-const THEMES: { mode: ThemeMode; label: string }[] = [
-  { mode: "system", label: "跟随系统" },
-  { mode: "light", label: "浅色" },
-  { mode: "dark", label: "深色" },
 ];
 
 interface ThreadState {
@@ -79,13 +72,12 @@ function initialCollapsed() {
   return window.innerWidth < 860;
 }
 
-const stripSlash = (u: string) => u.replace(/\/+$/, "");
-
 export default function AppMode({ initialHubs, initialInfo }: {
   initialHubs: Hub[];
   initialInfo: AppInfo | null;
 }) {
   const [theme, setTheme] = useThemeMode();
+  const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
@@ -100,13 +92,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [machineInspect, setMachineInspect] = useState<MachineRef | null>(null);
   const [spawnTarget, setSpawnTarget] = useState<SpawnTarget | null>(null);
   const [addMachineOpen, setAddMachineOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectPrefill, setConnectPrefill] = useState("");
   const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
   const [thread, setThread] = useState<ThreadState | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
-  const [removeBusy, setRemoveBusy] = useState(false);
-  const [removeError, setRemoveError] = useState<unknown>(null);
 
   // The boot probe already carries app/info; retry once in case it failed.
   useEffect(() => {
@@ -118,16 +107,25 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [h, o] = await Promise.all([appApi.hubs(), appApi.overview()]);
+      const [h, o, pending] = await Promise.all([
+        appApi.hubs(),
+        appApi.overview(),
+        // The backend may not know this endpoint yet; never break polling.
+        readPendingLink(),
+      ]);
       setHubs(h);
       setOv(o);
       setError(null);
+      setNow(Date.now());
       setLocalTick((t) => t + 1);
+      if (pending) {
+        setConnectPrefill(pending);
+        setConnectOpen(true);
+      }
     } catch (e) {
       setError(e);
     } finally {
       setLoading(false);
-      setNow(Date.now());
     }
   }, []);
 
@@ -144,39 +142,55 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
   }, [refresh]);
 
-  // A removed hub must not stay selected as a filter.
+  // A removed hub must not stay selected.
   useEffect(() => {
     if (filters.hub !== "all" && !hubs.some((h) => h.id === filters.hub)) {
       setFilters((f) => ({ ...f, hub: "all" }));
     }
   }, [hubs, filters.hub]);
 
-  // The machine inspector belongs to the machines page.
   useEffect(() => {
     if (page !== "machines") setMachineInspect(null);
   }, [page]);
 
-  // A freshly spawned node stays highlighted for a while.
   useEffect(() => {
     if (!highlight) return;
     const t = window.setTimeout(() => setHighlight(null), 15_000);
     return () => window.clearTimeout(t);
   }, [highlight]);
 
+  // Renames live only in this App; fold them in before anything renders a name.
+  const namedHubs = useMemo(
+    () => hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)),
+    [hubs, hubNames],
+  );
+  const namedOv = useMemo(
+    () => ov && {
+      ...ov,
+      hubs: ov.hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)),
+    },
+    [ov, hubNames],
+  );
+
   const rows = useMemo<AgentRow[]>(() => {
-    if (!ov) return [];
-    return ov.hubs
+    if (!namedOv) return [];
+    return namedOv.hubs
       .filter((h) => h.ok && h.overview)
       .flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
-  }, [ov]);
+  }, [namedOv]);
 
   const current = useMemo(() => {
     if (!inspect) return null;
     return rows.find((r) => r.hub.id === inspect.hubId && r.st.agent.name === inspect.name) || null;
   }, [rows, inspect]);
 
+  const visibleHubs = useMemo(
+    () => filters.hub === "all" ? namedHubs : namedHubs.filter((h) => h.id === filters.hub),
+    [namedHubs, filters.hub],
+  );
+
   const openThread = async (hubId: string, threadId: string) => {
-    const hubName = ov?.hubs.find((h) => h.id === hubId)?.name || hubId;
+    const hubName = namedOv?.hubs.find((h) => h.id === hubId)?.name || hubId;
     setThread({ hubId, hubName, id: threadId, messages: null });
     try {
       const r = await appApi.thread(hubId, threadId);
@@ -186,30 +200,25 @@ export default function AppMode({ initialHubs, initialInfo }: {
     }
   };
 
-  const removeHub = async () => {
-    if (!removeTarget) return;
-    setRemoveBusy(true);
-    setRemoveError(null);
-    try {
-      await appApi.removeHub(removeTarget.id);
-      setRemoveTarget(null);
-      await refresh();
-    } catch (e) {
-      setRemoveError(e);
-    } finally {
-      setRemoveBusy(false);
-    }
+  const closeConnect = (open: boolean) => {
+    setConnectOpen(open);
+    if (!open) setConnectPrefill("");
   };
 
-  const viewLocalHub = (localUrl: string) => {
-    const h = hubs.find((x) => stripSlash(x.url) === stripSlash(localUrl));
-    if (h) setFilters((f) => ({ ...f, hub: h.id }));
+  const hubAdded = async (hub: Hub) => {
+    await refresh();
+    setFilters((f) => ({ ...f, hub: hub.id }));
     setPage("nodes");
   };
 
-  const openLocal = () => setPage("local");
+  const startLocal = async () => {
+    const r = await appApi.startLocalHub({ tunnel: "none" });
+    await refresh();
+    setFilters((f) => ({ ...f, hub: r.hub.id }));
+    setPage("nodes");
+  };
 
-  // Remember explicit toggles; an untouched window uses the 860px default.
+  // Keep explicit sidebar toggles; an untouched window uses the 860px default.
   const toggleSidebar = () => {
     setCollapsed((c) => {
       const next = !c;
@@ -223,15 +232,31 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const allConnected = hubs.length > 0 && connected === hubs.length;
   const isMac = info?.shell === "mac";
 
+  if (hubs.length === 0) {
+    return (
+      <div className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
+        <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} />
+        <ConnectHubDialog
+          open={connectOpen}
+          onOpenChange={closeConnect}
+          prefill={connectPrefill}
+          onAdded={(hub) => void hubAdded(hub)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
       {!collapsed && (
         <aside className="app-sidebar">
           <div className="app-sidebar-head" style={dragStyle}>
-            <div className="brand">
-              <LogoSymbol className="h-[18px] w-[18px]" />
-              <LogoWordmark className="h-[13px] w-auto" />
-            </div>
+            <HubSwitcher
+              hubs={namedHubs}
+              value={filters.hub}
+              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
+              onAdd={() => setConnectOpen(true)}
+            />
           </div>
 
           <nav className="app-nav">
@@ -257,17 +282,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
           <div className="app-sidebar-foot">
             <button
               type="button"
-              className={cn("app-nav-item", settingsOpen && "active")}
-              onClick={() => setSettingsOpen(true)}
+              className={cn("app-nav-item", page === "settings" && "active")}
+              onClick={() => setPage("settings")}
             >
               <Settings strokeWidth={1.75} />
               <span>设置</span>
             </button>
             <div
               className="app-sidebar-status"
-              title={hubs.length
-                ? hubs.map((h) => `${h.name}：${h.ok ? "已连接" : "连不上"}`).join("\n")
-                : "还没有添加 Hub"}
+              title={namedHubs.map((h) => `${h.name}：${h.ok ? "已连接" : "连不上"}`).join("\n")}
             >
               <span className="dot" style={{ background: allConnected ? "var(--green)" : "var(--red)" }} />
               <span>{connected} 个 Hub 已连接</span>
@@ -287,6 +310,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
           >
             <PanelLeft />
           </button>
+          {collapsed && (
+            <HubSwitcher
+              hubs={namedHubs}
+              value={filters.hub}
+              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
+              onAdd={() => setConnectOpen(true)}
+            />
+          )}
           <nav className="app-crumbs" aria-label="位置">
             <span>{meta.group}</span>
             <span className="sep">/</span>
@@ -310,93 +341,49 @@ export default function AppMode({ initialHubs, initialInfo }: {
           )}
 
           {page === "nodes" && (
-            hubs.length === 0
-              ? <Onboarding onAdd={() => setAddOpen(true)} onLocal={openLocal} />
-              : (
-                <NodesPage
-                  rows={rows}
-                  hubs={ov?.hubs}
-                  hubMeta={hubs}
-                  loading={loading}
-                  filters={filters}
-                  onFilters={setFilters}
-                  highlight={highlight}
-                  onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
-                  onAdd={() => setSpawnTarget({})}
-                />
-              )
-          )}
-
-          {page === "tasks" && <TasksPage />}
-
-          {page === "hubs" && (
-            hubs.length === 0
-              ? <Onboarding onAdd={() => setAddOpen(true)} onLocal={openLocal} />
-              : (
-                <HubsPage
-                  hubs={hubs}
-                  hubsOv={ov?.hubs}
-                  onAdd={() => setAddOpen(true)}
-                  onRemove={(h) => { setRemoveError(null); setRemoveTarget(h); }}
-                  onOpenHub={(h) => { setFilters((f) => ({ ...f, hub: h.id })); setPage("nodes"); }}
-                />
-              )
+            <NodesPage
+              rows={rows}
+              hubs={namedOv?.hubs}
+              hubMeta={hubs}
+              loading={loading}
+              filters={filters}
+              onFilters={setFilters}
+              highlight={highlight}
+              onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
+              onAdd={() => setSpawnTarget({})}
+            />
           )}
 
           {page === "machines" && (
             <MachinesPage
-              hubs={hubs}
-              hubsOv={ov?.hubs}
+              hubs={visibleHubs}
+              hubsOv={namedOv?.hubs}
               loading={loading}
+              groupByHub={filters.hub === "all"}
               onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
               onAdd={() => setAddMachineOpen(true)}
             />
           )}
 
-          {page === "local" && (
-            <LocalPage refreshKey={localTick} onRefresh={refresh} onViewHub={viewLocalHub} />
+          {page === "settings" && (
+            <SettingsPage
+              hubs={namedHubs}
+              info={info}
+              theme={theme}
+              onTheme={setTheme}
+              refreshKey={localTick}
+              onRefresh={refresh}
+              onAddHub={() => setConnectOpen(true)}
+            />
           )}
         </div>
       </div>
 
-      <AddHubDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => void refresh()} />
-
-      <Modal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        title="设置"
-        description="外观会立即生效。"
-      >
-        <div className="app-field">
-          <span className="app-field-label">外观</span>
-          <div className="seg seg-fill" role="tablist" aria-label="外观">
-            {THEMES.map((t) => (
-              <button
-                key={t.mode}
-                type="button"
-                role="tab"
-                aria-selected={theme === t.mode}
-                className={cn("seg-btn", theme === t.mode && "active")}
-                onClick={() => setTheme(t.mode)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {info?.version && <div className="app-hint">myco App {info.version}</div>}
-      </Modal>
-
-      <ConfirmDialog
-        open={!!removeTarget}
-        onOpenChange={(o) => !o && setRemoveTarget(null)}
-        title={removeTarget ? `移除 ${removeTarget.name}？` : "移除 Hub"}
-        description="只会从这个 App 里移除。Hub 本身和它上面的 agent 都不受影响，仍在照常运行。"
-        consequences={<p>你将看不到这个 Hub 的节点，之后只能凭控制台令牌重新添加。</p>}
-        confirmLabel="移除 Hub"
-        busy={removeBusy}
-        error={removeError ? <ErrorText error={removeError} /> : undefined}
-        onConfirm={() => void removeHub()}
+      <ConnectHubDialog
+        open={connectOpen}
+        onOpenChange={closeConnect}
+        prefill={connectPrefill}
+        onAdded={(hub) => void hubAdded(hub)}
       />
 
       <Inspector
@@ -414,7 +401,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
       <MachineInspector
         target={machineInspect}
-        hubs={ov?.hubs}
+        hubs={namedOv?.hubs}
         rows={rows}
         now={now}
         onClose={() => setMachineInspect(null)}
@@ -428,8 +415,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
       <AddNodeDialog
         target={spawnTarget}
-        hubs={hubs}
-        hubsOv={ov?.hubs}
+        hubs={namedHubs}
+        hubsOv={namedOv?.hubs}
         onClose={() => setSpawnTarget(null)}
         onSpawned={(hubId, agent) => {
           setHighlight({ hubId, name: agent.name });
@@ -442,7 +429,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddMachineDialog
         open={addMachineOpen}
         onOpenChange={setAddMachineOpen}
-        hubs={hubs}
+        hubs={namedHubs}
       />
 
       <Modal

@@ -7,6 +7,10 @@ import http from "node:http";
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
 // MOCK_SHELL=mac reserves room for the macOS traffic lights; browser does not.
 const SHELL = process.env.MOCK_SHELL === "browser" ? "browser" : "mac";
+// MOCK_EMPTY=1 starts with no hubs, to see the welcome page.
+const EMPTY = process.env.MOCK_EMPTY === "1";
+// MOCK_PENDING_LINK is returned once by GET /app/pending-link.
+let pendingLink = process.env.MOCK_PENDING_LINK || "";
 const iso = (offsetSec = 0) => new Date(Date.now() - offsetSec * 1000).toISOString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -162,10 +166,11 @@ const state = {
   counter: 0,
 };
 
-// This machine: the CLI starts out missing so the install flow can be tried,
-// cloudflared is present, Tailscale is not.
+if (EMPTY) state.hubs = [];
+
+// This machine: myco ships with the App, cloudflared is present, Tailscale is not.
 const local = {
-  myco: null,
+  myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
   hub: null,
   tools: {
     cloudflared: { path: "/opt/homebrew/bin/cloudflared" },
@@ -255,20 +260,61 @@ const server = http.createServer(async (req, res) => {
 
   if (method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
+  // /app/pending-link — a link the App was opened with, read once.
+  if (parts[0] === "app" && parts[1] === "pending-link" && parts.length === 2) {
+    if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const link = pendingLink;
+    pendingLink = "";
+    return send(res, 200, { link });
+  }
+
   // /app/hubs
   if (parts[0] === "app" && parts[1] === "hubs" && parts.length === 2) {
     if (method === "GET") return send(res, 200, state.hubs.map(hubView));
     if (method === "POST") {
       const body = await readBody(req);
-      if (!body || typeof body.name !== "string" || typeof body.url !== "string" || typeof body.token !== "string") {
+      if (!body) return fail(res, 400, "invalid_request", "请求内容不是 JSON。");
+
+      // The normal way: paste the link printed by the hub installer.
+      if (typeof body.link === "string") {
+        let parsed = null;
+        try { parsed = new URL(body.link.trim()); } catch { /* handled below */ }
+        const m = parsed ? /^\/c\/(myco_console_[A-Za-z0-9_-]+)\/?$/.exec(parsed.pathname) : null;
+        if (!parsed || !/^https?:$/.test(parsed.protocol) || !m) {
+          return fail(res, 400, "invalid_link", "这不是 App 连接链接",
+            "复制 Hub 安装完成后打印的链接，或者用下面的方式手动填写地址和令牌。");
+        }
+        const url = parsed.origin;
+        const existing = state.hubs.find((h) => h.url === url);
+        if (existing) {
+          existing.token = m[1];
+          existing.ok = true;
+          delete existing.error;
+          return send(res, 200, hubView(existing));
+        }
+        state.counter += 1;
+        const hub = {
+          id: `hub_added_${state.counter}`, name: (typeof body.name === "string" && body.name.trim()) || parsed.host,
+          url, token: m[1], ok: true, hub_version: "0.16.6", update_available: false,
+          agents: [], threads: {}, recent: [],
+        };
+        state.hubs.push(hub);
+        return send(res, 201, hubView(hub));
+      }
+
+      if (typeof body.name !== "string" || typeof body.url !== "string" || typeof body.token !== "string") {
         return fail(res, 400, "invalid_request", "name、url 和 token 为必填项");
       }
       if (body.token.trim().length < 8 || !body.token.startsWith("myco_")) {
         return fail(res, 401, "invalid_token", "Hub 拒绝了这个控制台令牌。",
           "请在 Hub 所在机器上运行 myco console token create --name <设备名> 重新创建。");
       }
-      if (state.hubs.some((h) => h.url === body.url.trim())) {
-        return fail(res, 409, "already_exists", "这个 Hub 地址已经添加过了。");
+      const existing = state.hubs.find((h) => h.url === body.url.trim());
+      if (existing) {
+        existing.token = body.token.trim();
+        existing.ok = true;
+        delete existing.error;
+        return send(res, 200, hubView(existing));
       }
       state.counter += 1;
       const hub = {
@@ -326,7 +372,7 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 400, "invalid_hostname", "域名看起来不对。", "例如 hub.example.com。");
       }
 
-      await sleep(4000);
+      await sleep(tunnel === "none" ? 2000 : 4000);
 
       const publicUrl = tunnel === "none"
         ? null

@@ -5,10 +5,12 @@ import { machineSubtitle, osInfo } from "@/app/nodes";
 import { cn } from "@/lib/utils";
 
 /** Real machines that run nodes, grouped by hub. Cloud sessions are not machines. */
-export function MachinesPage({ hubs, hubsOv, loading, onOpenMachine, onAdd }: {
+export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine, onAdd }: {
   hubs: Hub[];
   hubsOv: HubOverview[] | undefined;
   loading: boolean;
+  /** Show each hub as a group; false when the switcher already picked one. */
+  groupByHub: boolean;
   onOpenMachine: (hubId: string, machineId: string) => void;
   onAdd: () => void;
 }) {
@@ -19,6 +21,7 @@ export function MachinesPage({ hubs, hubsOv, loading, onOpenMachine, onAdd }: {
 
   const all = groups.flatMap((g) => g.machines);
   const online = all.filter((m) => m.online).length;
+  const hasUnreachable = groups.some((g) => g.ov && !g.ov.ok);
   const summary = hubsOv
     ? [
       `${all.length} 台机器`,
@@ -38,7 +41,7 @@ export function MachinesPage({ hubs, hubsOv, loading, onOpenMachine, onAdd }: {
 
       {!hubsOv ? (
         loading && <div className="app-empty-note">正在加载…</div>
-      ) : all.length === 0 ? (
+      ) : all.length === 0 && !hasUnreachable ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Monitor /></div>
           <h2>还没有机器</h2>
@@ -52,13 +55,15 @@ export function MachinesPage({ hubs, hubsOv, loading, onOpenMachine, onAdd }: {
       ) : (
         groups.map((g) => (
           <section className="app-group" key={g.hub.id}>
-            <div className="app-group-title">
-              <span className="name">{g.hub.name}</span>
-              <span className="parts">
-                <span className="sep">·</span>
-                <span className="part">{g.machines.length} 台机器</span>
-              </span>
-            </div>
+            {groupByHub && (
+              <div className="app-group-title">
+                <span className="name">{g.hub.name}</span>
+                <span className="parts">
+                  <span className="sep">·</span>
+                  <span className="part">{g.machines.length} 台机器</span>
+                </span>
+              </div>
+            )}
             <div className="app-list">
               {!g.ov ? (
                 <div className="app-empty-note">正在读取这个 Hub 的机器…</div>
