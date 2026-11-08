@@ -33,6 +33,9 @@ type Options struct {
 	// EnvFunc, when set, is called before every invocation and replaces Env,
 	// so changes to the agent's env file apply without restarting.
 	EnvFunc func() []string
+	// Provider, when set, is called before every invocation and returns the
+	// pinned model provider (nil = the machine's own setting).
+	Provider func() *harness.ProviderSettings
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -347,7 +350,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		if m.Type == "task" && !executor {
 			go r.watchSteers(watchCtx, log)
 		}
-		res, runErr = r.harness.Run(runCtx, harness.Request{
+		req := harness.Request{
 			Prompt:    prompt,
 			ExtraDirs: extraDirs,
 			SessionID: sessionID,
@@ -355,7 +358,17 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			Body:      m.Body, From: m.From, Type: m.Type,
 			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
-		})
+		}
+		if r.opts.Provider != nil && !executor {
+			if p := r.opts.Provider(); p != nil {
+				if _, ok := r.harness.(harness.ProviderAware); ok {
+					req.Provider = p
+				} else {
+					req.Env = append(p.EnvList(), req.Env...) // myco's own variables still win
+				}
+			}
+		}
+		res, runErr = r.harness.Run(runCtx, req)
 		steered := errors.Is(context.Cause(runCtx), errSteered)
 		stopWatch()
 		cancelDeadline()

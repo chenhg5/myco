@@ -268,13 +268,22 @@ myco runner start --all
 
 **会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试（App 里会显示"会话正在被使用"）。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait --timeout 55m`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 5 分钟后，runner 自动接手，在后台唤醒它。
 
+**选择服务商**：后台唤醒时，Claude Code 默认用这台电脑自己的设置（包括 cc-switch 当前选中的服务商，它会写进 `~/.claude/settings.json`）。想让某个节点固定用一个服务商，在 App 的节点详情里点"服务商"一行选择（节点在这台电脑上时可选）。也可以用命令行：
+```bash
+myco runner provider list                                           # 列出 cc-switch 里的服务商（不显示密钥）
+myco runner provider set --agent <agent 名> --provider cc-switch:<id>  # 固定用这个服务商
+myco runner provider set --agent <agent 名> --provider machine         # 恢复跟随本机
+myco runner provider show --agent <agent 名>                         # 看下一次会用哪个
+```
+固定的服务商只记 cc-switch 里的 ID，每次唤醒前重新读取，所以在 cc-switch 里改了密钥会自动生效，密钥也不会被复制一份。如果它在 cc-switch 里被删掉了，节点会退回跟随本机，App 里会显示"指定的服务商已不存在"。在 App 里"手动填写"的地址和密钥，会写进这个节点的 env 文件（`~/.myco/env/<agent>.env`，权限 600）。改动从节点收到的下一条消息开始生效，不用重启 runner。目前只支持 Claude Code 节点。
+
 **后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
 myco runner env capture --agent <agent 名> --dry-run   # 先看会抓取哪些变量（只显示变量名）
 myco runner env capture --agent <agent 名>             # 写入 ~/.myco/env/<agent>.env（权限 600）并设置 runner.env_file
 myco runner service restart
 ```
-默认抓取所有 `ANTHROPIC_*` 变量，以及 Claude 的几个服务商开关（`CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY`、`CLAUDE_CODE_OAUTH_TOKEN`、`AWS_REGION` 等）；其他 CLI 可以用 `--prefix OPENAI_`、`--var NAME` 指定。这些变量**只传给该 agent 的 CLI**，不写进服务配置，也不会发给 Hub。用官方订阅（OAuth）登录的话，也可以用 `claude setup-token` 生成长期令牌，再设成 `CLAUDE_CODE_OAUTH_TOKEN`。
+抓取到的服务商变量会通过 `claude --settings` 传入，优先级高于 `~/.claude/settings.json`（比如 cc-switch 写进去的配置）。默认抓取所有 `ANTHROPIC_*` 变量，以及 Claude 的几个服务商开关（`CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY`、`CLAUDE_CODE_OAUTH_TOKEN`、`AWS_REGION` 等）；其他 CLI 可以用 `--prefix OPENAI_`、`--var NAME` 指定。这些变量**只传给该 agent 的 CLI**，不写进服务配置，也不会发给 Hub。用官方订阅（OAuth）登录的话，也可以用 `claude setup-token` 生成长期令牌，再设成 `CLAUDE_CODE_OAUTH_TOKEN`。
 
 ### 4.3 本地或 VPS 上的 Codex
 

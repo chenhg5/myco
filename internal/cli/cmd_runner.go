@@ -77,7 +77,7 @@ notes are never auto-answered. Logs go to stderr.`,
 			return e.runAll(shared, log)
 		}),
 	}
-	return (&Command{Name: "runner", Summary: "Turn agent CLIs into always-reachable workers"}).Add(start, serviceCommands(), runnerEnvCommands())
+	return (&Command{Name: "runner", Summary: "Turn agent CLIs into always-reachable workers"}).Add(start, serviceCommands(), runnerEnvCommands(), runnerProviderCommands())
 }
 
 // runnerShared holds settings common to every agent a process serves.
@@ -173,8 +173,22 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 		}
 	}
+	// The provider (runner.provider, or provider variables in the env file)
+	// is resolved again before every run, like the env file itself.
+	currentProvider := func() providerChoice {
+		ref, envFile := rc.Provider, rc.EnvFile
+		if c, err := config.Load(cfgPath); err == nil {
+			ref = c.Runner.Provider
+			if c.Runner.EnvFile != "" {
+				envFile = c.Runner.EnvFile
+			}
+		}
+		return resolveProvider(h.Name(), ref, envFile)
+	}
+	initial := currentProvider()
+	var rep *runtimeReporter
 	if !sh.once {
-		e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, log)
+		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, initial, log)
 	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
@@ -264,7 +278,10 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if access == harness.AccessFull {
 		alog.Warn("access=full: the agent CLI runs without approvals or sandbox; messages from other agents drive it")
 	}
-	alog.Info("runner ready", "hub", cfg.Hub, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
+	if initial.warn != "" {
+		alog.Warn("provider: "+initial.warn, "provider", initial.name)
+	}
+	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
@@ -273,6 +290,14 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.
 		Env: env, EnvFunc: envFunc,
+		Provider: func() *harness.ProviderSettings {
+			ch := currentProvider()
+			if ch.warn != "" {
+				alog.Warn("provider: "+ch.warn, "provider", ch.name)
+			}
+			rep.Provider(ch)
+			return ch.settings
+		},
 	}, alog), nil
 }
 

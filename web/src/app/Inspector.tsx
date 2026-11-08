@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { MessageSquare, X } from "lucide-react";
-import { appApi } from "@/appapi";
+import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
@@ -164,6 +164,128 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
         </div>
       </Modal>
     </>
+  );
+}
+
+// ProviderRow: which model provider (endpoint + key) the node's CLI uses.
+// A node on this computer can be pinned to a cc-switch provider, given an
+// endpoint by hand, or follow the computer's own setting.
+function providerSourceNote(src?: string) {
+  if (src === "pinned") return L("为它指定", "Chosen for it");
+  if (src === "env_file") return L("手动填写", "Entered by hand");
+  if (src === "missing") return L("指定的服务商已不存在，暂用本机设置", "The chosen provider is gone; using the machine's setting");
+  if (src === "machine") return L("跟随本机设置", "Follows the machine");
+  return "";
+}
+
+function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+  const ag = row.st.agent;
+  const rt = ag.runtime;
+  const [local, setLocal] = useState<AgentProvider | null>(null);
+  const [list, setList] = useState<ProviderList | null>(null);
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState("");
+  const [manual, setManual] = useState({ base_url: "", api_key: "", model: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [saved, setSaved] = useState("");
+
+  useEffect(() => {
+    let off = false;
+    setLocal(null);
+    setSaved("");
+    appApi.agentProvider(ag.name, row.hub.id).then((p) => { if (!off) setLocal(p); }).catch(() => {});
+    return () => { off = true; };
+  }, [row.hub.id, ag.name]);
+
+  const editable = !!local?.local && local.harness === "claude";
+  const start = async () => {
+    setError(null);
+    setChoice(local?.provider || "");
+    setManual({ base_url: "", api_key: "", model: "" });
+    setOpen(true);
+    try { setList(await appApi.providers()); } catch (e) { setError(e); }
+  };
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = choice === "env_file"
+        ? (manual.base_url || manual.api_key ? { manual } : null)
+        : { provider: choice };
+      if (body) setLocal(await appApi.setAgentProvider(ag.name, row.hub.id, body));
+      setSaved(L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the node's next message."));
+      setOpen(false);
+      window.setTimeout(() => void onRefresh(), 1500);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const current = list?.providers.find((p) => p.current);
+  const name = rt?.provider || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
+  return (
+    <div className="app-kv">
+      <span className="app-kv-label">{L("服务商", "Provider")}</span>
+      <span className="app-kv-value">
+        {editable ? (
+          <button type="button" className="app-kv-link" onClick={() => void start()}>
+            {name}<span className="app-chev">›</span>
+          </button>
+        ) : name}
+        {rt?.provider_source && <span className="app-kv-note app-kv-block">{providerSourceNote(rt.provider_source)}</span>}
+        {saved && <span className="app-kv-note app-kv-block app-offline-ok">{saved}</span>}
+      </span>
+
+      <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
+        description={L("后台唤醒这个节点时，它的 Claude Code 用哪个服务商（地址、密钥和模型）。只影响这个节点，密钥只保存在这台电脑上。", "Which provider (endpoint, key and model) this node's Claude Code uses when it is woken in the background. Only this node is affected; keys stay on this computer.")}>
+        <div className="app-provider-list" role="radiogroup">
+          <label className={cn("app-provider-opt", choice === "" && "picked")}>
+            <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
+            <span>
+              <b>{L("跟随本机设置", "Follow this computer")}</b>
+              <small>{current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`) : L("用这台电脑上 Claude Code 自己的设置", "Uses Claude Code's own settings on this computer")}</small>
+            </span>
+          </label>
+          {list?.providers.map((p) => (
+            <label key={p.ref} className={cn("app-provider-opt", choice === p.ref && "picked")}>
+              <input type="radio" name="provider" checked={choice === p.ref} onChange={() => setChoice(p.ref)} />
+              <span>
+                <b>{p.name}</b>
+                <small>{[p.host || L("官方地址", "Official endpoint"), p.model, "cc-switch"].filter(Boolean).join(" · ")}</small>
+              </span>
+            </label>
+          ))}
+          <label className={cn("app-provider-opt", choice === "env_file" && "picked")}>
+            <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} />
+            <span>
+              <b>{L("手动填写", "Enter by hand")}</b>
+              <small>{local?.env_host ? L(`现在是 ${local.env_host}`, `Now ${local.env_host}`) : L("Anthropic 兼容的地址和密钥", "An Anthropic-compatible endpoint and key")}</small>
+            </span>
+          </label>
+        </div>
+        {choice === "env_file" && (
+          <div className="app-provider-manual">
+            <input className="app-input" placeholder="https://api.example.com/anthropic" value={manual.base_url} onChange={(e) => setManual({ ...manual, base_url: e.target.value })} disabled={busy} />
+            <input className="app-input" type="password" placeholder={L("密钥", "Key")} value={manual.api_key} onChange={(e) => setManual({ ...manual, api_key: e.target.value })} disabled={busy} autoComplete="off" />
+            <input className="app-input" placeholder={L("模型（可选）", "Model (optional)")} value={manual.model} onChange={(e) => setManual({ ...manual, model: e.target.value })} disabled={busy} />
+          </div>
+        )}
+        {list && !list.cc_switch && (
+          <p className="app-modal-note">{L("装了 cc-switch 的话，这里会列出它的服务商。", "With cc-switch installed, its providers are listed here.")}</p>
+        )}
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => setOpen(false)} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void save()}
+            disabled={busy || (choice === "env_file" && !local?.env_host && (!manual.base_url || !manual.api_key))}>
+            {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
+          </button>
+        </div>
+      </Modal>
+    </div>
   );
 }
 
@@ -412,6 +534,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                   )}
                 </span>
               </div>
+              {kind === "agent" && !isCloud(ag) && (rt?.cli || ag.binding.harness) === "claude" && <ProviderRow row={row} onRefresh={onRefresh} />}
               <div className="app-kv">
                 <span className="app-kv-label">{L("权限", "Access")}</span>
                 <span className="app-kv-value">{accessLabel(rt?.access)}</span>

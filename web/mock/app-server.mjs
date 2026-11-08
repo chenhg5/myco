@@ -198,7 +198,7 @@ const state = {
         makeAgent({
           name: "docs-claude", description: "保持 README 和 docs/ 与代码同步。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly" },
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly", provider: "DeepSeek", provider_source: "machine" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
           online: false, last_seen_at: iso(5400), status_at: iso(5400),
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
@@ -363,6 +363,15 @@ function conversationAgent(msgs) {
 }
 
 // This machine: myco ships with the App, cloudflared is present, Tailscale is not.
+// cc-switch on this computer (mock): providers and which local agents can pick one
+const ccProviders = [
+  { ref: "cc-switch:official", id: "official", name: "Claude 官方", app: "claude" },
+  { ref: "cc-switch:deepseek", id: "deepseek", name: "DeepSeek", app: "claude", host: "api.deepseek.com", model: "deepseek-v4", current: true },
+  { ref: "cc-switch:glm", id: "glm", name: "智谱 GLM", app: "claude", host: "open.bigmodel.cn", model: "glm-5" },
+  { ref: "cc-switch:kimi", id: "kimi", name: "Kimi", app: "claude", host: "api.moonshot.cn" },
+];
+const localProviderAgents = new Map([["docs-claude", { local: true, harness: "claude", provider: "" }]]);
+
 const local = {
   hostname: "Studio.local",
   myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
@@ -558,6 +567,28 @@ const server = http.createServer(async (req, res) => {
   // /app/local[...]
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
+
+    // /app/local/providers and /app/local/agents/{name}/provider (cc-switch)
+    if (parts.length === 3 && parts[2] === "providers" && method === "GET") {
+      return send(res, 200, { cc_switch: true, providers: ccProviders });
+    }
+    if (parts.length === 5 && parts[2] === "agents" && parts[4] === "provider") {
+      const name = decodeURIComponent(parts[3]);
+      if (!localProviderAgents.has(name)) return method === "GET" ? send(res, 200, { local: false, provider: "" }) : send(res, 404, { error: "not_found", message: "this agent does not run on this computer" });
+      if (method === "PUT") {
+        const body = await readBody(req);
+        const cur = { local: true, harness: "claude", provider: body.manual ? "env_file" : body.provider || "" };
+        if (body.manual) cur.env_host = new URL(body.manual.base_url).host;
+        localProviderAgents.set(name, cur);
+        // what the runner would report on its next message
+        for (const h of state.hubs) for (const a of h.agents || []) if (a.name === name && a.runtime) {
+          const p = ccProviders.find((x) => x.ref === cur.provider);
+          a.runtime.provider = p ? p.name : cur.env_host || ccProviders.find((x) => x.current)?.name;
+          a.runtime.provider_source = p ? "pinned" : cur.env_host ? "env_file" : "machine";
+        }
+      }
+      return send(res, 200, localProviderAgents.get(name));
+    }
 
     // /app/local/sessions — Claude Code / Codex transcripts on this computer.
     if (parts.length === 3 && parts[2] === "sessions" && method === "GET") {

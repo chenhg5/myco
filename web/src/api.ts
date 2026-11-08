@@ -5,7 +5,9 @@ export interface Delivery { mode: string; url?: string; has_secret?: boolean; pa
 /** What a node is. `machine` is a machine node (`xxx-machine`), not shown as a node. */
 export type AgentKind = "agent" | "shell" | "human" | "machine";
 export type RuntimeAccess = "readonly" | "workspace" | "full";
-export type ModelSource = "configured" | "cli-config" | "observed" | "default";
+export type ModelSource = "configured" | "cli-config" | "observed" | "default" | "provider";
+/** pinned: chosen for this node; machine: the machine's current setting; env_file: entered by hand; missing: the pinned one is gone. */
+export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
 /** What the node actually runs; absent on nodes reported by old runners. */
 export interface Runtime {
   cli: string;
@@ -13,6 +15,9 @@ export interface Runtime {
   model?: string;
   model_source?: ModelSource;
   access?: RuntimeAccess;
+  /** model provider's name (never its key) */
+  provider?: string;
+  provider_source?: ProviderSource;
 }
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;

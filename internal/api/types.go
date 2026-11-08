@@ -71,6 +71,12 @@ type Runtime struct {
 	// CLI's own settings), observed (seen in its last turn), or default.
 	ModelSource string `json:"model_source,omitempty"`
 	Access      string `json:"access,omitempty"`
+	// Provider is the model provider's display name (never its key);
+	// ProviderSource: pinned (chosen for this agent), machine (the
+	// machine's current setting), env_file (from runner.env_file) or
+	// missing (the pinned provider no longer exists; the machine's is used).
+	Provider       string `json:"provider,omitempty"`
+	ProviderSource string `json:"provider_source,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.

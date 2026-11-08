@@ -52,6 +52,10 @@ type Runner struct {
 	// EnvFile holds KEY=VALUE lines passed only to this agent's CLI (e.g.
 	// CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`). Keep it chmod 600.
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
+	// Provider pins the model provider the agent's CLI uses, read again
+	// before every run: "cc-switch:<id>" (see internal/provider). Empty =
+	// whatever the machine is set to.
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
 	// Model and Access are mapped to CLI flags by the harness.
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Access string `yaml:"access,omitempty" json:"access,omitempty"`

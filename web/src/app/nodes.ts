@@ -103,6 +103,7 @@ export function modelSourceLabel(source?: ModelSource): string | undefined {
   if (source === "observed") return L("实际使用", "In use");
   if (source === "default") return L("CLI 默认", "CLI default");
   if (source === "cli-config") return L("CLI 设置", "CLI setting");
+  if (source === "provider") return L("服务商设置", "Provider setting");
   return undefined;
 }
 

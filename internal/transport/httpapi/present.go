@@ -33,7 +33,8 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	}
 	out.Kind, out.MachineID = a.Kind(), a.MachineID
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
-		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access}
+		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
+			Provider: rt.Provider, ProviderSource: rt.ProviderSource}
 	}
 	return out
 }

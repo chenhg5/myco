@@ -62,11 +62,15 @@ type Runtime struct {
 	Model       string `json:"model,omitempty"`
 	ModelSource string `json:"model_source,omitempty"` // configured | cli-config | observed | default
 	Access      string `json:"access,omitempty"`
+	// Provider is the model provider's display name; ProviderSource is
+	// pinned | machine | env_file | missing.
+	Provider       string `json:"provider,omitempty"`
+	ProviderSource string `json:"provider_source,omitempty"`
 }
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}

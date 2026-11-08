@@ -272,6 +272,13 @@ export const appApi = {
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),
 
   local: () => request<LocalState>("GET", "app/local"),
+  /** cc-switch's Claude providers on this computer (names and hosts only). */
+  providers: () => request<ProviderList>("GET", "app/local/providers"),
+  /** A node's provider setting, if the node runs on this computer. */
+  agentProvider: (name: string, hubId: string) =>
+    request<AgentProvider>("GET", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`),
+  setAgentProvider: (name: string, hubId: string, body: { provider?: string; manual?: ManualProvider }) =>
+    request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */
   restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
@@ -281,3 +288,10 @@ export const appApi = {
     request<StartLocalHubResult>("POST", "app/local/hub", input),
   stopLocalHub: () => request<{ stopped: true }>("POST", "app/local/hub/stop"),
 };
+
+/** A cc-switch provider (keys are never sent to the page). */
+export interface ProviderInfo { ref: string; id: string; name: string; app: string; current?: boolean; host?: string; model?: string }
+export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; error?: string }
+/** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" was entered by hand. */
+export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string }
+export interface ManualProvider { base_url: string; api_key: string; model?: string }

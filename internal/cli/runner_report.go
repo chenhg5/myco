@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -18,10 +19,25 @@ import (
 	"github.com/chenhg5/myco/internal/machineid"
 )
 
-// reportToHub tells the hub, in the background and best effort, which
-// machine this agent runs on and with which CLI and model, so the console
-// can show one entry per device and each node's model.
-func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access harness.Access, log *slog.Logger) {
+// runtimeReporter tells the hub, in the background and best effort, which
+// CLI, model and provider an agent runs with; it reports again whenever the
+// provider changes (e.g. picked in the console, or switched in cc-switch).
+type runtimeReporter struct {
+	c   *client.Client
+	log *slog.Logger
+	cfg string // runner.model, if set
+
+	mu      sync.Mutex
+	base    *api.Runtime // nil until the CLI version is known
+	choice  providerChoice
+	last    api.Runtime
+	sending bool
+}
+
+// reportToHub reports this machine (once) and the agent's runtime, and
+// returns the reporter for later provider changes.
+func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
+	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice}
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
 		defer cancel()
@@ -37,25 +53,74 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			}
 		}
 		rt := api.Runtime{CLI: h.Name(), Access: string(access)}
-		switch {
-		case rc.Model != "":
-			rt.Model, rt.ModelSource = rc.Model, "configured"
-		default:
-			if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
-				rt.Model, rt.ModelSource = m, "cli-config"
-			} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
-				rt.ModelSource = "default"
-			}
+		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
+			rt.Model, rt.ModelSource = m, "cli-config"
+		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
+			rt.ModelSource = "default"
 		}
 		if ck, ok := h.(harness.Checker); ok {
 			if v := ck.Check(ctx).Version; v != "" && len(v) < 60 {
 				rt.CLIVersion = v
 			}
 		}
-		if err := c.ReportRuntime(ctx, rt); err != nil {
-			log.Debug("runtime report failed (older hub?)", "err", err)
-		}
+		rep.mu.Lock()
+		rep.base = &rt
+		rep.mu.Unlock()
+		rep.flush(ctx)
 	}()
+	return rep
+}
+
+// Provider records the provider of the next run; the hub hears of changes.
+func (r *runtimeReporter) Provider(ch providerChoice) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.choice = ch
+	r.mu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		r.flush(ctx)
+	}()
+}
+
+func (r *runtimeReporter) flush(ctx context.Context) {
+	r.mu.Lock()
+	if r.base == nil || r.sending {
+		r.mu.Unlock()
+		return
+	}
+	rt := *r.base
+	ch := r.choice
+	switch {
+	case r.cfg != "":
+		rt.Model, rt.ModelSource = r.cfg, "configured"
+	case ch.model != "" && ch.settings != nil:
+		rt.Model, rt.ModelSource = ch.model, "provider"
+	}
+	rt.Provider, rt.ProviderSource = ch.name, ch.source
+	if rt == r.last {
+		r.mu.Unlock()
+		return
+	}
+	r.sending = true
+	r.mu.Unlock()
+	err := r.c.ReportRuntime(ctx, rt)
+	r.mu.Lock()
+	r.sending = false
+	if err == nil {
+		r.last = rt
+	}
+	again := err == nil && (r.choice.name != ch.name || r.choice.source != ch.source || r.choice.model != ch.model)
+	r.mu.Unlock()
+	if err != nil {
+		r.log.Debug("runtime report failed (older hub?)", "err", err)
+	}
+	if again {
+		r.flush(ctx)
+	}
 }
 
 var tomlModel = regexp.MustCompile(`(?m)^\s*model\s*=\s*"([^"]+)"`)
@@ -75,10 +140,16 @@ func cliConfigModel(cli string, getenv func(string) string) string {
 			return ""
 		}
 		var s struct {
-			Model string `json:"model"`
+			Model string         `json:"model"`
+			Env   map[string]any `json:"env"`
 		}
 		_ = json.Unmarshal(b, &s)
-		return strings.TrimSpace(s.Model)
+		if m := strings.TrimSpace(s.Model); m != "" {
+			return m
+		}
+		// cc-switch and similar tools set the model through env.
+		m, _ := s.Env["ANTHROPIC_MODEL"].(string)
+		return strings.TrimSpace(m)
 	case "codex":
 		dir := getenv("CODEX_HOME")
 		if dir == "" {

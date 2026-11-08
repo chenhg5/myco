@@ -44,6 +44,33 @@ type Request struct {
 	Body string
 	From string
 	Type string
+	// Provider, when set, pins the model provider for this run: variables
+	// that must win over the CLI's own configuration (Claude Code's
+	// settings.json env beats the process environment). Harnesses without a
+	// stronger channel add them to the process environment.
+	Provider *ProviderSettings
+}
+
+// ProviderAware marks harnesses that apply Request.Provider themselves;
+// for others the runner adds its variables to Request.Env.
+type ProviderAware interface{ AppliesProvider() }
+
+// ProviderSettings are a provider's variables and optional model.
+type ProviderSettings struct {
+	Env   map[string]string
+	Model string
+}
+
+// EnvList returns p's variables as KEY=VALUE pairs (nil-safe).
+func (p *ProviderSettings) EnvList() []string {
+	if p == nil {
+		return nil
+	}
+	out := make([]string, 0, len(p.Env))
+	for k, v := range p.Env {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
 
 // CommandExecutor marks harnesses that execute the message body itself

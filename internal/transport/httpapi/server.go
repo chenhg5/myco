@@ -1174,7 +1174,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
-		ModelSource: in.ModelSource, Access: in.Access}); err != nil {
+		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource}); err != nil {
 		writeError(w, err)
 		return
 	}

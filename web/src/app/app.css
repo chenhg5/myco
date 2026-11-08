@@ -3007,3 +3007,15 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-kv-block { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.45; max-width: 300px; margin-left: auto; }
 /* the in-use notice's copyable sentence wraps instead of scrolling */
 .app-inuse .app-command code { white-space: normal; overflow-wrap: anywhere; }
+
+/* provider picker: one option per row, the picked one highlighted */
+.app-provider-list { display: flex; flex-direction: column; gap: 6px; margin: 0 -2px 10px; padding: 2px; max-height: 320px; overflow-y: auto; }
+.app-provider-opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line); cursor: pointer; font-size: 13px; }
+.app-provider-opt:hover { background: var(--nav-hover); }
+.app-provider-opt.picked { box-shadow: 0 0 0 1.5px var(--accent); }
+.app-provider-opt input { margin-top: 3px; accent-color: var(--accent); }
+.app-provider-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-provider-opt b { font-weight: 500; color: var(--fg); }
+.app-provider-opt small { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.app-provider-manual { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.app-modal-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }

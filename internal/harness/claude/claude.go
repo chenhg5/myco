@@ -66,6 +66,9 @@ func transcriptPatterns(id string) []string {
 
 func (c *claude) Name() string { return Name }
 
+// AppliesProvider implements harness.ProviderAware (via --settings).
+func (c *claude) AppliesProvider() {}
+
 // accessArgs maps access levels to Claude Code permission flags.
 var accessArgs = map[harness.Access][]string{
 	harness.AccessReadonly:  {"--permission-mode", "default", "--disallowedTools", "Edit,Write,NotebookEdit,Bash"},
@@ -76,6 +79,70 @@ var accessArgs = map[harness.Access][]string{
 // Check implements harness.Checker.
 func (c *claude) Check(ctx context.Context) harness.Check {
 	return harness.CheckBinary(ctx, c.opts.Binary, "--version")
+}
+
+// configDir is Claude Code's config directory for a run with env.
+func configDir(env []string) string {
+	for i := len(env) - 1; i >= 0; i-- {
+		if v, ok := strings.CutPrefix(env[i], "CLAUDE_CONFIG_DIR="); ok && v != "" {
+			return v
+		}
+	}
+	return harness.HomeDir("CLAUDE_CONFIG_DIR", ".claude")
+}
+
+// providerKey reports whether an env name configures the model provider.
+func providerKey(k string) bool {
+	if strings.HasPrefix(k, "ANTHROPIC_") || strings.HasPrefix(k, "CLAUDE_CODE_USE_") {
+		return true
+	}
+	switch k {
+	case "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_SUBAGENT_MODEL", "API_TIMEOUT_MS", "AWS_REGION", "AWS_PROFILE", "CLOUD_ML_REGION":
+		return true
+	}
+	return false
+}
+
+// providerSettingsFile writes the provider as a private settings file for
+// --settings, which overrides ~/.claude/settings.json key by key. Provider
+// keys the user's settings set but this provider does not (e.g. another
+// provider's ANTHROPIC_MODEL left by cc-switch) are blanked, which Claude
+// Code treats as unset. A file keeps keys out of the process list.
+func providerSettingsFile(p *harness.ProviderSettings, dir string) (string, error) {
+	env := map[string]string{}
+	if b, err := os.ReadFile(filepath.Join(dir, "settings.json")); err == nil {
+		var user struct {
+			Env map[string]any `json:"env"`
+		}
+		if json.Unmarshal(b, &user) == nil {
+			for k := range user.Env {
+				if providerKey(k) {
+					env[k] = ""
+				}
+			}
+		}
+	}
+	for k, v := range p.Env {
+		env[k] = v
+	}
+	s := map[string]any{"env": env}
+	if p.Model != "" {
+		s["model"] = p.Model
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "myco-provider-*.json") // mode 0600
+	if err != nil {
+		return "", fmt.Errorf("provider settings: %w", err)
+	}
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), f.Close()
 }
 
 // event is the subset of `--output-format stream-json` events we use.
@@ -111,6 +178,14 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 		args = append(args, "--add-dir", d)
 	}
 	args = append(args, c.opts.Args...)
+	if req.Provider != nil {
+		file, err := providerSettingsFile(req.Provider, configDir(req.Env))
+		if err != nil {
+			return harness.Result{}, err
+		}
+		defer os.Remove(file)
+		args = append(args, "--settings", file)
+	}
 	out, runErr := harness.Exec(ctx, harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,
 		Env: req.Env, UnsetEnv: inheritedSessionEnv(os.Environ()),

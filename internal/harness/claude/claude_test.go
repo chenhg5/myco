@@ -1,8 +1,14 @@
 package claude
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/chenhg5/myco/internal/harness"
 )
 
 func TestParseStream(t *testing.T) {
@@ -35,6 +41,41 @@ func TestInheritedSessionEnv(t *testing.T) {
 	for _, k := range got {
 		if !want[k] {
 			t.Fatalf("unexpected %s in %v", k, got)
+		}
+	}
+}
+
+// The provider file overrides settings.json key by key: keys the user's
+// settings set but the provider does not are blanked, others kept out.
+func TestProviderSettingsFile(t *testing.T) {
+	dir := t.TempDir()
+	user := `{"model":"opus","env":{"ANTHROPIC_BASE_URL":"https://old","ANTHROPIC_MODEL":"old-model","CLAUDE_CODE_USE_BEDROCK":"1","DISABLE_TELEMETRY":"1"}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(user), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := providerSettingsFile(&harness.ProviderSettings{Env: map[string]string{"ANTHROPIC_BASE_URL": "https://new", "ANTHROPIC_AUTH_TOKEN": "k"}}, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f)
+	if st, _ := os.Stat(f); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode().Perm())
+	}
+	b, _ := os.ReadFile(f)
+	var got struct {
+		Env   map[string]string `json:"env"`
+		Model string            `json:"model"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"ANTHROPIC_BASE_URL": "https://new", "ANTHROPIC_AUTH_TOKEN": "k", "ANTHROPIC_MODEL": "", "CLAUDE_CODE_USE_BEDROCK": ""}
+	if len(got.Env) != len(want) || got.Model != "" {
+		t.Fatalf("got %s", b)
+	}
+	for k, v := range want {
+		if got.Env[k] != v {
+			t.Fatalf("%s = %q in %s", k, got.Env[k], b)
 		}
 	}
 }
