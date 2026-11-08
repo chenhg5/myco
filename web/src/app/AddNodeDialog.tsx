@@ -8,6 +8,8 @@ import {
 } from "@/appapi";
 import type { Agent, RuntimeAccess } from "@/api";
 import { CopyButton } from "@/app/copy";
+import { NodePicker } from "@/app/NodePicker";
+import { agentKind } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { cn, timeAgo } from "@/lib/utils";
 import { L } from "@/lib/i18n";
@@ -30,7 +32,7 @@ const CLIS: { value: SpawnCli; label: string }[] = [
   { value: "cursor", label: "Cursor" },
   { value: "gemini", label: "Gemini CLI" },
   { value: "opencode", label: "OpenCode" },
-  { value: "shell", get label() { return L("命令（shell 节点）", "Command (shell node)"); } },
+  { value: "exec", get label() { return L("Shell 节点（远程执行命令）", "Shell node (runs commands)"); } },
 ];
 
 const ACCESS: { value: RuntimeAccess; label: string }[] = [
@@ -55,7 +57,7 @@ function cliIcon(cli: string) {
   return cli === "codex" ? Code2 : Sparkles;
 }
 
-const isShell = (cli: string) => cli === "shell";
+const isShell = (cli: string) => cli === "exec";
 
 /** Opens a new session, joins one already on this computer, or hands a link
  *  to another computer. */
@@ -83,7 +85,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("");
-  const [command, setCommand] = useState("");
+  const [senders, setSenders] = useState<string[]>([]);
   const [access, setAccess] = useState<RuntimeAccess>("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -126,7 +128,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
     setDir("");
     setName("");
     setDescription("");
-    setCommand("");
+    setSenders([]);
     setModel("");
     setAccess("workspace");
     setBusy(false);
@@ -213,7 +215,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hubId || !machineId || !dir.trim() || (isShell(cli) && !command.trim())) return;
+    if (!hubId || !machineId || !dir.trim() || (isShell(cli) && senders.length === 0)) return;
     setBusy(true);
     setError(null);
     try {
@@ -221,7 +223,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
         ? {
           cli,
           dir: dir.trim(),
-          command: command.trim(),
+          allow_from: senders,
           ...(name.trim() ? { name: name.trim() } : {}),
           ...(description.trim() ? { description: description.trim() } : {}),
         }
@@ -555,23 +557,21 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
 
             {isShell(cli) && (
               <>
-                <label className="app-field">
-                  <span className="app-field-label">{L("命令", "Command")}</span>
-                  <input
-                    className="app-input mono"
-                    value={command}
-                    onChange={(e) => setCommand(e.target.value)}
-                    placeholder="./scripts/build.sh"
-                    disabled={busy}
-                    required
-                  />
-                </label>
                 <div className="app-small-note">
-                  {L("每收到一条消息就在这个目录里运行一次：消息内容从标准输入传进去，命令的输出就是回复。", "Runs once in this folder for every message: the message arrives on standard input, and the command's output is the reply.")}
+                  {L("Shell 节点在这个目录里运行别的节点发来的命令，并把输出发回去。适合让 agent 在这台机器上跑构建、看日志、查状态。", "A shell node runs the commands other nodes send it, in this folder, and sends back the output. Handy for letting agents build, read logs or check status on this machine.")}
+                </div>
+                <div className="app-field">
+                  <span className="app-field-label">{L("谁能发命令", "Who can send commands")}</span>
+                  <NodePicker
+                    nodes={(hubsOv?.find((h) => h.id === hubId)?.overview?.agents || []).map((x) => x.agent).filter((x) => agentKind(x) !== "machine")}
+                    value={senders}
+                    onChange={setSenders}
+                    disabled={busy}
+                  />
                 </div>
                 <div className="app-warn">
                   <AlertTriangle />
-                  <span>{L("命令能做那台机器上用户能做的任何事，所以只有那台机器在本地允许完全权限（~/.myco/machine.yaml 里 spawn.max_access: full）时才能添加。", "A command can do anything that machine's user can, so it can only be added where that machine allows full access locally (spawn.max_access: full in ~/.myco/machine.yaml).")}</span>
+                  <span>{L("选中的节点能在那台机器上以它的用户身份运行任何命令，所以只有那台机器在本地允许完全权限（~/.myco/machine.yaml 里 spawn.max_access: full）时才能添加。", "The selected nodes can run any command on that machine as its user, so it can only be added where that machine allows full access locally (spawn.max_access: full in ~/.myco/machine.yaml).")}</span>
                 </div>
               </>
             )}
@@ -646,7 +646,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               <button
                 type="submit"
                 className="app-btn app-btn-primary"
-                disabled={busy || !hubId || !machineId || !dir.trim() || (isShell(cli) && !command.trim())}
+                disabled={busy || !hubId || !machineId || !dir.trim() || (isShell(cli) && senders.length === 0)}
               >
                 {busy ? L("正在启动…", "Starting…") : isShell(cli) ? L("添加节点", "Add node") : L("开始会话", "Start session")}
               </button>

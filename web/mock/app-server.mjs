@@ -867,12 +867,12 @@ const server = http.createServer(async (req, res) => {
           "它的 myco 版本太旧，或者 runner 没在运行。");
       }
       const body = await readBody(req);
-      if (body && body.cli === "shell") {
-        const cmd = typeof body.command === "string" ? body.command.trim() : "";
+      if (body && body.cli === "exec") {
         const dir = typeof body.dir === "string" ? body.dir.trim() : "";
-        if (!cmd || !dir) return fail(res, 400, "invalid_request", "a shell node needs a command and a directory");
+        if (!Array.isArray(body.allow_from) || body.allow_from.length === 0) return fail(res, 400, "invalid_argument", "a shell node needs at least one agent allowed to send it commands");
+        if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
         if (machine.id !== "m_studio") { // only Studio Mac allows full access in the mock
-          return fail(res, 403, "permission_denied", `a shell node runs its command with full rights, but machine ${machine.name} allows at most workspace; the machine's owner can allow it with spawn.max_access: full in ~/.myco/machine.yaml`);
+          return fail(res, 403, "permission_denied", `a shell node runs commands with full rights, but machine ${machine.name} allows at most workspace; the machine's owner can allow it with spawn.max_access: full in ~/.myco/machine.yaml`);
         }
         await sleep(1200);
         state.counter += 1;
@@ -881,10 +881,10 @@ const server = http.createServer(async (req, res) => {
           name, description: typeof body.description === "string" ? body.description : "",
           kind: "shell", machine_id: machine.id, created_at: iso(0), last_seen_at: iso(0),
           labels: [`machine=${machine.name.toLowerCase().replace(/\s+/g, "-")}`],
-          binding: { harness: "shell", environment: "macOS", workdir: dir },
+          binding: { harness: "exec", environment: "macOS", workdir: dir }, allow_from: body.allow_from,
         });
         hub.agents.push(agent);
-        return send(res, 200, { agent, session_id: "", cli: "shell", workdir: dir, access: "full" });
+        return send(res, 200, { agent, session_id: "", cli: "exec", workdir: dir, access: "full" });
       }
       if (!body || !(body.cli in CLI_MODELS)) {
         return fail(res, 400, "invalid_request", "cli 必须是 claude、codex、pi、kiro、cursor、gemini 或 opencode。");

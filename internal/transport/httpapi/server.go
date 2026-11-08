@@ -1117,6 +1117,29 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	in.EnrollToken = ""
+	if in.CLI == "exec" {
+		// A shell node: the machine joins it with a one-use exec enrollment
+		// made here, by the admin, carrying who may send it commands.
+		if len(in.AllowFrom) == 0 {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "a shell node needs at least one agent allowed to send it commands"))
+			return
+		}
+		node, err := s.machines.SpawnNode(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		_, tok, err := s.enroll.Create(r.Context(), app.CreateEnrollmentInput{
+			NamePrefix: strings.TrimSuffix(string(node), "machine"), Harness: "exec", AllowFrom: in.AllowFrom,
+			Note: "shell node added from the console", MaxUses: 1, TTL: 10 * time.Minute,
+		})
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		in.EnrollToken = tok
+	}
 	body, _ := json.Marshal(in)
 	wait := waitParam(r)
 	if wait <= 0 {

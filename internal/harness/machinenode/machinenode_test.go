@@ -252,29 +252,30 @@ func TestCredentialDirsWhenHomeIsASymlink(t *testing.T) {
 	}
 }
 
-// A shell node runs no first turn and needs a machine that allows full access.
+// A shell node runs no first turn, needs the hub's exec token (admin only)
+// and a machine that allows full access.
 func TestSpawnShellNode(t *testing.T) {
 	r := newRig(t)
-	r.node.Deps.Enroll = func(_ context.Context, p Plan, _ api.SpawnRequest, sid string) (string, error) {
-		if sid != "" {
-			t.Errorf("shell node enrolled with session %q", sid)
+	r.node.Deps.Enroll = func(_ context.Context, p Plan, sr api.SpawnRequest, sid string) (string, error) {
+		if sid != "" || sr.EnrollToken != "tok" {
+			t.Errorf("shell node enrolled with session %q, token %q", sid, sr.EnrollToken)
 		}
 		r.enrolled = append(r.enrolled, p)
 		return p.Name, nil
 	}
-	req := api.SpawnRequest{CLI: "shell", Dir: "~/code/app", Command: "./scripts/build.sh"}
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: "exec", Dir: "~/code/app"}); !res.Denied || !strings.Contains(res.Error, "administrator") {
+		t.Fatalf("without the hub's token: %+v", res)
+	}
+	req := api.SpawnRequest{CLI: "exec", Dir: "~/code/app", EnrollToken: "tok"}
 	if res := r.run(t, "lead", req); !res.Denied || !strings.Contains(res.Error, "spawn.max_access: full") {
 		t.Fatalf("workspace machine must refuse: %+v", res)
 	}
 	r.node.Policy.MaxAccess = harness.AccessFull
-	if res := r.run(t, "lead", api.SpawnRequest{CLI: "shell", Dir: "~/code/app"}); !res.Denied {
-		t.Fatalf("no command must be refused: %+v", res)
-	}
 	res := r.run(t, "lead", req)
 	if res.Denied || res.Error != "" || res.Agent != "wsl-app-shell" || res.Access != "full" {
 		t.Fatalf("spawn: %+v", res)
 	}
-	if r.cli.got.Prompt != "" || len(r.enrolled) != 1 || r.enrolled[0].Command != "./scripts/build.sh" || r.spawned != 1 {
+	if r.cli.got.Prompt != "" || len(r.enrolled) != 1 || r.enrolled[0].CLI != "exec" || r.spawned != 1 {
 		t.Fatalf("ran a first turn or did not enroll: %+v %+v", r.cli.got, r.enrolled)
 	}
 }

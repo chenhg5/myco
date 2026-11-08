@@ -585,7 +585,7 @@ spawn:
 - `--dir ~/...` 指的是**那台机器**的家目录（本机 shell 展开成你自己的家目录也没关系，myco 会还原）。目录必须已经存在。
 - 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
 - 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。
-- **shell 节点**（每条消息在那个目录里跑一次命令，消息从标准输入传入，输出就是回复）：`myco agent spawn --on mac --dir ~/code/app --cli shell --command "./scripts/build.sh" --name builder`，App 里"添加节点 → 在机器上新建 → 类型：命令"也可以。命令能做那台机器上用户能做的任何事，所以只有那台机器的 `spawn.max_access` 是 `full` 时才允许。
+- **shell 节点**（别的节点给它发命令，它在指定目录里运行并把输出发回去，也就是 exec 节点）：在 App 里"添加节点 → 在机器上新建 → 类型：Shell 节点"，选目录和"谁能发命令"。只有 Hub 管理员（App）能添加：Hub 为这次添加生成一个只能用一次、10 分钟内有效的 exec 入网令牌，那台机器用它登记节点。被选中的节点能在那台机器上运行任何命令，所以只有那台机器的 `spawn.max_access` 是 `full` 时才允许。
 - 列出所有机器节点：`myco agent list --selector harness=machine`。
 - **用环境变量登录的 CLI**（比如 Claude Code 用 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` 接第三方服务）：后台 runner 不读 shell 配置，要在那台机器上、能正常用 claude 的终端里给机器节点抓一次变量：
   ```bash
@@ -689,4 +689,4 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
   - 机器是运行节点的电脑或服务器，按机器自己的稳定 ID（哈希后上报）唯一识别，同一台设备重新加入、改主机名都还是同一台（v0.16.9 起，需要那台机器升级 myco）。
   - claude.ai、Codex cloud 等云端会话跑在临时 sandbox 里，不算机器。
   - 节点分为 AI 和 shell 两类（App 不再单独列出"人"节点）；每个节点显示它用的 CLI 和模型（runner 上报：节点配置的 `runner.model`，或 CLI 自己设置里的默认模型）。
-- **在机器上开新会话**：App 里选机器 → 类型（CLI，或一条命令作为 shell 节点）→ 目录。以管理员身份发起，不受那台机器节点 allow-from 的限制；目录范围和权限上限仍由那台机器的 `machine.yaml` 决定。需要那台机器是用入网链接接入的、myco 是 v0.16.5 以上，且 runner 在运行。
+- **在机器上开新会话**：App 里选机器 → 类型（某个 CLI，或 Shell 节点）→ 目录。以管理员身份发起，不受那台机器节点 allow-from 的限制；目录范围和权限上限仍由那台机器的 `machine.yaml` 决定。需要那台机器是用入网链接接入的、myco 是 v0.16.5 以上，且 runner 在运行。

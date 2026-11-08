@@ -142,11 +142,18 @@ func (e *env) machineNode(me *api.Agent, c *client.Client, sh runnerShared) (har
 				return err == nil
 			},
 			Enroll: func(ctx context.Context, p machinenode.Plan, sr api.SpawnRequest, sessionID string) (string, error) {
-				mc, err := client.New(m.Hub, m.EnrollToken)
+				token := m.EnrollToken
+				b := api.Binding{Harness: p.CLI, SessionID: sessionID, Environment: host, Workdir: p.Workdir}
+				if p.CLI == machinenode.ExecCLI {
+					// A shell node joins with the one-use exec token the hub
+					// made for this request; it carries the allowed senders.
+					token = sr.EnrollToken
+					b.SessionID = "exec:" + host + ":" + orDefault(osutil.UserName(e.in.Getenv), "user") + ":" + p.Name
+				}
+				mc, err := client.New(m.Hub, token)
 				if err != nil {
 					return "", err
 				}
-				b := api.Binding{Harness: p.CLI, SessionID: sessionID, Environment: host, Workdir: p.Workdir}
 				res, err := mc.Enroll(ctx, api.EnrollRequest{Name: p.Name, DisplayName: sr.DisplayName, Description: sr.Description,
 					Labels: sr.Labels, Binding: b}, false)
 				if err != nil {
@@ -158,8 +165,8 @@ func (e *env) machineNode(me *api.Agent, c *client.Client, sh runnerShared) (har
 				// turns need the same, or the session cannot log in.
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
 					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
-				if p.CLI == machinenode.ShellCLI {
-					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir, Command: p.Command}
+				if p.CLI == machinenode.ExecCLI {
+					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir}
 				}
 				return res.Agent.Name, saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
 			},

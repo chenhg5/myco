@@ -509,11 +509,12 @@ type SpawnRequest struct {
 	Model  string `json:"model,omitempty"`
 	// Prompt is extra first instructions for the new session.
 	Prompt string `json:"prompt,omitempty"`
-	// Command is the command line of a shell node (CLI "shell"): it runs for
-	// every message, with the message on stdin, and its output is the
-	// reply. It can do anything the runner's user can, so the machine only
-	// allows it when its spawn.max_access is full.
-	Command string `json:"command,omitempty"`
+	// AllowFrom, for a shell node (CLI "exec"), names the agents that may
+	// send it commands. Only the hub admin can add shell nodes: the hub
+	// turns this into a one-use exec enrollment token (EnrollToken), which
+	// the machine joins the node with.
+	AllowFrom   []string `json:"allow_from,omitempty"`
+	EnrollToken string   `json:"enroll_token,omitempty"`
 }
 
 // SpawnResult is a machine node's answer to a SpawnRequest.

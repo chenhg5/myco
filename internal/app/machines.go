@@ -205,23 +205,9 @@ func (s *MachineService) Rename(ctx context.Context, id, name string) (*domain.M
 // allow_from; the machine's own directory and access rules still apply),
 // and Spawn waits for the answer.
 func (s *MachineService) Spawn(ctx context.Context, id string, body []byte, wait time.Duration) (*domain.Message, error) {
-	views, _, err := s.List(ctx)
+	node, err := s.SpawnNode(ctx, id)
 	if err != nil {
 		return nil, err
-	}
-	var node domain.AgentName
-	found := false
-	for _, v := range views {
-		if v.ID == id {
-			found, node = true, v.SpawnNode
-		}
-	}
-	if !found {
-		return nil, domain.Errf(domain.CodeNotFound, "machine %s not found", id)
-	}
-	if node == "" {
-		return nil, domain.Errf(domain.CodeInvalidState, "machine %s cannot start sessions now", id).
-			WithSuggestion("its myco must be v0.16.5 or newer, joined with a link, and its runner running (myco runner service status)")
 	}
 	if !json.Valid(body) {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "spawn request must be JSON")
@@ -232,4 +218,27 @@ func (s *MachineService) Spawn(ctx context.Context, id string, body []byte, wait
 		return nil, err
 	}
 	return s.messages.WaitReply(ctx, admin, out.Message.ID, wait)
+}
+
+// SpawnNode returns the machine node that starts sessions on machine id.
+func (s *MachineService) SpawnNode(ctx context.Context, id string) (domain.AgentName, error) {
+	views, _, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	var node domain.AgentName
+	found := false
+	for _, v := range views {
+		if v.ID == id {
+			found, node = true, v.SpawnNode
+		}
+	}
+	if !found {
+		return "", domain.Errf(domain.CodeNotFound, "machine %s not found", id)
+	}
+	if node == "" {
+		return "", domain.Errf(domain.CodeInvalidState, "machine %s cannot start sessions now", id).
+			WithSuggestion("its myco must be v0.16.5 or newer, joined with a link, and its runner running (myco runner service status)")
+	}
+	return node, nil
 }

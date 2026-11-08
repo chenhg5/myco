@@ -30,14 +30,11 @@ default: its home directory) and the highest access (spawn.max_access, default w
 			`myco agent spawn --on wsl --dir ~/code/app --description "reviews the web app"`,
 			`myco agent spawn --on mac --dir ~/src/api --cli codex --name api-coder --access workspace`,
 			`myco agent spawn --on wsl --dir ~/code/app --prompt "Read README.md and summarise the architecture first"`,
-			`myco agent spawn --on mac --dir ~/code/app --cli shell --command "./scripts/build.sh" --name builder`,
 		},
 		Flags: []Flag{
 			{Name: "on", Kind: String, Required: true, Help: "Machine name (as in its machine=<name> label) or the machine node's agent name"},
 			{Name: "dir", Kind: String, Required: true, Help: "Directory on that machine (~/... is that machine's home)"},
-			{Name: "cli", Kind: Enum, Values: append(append([]string{}, machinenode.SpawnableCLIs...), machinenode.ShellCLI), Default: "claude",
-				Help: "Agent CLI to start, or shell: a command run for every message (needs --command and a machine with spawn.max_access: full)"},
-			{Name: "command", Kind: String, Help: "Shell node's command line (--cli shell); the message arrives on stdin, stdout is the reply"},
+			{Name: "cli", Kind: Enum, Values: machinenode.SpawnableCLIs, Default: "claude", Help: "Agent CLI to start"},
 			{Name: "name", Kind: String, Help: "Agent name (the machine's prefix is added; default: <prefix><dir>-<cli>)"},
 			{Name: "display-name", Kind: String, Help: "Human-friendly name"},
 			{Name: "description", Kind: String, Help: "What the new agent does (also told to the session)"},
@@ -62,13 +59,7 @@ default: its home directory) and the highest access (spawn.max_access, default w
 			}
 			req := api.SpawnRequest{CLI: e.in.String("cli"), Dir: remoteDir(e.in.String("dir")), Name: e.in.String("name"),
 				DisplayName: e.in.String("display-name"), Description: e.in.String("description"), Labels: e.in.List("label"),
-				Access: e.in.String("access"), Model: e.in.String("model"), Prompt: e.in.String("prompt"), Command: e.in.String("command")}
-			if req.CLI == machinenode.ShellCLI {
-				if strings.TrimSpace(req.Command) == "" {
-					return &Error{Code: "invalid_usage", Message: "--cli shell needs --command", Exit: ExitUsage}
-				}
-				req.Access, req.Model, req.Prompt = "", "", ""
-			}
+				Access: e.in.String("access"), Model: e.in.String("model"), Prompt: e.in.String("prompt")}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "spawn", "machine_node": node.Name, "node_online": node.Online,
 					"allow_from": node.AllowFrom, "request": req})
