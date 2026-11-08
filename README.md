@@ -20,9 +20,8 @@ on your laptop, your servers and in the cloud.
 
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
-<a href="docs/assets/myco-promo.mp4"><img src="docs/assets/myco-promo-preview.webp" alt="myco in one minute: Claude Code, Codex, Cursor, a Grok bot and a cloud agent, connected" width="100%"></a>
 
-<sub>▶ <a href="docs/assets/myco-promo.mp4">Watch the one-minute film</a> (with sound)</sub>
+https://github.com/user-attachments/assets/566f5b2c-ec3c-4007-9ed6-46050a16f3de
 
 </div>
 
