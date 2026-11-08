@@ -25,6 +25,9 @@ export interface AppOverview {
 }
 
 export interface NewHub { name: string; url: string; token: string }
+/** A console link (`https://host/c/myco_console_…`) added to the App. */
+export interface NewHubLink { name?: string; link: string }
+export interface PendingLink { link: string }
 export interface ProfileInput { display_name?: string; description?: string }
 
 /** CLIs that a machine can be asked to start a new session with. */
@@ -159,6 +162,10 @@ export const appApi = {
   info: () => request<AppInfo>("GET", "app/info"),
   hubs: () => request<Hub[]>("GET", "app/hubs"),
   addHub: (input: NewHub) => request<Hub>("POST", "app/hubs", input),
+  /** Adds a hub from the App link printed by the hub installer. */
+  addHubByLink: (input: NewHubLink) => request<Hub>("POST", "app/hubs", input),
+  /** A console link the App was opened with, consumed once. */
+  pendingLink: () => request<PendingLink>("GET", "app/pending-link"),
   removeHub: (id: string) => request<void>("DELETE", `app/hubs/${enc(id)}`),
   overview: () => request<AppOverview>("GET", "app/overview"),
   thread: (hubId: string, threadId: string) =>

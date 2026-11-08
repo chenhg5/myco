@@ -27,7 +27,6 @@ const KIND_OPTIONS: { value: NodeKind | "all"; label: string }[] = [
   { value: "all", label: "全部" },
   { value: "agent", label: "AI" },
   { value: "shell", label: "shell" },
-  { value: "human", label: "人" },
 ];
 
 function tasksOf(row: AgentRow): string {
@@ -45,7 +44,6 @@ export function NodeRowView({ row, highlight, onClick }: {
   onClick: () => void;
 }) {
   const a = row.st.agent;
-  const kind = agentKind(a);
   const state = stateMeta[row.st.state];
   const Icon = nodeIcon(a);
   const machine = machineLabel(row);
@@ -65,14 +63,8 @@ export function NodeRowView({ row, highlight, onClick }: {
           <span className={cn("dot", row.st.state)} />
           <span>{state.label}</span>
           <span className="sep">·</span>
-          {kind === "human" ? (
-            <span className="txt">人</span>
-          ) : (
-            <>
-              <span className="txt">{cliName(a)}</span>
-              {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}
-            </>
-          )}
+          <span className="txt">{cliName(a)}</span>
+          {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}
           {machine && <><span className="sep">·</span><span className="txt">{machine}</span></>}
         </span>
       </span>
@@ -95,12 +87,16 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   onOpen: (row: AgentRow) => void;
   onAdd: () => void;
 }) {
-  // Machine nodes (`xxx-machine`) are not nodes.
-  const nodes = useMemo(() => rows.filter((r) => agentKind(r.st.agent) !== "machine"), [rows]);
+  // Machine nodes (`xxx-machine`) and people are not nodes in this App.
+  const nodes = useMemo(() => rows.filter((r) => {
+    const kind = agentKind(r.st.agent);
+    return kind !== "machine" && kind !== "human";
+  }), [rows]);
 
   // Real machines, grouped by hub, for the machine filter.
   const machineGroups = useMemo(() => {
     return (hubs || [])
+      .filter((h) => filters.hub === "all" || h.id === filters.hub)
       .map((h) => ({
         hub: h.name,
         machines: (h.overview?.machines || []).map((m) => ({
@@ -109,7 +105,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
         })),
       }))
       .filter((g) => g.machines.length > 0);
-  }, [hubs]);
+  }, [hubs, filters.hub]);
   const machineValues = useMemo(
     () => machineGroups.flatMap((g) => g.machines.map((m) => m.value)),
     [machineGroups],
@@ -124,10 +120,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   }, [machineValues, filters, onFilters]);
 
   const counts = useMemo(() => {
-    const c = { total: nodes.length, working: 0, pending: 0, idle: 0, offline: 0 };
-    nodes.forEach((r) => { c[r.st.state] += 1; });
+    const c = { total: 0, working: 0, pending: 0, idle: 0, offline: 0 };
+    nodes
+      .filter((r) => filters.hub === "all" || r.hub.id === filters.hub)
+      .forEach((r) => { c.total += 1; c[r.st.state] += 1; });
     return c;
-  }, [nodes]);
+  }, [nodes, filters.hub]);
 
   const summary = [
     `${counts.total} 个节点`,
@@ -135,7 +133,6 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
     counts.pending ? `${counts.pending} 有待办` : "",
     counts.idle ? `${counts.idle} 空闲` : "",
     counts.offline ? `${counts.offline} 离线` : "",
-    hubs ? `${hubs.length} 个 Hub` : "",
   ].filter(Boolean).join(" · ");
 
   const filtered = useMemo(() => {
@@ -161,8 +158,14 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
 
   const set = (patch: Partial<Filters>) => onFilters({ ...filters, ...patch });
 
-  const groups = (hubs || [])
-    .filter((h) => filters.hub === "all" || h.id === filters.hub)
+  const scopedHubs = (hubs || []).filter((h) => filters.hub === "all" || h.id === filters.hub);
+  const hasUnreachable = scopedHubs.some((h) => !h.ok);
+  const hubScoped = useMemo(
+    () => nodes.filter((r) => filters.hub === "all" || r.hub.id === filters.hub),
+    [nodes, filters.hub],
+  );
+
+  const groups = scopedHubs
     .map((h) => ({ hub: h, meta: hubMeta.find((m) => m.id === h.id), rows: filtered.filter((r) => r.hub.id === h.id) }))
     // A hub picked explicitly stays visible even when it has no agents.
     .filter((g) => filters.hub !== "all" || !g.hub.ok || g.rows.length > 0);
@@ -214,13 +217,6 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           ))}
         </div>
         <span className="app-select-wrap">
-          <select className="app-select" value={filters.hub} onChange={(e) => set({ hub: e.target.value })} aria-label="按 Hub 筛选">
-            <option value="all">全部 Hub</option>
-            {(hubs || []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-          </select>
-          <ChevronDown />
-        </span>
-        <span className="app-select-wrap">
           <select className="app-select" value={filters.machine} onChange={(e) => set({ machine: e.target.value })} aria-label="按机器筛选">
             <option value="all">全部机器</option>
             <option value={CLOUD_FILTER}>云端</option>
@@ -236,11 +232,22 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
 
       {!hubs ? (
         loading && <div className="app-empty-note">正在加载…</div>
-      ) : groups.length === 0 ? (
+      ) : !hasUnreachable && hubScoped.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Server /></div>
-          <h2>{nodes.length ? "没有匹配的节点" : "还没有节点"}</h2>
-          <p>{nodes.length ? "换一个搜索或筛选条件试试。" : "在任意 Hub 上接入一个 agent 后，它会出现在这里。"}</p>
+          <h2>还没有节点</h2>
+          <p>在 Hub 上接入一个 agent，或者在一台机器上开一个新会话。</p>
+          <div className="app-empty-actions">
+            <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
+              <Plus />添加节点
+            </button>
+          </div>
+        </div>
+      ) : filtered.length === 0 && !hasUnreachable ? (
+        <div className="app-empty" style={{ margin: "8vh auto 0" }}>
+          <div className="app-empty-icon"><Server /></div>
+          <h2>没有匹配的节点</h2>
+          <p>换一个搜索或筛选条件试试。</p>
         </div>
       ) : (
         groups.map((g) => (
