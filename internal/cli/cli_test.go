@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -318,6 +319,15 @@ func TestReadEnvFile(t *testing.T) {
 func TestRunnerEnvCapture(t *testing.T) {
 	home := t.TempDir()
 	testutil.SetHome(t, home)
+	// The caller's own provider variables (e.g. when the tests run inside a
+	// Claude Code session) must not leak into what is captured; empty values
+	// are skipped by capture.
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(k, "ANTHROPIC_") || slices.Contains(defaultCaptureVars, k) {
+			t.Setenv(k, "")
+		}
+	}
 	t.Setenv("ANTHROPIC_BASE_URL", "https://llm.example.com/anthropic")
 	t.Setenv("ANTHROPIC_API_KEY", "sk-secret value")
 	t.Setenv("UNRELATED", "x")
