@@ -22,10 +22,10 @@ func TestMachineNeverJoined(t *testing.T) {
 func TestMachineRoundTripAndPermissions(t *testing.T) {
 	testutil.SetHome(t, t.TempDir())
 	def := DefaultPath()
-	in := &Machine{
+	in := &Machine{MachineHub: MachineHub{
 		Hub: "https://hub", Machine: "vps", EnrollToken: "myco_enroll",
 		NamePrefix: "vps-", Harness: "codex", AllowFrom: []string{"alice", "bob"},
-	}
+	}}
 	if err := SaveMachine(def, in); err != nil {
 		t.Fatal(err)
 	}

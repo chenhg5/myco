@@ -163,7 +163,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	var h harness.Harness
 	if name == machinenode.Name {
-		if h, err = e.machineNode(me, c, sh); err != nil {
+		if h, err = e.machineNode(cfg.Hub, me, c, sh); err != nil {
 			return nil, err
 		}
 	} else {
@@ -308,14 +308,15 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		wg      sync.WaitGroup
 		started = map[string]bool{}
 		failed  = map[string]string{} // profile -> last start error
-		machine = false               // machine node ensured
+		machine = false               // machine nodes ensured
+		nodes   = map[string]bool{}   // hub -> machine node ensured
 	)
 	if sh.rescan == nil {
 		sh.rescan = make(chan struct{}, 1)
 	}
 	scan := func() int {
 		if !machine {
-			machine = e.ensureMachineNodeLogged(log)
+			machine = e.ensureMachineNodesLogged(log, nodes)
 		}
 		profiles, err := config.ListProfiles(dir)
 		if err != nil {

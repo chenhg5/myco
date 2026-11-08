@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -244,12 +245,19 @@ node right away.`,
 			if dry {
 				return e.dryRun(map[string]any{"action": "machine_join", "hub": hub, "machine": res})
 			}
-			m := &config.Machine{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
+			// Another hub's link adds a membership; this machine stays in the
+			// hubs it already joined. Local policy (spawn) is kept.
+			m := config.MachineHub{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
 				Harness: res.Harness, AllowFrom: res.AllowFrom}
-			if old, err := config.LoadMachine(e.defaultPath); err == nil && old != nil {
-				m.Spawn = old.Spawn // local policy survives re-joining
+			mf, err := config.LoadMachine(e.defaultPath)
+			if err != nil {
+				return err
 			}
-			if err := config.SaveMachine(e.defaultPath, m); err != nil {
+			if mf == nil {
+				mf = &config.Machine{}
+			}
+			mf.Put(m)
+			if err := config.SaveMachine(e.defaultPath, mf); err != nil {
 				return err
 			}
 			out := map[string]any{"machine": m.Machine, "hub": hub, "created": res.Created, "labels": res.Labels,
@@ -266,7 +274,9 @@ node right away.`,
 					agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), agent.Binding.Workdir))
 			}
 			if res.Harness != execnode.Name && !cloud && !dry {
-				if a, err := e.ensureMachineNode(); err != nil {
+				if _, hubs, _ := e.machineNodeHubs(); !slices.ContainsFunc(hubs, func(h config.MachineHub) bool { return config.SameHub(h.Hub, hub) }) {
+					// spawning disabled here
+				} else if a, err := e.ensureMachineNode(m); err != nil {
 					notes = append(notes, "machine node not created ("+toError(err, "").Message+"): `myco agent spawn` will not reach this machine")
 				} else if a != nil {
 					out["machine_node"] = a.Name
@@ -326,7 +336,7 @@ func detectCLIs() []string {
 }
 
 // joinExecNode enrolls this user on this machine as the machine's exec node.
-func (e *env) joinExecNode(m *config.Machine, workdir string) (*api.Agent, error) {
+func (e *env) joinExecNode(m config.MachineHub, workdir string) (*api.Agent, error) {
 	if workdir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -375,6 +385,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			"myco join",
 			`myco join --description "reviews PRs for the web app" --display-name "Web reviewer"`,
 			"myco join --harness codex --session-id 0199a1b2-...   # if detection fails",
+			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Agent name (default: <machine>-<cli>-<short session id>)"},
@@ -383,11 +394,34 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "label", Kind: List, Help: "Extra labels, e.g. group=web"},
 			{Name: "harness", Kind: String, Help: "claude or codex (default: detected)"},
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
+			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 		},
 		Run: handler(func(e *env) error {
-			m, err := config.LoadMachine(e.defaultPath)
+			mf, err := config.LoadMachine(e.defaultPath)
 			if err != nil {
 				return err
+			}
+			// The membership to use: --hub, else MYCO_HUB when it is one of
+			// this machine's hubs, else the primary one.
+			var m *config.MachineHub
+			if mf != nil {
+				want := e.in.String("hub")
+				if want == "" {
+					want = e.in.Getenv(config.EnvHub)
+				}
+				if h, ok := mf.For(want); ok {
+					m = &h
+				} else if e.in.String("hub") != "" {
+					var have []string
+					for _, h := range mf.Hubs() {
+						have = append(have, h.Hub)
+					}
+					return errorf("not_found", ExitNotFound, "this machine joined: "+strings.Join(have, ", ")+"; join another hub with its link first",
+						"this machine has not joined %s", e.in.String("hub"))
+				} else if mf.Hub != "" {
+					h := mf.MachineHub
+					m = &h
+				}
 			}
 			hub, tok := "", e.in.Getenv(config.EnvEnrollToken)
 			prefix := ""
@@ -449,7 +483,7 @@ Safe to re-run: the same session gets the same agent back.`,
 	}
 }
 
-func machineName(m *config.Machine) string {
+func machineName(m *config.MachineHub) string {
 	if m == nil {
 		return ""
 	}

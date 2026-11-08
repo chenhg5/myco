@@ -154,7 +154,7 @@ func TestSaveIgnoresStaleTempFileMode(t *testing.T) {
 		if name == "config.yaml" {
 			err = Save(path, &Config{Token: "myco_secret"})
 		} else {
-			err = SaveMachine(filepath.Join(dir, "config.yaml"), &Machine{Hub: "https://hub", EnrollToken: "myco_enroll_secret"})
+			err = SaveMachine(filepath.Join(dir, "config.yaml"), &Machine{MachineHub: MachineHub{Hub: "https://hub", EnrollToken: "myco_enroll_secret"}})
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -274,5 +274,46 @@ func TestReadEnvFile(t *testing.T) {
 	}
 	if _, err := ReadEnvFile(filepath.Join(home, "missing")); err == nil {
 		t.Fatal("missing env file must be an error")
+	}
+}
+
+// A machine joins several hubs: the first stays primary, the file keeps the
+// old layout for it, and rejoining a hub replaces only that membership.
+func TestMachineSeveralHubs(t *testing.T) {
+	dir := t.TempDir()
+	def := filepath.Join(dir, "config.yaml")
+	m := &Machine{}
+	m.Put(MachineHub{Hub: "https://home", Machine: "mac", EnrollToken: "t1", NamePrefix: "mac-"})
+	m.Put(MachineHub{Hub: "https://team.example.com/", Machine: "mac", EnrollToken: "t2", NamePrefix: "glenn-mac-"})
+	m.Put(MachineHub{Hub: "https://HOME/", Machine: "mac", EnrollToken: "t3", NamePrefix: "mac-"})
+	m.Spawn.MaxAccess = "full"
+	if err := SaveMachine(def, m); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(MachinePath(def))
+	if !strings.HasPrefix(string(b), "hub: https://HOME/") || !strings.Contains(string(b), "others:") {
+		t.Fatalf("layout:\n%s", b)
+	}
+	got, err := LoadMachine(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hubs := got.Hubs()
+	if len(hubs) != 2 || hubs[0].EnrollToken != "t3" || hubs[1].NamePrefix != "glenn-mac-" || got.Spawn.MaxAccess != "full" {
+		t.Fatalf("hubs: %+v", got)
+	}
+	if h, ok := got.For("https://team.example.com"); !ok || h.EnrollToken != "t2" {
+		t.Fatalf("For: %+v %v", h, ok)
+	}
+	if _, ok := got.For("https://other"); ok {
+		t.Fatal("unknown hub found")
+	}
+	// The old single-hub file still reads.
+	if err := os.WriteFile(MachinePath(def), []byte("hub: https://old\nmachine: box\nenroll_token: x\nname_prefix: box-\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := LoadMachine(def)
+	if len(old.Hubs()) != 1 || old.Hubs()[0].Machine != "box" {
+		t.Fatalf("old layout: %+v", old)
 	}
 }

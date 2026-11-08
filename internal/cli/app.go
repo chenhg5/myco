@@ -235,7 +235,7 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 		e.cfg.Harness, e.cfg.SessionID = b.Harness, b.SessionID
 		return config.Save(e.cfgPath, e.cfg)
 	}
-	path := config.ProfilePath(e.defaultPath, agent)
+	path := profilePathFor(e.defaultPath, hub, agent)
 	cfg, err := config.Load(path) // keep runner settings on re-enrollment
 	if err != nil {
 		return err
