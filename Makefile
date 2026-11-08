@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/chenhg5/myco/internal/cli.Version=$(VERSION)
 
-.PHONY: build test test-integration smoke check vet cross clean web
+.PHONY: build test test-integration smoke check vet cross clean web app
 
 build:
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco ./cmd/myco
@@ -37,3 +37,28 @@ clean:
 # internal/web/dist so Go builds never need Node.
 web:
 	cd web && npm ci && npm run build
+
+# The console app (macOS only: the window links the system WebKit through cgo).
+# Produces bin/myco.app; signs it when MYCO_SIGN_IDENTITY names a Developer ID
+# Application identity in the keychain, otherwise signs it ad hoc.
+APP_VERSION := $(patsubst v%,%,$(firstword $(subst -, ,$(VERSION))))
+app:
+	@test "$$(uname)" = Darwin || { echo "make app needs macOS (the release workflow builds it on a macOS runner)"; exit 1; }
+	CGO_ENABLED=1 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0 \
+		go build -tags production -ldflags '-s -w -X main.version=$(VERSION)' -o bin/myco-app ./cmd/myco-app
+	rm -rf bin/myco.app bin/myco.iconset
+	mkdir -p bin/myco.app/Contents/MacOS bin/myco.app/Contents/Resources bin/myco.iconset
+	cp bin/myco-app bin/myco.app/Contents/MacOS/myco-app
+	sed 's/@VERSION@/$(APP_VERSION)/g' cmd/myco-app/build/darwin/Info.plist > bin/myco.app/Contents/Info.plist
+	for s in 16 32 128 256 512; do \
+		sips -z $$s $$s cmd/myco-app/build/darwin/icon-1024.png --out bin/myco.iconset/icon_$${s}x$${s}.png >/dev/null; \
+		d=$$((s*2)); sips -z $$d $$d cmd/myco-app/build/darwin/icon-1024.png --out bin/myco.iconset/icon_$${s}x$${s}@2x.png >/dev/null; \
+	done
+	iconutil -c icns bin/myco.iconset -o bin/myco.app/Contents/Resources/myco.icns
+	rm -rf bin/myco.iconset
+	if [ -n "$$MYCO_SIGN_IDENTITY" ]; then \
+		codesign --force --options runtime --timestamp --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app; \
+	else \
+		codesign --force --sign - bin/myco.app; \
+	fi
+	codesign --verify --strict bin/myco.app && echo "built bin/myco.app ($(APP_VERSION))"
