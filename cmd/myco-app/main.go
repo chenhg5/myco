@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/chenhg5/myco/internal/console"
 	"github.com/chenhg5/myco/internal/web"
@@ -34,18 +35,44 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}}
-	h := handler(b)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version,
+		Local: &console.Local{Home: home, Device: deviceName()}}
 	if *serve != "" {
-		if err := runServe(*serve, h); err != nil {
+		b.Shell = "browser"
+		if err := runServe(*serve, handler(b)); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
-	if err := runGUI(h); err != nil {
+	b.Shell = "mac"
+	if err := runGUI(handler(b)); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
 	}
+}
+
+// deviceName names this computer in console tokens: its host name,
+// lower-cased, without ".local", e.g. "glenns-macbook-pro".
+func deviceName() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "this-computer"
+	}
+	h = strings.ToLower(strings.TrimSuffix(h, ".local"))
+	var b strings.Builder
+	for _, r := range h {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // handler serves the console API under /app/ and the web UI everywhere else.

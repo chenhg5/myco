@@ -38,6 +38,12 @@ func runGUI(h http.Handler) error {
 		MinWidth:  720,
 		MinHeight: 480,
 		URL:       "/",
+		// No title bar: the traffic lights float over the sidebar, and the
+		// page marks its top row as the drag area (--wails-draggable).
+		Mac: application.MacWindow{
+			TitleBar:                application.MacTitleBarHiddenInset,
+			InvisibleTitleBarHeight: 40,
+		},
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		window.Hide()
