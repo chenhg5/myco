@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
@@ -41,6 +42,11 @@ type Local struct {
 	// Bundled is the myco CLI shipped inside the app ("" = none): used when
 	// no other is installed, and installed into ~/.local/bin by EnsureCLI.
 	Bundled string
+	// ServiceFile returns the local hub's service definition (tests replace
+	// it); default: from the service manager.
+	ServiceFile func() string
+
+	lanOnce sync.Once
 }
 
 // EnsureCLI installs the app's bundled myco CLI into ~/.local/bin when no
@@ -284,6 +290,9 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 		return st
 	}
 	h := &LocalHub{LocalURL: env[config.EnvHub]}
+	// Older local hubs listened on 127.0.0.1 only: move this one onto the
+	// LAN (once, in the background).
+	l.moveHubToLAN()
 	if c, err := client.New(h.LocalURL, ""); err == nil {
 		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		if hl, err := c.Health(cctx); err == nil {

@@ -116,7 +116,7 @@ myco hub up --tunnel none                                    # 不穿透：只�
   - 局域网地址由路由器分配，可能会变；变了以后，已加入的机器要用新地址重新加入。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个。
   - Mac 第一次会弹出"是否允许 myco 接受传入的网络连接"，要选允许。
   - 只想给本机用：`myco hub up --tunnel none --local-only`（只监听 127.0.0.1）。
-  - v0.18.2 及之前用 `--tunnel none` 开的 Hub 只监听 127.0.0.1，升级后重新执行一次 `myco hub up --tunnel none` 才能让局域网访问。
+  - v0.18.2 及之前用 `--tunnel none` 开的 Hub 只监听 127.0.0.1。打开 v0.18.3 及以后的 App 时会自动处理一次：命令行工具太旧就先 `myco upgrade`，再重新执行 `myco hub up --tunnel none`（用了穿透、或者特意加了 `--local-only` 的不动）。不用 App 的话，自己执行这两条即可。
 - 停止：`myco hub down`（数据保留，`myco hub up` 再次启动）。日志在 `~/.myco/hub/hub.log`。
 - 也可以不用 `hub up`，直接运行：`myco hub serve --tunnel tailscale --admin-token-file ~/.myco/hub/hub.env ...`。
 

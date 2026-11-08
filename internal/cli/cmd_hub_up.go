@@ -27,6 +27,9 @@ import (
 
 // hubDir is where `myco hub up` keeps a personal hub: hub.env (admin token,
 // mode 600), hub.db, files/, hub.log, cloudflared.yml.
+// LocalOnlyMarker, in the hub's directory, records `hub up --local-only`.
+const LocalOnlyMarker = "local-only"
+
 func (e *env) hubDir() string { return filepath.Join(config.Dir(e.defaultPath), "hub") }
 
 func hubUpCommand() *Command {
@@ -107,6 +110,13 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			created, err := writeHubEnv(dir, local)
 			if err != nil {
 				return err
+			}
+			// Remember a deliberate --local-only, so the app does not "fix"
+			// a hub that listens on 127.0.0.1 on purpose.
+			if marker := filepath.Join(dir, LocalOnlyMarker); kind == "none" && e.in.Bool("local-only") {
+				_ = os.WriteFile(marker, []byte("myco hub up --local-only\n"), 0o600)
+			} else {
+				_ = os.Remove(marker)
 			}
 			// 2. Tunnel prerequisites now, in the foreground, so problems
 			// (not logged in, Funnel disabled) show up here, not in a log.
