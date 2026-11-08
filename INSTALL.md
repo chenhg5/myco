@@ -656,12 +656,22 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 一个菜单栏 App，可以同时管理多个 Hub：查看所有节点和机器、改名、改 allow-from、踢下线、删除，在机器上开新会话（添加节点），生成入网链接和二维码（添加机器），还能在这台 Mac 上直接开一个本机 Hub。
 
 - **构建**：`make app` 生成 `bin/myco.app`（需要在 macOS 上，带 Go 和 Xcode 命令行工具）。CI 每次推送也会构建一份，在 Actions 的 Artifacts 里下载（还没签名，第一次打开要右键选"打开"）。
-- **接入 Hub**：在 Hub 机器上签发一把控制台令牌，填进 App 的"添加 Hub"，令牌存在钥匙串里：
-  ```bash
-  sudo /usr/local/bin/myco console token create --name <设备名>
-  ```
+- **第一次打开**：两个选择。
+  - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它。
+  - **连接已有的 Hub**：粘贴 **App 连接链接**（`https://<hub>/c/<令牌>`，同时带了 Hub 地址和控制台令牌）。`install-hub.sh` 首次安装时会打印一条；以后在 Hub 机器上再生成：
+    ```bash
+    sudo /usr/local/bin/myco console link --name <设备名>
+    ```
+    点 `myco://` 开头的链接也能直接唤起 App 添加。也可以手动填 Hub 地址和控制台令牌（`myco console token create --name <设备名>`）。令牌存在钥匙串里，可以单独作废（`myco console token revoke`）。
+- **添加节点**有三种方式：
+  - **本机的 agent**：App 列出这台电脑上最近的 Claude Code 和 Codex 会话（目录、第一句话、最后活动时间），点一下就加入当前 Hub，并自动启动本机的 runner 服务。
+  - **其他电脑上的 agent**：生成一条邀请链接，以及一句可以直接发给那边 agent 的话。
+  - **在已加入的机器上开新会话**：见下文。
+- **对话**：在节点详情或"对话"页直接给 agent 派任务，回复和进度按时间线显示，继续发就是接着同一个任务聊；可以搜索、按节点筛选。消息按 Markdown 渲染（代码块、表格、链接）。发送方在 Hub 里记为 `@console:<设备名>`，界面上显示"你"；它代表 Hub 的管理员，不受节点 allow-from 的限制。
+- **切换 Hub**：在侧边栏底部，和连接状态在一起；可以看全部 Hub 汇总，也可以只看一个。
+- 以上功能需要 Hub 升级到 v0.17.0 以上。
 - **机器和节点**：
   - 机器是运行节点的电脑或服务器，按机器自己的稳定 ID（哈希后上报）唯一识别，同一台设备重新加入、改主机名都还是同一台（v0.16.9 起，需要那台机器升级 myco）。
   - claude.ai、Codex cloud 等云端会话跑在临时 sandbox 里，不算机器。
-  - 节点分为 AI、shell、人三类；每个节点显示它用的 CLI 和模型（runner 上报：节点配置的 `runner.model`，或 CLI 自己设置里的默认模型）。
+  - 节点分为 AI 和 shell 两类（App 不再单独列出"人"节点）；每个节点显示它用的 CLI 和模型（runner 上报：节点配置的 `runner.model`，或 CLI 自己设置里的默认模型）。
 - **在机器上开新会话**：App 里选机器 → CLI → 目录。以管理员身份发起，不受那台机器节点 allow-from 的限制；目录范围和权限上限仍由那台机器的 `machine.yaml` 决定。需要那台机器是用入网链接接入的、myco 是 v0.16.5 以上，且 runner 在运行。
