@@ -343,6 +343,42 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/agents/cleanup", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			OfflineDays int  `json:"offline_days"`
+			DryRun      bool `json:"dry_run"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := c.CleanupAgents(r.Context(), in.OfflineDays, in.DryRun)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/agents/{name}/peers", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		ps, err := c.Peers(r.Context(), r.PathValue("name"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if ps == nil {
+			ps = []api.Peer{}
+		}
+		writeJSON(w, http.StatusOK, api.PeerList{Peers: ps})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/exchanges", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+		ex, err := c.Exchanges(r.Context(), q.Get("a"), q.Get("b"), before, 0)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, ex)
+	}))
 	m.HandleFunc("PATCH /app/hubs/{id}/machines/{mid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
 			Name string `json:"name"`

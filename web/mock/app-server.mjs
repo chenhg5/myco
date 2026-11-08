@@ -213,6 +213,12 @@ const state = {
           delivery: { mode: "webhook", url: "http://bench-01:7790/hook", has_secret: true },
         }),
         makeAgent({
+          name: "mac-exec", owner: "glenn", owner_id: "mem_glenn", description: "在 Studio Mac 上执行命令。",
+          kind: "shell", machine_id: "m_studio", runtime: { cli: "exec" },
+          labels: ["machine=studio"], binding: { harness: "exec", environment: "macOS", workdir: "~" },
+          delivery: { mode: "pull" }, allow_from: ["pm-codex"], status_at: iso(30),
+        }),
+        makeAgent({
           name: "glenn", owner: "glenn", owner_id: "mem_glenn", display_name: "Glenn", description: "人。负责发任务和验收。",
           kind: "human", binding: { harness: "human" },
           labels: ["role=human"], status_at: iso(3),
@@ -394,6 +400,29 @@ function totals(agents) {
     t[s] += 1;
   }
   return t;
+}
+
+// A node's demo history with the exec node mac-exec: six commands, one thread each.
+const execHistories = {};
+function execHistory(agent) {
+  if (execHistories[agent]) return execHistories[agent];
+  const out = [];
+  const cmds = ["uptime", "df -h /", "git -C ~/code/myco pull", "make check", "myco upgrade", "myco --version"];
+  const outs = ["up 3 days, 4:12, 2 users, load averages: 1.92 2.10 2.31\n", "Filesystem   Size  Used Avail Capacity\n/dev/disk3s1 926Gi 412Gi 498Gi  46%\n", "Already up to date.\n", "ok  github.com/chenhg5/myco/internal/app 1.2s\nsmoke: all steps passed\n", "", "v0.16.7\n"];
+  cmds.forEach((c, i) => {
+    const t = 6 * 3600 - i * 3000;
+    const th = `th_exec_${agent}_${i}`;
+    const timedOut = i === cmds.length - 1;
+    const task = makeMessage({ thread_id: th, from: agent, to: "mac-exec", type: "task", status: "done", body: c, created_at: iso(t), updated_at: iso(t) });
+    out.push(task);
+    out.push(makeMessage({ thread_id: th, reply_to: task.id, from: "mac-exec", to: agent, type: "reply", status: "done",
+      body: JSON.stringify(i === 4
+        ? { exit_code: 1, stdout: "", stderr: "download failed: 504 Gateway Timeout\n", duration_ms: 12400, timed_out: false }
+        : { exit_code: timedOut ? 124 : 0, stdout: outs[i], stderr: "", duration_ms: timedOut ? 60000 : 820, timed_out: timedOut, error: timedOut ? "killed after 1m0s (the node's timeout)" : "" }),
+      created_at: iso(t - 30), updated_at: iso(t - 30) }));
+  });
+  execHistories[agent] = out;
+  return out;
 }
 
 // Ids of messages closed with "dismiss" (/app/hubs/{id}/messages/{mid}/dismiss).
@@ -861,6 +890,30 @@ const server = http.createServer(async (req, res) => {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       dismissed.add(parts[4]);
       return send(res, 200, makeMessage({ id: parts[4], status: "done" }));
+    }
+
+    // /app/hubs/{id}/agents/{name}/peers — other nodes it talked to (demo: an exec node).
+    if (parts.length === 6 && parts[3] === "agents" && parts[5] === "peers" && method === "GET") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const ex = execHistory(decodeURIComponent(parts[4]));
+      return send(res, 200, { peers: [{ agent: "mac-exec", messages: ex.length, last: ex[ex.length - 1] }] });
+    }
+    // /app/hubs/{id}/exchanges?a=&b=&before= — newest first, 4 per page (to show paging).
+    if (parts.length === 4 && parts[3] === "exchanges" && method === "GET") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const q = new URL(req.url, "http://x").searchParams;
+      const a = q.get("a") === "mac-exec" ? q.get("b") : q.get("a");
+      const before = Number(q.get("before") || 0);
+      const all = execHistory(a).slice().reverse().filter((m) => !before || new Date(m.created_at).getTime() < before);
+      return send(res, 200, { messages: all.slice(0, 4), more: all.length > 4 });
+    }
+    // /app/hubs/{id}/agents/cleanup — offline nodes (demo: every offline one).
+    if (parts.length === 5 && parts[3] === "agents" && parts[4] === "cleanup" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = await readBody(req);
+      const stale = hub.agents.filter((a) => !a.online && a.kind !== "machine" && a.binding?.harness);
+      if (!body.dry_run) hub.agents = hub.agents.filter((a) => !stale.includes(a));
+      return send(res, 200, { agents: stale, removed: !body.dry_run, dry_run: !!body.dry_run });
     }
 
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {

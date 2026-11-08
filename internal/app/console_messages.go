@@ -118,3 +118,24 @@ func (s *MessageService) Conversations(ctx context.Context, agent, query string,
 	}
 	return out, nil
 }
+
+// Peers lists the nodes agent exchanged messages with (not the console),
+// most recent first.
+func (s *MessageService) Peers(ctx context.Context, agent domain.AgentName, limit int) ([]domain.PeerRef, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.messages.ListPeers(ctx, agent, limit)
+}
+
+// Between pages through the messages between nodes a and b (either
+// direction), newest first; before is unix ms (0 = now).
+func (s *MessageService) Between(ctx context.Context, a, b domain.AgentName, before int64, limit int) ([]*domain.Message, error) {
+	if a == "" || b == "" {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "name both nodes (a and b)")
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return s.messages.ListBetween(ctx, a, b, before, limit)
+}

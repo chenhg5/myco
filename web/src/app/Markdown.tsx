@@ -74,7 +74,7 @@ export function Markdown({ text }: { text: string }) {
   return <div className="md" onClick={onCopyClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-interface ExecResult {
+export interface ExecResult {
   exit_code?: number;
   stdout?: string;
   stderr?: string;
@@ -148,6 +148,15 @@ function parseJSON(body: string): { ok: true; value: unknown } | null {
   } catch { /* plain text that happens to start with a brace */ }
   return null;
 }
+
+/** The command result in an exec node's reply, or null. */
+export function parseExecResult(body: string): ExecResult | null {
+  const p = parseJSON(body);
+  if (p && !Array.isArray(p.value) && isExec(p.value as object)) return p.value as ExecResult;
+  return null;
+}
+
+export { duration as execDuration };
 
 function RenderedBody({ body }: { body: string }) {
   const parsed = parseJSON(body);

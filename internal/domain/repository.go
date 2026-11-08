@@ -63,6 +63,12 @@ type MessageRepository interface {
 	// optionally only threads with agent in them, or a message containing
 	// query. before (unix ms, 0 = now) pages back.
 	ListThreads(ctx context.Context, senderPrefix string, agent AgentName, query string, before int64, limit int) ([]ThreadRef, error)
+	// ListPeers returns the agents agent exchanged messages with (consoles
+	// excluded), most recent first, with how many messages and the newest.
+	ListPeers(ctx context.Context, agent AgentName, limit int) ([]PeerRef, error)
+	// ListBetween returns messages between agents a and b in either
+	// direction, newest first; before (unix ms, 0 = now) pages back.
+	ListBetween(ctx context.Context, a, b AgentName, before int64, limit int) ([]*Message, error)
 	// CreateMany stores several new messages atomically.
 	CreateMany(ctx context.Context, ms []*Message) error
 	// ListDue returns (without claiming) up to limit messages deliverable to
@@ -80,6 +86,13 @@ type MessageRepository interface {
 }
 
 // ThreadRef is a thread and when it was last updated.
+// PeerRef is another agent an agent exchanged messages with.
+type PeerRef struct {
+	Agent    AgentName
+	Messages int
+	Last     *Message
+}
+
 type ThreadRef struct {
 	ID        string
 	UpdatedAt time.Time

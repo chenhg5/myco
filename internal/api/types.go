@@ -604,6 +604,40 @@ type ConversationList struct {
 	Conversations []Conversation `json:"conversations"`
 }
 
+// CleanupRequest is the body of POST /v1/agents/cleanup.
+type CleanupRequest struct {
+	// OfflineDays: remove nodes offline for at least this many days (>= 1).
+	OfflineDays int `json:"offline_days"`
+}
+
+// CleanupResponse lists the nodes removed (or, with dry_run, that would be):
+// only those the caller may manage.
+type CleanupResponse struct {
+	Agents  []Agent `json:"agents"`
+	Removed bool    `json:"removed"`
+	DryRun  bool    `json:"dry_run,omitempty"`
+}
+
+// Peer is another node a node exchanged messages with
+// (GET /v1/console/agents/{name}/peers).
+type Peer struct {
+	Agent    string   `json:"agent"`
+	Messages int      `json:"messages"`
+	Last     *Message `json:"last,omitempty"`
+}
+
+// PeerList is the body of GET /v1/console/agents/{name}/peers.
+type PeerList struct {
+	Peers []Peer `json:"peers"`
+}
+
+// Exchange is the body of GET /v1/console/exchanges: messages between two
+// nodes, newest first; more says older ones exist (page with before).
+type Exchange struct {
+	Messages []Message `json:"messages"`
+	More     bool      `json:"more"`
+}
+
 // SteerRequest is the body of POST /v1/console/messages/{id}/steer.
 type SteerRequest struct {
 	Body string `json:"body"`

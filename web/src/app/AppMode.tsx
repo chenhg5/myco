@@ -9,6 +9,7 @@ import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
+import { CleanupDialog } from "@/app/CleanupDialog";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { ConversationsPage, type ConversationRow } from "@/app/ConversationsPage";
 import { HubSwitcher } from "@/app/HubSwitcher";
@@ -108,6 +109,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
   const [conv, setConv] = useState<ConversationTarget | null>(null);
   const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
   /** Bumped to make the settings page show its Hub section. */
   const [hubSettingsRequest, setHubSettingsRequest] = useState(0);
 
@@ -208,13 +210,23 @@ export default function AppMode({ initialHubs, initialInfo }: {
     [namedHubs, filters.hub],
   );
 
-  const openConversation = (hubId: string, threadId: string, agent: string) => {
+  // From a node's panel, Back returns to that node (on the page it was on).
+  const openConversation = (hubId: string, threadId: string, agent: string, extra?: { peer?: string; fromNode?: boolean }) => {
     const hubName = namedHubs.find((h) => h.id === hubId)?.name
       || namedOv?.hubs.find((h) => h.id === hubId)?.name
       || hubId;
+    const returnTo = extra?.fromNode && inspect ? { page, node: inspect } : undefined;
     setInspect(null);
     setPage("conversations");
-    setConv({ hubId, hubName, threadId, agent });
+    setConv({ hubId, hubName, threadId, agent, peer: extra?.peer, returnTo });
+  };
+  const closeConversation = () => {
+    const back = conv?.returnTo;
+    setConv(null);
+    if (back) {
+      setPage(back.page as Page);
+      setInspect(back.node);
+    }
   };
 
   const openConversationRow = (row: ConversationRow) => {
@@ -367,7 +379,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             target={conv}
             rows={rows}
             now={now}
-            onBack={() => setConv(null)}
+            onBack={closeConversation}
             onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
           />
         ) : (
@@ -403,6 +415,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 highlight={highlight}
                 onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
                 onAdd={() => setSpawnTarget({})}
+                onCleanup={() => setCleanupOpen(true)}
               />
             )}
 
@@ -439,6 +452,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
+      <CleanupDialog
+        open={cleanupOpen}
+        onOpenChange={setCleanupOpen}
+        hubs={namedOv?.hubs || []}
+        defaultHub={filters.hub === "all" ? undefined : filters.hub}
+        onDone={() => void refresh()}
+      />
       <ConnectHubDialog
         open={connectOpen}
         onOpenChange={closeConnect}
@@ -451,7 +471,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
         now={now}
         onClose={() => setInspect(null)}
         onRefresh={refresh}
-        onThread={(hubId, threadId, agent) => openConversation(hubId, threadId, agent)}
+        onThread={(hubId, threadId, agent) => openConversation(hubId, threadId, agent, { fromNode: true })}
+        onPeer={(hubId, agent, peer) => openConversation(hubId, "", agent, { peer, fromNode: true })}
         onMessage={(r) => {
           setInspect(null);
           setNewConv({ hubId: r.hub.id, agent: r.st.agent.name });

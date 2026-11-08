@@ -3086,3 +3086,116 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-msg-status { font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: var(--pill); color: var(--muted); margin-right: 2px; }
 .app-msg-status.delivered, .app-msg-status.acked { color: var(--accent); }
 .app-msg-status.held { color: var(--warn, #c48a1a); }
+
+/* Exchange view: load earlier, and a divider where a new thread starts. */
+.conv-older {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.conv-thread-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.conv-thread-divider::before,
+.conv-thread-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--line-2);
+}
+.app-msg .meta .count {
+  color: var(--muted);
+}
+
+/* Clean up offline nodes */
+.app-cleanup-controls {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.app-cleanup-controls .app-field-label {
+  margin: 0;
+}
+.app-cleanup-list {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.app-summary-action {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent, var(--fg-2));
+  font: inherit;
+  cursor: pointer;
+}
+.app-summary-action:hover {
+  text-decoration: underline;
+}
+
+/* Exchanges with an exec node, as a terminal. */
+.term {
+  background: #15161a;
+  color: #d9dbe0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+  overflow-x: auto;
+}
+.term-cmd + .term-cmd,
+.term-cmd + .term-comment,
+.term-comment + .term-cmd,
+.term-comment + .term-comment {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #2c2e35;
+}
+.term-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #7c808b;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.term-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #f2f3f5;
+}
+.term-prompt {
+  color: #52a685;
+  margin-right: 8px;
+  user-select: none;
+}
+.term-out {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  color: #c3c6cd;
+}
+.term-out.is-err {
+  color: #f0a3a3;
+}
+.term-exit {
+  margin-top: 4px;
+  color: #f08c8c;
+}
+.term-pending {
+  margin-top: 4px;
+  color: #d9b45c;
+}
+.term-comment {
+  color: #8d919b;
+  white-space: pre-wrap;
+}

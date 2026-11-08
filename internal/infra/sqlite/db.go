@@ -175,6 +175,9 @@ func Open(path string) (*sql.DB, error) {
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_broadcast ON messages(broadcast_id) WHERE broadcast_id != ''`,
+		// Messages an agent sent (its inbox is idx_messages_inbox): peers and
+		// exchanges between two nodes.
+		`CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent, to_agent, created_at)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
 			db.Close()

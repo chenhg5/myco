@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -111,6 +112,7 @@ func (s *Server) routes() {
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
+	m.HandleFunc("POST /v1/agents/cleanup", s.admin(s.cleanupAgents))
 	m.HandleFunc("POST /v1/agents/{name}/kick", s.admin(s.kickAgent))
 	m.HandleFunc("GET /v1/machines", s.admin(s.listMachines))
 	m.HandleFunc("PATCH /v1/machines/{id}", s.admin(s.renameMachine))
@@ -126,6 +128,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
 	m.HandleFunc("POST /v1/console/messages/{id}/dismiss", s.admin(s.consoleDismiss))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
+	m.HandleFunc("GET /v1/console/agents/{name}/peers", s.admin(s.consolePeers))
+	m.HandleFunc("GET /v1/console/exchanges", s.admin(s.consoleExchanges))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	// Members (people) and the audit log. Console tokens act as their member;
 	// handlers check what that member may do.
@@ -343,6 +347,43 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 		s.record(r, "agent.remove", string(a.Name), "")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "removed": !dry, "dry_run": dry})
+}
+
+// cleanupAgents removes the nodes offline for a while that the caller may
+// manage (members: their own; owner and admins: all).
+func (s *Server) cleanupAgents(w http.ResponseWriter, r *http.Request) {
+	var req api.CleanupRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.OfflineDays < 1 {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "offline_days must be at least 1"))
+		return
+	}
+	stale, err := s.agents.Stale(r.Context(), time.Duration(req.OfflineDays)*24*time.Hour)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	actor, dry := s.actorOf(r), dryRun(r)
+	out := api.CleanupResponse{Agents: []api.Agent{}, Removed: !dry, DryRun: dry}
+	for _, a := range stale {
+		if !actor.Owns(a.Owner) {
+			continue
+		}
+		if !dry {
+			if _, err := s.agents.Remove(r.Context(), string(a.Name), false); err != nil {
+				if domain.IsCode(err, domain.CodeNotFound) {
+					continue
+				}
+				writeError(w, err)
+				return
+			}
+			s.record(r, "agent.remove", string(a.Name), fmt.Sprintf("cleanup: offline %d+ days", req.OfflineDays))
+		}
+		out.Agents = append(out.Agents, s.agentDTO(a))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) kickAgent(w http.ResponseWriter, r *http.Request) {
@@ -1442,6 +1483,47 @@ func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	s.record(r, "message.dismiss", string(m.To), id+" from "+string(m.From))
 	writeJSON(w, http.StatusOK, messageDTO(m))
+}
+
+func (s *Server) consolePeers(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	ps, err := s.messages.Peers(r.Context(), domain.AgentName(r.PathValue("name")), limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.PeerList{Peers: make([]api.Peer, 0, len(ps))}
+	for _, p := range ps {
+		pe := api.Peer{Agent: string(p.Agent), Messages: p.Messages}
+		if p.Last != nil {
+			m := messageDTO(p.Last)
+			pe.Last = &m
+		}
+		out.Peers = append(out.Peers, pe)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	ms, err := s.messages.Between(r.Context(), domain.AgentName(q.Get("a")), domain.AgentName(q.Get("b")), before, limit+1)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.Exchange{Messages: make([]api.Message, 0, len(ms))}
+	if len(ms) > limit {
+		ms, out.More = ms[:limit], true
+	}
+	for _, m := range ms {
+		out.Messages = append(out.Messages, messageDTO(m))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {

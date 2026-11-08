@@ -83,7 +83,7 @@ export function NodeRowView({ row, highlight, onClick }: {
   );
 }
 
-export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd }: {
+export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd, onCleanup }: {
   rows: AgentRow[];
   hubs: HubOverview[] | undefined;
   hubMeta: Hub[];
@@ -93,6 +93,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   highlight: { hubId: string; name: string } | null;
   onOpen: (row: AgentRow) => void;
   onAdd: () => void;
+  // Opens "clean up offline nodes".
+  onCleanup?: () => void;
 }) {
   // Machine nodes (`xxx-machine`) and people are not nodes in this App.
   const nodes = useMemo(() => rows.filter((r) => {
@@ -203,7 +205,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   return (
     <div className="app-page">
       <div className="app-page-head">
-        <p className="app-summary">{hubs ? summary : L("正在加载…", "Loading…")}</p>
+        <p className="app-summary">
+          {hubs ? summary : L("正在加载…", "Loading…")}
+          {hubs && counts.offline > 0 && onCleanup && (
+            <button type="button" className="app-summary-action" onClick={onCleanup}>{L("清理离线节点", "Clean up offline nodes")}</button>
+          )}
+        </p>
         <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
           <Plus />{L("添加节点", "Add node")}
         </button>

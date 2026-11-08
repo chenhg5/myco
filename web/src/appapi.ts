@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Device, Machine, Member, MemberRole, Message, Overview, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 export interface Hub {
@@ -237,6 +237,15 @@ export const appApi = {
   overview: () => request<AppOverview>("GET", "app/overview"),
   thread: (hubId: string, threadId: string) =>
     request<{ messages: Message[] }>("GET", `app/hubs/${enc(hubId)}/threads/${enc(threadId)}`),
+  /** The nodes a node exchanged messages with (not the console), most recent first. */
+  peers: (hubId: string, name: string) =>
+    request<{ peers: Peer[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/peers`),
+  /** Messages between two nodes, newest first; before (unix ms) pages back. */
+  exchanges: (hubId: string, a: string, b: string, before?: number) =>
+    request<{ messages: Message[]; more: boolean }>("GET", `app/hubs/${enc(hubId)}/exchanges?a=${enc(a)}&b=${enc(b)}${before ? `&before=${before}` : ""}`),
+  /** Removes (or, with dry_run, lists) nodes offline for offline_days or more that you may manage. */
+  cleanup: (hubId: string, offlineDays: number, dryRun: boolean) =>
+    request<{ agents: Agent[]; removed: boolean; dry_run?: boolean }>("POST", `app/hubs/${enc(hubId)}/agents/cleanup`, { offline_days: offlineDays, dry_run: dryRun }),
 
   /** Claude Code / Codex sessions on this computer, newest first. */
   localSessions: () => request<{ sessions: LocalSession[] }>("GET", "app/local/sessions"),

@@ -51,6 +51,8 @@ export interface Message {
   from_owner?: string;
   created_at: string; updated_at: string;
 }
+/** Another node a node exchanged messages with. */
+export interface Peer { agent: string; messages: number; last?: Message }
 export type State = "working" | "pending" | "idle" | "offline";
 export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number; current?: Message[];
   /** how it receives right now: a session keeps `inbox wait` running, or a runner wakes the session per message */

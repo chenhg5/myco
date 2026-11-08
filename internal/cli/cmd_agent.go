@@ -378,7 +378,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove)
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove, agentCleanupCommand())
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
@@ -547,4 +547,52 @@ func truncate(s string, n int) string {
 		return string([]rune(s)[:n-1]) + "…"
 	}
 	return s
+}
+
+// agentCleanupCommand removes nodes that have been offline for a while.
+func agentCleanupCommand() *Command {
+	return &Command{
+		Name:     "cleanup",
+		Summary:  "Remove nodes offline for N days or more (yours; owner/admin: everyone's)",
+		Mutating: true,
+		Long: `Every session that joins becomes a node, and ended sessions stay as offline nodes. This removes the
+nodes that have not been seen for --offline-days (never seen: since they joined). Members remove only
+their own nodes; the hub's owner and admins remove anyone's. Identities registered by hand without a
+harness, and machine nodes, are kept. A removed session can come back with "myco join". Each removal is audited.`,
+		Examples: []string{
+			"myco agent cleanup --offline-days 30 --dry-run   # list them first",
+			"myco agent cleanup --offline-days 30 --force",
+		},
+		Flags: []Flag{
+			{Name: "offline-days", Kind: Int, Default: "30", Help: "Remove nodes offline for at least this many days"},
+			{Name: "force", Kind: Bool, Help: "Required to actually remove (irreversible)"},
+			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
+		},
+		Run: handler(func(e *env) error {
+			dry := e.in.Bool("dry-run")
+			if !dry && !e.in.Bool("force") {
+				return errorf("confirmation_required", ExitUsage, "re-run with --force (or --dry-run to preview)", "removing nodes is irreversible")
+			}
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			res, err := c.CleanupAgents(e.in.Ctx, e.in.Int("offline-days"), dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "cleanup", "offline_days": e.in.Int("offline-days"), "agents": res.Agents})
+			}
+			return e.p.Print(res, func(w io.Writer) {
+				if len(res.Agents) == 0 {
+					fmt.Fprintln(w, "nothing to remove")
+					return
+				}
+				for _, a := range res.Agents {
+					fmt.Fprintln(w, "removed "+a.Name)
+				}
+			})
+		}),
+	}
 }

@@ -295,3 +295,48 @@ func (r *MessageRepo) ListThreads(ctx context.Context, senderPrefix string, agen
 func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
 }
+
+func (r *MessageRepo) ListPeers(ctx context.Context, agent domain.AgentName, limit int) ([]domain.PeerRef, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT CASE WHEN from_agent=? THEN to_agent ELSE from_agent END AS peer, COUNT(*), MAX(created_at)
+		FROM messages WHERE (from_agent=? OR to_agent=?) AND from_agent NOT LIKE '@%' AND to_agent NOT LIKE '@%' AND from_agent != to_agent
+		GROUP BY peer ORDER BY MAX(created_at) DESC LIMIT ?`, agent, agent, agent, limit)
+	if err != nil {
+		return nil, internal(err)
+	}
+	var out []domain.PeerRef
+	for rows.Next() {
+		var (
+			p    domain.PeerRef
+			last int64
+		)
+		if err := rows.Scan(&p.Agent, &p.Messages, &last); err != nil {
+			rows.Close()
+			return nil, internal(err)
+		}
+		out = append(out, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, internal(err)
+	}
+	for i := range out {
+		ms, err := r.ListBetween(ctx, agent, out[i].Agent, 0, 1)
+		if err != nil {
+			return nil, err
+		}
+		if len(ms) > 0 {
+			out[i].Last = ms[0]
+		}
+	}
+	return out, nil
+}
+
+func (r *MessageRepo) ListBetween(ctx context.Context, a, b domain.AgentName, before int64, limit int) ([]*domain.Message, error) {
+	where := `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?))`
+	args := []any{a, b, b, a}
+	if before > 0 {
+		where += ` AND created_at < ?`
+		args = append(args, before)
+	}
+	return r.many(ctx, r.db, where+` ORDER BY created_at DESC, id DESC LIMIT ?`, append(args, limit)...)
+}

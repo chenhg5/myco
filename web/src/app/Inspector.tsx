@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, MessageSquare, X } from "lucide-react";
 import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import type { Member } from "@/api";
+import type { Member, Peer } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
@@ -21,23 +21,20 @@ const pillClass: Record<string, string> = { working: "green", pending: "amber", 
 
 const isConsole = (name: string) => name.startsWith("@console:");
 
-// MessageRows lists the node's recent threads, one row per thread: either
-// the ones you (the console) take part in, or its exchanges with other
-// nodes, which you can only read.
-function MessageRows({ row, now, mine, onThread }: {
+// MessageRows lists the threads you (the console) take part in with the node.
+function MessageRows({ row, now, onThread }: {
   row: AgentRow;
   now: number;
-  mine: boolean;
   onThread: (hubId: string, threadId: string, agent: string) => void;
 }) {
   const name = row.st.agent.name;
   const seen = new Set<string>();
   const msgs = (row.hub.overview?.recent || [])
     .filter((m) => m.from === name || m.to === name)
-    .filter((m) => (isMe(m.from, row.hub) || isMe(m.to, row.hub)) === mine)
+    .filter((m) => isMe(m.from, row.hub) || isMe(m.to, row.hub))
     .filter((m) => (seen.has(m.thread_id) ? false : (seen.add(m.thread_id), true)))
     .slice(0, 6);
-  if (!msgs.length) return <div className="app-empty-note">{mine ? L("你还没有和它对话", "No conversation with it yet") : L("最近没有和其他节点的往来", "No recent exchanges with other nodes")}</div>;
+  if (!msgs.length) return <div className="app-empty-note">{L("你还没有和它对话", "No conversation with it yet")}</div>;
   const label = (n: string) => (isConsole(n) ? personLabel(n, row.hub) : n === name ? (row.st.agent.display_name || n) : n);
   return (
     <>
@@ -48,6 +45,46 @@ function MessageRows({ row, now, mine, onThread }: {
             <span className="time">{timeAgo(m.updated_at, now)}</span>
           </span>
           <span className="body">{summarize(m)}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
+// PeerRows lists the other nodes this node exchanged messages with, one row
+// per node (however many threads); a row opens their whole history.
+function PeerRows({ row, now, onPeer }: {
+  row: AgentRow;
+  now: number;
+  onPeer: (hubId: string, agent: string, peer: string) => void;
+}) {
+  const name = row.st.agent.name;
+  const hubId = row.hub.id;
+  const [peers, setPeers] = useState<Peer[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  // Reload when the node's activity changes (the overview refreshes).
+  const stamp = (row.hub.overview?.recent || []).find((m) => m.from === name || m.to === name)?.id || "";
+  useEffect(() => {
+    let cancelled = false;
+    appApi.peers(hubId, name)
+      .then((r) => { if (!cancelled) { setPeers(r.peers); setError(null); } })
+      .catch((e) => { if (!cancelled) setError(e); });
+    return () => { cancelled = true; };
+  }, [hubId, name, stamp]);
+  if (error && !peers) return <ErrorText error={error} />;
+  if (!peers) return <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>;
+  if (!peers.length) return <div className="app-empty-note">{L("还没有和其他节点的往来", "No exchanges with other nodes yet")}</div>;
+  const nameOf = (n: string) => (row.hub.overview?.agents || []).find((x) => x.agent.name === n)?.agent.display_name || n;
+  return (
+    <>
+      {peers.map((p) => (
+        <button key={p.agent} type="button" className="app-msg" onClick={() => onPeer(hubId, name, p.agent)}>
+          <span className="meta">
+            <span className="who">{nameOf(p.agent)}</span>
+            <span className="count">{L(`${p.messages} 条消息`, `${p.messages} message${p.messages === 1 ? "" : "s"}`)}</span>
+            {p.last && <span className="time">{timeAgo(p.last.created_at, now)}</span>}
+          </span>
+          {p.last && <span className="body">{p.last.from === name ? "→ " : "← "}{summarize(p.last)}</span>}
         </button>
       ))}
     </>
@@ -412,12 +449,14 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
   );
 }
 
-export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, onOpenMachine }: {
+export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine }: {
   row: AgentRow | null;
   now: number;
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onThread: (hubId: string, threadId: string, agent: string) => void;
+  // Opens the whole history between agent and another node.
+  onPeer: (hubId: string, agent: string, peer: string) => void;
   onMessage: (row: AgentRow) => void;
   onOpenMachine: (hubId: string, machineId: string) => void;
 }) {
@@ -660,7 +699,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 </button>
               )}
             </div>
-            <div className="app-list"><MessageRows row={row} now={now} mine onThread={onThread} /></div>
+            <div className="app-list"><MessageRows row={row} now={now} onThread={onThread} /></div>
           </section>
 
           <section className="app-group">
@@ -668,7 +707,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
               <span className="name">{L("与其他节点的往来", "Exchanges with other nodes")}</span>
               <span className="app-group-note">{L("只读", "Read-only")}</span>
             </div>
-            <div className="app-list"><MessageRows row={row} now={now} mine={false} onThread={onThread} /></div>
+            <div className="app-list"><PeerRows row={row} now={now} onPeer={onPeer} /></div>
           </section>
 
           <section className="app-group">

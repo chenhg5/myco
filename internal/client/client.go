@@ -692,6 +692,33 @@ func (c *Client) Conversations(ctx context.Context, agent, query string, before 
 	return out.Conversations, c.do(ctx, http.MethodGet, "/v1/console/conversations", q, nil, &out)
 }
 
+// CleanupAgents removes nodes offline for at least days (those the caller
+// may manage); with dry, only lists them.
+func (c *Client) CleanupAgents(ctx context.Context, days int, dry bool) (*api.CleanupResponse, error) {
+	var out api.CleanupResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/agents/cleanup", dryQuery(dry), api.CleanupRequest{OfflineDays: days}, &out)
+}
+
+// Peers lists the nodes agent exchanged messages with (console token).
+func (c *Client) Peers(ctx context.Context, agent string) ([]api.Peer, error) {
+	var out api.PeerList
+	return out.Peers, c.do(ctx, http.MethodGet, "/v1/console/agents/"+esc(agent)+"/peers", nil, nil, &out)
+}
+
+// Exchanges pages through the messages between nodes a and b, newest
+// first; before is unix ms (0 = now).
+func (c *Client) Exchanges(ctx context.Context, a, b string, before int64, limit int) (*api.Exchange, error) {
+	q := url.Values{"a": {a}, "b": {b}}
+	if before > 0 {
+		q.Set("before", strconv.FormatInt(before, 10))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out api.Exchange
+	return &out, c.do(ctx, http.MethodGet, "/v1/console/exchanges", q, nil, &out)
+}
+
 // Whoami says which member a console token belongs to.
 func (c *Client) Whoami(ctx context.Context) (*api.Whoami, error) {
 	var out api.Whoami

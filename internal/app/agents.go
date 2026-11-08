@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -29,6 +30,40 @@ func NewAgentService(agents domain.AgentRepository, tokens TokenIssuer, ids IDGe
 
 // OnlineWindow is how recently an agent must have been seen to count as online.
 func (s *AgentService) OnlineWindow() time.Duration { return s.onlineWindow }
+
+// Stale lists agents that have been offline for at least d (never seen:
+// since they were created), oldest first. Identities registered by hand
+// without a harness are left out (nothing marks them online), and so are
+// machine nodes (a machine's runner recreates its node when it comes back).
+func (s *AgentService) Stale(ctx context.Context, d time.Duration) ([]*domain.Agent, error) {
+	all, err := s.agents.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock.Now()
+	var out []*domain.Agent
+	for _, a := range all {
+		if k := a.Kind(); k == domain.KindHuman || k == domain.KindMachine || a.IsOnline(now, s.onlineWindow) {
+			continue
+		}
+		seen := a.LastSeenAt
+		if seen.IsZero() {
+			seen = a.CreatedAt
+		}
+		if now.Sub(seen) >= d {
+			out = append(out, a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return lastSeen(out[i]).Before(lastSeen(out[j])) })
+	return out, nil
+}
+
+func lastSeen(a *domain.Agent) time.Time {
+	if a.LastSeenAt.IsZero() {
+		return a.CreatedAt
+	}
+	return a.LastSeenAt
+}
 
 // Now exposes the service clock (used by presenters for online status).
 func (s *AgentService) Now() time.Time { return s.clock.Now() }

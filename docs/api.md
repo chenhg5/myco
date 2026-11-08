@@ -26,10 +26,13 @@ Errors (any non-2xx):
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |
 | `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
+| `POST /v1/agents/cleanup?dry_run=` | admin (members: their own nodes) | `{offline_days}` → `{agents, removed}`: removes nodes offline for that many days or more (never seen: since they joined); hand-registered identities and machine nodes are kept; each removal audited |
 | `GET /v1/console/me` | admin | `{member?, admin?, can_manage}`: the person behind a console token |
 | `POST /v1/console/pair` | — (the code is the proof) | `{code, device}` → `{token, device, member}`: trades a one-time pairing code (`myco_pair_…`, from an invite or an add-device link; once, within 24 h) for the device's own console token |
 | `POST /v1/console/me/pairings` | admin | → `{link, expires_at, command}`: a one-time link to add another device of the caller (the owner, for the admin token) |
 | `GET /v1/console/me/devices`, `DELETE /v1/console/me/devices/{id}` | admin | The caller's devices (console tokens); removing one revokes it |
+| `GET /v1/console/agents/{name}/peers` | admin | `{peers: [{agent, messages, last}]}`: the nodes it exchanged messages with (not the console), most recent first |
+| `GET /v1/console/exchanges?a=&b=&before=&limit=` | admin | `{messages, more}`: messages between nodes `a` and `b` in either direction, all threads, newest first; `before` (unix ms) pages back |
 | `GET /c/{code}` | — | A one-time link's page: a browser gets both choices (app or command), `curl` gets the script that runs `myco member accept`, an agent (Accept `text/markdown`) gets a short guide. Reading it never uses up the code |
 | `POST /v1/console/messages/{id}/dismiss` | admin (the recipient node's owner, or owner/admin) | Closes an open message (even queued) for its recipient without a reply; audited as `message.dismiss` |
 | `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
