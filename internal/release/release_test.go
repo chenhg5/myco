@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/chenhg5/myco/internal/osutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -161,7 +162,7 @@ func TestReplaceIsAtomic(t *testing.T) {
 	}
 	b, _ := os.ReadFile(target)
 	st, _ := os.Stat(target)
-	if string(b) != "new" || st.Mode().Perm() != 0o755 {
+	if string(b) != "new" || (osutil.UnixPermissions && st.Mode().Perm() != 0o755) {
 		t.Fatalf("after Replace: %q %v", b, st.Mode())
 	}
 	entries, _ := os.ReadDir(dir)

@@ -193,14 +193,15 @@ func (e *env) watchVersions(log interface {
 	if hub == "" {
 		return
 	}
+	self := Version // read once, before the goroutine
 	go func() {
 		for {
 			if h, err := hubHealth(e.in.Ctx, hub, 10*time.Second); err == nil {
 				c := updateCache{Hub: hub, HubVersion: h.ServerVersion, HubKnown: h.ServerVersion != "", Latest: h.LatestVersion, CheckedAt: time.Now()}
-				for _, n := range updateNotices(c, Version) {
+				for _, n := range updateNotices(c, self) {
 					log.Warn(n)
 				}
-				log.Info("versions", "myco", Version, "hub", orDefault(h.ServerVersion, "older than v0.16.6"), "latest", orDefault(h.LatestVersion, "unknown"))
+				log.Info("versions", "myco", self, "hub", orDefault(h.ServerVersion, "older than v0.16.6"), "latest", orDefault(h.LatestVersion, "unknown"))
 			}
 			select {
 			case <-e.in.Ctx.Done():

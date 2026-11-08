@@ -8,11 +8,13 @@ import (
 	"testing"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 // fakeCLI writes a script that records its argv and prints canned output.
 func fakeCLI(t *testing.T, output string) (bin, argsFile string) {
 	t.Helper()
+	testutil.NeedsPOSIXShell(t)
 	dir := t.TempDir()
 	argsFile = filepath.Join(dir, "args")
 	bin = filepath.Join(dir, "fake")

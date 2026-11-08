@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 // readmeHarnesses are the harnesses the README advertises.
@@ -106,6 +107,7 @@ func hasPrompt(a string) bool { return strings.Contains(a, "{prompt}") }
 // fakeCLI writes an executable that records argv one per line and prints out.
 func fakeCLI(t *testing.T, out string) (bin, argsFile string) {
 	t.Helper()
+	testutil.NeedsPOSIXShell(t)
 	dir := t.TempDir()
 	argsFile = filepath.Join(dir, "args")
 	bin = filepath.Join(dir, "fake")

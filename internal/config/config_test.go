@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/testutil"
 )
 
 func perm(t *testing.T, path string) os.FileMode {
@@ -31,7 +32,7 @@ func writeFile(t *testing.T, path, content string) {
 
 func TestDefaultPathsFromHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	def := DefaultPath()
 	if want := filepath.Join(home, ".myco", "config.yaml"); def != want {
 		t.Fatalf("DefaultPath = %s, want %s", def, want)
@@ -70,7 +71,7 @@ func TestLoadErrors(t *testing.T) {
 }
 
 func TestSaveLoadRoundTrip(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	path := DefaultPath() // ~/.myco does not exist yet
 	in := &Config{
 		Hub: "https://hub.example", Agent: "mac-claude", Token: "myco_secret",
@@ -115,6 +116,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestSavePermissions(t *testing.T) {
+	testutil.NeedsUnixPermissions(t)
 	path := filepath.Join(t.TempDir(), "sub", "config.yaml")
 	if err := Save(path, &Config{Token: "myco_secret"}); err != nil {
 		t.Fatal(err)
@@ -140,6 +142,7 @@ func TestSavePermissions(t *testing.T) {
 // A stale, world-readable temp file from an earlier crash must not leak its
 // mode into the saved file (Save used to reuse path+".tmp" via os.WriteFile).
 func TestSaveIgnoresStaleTempFileMode(t *testing.T) {
+	testutil.NeedsUnixPermissions(t)
 	dir := t.TempDir()
 	for _, name := range []string{"config.yaml", "machine.yaml"} {
 		path := filepath.Join(dir, name)
@@ -191,7 +194,7 @@ func TestApplyEnvAndRedacted(t *testing.T) {
 }
 
 func TestListProfilesAndFindBySession(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	def := DefaultPath()
 	dir := ProfilesDir(def)
 
@@ -241,7 +244,7 @@ func TestListProfilesAndFindBySession(t *testing.T) {
 
 func TestReadEnvFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	content := strings.Join([]string{
 		"# comment",
 		"",

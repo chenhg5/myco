@@ -45,9 +45,15 @@ func defaultInheritEnv() []string {
 	if runtime.GOOS == "windows" {
 		// Without SystemRoot, PATHEXT and friends, most Windows programs
 		// (PowerShell included) fail to start in a clean environment.
+		// .NET (so PowerShell) also wants the processor and module
+		// variables, or it starts very slowly.
 		return []string{"PATH", "PATHEXT", "SystemRoot", "SystemDrive", "windir", "ComSpec",
-			"USERPROFILE", "USERNAME", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
-			"ProgramData", "ProgramFiles", "ProgramFiles(x86)", "TEMP", "TMP", "TZ"}
+			"USERPROFILE", "USERNAME", "USERDOMAIN", "COMPUTERNAME", "HOMEDRIVE", "HOMEPATH",
+			"APPDATA", "LOCALAPPDATA", "ProgramData", "ALLUSERSPROFILE", "PUBLIC",
+			"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles",
+			"CommonProgramFiles(x86)", "CommonProgramW6432", "PSModulePath",
+			"NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "OS",
+			"TEMP", "TMP", "TZ"}
 	}
 	return []string{"PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ"}
 }

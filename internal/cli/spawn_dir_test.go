@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"github.com/chenhg5/myco/internal/testutil"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -10,10 +10,7 @@ import (
 // this machine's separator, and leaves other paths alone.
 func TestRemoteDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if runtime.GOOS == "windows" {
-		t.Setenv("USERPROFILE", home)
-	}
+	testutil.SetHome(t, home)
 	for in, want := range map[string]string{
 		home:                                   "~",
 		filepath.Join(home, "code", "app"):     "~/code/app",

@@ -38,7 +38,7 @@ func ShellArgs(shell, script string, args ...string) []string {
 	var out []string
 	switch shellKind(shell) {
 	case "powershell":
-		out = []string{"-NoProfile", "-NonInteractive", "-Command", script}
+		out = []string{"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script}
 	case "cmd":
 		out = []string{"/D", "/C", script}
 	default:

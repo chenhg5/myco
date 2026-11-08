@@ -232,11 +232,11 @@ func (n *Node) dir(requested string) (string, error) {
 		return "", fmt.Errorf("directory %s is outside the allowed directories on machine %s (%s); the machine's owner can change spawn.dirs in ~/.myco/machine.yaml",
 			requested, n.Machine, strings.Join(roots, ", "))
 	}
-	for _, c := range credentialDirs {
-		bad := filepath.Join(n.Policy.Home, c)
-		if osutil.Within(real, bad) {
-			return "", fmt.Errorf("refusing to start a session inside a credentials directory (%s)", c)
-		}
+	// By path component of the resolved directory, not by prefix of Home:
+	// Home may itself be a symlink (or an 8.3 short name on Windows), and
+	// then no resolved path would ever start with it.
+	if osutil.InCredentialDir(real) {
+		return "", fmt.Errorf("refusing to start a session inside a credentials directory (%s)", strings.Join(credentialDirs, ", "))
 	}
 	return real, nil
 }
