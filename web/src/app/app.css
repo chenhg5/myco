@@ -3,6 +3,9 @@
 .app-portal {
   --bg: #f4f4f6;
   --card: #ffffff;
+  --sidebar: #ececf0;
+  --nav-hover: rgba(20, 22, 30, 0.045);
+  --nav-sel: rgba(255, 255, 255, 0.88);
   --pill: #f1f1f4;
   --pill-hover: #e9e9ee;
   --seg-track: #e6e6eb;
@@ -34,6 +37,9 @@
 .dark .app-portal {
   --bg: #1a1a1e;
   --card: #232327;
+  --sidebar: #202024;
+  --nav-hover: rgba(255, 255, 255, 0.05);
+  --nav-sel: rgba(255, 255, 255, 0.09);
   --pill: #2d2d33;
   --pill-hover: #36363d;
   --seg-track: rgba(255, 255, 255, 0.035);
@@ -60,7 +66,6 @@
 .app-shell {
   height: 100%;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
   background: var(--bg);
 }
@@ -70,40 +75,163 @@
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-/* ---------- top bar ---------- */
-.app-topbar {
-  position: relative;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  height: 46px;
+/* ---------- sidebar & shell chrome ---------- */
+.app-sidebar {
+  width: 232px;
   flex: none;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
   user-select: none;
 }
-.app-topbar .brand {
+.app-sidebar-head {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+/* macOS traffic lights float over the top-left 80px. */
+.app-shell.shell-mac .app-sidebar-head {
+  padding-left: 80px;
+}
+.app-sidebar-head .brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  color: var(--fg);
+}
+.app-sidebar-head .brand svg {
+  flex: none;
+}
+.app-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 10px 10px;
+}
+.app-nav-group {
+  margin-top: 14px;
+}
+.app-nav-group:first-child {
+  margin-top: 4px;
+}
+.app-nav-title {
+  padding: 0 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.app-nav-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.app-topbar .center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+.app-nav-item:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
 }
-.app-topbar .actions {
+.app-nav-item.active {
+  background: var(--nav-sel);
+  color: var(--fg);
+  font-weight: 500;
+}
+.app-nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+}
+.app-nav-item.active svg {
+  color: var(--fg-2);
+}
+.app-nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.app-sidebar-foot {
+  flex: none;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--line);
+}
+.app-sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.app-sidebar-status .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app-crumbbar {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  user-select: none;
+}
+/* Collapsed in the macOS shell: keep the traffic lights clear. */
+.app-shell.shell-mac.collapsed .app-crumbbar {
+  padding-left: 80px;
+}
+.app-sidebar-head button,
+.app-sidebar-head a,
+.app-sidebar-head input,
+.app-crumbbar button,
+.app-crumbbar a,
+.app-crumbbar input {
+  --wails-draggable: no-drag;
+}
+.app-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.app-crumbs .sep {
+  color: var(--faint);
+}
+.app-crumbs .cur {
+  color: var(--fg);
+  font-weight: 500;
+}
+.app-crumb-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-left: auto;
-}
-.app-topbar button,
-.app-topbar a,
-.app-topbar input,
-.app-topbar select {
-  --wails-draggable: no-drag;
 }
 
 /* ---------- segmented control ---------- */
@@ -142,6 +270,13 @@
   padding: 0 9px;
   font-size: 11.5px;
 }
+.seg-fill {
+  display: flex;
+  width: 100%;
+}
+.seg-fill .seg-btn {
+  flex: 1;
+}
 
 /* ---------- buttons ---------- */
 .app-btn {
@@ -176,6 +311,19 @@
 .app-btn svg {
   width: 14px;
   height: 14px;
+}
+.app-btn-small {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  flex: none;
+}
+.app-btn-small svg {
+  width: 12px;
+  height: 12px;
+}
+a.app-btn {
+  text-decoration: none;
 }
 .app-btn-primary {
   background: var(--accent);
@@ -256,7 +404,7 @@ textarea.app-input {
 }
 .app-page {
   width: 100%;
-  max-width: 820px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 18px 20px 40px;
 }
@@ -591,9 +739,16 @@ textarea.app-input {
 }
 .app-empty p {
   margin: 0 auto 16px;
-  max-width: 340px;
+  max-width: 360px;
   font-size: 12px;
   line-height: 1.55;
+}
+.app-empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
 .app-code {
   display: inline-block;
@@ -699,6 +854,11 @@ textarea.app-input {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;
 }
+.app-kv-value.clip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-counts {
   display: flex;
   gap: 14px;
@@ -800,6 +960,120 @@ textarea.app-input {
   background: var(--red-soft);
 }
 
+/* ---------- local hub ---------- */
+.app-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.app-small-note {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.app-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.app-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: app-spin 0.7s linear infinite;
+}
+.app-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line-2);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.app-choice:first-child {
+  border-top: 0;
+}
+.app-choice:hover {
+  background: var(--pill);
+}
+.app-choice.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.app-choice.disabled:hover {
+  background: transparent;
+}
+.app-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.app-choice-text .t {
+  font-size: 13px;
+  color: var(--fg);
+}
+.app-choice-text .d {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.app-radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  flex: none;
+  border-radius: 999px;
+  border: 1.5px solid var(--faint);
+  transition: border-color 0.12s ease;
+}
+.app-choice input:checked + .app-radio {
+  border-color: var(--accent);
+}
+.app-choice input:checked + .app-radio::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.app-choice input:focus-visible + .app-radio {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.app-notice {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.app-notice svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 1px;
+}
+
 /* ---------- dialogs (portalled) ---------- */
 .app-overlay {
   position: fixed;
@@ -891,6 +1165,7 @@ textarea.app-input {
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .app-hint code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -961,6 +1236,9 @@ textarea.app-input {
   from { opacity: 0; transform: translateX(16px); }
   to { opacity: 1; transform: none; }
 }
+@keyframes app-spin {
+  to { transform: rotate(360deg); }
+}
 
 .app-pill.amber {
   background: var(--amber-soft);
@@ -972,7 +1250,7 @@ textarea.app-input {
 }
 
 .app-banner-wrap {
-  max-width: 820px;
+  max-width: 880px;
   margin: 12px auto 0;
   padding: 0 20px;
 }

@@ -17,7 +17,7 @@ import { CopyText } from "@/components/copy";
 import { LogoSymbol, LogoWordmark } from "@/components/brand";
 import { cn, timeAgo } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
-import { probeAppMode, type Hub } from "@/appapi";
+import { probeAppMode, type AppInfo, type Hub } from "@/appapi";
 import AppMode from "@/app/AppMode";
 
 const POLL_MS = 5000;
@@ -467,17 +467,18 @@ function HubApp() {
 export default function App() {
   const [mode, setMode] = useState<"probing" | "hub" | "app">("probing");
   const [hubs, setHubs] = useState<Hub[]>([]);
+  const [info, setInfo] = useState<AppInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    probeAppMode().then((h) => {
+    probeAppMode().then((boot) => {
       if (cancelled) return;
-      if (h) { setHubs(h); setMode("app"); } else { setMode("hub"); }
+      if (boot) { setHubs(boot.hubs); setInfo(boot.info); setMode("app"); } else { setMode("hub"); }
     });
     return () => { cancelled = true; };
   }, []);
 
   if (mode === "probing") return null;
-  if (mode === "app") return <AppMode initialHubs={hubs} />;
+  if (mode === "app") return <AppMode initialHubs={hubs} initialInfo={info} />;
   return <HubApp />;
 }
