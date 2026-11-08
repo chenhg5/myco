@@ -170,7 +170,7 @@ func TestReplaceIsAtomic(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("temp files left: %v", entries)
 	}
-	if os.Geteuid() != 0 { // root can write anywhere
+	if osutil.UnixPermissions && os.Geteuid() != 0 { // root can write anywhere; Windows has no dir mode bits
 		ro := t.TempDir()
 		ot := filepath.Join(ro, "myco")
 		os.WriteFile(ot, []byte("old"), 0o755)

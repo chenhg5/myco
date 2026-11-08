@@ -38,7 +38,7 @@ jobs:
         run: go build -o bin/myco.exe ./cmd/myco
       - name: tests
         run: go test ./...
-      - name: the binary starts and serves a hub
+      - name: the binary runs
         shell: pwsh
         run: |
           bin/myco.exe --version
