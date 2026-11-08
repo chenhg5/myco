@@ -288,6 +288,9 @@ type PullRequest struct {
 	WaitSeconds int `json:"wait_seconds,omitempty"`
 	// Types, if set, only pulls messages of these types (e.g. ["steer"]).
 	Types []string `json:"types,omitempty"`
+	// Via is "runner" when an agent's runner pulls; such pulls get nothing
+	// while a session of the agent keeps `inbox wait` running.
+	Via string `json:"via,omitempty"`
 }
 
 // MessageList wraps a list of messages.
@@ -309,6 +312,9 @@ type ReplyRequest struct {
 // ReleaseRequest is the body of POST /v1/messages/{id}/release.
 type ReleaseRequest struct {
 	DelaySeconds int `json:"delay_seconds"`
+	// Reason "in_use" tells the hub the agent's session was busy (e.g. open
+	// in a terminal), which the console shows with a way to fix it.
+	Reason string `json:"reason,omitempty"`
 }
 
 // FailRequest is the body of POST /v1/messages/{id}/fail.
@@ -448,6 +454,13 @@ type AgentStatus struct {
 	InProgress int       `json:"in_progress"`
 	Held       int       `json:"held"`
 	Current    []Message `json:"current,omitempty"`
+	// Receiving is how the agent gets messages right now: "session" (a
+	// session keeps `inbox wait` running), "runner" (a runner wakes the
+	// session per message) or empty (nothing is receiving).
+	Receiving string `json:"receiving,omitempty"`
+	// SessionInUse: the runner recently found the session in use elsewhere
+	// and handed messages back instead of interrupting it.
+	SessionInUse bool `json:"session_in_use,omitempty"`
 }
 
 // OverviewTotals counts agents by state.

@@ -44,6 +44,8 @@ type Client struct {
 	base  *url.URL
 	token string
 	http  *http.Client
+	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
+	Via string
 }
 
 // New returns a client for hub base URL authenticated with token.
@@ -383,6 +385,14 @@ func (c *Client) Release(ctx context.Context, id string, delay time.Duration, dr
 		api.ReleaseRequest{DelaySeconds: int(delay.Seconds())}, &out)
 }
 
+// ReleaseInUse is Release for a message the agent's session could not take
+// because someone else is using it; the hub shows this in the console.
+func (c *Client) ReleaseInUse(ctx context.Context, id string, delay time.Duration) (*api.Message, error) {
+	var out api.MessageResult
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/release", nil,
+		api.ReleaseRequest{DelaySeconds: int(delay.Seconds()), Reason: "in_use"}, &out)
+}
+
 // Fail closes a message as failed.
 func (c *Client) Fail(ctx context.Context, id, reason string, dry bool) (*api.Message, error) {
 	var out api.MessageResult
@@ -424,7 +434,7 @@ func (c *Client) Pull(ctx context.Context, limit int, wait time.Duration) ([]api
 // PullTypes is Pull restricted to message types (nil = all).
 func (c *Client) PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error) {
 	var out api.MessageList
-	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types}, &out)
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
 	return out.Messages, err
 }
 

@@ -753,6 +753,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, a := range ov.Agents {
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
+		st.Receiving, st.SessionInUse = s.messages.Presence().State(a.Agent.Name, s.agents.OnlineWindow())
 		st.Agent.Aliases = aliasMap[a.Agent.Name]
 		if id, ok := where[a.Agent.Name]; ok {
 			st.Agent.MachineID = id
@@ -924,6 +925,11 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request, a *domain.Agent
 		writeError(w, err)
 		return
 	}
+	if req.Reason == "in_use" && !dry {
+		if p := s.messages.Presence(); p != nil {
+			p.SessionInUse(a.Name)
+		}
+	}
 	writeJSON(w, http.StatusOK, api.MessageResult{Message: messageDTO(m), DryRun: dry})
 }
 
@@ -1001,7 +1007,11 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	for _, t := range req.Types {
 		types = append(types, domain.MessageType(t))
 	}
-	msgs, err := s.messages.Pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
+	pull := s.messages.Pull
+	if req.Via == "runner" {
+		pull = s.messages.PullForRunner
+	}
+	msgs, err := pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return // client went away

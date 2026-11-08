@@ -44,7 +44,7 @@ Errors (any non-2xx):
 | `POST /v1/files?name=` | agent | Raw body upload (≤ `--max-file-size`) → file `{id, name, size, sha256, content_type, owner, expires_at}` |
 | `GET /v1/files/{id}` | uploader / recipient | Download; headers `X-Myco-SHA256`, `X-Myco-File-Name` |
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
-| `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline) and counters; message contents only for the viewer's own messages (all for admin) |
+| `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), counters, `receiving` (`session`/`runner`) and `session_in_use`; message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
 | `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name` and `aliases` |
 | `GET /v1/me` | agent | The calling agent |
@@ -53,12 +53,12 @@ Errors (any non-2xx):
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
 | `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate, via_alias?}`; `to` may be an alias (the message stores the real name); attaching grants the recipient access |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
-| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?}` → `{messages}`; leases messages (long-poll ≤ 60s) |
+| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 5 minutes after) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply |
 | `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
-| `POST /v1/messages/{id}/release` | recipient | `{delay_seconds}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt |
+| `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
 | `POST /v1/messages/{id}/progress` | recipient | `{body}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender) |

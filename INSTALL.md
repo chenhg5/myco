@@ -266,6 +266,8 @@ myco agent get        # 确认 binding.harness=claude，binding.session_id 是�
 myco runner start --all
 ```
 
+**会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试（App 里会显示"会话正在被使用"）。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait --timeout 55m`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 5 分钟后，runner 自动接手，在后台唤醒它。
+
 **后台服务里的 CLI 认证失败**（比如 claude 报 `OAuth session expired and could not be refreshed`）：后台服务（launchd/systemd）**不会加载你的 shell 配置**。如果你的 CLI 是靠 shell 里导出的变量来配置的，比如第三方 Anthropic 兼容服务的 `ANTHROPIC_BASE_URL` 加 `ANTHROPIC_API_KEY`（或 `ANTHROPIC_AUTH_TOKEN`），后台的 claude 就拿不到这些变量。在一个 CLI 能正常工作的终端里执行：
 ```bash
 myco runner env capture --agent <agent 名> --dry-run   # 先看会抓取哪些变量（只显示变量名）

@@ -35,7 +35,15 @@ type MessageService struct {
 	observer DeliveryObserver
 	files    domain.FileRepository // nil: attachments disabled
 	aliases  domain.AliasRepository
+	presence *Presence // nil: no session/runner arbitration
 }
+
+// SetPresence enables tracking of live `inbox wait` sessions, so runner
+// pulls yield to them (see PullForRunner).
+func (s *MessageService) SetPresence(p *Presence) { s.presence = p }
+
+// Presence returns the presence tracker (nil when disabled).
+func (s *MessageService) Presence() *Presence { return s.presence }
 
 // SetAliases lets messages be addressed to aliases.
 func (s *MessageService) SetAliases(repo domain.AliasRepository) { s.aliases = repo }
@@ -166,6 +174,24 @@ func (s *MessageService) requireThreadParticipant(ctx context.Context, agent dom
 
 // Pull leases up to limit due messages for agent, long-polling up to wait.
 func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
+	return s.pull(ctx, agent, limit, waitFor, nil, types)
+}
+
+// PullForRunner is Pull for an agent's runner: while a session of the agent
+// is live (keeps `inbox wait` running), the runner gets nothing, so it does
+// not wake a session that is already receiving by itself. It still waits out
+// waitFor so the runner's loop stays a slow long-poll.
+func (s *MessageService) PullForRunner(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, types ...domain.MessageType) ([]*domain.Message, error) {
+	if s.presence == nil {
+		return s.Pull(ctx, agent, limit, waitFor, types...)
+	}
+	s.presence.RunnerPulled(agent.Name)
+	return s.pull(ctx, agent, limit, waitFor, func() bool { return s.presence.Live(agent.Name) }, types)
+}
+
+// pull leases due messages; when yield reports true it claims nothing and
+// sleeps until the deadline instead.
+func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit int, waitFor time.Duration, yield func() bool, types []domain.MessageType) ([]*domain.Message, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
@@ -174,6 +200,9 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 	deadline := s.clock.Now().Add(waitFor)
 	for {
 		// Subscribe before querying so a concurrent Send cannot be missed.
+		if yield != nil && yield() {
+			return nil, sleepUntil(ctx, deadline.Sub(s.clock.Now()))
+		}
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
 		now := s.clock.Now()
 		msgs, err := s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
@@ -195,6 +224,9 @@ func (s *MessageService) Pull(ctx context.Context, agent *domain.Agent, limit in
 				return nil, ctx.Err()
 			}
 			// Timer elapsed: one final pass catches expired leases.
+			if yield != nil && yield() {
+				return nil, nil
+			}
 			now := s.clock.Now()
 			return s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
 				return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
@@ -545,6 +577,9 @@ func (s *MessageService) consume(ctx context.Context, agent *domain.Agent, r *do
 // returns them without claiming (for "sleep until there is mail" loops).
 func (s *MessageService) WaitPending(ctx context.Context, agent *domain.Agent, waitFor time.Duration) ([]*domain.Message, error) {
 	waitFor = min(max(waitFor, 0), s.policy.MaxWait)
+	if s.presence != nil {
+		defer s.presence.Listen(agent.Name)()
+	}
 	deadline := s.clock.Now().Add(waitFor)
 	for {
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))

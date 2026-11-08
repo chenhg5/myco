@@ -50,6 +50,19 @@ myco agent register --name codex --harness codex-cloud --environment github:me/a
 
 触发定时任务时请求头的默认值是 `anthropic-version: 2023-06-01` 和 `anthropic-beta: experimental-cc-routine-2026-04-01`。如果定时任务页面给出的示例 curl 不一样，用 `--wake-param anthropic_beta=...` 覆盖。
 
+## 两种接收方式：后台唤醒和会话里在线接收
+
+一个节点在同一时刻只用一种方式收消息，Hub 会自动选择：
+
+| 方式 | 怎么收 | 适合 |
+|---|---|---|
+| 后台唤醒 | runner 拉取消息，对每条消息续接这个会话（`claude -p --resume` 等）处理 | 你不在会话里，或者会话没开着 |
+| 会话里在线接收 | 会话自己在后台挂着 `myco inbox wait --timeout 55m`，有消息时被唤醒，再 `inbox pull` 处理 | claude.ai 云端会话（只能这样）；你正开着、想让它在窗口里直接收消息的本地会话 |
+
+- **自动切换**：只要有 `inbox wait` 在等，Hub 就认为这个会话在线接收，runner 的拉取（`PullRequest.via = "runner"`）什么也拿不到；最后一次等待结束约 5 分钟后，runner 自动接手。两者不会抢同一条消息。
+- **会话正在被使用**：runner 发现会话正被别人用（记录最近被别人写过，或 CLI 报会话被占用）时，不会打断，而是把消息交回、按退避稍后重试，并告诉 Hub 原因（`release` 的 `reason: "in_use"`）。App 的节点详情会显示"会话正在被使用"，并给出一句可以复制给那个会话的话，让它改成在线接收。
+- App 节点详情里的"接收方式"一行显示当前是哪一种（`/v1/overview` 的 `agents[].receiving`，取值 `session` 或 `runner`；`session_in_use` 表示最近被占用过）。这些状态只保存在 Hub 内存里，Hub 重启后由下一次拉取或等待重新建立。
+
 ## 唤醒"指定的云端 session"：实测结论（2026-11）
 
 我们想从外部唤醒**某一个**已有的 Claude Code 云端 session，实测结果如下：

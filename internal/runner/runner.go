@@ -194,9 +194,20 @@ func (r *Runner) busyDelay(key string) time.Duration {
 	return min(d, r.opts.BusyRetry)
 }
 
+// inUseReleaser is a Hub that can say why a message is handed back.
+type inUseReleaser interface {
+	ReleaseInUse(ctx context.Context, id string, delay time.Duration) (*api.Message, error)
+}
+
 func (r *Runner) release(ctx context.Context, log *slog.Logger, m api.Message, key, reason string) {
 	delay := r.busyDelay(key)
-	if _, err := r.hub.Release(ctx, m.ID, delay, false); err != nil {
+	var err error
+	if h, ok := r.hub.(inUseReleaser); ok {
+		_, err = h.ReleaseInUse(ctx, m.ID, delay)
+	} else {
+		_, err = r.hub.Release(ctx, m.ID, delay, false)
+	}
+	if err != nil {
 		log.Error("releasing busy message failed", "err", err)
 		return
 	}

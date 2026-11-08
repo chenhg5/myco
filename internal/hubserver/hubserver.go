@@ -81,6 +81,7 @@ func Build(o Options) (*Hub, error) {
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
+	messages.SetPresence(app.NewPresence(clock, 5*time.Minute))
 	enroll := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), agentsRepo, security.Tokens{}, ids, clock)
 	aliasRepo := sqlite.NewAliasRepo(db)
 	if n, err := aliasRepo.DeleteDangling(context.Background()); err != nil {

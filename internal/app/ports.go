@@ -54,3 +54,12 @@ func wait(ctx context.Context, ch <-chan struct{}, d time.Duration) bool {
 	}
 	return false
 }
+
+// sleepUntil waits d (if positive) or until ctx is done.
+func sleepUntil(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	wait(ctx, nil, d)
+	return ctx.Err()
+}

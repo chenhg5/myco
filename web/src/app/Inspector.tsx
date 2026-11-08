@@ -169,6 +169,45 @@ function LabelsEditor({ row, onRefresh }: { row: AgentRow; onRefresh: () => Prom
 
 const hostKey = (h?: string) => (h || "").toLowerCase().replace(/\.local$/, "");
 
+// The command a session keeps running to receive in the window.
+const WAIT_CMD = "myco inbox wait --timeout 55m";
+
+function receivingLabel(r?: string) {
+  if (r === "session") return L("会话里在线接收", "In the session");
+  if (r === "runner") return L("后台唤醒", "Woken in the background");
+  return "—";
+}
+
+function receivingNote(r?: string, cloud?: boolean) {
+  if (r === "session" && cloud) return L("会话自己挂着 inbox wait 收消息；停止等待后就收不到了，回到会话里让它重新开始等待。", "The session keeps inbox wait running and reads its own messages. If it stops waiting it can't receive; go back to the session and have it start waiting again.");
+  if (r === "session") return L("会话自己挂着 inbox wait 收消息，runner 暂时让开；会话停止等待约 5 分钟后，runner 自动接手。", "The session keeps inbox wait running and reads its own messages, so the runner stands aside. About 5 minutes after the session stops waiting, the runner takes over.");
+  if (r === "runner") return L("有消息时，runner 在后台唤醒这个会话处理，你不用开着它。", "When a message arrives, the runner wakes this session in the background to handle it. You don't need to keep it open.");
+  return "";
+}
+
+// InUseCard: the runner found the session open elsewhere (a terminal or the
+// IDE) and handed messages back instead of interrupting. The fix is to let
+// that open session receive by itself.
+function InUseCard() {
+  const ask = L(
+    `请在后台一直运行 \`${WAIT_CMD}\`，结束后马上再启动一次，收到消息时用 myco inbox pull 读取并处理。`,
+    `Keep \`${WAIT_CMD}\` running as a background command, start it again whenever it exits, and when it reports messages read them with myco inbox pull and handle them.`,
+  );
+  return (
+    <section className="app-offline app-inuse">
+      <div className="app-offline-head">
+        <span className="dot pending" />
+        <b>{L("会话正在被使用", "Session in use")}</b>
+      </div>
+      <p>{L("这个会话正开在终端或编辑器里，runner 不会打断你，消息先排着、过一会儿再试。想让它在你开着的窗口里直接收消息，把下面这句话发给那个会话：", "This session is open in a terminal or editor, so the runner won't interrupt you: messages wait and are retried later. To have the open window receive them directly, send this sentence to that session:")}</p>
+      <div className="app-command">
+        <code>{ask}</code>
+        <CopyButton value={ask} />
+      </div>
+    </section>
+  );
+}
+
 // OfflineCard says why a node is offline and how to bring it back: on this
 // computer, restart the runner; on another one, the command to run there;
 // a cloud session comes back when its session continues.
@@ -340,6 +379,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
         <div className="app-inspector-body">
 
           {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
+          {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <InUseCard />}
 
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
@@ -348,6 +388,15 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 <span className="app-kv-label">{L("类型", "Type")}</span>
                 <span className="app-kv-value">{kindLabel(kind)}</span>
               </div>
+              {kind !== "human" && row.st.receiving && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("接收方式", "Receives")}</span>
+                  <span className="app-kv-value" title={receivingNote(row.st.receiving, isCloud(ag))}>
+                    {receivingLabel(row.st.receiving)}
+                    <span className="app-kv-note app-kv-block">{receivingNote(row.st.receiving, isCloud(ag))}</span>
+                  </span>
+                </div>
+              )}
               <div className="app-kv">
                 <span className="app-kv-label">CLI</span>
                 <span className="app-kv-value">

@@ -192,7 +192,7 @@ const state = {
           runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=官网改版", "role=pm", "review", "release"], capabilities: ["review", "release"],
-          binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" },
+          binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" }, session_in_use: true,
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
@@ -394,6 +394,8 @@ function agentStatus(a) {
     queued: a.queued ?? (state === "working" ? 2 : 0),
     in_progress: state === "working" ? 1 : 0,
     held: 0,
+    receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
+    session_in_use: a.session_in_use || undefined,
     current: state === "working"
       ? [makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" })]
       : [],

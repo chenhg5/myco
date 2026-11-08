@@ -41,7 +41,11 @@ export interface Message {
   created_at: string; updated_at: string;
 }
 export type State = "working" | "pending" | "idle" | "offline";
-export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number; current?: Message[] }
+export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number; current?: Message[];
+  /** how it receives right now: a session keeps `inbox wait` running, or a runner wakes the session per message */
+  receiving?: "session" | "runner";
+  /** the runner recently found the session in use and handed messages back */
+  session_in_use?: boolean }
 export interface Overview {
   generated_at: string; viewer: { kind: "agent" | "admin"; name?: string }; online_window_seconds: number;
   totals: { agents: number; working: number; pending: number; idle: number; offline: number };
