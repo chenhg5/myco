@@ -16,6 +16,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -74,7 +75,8 @@ func (l *Local) find(name string, extra ...string) string {
 		return p
 	}
 	for _, p := range extra {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+		// Windows has no executable bit: any file there counts.
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && (!osutil.UnixPermissions || st.Mode()&0o111 != 0) {
 			return p
 		}
 	}
