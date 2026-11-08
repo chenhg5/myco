@@ -23,6 +23,21 @@ type Machine struct {
 	NamePrefix  string   `yaml:"name_prefix" json:"name_prefix"`
 	Harness     string   `yaml:"harness,omitempty" json:"harness,omitempty"`
 	AllowFrom   []string `yaml:"allow_from,omitempty" json:"allow_from,omitempty"`
+	// Spawn limits what `myco agent spawn` may start on this machine. It is
+	// local policy: only someone with access to this machine can change it.
+	Spawn SpawnPolicy `yaml:"spawn,omitempty" json:"spawn,omitempty"`
+}
+
+// SpawnPolicy is a machine's local rules for starting new agent sessions.
+type SpawnPolicy struct {
+	// Disabled turns the machine node off (no `agent spawn` here).
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+	// Dirs are the directories new sessions may run in, with subdirectories
+	// ("~" allowed). Default: the home directory.
+	Dirs []string `yaml:"dirs,omitempty" json:"dirs,omitempty"`
+	// MaxAccess caps the permission level of spawned sessions: readonly,
+	// workspace (default) or full. full is only possible when set here.
+	MaxAccess string `yaml:"max_access,omitempty" json:"max_access,omitempty"`
 }
 
 // MachinePath returns machine.yaml next to the default config.

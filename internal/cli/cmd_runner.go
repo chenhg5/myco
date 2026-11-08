@@ -16,6 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
+	"github.com/chenhg5/myco/internal/harness/machinenode"
 	"github.com/chenhg5/myco/internal/runner"
 )
 
@@ -87,6 +88,9 @@ type runnerShared struct {
 	rebind     bool
 	slots      chan struct{}
 	registry   *harness.Registry
+	// rescan, when set (runner --all), asks for an immediate profile scan,
+	// e.g. right after a machine node spawned a new agent.
+	rescan chan struct{}
 }
 
 // runnerOverrides are per-invocation flags (single-agent mode only).
@@ -155,10 +159,17 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		spec.AuditLog = filepath.Join(config.Dir(e.defaultPath), "logs", me.Name+".exec.jsonl")
 		execSpec = &spec
 	}
-	h, err := sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
-		Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec})
-	if err != nil {
-		return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
+	var h harness.Harness
+	if name == machinenode.Name {
+		if h, err = e.machineNode(me, c, sh); err != nil {
+			return nil, err
+		}
+	} else {
+		h, err = sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
+			Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec})
+		if err != nil {
+			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
+		}
 	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
@@ -183,7 +194,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		// after a network change): take over when the session provably
 		// lives here. Exec nodes have no shared session to protect.
 		b := me.Binding
-		local := name == execnode.Name && b.Harness == execnode.Name
+		local := (name == execnode.Name || name == machinenode.Name) && b.Harness == name
 		if p, ok := h.(harness.BusyProber); ok && b.Harness == name && b.SessionID != "" {
 			_, local = p.LastActivity(b.SessionID)
 		}
@@ -250,8 +261,15 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		wg      sync.WaitGroup
 		started = map[string]bool{}
 		failed  = map[string]string{} // profile -> last start error
+		machine = false               // machine node ensured
 	)
+	if sh.rescan == nil {
+		sh.rescan = make(chan struct{}, 1)
+	}
 	scan := func() int {
+		if !machine {
+			machine = e.ensureMachineNodeLogged(log)
+		}
 		profiles, err := config.ListProfiles(dir)
 		if err != nil {
 			log.Warn("reading profiles failed", "dir", dir, "err", err)
@@ -310,6 +328,8 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			wg.Wait()
 			return nil
 		case <-t.C:
+			scan()
+		case <-sh.rescan:
 			scan()
 		}
 	}

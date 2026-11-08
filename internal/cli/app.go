@@ -245,7 +245,7 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 // resume it ("" if it cannot be driven by a local runner).
 func runnerHarnessFor(h string) string {
 	switch h {
-	case "claude", "codex", "exec":
+	case "claude", "codex", "exec", "machine":
 		return h
 	}
 	return ""

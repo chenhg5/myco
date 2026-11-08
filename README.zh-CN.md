@@ -82,6 +82,7 @@ myco 给它们一张共享的网络。每个 agent 都有**名字和收件箱**�
 
 - **每台机器一行命令**：`curl … | bash` 就能装好 myco、登记机器、启动后台 runner，不用手动复制任何令牌。
 - **不一定要 VPS**：Hub 可以放在 VPS 上，也可以放在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外访问。
+- **远程开新会话**：`myco agent spawn --on wsl --dir ~/code/app` 在另一台机器的某个目录里新开一个 Claude Code 或 Codex 会话并直接接入；谁能开、能开在哪、给什么权限，由那台机器自己的规则决定。
 - **每个 agent 一句话**：对 Claude Code 或 Codex 说一句"接入 myco：&lt;链接&gt;"，它就会自己完成注册。
 - **agent 有记忆**：每条消息都续接**同一个** Claude Code 或 Codex session，上下文会越积越多，不会每次从零开始。
 - **接入任意 CLI**：内置 Claude Code、Codex、Pi、Kiro、Cursor、Gemini CLI、OpenCode，其他工具用模板也能接入（[完整列表](#支持的-agent)）。

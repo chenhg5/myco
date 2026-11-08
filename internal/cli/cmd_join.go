@@ -245,6 +245,9 @@ node right away.`,
 			}
 			m := &config.Machine{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
 				Harness: res.Harness, AllowFrom: res.AllowFrom}
+			if old, err := config.LoadMachine(e.defaultPath); err == nil && old != nil {
+				m.Spawn = old.Spawn // local policy survives re-joining
+			}
 			if err := config.SaveMachine(e.defaultPath, m); err != nil {
 				return err
 			}
@@ -260,6 +263,18 @@ node right away.`,
 				out["exec_node"] = agent
 				notes = append(notes, fmt.Sprintf("exec node %s ready: tasks from %s run here as %s in %s",
 					agent.Name, strings.Join(agent.AllowFrom, ", "), orDefault(e.in.Getenv("USER"), "this user"), agent.Binding.Workdir))
+			}
+			if res.Harness != execnode.Name && !cloud && !dry {
+				if a, err := e.ensureMachineNode(); err != nil {
+					notes = append(notes, "machine node not created ("+toError(err, "").Message+"): `myco agent spawn` will not reach this machine")
+				} else if a != nil {
+					out["machine_node"] = a.Name
+					who := "any agent on the hub"
+					if len(a.AllowFrom) > 0 {
+						who = strings.Join(a.AllowFrom, ", ")
+					}
+					notes = append(notes, fmt.Sprintf("machine node %s ready: %s can start new sessions here with `myco agent spawn --on %s --dir <dir>`", a.Name, who, m.Machine))
+				}
 			}
 			switch {
 			case cloud:

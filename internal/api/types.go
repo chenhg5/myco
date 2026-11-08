@@ -404,6 +404,41 @@ type Overview struct {
 	Recent              []Message      `json:"recent"`
 }
 
+// SpawnRequest asks a machine node (harness "machine") to start a new agent
+// session in a directory on its machine and join it to the network. It is
+// sent as the body of a task; see `myco agent spawn`.
+type SpawnRequest struct {
+	// CLI is the agent CLI to start: claude, codex, or a preset (pi, kiro, ...).
+	CLI string `json:"cli"`
+	// Dir is the working directory on the node's machine ("~/..." allowed).
+	Dir string `json:"dir"`
+	// Name is the new agent's name; the machine's prefix is added when missing.
+	Name        string   `json:"name,omitempty"`
+	DisplayName string   `json:"display_name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Labels      []string `json:"labels,omitempty"`
+	// Access is the session's permission level (default workspace); the
+	// machine caps it (default cap: workspace).
+	Access string `json:"access,omitempty"`
+	Model  string `json:"model,omitempty"`
+	// Prompt is extra first instructions for the new session.
+	Prompt string `json:"prompt,omitempty"`
+}
+
+// SpawnResult is a machine node's answer to a SpawnRequest.
+type SpawnResult struct {
+	Agent     string `json:"agent,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	CLI       string `json:"cli,omitempty"`
+	Workdir   string `json:"workdir,omitempty"`
+	Access    string `json:"access,omitempty"`
+	// Reply is the new session's answer to its first turn.
+	Reply string `json:"reply,omitempty"`
+	// Denied: the machine refused the request (policy); Error says why.
+	Denied bool   `json:"denied,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 // ExecResult is the reply body of an exec node (harness "exec").
 type ExecResult struct {
 	ExitCode   int    `json:"exit_code"`

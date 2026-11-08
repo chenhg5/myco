@@ -1,4 +1,4 @@
-import { Bot, Cloud, Code2, Sparkles, Terminal, Boxes, SquareTerminal } from "lucide-react";
+import { Bot, Cloud, Code2, Sparkles, Terminal, Boxes, SquareTerminal, Server } from "lucide-react";
 import type { State } from "@/api";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,7 @@ const harnessMeta: Record<string, { label: string; icon: typeof Bot }> = {
   "codex-cloud": { label: "Codex 云端", icon: Cloud },
   shell: { label: "Shell", icon: Terminal },
   exec: { label: "Exec", icon: SquareTerminal },
+  machine: { label: "机器节点", icon: Server },
 };
 
 export function harnessInfo(harness?: string) {

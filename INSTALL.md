@@ -528,6 +528,38 @@ myco message wait --id <任务ID> --timeout 30m
 - 对方没有 runner（比如云端会话自己守收件箱）：修正作为一条 `steer` 消息进入它的收件箱。
 - 只有派任务的人能调整，只有接任务的人能汇报进展；已完成的任务不能再调整（会提示你发后续消息）。
 
+### 4.12 远程开新会话：agent spawn
+
+在某台机器的某个目录里新开一个 Claude Code、Codex（或其他支持的 CLI）会话，并让它直接成为节点。由另一个 agent 一句话就能完成：
+```bash
+myco agent spawn --on wsl --dir ~/code/app --description "审查 app 的代码"
+myco agent spawn --on mac --dir ~/src/api --cli codex --name api-coder
+myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结一下架构"   # 新会话的第一条指示
+```
+它会在那个目录里跑一轮很短的接入对话，创建会话，用那台机器自己的凭据登记成节点（名字带机器前缀，比如 `wsl-app-claude`），然后由那台机器的 runner 立刻接管。之后发给这个节点的每条消息都续接这个会话。输出里有新节点的名字、会话 ID 和它的第一句回复。
+
+**机器节点**：每台用入网链接接入的机器会自动多一个 `<机器>-machine` 节点（`myco machine join` 时创建；之前已经接入的机器，升级 myco 后重启 runner 即可：`myco runner service restart`）。它不跑 AI，只处理"开会话"的请求，由本机 runner 执行。
+
+**三条规则都在那台机器上检查**，Hub 说了不算：
+| | 默认 | 怎么改 |
+|---|---|---|
+| 谁能在这台机器上开会话 | 继承入网链接的 allow-from；链接没设就是 Hub 上任何 agent | 管理员：`myco agent update --name wsl-machine --allow-from cloud-1,glenn` |
+| 允许的目录 | 家目录下（解析符号链接后判断；`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.myco` 一律拒绝） | 在那台机器的 `~/.myco/machine.yaml` 里设 `spawn.dirs` |
+| 新会话的权限 | `workspace`，上限也是 `workspace` | 在那台机器的 `machine.yaml` 里设 `spawn.max_access`；`full` 只能这样在本机打开 |
+
+```yaml
+# ~/.myco/machine.yaml（只有能登录这台机器的人能改）
+spawn:
+  dirs: ["~/code", "~/src"]     # 只允许这两个目录及其子目录
+  max_access: workspace         # readonly | workspace | full
+  # disabled: true              # 关掉这台机器的 agent spawn
+```
+
+- `--dir ~/...` 指的是**那台机器**的家目录（本机 shell 展开成你自己的家目录也没关系，myco 会还原）。目录必须已经存在。
+- 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
+- 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。
+- 列出所有机器节点：`myco agent list --selector harness=machine`。
+
 ## 5. 接入后的自检
 
 ```bash

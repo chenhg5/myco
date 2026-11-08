@@ -9,6 +9,14 @@ import (
 // HarnessExec is the harness of exec nodes (shell command execution).
 const HarnessExec = "exec"
 
+// HarnessMachine is the harness of machine nodes: one per joined machine,
+// served by its runner, which start new agent sessions there on request
+// (`myco agent spawn`).
+const HarnessMachine = "machine"
+
+// MachineNodeName is the name of a machine's machine node.
+func MachineNodeName(prefix string) string { return prefix + "machine" }
+
 // Enrollment kinds. A plain enrollment admits sessions directly. A join link
 // is handed to people as a URL: each machine that opens it gets its own
 // machine enrollment (named after the machine, labelled machine=<name>),
@@ -150,6 +158,12 @@ func (e *Enrollment) Admit(b Binding) error {
 	if b.Harness == HarnessExec && e.Harness != HarnessExec {
 		return Errf(CodePermissionDenied, "enrollment %s cannot create exec nodes", e.ID).
 			WithSuggestion("the hub admin must create one for exec: myco enrollment create --harness exec --name-prefix <p> --allow-from <agent>")
+	}
+	// Machine nodes start sessions on a machine, so only that machine's own
+	// credentials may create one, and only under its fixed name.
+	if b.Harness == HarnessMachine && e.Kind != EnrollmentMachine {
+		return Errf(CodePermissionDenied, "enrollment %s cannot create machine nodes", e.ID).
+			WithSuggestion("machine nodes are created by `myco machine join` (or `myco runner start --all`) with the machine's own credentials")
 	}
 	return nil
 }

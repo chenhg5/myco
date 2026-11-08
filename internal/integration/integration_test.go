@@ -473,3 +473,103 @@ func TestAdminRoutesDistinguish401And403(t *testing.T) {
 		t.Fatalf("CLI with a wrong admin token: exit %d, want %d", code, cli.ExitPermission)
 	}
 }
+
+// fakePi is a stand-in for the `pi` agent CLI (the "pi" preset): it prints
+// the JSONL events myco parses, keeps one session id, and on resume answers
+// with that id so the test can tell the same session was continued.
+const fakePi = `#!/bin/sh
+sess=pi-sess-1
+case " $* " in
+  *" --session "*) printf '{"type":"session","id":"%s"}\n' "$sess"
+                   printf '{"type":"message_end","message":{"role":"assistant","content":"resumed %s in %s"}}\n' "$sess" "$PWD" ;;
+  *)               printf '{"type":"session","id":"%s"}\n' "$sess"
+                   printf '{"type":"message_end","message":{"role":"assistant","content":"ready"}}\n' ;;
+esac
+`
+
+// agent spawn end to end: a machine joins with a link (and gets a machine
+// node), its runner serves the node, another agent spawns a session in a
+// directory there, and the new agent then answers by resuming that session.
+func TestAgentSpawnEndToEnd(t *testing.T) {
+	home := isolatedHome(t)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "pi"), []byte(fakePi), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.MkdirAll(filepath.Join(home, "proj"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	link, err := h.admin().CreateEnrollment(c, api.CreateEnrollmentRequest{Kind: "link", AllowFrom: []string{"lead"}, MaxUses: 1, TTLSeconds: 3600}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lead := newCLI(t, h, filepath.Join(home, "lead.yaml"))
+	coder := newCLI(t, h, filepath.Join(home, "coder.yaml"))
+	lead.must(c, "agent", "register", "--name", "lead")
+	coder.must(c, "agent", "register", "--name", "coder")
+
+	// The machine joins; its machine node appears with the link's allow_from.
+	box := newCLI(t, h, filepath.Join(home, ".myco", "config.yaml"))
+	delete(box.env, "MYCO_HUB")
+	delete(box.env, "MYCO_ADMIN_TOKEN")
+	box.env["PATH"] = os.Getenv("PATH")
+	out := box.must(c, "machine", "join", "--link", link.JoinURL, "--machine", "box", "--no-service")
+	if !strings.Contains(out, `"machine_node": "box-machine"`) {
+		t.Fatalf("machine join did not create the machine node: %s", out)
+	}
+	node, err := h.admin().GetAgent(c, "box-machine")
+	if err != nil || node.Binding.Harness != "machine" || len(node.AllowFrom) != 1 || node.AllowFrom[0] != "lead" {
+		t.Fatalf("machine node: %v %+v", err, node)
+	}
+
+	// The machine's runner serves the node (and, later, the spawned agent).
+	rctx, stop := context.WithCancel(c)
+	done := make(chan struct{})
+	go func() { defer close(done); box.run(rctx, "runner", "start", "--all", "--log-level", "error") }()
+	t.Cleanup(func() { stop(); <-done })
+
+	out = lead.must(c, "agent", "spawn", "--on", "box", "--dir", filepath.Join(home, "proj"), "--cli", "pi",
+		"--name", "rev", "--description", "reviews proj", "--timeout", "20s")
+	var sp struct{ Result api.SpawnResult }
+	if err := json.Unmarshal([]byte(out), &sp); err != nil {
+		t.Fatalf("spawn output: %s", out)
+	}
+	r := sp.Result
+	if r.Agent != "box-rev" || r.SessionID != "pi-sess-1" || r.CLI != "pi" || r.Access != "workspace" || r.Reply != "ready" ||
+		r.Workdir != filepath.Join(home, "proj") {
+		t.Fatalf("spawn result: %+v", r)
+	}
+	a, err := h.admin().GetAgent(c, "box-rev")
+	if err != nil || a.Binding.SessionID != "pi-sess-1" || a.Binding.Workdir != filepath.Join(home, "proj") || a.Description != "reviews proj" {
+		t.Fatalf("spawned agent: %v %+v", err, a)
+	}
+
+	// The new agent is served right away and resumes the spawned session.
+	out = lead.must(c, "message", "send", "--to", "box-rev", "--body", "status?", "--wait", "20s")
+	if !strings.Contains(out, "resumed pi-sess-1 in "+filepath.Join(home, "proj")) {
+		t.Fatalf("the spawned agent did not resume its session: %s", out)
+	}
+
+	// The machine's rules: senders outside allow_from, and directories
+	// outside home, are refused.
+	if code, _, _ := coder.run(c, "agent", "spawn", "--on", "box", "--dir", filepath.Join(home, "proj"), "--cli", "pi", "--timeout", "5s"); code != cli.ExitPermission {
+		t.Fatalf("coder spawn: exit %d, want %d", code, cli.ExitPermission)
+	}
+	code, _, errOut := lead.run(c, "agent", "spawn", "--on", "box", "--dir", t.TempDir(), "--cli", "pi", "--timeout", "20s")
+	if code != cli.ExitPermission || !strings.Contains(errOut, "outside the allowed directories") {
+		t.Fatalf("spawn outside home: exit %d %s", code, errOut)
+	}
+
+	// Only a machine's own credentials can create a machine node.
+	plain, err := h.admin().CreateEnrollment(c, api.CreateEnrollmentRequest{NamePrefix: "x-"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.client(plain.Token).Enroll(c, api.EnrollRequest{Binding: api.Binding{Harness: "machine", SessionID: "machine:h:u", Environment: "h"}}, false)
+	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" {
+		t.Fatalf("plain enrollment created a machine node: %v", err)
+	}
+}

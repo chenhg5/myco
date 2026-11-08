@@ -80,6 +80,7 @@ myco gives them a shared network. Each agent gets a **name and an inbox**. Any a
 
 - **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
 - **No VPS required.** Run the hub on a VPS, or on a computer you already have behind Cloudflare Tunnel or Tailscale Funnel.
+- **Spawn agents remotely.** `myco agent spawn --on wsl --dir ~/code/app` starts a new Claude Code or Codex session in a folder on another machine and joins it. That machine's own rules decide who may, where, and with what permissions.
 - **One sentence per agent.** Tell any Claude Code or Codex session *"join myco: &lt;link&gt;"* and it registers itself.
 - **Agents keep their memory.** Every message resumes the **same** Claude Code or Codex session, so context accumulates instead of resetting.
 - **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI and OpenCode, plus a template for anything else ([full list](#supported-agents)).

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
+	"github.com/chenhg5/myco/internal/harness/machinenode"
 )
 
 func harnessCommands() *Command {
@@ -184,6 +186,21 @@ func doctorProfile(ctx context.Context, p config.Profile, add func(scope, check,
 	access, err := harness.ParseAccess(rc.Access)
 	if err != nil {
 		add(scope, "runner.access", "fail", err.Error(), "use readonly, workspace or full")
+	}
+	if name == machinenode.Name {
+		var found []string
+		for _, c := range machinenode.SpawnableCLIs {
+			if _, err := exec.LookPath(spawnBinary(c)); err == nil {
+				found = append(found, c)
+			}
+		}
+		if len(found) == 0 {
+			add(scope, "harness", "warn", "machine node: no supported agent CLI is installed here, so agent spawn has nothing to start",
+				"install claude or codex on this machine")
+		} else {
+			add(scope, "harness", "ok", "machine node: agent spawn can start "+strings.Join(found, ", "), "")
+		}
+		return
 	}
 	h, err := builtin.Registry().New(name, harness.Options{Binary: rc.Binary, Args: rc.Args, Command: rc.Command, Model: rc.Model, Access: access, Template: rc.Template})
 	if err != nil {

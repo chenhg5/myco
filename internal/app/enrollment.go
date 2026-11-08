@@ -264,6 +264,13 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	if err := e.Usable(now, true); err != nil {
 		return nil, err
 	}
+	if in.Binding.Harness == domain.HarnessMachine {
+		want := domain.MachineNodeName(e.NamePrefix)
+		if in.Name != "" && in.Name != want {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "a machine node is always named %s", want)
+		}
+		in.Name = want
+	}
 	name, err := e.NameFor(in.Name, in.Binding.SessionID)
 	if err != nil {
 		return nil, err
