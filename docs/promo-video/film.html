@@ -1,0 +1,482 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The myco promo film. Every frame is a pure function of time: window.seek(t)
+     sets the whole picture for second t. render.mjs steps through it. Inputs come
+     from the page's init script: window.LANG ("en" | "zh"), window.ASSETS (folder
+     of app captures), window.LINES (narration lines with at / dur / text). -->
+<link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/800.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400.css">
+<style>
+:root {
+  --bg: #0a0c0b; --green: #52a685; --green-2: #3a9a78; --ink: #f2f4f3; --muted: #8b928f;
+  --sans: Inter, "Noto Sans SC", "WenQuanYi Zen Hei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); font-family: var(--sans); color: var(--ink); }
+#stage { position: absolute; inset: 0; overflow: hidden; perspective: 1800px; }
+.abs { position: absolute; }
+#glow { position: absolute; width: 1600px; height: 1600px; border-radius: 50%; left: 160px; top: -260px;
+  background: radial-gradient(closest-side, rgba(82,166,133,.20), rgba(82,166,133,.05) 55%, transparent 72%); }
+#grain { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px); background-size: 4px 4px; }
+
+/* product windows (hook) */
+.win { position: absolute; border-radius: 14px; background: #15181a; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07); }
+.win .bar { border-radius: 14px 14px 0 0; }
+.win .bar { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #1d2124; font-size: 15px; color: #aab1ad; }
+.win .dots { display: flex; gap: 7px; margin-right: 8px; } .win .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.win .dots i:nth-child(1) { background: #ff5f57; } .win .dots i:nth-child(2) { background: #febc2e; } .win .dots i:nth-child(3) { background: #28c840; }
+.win .body { padding: 18px 20px; font-family: var(--mono); font-size: 17px; line-height: 1.7; color: #d7dcd9; }
+.win .tag { position: absolute; left: 50%; bottom: -40px; transform: translateX(-50%); white-space: nowrap; font-size: 18px; color: var(--muted); }
+.brand { font-family: var(--sans); font-weight: 600; font-size: 20px; margin-bottom: 8px; }
+.wait { color: #e0b252; }
+.chip { position: absolute; padding: 8px 14px; border-radius: 10px; background: #f2f4f3; color: #111; font-family: var(--mono); font-size: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); white-space: nowrap; }
+#cursor { position: absolute; width: 34px; height: 34px; z-index: 50; pointer-events: none; }
+#cursor svg { filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+#ripple { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--green); z-index: 49; }
+
+.kinetic { position: absolute; left: 0; right: 0; text-align: center; font-weight: 800; letter-spacing: -.02em; }
+#threads { position: absolute; inset: 0; }
+#logo { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; margin: -190px 0 0 -130px; }
+#word { position: absolute; left: 50%; top: 50%; height: 92px; margin-left: -150px; width: 300px; }
+#tagline { top: 640px; font-size: 46px; font-weight: 600; }
+
+/* the app window */
+#frame { position: absolute; left: 248px; top: 54px; width: 1424px; height: 890px; border-radius: 18px; overflow: hidden;
+  box-shadow: 0 50px 120px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.09); background: #1c1c1e; transform-style: preserve-3d; }
+#cam { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; }
+#cam img.shot { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; }
+#lights { position: absolute; left: 22px; top: 20px; display: flex; gap: 9px; z-index: 5; }
+#lights i { width: 14px; height: 14px; border-radius: 50%; display: block; }
+.mask { position: absolute; background: #1a1a1e; }
+.reg { position: absolute; overflow: hidden; }
+.reg img { position: absolute; width: 1280px; height: 800px; }
+.hl { position: absolute; border-radius: 12px; box-shadow: 0 0 0 3px var(--green), 0 0 40px rgba(82,166,133,.55); }
+#typed { position: absolute; font-size: 14px; color: #f2f4f3; white-space: nowrap; overflow: hidden; }
+.badge { position: absolute; padding: 10px 18px; border-radius: 999px; background: rgba(82,166,133,.16); color: #8fd3b4; font-weight: 600; font-size: 22px;
+  box-shadow: 0 0 0 1px rgba(82,166,133,.45); white-space: nowrap; }
+
+#net { position: absolute; inset: 0; }
+.node { position: absolute; transform: translate(-50%, -50%); text-align: center; }
+.node .dot { width: 92px; height: 92px; border-radius: 50%; margin: 0 auto 12px; background: #151a18; box-shadow: 0 0 0 2px rgba(82,166,133,.6), 0 0 40px rgba(82,166,133,.25);
+  display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 26px; color: var(--green); }
+.node b { display: block; font-size: 22px; font-weight: 600; } .node span { font-size: 17px; color: var(--muted); }
+.pkt { position: absolute; transform: translate(-50%, -50%); }
+.pkt i { display: block; width: 18px; height: 18px; border-radius: 50%; background: #c8f0dd; box-shadow: 0 0 24px 8px rgba(82,166,133,.8); }
+.pkt em { position: absolute; left: 24px; top: -14px; font-style: normal; white-space: nowrap; font-size: 18px; padding: 4px 10px; border-radius: 8px; background: rgba(20,26,24,.9); color: #cfe9dd; box-shadow: 0 0 0 1px rgba(82,166,133,.4); }
+
+#word2 { position: absolute; left: 0; right: 0; text-align: center; top: 52px; font-size: 64px; font-weight: 800; letter-spacing: -.02em; z-index: 20; }
+#end { position: absolute; inset: 0; }
+#end .pill { display: inline-block; margin: 0 10px; padding: 16px 30px; border-radius: 999px; font-size: 26px; font-weight: 600; }
+#sub { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; z-index: 90; }
+#sub span { display: inline-block; max-width: 1500px; padding: 10px 22px; border-radius: 12px; background: rgba(0,0,0,.55); font-size: 30px; line-height: 1.35; font-weight: 600; }
+#flash { position: absolute; inset: 0; background: #fff; z-index: 95; pointer-events: none; }
+#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55)); pointer-events: none; z-index: 80; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="glow"></div><div id="grain"></div>
+
+  <!-- hook: five agents, each alone -->
+  <div id="hook">
+    <div class="win" id="w0" style="left:120px;top:140px;width:560px;height:300px">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>zsh — ~/code/website</div>
+      <div class="body"><div class="brand" style="color:#d97757">✻ Claude Code</div>
+        <div>&gt; <span data-t="redo the hero section">redo the hero section</span></div>
+        <div style="color:#8fd3b4">● Editing app/page.tsx</div><div class="wait" data-wait>● Waiting for the API spec…</div></div>
+      <div class="tag" data-tag></div></div>
+    <div class="win" id="w1" style="left:1200px;top:110px;width:600px;height:310px">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>ssh build-01 — codex</div>
+      <div class="body"><div class="brand" style="color:#e8e8e8">⌘ Codex</div>
+        <div>› add a /api/plans endpoint</div><div style="color:#8fd3b4">• Running tests… 18 passed</div><div class="wait" data-wait>• Waiting for review…</div></div>
+      <div class="tag" data-tag></div></div>
+    <div class="win" id="w2" style="left:210px;top:590px;width:620px;height:330px">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Cursor — website</div>
+      <div class="body" style="display:flex;gap:18px;padding:0">
+        <div style="width:330px;padding:16px 18px;font-size:15px;line-height:1.75;color:#9aa19e">
+          <div><span style="color:#c792ea">export</span> <span style="color:#82aaff">function</span> <span style="color:#ffcb6b">Pricing</span>() {</div>
+          <div>&nbsp; <span style="color:#c792ea">const</span> plans = <span style="color:#82aaff">usePlans</span>()</div>
+          <div>&nbsp; <span style="color:#c792ea">return</span> &lt;<span style="color:#f07178">Grid</span>&gt;</div>
+          <div>&nbsp;&nbsp;&nbsp; {plans.<span style="color:#82aaff">map</span>(p =&gt;</div><div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;<span style="color:#f07178">PlanCard</span> {...p}/&gt;)}</div></div>
+        <div style="flex:1;border-left:1px solid #2a2f31;padding:16px 16px;font-family:var(--sans);font-size:16px;line-height:1.55">
+          <div class="brand" style="color:#e8e8e8;font-size:18px">◆ Cursor Agent</div><div style="color:#9aa19e">Building PlanCard…</div><div class="wait" data-wait>Needs the copy from docs</div></div></div>
+      <div class="tag" data-tag></div></div>
+    <div class="win" id="w3" style="left:1280px;top:600px;width:480px;height:330px">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Grok</div>
+      <div class="body" style="font-family:var(--sans);font-size:17px">
+        <div class="brand" style="color:#e8e8e8">✦ Grok bot</div>
+        <div style="margin-left:auto;width:max-content;max-width:330px;background:#2a3034;padding:8px 14px;border-radius:14px;margin-bottom:10px" data-t>Any alerts overnight?</div>
+        <div style="width:max-content;max-width:360px;background:#1f2a26;padding:8px 14px;border-radius:14px;color:#cfe9dd">3 alerts, all resolved. One needs a deploy.</div></div>
+      <div class="tag" data-tag></div></div>
+    <div class="win" id="w4" style="left:760px;top:350px;width:420px;height:270px">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>claude.ai</div>
+      <div class="body" style="font-family:var(--sans);font-size:17px">
+        <div class="brand" style="color:#d97757">claude.ai · cloud</div>
+        <div style="color:#9aa19e">Research: payment providers in the EU</div><div class="wait" data-wait>Drafting the comparison…</div></div>
+      <div class="tag" data-tag></div></div>
+    <div class="chip" id="carry"></div>
+    <div class="kinetic" id="k1" style="top:470px;font-size:120px"></div>
+  </div>
+
+  <svg id="threads" viewBox="0 0 1920 1080"></svg>
+  <img id="logo" src="../assets/logo/myco-symbol.svg">
+  <img id="word" src="../assets/logo/myco-wordmark-dark.svg">
+  <div class="kinetic" id="tagline"></div>
+
+  <div id="frame"><div id="cam"></div><div id="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
+  <div id="net"></div>
+  <div id="word2"></div>
+  <div id="end"></div>
+  <div id="ripple"></div>
+  <div id="cursor"><svg viewBox="0 0 24 24" width="34" height="34"><path d="M4 2l14 9-6.5 1.5L15 20l-3 1.5-3.5-7.5L4 18z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg></div>
+  <div id="vignette"></div>
+  <div id="sub"><span></span></div>
+  <div id="flash"></div>
+</div>
+<script>
+const LANG = window.LANG || 'en';
+const ZH = LANG === 'zh';
+const A = (window.ASSETS || 'assets/' + LANG) + '/';
+const T = (zh, en) => (ZH ? zh : en);
+const $ = (id) => document.getElementById(id);
+
+// ---------- easing ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const eo = (x) => 1 - Math.pow(1 - x, 3);
+const eio = (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const back = (x) => { const c = 1.6; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+const beatPulse = (t, from, to) => (t >= from && t < to ? Math.exp(-((t * 2) % 1) * 7) : 0); // 120 BPM
+
+// ---------- hook ----------
+const W = [0, 1, 2, 3, 4].map((i) => $('w' + i));
+const POP = [0.5, 2.0, 3.5, 4.5, 5.5];
+const TAGS = [T('MacBook 上的 Claude Code', 'Claude Code · MacBook'), T('服务器上的 Codex', 'Codex · build server'), T('Windows 上的 Cursor', 'Cursor · Windows desktop'),
+  T('Grok 机器人', 'Grok bot'), T('云端的 agent', 'Agents in the cloud')];
+W.forEach((w, i) => { w.querySelector('[data-tag]').textContent = TAGS[i]; });
+const center = (w) => { const r = { x: parseFloat(w.style.left) + parseFloat(w.style.width) / 2, y: parseFloat(w.style.top) + parseFloat(w.style.height) / 2 }; return r; };
+const WC = W.map(center);
+// the copy-paste chaos: (from, to, start, end)
+const HOPS = [[0, 1, 8.3, 9.2], [1, 3, 9.6, 10.4], [3, 2, 10.8, 11.5], [2, 4, 11.8, 12.3], [4, 0, 12.45, 12.9], [0, 3, 13.0, 13.4], [3, 1, 13.45, 13.85]];
+const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fees table', 'hero text', 'deploy ok?'];
+
+function hook(t) {
+  const on = t < 15.4;
+  $('hook').style.display = on ? '' : 'none';
+  if (!on) return;
+  W.forEach((w, i) => {
+    const p = seg(t, POP[i], POP[i] + .45);
+    const floatY = Math.sin(t * 1.3 + i * 1.7) * 6;
+    let s = lerp(.6, 1, back(p)); let op = p;
+    // the drop: windows shrink into the threads' ends
+    const d = seg(t, 14.2, 15.2);
+    const tx = (960 - WC[i].x) * eio(d) * .55, ty = (540 - WC[i].y) * eio(d) * .55;
+    s *= 1 - .82 * eio(d); op *= 1 - d;
+    // problem phase: everything dims a little, then jitters on the beats
+    const dim = seg(t, 8, 8.6) * (1 - seg(t, 13.9, 14.1));
+    const jit = t > 12 && t < 14 ? Math.sin(t * 60 + i) * 3 * seg(t, 12, 13.5) : 0;
+    w.style.opacity = op;
+    w.style.filter = `brightness(${1 - .25 * dim})`;
+    w.style.transform = `translate(${tx + jit}px, ${floatY + ty}px) scale(${s})`;
+    w.querySelectorAll('[data-wait]').forEach((e) => { e.style.opacity = seg(t, 8.4 + i * .3, 8.8 + i * .3) * (0.6 + 0.4 * Math.sin(t * 6)); });
+  });
+  // carried chip + cursor during 8-14
+  const c = $('carry'); c.style.display = 'none';
+  for (let h = 0; h < HOPS.length; h++) {
+    const [a, b, s0, s1] = HOPS[h];
+    if (t >= s0 - .15 && t <= s1 + .1) {
+      const p = eio(seg(t, s0, s1));
+      const x = lerp(WC[a].x, WC[b].x, p), y = lerp(WC[a].y, WC[b].y, p) - Math.sin(p * Math.PI) * 120;
+      c.style.display = ''; c.textContent = CARRY[h]; c.style.left = x + 18 + 'px'; c.style.top = y + 24 + 'px';
+      c.style.opacity = seg(t, s0 - .15, s0) * (1 - seg(t, s1, s1 + .1));
+      setCursor(x, y, 1);
+    }
+  }
+  // "Copy. Paste. Wait." on the beats
+  const k = $('k1'); const words = [[12.0, T('复制。', 'Copy.')], [12.5, T('粘贴。', 'Paste.')], [13.0, T('等待。', 'Wait.')]];
+  k.textContent = ''; k.style.opacity = 0;
+  for (const [at, wd] of words) if (t >= at && t < at + .5) { k.textContent = wd; const p = seg(t, at, at + .12); k.style.opacity = 1; k.style.transform = `scale(${lerp(1.5, 1, eo(p))})`; }
+  if (t >= 13.5 && t < 14) { k.textContent = T('复制。粘贴。等待。', 'Copy. Paste. Wait.'); k.style.opacity = 1 - seg(t, 13.85, 14); k.style.transform = `scale(${1 + .08 * seg(t, 13.5, 14)})`; k.style.fontSize = '96px'; }
+  else k.style.fontSize = '120px';
+}
+
+// ---------- the drop: mycelium threads into the logo ----------
+function drop(t) {
+  const svg = $('threads');
+  const on = t >= 14 && t < 18.6;
+  svg.style.display = on ? '' : 'none';
+  $('logo').style.display = $('word').style.display = $('tagline').style.display = on ? '' : 'none';
+  if (!on) return;
+  const grow = eo(seg(t, 14.0, 15.0)), fade = 1 - seg(t, 17.6, 18.4);
+  let html = '';
+  WC.forEach((c, i) => {
+    for (let k = 0; k < 3; k++) {
+      const mx = (c.x + 960) / 2 + Math.sin(i * 3 + k) * 140, my = (c.y + 540) / 2 + Math.cos(i * 2 + k) * 120;
+      const len = 1400;
+      html += `<path d="M${c.x},${c.y} Q${mx},${my} 960,540" fill="none" stroke="rgba(82,166,133,${.75 - k * .2})" stroke-width="${3 - k * .8}" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - grow)}" stroke-linecap="round"/>`;
+    }
+    const nodeP = seg(t, 14.6, 15.3);
+    html += `<circle cx="${lerp(c.x, 960 + (c.x - 960) * .45, eio(nodeP))}" cy="${lerp(c.y, 540 + (c.y - 540) * .45, eio(nodeP))}" r="${10 + 6 * Math.exp(-(((t - 14.6) * 3) ** 2))}" fill="#8fd3b4" opacity="${grow}"/>`;
+  });
+  svg.innerHTML = html; svg.style.opacity = fade * (1 - .6 * seg(t, 15.2, 16));
+  const lp = seg(t, 15.0, 15.7), wp = seg(t, 15.5, 16.1), tp = seg(t, 16.0, 16.6);
+  $('logo').style.opacity = lp * fade; $('logo').style.transform = `scale(${lerp(.3, 1, back(lp)) * (1 + .5 * seg(t, 17.6, 18.4))}) rotate(${lerp(-40, 0, eo(lp))}deg)`;
+  $('word').style.opacity = wp * fade; $('word').style.top = `calc(50% + ${110 + 20 * (1 - eo(wp))}px)`;
+  const tg = $('tagline'); tg.textContent = T('一个 App，连起你所有的 agent', 'One app for every agent, on every machine.');
+  tg.style.top = '790px'; tg.style.opacity = tp * fade; tg.style.transform = `translateY(${20 * (1 - eo(tp))}px)`;
+}
+
+// ---------- app shots ----------
+const cam = $('cam');
+const IMG = {};
+// "other:<name>" is a capture in the other language (the montage's language beat)
+function img(name) {
+  if (!IMG[name]) {
+    const i = new Image(); i.className = 'shot';
+    i.src = name.startsWith('other:') ? (window.ASSETS_OTHER + '/' + name.slice(6) + '.png') : A + name + '.png';
+    IMG[name] = i;
+  }
+  return IMG[name];
+}
+const K0 = 1424 / 1280; // display px per app px
+let shown = '';
+function show(name, extra) {
+  const key = name + (extra || '');
+  if (shown === key) return;
+  shown = key; cam.innerHTML = ''; cam.appendChild(img(name).cloneNode());
+}
+// camera: focus (app px) and zoom
+function camera(fx, fy, s) {
+  const k = K0 * s; const fw = 1424, fh = 890;
+  let x = fw / 2 - fx * k, y = fh / 2 - fy * k;
+  x = clamp(x, fw - 1280 * k, 0); y = clamp(y, fh - 800 * k, 0);
+  cam.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  return { k, x, y };
+}
+// app px -> screen px under the current camera
+let CAM = { k: K0, x: 0, y: 0 };
+const toScreen = (ax, ay) => ({ x: 248 + CAM.x + ax * CAM.k, y: 54 + CAM.y + ay * CAM.k });
+function keyframes(t, ks) { // [[t, fx, fy, s], ...] eased
+  if (t <= ks[0][0]) return ks[0].slice(1);
+  for (let i = 0; i < ks.length - 1; i++) {
+    const [t0, ...a] = ks[i], [t1, ...b] = ks[i + 1];
+    if (t <= t1) { const p = eio(seg(t, t0, t1)); return a.map((v, j) => lerp(v, b[j], p)); }
+  }
+  return ks[ks.length - 1].slice(1);
+}
+function overlay(html) { const d = document.createElement('div'); d.innerHTML = html; cam.appendChild(d); return d; }
+function hlRect(x, y, w, h, op) { if (op <= 0) return; overlay(`<div class="hl" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${op}"></div>`); }
+
+function setCursor(x, y, op, click) {
+  const c = $('cursor'); c.style.display = op > 0 ? '' : 'none'; c.style.left = x + 'px'; c.style.top = y + 'px'; c.style.opacity = op;
+  c.style.transform = `scale(${click ? .85 : 1})`;
+}
+function ripple(x, y, p) { const r = $('ripple'); r.style.display = p > 0 && p < 1 ? '' : 'none'; r.style.left = x - 30 + 'px'; r.style.top = y - 30 + 'px'; r.style.transform = `scale(${.4 + p * 1.4})`; r.style.opacity = 1 - p; }
+function clickAt(t, at, ax, ay) { const s = toScreen(ax, ay); ripple(s.x, s.y, seg(t, at, at + .45)); }
+
+function frameMotion(t) {
+  const f = $('frame');
+  const on = t >= 17.9 && t < 58.6;
+  f.style.display = on ? '' : 'none';
+  if (!on) return false;
+  // fly in (18), beat bumps in the montage, fly out (58)
+  const inP = eo(seg(t, 17.9, 18.9)), outP = eio(seg(t, 58.0, 58.6));
+  const bump = beatPulse(t, 50, 58) * .015;
+  const ry = lerp(28, 0, inP), ty = lerp(500, 0, inP) - outP * 700;
+  const mont = eio(seg(t, 49.9, 50.4)) * (1 - eio(seg(t, 57.8, 58.2)));
+  f.style.opacity = Math.min(1, inP * 1.4) * (1 - outP);
+  f.style.transform = `translateY(${ty + 70 * mont}px) rotateX(${ry}deg) scale(${(1 + bump) * lerp(.92, 1, inP) * (1 - .2 * mont)})`;
+  return true;
+}
+
+// conversation regions (app px): you+task, progress, reply, follow-up
+const REG = [[580, 135, 640, 80], [560, 230, 420, 30], [330, 272, 560, 246], [560, 528, 640, 125]];
+function conversation(t, base) {
+  show('conversation-dark', 'c');
+  // masks over the regions, then each region rises in
+  const at = [35.6, 36.3, 37.0, 40.0];
+  let html = '';
+  REG.forEach(([x, y, w, h], i) => {
+    html += `<div class="mask" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`;
+    const p = seg(t, at[i], at[i] + (i === 2 ? .9 : .35));
+    if (p > 0) {
+      const clip = i === 2 ? `clip-path: inset(0 0 ${(1 - eo(p)) * 100}% 0);` : '';
+      html += `<div class="reg" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${i === 2 ? 1 : eo(p)};transform:translateY(${(1 - eo(p)) * 14}px);${clip}"><img src="${A}conversation-dark.png" style="left:${-x}px;top:${-y}px"></div>`;
+    }
+  });
+  // the composer: the task types itself, then it's sent
+  const task = T('按设计稿做新的定价页，三档套餐，支持月付 / 年付切换。', 'Build the new pricing page from the design: three plans, with a monthly / yearly toggle.');
+  const typing = seg(t, 34.4, 35.4), sent = t >= 35.6;
+  if (t >= 34.3 && !sent) {
+    html += `<div class="mask" style="left:330px;top:692px;width:700px;height:30px;background:#2a2a2d"></div>`;
+    html += `<div id="typed" style="left:336px;top:700px">${task.slice(0, Math.round(task.length * typing))}<span style="opacity:${(t * 2) % 1 < .5 ? 1 : 0}">|</span></div>`;
+  }
+  if (t >= 40.0) html += ''; // follow-up shown via region 3
+  const d = document.createElement('div'); d.innerHTML = html; cam.appendChild(d);
+}
+
+function appShots(t) {
+  if (!frameMotion(t)) { $('word2').style.opacity = 0; return; }
+  let ks, after = null;
+  if (t < 26) { // see
+    show('nodes-dark');
+    ks = [[18, 640, 400, 1], [20.2, 640, 400, 1], [21.4, 600, 255, 1.7], [23.0, 600, 255, 1.7], [24.0, 600, 470, 1.7], [25.2, 640, 400, 1]];
+    CAM = camera(...keyframes(t, ks));
+    hlRect(312, 193, 906, 58, seg(t, 21.4, 21.8) * (1 - seg(t, 23.0, 23.3)));
+    hlRect(312, 437, 906, 58, seg(t, 24.0, 24.3) * (1 - seg(t, 25.0, 25.3)));
+  } else if (t < 28.2) { // add: pick a session
+    show('add-node-dark');
+    CAM = camera(...keyframes(t, [[26, 640, 400, 1], [26.6, 640, 400, 1.25]]));
+    hlRect(356, 346, 566, 58, seg(t, 27.0, 27.2));
+    const a = toScreen(560, 380), b = toScreen(876, 604);
+    const p1 = eio(seg(t, 26.3, 26.9)), p2 = eio(seg(t, 27.3, 27.85));
+    const x = t < 27.3 ? lerp(1500, a.x, p1) : lerp(a.x, b.x, p2), y = t < 27.3 ? lerp(950, a.y, p1) : lerp(a.y, b.y, p2);
+    setCursor(x, y, seg(t, 26.2, 26.4), Math.abs(t - 27.0) < .08 || Math.abs(t - 28.0) < .08);
+    clickAt(t, 27.0, 560, 380); clickAt(t, 28.0, 876, 604);
+    after = 'cursor';
+  } else if (t < 30.0) { // the new node
+    show('added');
+    CAM = camera(...keyframes(t, [[28.2, 640, 520, 1.25], [29.0, 700, 588, 1.6]]));
+    const p = seg(t, 28.25, 28.7);
+    hlRect(312, 558, 906, 60, p);
+    overlay(`<div class="badge" style="left:1010px;top:574px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${p}">${T('已加入', 'Joined')}</div>`);
+  } else if (t < 34.0) { // invite sentence
+    show('invite');
+    CAM = camera(...keyframes(t, [[30.0, 640, 400, 1.1], [30.8, 640, 438, 1.55], [33.4, 640, 438, 1.62]]));
+    hlRect(356, 402, 566, 72, seg(t, 30.8, 31.2));
+    const b = toScreen(880, 438);
+    setCursor(lerp(1600, b.x, eio(seg(t, 31.0, 31.6))), lerp(900, b.y, eio(seg(t, 31.0, 31.6))), seg(t, 30.9, 31.1) * (1 - seg(t, 33.0, 33.3)), Math.abs(t - 31.8) < .08);
+    clickAt(t, 31.8, 880, 438);
+    overlay(`<div class="badge" style="left:800px;top:478px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${seg(t, 31.85, 32.1) * (1 - seg(t, 33.2, 33.5))}">✓ ${T('已复制，发给那边的 agent', 'Copied — paste it to that agent')}</div>`);
+    after = 'cursor';
+  } else if (t < 44.0) { // a task, and the work coming back
+    ks = [[34, 760, 420, 1.12], [37.0, 760, 330, 1.12], [38.4, 640, 400, 1.38], [39.8, 760, 420, 1.12], [41.0, 900, 560, 1.3], [43.6, 900, 560, 1.32]];
+    CAM = camera(...keyframes(t, ks));
+    conversation(t);
+    const pb = seg(t, 41.0, 41.4) * (1 - seg(t, 43.5, 43.9));
+    overlay(`<div class="badge" style="left:340px;top:560px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${pb}">${T('同一个会话，上下文都在', 'Same session · context kept')}</div>`);
+  } else if (t < 50) { // together: handled by the network scene
+    $('frame').style.display = 'none';
+  } else { // montage: one beat each
+    const m = Math.floor((t - 50) / 2);
+    const names = ['filtered', 'machines-list', 'nodes', 'other:nodes-dark'];
+    const name = names[clamp(m, 0, 3)];
+    show(name);
+    const local = (t - 50) % 2;
+    CAM = camera(640, 400, 1.06 - .06 * eo(clamp(local / 2)));
+    if (name === 'filtered') hlRect(902, 117, 146, 32, seg(local, .1, .3));
+    const w = $('word2');
+    const words = [T('分组和标签', 'Groups & tags'), T('机器', 'Machines'), T('浅色 / 深色', 'Light / Dark'), T('中文 / English', 'English / 中文')];
+    w.textContent = words[clamp(m, 0, 3)];
+    w.style.opacity = seg(local, 0, .15) * (1 - seg(local, 1.8, 2)) * (1 - seg(t, 57.9, 58));
+    w.style.transform = `translateX(${(1 - eo(seg(local, 0, .25))) * -40}px)`;
+  }
+  if (t < 50 || t >= 58) $('word2').style.opacity = 0;
+  if (after !== 'cursor') { setCursor(0, 0, 0); ripple(0, 0, 0); }
+}
+
+// ---------- together: the network ----------
+const NODES = [
+  { k: 'fe', x: 620, y: 360, b: T('前端', 'Frontend'), s: 'Claude Code', g: '✻' },
+  { k: 'be', x: 1300, y: 360, b: T('后端', 'Backend'), s: 'Codex', g: '⌘' },
+  { k: 'rv', x: 960, y: 220, b: T('代码审查', 'Reviewer'), s: 'Codex', g: '⌘' },
+  { k: 'cu', x: 470, y: 660, b: T('组件', 'Components'), s: 'Cursor', g: '◆' },
+  { k: 'gr', x: 1450, y: 660, b: T('值班', 'On-call'), s: 'Grok bot', g: '✦' },
+  { k: 'rs', x: 960, y: 760, b: T('调研', 'Research'), s: 'claude.ai', g: '☁' },
+];
+const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.6, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.6, 'LGTM ✓'],
+  ['gr', 'be', 47.4, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.2, T('费率对比', 'fee table')], ['cu', 'fe', 48.9, 'PlanCard ✓']];
+function together(t) {
+  const net = $('net'); const on = t >= 43.8 && t < 50.3;
+  net.style.display = on ? '' : 'none'; if (!on) return;
+  const inP = seg(t, 43.8, 44.4), outP = seg(t, 49.8, 50.3);
+  const byK = Object.fromEntries(NODES.map((n) => [n.k, n]));
+  let svg = '<svg viewBox="0 0 1920 1080" style="position:absolute;inset:0">';
+  for (let i = 0; i < NODES.length; i++) for (let j = i + 1; j < NODES.length; j++) {
+    const a = NODES[i], b = NODES[j];
+    const mx = (a.x + b.x) / 2 + (a.y - b.y) * .15, my = (a.y + b.y) / 2 + (b.x - a.x) * .15;
+    svg += `<path d="M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}" stroke="rgba(82,166,133,.28)" stroke-width="2" fill="none" stroke-dasharray="1200" stroke-dashoffset="${1200 * (1 - eo(seg(t, 44.0 + i * .08, 44.9 + i * .08)))}"/>`;
+  }
+  svg += '</svg>';
+  let html = svg;
+  NODES.forEach((n, i) => {
+    const p = back(seg(t, 43.9 + i * .07, 44.4 + i * .07));
+    const glow = PKTS.some(([a, b, at]) => (b === n.k && t > at + .7 && t < at + 1.2)) ? 1 : 0;
+    html += `<div class="node" style="left:${n.x}px;top:${n.y}px;transform:translate(-50%,-50%) scale(${p});opacity:${clamp(p)}"><div class="dot" style="box-shadow:0 0 0 2px rgba(82,166,133,${.6 + .4 * glow}),0 0 ${40 + 50 * glow}px rgba(82,166,133,${.25 + .5 * glow})">${n.g}</div><b>${n.b}</b><span>${n.s}</span></div>`;
+  });
+  PKTS.forEach(([a, b, at, label]) => {
+    const p = seg(t, at, at + .75); if (p <= 0 || p >= 1) return;
+    const A1 = byK[a], B1 = byK[b];
+    const mx = (A1.x + B1.x) / 2 + (A1.y - B1.y) * .15, my = (A1.y + B1.y) / 2 + (B1.x - A1.x) * .15;
+    const q = eio(p), x = (1 - q) ** 2 * A1.x + 2 * (1 - q) * q * mx + q * q * B1.x, y = (1 - q) ** 2 * A1.y + 2 * (1 - q) * q * my + q * q * B1.y;
+    html += `<div class="pkt" style="left:${x}px;top:${y}px"><i></i><em>${label}</em></div>`;
+  });
+  net.innerHTML = html; net.style.opacity = inP * (1 - outP); net.style.transform = `scale(${1 + .04 * seg(t, 44, 50)})`;
+}
+
+// ---------- end card ----------
+function endCard(t) {
+  const e = $('end'); const on = t >= 58.2;
+  e.style.display = on ? '' : 'none'; if (!on) return;
+  const lp = seg(t, 58.2, 58.9), wp = seg(t, 58.7, 59.3), tp = seg(t, 59.3, 59.9), pp = seg(t, 60.2, 60.8), up = seg(t, 60.9, 61.4);
+  e.innerHTML = `
+    <img src="../assets/logo/myco-symbol.svg" style="position:absolute;left:50%;top:210px;width:200px;margin-left:-100px;opacity:${lp};transform:scale(${lerp(.5, 1, back(lp))})">
+    <img src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;top:440px;height:88px;width:280px;margin-left:-140px;opacity:${wp};transform:translateY(${16 * (1 - eo(wp))}px)">
+    <div class="kinetic" style="top:560px;font-size:40px;font-weight:600;color:#cfd6d2;opacity:${tp}">${T('AI agent 的菌丝网络', 'The mycelium for your AI agents.')}</div>
+    <div class="kinetic" style="top:650px;opacity:${pp};transform:translateY(${14 * (1 - eo(pp))}px)">
+      <span class="pill" style="background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
+      <span class="pill" style="box-shadow:0 0 0 2px rgba(255,255,255,.35)">${T('Windows 版', 'Windows')}</span></div>
+    <div class="kinetic" style="top:770px;font-size:30px;font-weight:400;color:#9aa19e;font-family:var(--mono);opacity:${up}">github.com/chenhg5/myco</div>`;
+}
+
+// ---------- subtitles, flash, glow ----------
+function subtitles(t) {
+  const s = $('sub').firstElementChild; const L = window.LINES || [];
+  const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
+  s.textContent = ln ? ln.text : ''; s.parentElement.style.opacity = ln ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
+}
+function flash(t) {
+  const f = $('flash');
+  let o = 0;
+  for (const at of [14.0, 50.0, 58.0]) o = Math.max(o, (t >= at ? Math.exp(-(t - at) * 9) : 0) * (at === 50 ? .35 : .85));
+  f.style.opacity = o;
+}
+function glow(t) {
+  const g = $('glow');
+  const energy = t < 8 ? .45 : t < 14 ? .45 + .4 * seg(t, 8, 14) : 1;
+  g.style.opacity = energy * (.85 + .15 * beatPulse(t, 14, 58));
+  g.style.transform = `translate(${Math.sin(t * .3) * 60}px, ${Math.cos(t * .23) * 40}px) scale(${1 + .04 * beatPulse(t, 14, 58)})`;
+}
+
+// sound-effect cues the mixer reads (seconds, name, gain)
+window.CUES = [
+  ...POP.map((at) => [at, 'pop', .8]),
+  ...HOPS.flatMap(([, , s0, s1]) => [[s0, 'click', .5], [s1, 'tick', .7]]),
+  [17.9, 'whoosh', .9], [26.0, 'whoosh', .6], [27.0, 'click', .9], [28.0, 'click', .9], [28.25, 'pop', .9],
+  [30.0, 'whoosh', .6], [31.8, 'click', .9], [34.0, 'whoosh', .6],
+  ...Array.from({ length: 14 }, (_, i) => [34.4 + i * .07, 'tick', .45]),
+  [35.6, 'send', .9], [36.3, 'tick', .6], [37.0, 'ding', .7], [40.0, 'pop', .6], [43.8, 'whoosh', .7],
+  ...PKTS.map(([, , at]) => [at, 'zip', .8]),
+  [52.0, 'whoosh', .45], [54.0, 'whoosh', .45], [56.0, 'whoosh', .45], [58.2, 'shimmer', .8],
+];
+
+window.seek = (t) => {
+  setCursor(0, 0, 0); ripple(0, 0, 0);
+  glow(t); hook(t); drop(t); appShots(t); together(t); endCard(t); subtitles(t); flash(t);
+};
+window.ready = Promise.all([...document.images].map((i) => i.decode().catch(() => {}))).then(async () => {
+  const names = ['nodes-dark', 'add-node-dark', 'added', 'invite', 'conversation-dark', 'filtered', 'machines-list', 'nodes', 'other:nodes-dark'];
+  await Promise.all(names.map((n) => img(n).decode().catch(() => console.error('missing ' + n))));
+  await document.fonts.ready;
+});
+</script>
+</body>
+</html>

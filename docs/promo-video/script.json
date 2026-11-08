@@ -1,0 +1,40 @@
+{
+  "bpm": 120,
+  "note": "Times are in seconds on a 120 BPM grid (one beat = 0.5 s, one bar = 2 s). Each line starts at `at`; its narration must end before the next line's `at` (render.mjs speeds a clip up to 1.25x when it doesn't).",
+  "sections": [
+    { "id": "hook",     "start": 0,  "end": 14 },
+    { "id": "drop",     "start": 14, "end": 18 },
+    { "id": "see",      "start": 18, "end": 26 },
+    { "id": "add",      "start": 26, "end": 34 },
+    { "id": "task",     "start": 34, "end": 44 },
+    { "id": "together", "start": 44, "end": 50 },
+    { "id": "montage",  "start": 50, "end": 58 },
+    { "id": "end",      "start": 58, "end": 66 }
+  ],
+  "lines": [
+    { "at": 0.6,  "en": "Claude Code on your laptop. Codex on a server. Cursor. A Grok bot. Agents in the cloud.",
+                  "zh": "笔记本上的 Claude Code，服务器上的 Codex，Cursor，Grok 机器人，还有云端的 agent。" },
+    { "at": 8.2,  "en": "They all work hard, but they can't talk to each other. So you copy, paste, and wait.",
+                  "zh": "它们都很能干，却彼此不通。于是你只能复制、粘贴、再等待。" },
+    { "at": 14.4, "en": "Meet myco.",
+                  "zh": "认识一下 myco。" },
+    { "at": 16.0, "en": "One app for every agent, on every machine.",
+                  "zh": "一个 App，连起每台机器上的每个 agent。" },
+    { "at": 20.2, "en": "See who's working, which model it runs, and where.",
+                  "zh": "谁在工作、用的什么模型、跑在哪里，一眼看清。" },
+    { "at": 26.2, "en": "Add the sessions already on your computer, in one click.",
+                  "zh": "电脑上已有的会话，点一下就加入。" },
+    { "at": 30.2, "en": "Or send one sentence to an agent anywhere else.",
+                  "zh": "别处的 agent，发一句话就能接进来。" },
+    { "at": 34.2, "en": "Give a task, and watch the work come back.",
+                  "zh": "派一个任务，看着结果回来。" },
+    { "at": 38.6, "en": "Every task resumes the agent's own session, so nothing is forgotten.",
+                  "zh": "每个任务都续接它自己的会话，上下文一点不丢。" },
+    { "at": 44.2, "en": "And your agents hand off work to each other.",
+                  "zh": "agent 之间，还能自己交接工作。" },
+    { "at": 50.2, "en": "Groups. Tags. Machines. Light or dark. English or Chinese.",
+                  "zh": "分组、标签、机器。浅色深色，中文英文。" },
+    { "at": 58.4, "en": "myco. The mycelium for your AI agents. Download it for Mac and Windows.",
+                  "zh": "myco，AI agent 的菌丝网络。Mac 和 Windows 版，现在就能下载。" }
+  ]
+}

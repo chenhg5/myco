@@ -637,7 +637,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         hub: hubView(appHub),
         public_url: publicUrl || local.hub.local_url,
-        ...(publicUrl ? { join_url: `${publicUrl}/join/demo-enroll-token` } : {}),
+        ...(publicUrl ? { join_url: `${publicUrl}/j/myco_enroll_k3v9q2wd7hx4m8pa` } : {}),
         warnings,
       });
     }
@@ -800,7 +800,7 @@ const server = http.createServer(async (req, res) => {
       const uses = Number.isInteger(body?.uses) ? body.uses : 1;
       const hours = Number.isInteger(body?.expires_hours) ? body.expires_hours : 24;
       state.counter += 1;
-      const joinUrl = `${hub.url.replace(/\/+$/, "")}/join/demo-${state.counter}`;
+      const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
       return send(res, 200, {
         join_url: joinUrl,
         command: `curl -fsSL ${joinUrl} | bash`,
