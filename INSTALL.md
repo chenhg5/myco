@@ -32,6 +32,8 @@ curl -fsSL <入网链接> | bash
 ```
 它会：安装或升级 myco（校验 SHA256）→ 登记这台机器（凭据存在 `~/.myco/machine.yaml`，只有你能读）→ 安装后台 runner 服务。可以重复执行；同一台机器再执行不会消耗链接的次数。这台机器上的 agent 会自动带上 `machine=<机器名>` 标签。
 
+**原生 Windows（预览）**：release 里有 `myco-windows-amd64.exe` 和 `myco-windows-arm64.exe`，已在 Windows CI 上跑通全部测试，但一键安装脚本和后台服务还没做。现在可以手动下载、改名为 `myco.exe` 放进 PATH，用 `myco join` 接入会话，在一个终端窗口里运行 `myco runner start --all`。exec 节点和 shell 节点在 Windows 上默认用 PowerShell 执行命令（命令要写 PowerShell 语法）。想要完整的一键体验，现在仍推荐 WSL。
+
 **每个 AI 会话**：在 Claude Code 或 Codex 会话里说一句"接入 myco：<入网链接>"，或者在已登记的机器上直接执行：
 ```bash
 myco join
