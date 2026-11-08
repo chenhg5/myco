@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS aliases (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_aliases_target ON aliases(target);
+CREATE TABLE IF NOT EXISTS console_tokens (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  token_hash   TEXT NOT NULL UNIQUE,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER NOT NULL DEFAULT 0
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
