@@ -38,6 +38,7 @@ async function page(film = process.env.FILM || 'film.html') {
   await p.addInitScript(([lang, assets, other, lines]) => { window.LANG = lang; window.ASSETS = assets; window.ASSETS_OTHER = other; window.LINES = lines; },
     [LANG, 'file://' + join(WORK, 'assets', LANG), 'file://' + join(WORK, 'assets', OTHER), LINES]);
   p.on('pageerror', (e) => console.error('page error:', e.message));
+  await p.addInitScript((tex) => { window.TEX = tex; }, join(WORK, 'tex'));
   p.on('console', (m) => { if (m.type() === 'error') console.error('console:', m.text()); });
   await p.goto('file://' + join(DIR, film));
   await p.evaluate(() => window.ready);
@@ -45,7 +46,7 @@ async function page(film = process.env.FILM || 'film.html') {
 }
 
 // the 3D worlds (film3d.html) and the app (film.html) share the clock; each frame comes from one of them
-const is3d = (t) => t < 18.5 || (t >= 43.85 && t < 50.2) || t >= 58.1;
+const is3d = (t) => t < 48.0 || t >= 57.95;
 async function pages() {
   const a = await page('film3d.html'); const b = await page('film.html');
   return { pick: (t) => (is3d(t) ? a.p : b.p), close: async () => { await a.b.close(); await b.b.close(); } };
@@ -75,9 +76,9 @@ if (mode === 'stills') {
   ff.stdin.end(); await new Promise((r) => ff.on('close', r)); await P.close();
   console.log('video', n, 'frames');
 } else if (mode === 'mix') {
-  const { b, p } = await page();
-  const cues = await p.evaluate(() => window.CUES);
-  await b.close();
+  const P = await pages();
+  const cues = [...(await P.pick(0).evaluate(() => window.CUES)), ...(await P.pick(50).evaluate(() => window.APP_CUES || []))];
+  await P.close();
   const SFX = join(WORK, 'audio', 'sfx');
   const inputs = ['-i', join(OUT, 'video.mp4'), '-i', join(WORK, 'audio', 'bgm.wav')];
   const fl = [];

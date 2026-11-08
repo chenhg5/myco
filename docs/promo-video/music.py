@@ -2,9 +2,10 @@
 
     python3 music.py <out dir>   -> bgm.wav (68 s, 120 BPM) and sfx/<name>.wav
 
-The track follows script.json's sections: a sparse intro (0-8 s), a build with
-a riser and snare roll (8-14 s), a drop at 14 s, a full groove, a lift into the
-montage at 50 s, and a final hit at 58 s. A minor: Am - F - C - G, one chord a bar.
+The track follows script.json's sections: a quiet title (0-4 s), a sparse intro
+(4-12 s), a build with a riser and snare roll (12-18 s), the drop at 18 s, a full
+groove, a lift into the app at 48 s, and a final hit at 58 s. A minor:
+Am - F - C - G, one chord a bar.
 """
 import os, sys, wave
 import numpy as np
@@ -14,6 +15,7 @@ BPM = 120
 BEAT = 60 / BPM
 BAR = 4 * BEAT
 TOTAL = 68.0
+TITLE, BUILD, DROP, LIFT, HIT = 4.0, 12.0, 18.0, 48.0, 58.0
 rng = np.random.default_rng(7)
 
 
@@ -128,14 +130,15 @@ def build():
     for b in range(bars):
         t0 = b * BAR; sec = t0
         root, triad = CHORDS[b % 4]
-        full = 14 <= sec < 58
-        intro = sec < 8
-        build_ = 8 <= sec < 14
-        ending = sec >= 58
+        full = DROP <= sec < HIT
+        intro = sec < BUILD
+        title = sec < TITLE
+        build_ = BUILD <= sec < DROP
+        ending = sec >= HIT
         # pad, opening up after the drop
         cut = 900 if intro else 1300 if build_ else 2600 if full else 1600
         if sec < 64:
-            put(music, pad([note(m) for m in triad], int(BAR * SR), cut), t0, 0.9 if full else 1.6 if intro else 0.8)
+            put(music, pad([note(m) for m in triad], int(BAR * SR), cut), t0, 0.9 if full else 1.2 if title else 1.6 if intro else 0.8)
         for k in range(4):  # beats
             tb = t0 + k * BEAT
             if full or (build_ and k % 2 == 0) or (ending and tb < 64 and k == 0):
@@ -145,44 +148,44 @@ def build():
             for h in range(2):  # 8th hats
                 th = tb + h * BEAT / 2
                 if intro and h == 0: continue
+                if title: continue
                 if sec < 64:
                     put(drums, hat(open_=(full and h == 1)), th, 1.5 if intro else 1.0)
-            if 50 <= sec < 58:  # montage: extra 16th hats
+            if LIFT <= sec < HIT:  # the app section: extra 16th hats
                 for q in (0.25, 0.75):
                     put(drums, hat(), tb + q * BEAT, 0.6)
-            if full and not (46 <= sec < 50):  # bass, 8ths, ducked by the kick
+            if full and not (LIFT - 2 <= sec < LIFT):  # bass, 8ths, ducked by the kick
                 for h in range(2):
                     put(bassl, bass(note(root), int(BEAT / 2 * SR)), tb + h * BEAT / 2, 0.9 if h else 0.55)
         # 16th pluck arpeggio from the build on
-        if sec >= 8 and sec < 64:
+        if sec >= BUILD and sec < 64:
             for s in range(16):
                 ts = t0 + s * BEAT / 4
                 if build_ and s % 2: continue
                 m = triad[ARP[s]] + (12 if (s // 4) % 2 and full else 0)
                 put(music, pluck(note(m), bright=2200 if build_ else 4200), ts, 0.33 if full else 0.24)
 
-    # build 8-14: snare roll accelerating into the drop, noise riser
-    tb = 12.0
+    # the build: snare roll accelerating into the drop, noise riser
     for i in range(16):
-        put(drums, snare(), 12.0 + i * BEAT / 4, 0.25 + 0.04 * i)
+        put(drums, snare(), DROP - 2 + i * BEAT / 4, 0.22 + 0.035 * i)
     rn = int(6 * SR); tt = t(rn)
     riser = highpass(rng.standard_normal(rn), 400)
-    riser = lowpass(riser, 600 + 9000 * (tt / 6) ** 2) * (tt / 6) ** 2 * 0.45
-    put(fx, riser, 8.0)
-    # lift into the montage (48-50)
+    riser = lowpass(riser, 600 + 7000 * (tt / 6) ** 2) * (tt / 6) ** 2 * 0.35
+    put(fx, riser, DROP - 6)
+    # the lift into the app
     rn2 = int(2 * SR); tt2 = t(rn2)
-    put(fx, lowpass(highpass(rng.standard_normal(rn2), 500), 800 + 8000 * (tt2 / 2) ** 2) * (tt2 / 2) ** 2 * 0.35, 48.0)
+    put(fx, lowpass(highpass(rng.standard_normal(rn2), 500), 800 + 7000 * (tt2 / 2) ** 2) * (tt2 / 2) ** 2 * 0.28, LIFT - 2)
     for i in range(8):
-        put(drums, snare(), 49.0 + i * BEAT / 4, 0.25 + 0.06 * i)
-    # impacts: drop, montage, end
-    for at, g in ((14.0, 1.0), (50.0, 0.7), (58.0, 1.0)):
+        put(drums, snare(), LIFT - 1 + i * BEAT / 4, 0.22 + 0.05 * i)
+    # impacts (soft): drop, lift, end
+    for at, g in ((DROP, 0.75), (LIFT, 0.45), (HIT, 0.75)):
         put(fx, impact(), at, g)
 
     # sidechain: duck pads/bass/plucks on each kick after the drop
     duck = np.ones(n)
     for b in range(int(TOTAL / BEAT)):
         tb = b * BEAT
-        if 14 <= tb < 58:
+        if DROP <= tb < HIT:
             i = int(tb * SR); m = int(0.22 * SR)
             duck[i:i + m] = np.minimum(duck[i:i + m], 0.35 + 0.65 * (np.arange(m) / m) ** 0.6)
     mix = drums * 0.9 + (bassl + music) * duck + fx

@@ -44,6 +44,10 @@ const { chromium } = require('playwright');
     await p.getByText(T('在写 FAQ', 'Writing the FAQ')).first().click(); await p.waitForTimeout(400);
     await p.locator('.conv-scroll').evaluate((e) => { e.scrollTop = 0; });
   });
+  await shot('observed', true, async (p) => {
+    await p.getByText(T('前端（Claude Code）', 'Frontend (Claude Code)')).first().click(); await p.waitForTimeout(500);
+    await p.locator('.app-msg').filter({ hasText: T('今天下午部署', 'deploying this afternoon') }).first().click(); await p.waitForTimeout(800);
+  });
   await shot('node-dark', true, async (p) => {
     await p.getByText(T('前端（Claude Code）', 'Frontend (Claude Code)')).first().click();
   });

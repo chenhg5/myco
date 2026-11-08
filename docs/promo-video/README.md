@@ -6,16 +6,20 @@ A ~66 s product film in English and Chinese: motion graphics on a 120 BPM grid, 
 |---|---|
 | `script.json` | The sections (on the beat grid) and the narration lines in both languages, with their start times |
 | `capture.cjs` | Captures the app states the film shows, from the showcase mock (`web/mock/showcase.mjs`) |
+| `fetch-logos.sh` | The agents' marks (Claude, OpenAI for Codex, Cursor, Grok) from their sources, as PNGs; trademarks of their owners, used to name the products myco works with |
+| `windows.html`, `tex.cjs` | The five agent windows of the opening, styled after each product's interface, rendered to textures |
+| `film3d.html` | The 3D world (Three.js): the title, the agents, the trap, the network of logo tiles (seeing each other, messages, files) and the end |
 | `tts_en.py` | English narration with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (offline) |
 | `tts_zh.mjs` | Chinese narration with Doubao TTS (`DOUBAO_TTS` points to a client module exporting `tts(text, file)`) |
 | `music.py` | The music (sparse intro, build, drop at 0:14, lift at 0:50, final hit at 0:58) and the sound effects, synthesized with numpy: no samples, no licences |
-| `film.html` | The film: five agents alone (Claude Code, Codex, Cursor, a Grok bot, a cloud agent), the copy-paste trap, the mycelium drop into the logo, the app (see, add, give a task), agents handing work to each other, a montage and the end card. It also lists the sound-effect cues |
+| `film.html` | The app section (0:48-0:58): the node list, a node's exchanges with other agents, the read-only thread between two agents, adding an agent |
 | `render.mjs` | `stills`, `film` and `mix` |
 
 Everything generated goes to `$WORK` (default `./work`, not committed). Node 22, Python 3 with numpy, ffmpeg, Playwright with Chromium:
 
 ```bash
-npm i --no-save @fontsource/inter@5.1.0 @fontsource/noto-sans-sc@5.1.0 @fontsource/jetbrains-mono@5.1.0
+npm i                                      # three, fonts, simple-icons (package.json)
+sh fetch-logos.sh && node tex.cjs          # marks and window textures into $WORK/tex (plus $WORK/tex/logo.png: the myco mark as a PNG)
 export WORK=$PWD/work
 # app captures, both languages (with the showcase mock and the app's dev server running)
 (cd ../../web && MOCK_SHELL=mac MOCK_SHOWCASE=en node mock/app-server.mjs & npx vite --port 5174)
@@ -31,4 +35,4 @@ LANG_FILM=en node render.mjs film && LANG_FILM=en node render.mjs mix     # $WOR
 LANG_FILM=zh node render.mjs film && LANG_FILM=zh node render.mjs mix     # $WORK/out-zh/myco-promo-zh.mp4
 ```
 
-Product names in the film (Claude Code, Codex, Cursor, Grok, claude.ai) are shown as text in drawn windows; no third-party logos are used.
+The agents' marks are their owners' trademarks, shown to name the products myco works with: Claude and Cursor from simple-icons 16.36.0, OpenAI from simple-icons 13.21.0, Grok from grok.com.

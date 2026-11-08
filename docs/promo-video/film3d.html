@@ -2,26 +2,41 @@
 <html>
 <head>
 <meta charset="utf-8">
-<!-- The promo's 3D worlds (Three.js), drawn as a pure function of time: window.seek(t).
-     World 1, 0-19 s: five agents alone in space (Claude Code, Codex, Cursor, a Grok bot,
-     a cloud agent), the camera flying from one to the next; the copy-paste trap with the
-     camera chasing each message; the drop at 14 s where mycelium threads grow out of every
-     window into one core that becomes the logo; a dive through the logo into the app. -->
+<!-- The promo's 3D world (Three.js), a pure function of time: window.seek(t). Everything
+     but the app section (film.html, 48-58 s) is drawn here:
+       0-4    title: the mark settles, "Connect your AI agents."
+       4-12   five agents alone in space, each in its own product's window
+       12-18  the trap: you carry every message between them
+       18-22  the drop: mycelium threads; each window becomes its logo tile around the hub
+       22-30  they see each other (agent list)
+       30-40  they message each other; one wakes up in its own session
+       40-48  they hand files to each other
+       58-66  the network folds into the myco mark; download
+     Textures come from $WORK/tex (tex.cjs). -->
+<link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
 <link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
 <link rel="stylesheet" href="node_modules/@fontsource/inter/800.css">
+<link rel="stylesheet" href="node_modules/@fontsource/noto-sans-sc/400.css">
 <link rel="stylesheet" href="node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400.css">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050706; font-family: Inter, "Noto Sans SC", sans-serif; color: #f2f4f3; }
 canvas { position: absolute; inset: 0; }
 #ui { position: absolute; inset: 0; pointer-events: none; }
-.label { position: absolute; transform: translate(-50%, 0); white-space: nowrap; font-size: 26px; font-weight: 600; color: #cfd8d3; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
-.label small { display: block; text-align: center; font-size: 19px; font-weight: 600; color: #7f8a85; margin-top: 2px; }
+.label { position: absolute; transform: translate(-50%, 0); white-space: nowrap; text-align: center; font-size: 25px; font-weight: 600; color: #dfe6e2; text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+.label small { display: block; font-size: 18px; font-weight: 400; color: #8e9a94; margin-top: 2px; }
+.label .on { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #5fc79a; margin-right: 8px; vertical-align: 3px; }
+.chip { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 22px; font-weight: 600; padding: 7px 14px; border-radius: 10px; background: rgba(12,20,17,.9); color: #d8efe4; box-shadow: 0 0 0 1px rgba(95,199,154,.4); }
 .words { position: absolute; left: 0; right: 0; text-align: center; font-weight: 800; letter-spacing: -.025em; }
-.words span { display: inline-block; margin: 0 .14em; }
+.words span { display: inline-block; margin: 0 .13em; }
+#term { position: absolute; left: 70px; bottom: 120px; width: 760px; border-radius: 14px; overflow: hidden; background: rgba(14,16,15,.92); box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08); }
+#term .bar { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: rgba(34,36,35,.95); font-size: 15px; color: #9aa29e; }
+#term .bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+#term pre { margin: 0; padding: 14px 18px 16px; font-family: "JetBrains Mono", "Noto Sans SC", monospace; font-size: 17px; line-height: 1.6; color: #d7dcd9; white-space: pre; }
+#term .p { color: #5fc79a; } #term .d { color: #7f8a85; } #term .k { color: #e6c07b; }
 #sub { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; }
 #sub span { display: inline-block; max-width: 1500px; padding: 10px 22px; border-radius: 12px; background: rgba(0,0,0,.5); font-size: 30px; font-weight: 600; line-height: 1.35; }
-#flash { position: absolute; inset: 0; background: #fff; }
 </style>
 <script type="importmap">{ "imports": {
   "three": "./node_modules/three/build/three.module.js",
@@ -29,15 +44,15 @@ canvas { position: absolute; inset: 0; }
 </head>
 <body>
 <div id="ui">
-  <div id="halo" style="position:absolute;left:310px;top:470px;width:1300px;height:420px;background:radial-gradient(closest-side, rgba(3,6,5,.78), transparent);"></div>
+  <div id="halo" style="position:absolute;left:260px;top:480px;width:1400px;height:500px;background:radial-gradient(closest-side, rgba(3,6,5,.78), transparent);opacity:0"></div>
   <div id="labels"></div>
-  <div class="words" id="kin" style="top:420px;font-size:150px"></div>
-  <div class="words" id="tag" style="top:790px;font-size:50px;font-weight:600"></div>
-  <img id="wordmark" src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;width:330px;margin-left:-165px;top:670px">
-  <div id="netlabels"></div>
-  <div id="endui" style="position:absolute;inset:0"></div>
+  <div id="chips"></div>
+  <img id="wordmark" src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;width:330px;margin-left:-165px;top:640px;opacity:0">
+  <div class="words" id="line1" style="top:760px;font-size:44px;font-weight:600;color:#d5ddd9"></div>
+  <div class="words" id="kin" style="top:430px;font-size:140px"></div>
+  <div id="cta"></div>
+  <div id="term" style="opacity:0"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span id="termTitle" style="margin-left:6px"></span></div><pre id="termBody"></pre></div>
   <div id="sub"><span></span></div>
-  <div id="flash"></div>
 </div>
 <script type="module">
 import * as THREE from 'three';
@@ -45,10 +60,11 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const ZH = window.LANG === 'zh';
 const T = (zh, en) => (ZH ? zh : en);
-const TEX = window.TEX || '/tmp/claude-0/promo/tex';
+const TEX = window.TEX;
 const $ = (id) => document.getElementById(id);
 
 // ---------- math ----------
@@ -59,345 +75,386 @@ const p4out = (x) => 1 - Math.pow(1 - x, 4);
 const p2io = (x) => (x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 const p3in = (x) => x * x * x;
 const lerp = (a, b, x) => a + (b - a) * x;
-// closed-form damped spring 0 -> 1 (damping ratio z, natural frequency w)
 const spring = (x, z = .75, w = 14) => { if (x <= 0) return 0; const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * x) * (Math.cos(wd * x) + (z * w / wd) * Math.sin(wd * x)); };
 const hash = (i) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
-// ---------- renderer ----------
+// ---------- renderer: soft look ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(1920, 1080); renderer.setPixelRatio(1);
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 document.body.insertBefore(renderer.domElement, $('ui'));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050706);
-scene.fog = new THREE.FogExp2(0x050706, 0.045);
-const camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.05, 200);
+scene.fog = new THREE.FogExp2(0x050706, 0.04);
+const camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.05, 300);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(1920, 1080), 0.45, 0.4, 0.82);
-composer.addPass(bloom);
-composer.addPass(new OutputPass());
+const bloom = new UnrealBloomPass(new THREE.Vector2(1920, 1080), 0.35, 0.4, 0.85);
+composer.addPass(bloom); composer.addPass(new OutputPass());
+scene.add(new THREE.HemisphereLight(0xdff5ea, 0x0a1210, 0.9));
+const key = new THREE.DirectionalLight(0xfff2e6, 1.6); key.position.set(4, 6, 8); scene.add(key);
+const rimL = new THREE.DirectionalLight(0x6fd6a8, 1.2); rimL.position.set(-6, 2, -6); scene.add(rimL);
 
 const loader = new THREE.TextureLoader();
 const load = (f) => new Promise((res, rej) => loader.load(f, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, rej));
 
-// ---------- dust: seeded points for depth ----------
+// dust for depth
 {
-  const n = 1400, pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { pos[i * 3] = (hash(i) - .5) * 40; pos[i * 3 + 1] = (hash(i + 9e3) - .5) * 24; pos[i * 3 + 2] = -hash(i + 2e4) * 40 + 8; }
+  const n = 1600, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (hash(i) - .5) * 44; pos[i * 3 + 1] = (hash(i + 9e3) - .5) * 26; pos[i * 3 + 2] = -hash(i + 2e4) * 46 + 40; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x6f9e8a, size: .035, transparent: true, opacity: .55, depthWrite: false })));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x6f9e8a, size: .035, transparent: true, opacity: .45, depthWrite: false })));
 }
 
-// ---------- the five agents ----------
-// world positions, facing slightly toward the origin; labels in two languages
+// ---------- the agents ----------
 const AG = [
-  { p: V(-3.4, 1.15, -1.0), ry: .28, name: 'Claude Code', where: T('笔记本', 'MacBook'), pop: 0.5 },
-  { p: V(3.6, 1.35, -3.2), ry: -.32, name: 'Codex', where: T('服务器', 'build server'), pop: 2.0 },
-  { p: V(-3.0, -1.6, -4.4), ry: .36, name: 'Cursor', where: T('Windows 台式机', 'Windows desktop'), pop: 3.5 },
-  { p: V(3.2, -1.45, -0.6), ry: -.28, name: 'Grok', where: T('机器人', 'bot'), pop: 4.5 },
-  { p: V(0.2, 0.1, -7.2), ry: 0, name: 'claude.ai', where: T('云端', 'cloud'), pop: 5.5 },
+  { k: 'cc', p: V(-3.4, 1.15, -1.0), ry: .28, pop: 4.5, name: 'Claude Code', where: T('MacBook 上', 'on a MacBook'), mark: 'claude', bg: 0xd97757, does: T('前端', 'frontend') },
+  { k: 'cx', p: V(3.6, 1.35, -3.2), ry: -.32, pop: 6.1, name: 'Codex', where: T('服务器上', 'on a build server'), mark: 'openai', bg: 0x121212, does: T('API 和测试', 'API & tests') },
+  { k: 'cu', p: V(-3.0, -1.6, -4.4), ry: .36, pop: 7.5, name: 'Cursor', where: T('Windows 台式机上', 'on a Windows desktop'), mark: 'cursor', bg: 0x151515, does: T('组件', 'components') },
+  { k: 'gr', p: V(3.2, -1.45, -0.6), ry: -.28, pop: 8.4, name: T('Grok 机器人', 'Grok bot'), where: T('值班', 'on call'), mark: 'grok', bg: 0x000000, does: T('告警', 'alerts') },
+  { k: 'ca', p: V(0.2, 0.15, -7.2), ry: 0, pop: 9.3, name: 'claude.ai', where: T('云端', 'in the cloud'), mark: 'claude', bg: 0xb8664a, does: T('调研', 'research') },
 ];
-const panels = [];
-const labelsEl = $('labels');
-const CORE = V(0, 0, -3.6);
+const byK = Object.fromEntries(AG.map((a, i) => [a.k, i]));
+const HUB = V(0, 0, -3.6);
+const panels = []; const tiles = [];
+const labelsEl = $('labels'); const chipsEl = $('chips');
 
-// camera shots: [time, position, lookAt]; moves between shots use expo-out (fast start, long tail)
-const look = (i, d = 3.2, side = 0) => { const a = AG[i]; const n = V(Math.sin(a.ry), 0, Math.cos(a.ry)); return [a.p.clone().add(n.multiplyScalar(d)).add(V(side, .1, 0)), a.p.clone()]; };
+// ---------- camera shots for the hook ----------
+const look = (i, d = 3.0, side = 0) => { const a = AG[i]; const n = V(Math.sin(a.ry), 0, Math.cos(a.ry)); return [a.p.clone().add(n.multiplyScalar(d)).add(V(side, .1, 0)), a.p.clone()]; };
 let SHOTS;
+const WIDE = [V(0, .3, 6.4), V(0, 0, -2.6)];
+const TITLE_CAM = [V(0, 0, 36.2), V(0, .1, 30)];
+const TITLE_POS = V(0, 0, 30);
 
-// ---------- the copy-paste trap ----------
-const HOPS = [[0, 1, 8.3, 8.95], [1, 3, 9.35, 9.95], [3, 2, 10.35, 10.9], [2, 4, 11.25, 11.7], [4, 0, 12.05, 12.4], [0, 3, 12.55, 12.85], [3, 1, 12.95, 13.2], [1, 2, 13.25, 13.45], [2, 0, 13.5, 13.68]];
+// ---------- the trap ----------
+const HOPS = [[0, 1, 12.3, 12.95], [1, 3, 13.35, 13.95], [3, 2, 14.35, 14.9], [2, 4, 15.25, 15.7], [4, 0, 16.05, 16.4], [0, 3, 16.55, 16.85], [3, 1, 16.95, 17.2], [1, 2, 17.25, 17.45], [2, 0, 17.5, 17.68]];
 const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fee table', 'hero text', 'deploy ok?', 'tests?', 'copy…'];
 const chips = [];
 function chipTexture(text) {
   const c = document.createElement('canvas'); c.width = 640; c.height = 112; const x = c.getContext('2d');
-  x.fillStyle = '#f2f4f3'; x.beginPath(); x.roundRect(4, 4, 632, 104, 26); x.fill();
+  x.fillStyle = '#eef1ef'; x.beginPath(); x.roundRect(4, 4, 632, 104, 26); x.fill();
   x.fillStyle = '#0d110f'; x.font = '600 50px Inter, sans-serif'; x.textBaseline = 'middle'; x.fillText(text, 34, 58);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 const hopCurve = (a, b, i) => { const A = AG[a].p, B = AG[b].p; const m = A.clone().add(B).multiplyScalar(.5).add(V(0, 1.4 + hash(i) * .8, 1.2)); return new THREE.QuadraticBezierCurve3(A.clone().add(V(0, 0, .2)), m, B.clone().add(V(0, 0, .2))); };
 
-// ---------- mycelium threads into the core ----------
-const threads = [];
-const knots = [];
-function buildThreads() {
-  AG.forEach((a, i) => {
-    for (let k = 0; k < 4; k++) {
-      const s = i * 10 + k;
-      const pts = [a.p.clone()];
-      for (let j = 1; j < 4; j++) {
-        const f = j / 4;
-        pts.push(a.p.clone().lerp(CORE, f).add(V((hash(s + j) - .5) * 1.6 * (1 - f), (hash(s + j + 50) - .5) * 1.4 * (1 - f), (hash(s + j + 90) - .5) * 1.2)));
-      }
-      pts.push(CORE.clone());
-      const curve = new THREE.CatmullRomCurve3(pts);
-      const geo = new THREE.TubeGeometry(curve, 120, k === 0 ? .022 : .012, 8, false);
-      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x58d39e).multiplyScalar(k === 0 ? .85 : .6), transparent: true, opacity: 0 });
-      const m = new THREE.Mesh(geo, mat); scene.add(m);
-      threads.push({ m, geo, curve, i, k, n: geo.index.count });
-    }
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(.06, 24, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9ff0c8).multiplyScalar(1.1) }));
-    knot.visible = false; scene.add(knot); knots.push(knot);
-  });
+// ---------- the network: threads to the hub, links between agents ----------
+const threads = []; const links = {};
+function tube(curve, r, color, n = 100) {
+  const geo = new THREE.TubeGeometry(curve, n, r, 8, false);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 }));
+  scene.add(m); return { m, geo, n: geo.index.count, curve };
 }
-
-// ---------- the logo at the core ----------
-let logo;
-
-// ---------- world 2: agents handing work to each other (43.8-50.3 s) ----------
-const NET = V(0, 0, -40);
-const NODES = [
-  { k: 'fe', p: V(-2.6, .9, .6), b: T('前端', 'Frontend'), s: 'Claude Code' },
-  { k: 'be', p: V(2.7, 1.0, -.8), b: T('后端', 'Backend'), s: 'Codex' },
-  { k: 'rv', p: V(.1, 2.3, -2.2), b: T('代码审查', 'Reviewer'), s: 'Codex' },
-  { k: 'cu', p: V(-3.0, -1.5, -1.6), b: T('组件', 'Components'), s: 'Cursor' },
-  { k: 'gr', p: V(3.1, -1.4, .9), b: T('值班', 'On-call'), s: 'Grok bot' },
-  { k: 'rs', p: V(.2, -2.3, -.4), b: T('调研', 'Research'), s: 'claude.ai' },
-].map((n) => ({ ...n, p: n.p.add(NET) }));
-const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.5, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.4, 'LGTM ✓'],
-  ['gr', 'be', 47.2, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.0, T('费率对比', 'fee table')], ['cu', 'fe', 48.8, 'PlanCard ✓']];
-const nodeObjs = []; const edges = {}; const pulses = [];
-const netLabels = $('netlabels');
-function edgeCurve(a, b) {
-  const A = a.p, B = b.p; const m = A.clone().add(B).multiplyScalar(.5);
-  const off = m.clone().sub(NET).normalize().multiplyScalar(.9).add(V(0, .4, 0));
+function linkCurve(a, b) {
+  const A = AG[a].p, B = AG[b].p; const m = A.clone().add(B).multiplyScalar(.5);
+  const off = m.clone().sub(HUB); off.y += .5; off.normalize().multiplyScalar(.9);
   return new THREE.QuadraticBezierCurve3(A.clone(), m.add(off), B.clone());
 }
-function buildNet() {
-  NODES.forEach((n) => {
-    const g = new THREE.Group(); g.position.copy(n.p);
-    const core = new THREE.Mesh(new THREE.SphereGeometry(.26, 48, 48), new THREE.MeshBasicMaterial({ color: 0x0c1814 }));
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(.31, 48, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x58d39e).multiplyScalar(1.1), side: THREE.BackSide, transparent: true }));
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.07, 24, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xbff5dc).multiplyScalar(.9) }));
-    g.add(halo); g.add(core); g.add(dot); scene.add(g);
-    const el = document.createElement('div'); el.className = 'label'; el.innerHTML = `${n.b}<small>${n.s}</small>`; netLabels.appendChild(el);
-    nodeObjs.push({ n, g, halo, el });
+function buildNetwork() {
+  AG.forEach((a, i) => {
+    for (let k = 0; k < 3; k++) {
+      const s = i * 10 + k; const pts = [a.p.clone()];
+      for (let j = 1; j < 4; j++) { const f = j / 4; pts.push(a.p.clone().lerp(HUB, f).add(V((hash(s + j) - .5) * 1.4 * (1 - f), (hash(s + j + 50) - .5) * 1.2 * (1 - f), (hash(s + j + 90) - .5)))); }
+      pts.push(HUB.clone());
+      threads.push({ ...tube(new THREE.CatmullRomCurve3(pts), k === 0 ? .018 : .009, new THREE.Color(0x58d39e).multiplyScalar(k === 0 ? .8 : .55), 120), i, k });
+    }
   });
-  const byK = Object.fromEntries(NODES.map((n) => [n.k, n]));
-  for (let i = 0; i < NODES.length; i++) for (let j = i + 1; j < NODES.length; j++) {
-    const c = edgeCurve(NODES[i], NODES[j]);
-    const geo = new THREE.TubeGeometry(c, 80, .012, 6, false);
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0x3f9c78), transparent: true, opacity: 0 }));
-    scene.add(m); edges[NODES[i].k + NODES[j].k] = { c, m, geo, n: geo.index.count, i };
+  for (let i = 0; i < AG.length; i++) for (let j = i + 1; j < AG.length; j++) {
+    links[AG[i].k + AG[j].k] = { ...tube(linkCurve(i, j), .011, new THREE.Color(0x3f9c78), 80), i, j };
   }
-  PKTS.forEach(([a, b, at, label]) => {
-    const fwd = edges[a + b], rev = edges[b + a]; const e = fwd || rev;
-    const trail = [];
-    for (let q = 0; q < 6; q++) { const s = new THREE.Mesh(new THREE.SphereGeometry(.08 * (1 - q * .13), 16, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xd8ffef).multiplyScalar(1.25 - q * .15), transparent: true })); s.visible = false; scene.add(s); trail.push(s); }
-    const el = document.createElement('div'); el.className = 'label'; el.style.cssText = 'font-size:24px;padding:6px 14px;border-radius:10px;background:rgba(10,20,16,.85);box-shadow:0 0 0 1px rgba(88,211,158,.45);color:#d6f5e6';
-    el.textContent = label; netLabels.appendChild(el);
-    pulses.push({ e, rev: !fwd, at, trail, el, to: b });
-  });
 }
-let logo2;
+const link = (a, b) => (links[a + b] ? { L: links[a + b], rev: false } : { L: links[b + a], rev: true });
+
+// along the links: [from, to, start, end, text, kind]
+const MSGS = [
+  ['cc', 'cx', 30.7, 31.6, T('派任务：加 /api/plans 接口', 'task: add a /api/plans endpoint'), 'task'],
+  ['cx', 'cc', 33.7, 34.5, T('✓ 完成 · 18 个测试通过', '✓ done · 18 tests pass'), 'reply'],
+  ['gr', 'cx', 35.5, 36.3, T('告警 #3：需要部署', 'alert #3: needs a deploy'), 'task'],
+  ['cx', 'gr', 38.0, 38.8, T('✓ 已部署', '✓ deployed'), 'reply'],
+  ['cu', 'cc', 40.8, 42.5, 'pricing-design.png · 2.4 MB', 'file'],
+  ['cx', 'cu', 44.0, 45.3, 'plans.json · 3 KB', 'file'],
+];
+const pulses = [];
+function fileTexture(name, size) {
+  const c = document.createElement('canvas'); c.width = 520; c.height = 300; const x = c.getContext('2d');
+  x.fillStyle = '#f3f5f4'; x.beginPath(); x.roundRect(6, 6, 508, 288, 28); x.fill();
+  x.fillStyle = '#cfe9dd'; x.beginPath(); x.roundRect(40, 60, 120, 150, 14); x.fill();
+  x.fillStyle = '#3a9a78'; x.font = '700 40px Inter, sans-serif'; x.fillText(name.endsWith('.png') ? 'PNG' : '{ }', 52, 150);
+  x.fillStyle = '#101513'; x.font = '600 32px Inter, sans-serif'; x.fillText(name, 186, 120);
+  x.fillStyle = '#5c6661'; x.font = '400 30px Inter, sans-serif'; x.fillText(size + '  ·  sha256 ✓', 186, 170);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+// ---------- marks ----------
+let hubMark, titleMark;
+const markMat = (tex, o = {}) => new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, toneMapped: false, depthWrite: false, color: new THREE.Color(.82, .82, .82), ...o });
+
+// ---------- terminal card (real myco commands, output trimmed) ----------
+const TERM = [
+  { from: 23.0, to: 29.6, lines: [
+    ['p', '$ myco agent list --online'],
+    ['d', 'NAME            STATE    CLI           MACHINE'],
+    ['', 'build-codex     working  codex         build-01', 23.9],
+    ['', 'desk-cursor     idle     cursor        desk-win', 24.3],
+    ['', 'oncall-grok     idle     grok          cloud', 24.7],
+    ['', 'cloud-research  idle     claude-cloud  claude.ai', 25.1],
+  ] },
+  { from: 30.4, to: 39.6, lines: [
+    ['p', '$ myco message send --to build-codex \\'],
+    ['p', T('    --body "加一个 /api/plans 接口" --wait 15m', '    --body "Add a /api/plans endpoint" --wait 15m')],
+    ['d', T('已送达 build-codex，等待回复…', 'delivered to build-codex, waiting…'), 31.6],
+    ['k', T('build-codex：完成，18 个测试通过 ✓', 'build-codex: done, 18 tests pass ✓'), 34.5],
+  ] },
+  { from: 40.4, to: 47.0, lines: [
+    ['p', '$ myco inbox pull'],
+    ['', T('desk-cursor → 你：新的定价页设计', 'desk-cursor → you: the new pricing design'), 42.5],
+    ['k', '  📎 pricing-design.png   2.4 MB   sha256 ✓', 42.8],
+  ] },
+];
 
 // ---------- build ----------
 window.ready = (async () => {
-  const texs = await Promise.all([0, 1, 2, 3, 4].map((i) => load(`file://${TEX}/w${i}.png`)));
-  texs.forEach((tex, i) => {
-    const a = AG[i]; const w = tex.image.width / 500, h = tex.image.height / 500;
-    const g = new THREE.Group();
+  const wt = await Promise.all([0, 1, 2, 3, 4].map((i) => load(`file://${TEX}/w${i}.png`)));
+  const mt = Object.fromEntries(await Promise.all(['claude', 'openai', 'cursor', 'grok'].map(async (n) => [n, await load(`file://${TEX}/m-${n}.png`)])));
+  const myco = await load(`file://${TEX}/logo.png`);
+  wt.forEach((tex, i) => {
+    const a = AG[i]; const w = tex.image.width / 520, h = tex.image.height / 520;
+    const g = new THREE.Group(); g.position.copy(a.p); g.rotation.y = a.ry;
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, toneMapped: false, side: THREE.DoubleSide });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    // a soft green rim light behind each window
-    const rim = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.012, h * 1.02), new THREE.MeshBasicMaterial({ color: 0x2b6e55, transparent: true, opacity: 0 }));
-    rim.position.z = -.02;
-    g.add(rim); g.add(plane); g.position.copy(a.p); g.rotation.y = a.ry; scene.add(g);
-    const el = document.createElement('div'); el.className = 'label'; el.innerHTML = `${a.name}<small>${a.where}</small>`; labelsEl.appendChild(el);
-    panels.push({ g, plane, rim, mat, w, h, el });
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat)); scene.add(g);
+    const el = document.createElement('div'); el.className = 'label'; labelsEl.appendChild(el);
+    panels.push({ g, mat, w, h, el });
+    // the logo tile: a rounded slab with the mark on its face
+    const tg = new THREE.Group(); tg.position.copy(a.p);
+    const slab = new THREE.Mesh(new RoundedBoxGeometry(1.2, 1.2, .2, 4, .19), new THREE.MeshStandardMaterial({ color: a.bg, roughness: .45, metalness: .1, transparent: true, opacity: 0 }));
+    const fs = a.mark === 'grok' ? 1.18 : .74;
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(fs, fs), markMat(mt[a.mark]));
+    face.position.z = .102; tg.add(slab); tg.add(face); tg.scale.setScalar(.001); scene.add(tg);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.92, .012, 8, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6fe0ae), transparent: true, opacity: 0 }));
+    ring.position.copy(a.p); scene.add(ring);
+    tiles.push({ tg, slab, face, ring });
   });
   HOPS.forEach(([a, b], i) => {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: chipTexture(CARRY[i]), transparent: true, opacity: 0, depthTest: false, toneMapped: false, color: new THREE.Color(.72, .72, .72) }));
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: chipTexture(CARRY[i]), transparent: true, opacity: 0, depthTest: false, toneMapped: false, color: new THREE.Color(.8, .8, .8) }));
     s.scale.set(1.15, .2, 1); s.renderOrder = 10; scene.add(s); chips.push({ s, curve: hopCurve(a, b, i) });
   });
-  buildThreads();
-  buildNet();
-  const lt = await load(`file://${TEX}/logo.png`);
-  logo = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), new THREE.MeshBasicMaterial({ map: lt, transparent: true, opacity: 0, toneMapped: false, color: new THREE.Color(1, 1, 1), depthTest: false }));
-  logo.renderOrder = 20; logo.position.copy(CORE).add(V(0, .45, 0));
-  logo2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: lt, transparent: true, opacity: 0, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15), depthTest: false }));
-  logo2.renderOrder = 20; logo2.position.copy(NET).add(V(0, .9, 0)); scene.add(logo2); scene.add(logo);
-  const wide = [V(0, .3, 6.2), V(0, 0, -2.6)];
-  SHOTS = [
-    [0.0, ...look(0, 2.6, -.4)],
-    [2.0, ...look(1, 3.0, .3)],
-    [3.5, ...look(2, 3.0, -.3)],
-    [4.5, ...look(3, 2.7, .3)],
-    [5.5, ...look(4, 3.4, 0)],
-    [6.6, ...wide],
-  ];
+  buildNetwork();
+  MSGS.forEach(([a, b, s0, s1, text, kind]) => {
+    const { L, rev } = link(a, b);
+    let obj;
+    if (kind === 'file') {
+      const m = text.split(' · ');
+      obj = new THREE.Mesh(new THREE.PlaneGeometry(.95, .55), markMat(fileTexture(m[0], m[1]), { depthTest: false }));
+      obj.renderOrder = 12;
+    } else obj = new THREE.Mesh(new THREE.SphereGeometry(.07, 16, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xd8ffef).multiplyScalar(1.1), transparent: true }));
+    obj.visible = false; scene.add(obj);
+    const el = document.createElement('div'); el.className = 'chip'; el.textContent = text; chipsEl.appendChild(el);
+    pulses.push({ L, rev, s0, s1, obj, el, kind });
+  });
+  hubMark = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), markMat(myco, { depthTest: false })); hubMark.renderOrder = 15; hubMark.position.copy(HUB); scene.add(hubMark);
+  titleMark = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), markMat(myco)); titleMark.position.copy(TITLE_POS).add(V(0, .75, 0)); scene.add(titleMark);
+  SHOTS = [[4.0, ...look(0, 2.6, -.4)], [6.1, ...look(1, 2.9, .3)], [7.5, ...look(2, 2.9, -.3)], [8.4, ...look(3, 2.6, .3)], [9.3, ...look(4, 3.3, 0)], [10.4, ...WIDE]];
   await document.fonts.ready;
 })();
 
-// camera between shots: a fast move (0.55 s, expo-out) after each shot's time
-function shotCamera(t) {
+function hookCamera(t) {
   let pos = SHOTS[0][1].clone(), tgt = SHOTS[0][2].clone();
   for (let i = 1; i < SHOTS.length; i++) {
-    const [at, p, q] = SHOTS[i]; const dur = i === SHOTS.length - 1 ? 1.4 : .55;
-    const x = i === SHOTS.length - 1 ? p2io(seg(t, at, at + dur)) : expoOut(seg(t, at - .08, at + dur));
+    const [at, p, q] = SHOTS[i]; const last = i === SHOTS.length - 1;
+    const x = last ? p2io(seg(t, at, at + 1.4)) : expoOut(seg(t, at - .08, at + .6));
     pos.lerp(p, x); tgt.lerp(q, x);
   }
   return [pos, tgt];
 }
-
 const vTmp = new THREE.Vector3();
-function project(p) { vTmp.copy(p).project(camera); return { x: (vTmp.x * .5 + .5) * 1920, y: (-vTmp.y * .5 + .5) * 1080, z: vTmp.z }; }
-
-function wordsIn(el, words, t0, step = .07) {
-  el.innerHTML = words.map((w, i) => { const p = seg(window.__t, t0 + i * step, t0 + i * step + .14); return `<span style="opacity:${p};filter:blur(${(1 - p) * 8}px)">${w}</span>`; }).join(ZH ? '' : ' ');
+const project = (p) => { vTmp.copy(p).project(camera); return { x: (vTmp.x * .5 + .5) * 1920, y: (-vTmp.y * .5 + .5) * 1080, z: vTmp.z }; };
+function wordsIn(el, words, t, t0, step = .08) {
+  el.innerHTML = words.map((w, i) => { const p = seg(t, t0 + i * step, t0 + i * step + .16); return `<span style="opacity:${p};filter:blur(${(1 - p) * 8}px)">${w}</span>`; }).join(ZH ? '' : ' ');
+}
+// the network camera orbits the hub, leaning toward each exchange
+function netCamera(t) {
+  const ang = -.18 + Math.sin((t - 18) * .09) * .22;
+  let r = lerp(15.5, 12.8, p4out(seg(t, 18, 20.5)));
+  const focus = HUB.clone();
+  const lean = (a, b, s0, s1, k) => { const w = seg(t, s0, s0 + .8) * (1 - seg(t, s1 - .6, s1)); if (w > 0) { const m = AG[byK[a]].p.clone().add(AG[byK[b]].p).multiplyScalar(.5); focus.lerp(m, w * k * .45); r -= w * 2.0; } };
+  lean('cc', 'cx', 30.2, 35.2, .7); lean('gr', 'cx', 35.2, 39.6, .7); lean('cu', 'cc', 40.2, 43.6, .7); lean('cx', 'cu', 43.6, 46.4, .6);
+  // leave the lower left free for the terminal card
+  const tw = p2io(seg(t, 22.6, 23.3)) * (1 - p2io(seg(t, 46.6, 47.3)));
+  focus.add(V(-1.6 * tw, -.7 * tw, 0));
+  return [focus.clone().add(V(Math.sin(ang) * r, 1.2 + Math.sin(t * .35) * .3, Math.cos(ang) * r)), focus];
 }
 
 window.seek = (t) => {
-  window.__t = t;
   // ----- camera -----
-  let [pos, tgt] = shotCamera(t);
-  // the trap: the camera chases each message with a little lag
-  if (t >= 8.2 && t < 14) {
-    const wideP = SHOTS[SHOTS.length - 1][1], wideT = SHOTS[SHOTS.length - 1][2];
-    let follow = null;
-    for (let h = 0; h < HOPS.length; h++) { const [, , s0, s1] = HOPS[h]; if (t >= s0 - .1 && t <= s1 + .25) follow = chips[h].curve.getPoint(clamp(p2io(seg(t - .06, s0, s1)))); }
-    const k = seg(t, 8.2, 8.8) * (1 - seg(t, 13.6, 14));
-    const fp = follow || wideT;
-    tgt = wideT.clone().lerp(fp, .55 * k);
-    pos = wideP.clone().add(V((fp.x - wideT.x) * .25 * k, (fp.y - wideT.y) * .2 * k, -1.2 * k * seg(t, 8.2, 11)));
-    // shake grows into the drop
-    const sh = seg(t, 11.5, 13.9) * .06;
-    pos.add(V(Math.sin(t * 47) * sh, Math.cos(t * 39) * sh, 0));
-    // anticipation: pull back just before the drop
-    pos.z += p3in(seg(t, 13.55, 14)) * 1.6;
-  }
-  // the drop and the core: slow orbit, then the dive into the logo
-  if (t >= 14) {
-    const orbit = (t - 14) * .07;
-    const r = lerp(9.5, 6.6, p4out(seg(t, 14, 15.6)));
-    pos = V(Math.sin(orbit) * r, .35 + .2 * Math.sin(t * .5), CORE.z + Math.cos(orbit) * r);
-    tgt = CORE.clone();
-    const dive = p3in(seg(t, 17.6, 18.55));
-    pos.lerp(CORE.clone().add(V(0, 0, .05)), dive);
-  }
-  // world 2 (43.8-50.3) and the end (58+): orbit the network
-  if (t >= 43.8 && t < 50.4 || t >= 58) {
-    const tt = t >= 58 ? t - 58 + 6.6 : t - 43.8;
-    const ang = -.5 + tt * .075;
-    const r = t >= 58 ? lerp(10.5, 12.5, p2io(seg(t, 58, 61))) : lerp(16, 10.5, expoOut(seg(t, 43.8, 44.9)));
-    pos = NET.clone().add(V(Math.sin(ang) * r, .8 + Math.sin(tt * .4) * .3, Math.cos(ang) * r));
-    tgt = NET.clone().add(V(0, t >= 58 ? .4 : 0, 0));
+  let pos, tgt;
+  if (t < 4.4) { // the title, then forward into the scene
+    pos = TITLE_CAM[0].clone().add(V(0, 0, -1.2 * seg(t, 0, 3.4))); tgt = TITLE_CAM[1].clone();
+    const f = p2io(seg(t, 3.3, 4.4)); const [hp, ht] = hookCamera(4.0);
+    pos.lerp(hp, f); tgt.lerp(ht, f);
+  } else if (t < 18.2) {
+    [pos, tgt] = hookCamera(t);
+    if (t >= 12.2) { // the trap: the camera chases each message
+      let follow = null;
+      for (let h = 0; h < HOPS.length; h++) { const [, , s0, s1] = HOPS[h]; if (t >= s0 - .1 && t <= s1 + .25) follow = chips[h].curve.getPoint(clamp(p2io(seg(t - .06, s0, s1)))); }
+      const k = seg(t, 12.2, 12.8) * (1 - seg(t, 17.6, 18));
+      const fp = follow || WIDE[1];
+      tgt = WIDE[1].clone().lerp(fp, .55 * k);
+      pos = WIDE[0].clone().add(V((fp.x - WIDE[1].x) * .25 * k, (fp.y - WIDE[1].y) * .2 * k, -1.2 * k * seg(t, 12.2, 15)));
+      const sh = seg(t, 15.5, 17.9) * .045; pos.add(V(Math.sin(t * 47) * sh, Math.cos(t * 39) * sh, 0));
+      pos.z += p3in(seg(t, 17.55, 18)) * 1.6;
+    }
+    if (t >= 18) { const [np, nt] = netCamera(t); const f = p2io(seg(t, 18, 18.2)); pos.lerp(np, f); tgt.lerp(nt, f); }
+  } else {
+    [pos, tgt] = netCamera(t);
+    if (t >= 46.4 && t < 48.2) { const d = p3in(seg(t, 46.6, 48.0)); pos.lerp(HUB.clone().add(V(0, 0, .3)), d); tgt = HUB.clone(); }
+    if (t >= 57.9) { const ang = .25 + (t - 58) * .04; const r = lerp(13, 14.5, p2io(seg(t, 58, 61))); pos = HUB.clone().add(V(Math.sin(ang) * r, .7, Math.cos(ang) * r)); tgt = HUB.clone().add(V(0, .45, 0)); }
   }
   camera.position.copy(pos); camera.lookAt(tgt);
-  camera.fov = t < 19 ? 38 + 10 * p3in(seg(t, 17.6, 18.55)) : 38; camera.updateProjectionMatrix();
+  camera.fov = 38 + (t < 57.9 ? 8 * p3in(seg(t, 46.6, 48.0)) : 0); camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
 
-  // ----- panels -----
-  const collapse = seg(t, 14.15, 15.0);
+  // ----- title -----
+  if (titleMark) {
+    const p = spring(t - .3, .8, 9);
+    titleMark.material.opacity = clamp((t - .3) * 2) * (1 - seg(t, 3.2, 3.9));
+    titleMark.scale.setScalar(Math.max(.001, p)); titleMark.rotation.y = (1 - clamp(p)) * .8 + Math.sin(t * .6) * .06;
+  }
+  const wm = $('wordmark'), l1 = $('line1');
+  const tWord = seg(t, 1.0, 1.35), tOut = seg(t, 3.2, 3.6), eWord = seg(t, 59.2, 59.55);
+  if (t < 4) { wm.style.opacity = tWord * (1 - tOut); wm.style.filter = `blur(${(1 - tWord) * 10 + tOut * 8}px)`; wm.style.top = '600px'; l1.style.top = '720px'; wordsIn(l1, T('把你的 AI agent 连起来', 'Connect your AI agents.').split(' '), t, 1.5); l1.style.opacity = 1 - tOut; l1.style.filter = `blur(${tOut * 8}px)`; }
+  else if (t >= 59) { wm.style.opacity = eWord; wm.style.filter = `blur(${(1 - eWord) * 10}px)`; wm.style.top = '600px'; l1.style.top = '715px'; wordsIn(l1, T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), t, 59.8); l1.style.opacity = 1; l1.style.filter = 'none'; }
+  else { wm.style.opacity = 0; l1.innerHTML = ''; }
+  $('halo').style.opacity = t < 4 ? seg(t, .8, 1.3) * (1 - tOut) : seg(t, 59, 59.5);
+
+  // ----- hook windows; at the drop each one becomes its logo tile -----
+  const collapse = seg(t, 18.1, 18.9);
+  const gather = p3in(seg(t, 58.1, 58.9));
+  const netOn = (t >= 18 && t < 47.9) || t >= 57.9;
   panels.forEach((P, i) => {
-    const a = AG[i];
+    const a = AG[i]; const T0 = tiles[i];
     const s = spring(t - a.pop, .72, 13) * (1 - p3in(collapse) * .96);
     const drift = V(Math.sin(t * .6 + i) * .05, Math.cos(t * .5 + i * 2) * .05, 0);
-    P.g.position.copy(a.p).add(drift);
-    P.g.scale.setScalar(Math.max(.001, s));
-    const vis = clamp((t - a.pop) * 6) * (1 - collapse);
-    P.mat.opacity = vis;
-    // "waiting": the rim warms and pulses during the trap
-    const wait = seg(t, 8.4 + i * .25, 8.9 + i * .25) * (1 - seg(t, 13.9, 14.1));
-    P.rim.material.color.setRGB(lerp(.17, .55, wait), lerp(.43, .38, wait), lerp(.33, .12, wait));
-    P.rim.material.opacity = vis * (.18 + .5 * wait * (.6 + .4 * Math.sin(t * 7 + i)));
-    // label under the window while it is introduced
-    const lp = project(a.p.clone().add(V(0, -P.h / 2 - .12, 0).applyAxisAngle(V(0, 1, 0), 0)).add(drift));
-    const lv = seg(t, a.pop + .25, a.pop + .5) * (1 - seg(t, 7.6, 8.0)) * (lp.z < 1 ? 1 : 0);
-    P.el.style.opacity = lv; P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px';
+    P.g.position.copy(a.p).add(drift); P.g.scale.setScalar(Math.max(.001, s));
+    const wait = seg(t, 12.4 + i * .25, 12.9 + i * .25) * (1 - seg(t, 17.9, 18.1));
+    P.mat.opacity = clamp((t - a.pop) * 6) * (1 - collapse);
+    P.mat.color.setRGB(1 - .18 * wait, 1 - .18 * wait, 1 - .22 * wait);
+    // labels: the window's name while it is introduced; in the network, under the tile
+    let lp, lv;
+    if ((t >= 19.2 && t < 47.6) || (t >= 57.9 && t < 58.4)) {
+      lp = project(a.p.clone().add(V(0, -.84, 0)));
+      const seen = a.k === 'cc' ? seg(t, 23.0, 23.3) : seg(t, 23.5 + (i - 1) * .4, 23.8 + (i - 1) * .4);
+      P.el.innerHTML = `${a.name}<small>${seen > 0 ? '<span class="on"></span>' : ''}${a.where}${seen > .5 ? ' · ' + a.does : ''}</small>`;
+      lv = seg(t, 19.4, 19.9) * (1 - seg(t, 47.2, 47.6)) * (t >= 57.9 ? 1 - seg(t, 58, 58.3) : 1);
+    } else {
+      lp = project(a.p.clone().add(V(0, -P.h / 2 - .1, 0)).add(drift));
+      P.el.innerHTML = `${a.name}<small>${a.where}</small>`;
+      lv = seg(t, a.pop + .25, a.pop + .5) * (1 - seg(t, 11.6, 12.0));
+    }
+    P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px'; P.el.style.opacity = lp.z < 1 ? lv : 0;
+    // the tile, turning slowly so its edges catch the light
+    const ts = netOn ? spring(t - 18.55 - i * .05, .7, 12) : 0;
+    T0.tg.scale.setScalar(Math.max(.001, t >= 57.9 ? 1 - gather : ts));
+    T0.tg.position.copy(a.p).lerp(HUB, gather);
+    T0.tg.quaternion.copy(camera.quaternion); T0.tg.rotateY(Math.sin(t * .7 + i * 1.3) * .35); T0.tg.rotateX(Math.cos(t * .5 + i) * .12);
+    T0.slab.material.opacity = netOn ? (t >= 57.9 ? 1 : clamp(ts * 2)) : 0; T0.face.material.opacity = T0.slab.material.opacity;
+    // a ring: seeing (Claude Code, 23 s), working (Codex), waking up (Codex, 36.3 s)
+    let ro = 0, rs = 1;
+    if (a.k === 'cc') { const x = seg(t, 23.0, 24.4); ro = x > 0 && x < 1 ? (1 - x) * .8 : 0; rs = 1 + x * 3.5; }
+    if (a.k === 'cx' && t > 31.6 && t < 33.7) { ro = .55; rs = 1 + .05 * Math.sin(t * 8); }
+    if (a.k === 'cx' && t > 36.3 && t < 37.9) { ro = .7 * (1 - seg(t, 37.6, 37.9)); rs = 1 + .12 * Math.sin(t * 10); }
+    T0.ring.position.copy(a.p); T0.ring.quaternion.copy(camera.quaternion); T0.ring.scale.setScalar(rs); T0.ring.material.opacity = netOn && t < 47.9 ? ro : 0;
   });
 
-  // ----- messages in flight -----
+  // ----- messages carried by hand (the trap) -----
   chips.forEach((c, h) => {
-    const [, , s0, s1] = HOPS[h];
-    const p = p2io(seg(t, s0, s1)); const on = t >= s0 - .12 && t <= s1 + .08;
-    c.s.material.opacity = on ? seg(t, s0 - .12, s0) * (1 - seg(t, s1, s1 + .08)) : 0;
+    const [, , s0, s1] = HOPS[h]; const p = p2io(seg(t, s0, s1));
+    c.s.material.opacity = t >= s0 - .12 && t <= s1 + .08 ? seg(t, s0 - .12, s0) * (1 - seg(t, s1, s1 + .08)) : 0;
     c.s.position.copy(c.curve.getPoint(p));
   });
 
-  // ----- threads grow, knots run along them -----
+  // ----- threads and links -----
+  const netVis = (t >= 18 && t < 48) || t >= 57.9;
+  const gatherAll = seg(t, 58.1, 58.9);
   threads.forEach((th) => {
-    const g = p4out(seg(t, 14.0 + th.k * .05, 15.1 + th.k * .08));
-    th.geo.setDrawRange(0, Math.floor(th.n * g));
-    th.m.material.opacity = g > 0 ? (th.k === 0 ? .9 : .45) * (1 - .55 * seg(t, 15.4, 16.2)) * (1 - seg(t, 17.9, 18.4)) : 0;
+    const g = p4out(seg(t, 18.0 + th.k * .05, 19.1 + th.k * .08));
+    th.geo.setDrawRange(0, Math.floor(th.n * (t >= 57.9 ? 1 : g)));
+    th.m.material.opacity = netVis ? (th.k === 0 ? .8 : .4) * (t >= 57.9 ? 1 - gatherAll : g) * (1 - .5 * seg(t, 20, 21)) : 0;
   });
-  knots.forEach((kn, i) => {
-    const c = threads[i * 4].curve; const p = p4out(seg(t, 14.6, 15.5));
-    kn.visible = t >= 14.6 && t < 18.4; kn.position.copy(c.getPoint(p));
-    kn.scale.setScalar(1 + .6 * Math.exp(-Math.pow((t - 15.5) * 4, 2)));
+  Object.values(links).forEach((L, q) => {
+    const g = p4out(seg(t, 19.6 + q * .04, 20.6 + q * .04));
+    L.geo.setDrawRange(0, Math.floor(L.n * (t >= 57.9 ? 1 : g)));
+    const busy = pulses.some((p) => p.L === L && t >= p.s0 - .2 && t <= p.s1 + .6);
+    L.m.material.color.setRGB(busy ? .42 : .25, busy ? .9 : .61, busy ? .66 : .47);
+    L.m.material.opacity = netVis ? (busy ? .95 : .5) * (t >= 57.9 ? 1 - gatherAll : g) : 0;
   });
 
-  // ----- the logo -----
-  if (logo) {
-    const lp = spring(t - 15.2, .7, 11);
-    logo.material.opacity = clamp((t - 15.2) * 3);
-    logo.scale.setScalar(Math.max(.001, lp));
-    logo.quaternion.copy(camera.quaternion);
-    logo.rotateZ((1 - clamp(lp)) * -1.2);
+  // ----- messages and files along the links -----
+  pulses.forEach((P) => {
+    const x = seg(t, P.s0, P.s1); const on = x > 0 && x < 1 && t < 48;
+    const y = p2io(x); const pt = P.L.curve.getPoint(P.rev ? 1 - y : y);
+    P.obj.visible = on; P.obj.position.copy(pt);
+    if (P.kind === 'file') { P.obj.quaternion.copy(camera.quaternion); P.obj.scale.setScalar(.9 + .1 * Math.sin(x * Math.PI)); P.obj.material.opacity = seg(x, 0, .08) * (1 - seg(x, .92, 1)); }
+    const lp = project(pt.clone().add(V(0, .25, 0)));
+    P.el.style.opacity = on && P.kind !== 'file' ? seg(x, 0, .12) * (1 - seg(x, .88, 1)) : 0;
+    P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px';
+  });
+
+  // ----- the hub mark -----
+  if (hubMark) {
+    const hp = spring(t - 19.0, .75, 11), end = spring(t - 58.5, .72, 10);
+    hubMark.material.opacity = t >= 57.9 ? clamp((t - 58.0) * 3) : clamp((t - 19.0) * 3) * (1 - seg(t, 47.6, 48));
+    hubMark.scale.setScalar(Math.max(.001, t >= 57.9 ? .55 + 1.25 * end : hp * .55));
+    hubMark.quaternion.copy(camera.quaternion);
+    hubMark.position.copy(HUB).add(V(0, t >= 57.9 ? .75 * end : 0, 0));
   }
-  bloom.strength = .38 + .35 * Math.exp(-Math.pow((t - 14.0) * 3, 2)) + .15 * seg(t, 15.2, 15.6) * (1 - seg(t, 16, 17)) + .5 * p3in(seg(t, 17.9, 18.55));
-
-  // ----- world 2: nodes, threads, pulses -----
-  const netOn = (t >= 43.8 && t < 50.4) || t >= 58;
-  const gather = p3in(seg(t, 58.0, 58.9)); // the end: every node is drawn into the logo
-  nodeObjs.forEach((o, i) => {
-    const s = netOn ? spring(t - 43.85 - i * .07, .72, 13) * (1 - gather) : 0;
-    o.g.position.copy(o.n.p).lerp(NET, gather); o.g.scale.setScalar(Math.max(.001, t >= 58 ? 1 - gather : s));
-    const hit = pulses.some((p) => p.to === o.n.k && t > p.at + .7 && t < p.at + 1.25);
-    o.halo.material.color.setRGB(.3 * (1 + .6 * hit), .8 * (1 + .35 * hit), .58 * (1 + .5 * hit));
-    const lp = project(o.n.p.clone().add(V(0, -.55, 0)));
-    o.el.style.opacity = netOn && t < 58 ? seg(t, 44.1 + i * .07, 44.4 + i * .07) * (1 - seg(t, 50.0, 50.3)) : 0;
-    o.el.style.left = lp.x + 'px'; o.el.style.top = lp.y + 'px';
-  });
-  Object.values(edges).forEach((e) => {
-    const g = p4out(seg(t, 44.0 + e.i * .05, 45.0 + e.i * .05));
-    e.geo.setDrawRange(0, Math.floor(e.n * (t >= 58 ? 1 : g)));
-    e.m.material.opacity = netOn ? (t >= 58 ? .55 * (1 - gather) : .55 * g * (1 - seg(t, 50.0, 50.4))) : 0;
-  });
-  pulses.forEach((p) => {
-    const x = seg(t, p.at, p.at + .8); const on = netOn && t < 58 && x > 0 && x < 1;
-    p.trail.forEach((s, q) => { const y = clamp(p4out(x) - q * .03); s.visible = on && y > 0; s.position.copy(p.e.c.getPoint(p.rev ? 1 - y : y)); });
-    const lp = project(p.e.c.getPoint(p.rev ? 1 - p4out(x) : p4out(x)).add(V(0, .35, 0)));
-    p.el.style.opacity = on ? seg(x, 0, .15) * (1 - seg(x, .85, 1)) : 0; p.el.style.left = lp.x + 'px'; p.el.style.top = lp.y + 'px';
-  });
-  if (logo) logo.visible = t < 18.6;
-  if (logo2) { const lp = spring(t - 58.6, .7, 11); logo2.material.opacity = t >= 58.6 ? clamp((t - 58.6) * 4) : 0; logo2.scale.setScalar(Math.max(.001, lp)); logo2.quaternion.copy(camera.quaternion); logo2.rotateZ((1 - clamp(lp)) * -1.2); }
-  if (t >= 58) bloom.strength = .38 + .3 * Math.exp(-Math.pow((t - 58.75) * 3.5, 2));
-  if (t >= 43.8 && t < 50.4) bloom.strength = .38;
+  bloom.strength = .32 + .25 * Math.exp(-Math.pow((t - 18.0) * 3, 2)) + .2 * p3in(seg(t, 47, 48));
 
   composer.render();
 
-  // ----- the end card -----
-  const eu = $('endui');
-  if (t >= 59.0) {
-    const wp = seg(t, 59.0, 59.35), pp = seg(t, 60.4, 60.75), up = seg(t, 61.0, 61.3);
-    eu.innerHTML = `<div id="halo2" style="position:absolute;left:310px;top:520px;width:1300px;height:470px;background:radial-gradient(closest-side, rgba(3,6,5,.8), transparent)"></div>
-      <img src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;width:330px;margin-left:-165px;top:600px;opacity:${wp};filter:blur(${(1 - wp) * 10}px)">
-      <div class="words" style="top:715px;font-size:46px;font-weight:600;color:#d5ddd9"></div>
-      <div class="words" style="top:810px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
-        <span style="padding:16px 34px;border-radius:999px;background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
-        <span style="padding:16px 34px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.4)">${T('Windows 版', 'Windows')}</span></div>
-      <div class="words" style="top:925px;font-size:28px;font-weight:600;color:#9aa49f;opacity:${up};font-family:'JetBrains Mono',monospace">github.com/chenhg5/myco</div>`;
-    wordsIn(eu.querySelectorAll('.words')[0], T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), 59.6, .08);
-  } else eu.innerHTML = '';
+  // ----- terminal card -----
+  const term = $('term'); let shown = null;
+  for (const c of TERM) if (t >= c.from && t < c.to) shown = c;
+  if (shown) {
+    const o = seg(t, shown.from, shown.from + .3) * (1 - seg(t, shown.to - .3, shown.to));
+    term.style.opacity = o; term.style.filter = `blur(${(1 - o) * 6}px)`;
+    $('termTitle').textContent = 'Claude Code — ~/code/website';
+    const first = shown.lines[0][1]; const typed = Math.round(first.length * seg(t, shown.from + .3, shown.from + .9));
+    let html = '';
+    shown.lines.forEach(([cls, text, at], n) => {
+      if (n === 0) { html += `<span class="${cls}">${text.slice(0, typed)}</span>\n`; return; }
+      if (at ? t >= at : t >= shown.from + .9 + n * .12) html += `<span class="${cls}">${text.replace(/</g, '&lt;')}</span>\n`;
+    });
+    $('termBody').innerHTML = html;
+  } else term.style.opacity = 0;
 
-  // ----- type and overlays -----
-  const kin = $('kin');
-  const beatWords = [[12.0, T('复制。', 'Copy.')], [12.5, T('粘贴。', 'Paste.')], [13.0, T('等待。', 'Wait.')]];
-  kin.innerHTML = '';
-  for (const [at, w] of beatWords) if (t >= at && t < at + .5) { const p = seg(t, at, at + .12); kin.innerHTML = `<span style="opacity:${p};filter:blur(${(1 - p) * 10}px);transform:scale(${lerp(1.25, 1, p4out(p))})">${w}</span>`; }
-  if (t >= 13.5 && t < 14) { const p = seg(t, 13.5, 13.62); kin.innerHTML = `<span style="font-size:110px;opacity:${p * (1 - seg(t, 13.88, 14))};filter:blur(${(1 - p) * 8}px)">${T('复制。粘贴。等待。', 'Copy. Paste. Wait.')}</span>`; }
-  $('halo').style.opacity = seg(t, 15.4, 15.9) * (1 - seg(t, 17.6, 17.9));
-  const wm = $('wordmark'); const wp = seg(t, 15.6, 15.95);
-  wm.style.opacity = wp * (1 - seg(t, 17.6, 17.9)); wm.style.filter = `blur(${(1 - wp) * 10}px)`;
-  const tg = $('tag'); if (t >= 15.9 && t < 17.9) { wordsIn(tg, T('一个 App，连起 你所有的 agent', 'One app for every agent, on every machine.').split(' '), 16.0, .08); tg.style.opacity = 1 - seg(t, 17.55, 17.85); tg.style.filter = `blur(${seg(t, 17.55, 17.85) * 8}px)`; } else tg.innerHTML = '';
+  // ----- type: the trap, the end -----
+  const kin = $('kin'); kin.innerHTML = '';
+  for (const [at, w] of [[16.0, T('复制。', 'Copy.')], [16.5, T('粘贴。', 'Paste.')], [17.0, T('等待。', 'Wait.')]]) if (t >= at && t < at + .5) { const p = seg(t, at, at + .12); kin.innerHTML = `<span style="opacity:${p};filter:blur(${(1 - p) * 10}px)">${w}</span>`; }
+  if (t >= 17.5 && t < 18) { const p = seg(t, 17.5, 17.62); kin.innerHTML = `<span style="font-size:104px;opacity:${p * (1 - seg(t, 17.88, 18))};filter:blur(${(1 - p) * 8}px)">${T('复制。粘贴。等待。', 'Copy. Paste. Wait.')}</span>`; }
+  const cta = $('cta');
+  if (t >= 60.2) {
+    const pp = seg(t, 60.4, 60.75), up = seg(t, 61.0, 61.3);
+    cta.innerHTML = `<div class="words" style="top:810px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
+      <span style="padding:16px 34px;border-radius:999px;background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
+      <span style="padding:16px 34px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.4)">${T('Windows 版', 'Windows')}</span></div>
+      <div class="words" style="top:925px;font-size:28px;font-weight:600;color:#9aa49f;opacity:${up};font-family:'JetBrains Mono',monospace">github.com/chenhg5/myco</div>`;
+  } else cta.innerHTML = '';
   const L = window.LINES || []; const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
   const sub = $('sub'); sub.firstElementChild.textContent = ln ? ln.text : '';
   sub.style.opacity = ln ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
-  $('flash').style.opacity = 0;
 };
+
+// sound cues for the mixer: [seconds, effect, gain]; the app section's are in film.html
+window.CUES = [
+  [0.3, 'shimmer', .35],
+  ...AG.map((a) => [a.pop, 'pop', .7]),
+  ...HOPS.flatMap(([, , s0, s1]) => [[s0, 'click', .45], [s1, 'tick', .6]]),
+  [19.0, 'shimmer', .4],
+  [23.0, 'zip', .5], ...[23.9, 24.3, 24.7, 25.1].map((x) => [x, 'tick', .5]),
+  ...MSGS.flatMap(([, , s0, s1, , kind]) => [[s0, kind === 'file' ? 'whoosh' : 'send', .6], [s1, kind === 'task' ? 'pop' : 'ding', .45]]),
+  [46.6, 'whoosh', .6], [58.3, 'whoosh', .45], [58.6, 'shimmer', .5],
+];
 </script>
 </body>
 </html>

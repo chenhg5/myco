@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The five agent windows of the film's opening, each styled after its product's own
+     interface and carrying its own mark ($LOGOS/*.png, see fetch-logos.sh). tex.cjs
+     screenshots each .win into a texture. -->
+<link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
+<link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: transparent; font-family: Inter, sans-serif; padding: 20px; display: flex; flex-direction: column; gap: 40px; align-items: flex-start; }
+.win { border-radius: 16px; overflow: hidden; background: #141414; color: #e6e6e6; box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+.bar { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #222; font-size: 15px; color: #a8a8a8; }
+.dots { display: flex; gap: 8px; margin-right: 6px; } .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+.mono { font-family: "JetBrains Mono", monospace; font-size: 17px; line-height: 1.65; }
+.logo { width: 22px; height: 22px; vertical-align: -5px; }
+.dim { color: #8a8a8a; } .ok { color: #7fd1a7; } .warn { color: #e2b45a; } .claude { color: #d97757; }
+</style>
+</head>
+<body>
+<!-- Claude Code: the terminal UI with its welcome box -->
+<div class="win" id="w0" style="width:640px">
+  <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span style="width:22px;height:22px;border-radius:6px;background:#d97757;display:inline-flex;align-items:center;justify-content:center"><img src="LOGOS/claude.png" style="width:15px;height:15px"></span> Claude Code — ~/code/website</div>
+  <div class="mono" style="padding:18px 22px">
+    <div style="border:1.5px solid #d97757;border-radius:10px;padding:12px 18px;margin-bottom:14px">
+      <div><span class="claude">✻</span> Welcome to <b>Claude Code</b>!</div>
+      <div class="dim" style="margin-top:6px">/help for help, /status for your current setup</div>
+      <div class="dim">cwd: /Users/glenn/code/website</div>
+    </div>
+    <div>&gt; Redo the hero section from the new design</div>
+    <div><span class="ok">⏺</span> Update(app/page.tsx)</div>
+    <div class="dim">&nbsp; ⎿ Updated with 24 additions</div>
+    <div class="warn">✻ Waiting for the API spec…</div>
+  </div>
+</div>
+
+<!-- Codex CLI -->
+<div class="win" id="w1" style="width:640px;background:#0f0f10">
+  <div class="bar"><span class="dots"><i></i><i></i><i></i></span>ssh build-01 — codex</div>
+  <div class="mono" style="padding:18px 22px">
+    <div style="border:1.5px solid #3a3a3a;border-radius:10px;padding:12px 18px;margin-bottom:14px">
+      <div><img class="logo" src="LOGOS/openai.png"> <b>&gt;_ OpenAI Codex</b> <span class="dim">(v0.52.0)</span></div>
+      <div class="dim" style="margin-top:6px">model: gpt-6-sol &nbsp; directory: ~/srv/website-api</div>
+    </div>
+    <div>› add a /api/plans endpoint</div>
+    <div><span class="ok">•</span> Ran npm test <span class="dim">— 18 passed</span></div>
+    <div class="warn">• Waiting for a review…</div>
+  </div>
+</div>
+
+<!-- Cursor -->
+<div class="win" id="w2" style="width:700px;background:#181818">
+  <div class="bar" style="background:#1f1f1f"><span class="dots"><i></i><i></i><i></i></span><img class="logo" src="LOGOS/cursor.png" style="width:18px;height:18px"> Cursor — website</div>
+  <div style="display:flex;height:300px">
+    <div style="width:150px;background:#1b1b1b;border-right:1px solid #2a2a2a;padding:14px;font-size:14px;line-height:1.9;color:#9a9a9a">
+      <div>▾ app</div><div style="padding-left:14px;color:#e6e6e6">pricing</div><div style="padding-left:14px">page.tsx</div><div>▾ components</div><div style="padding-left:14px">PlanCard.tsx</div></div>
+    <div class="mono" style="flex:1;padding:14px 16px;font-size:15px;color:#a9b1ac">
+      <div><span style="color:#c792ea">export function</span> <span style="color:#ffcb6b">Pricing</span>() {</div>
+      <div>&nbsp; <span style="color:#c792ea">const</span> plans = <span style="color:#82aaff">usePlans</span>()</div>
+      <div>&nbsp; <span style="color:#c792ea">return</span> &lt;<span style="color:#f07178">Grid</span>&gt;</div>
+      <div>&nbsp;&nbsp;&nbsp; {plans.<span style="color:#82aaff">map</span>(p =&gt; &lt;<span style="color:#f07178">PlanCard</span> {...p}/&gt;)}</div></div>
+    <div style="width:220px;border-left:1px solid #2a2a2a;padding:14px;font-size:15px;line-height:1.55">
+      <div style="font-weight:600;margin-bottom:8px">Agent</div>
+      <div class="dim">Building PlanCard…</div>
+      <div class="warn" style="margin-top:8px">Needs the copy from the docs</div></div>
+  </div>
+</div>
+
+<!-- Grok bot -->
+<div class="win" id="w3" style="width:520px;background:#0b0b0b">
+  <div class="bar" style="background:#161616"><span class="dots"><i></i><i></i><i></i></span><img class="logo" src="LOGOS/grok.png"> Grok</div>
+  <div style="padding:20px 22px;font-size:18px;line-height:1.5">
+    <div style="margin-left:auto;width:max-content;background:#2a2a2a;padding:10px 16px;border-radius:18px;margin-bottom:14px">Any alerts overnight?</div>
+    <div style="display:flex;gap:10px;align-items:flex-start"><img src="LOGOS/grok.png" style="width:30px;height:30px;border-radius:8px">
+      <div>3 alerts, all resolved.<br><span class="warn">One needs a deploy.</span></div></div>
+  </div>
+</div>
+
+<!-- claude.ai (a cloud agent) -->
+<div class="win" id="w4" style="width:520px;background:#262624;color:#e9e6dc">
+  <div class="bar" style="background:#1f1e1d"><span class="dots"><i></i><i></i><i></i></span>claude.ai</div>
+  <div style="padding:20px 22px;font-size:18px;line-height:1.5">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px"><span style="width:30px;height:30px;border-radius:8px;background:#d97757;display:inline-flex;align-items:center;justify-content:center"><img src="LOGOS/claude.png" style="width:20px;height:20px"></span><b>Claude</b><span class="dim" style="font-size:15px">· cloud session</span></div>
+    <div class="dim">Research: payment providers in the EU</div>
+    <div class="warn" style="margin-top:6px">Drafting the comparison…</div>
+  </div>
+</div>
+<script>
+// LOGOS is given in the URL (?logos=<dir>)
+const L = new URLSearchParams(location.search).get('logos');
+document.querySelectorAll('img').forEach((i) => { i.src = i.getAttribute('src').replace('LOGOS', 'file://' + L); });
+</script>
+</body>
+</html>
