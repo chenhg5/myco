@@ -19,7 +19,7 @@ const STATE_OPTIONS: { value: State | "all"; label: string }[] = [
   { value: "offline", label: "离线" },
 ];
 
-function machineOf(row: AgentRow): string | undefined {
+export function machineOf(row: AgentRow): string | undefined {
   const l = row.st.agent.labels.find((x) => x.startsWith("machine="));
   return l ? l.slice("machine=".length) : undefined;
 }
@@ -32,11 +32,17 @@ function tasksOf(row: AgentRow): string {
   ].filter(Boolean).join(" · ");
 }
 
-function AgentRowView({ row, now, onClick }: { row: AgentRow; now: number; onClick: () => void }) {
+export function AgentRowView({ row, now, onClick, showHub }: {
+  row: AgentRow;
+  now: number;
+  onClick: () => void;
+  /** Show the hub name in the subtitle instead of the machine (machines page). */
+  showHub?: boolean;
+}) {
   const ag = row.st.agent;
   const state = stateMeta[row.st.state];
   const Icon = harnessInfo(ag.binding.harness).icon;
-  const machine = machineOf(row);
+  const where = showHub ? row.hub.name : machineOf(row);
   const tasks = tasksOf(row);
   return (
     <button
@@ -51,7 +57,7 @@ function AgentRowView({ row, now, onClick }: { row: AgentRow; now: number; onCli
         <span className="app-row-sub">
           <span className={cn("dot", row.st.state)} />
           <span>{state.label}</span>
-          {machine && <><span className="sep">·</span><span className="txt">{machine}</span></>}
+          {where && <><span className="sep">·</span><span className="txt">{where}</span></>}
           <span className="sep">·</span>
           <span className="txt">{timeAgo(ag.last_seen_at, now)}</span>
         </span>
@@ -118,7 +124,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
   const groups = (hubs || [])
     .filter((h) => filters.hub === "all" || h.id === filters.hub)
     .map((h) => ({ hub: h, meta: hubMeta.find((m) => m.id === h.id), rows: filtered.filter((r) => r.hub.id === h.id) }))
-    .filter((g) => !g.hub.ok || g.rows.length > 0);
+    // A hub picked explicitly stays visible even when it has no agents.
+    .filter((g) => filters.hub !== "all" || !g.hub.ok || g.rows.length > 0);
 
   return (
     <div className="app-page">
@@ -189,6 +196,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, no
                   <AlertTriangle />
                   <span className="err" title={g.hub.error || undefined}>{g.hub.error || "App 无法连接这个 Hub。"}</span>
                 </div>
+              ) : g.rows.length === 0 ? (
+                <div className="app-empty-note">这个 Hub 上还没有节点。</div>
               ) : (
                 g.rows.map((r) => (
                   <AgentRowView key={r.st.agent.id} row={r} now={now} onClick={() => onOpen(r)} />

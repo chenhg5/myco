@@ -5,7 +5,10 @@
 import http from "node:http";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
+// MOCK_SHELL=mac reserves room for the macOS traffic lights; browser does not.
+const SHELL = process.env.MOCK_SHELL === "browser" ? "browser" : "mac";
 const iso = (offsetSec = 0) => new Date(Date.now() - offsetSec * 1000).toISOString();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function makeAgent(over) {
   const base = {
@@ -96,6 +99,18 @@ const state = {
     },
   ],
   counter: 0,
+};
+
+// This machine: the CLI starts out missing so the install flow can be tried,
+// cloudflared is present, Tailscale is not.
+const local = {
+  myco: null,
+  hub: null,
+  tools: {
+    cloudflared: { path: "/opt/homebrew/bin/cloudflared" },
+    tailscale: null,
+  },
+  device: "glenn-mac",
 };
 
 function totals(agents) {
@@ -207,6 +222,105 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, appOverview());
   }
 
+  // /app/info
+  if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
+    if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    return send(res, 200, { version: "v0.16.8-demo", shell: SHELL });
+  }
+
+  // /app/local[...]
+  if (parts[0] === "app" && parts[1] === "local") {
+    if (parts.length === 2 && method === "GET") return send(res, 200, local);
+
+    if (parts.length === 3 && parts[2] === "myco" && method === "POST") {
+      if (!local.myco) {
+        await sleep(2000);
+        local.myco = { path: "/Users/glenn/.local/bin/myco", version: "0.16.8" };
+      }
+      return send(res, 200, local.myco);
+    }
+
+    if (parts.length === 3 && parts[2] === "hub" && method === "POST") {
+      const body = await readBody(req);
+      const tunnel = body?.tunnel;
+      if (!["cloudflare", "tailscale", "none"].includes(tunnel)) {
+        return fail(res, 400, "invalid_request", "tunnel 必须是 cloudflare、tailscale 或 none。");
+      }
+      if (!local.myco) {
+        return fail(res, 409, "myco_missing", "还没有安装 myco 命令行。", "先在这个页面点“安装”。");
+      }
+      const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
+      if (tunnel === "cloudflare" && !local.tools.cloudflared) {
+        return fail(res, 409, "cloudflared_missing", "没有找到 cloudflared。", "在终端运行 brew install cloudflared。");
+      }
+      if (tunnel === "tailscale" && !local.tools.tailscale) {
+        return fail(res, 409, "tailscale_missing", "没有找到 Tailscale。", "先安装 Tailscale 并为这台设备开启 Funnel。");
+      }
+      if (tunnel === "cloudflare" && hostname && !/^[a-z0-9.-]+$/i.test(hostname)) {
+        return fail(res, 400, "invalid_hostname", "域名看起来不对。", "例如 hub.example.com。");
+      }
+
+      await sleep(4000);
+
+      const publicUrl = tunnel === "none"
+        ? null
+        : tunnel === "tailscale"
+          ? "https://glenn-mac.tail1a2b.ts.net"
+          : hostname
+            ? `https://${hostname}`
+            : "https://quiet-forest-4821.trycloudflare.com";
+      const warnings = tunnel === "none"
+        ? ["只在本机和同一局域网内可用。"]
+        : tunnel === "tailscale"
+          ? ["请确认已在这台设备上开启 Funnel。"]
+          : hostname
+            ? ["请确认域名已托管在 Cloudflare，并且执行过一次 cloudflared tunnel login。"]
+            : ["临时地址会在 Hub 重启后变化。", "这台电脑休眠或关机时，其他机器会连不上。"];
+
+      local.hub = {
+        running: true,
+        local_url: "http://127.0.0.1:7780",
+        ...(publicUrl ? { public_url: publicUrl } : {}),
+        version: "0.16.8",
+        added: true,
+      };
+
+      const appUrl = publicUrl || local.hub.local_url;
+      let appHub = state.hubs.find((h) => h.id === "hub_local");
+      if (!appHub) {
+        appHub = {
+          id: "hub_local", name: `${local.device} 本机`, url: appUrl,
+          token: "myco_console_local_demo", ok: true, hub_version: "0.16.8",
+          update_available: false, agents: [], threads: {}, recent: [],
+        };
+        state.hubs.push(appHub);
+      } else {
+        appHub.url = appUrl;
+        appHub.ok = true;
+        delete appHub.error;
+      }
+
+      return send(res, 200, {
+        hub: hubView(appHub),
+        public_url: publicUrl || local.hub.local_url,
+        ...(publicUrl ? { join_url: `${publicUrl}/join/demo-enroll-token` } : {}),
+        warnings,
+      });
+    }
+
+    if (parts.length === 4 && parts[2] === "hub" && parts[3] === "stop" && method === "POST") {
+      if (local.hub) local.hub.running = false;
+      const appHub = state.hubs.find((h) => h.id === "hub_local");
+      if (appHub) {
+        appHub.ok = false;
+        appHub.error = "本机 Hub 已停止";
+      }
+      return send(res, 200, { stopped: true });
+    }
+
+    return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+  }
+
   // /app/hubs/{id}[/...]
   if (parts[0] === "app" && parts[1] === "hubs" && parts.length >= 3) {
     const hub = state.hubs.find((h) => h.id === parts[2]);
@@ -214,6 +328,7 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length === 3 && method === "DELETE") {
       state.hubs = state.hubs.filter((h) => h.id !== hub.id);
+      if (hub.id === "hub_local" && local.hub) local.hub.added = false;
       return send(res, 204);
     }
 
