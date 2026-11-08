@@ -151,6 +151,11 @@ type Backend struct {
 	Timeout time.Duration
 	// NewClient builds a hub client (tests replace it); default client.New.
 	NewClient func(hubURL, token string) (*client.Client, error)
+	// Local, when set, enables /app/local (a hub on this computer).
+	Local *Local
+	// Version and Shell answer GET /app/info; Shell is "mac" for the app
+	// window (hidden title bar) and "browser" for --serve.
+	Version, Shell string
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -176,6 +181,15 @@ func (b *Backend) client(h Hub) (*client.Client, error) {
 // Handler returns the /app/ API.
 func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
+	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"version": b.Version, "shell": orStr(b.Shell, "browser")})
+	})
+	if b.Local != nil {
+		m.HandleFunc("GET /app/local", b.getLocal)
+		m.HandleFunc("POST /app/local/myco", b.installMyco)
+		m.HandleFunc("POST /app/local/hub", b.startLocal)
+		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
+	}
 	m.HandleFunc("GET /app/hubs", b.listHubs)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
