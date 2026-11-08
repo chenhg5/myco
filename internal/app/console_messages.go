@@ -57,6 +57,20 @@ func (s *MessageService) SteerFromConsole(ctx context.Context, name string, mana
 	return s.Steer(ctx, &domain.Agent{Name: m.From}, id, body, false)
 }
 
+// DismissFromConsole closes an open message on its recipient's behalf
+// without replying (a stale answer nobody will pull, a task that no longer
+// matters). allowed decides whether the caller may act for the recipient.
+func (s *MessageService) DismissFromConsole(ctx context.Context, id string, allowed func(to domain.AgentName) error) (*domain.Message, error) {
+	m, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := allowed(m.To); err != nil {
+		return nil, err
+	}
+	return s.Transition(ctx, &domain.Agent{Name: m.To}, id, TransitionComplete, false)
+}
+
 // Conversation is a thread the console takes part in.
 type Conversation struct {
 	ThreadID  string

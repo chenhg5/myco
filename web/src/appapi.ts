@@ -260,6 +260,9 @@ export const appApi = {
   /** Corrects an unfinished task the console sent. */
   steer: (hubId: string, messageId: string, body: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),
+  /** Closes an open message for its recipient without replying (owner or admin). */
+  dismissMessage: (hubId: string, messageId: string) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
   /** Adds and removes labels (group=… and tags) of a node. */

@@ -949,8 +949,41 @@ textarea.app-input {
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.app-msg:first-child {
+.app-msg:first-child,
+.app-msg-wrap:first-child .app-msg {
   border-top: 0;
+}
+.app-msg-wrap {
+  position: relative;
+}
+.app-msg-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.app-msg-wrap:hover .app-msg-dismiss,
+.app-msg-dismiss:focus-visible {
+  opacity: 1;
+}
+.app-msg-dismiss:hover {
+  color: var(--fg);
+  border-color: var(--fg-2);
+}
+@media (hover: hover) {
+  .app-msg-wrap:has(.app-msg-dismiss):hover .app-msg .time { visibility: hidden; }
+}
+@media (hover: none) {
+  .app-msg-dismiss { opacity: 1; }
 }
 .app-msg:hover {
   background: var(--pill);

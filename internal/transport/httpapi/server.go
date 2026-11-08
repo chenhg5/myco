@@ -121,6 +121,7 @@ func (s *Server) routes() {
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
+	m.HandleFunc("POST /v1/console/messages/{id}/dismiss", s.admin(s.consoleDismiss))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	// Members (people) and the audit log. Console tokens act as their member;
@@ -1399,6 +1400,33 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, messageDTO(m))
+}
+
+// consoleDismiss closes an open message for its recipient (owner of the
+// recipient node, or someone who manages the hub), without a reply.
+func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
+	actor := s.actorOf(r)
+	id := r.PathValue("id")
+	m, err := s.messages.DismissFromConsole(r.Context(), id, func(to domain.AgentName) error {
+		if actor.Manages() {
+			return nil
+		}
+		a, err := s.agents.Get(r.Context(), string(to))
+		if err != nil {
+			return err
+		}
+		if !actor.Owns(a.Owner) {
+			return domain.Errf(domain.CodePermissionDenied, "you can only dismiss messages of your own nodes").
+				WithSuggestion("ask the node's owner or a hub admin")
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.record(r, "message.dismiss", string(m.To), id+" from "+string(m.From))
+	writeJSON(w, http.StatusOK, messageDTO(m))
 }
 
 func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {

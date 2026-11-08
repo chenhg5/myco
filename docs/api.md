@@ -30,6 +30,7 @@ Errors (any non-2xx):
 | `POST /v1/console/pair` | — (the code is the proof) | `{code, device}` → `{token, device, member}`: trades a one-time pairing code (`myco_pair_…`, from an invite or an add-device link; once, within 24 h) for the device's own console token |
 | `POST /v1/console/me/pairings` | admin | → `{link, expires_at}`: a one-time link to add another device of the caller (the owner, for the admin token) |
 | `GET /v1/console/me/devices`, `DELETE /v1/console/me/devices/{id}` | admin | The caller's devices (console tokens); removing one revokes it |
+| `POST /v1/console/messages/{id}/dismiss` | admin (the recipient node's owner, or owner/admin) | Closes an open message (even queued) for its recipient without a reply; audited as `message.dismiss` |
 | `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
 | `POST /v1/members` | owner/admin | `{name, display_name?, role?}` (role `member` or `admin`) → `{member, link}`; the link (`<hub>/c/myco_pair_…`, once, within 24 h) signs that person's app in as them |
 | `PATCH /v1/members/{member}` | owner/admin (self: name only) | `{name?, display_name?, role?}`; role `owner` hands over the hub (owner only; the old owner becomes admin) |
@@ -66,7 +67,7 @@ Errors (any non-2xx):
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 5 minutes after) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
-| `POST /v1/messages/{id}/done` | recipient | Close without reply |
+| `POST /v1/messages/{id}/done` | recipient | Close without reply; also works on a queued message (drop it without pulling) |
 | `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
@@ -105,6 +106,10 @@ a JSON body:
 `exit_code` 124 = killed at the node's timeout, 126 = refused (sender not in `allow_from`,
 command not in the node's allowlist) with the reason in `error`. Notes, replies and events are
 never executed. `myco exec --to <node> --cmd "..."` wraps this and exits with `exit_code`.
+
+An exec node's answers (the result reply, or the failure event) are stored already `done`: they
+matter only to whoever waits for them (`GET /v1/messages/{id}/reply` still returns them), so a
+caller that gave up waiting does not find a stale result in its inbox.
 
 
 

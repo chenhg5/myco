@@ -46,6 +46,7 @@ func (t MessageType) ExpectsReply() bool { return t == TypeTask }
 //	queued ──pull──▶ delivered ──ack──▶ acked ──reply/done──▶ done
 //	   ▲                 │  ▲              ├──hold──▶ held ──reply/done──▶ done
 //	   └──lease expires──┘  └───release────┘   any open state ──fail──▶ failed
+//	queued ──done──▶ done   (dismiss without pulling)
 type Status string
 
 const (
@@ -219,7 +220,9 @@ func (m *Message) Complete(by AgentName, now time.Time) error {
 	if m.Status == StatusDone {
 		return nil
 	}
-	if err := m.requireOpen("complete", StatusDelivered, StatusAcked, StatusHeld); err != nil {
+	// Queued too: the recipient may close a message it never pulled (e.g. a
+	// late answer nobody waits for any more) without pulling it first.
+	if err := m.requireOpen("complete", StatusQueued, StatusDelivered, StatusAcked, StatusHeld); err != nil {
 		return err
 	}
 	m.Status, m.UpdatedAt = StatusDone, now

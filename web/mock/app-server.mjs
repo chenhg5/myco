@@ -396,17 +396,27 @@ function totals(agents) {
   return t;
 }
 
+// Ids of messages closed with "dismiss" (/app/hubs/{id}/messages/{mid}/dismiss).
+const dismissed = new Set();
+
 function agentStatus(a) {
   const state = a.online ? (a.status_text ? "working" : "idle") : "offline";
+  // Working nodes also have a stale queued answer waiting (dismissable).
+  const staleId = "msg_stale_" + a.name;
+  const stale = state === "working" && !dismissed.has(staleId)
+    ? [makeMessage({ id: staleId, thread_id: "th_stale_" + a.name, from: "mac-exec", to: a.name, type: "reply", status: "queued",
+        body: '{"exit_code":124,"stdout":"v0.16.7\\n","stderr":"","duration_ms":60028,"timed_out":true,"error":"killed after 1m0s"}',
+        created_at: iso(12 * 3600), updated_at: iso(12 * 3600) })]
+    : [];
   return {
     agent: a, state,
-    queued: a.queued ?? (state === "working" ? 2 : 0),
+    queued: a.queued ?? (state === "working" ? 1 + stale.length : 0),
     in_progress: state === "working" ? 1 : 0,
     held: 0,
     receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
     session_in_use: a.session_in_use || undefined,
     current: state === "working"
-      ? [makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" })]
+      ? [makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" }), ...stale]
       : [],
   };
 }
@@ -844,6 +854,13 @@ const server = http.createServer(async (req, res) => {
       task.updated_at = iso(0);
       scheduleReply(hub, task.thread_id, task.to, task.id);
       return send(res, 201, steer);
+    }
+
+    // /app/hubs/{id}/messages/{mid}/dismiss — close an open message unanswered.
+    if (parts.length === 6 && parts[3] === "messages" && parts[5] === "dismiss" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      dismissed.add(parts[4]);
+      return send(res, 200, makeMessage({ id: parts[4], status: "done" }));
     }
 
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {

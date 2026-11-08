@@ -666,6 +666,13 @@ func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Messag
 	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body}, &out)
 }
 
+// ConsoleDismiss closes an open message for its recipient without a reply
+// (the recipient node's owner, or a hub admin).
+func (c *Client) ConsoleDismiss(ctx context.Context, id string) (*api.Message, error) {
+	var out api.Message
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/dismiss", nil, struct{}{}, &out)
+}
+
 // Conversations lists the console's threads (admin or console token).
 func (c *Client) Conversations(ctx context.Context, agent, query string, before int64, limit int) ([]api.Conversation, error) {
 	q := url.Values{}

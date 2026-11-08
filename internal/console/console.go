@@ -322,6 +322,14 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusCreated, res)
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/dismiss", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.ConsoleDismiss(r.Context(), r.PathValue("mid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/conversations", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
 		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)

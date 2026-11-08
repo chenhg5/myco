@@ -206,7 +206,7 @@ func TestTransitionTable(t *testing.T) {
 	// want[status][op] is the resulting status, or an error code.
 	want := map[Status]map[string]string{
 		StatusQueued: {
-			"ack": bad, "hold": bad, "release": bad, "complete": bad, "reply": bad, "fail": bad, "progress": bad,
+			"ack": bad, "hold": bad, "release": bad, "complete": "done", "reply": bad, "fail": bad, "progress": bad,
 		},
 		StatusDelivered: {
 			"ack": "acked", "hold": "held", "release": "delivered", "complete": "done", "reply": "done", "fail": "failed", "progress": "delivered",

@@ -319,6 +319,7 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 			return nil, err
 		}
 		r.Attachments, r.FromOwner = atts, owner
+		closeIfResult(agent, r)
 		reply = r
 		return []*domain.Message{r}, nil
 	}
@@ -334,7 +335,9 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 		}
 	}
 	if !dryRun {
-		s.queued(reply.To)
+		if !reply.Status.Terminal() {
+			s.queued(reply.To)
+		}
 		s.notifier.Publish(replyTopic(id))
 	}
 	return reply, nil
@@ -470,6 +473,7 @@ func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reas
 		if err != nil || ev == nil {
 			return nil, err
 		}
+		closeIfResult(agent, ev)
 		event = ev
 		return []*domain.Message{ev}, nil
 	}
@@ -486,10 +490,23 @@ func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reas
 		return nil, err
 	}
 	if event != nil {
-		s.queued(event.To)
+		if !event.Status.Terminal() {
+			s.queued(event.To)
+		}
 		s.notifier.Publish(replyTopic(id))
 	}
 	return m, nil
+}
+
+// closeIfResult stores an exec node's answer (a command result, or the event
+// for a failed command) already done. It only matters to whoever waits for it
+// (myco exec, myco message wait finds it either way); a caller that gave up
+// would otherwise find a stale result sitting in its inbox, waking its runner
+// for nothing.
+func closeIfResult(from *domain.Agent, m *domain.Message) {
+	if from.Binding.Harness == domain.HarnessExec {
+		m.Status = domain.StatusDone
+	}
 }
 
 func (s *MessageService) mutateOrPreview(ctx context.Context, id string, dryRun bool, fn domain.MutateFunc) error {

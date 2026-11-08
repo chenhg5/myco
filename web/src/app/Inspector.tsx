@@ -629,16 +629,26 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
                 ? L("这些消息不在你能看到的范围里。", "These messages are not visible to you.")
                 : L("暂无未完成的任务", "Nothing open")}</div>}
               {current.map((m) => (
-                <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
-                  <span className="meta">
-                    <span className={cn("app-msg-status", m.status)}>{openStatusLabel(m.status)}</span>
-                    <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
-                    <span className="time">{timeAgo(m.updated_at, now)}</span>
-                  </span>
-                  <span className="body">{m.body}</span>
-                </button>
+                <div key={m.id} className="app-msg-wrap">
+                  <button type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
+                    <span className="meta">
+                      <span className={cn("app-msg-status", m.status)}>{openStatusLabel(m.status)}</span>
+                      <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
+                      <span className="time">{timeAgo(m.updated_at, now)}</span>
+                    </span>
+                    <span className="body">{m.body}</span>
+                  </button>
+                  {mayManage && (
+                    <button type="button" className="app-msg-dismiss" disabled={busy}
+                      title={L("不回复，直接标记为已处理", "Mark it handled without a reply")}
+                      onClick={() => void run(() => appApi.dismissMessage(hubId, m.id), "stay")}>
+                      {L("忽略", "Dismiss")}
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
+            {!action && error != null && <ErrorText error={error} />}
           </section>
 
           <section className="app-group">

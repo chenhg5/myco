@@ -120,6 +120,17 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 		t.Fatalf("agent send: %v %+v", err, msg)
 	}
 
+	// He may clear what waits for his own node, not for someone else's.
+	_, err = laohu.ConsoleDismiss(c, msg.Message.ID)
+	denied("dismiss a message of someone else's node", err)
+	toHim, err := admin.ConsoleSend(c, api.SendRequest{To: "laohu-claude", Type: "note", Body: "旧消息"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, err := laohu.ConsoleDismiss(c, toHim.Message.ID); err != nil || m.Status != "done" {
+		t.Fatalf("dismiss own node's message: %v %+v", err, m)
+	}
+
 	if _, err := laohu.KickAgent(c, "laohu-claude", false); err != nil {
 		t.Fatalf("kick own node: %v", err)
 	}
@@ -134,7 +145,7 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 		got = append(got, e.Actor+" "+e.Action+" "+e.Target)
 	}
 	all := strings.Join(got, "\n")
-	for _, want := range []string{"admin member.invite laohu", "laohu device.add laohu-mac", "laohu device.remove laohu-pc", "laohu link.create", "laohu agent.labels laohu-claude", "laohu agent.kick laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
+	for _, want := range []string{"admin member.invite laohu", "laohu device.add laohu-mac", "laohu device.remove laohu-pc", "laohu link.create", "laohu agent.labels laohu-claude", "laohu agent.kick laohu-claude", "laohu message.dismiss laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("audit lacks %q:\n%s", want, all)
 		}

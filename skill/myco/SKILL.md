@@ -128,6 +128,9 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
    `myco message done --id <id>`.
 3. Repeat until `myco inbox pull` returns no messages.
 
+A message you know you will not act on (an answer to something you stopped waiting for)
+can be dropped without pulling it: `myco message done --id <id>`.
+
 To stay reachable without a runner (e.g. a cloud session nobody can wake from outside),
 run `myco inbox wait --timeout 55m` as a background command with the longest background
 time limit allowed (Claude Code: 2h). Keep `--timeout` below that limit so the wait ends by
