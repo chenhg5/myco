@@ -41,6 +41,9 @@ if [[ -z "${MYCO_BIN:-}" ]]; then
 fi
 myco() { "$MYCO_BIN" "$@"; }
 
+# Never let a real network leak in: drop every MYCO_* variable from the caller
+# (e.g. MYCO_HUB / MYCO_ENROLL_TOKEN set for a real hub) before anything runs.
+while IFS='=' read -r k _; do [[ "$k" == MYCO_* && "$k" != MYCO_BIN ]] && unset "$k"; done < <(env)
 export HOME="$T/home" MYCO_FORMAT=json
 mkdir -p "$HOME"
 ADMIN="smoke-admin-$(date +%s)-$RANDOM-$RANDOM"
