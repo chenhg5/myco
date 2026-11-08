@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { MessageSquare, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import {
@@ -330,21 +330,17 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, o
           <span className={cn("app-pill", pillClass[row.st.state])}>
             <span className={cn("dot", row.st.state)} />{state.label}
           </span>
+          {(kind === "agent" || kind === "shell") && (
+            <button type="button" className="app-btn app-btn-plain" onClick={() => onMessage(row)} aria-label="发消息" title="发消息">
+              <MessageSquare />
+            </button>
+          )}
           <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label="关闭">
             <X />
           </button>
         </div>
 
         <div className="app-inspector-body">
-          {(kind === "agent" || kind === "shell") && (
-            <button
-              type="button"
-              className="app-btn app-btn-primary app-inspector-send"
-              onClick={() => onMessage(row)}
-            >
-              发消息
-            </button>
-          )}
 
           {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
 
