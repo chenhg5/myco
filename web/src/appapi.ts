@@ -53,6 +53,48 @@ export interface SpawnResult {
 export interface JoinLinkInput { uses?: number; expires_hours?: number }
 export interface JoinLink { join_url: string; command: string }
 
+/** A Claude Code or Codex session on this computer, found from its transcript. */
+export interface LocalSession {
+  cli: "claude" | "codex";
+  session_id: string;
+  workdir: string;
+  last_active: string;
+  /** The session's first request, shortened; may be empty. */
+  title?: string;
+  /** Set when this session is already an agent somewhere. */
+  joined?: { agent: string; hub: string };
+}
+export interface LocalJoinInput {
+  cli: string;
+  session_id: string;
+  workdir: string;
+  display_name?: string;
+}
+export interface LocalJoinResult {
+  agent: string;
+  created: boolean;
+  /** "running" when this computer's runner serves the new agent. */
+  runner: string;
+}
+
+/** One console conversation: a thread with an agent, newest activity first. */
+export interface Conversation {
+  thread_id: string;
+  agent?: string;
+  updated_at: string;
+  first: Message;
+  last: Message;
+  messages: number;
+}
+export interface ConversationQuery { agent?: string; q?: string; before?: number }
+export interface SendMessageInput {
+  to: string;
+  body: string;
+  /** Omit to start a new conversation. */
+  thread_id?: string;
+  type?: string;
+}
+
 /** How the App window is hosted: native macOS shell or a plain browser. */
 export type Shell = "mac" | "browser";
 export interface AppInfo { version: string; shell: Shell }
@@ -170,6 +212,29 @@ export const appApi = {
   overview: () => request<AppOverview>("GET", "app/overview"),
   thread: (hubId: string, threadId: string) =>
     request<{ messages: Message[] }>("GET", `app/hubs/${enc(hubId)}/threads/${enc(threadId)}`),
+
+  /** Claude Code / Codex sessions on this computer, newest first. */
+  localSessions: () => request<{ sessions: LocalSession[] }>("GET", "app/local/sessions"),
+  /** Makes one of those sessions an agent of the hub. */
+  localJoin: (hubId: string, input: LocalJoinInput) =>
+    request<LocalJoinResult>("POST", `app/hubs/${enc(hubId)}/local-join`, input),
+
+  conversations: (hubId: string, query: ConversationQuery = {}) => {
+    const q = new URLSearchParams();
+    if (query.agent) q.set("agent", query.agent);
+    if (query.q) q.set("q", query.q);
+    if (query.before) q.set("before", String(query.before));
+    const qs = q.toString();
+    return request<{ conversations: Conversation[] }>(
+      "GET", `app/hubs/${enc(hubId)}/conversations${qs ? `?${qs}` : ""}`,
+    );
+  },
+  /** Sends a task from this console; without thread_id it starts a conversation. */
+  sendMessage: (hubId: string, input: SendMessageInput) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+  /** Corrects an unfinished task the console sent. */
+  steer: (hubId: string, messageId: string, body: string) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
   updateAllowFrom: (hubId: string, name: string, allowFrom: string[]) =>

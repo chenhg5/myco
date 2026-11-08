@@ -1,25 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LayoutGrid, Monitor, PanelLeft, RefreshCw, Settings, WifiOff,
+  LayoutGrid, MessageSquare, Monitor, PanelLeft, RefreshCw, Settings, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
-import type { Message } from "@/api";
 import type { AgentRow, Filters } from "@/app/types";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
-import { ErrorText, Modal } from "@/app/dialogs";
+import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
+import { ConversationsPage, type ConversationRow } from "@/app/ConversationsPage";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { useHubNames } from "@/app/hubNames";
 import { Inspector } from "@/app/Inspector";
 import { MachineInspector, type MachineRef } from "@/app/MachineInspector";
 import { MachinesPage } from "@/app/MachinesPage";
+import { NewConversationDialog, type NewConversationTarget } from "@/app/NewConversationDialog";
 import { NodesPage } from "@/app/NodesPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { Welcome } from "@/app/Welcome";
 import { useThemeMode } from "@/lib/theme";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -37,9 +38,10 @@ function readPendingLink(): Promise<string> {
   return p;
 }
 
-type Page = "nodes" | "machines" | "settings";
+type Page = "conversations" | "nodes" | "machines" | "settings";
 
 const PAGE_META: Record<Page, { group: string; label: string }> = {
+  conversations: { group: "工作", label: "对话" },
   nodes: { group: "工作", label: "节点" },
   machines: { group: "工作", label: "机器" },
   settings: { group: "App", label: "设置" },
@@ -49,19 +51,12 @@ const NAV: { group: string; items: { page: Page; label: string; icon: typeof Lay
   {
     group: "工作",
     items: [
+      { page: "conversations", label: "对话", icon: MessageSquare },
       { page: "nodes", label: "节点", icon: LayoutGrid },
       { page: "machines", label: "机器", icon: Monitor },
     ],
   },
 ];
-
-interface ThreadState {
-  hubId: string;
-  hubName: string;
-  id: string;
-  messages: Message[] | null;
-  error?: string;
-}
 
 function initialCollapsed() {
   try {
@@ -95,7 +90,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectPrefill, setConnectPrefill] = useState("");
   const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
-  const [thread, setThread] = useState<ThreadState | null>(null);
+  const [conv, setConv] = useState<ConversationTarget | null>(null);
+  const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
 
   // The boot probe already carries app/info; retry once in case it failed.
   useEffect(() => {
@@ -153,6 +149,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (page !== "machines") setMachineInspect(null);
   }, [page]);
 
+  // Leaving the conversations page returns to the list next time.
+  useEffect(() => {
+    if (page !== "conversations") setConv(null);
+  }, [page]);
+
   useEffect(() => {
     if (!highlight) return;
     const t = window.setTimeout(() => setHighlight(null), 15_000);
@@ -189,15 +190,24 @@ export default function AppMode({ initialHubs, initialInfo }: {
     [namedHubs, filters.hub],
   );
 
-  const openThread = async (hubId: string, threadId: string) => {
-    const hubName = namedOv?.hubs.find((h) => h.id === hubId)?.name || hubId;
-    setThread({ hubId, hubName, id: threadId, messages: null });
-    try {
-      const r = await appApi.thread(hubId, threadId);
-      setThread({ hubId, hubName, id: threadId, messages: r.messages });
-    } catch (e) {
-      setThread({ hubId, hubName, id: threadId, messages: [], error: errorMessage(e) });
-    }
+  const openConversation = (hubId: string, threadId: string, agent: string) => {
+    const hubName = namedHubs.find((h) => h.id === hubId)?.name
+      || namedOv?.hubs.find((h) => h.id === hubId)?.name
+      || hubId;
+    setInspect(null);
+    setPage("conversations");
+    setConv({ hubId, hubName, threadId, agent });
+  };
+
+  const openConversationRow = (row: ConversationRow) => {
+    openConversation(row.hubId, row.conv.thread_id, row.conv.agent || "");
+  };
+
+  const nodeAdded = (hubId: string, name: string) => {
+    setHighlight({ hubId, name });
+    setMachineInspect(null);
+    setPage("nodes");
+    void refresh();
   };
 
   const closeConnect = (open: boolean) => {
@@ -330,53 +340,73 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
         </header>
 
-        <div className="app-scroll">
-          {error !== null && (
-            <div className="app-banner-wrap">
-              <div className="app-error-row">
-                <WifiOff />
-                <span className="err" title={errorMessage(error)}>无法获取 App 数据：{errorMessage(error)}</span>
+        {page === "conversations" && conv ? (
+          <ConversationDetail
+            target={conv}
+            rows={rows}
+            now={now}
+            onBack={() => setConv(null)}
+          />
+        ) : (
+          <div className="app-scroll">
+            {error !== null && (
+              <div className="app-banner-wrap">
+                <div className="app-error-row">
+                  <WifiOff />
+                  <span className="err" title={errorMessage(error)}>无法获取 App 数据：{errorMessage(error)}</span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {page === "nodes" && (
-            <NodesPage
-              rows={rows}
-              hubs={namedOv?.hubs}
-              hubMeta={hubs}
-              loading={loading}
-              filters={filters}
-              onFilters={setFilters}
-              highlight={highlight}
-              onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
-              onAdd={() => setSpawnTarget({})}
-            />
-          )}
+            {page === "conversations" && (
+              <ConversationsPage
+                hubs={namedHubs}
+                hub={filters.hub}
+                rows={rows}
+                now={now}
+                onOpen={openConversationRow}
+                onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
+              />
+            )}
 
-          {page === "machines" && (
-            <MachinesPage
-              hubs={visibleHubs}
-              hubsOv={namedOv?.hubs}
-              loading={loading}
-              groupByHub={filters.hub === "all"}
-              onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
-              onAdd={() => setAddMachineOpen(true)}
-            />
-          )}
+            {page === "nodes" && (
+              <NodesPage
+                rows={rows}
+                hubs={namedOv?.hubs}
+                hubMeta={hubs}
+                loading={loading}
+                filters={filters}
+                onFilters={setFilters}
+                highlight={highlight}
+                onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
+                onAdd={() => setSpawnTarget({})}
+              />
+            )}
 
-          {page === "settings" && (
-            <SettingsPage
-              hubs={namedHubs}
-              info={info}
-              theme={theme}
-              onTheme={setTheme}
-              refreshKey={localTick}
-              onRefresh={refresh}
-              onAddHub={() => setConnectOpen(true)}
-            />
-          )}
-        </div>
+            {page === "machines" && (
+              <MachinesPage
+                hubs={visibleHubs}
+                hubsOv={namedOv?.hubs}
+                loading={loading}
+                groupByHub={filters.hub === "all"}
+                onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
+                onAdd={() => setAddMachineOpen(true)}
+              />
+            )}
+
+            {page === "settings" && (
+              <SettingsPage
+                hubs={namedHubs}
+                info={info}
+                theme={theme}
+                onTheme={setTheme}
+                refreshKey={localTick}
+                onRefresh={refresh}
+                onAddHub={() => setConnectOpen(true)}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <ConnectHubDialog
@@ -391,7 +421,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
         now={now}
         onClose={() => setInspect(null)}
         onRefresh={refresh}
-        onThread={(hubId, threadId) => void openThread(hubId, threadId)}
+        onThread={(hubId, threadId, agent) => openConversation(hubId, threadId, agent)}
+        onMessage={(r) => {
+          setInspect(null);
+          setNewConv({ hubId: r.hub.id, agent: r.st.agent.name });
+        }}
         onOpenMachine={(hubId, machineId) => {
           setInspect(null);
           setPage("machines");
@@ -417,11 +451,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
         target={spawnTarget}
         hubs={namedHubs}
         hubsOv={namedOv?.hubs}
+        defaultHubId={filters.hub === "all" ? undefined : filters.hub}
         onClose={() => setSpawnTarget(null)}
-        onSpawned={(hubId, agent) => {
-          setHighlight({ hubId, name: agent.name });
-          setMachineInspect(null);
-          setPage("nodes");
+        onSpawned={(hubId, agent) => nodeAdded(hubId, agent.name)}
+        onJoined={nodeAdded}
+      />
+
+      <NewConversationDialog
+        target={newConv}
+        hubs={namedHubs}
+        rows={rows}
+        onClose={() => setNewConv(null)}
+        onSent={(hubId, threadId, agent) => {
+          setNewConv(null);
+          openConversation(hubId, threadId, agent);
           void refresh();
         }}
       />
@@ -431,33 +474,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onOpenChange={setAddMachineOpen}
         hubs={namedHubs}
       />
-
-      <Modal
-        open={!!thread}
-        onOpenChange={(o) => !o && setThread(null)}
-        wide
-        title="对话线程"
-        description={thread ? <span className="mono">{thread.hubName} · {thread.id}</span> : ""}
-      >
-        {thread?.error && <ErrorText error={thread.error} />}
-        <div className="app-thread-list">
-          {!thread?.messages ? (
-            <div className="app-empty-note">正在加载…</div>
-          ) : thread.messages.length === 0 ? (
-            <div className="app-empty-note">这个线程还没有消息。</div>
-          ) : (
-            thread.messages.map((m) => (
-              <div className="app-thread-msg" key={m.id}>
-                <div className="meta">
-                  <span className="who">{m.from}</span>→<span className="who">{m.to}</span>
-                  <span className="time">{timeAgo(m.created_at, now)}</span>
-                </div>
-                <div className="body">{m.body}</div>
-              </div>
-            ))
-          )}
-        </div>
-      </Modal>
     </div>
   );
 }

@@ -1,0 +1,181 @@
+import { useMemo, useState } from "react";
+import DOMPurify from "dompurify";
+import { Marked } from "marked";
+import { ChevronDown } from "lucide-react";
+import { copyText } from "@/app/copy";
+import { cn } from "@/lib/utils";
+
+/** Rough line budget for one message before it starts collapsed. */
+const COLLAPSE_LINES = 30;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/`/g, "&#96;");
+}
+
+// Code blocks carry their own copy button so every block gets one, without
+// mounting a React tree inside the rendered HTML. Links open outside the App.
+const md = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code({ text, lang }) {
+      const langClass = lang ? ` class="language-${escapeAttr(lang)}"` : "";
+      return (
+        `<div class="md-code">` +
+        `<button type="button" class="md-code-copy" data-code="${encodeURIComponent(text)}">复制</button>` +
+        `<pre><code${langClass}>${escapeHtml(text)}</code></pre>` +
+        `</div>`
+      );
+    },
+    link({ href, title, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<a href="${escapeAttr(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    },
+  },
+});
+
+function sanitize(raw: string): string {
+  return DOMPurify.sanitize(raw, {
+    ADD_ATTR: ["target"],
+    // Inline styles and form controls are never part of a message, and both
+    // would let a peer change how the console itself looks.
+    FORBID_TAGS: ["style", "form", "input", "textarea", "select"],
+    FORBID_ATTR: ["style"],
+  });
+}
+
+function onCopyClick(e: React.MouseEvent<HTMLDivElement>) {
+  const target = e.target as HTMLElement;
+  const btn = target.closest<HTMLButtonElement>("button.md-code-copy");
+  if (!btn) return;
+  const code = decodeURIComponent(btn.dataset.code || "");
+  const label = btn.textContent;
+  void copyText(code).then(() => {
+    btn.textContent = "已复制";
+    window.setTimeout(() => { btn.textContent = label || "复制"; }, 1500);
+  });
+}
+
+/** Rendered, sanitized markdown. Raw HTML is allowed through marked but
+ *  DOMPurify removes scripts, event handlers and unsafe URLs. */
+export function Markdown({ text }: { text: string }) {
+  const html = useMemo(() => sanitize(md.parse(text, { async: false }) as string), [text]);
+  return <div className="md" onClick={onCopyClick} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+interface ExecResult {
+  exit_code?: number;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  [key: string]: unknown;
+}
+
+function isExec(v: object): v is ExecResult {
+  return "exit_code" in v || "stdout" in v || "stderr" in v;
+}
+
+function duration(ms?: number): string {
+  if (typeof ms !== "number" || ms < 0) return "";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function ExecBlock({ data }: { data: ExecResult }) {
+  const code = typeof data.exit_code === "number" ? data.exit_code : undefined;
+  const ok = code === 0;
+  const failed = typeof code === "number" && code !== 0;
+  const took = duration(data.duration_ms);
+  return (
+    <div className="md-exec">
+      <div className="md-exec-head">
+        <span className={cn("md-exit", ok && "ok", failed && "bad")}>
+          {typeof code === "number" ? `退出码 ${code}` : "已结束"}
+        </span>
+        {took && <span className="md-exec-meta">{took}</span>}
+      </div>
+      {typeof data.stdout === "string" && data.stdout !== "" && (
+        <div className="md-exec-stream">
+          <div className="md-exec-label">stdout</div>
+          <pre>{data.stdout}</pre>
+        </div>
+      )}
+      {typeof data.stderr === "string" && data.stderr !== "" && (
+        <div className="md-exec-stream is-err">
+          <div className="md-exec-label">stderr</div>
+          <pre>{data.stderr}</pre>
+        </div>
+      )}
+      {typeof data.stdout !== "string" && typeof data.stderr !== "string" && (
+        <pre className="md-exec-raw">{JSON.stringify(data, null, 2)}</pre>
+      )}
+    </div>
+  );
+}
+
+function PrettyJSON({ data }: { data: unknown }) {
+  const text = JSON.stringify(data, null, 2);
+  const lines = text.split("\n").length;
+  return (
+    <details className="md-json" open={lines <= 24}>
+      <summary>
+        <ChevronDown />
+        <span>JSON 数据</span>
+        <span className="md-json-meta">{lines} 行</span>
+      </summary>
+      <pre>{text}</pre>
+    </details>
+  );
+}
+
+function parseJSON(body: string): { ok: true; value: unknown } | null {
+  const t = body.trim();
+  if (!t || (t[0] !== "{" && t[0] !== "[")) return null;
+  try {
+    const value: unknown = JSON.parse(t);
+    if (value && typeof value === "object") return { ok: true, value };
+  } catch { /* plain text that happens to start with a brace */ }
+  return null;
+}
+
+function RenderedBody({ body }: { body: string }) {
+  const parsed = parseJSON(body);
+  if (parsed) {
+    if (!Array.isArray(parsed.value) && isExec(parsed.value as object)) {
+      return <ExecBlock data={parsed.value as ExecResult} />;
+    }
+    return <PrettyJSON data={parsed.value} />;
+  }
+  return <Markdown text={body} />;
+}
+
+/**
+ * A message body: markdown, an exec result, or a JSON object. Bodies longer
+ * than 30 lines start folded so one long reply cannot take over the thread.
+ */
+export function MessageContent({ body }: { body: string }) {
+  const lines = body.split("\n").length;
+  const collapsible = lines > COLLAPSE_LINES;
+  const [open, setOpen] = useState(false);
+  if (!collapsible) return <RenderedBody body={body} />;
+  return (
+    <div className="md-fold">
+      <div className={cn("md-fold-body", !open && "is-collapsed")}>
+        <RenderedBody body={body} />
+      </div>
+      <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)}>
+        {open ? "收起" : `展开（共 ${lines} 行）`}
+      </button>
+    </div>
+  );
+}

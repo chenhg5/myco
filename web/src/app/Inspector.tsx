@@ -14,13 +14,17 @@ type Action = null | "profile" | "allow" | "kick" | "delete";
 
 const pillClass: Record<string, string> = { working: "green", pending: "amber", idle: "", offline: "" };
 
-function MessageRows({ row, now, onThread }: { row: AgentRow; now: number; onThread: (hubId: string, threadId: string) => void }) {
+function MessageRows({ row, now, onThread }: {
+  row: AgentRow;
+  now: number;
+  onThread: (hubId: string, threadId: string, agent: string) => void;
+}) {
   const msgs = (row.hub.overview?.recent || []).filter((m) => m.from === row.st.agent.name || m.to === row.st.agent.name).slice(0, 8);
   if (!msgs.length) return <div className="app-empty-note">最近没有消息</div>;
   return (
     <>
       {msgs.map((m) => (
-        <button key={m.id} type="button" className="app-msg" onClick={() => onThread(row.hub.id, m.thread_id)}>
+        <button key={m.id} type="button" className="app-msg" onClick={() => onThread(row.hub.id, m.thread_id, row.st.agent.name)}>
           <span className="meta">
             <span className="who">{m.from}</span>→<span className="who">{m.to}</span>
             <span className="time">{timeAgo(m.updated_at, now)}</span>
@@ -32,12 +36,13 @@ function MessageRows({ row, now, onThread }: { row: AgentRow; now: number; onThr
   );
 }
 
-export function Inspector({ row, now, onClose, onRefresh, onThread, onOpenMachine }: {
+export function Inspector({ row, now, onClose, onRefresh, onThread, onMessage, onOpenMachine }: {
   row: AgentRow | null;
   now: number;
   onClose: () => void;
   onRefresh: () => Promise<void>;
-  onThread: (hubId: string, threadId: string) => void;
+  onThread: (hubId: string, threadId: string, agent: string) => void;
+  onMessage: (row: AgentRow) => void;
   onOpenMachine: (hubId: string, machineId: string) => void;
 }) {
   const ag = row?.st.agent;
@@ -126,6 +131,16 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onOpenMachin
         </div>
 
         <div className="app-inspector-body">
+          {(kind === "agent" || kind === "shell") && (
+            <button
+              type="button"
+              className="app-btn app-btn-primary app-inspector-send"
+              onClick={() => onMessage(row)}
+            >
+              发消息
+            </button>
+          )}
+
           <section className="app-group">
             <div className="app-group-title"><span className="name">运行</span></div>
             <div className="app-list">
@@ -183,7 +198,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onOpenMachin
               </div>
               {current.length === 0 && <div className="app-empty-note">暂无进行中的任务</div>}
               {current.map((m) => (
-                <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id)}>
+                <button key={m.id} type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                   <span className="meta">
                     <span className="who">{m.from}</span>→<span className="who">{m.to}</span>
                     <span className="time">{timeAgo(m.updated_at, now)}</span>
