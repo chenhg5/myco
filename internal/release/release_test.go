@@ -165,6 +165,7 @@ func TestReplaceIsAtomic(t *testing.T) {
 	if string(b) != "new" || (osutil.UnixPermissions && st.Mode().Perm() != 0o755) {
 		t.Fatalf("after Replace: %q %v", b, st.Mode())
 	}
+	CleanupOld(target) // Windows keeps the running binary as myco.old
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {
 		t.Fatalf("temp files left: %v", entries)

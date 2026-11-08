@@ -225,7 +225,11 @@ func TestProfilesAndRunnerAll(t *testing.T) {
 	for _, n := range []string{"mac-a", "mac-b"} {
 		p := filepath.Join(home, ".myco", "agents", n+".yaml")
 		data, _ := os.ReadFile(p)
-		data = []byte(strings.Replace(string(data), "harness: claude\n    workdir", "harness: shell\n    command: 'echo handled-by-$MYCO_FROM'\n    workdir", 1))
+		cmd := `echo handled-by-$MYCO_FROM`
+		if osutil.Windows { // PowerShell
+			cmd = `Write-Output "handled-by-$env:MYCO_FROM"`
+		}
+		data = []byte(strings.Replace(string(data), "harness: claude\n    workdir", "harness: shell\n    command: '"+cmd+"'\n    workdir", 1))
 		os.WriteFile(p, data, 0o600)
 	}
 	admin.env["MYCO_CONFIG"] = filepath.Join(home, ".myco", "config.yaml")
@@ -691,6 +695,7 @@ func TestTableAlignsWideCharacters(t *testing.T) {
 }
 
 func TestExecNode(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
 	home := t.TempDir()
 	testutil.SetHome(t, home)
 	hub := newHub(t)
@@ -841,14 +846,18 @@ func TestExecNodeViaEnrollment(t *testing.T) {
 	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_CONFIG": filepath.Join(adminHome, "a.yaml")}}
 	done := make(chan [3]any, 1)
 	go func() {
-		c, o, e := boss.run("exec", "--to", "wsl-shell", "--cmd", "pwd", "--timeout", "20s", "--format", "text")
+		pwd := "pwd"
+		if osutil.Windows {
+			pwd = "(Get-Location).Path"
+		}
+		c, o, e := boss.run("exec", "--to", "wsl-shell", "--cmd", pwd, "--timeout", "20s", "--format", "text")
 		done <- [3]any{c, o, e}
 	}()
 	runner := &harnessT{t, map[string]string{"MYCO_HUB": hub}}
 	for {
 		select {
 		case r := <-done:
-			if r[0].(int) != 0 || strings.TrimSpace(r[1].(string)) != work {
+			if r[0].(int) != 0 || !sameDir(strings.TrimSpace(r[1].(string)), work) {
 				t.Fatalf("exec via enrolled node: %v", r)
 			}
 			return

@@ -405,7 +405,7 @@ func TestExecNodeEnforcesSendersAndAllowList(t *testing.T) {
 			}
 		}
 	}
-	if r := run("echo hello from ci"); r.code != 0 || !strings.Contains(r.out, "hello from ci") {
+	if r := run("echo 'hello from ci'"); r.code != 0 || !strings.Contains(r.out, "hello from ci") {
 		t.Fatalf("allowed command: exit %d %s", r.code, r.out)
 	}
 	r := run("cat /etc/hostname")

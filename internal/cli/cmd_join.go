@@ -562,9 +562,9 @@ func sameDir(a, b string) bool {
 	ra, err1 := filepath.EvalSymlinks(a)
 	rb, err2 := filepath.EvalSymlinks(b)
 	if err1 == nil && err2 == nil {
-		return ra == rb
+		return osutil.SamePath(ra, rb) // case-insensitive on Windows
 	}
-	return filepath.Clean(a) == filepath.Clean(b)
+	return osutil.SamePath(a, b)
 }
 
 // readCodexMeta reads the session id and cwd from a rollout's first line
