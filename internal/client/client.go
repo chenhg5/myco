@@ -589,3 +589,28 @@ func (c *Client) WaitReplyProgress(ctx context.Context, id string, total time.Du
 		}
 	}
 }
+
+// KickAgent signs an agent out: its token stops working; its record stays
+// (admin or console token).
+func (c *Client) KickAgent(ctx context.Context, name string, dry bool) (map[string]any, error) {
+	var out map[string]any
+	return out, c.do(ctx, http.MethodPost, "/v1/agents/"+esc(name)+"/kick", dryQuery(dry), nil, &out)
+}
+
+// CreateConsoleToken issues a console token (hub admin token only).
+func (c *Client) CreateConsoleToken(ctx context.Context, name string) (*api.CreateConsoleTokenResponse, error) {
+	var out api.CreateConsoleTokenResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/console/tokens", nil, api.CreateConsoleTokenRequest{Name: name}, &out)
+}
+
+// ListConsoleTokens lists console tokens (hub admin token only).
+func (c *Client) ListConsoleTokens(ctx context.Context) ([]api.ConsoleToken, error) {
+	var out api.ConsoleTokenList
+	return out.Tokens, c.do(ctx, http.MethodGet, "/v1/console/tokens", nil, nil, &out)
+}
+
+// RevokeConsoleToken disables a console token (hub admin token only).
+func (c *Client) RevokeConsoleToken(ctx context.Context, id string) (*api.ConsoleToken, error) {
+	var out api.ConsoleToken
+	return &out, c.do(ctx, http.MethodDelete, "/v1/console/tokens/"+esc(id), nil, nil, &out)
+}

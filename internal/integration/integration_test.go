@@ -817,3 +817,120 @@ func TestRunnerPicksUpEnvFileWithoutRestart(t *testing.T) {
 		t.Fatalf("a re-captured env file did not apply: %s", out)
 	}
 }
+
+// Console tokens: per-device admin credentials. Only the hub's admin token
+// manages them; a console token can do admin work (list, kick, overview)
+// but not mint or revoke console tokens; a revoked one stops at once.
+func TestConsoleTokens(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	aliceTok := h.register(api.RegisterRequest{Name: "alice"})
+
+	// The CLI on the hub machine (admin token) issues one; the plain token is
+	// printed once and is not stored.
+	adminCLI := newCLI(t, h, filepath.Join(home, "admin.yaml"))
+	out := adminCLI.must(c, "console", "token", "create", "--name", "glenn-mac")
+	var created struct {
+		ConsoleToken api.ConsoleToken `json:"console_token"`
+		Token        string           `json:"token"`
+		Hub          string           `json:"hub"`
+	}
+	if err := json.Unmarshal([]byte(out), &created); err != nil {
+		t.Fatalf("console token create: %s", out)
+	}
+	if !strings.HasPrefix(created.Token, app.ConsoleTokenPrefix) || created.ConsoleToken.Name != "glenn-mac" || !created.ConsoleToken.Active || created.Hub == "" {
+		t.Fatalf("created: %+v", created)
+	}
+	list := adminCLI.must(c, "console", "token", "list")
+	if strings.Contains(list, created.Token) || !strings.Contains(list, created.ConsoleToken.ID) {
+		t.Fatalf("list must show the token's id and never the token: %s", list)
+	}
+
+	// It works as an admin credential ...
+	con := h.client(created.Token)
+	if _, err := con.ListEnrollments(c); err != nil {
+		t.Fatalf("console token on an admin route: %v", err)
+	}
+	if _, err := con.Register(c, api.RegisterRequest{Name: "bob"}, false); err != nil {
+		t.Fatalf("console token registering an agent: %v", err)
+	}
+	// ... and records when it was last used ...
+	toks, err := h.admin().ListConsoleTokens(c)
+	if err != nil || len(toks) != 1 || toks[0].LastUsedAt == nil {
+		t.Fatalf("last used not recorded: %v %+v", err, toks)
+	}
+	// ... but cannot manage console tokens (403), and neither can agents.
+	for name, cl := range map[string]*client.Client{"console": con, "agent": h.client(aliceTok)} {
+		_, err := cl.CreateConsoleToken(c, "evil")
+		if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" {
+			t.Errorf("%s token creating a console token: %v, want permission_denied", name, err)
+		}
+		_, err = cl.RevokeConsoleToken(c, created.ConsoleToken.ID)
+		if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" {
+			t.Errorf("%s token revoking a console token: %v, want permission_denied", name, err)
+		}
+	}
+	// A token that only looks like one is unauthenticated.
+	_, err = h.client(app.ConsoleTokenPrefix + "made-up").ListEnrollments(c)
+	if e, ok := client.AsError(err); !ok || e.Code != "unauthenticated" {
+		t.Fatalf("made-up console token: %v", err)
+	}
+
+	// Revoked: unauthenticated right away; revoking again is fine.
+	adminCLI.must(c, "console", "token", "revoke", "--id", created.ConsoleToken.ID)
+	adminCLI.must(c, "console", "token", "revoke", "--id", created.ConsoleToken.ID)
+	_, err = con.ListEnrollments(c)
+	if e, ok := client.AsError(err); !ok || e.Code != "unauthenticated" {
+		t.Fatalf("revoked console token: %v, want unauthenticated", err)
+	}
+}
+
+// Kick signs an agent out: its token stops working at once, it shows as
+// offline, its record and queued messages stay, and it can come back.
+func TestKickSignsAnAgentOut(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	leadTok := h.register(api.RegisterRequest{Name: "lead"})
+	workerTok := h.register(api.RegisterRequest{Name: "worker", Labels: []string{"group=a"}})
+	if _, err := h.client(workerTok).Me(c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.client(leadTok).Send(c, api.SendRequest{To: "worker", Body: "queued before the kick"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.client(leadTok).KickAgent(c, "worker", false); err == nil {
+		t.Fatal("an agent token kicked another agent")
+	}
+
+	adminCLI := newCLI(t, h, filepath.Join(home, "admin.yaml"))
+	if code, _, _ := adminCLI.run(c, "agent", "kick", "--name", "worker", "--dry-run"); code != cli.ExitDryRun {
+		t.Fatalf("dry run: exit %d", code)
+	}
+	if _, err := h.client(workerTok).Me(c); err != nil {
+		t.Fatalf("a dry run must not sign the agent out: %v", err)
+	}
+	adminCLI.must(c, "agent", "kick", "--name", "worker")
+
+	_, err := h.client(workerTok).Me(c)
+	if e, ok := client.AsError(err); !ok || e.Code != "unauthenticated" {
+		t.Fatalf("kicked agent's token: %v, want unauthenticated", err)
+	}
+	a, err := h.admin().GetAgent(c, "worker")
+	if err != nil || a.Online || len(a.Labels) != 1 {
+		t.Fatalf("kicked agent must stay, offline, with its labels: %v %+v", err, a)
+	}
+	// It comes back with a new token, and its queued message is still there.
+	back, err := h.admin().Register(c, api.RegisterRequest{Name: "worker", RotateToken: true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := h.client(back.Token).Pull(c, 10, 0)
+	if err != nil || len(msgs) != 1 || msgs[0].Body != "queued before the kick" {
+		t.Fatalf("queued message after coming back: %v %+v", err, msgs)
+	}
+	if _, err := h.admin().KickAgent(c, "nobody", false); err == nil {
+		t.Fatal("kicking an unknown agent must fail")
+	}
+}

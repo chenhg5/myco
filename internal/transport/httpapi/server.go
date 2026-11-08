@@ -35,7 +35,12 @@ type Server struct {
 	ingress    map[string]Ingress
 	files      *app.FileService
 	overview   *app.OverviewService
+	console    *app.ConsoleService
 }
+
+// SetConsole enables console tokens (per-device admin credentials) and the
+// /v1/console/tokens endpoints.
+func (s *Server) SetConsole(c *app.ConsoleService) { s.console = c }
 
 // SetOverview enables GET /v1/overview.
 func (s *Server) SetOverview(o *app.OverviewService) { s.overview = o }
@@ -90,6 +95,12 @@ func (s *Server) routes() {
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
+	m.HandleFunc("POST /v1/agents/{name}/kick", s.admin(s.kickAgent))
+	// Console tokens: only the hub's own admin token manages them, so a
+	// leaked console token cannot mint more.
+	m.HandleFunc("POST /v1/console/tokens", s.masterAdmin(s.createConsoleToken))
+	m.HandleFunc("GET /v1/console/tokens", s.masterAdmin(s.listConsoleTokens))
+	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	m.HandleFunc("POST /v1/enrollments", s.admin(s.createEnrollment))
 	m.HandleFunc("GET /v1/enrollments", s.admin(s.listEnrollments))
 	m.HandleFunc("DELETE /v1/enrollments/{id}", s.admin(s.revokeEnrollment))
@@ -155,9 +166,48 @@ func bearer(r *http.Request) string {
 	return ""
 }
 
+// isAdmin accepts the hub's admin token or an active console token.
 func (s *Server) isAdmin(r *http.Request) bool {
+	if s.isMasterAdmin(r) {
+		return true
+	}
+	if s.console == nil {
+		return false
+	}
+	_, ok := s.console.Authenticate(r.Context(), bearer(r))
+	return ok
+}
+
+// isMasterAdmin accepts only the hub's own admin token.
+func (s *Server) isMasterAdmin(r *http.Request) bool {
 	t := bearer(r)
 	return s.adminToken != "" && t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(s.adminToken)) == 1
+}
+
+// masterAdmin allows only the hub's admin token (not console tokens).
+func (s *Server) masterAdmin(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.console == nil {
+			writeError(w, domain.Errf(domain.CodeNotFound, "console tokens are not enabled on this hub"))
+			return
+		}
+		if s.isMasterAdmin(r) {
+			h(w, r)
+			return
+		}
+		const hint = "run it on the hub machine, where the admin token is read from hub.env"
+		if s.isAdmin(r) {
+			writeError(w, domain.Errf(domain.CodePermissionDenied, "console tokens are managed with the hub's admin token only").WithSuggestion(hint))
+			return
+		}
+		if t := bearer(r); t != "" {
+			if _, err := s.agents.Authenticate(r.Context(), t); err == nil {
+				writeError(w, domain.Errf(domain.CodePermissionDenied, "admin token required (an agent token cannot do this)").WithSuggestion(hint))
+				return
+			}
+		}
+		writeError(w, domain.Errf(domain.CodeUnauthenticated, "admin token missing or invalid").WithSuggestion(hint))
+	}
 }
 
 // admin allows only the admin token. A missing or unknown token is 401
@@ -233,6 +283,63 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "removed": !dry, "dry_run": dry})
+}
+
+func (s *Server) kickAgent(w http.ResponseWriter, r *http.Request) {
+	dry := dryRun(r)
+	a, err := s.agents.Kick(r.Context(), r.PathValue("name"), dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "kicked": !dry, "dry_run": dry})
+}
+
+func (s *Server) createConsoleToken(w http.ResponseWriter, r *http.Request) {
+	var in api.CreateConsoleTokenRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	t, plain, err := s.console.Create(r.Context(), in.Name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, api.CreateConsoleTokenResponse{ConsoleToken: consoleDTO(t), Token: plain})
+}
+
+func (s *Server) listConsoleTokens(w http.ResponseWriter, r *http.Request) {
+	list, err := s.console.List(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.ConsoleTokenList{Tokens: make([]api.ConsoleToken, 0, len(list))}
+	for _, t := range list {
+		out.Tokens = append(out.Tokens, consoleDTO(t))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) revokeConsoleToken(w http.ResponseWriter, r *http.Request) {
+	t, err := s.console.Revoke(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, consoleDTO(t))
+}
+
+func consoleDTO(t *domain.ConsoleToken) api.ConsoleToken {
+	return api.ConsoleToken{ID: t.ID, Name: t.Name, Active: t.Active(), CreatedAt: t.CreatedAt,
+		LastUsedAt: optTime(t.LastUsedAt), RevokedAt: optTime(t.RevokedAt)}
+}
+
+func optTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {

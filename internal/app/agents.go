@@ -227,8 +227,12 @@ func (s *AgentService) Kick(ctx context.Context, name string, dryRun bool) (*dom
 		return nil, err
 	}
 	a.RotateToken(hash)
-	a.LastSeenAt = time.Time{}
 	if err := s.agents.Save(ctx, a); err != nil {
+		return nil, err
+	}
+	// Offline right away, not after the online window runs out.
+	a.LastSeenAt = time.Time{}
+	if err := s.agents.Touch(ctx, a.Name, a.LastSeenAt); err != nil {
 		return nil, err
 	}
 	return a, nil

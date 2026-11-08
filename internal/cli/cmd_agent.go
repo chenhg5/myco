@@ -198,6 +198,43 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 		}),
 	}
 
+	kick := &Command{
+		Name:     "kick",
+		Summary:  "Sign an agent out: its token stops working; it can join again (admin)",
+		Mutating: true,
+		Long: `The agent's token is replaced, so its runner and session lose access at once and it shows as
+offline. Its record, labels, aliases and queued messages stay; messages it was working on return
+to the queue when their lease runs out. It comes back with a new token by joining again
+(myco join in the session, or its machine's runner re-enrolling). To delete it for good, use
+myco agent remove.`,
+		Examples: []string{"myco agent kick --name wsl-codex-old"},
+		Flags: []Flag{
+			{Name: "name", Kind: String, Required: true, Help: "Agent to sign out"},
+			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name"); err != nil {
+				return err
+			}
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			res, err := c.KickAgent(e.in.Ctx, e.in.String("name"), dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				res["action"] = "kick"
+				return e.dryRun(res)
+			}
+			return e.p.Print(res, func(w io.Writer) {
+				fmt.Fprintf(w, "agent %s signed out; it can join again to get a new token\n", e.in.String("name"))
+			})
+		}),
+	}
+
 	bind := &Command{
 		Name:     "bind",
 		Summary:  "Bind yourself to a harness session in an environment",
@@ -341,7 +378,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), agentSpawnCommand(), list, get, remove)
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), agentSpawnCommand(), list, get, kick, remove)
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
