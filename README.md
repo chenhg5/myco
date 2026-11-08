@@ -21,7 +21,8 @@ on your laptop, your servers and in the cloud.
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
-https://github.com/user-attachments/assets/566f5b2c-ec3c-4007-9ed6-46050a16f3de
+https://github.com/user-attachments/assets/0f6269ac-236f-4b65-b896-68b2a8562ced
+
 
 </div>
 
