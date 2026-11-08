@@ -151,6 +151,11 @@ func (l *Local) env() []string {
 }
 
 func (l *Local) run(ctx context.Context, args ...string) ([]byte, error) {
+	return l.runIn(ctx, "", nil, args...)
+}
+
+// runIn runs myco in dir ("" = the app's) with extra environment variables.
+func (l *Local) runIn(ctx context.Context, dir string, extra []string, args ...string) ([]byte, error) {
 	bin := l.mycoPath()
 	if bin == "" {
 		return nil, &client.Error{Status: http.StatusConflict, Code: "not_configured", Message: "the myco command line is not installed on this computer",
@@ -160,7 +165,11 @@ func (l *Local) run(ctx context.Context, args ...string) ([]byte, error) {
 	if runner == nil {
 		runner = runCommand
 	}
-	out, err := runner(ctx, l.env(), bin, append(args, "--format", "json")...)
+	env := append(l.env(), extra...)
+	if dir != "" {
+		env = append(env, "MYCO_APP_WORKDIR="+dir)
+	}
+	out, err := runner(ctx, env, bin, append(args, "--format", "json")...)
 	if err != nil {
 		return out, cliError(out, err)
 	}
@@ -170,6 +179,11 @@ func (l *Local) run(ctx context.Context, args ...string) ([]byte, error) {
 func runCommand(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
+	for _, kv := range env {
+		if d, ok := strings.CutPrefix(kv, "MYCO_APP_WORKDIR="); ok {
+			cmd.Dir = d // myco join takes the session's directory from its own
+		}
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -442,4 +456,21 @@ func (b *Backend) stopLocal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"stopped": true})
+}
+
+// ensureRunner makes sure this computer's runner service is running (it
+// serves every local agent), installing it if needed. It returns "running"
+// or why it is not.
+func (l *Local) ensureRunner(ctx context.Context) string {
+	out, err := l.run(ctx, "runner", "service", "status")
+	var st struct {
+		Running bool `json:"running"`
+	}
+	if err == nil && json.Unmarshal(out, &st) == nil && st.Running {
+		return "running"
+	}
+	if _, err := l.run(ctx, "runner", "service", "install"); err != nil {
+		return "the runner service could not start: " + errText(err) + " (run `myco runner service install` in a terminal)"
+	}
+	return "running"
 }

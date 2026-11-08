@@ -187,6 +187,8 @@ func (b *Backend) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"version": b.Version, "shell": orStr(b.Shell, "browser")})
 	})
 	if b.Local != nil {
+		m.HandleFunc("GET /app/local/sessions", b.listLocalSessions)
+		m.HandleFunc("POST /app/hubs/{id}/local-join", b.withHubAndHubTimeout(2*time.Minute, b.localJoin))
 		m.HandleFunc("GET /app/local", b.getLocal)
 		m.HandleFunc("POST /app/local/myco", b.installMyco)
 		m.HandleFunc("POST /app/local/hub", b.startLocal)
@@ -312,6 +314,18 @@ func (b *Backend) Handler() http.Handler {
 // withHub resolves {id} to a hub client and bounds the call.
 func (b *Backend) withHub(h func(http.ResponseWriter, *http.Request, *client.Client)) http.HandlerFunc {
 	return b.withHubTimeout(b.timeout(), h)
+}
+
+// withHubAndHubTimeout is withHubTimeout for handlers that also need the hub.
+func (b *Backend) withHubAndHubTimeout(d time.Duration, h func(http.ResponseWriter, *http.Request, *client.Client, Hub)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hub, err := b.find(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		b.withHubTimeout(d, func(w http.ResponseWriter, r *http.Request, c *client.Client) { h(w, r, c, hub) })(w, r)
+	}
 }
 
 // withHubTimeout is withHub with its own bound (starting a session takes
