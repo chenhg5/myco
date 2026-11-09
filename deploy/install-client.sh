@@ -46,8 +46,9 @@ echo "==> current: $(command -v myco >/dev/null 2>&1 && myco version || echo 'no
 echo "==> downloading $BASE/$ASSET"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-curl -fsSL "$BASE/$ASSET" -o "$tmp/myco"
-curl -fsSL "$BASE/SHA256SUMS" -o "$tmp/SHA256SUMS"
+# GitHub's download redirect answers 502/504 now and then: retry those.
+curl -fsSL --retry 5 --retry-delay 2 "$BASE/$ASSET" -o "$tmp/myco"
+curl -fsSL --retry 5 --retry-delay 2 "$BASE/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
 want="$(awk -v f="$ASSET" '$2==f {print $1}' "$tmp/SHA256SUMS")"
 if command -v shasum >/dev/null; then got="$(shasum -a 256 "$tmp/myco" | awk '{print $1}')"; else got="$(sha256sum "$tmp/myco" | awk '{print $1}')"; fi
