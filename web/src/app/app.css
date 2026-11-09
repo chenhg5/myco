@@ -3160,7 +3160,10 @@ button.app-label:hover { filter: brightness(0.95); }
   border-radius: 10px;
   padding: 14px 16px;
   font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, monospace;
-  overflow-x: auto;
+  /* Long unbroken output (base64, hashes, URLs) wraps instead of making
+     the whole terminal scroll sideways. */
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .term-cmd + .term-cmd,
 .term-cmd + .term-comment,
@@ -3180,7 +3183,7 @@ button.app-label:hover { filter: brightness(0.95); }
 }
 .term-line {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   color: #f2f3f5;
 }
 .term-prompt {
@@ -3191,7 +3194,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-out {
   margin: 4px 0 0;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font: inherit;
   color: #c3c6cd;
 }
@@ -3209,6 +3212,10 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-comment {
   color: #8d919b;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-line.term-earlier {
+  color: #7c808b;
 }
 
 /* End-to-end encryption marks */

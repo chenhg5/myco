@@ -48,6 +48,15 @@ export function Terminal({ messages, execNode, nameOf, hubE2E }: {
       continue;
     }
     if (m.type === "progress" || m.type === "steer") continue;
+    // A result whose command is further back (not loaded yet): show it as
+    // output, not as its raw JSON.
+    if (m.from === execNode && m.type === "reply" && !m.unreadable) {
+      const res = parseExecResult(m.body);
+      if (res) {
+        items.push(<Output key={m.id} answer={m} res={res} nameOf={nameOf} />);
+        continue;
+      }
+    }
     if (m.unreadable) {
       items.push(<div className="term-comment" key={m.id}><span className="term-meta">{nameOf(m.from)} · {stamp(m.created_at)}</span><div># {L("已加密，只有双方的主人能看", "encrypted: only the owners of both sides can read it")}</div></div>);
       continue;
@@ -62,9 +71,38 @@ export function Terminal({ messages, execNode, nameOf, hubE2E }: {
   return <div className="term">{items}</div>;
 }
 
+type ExecResult = NonNullable<ReturnType<typeof parseExecResult>>;
+
+function ResultLines({ res }: { res: ExecResult }) {
+  const code = typeof res.exit_code === "number" ? res.exit_code : undefined;
+  return (
+    <>
+      {res.stdout ? <pre className="term-out">{res.stdout.replace(/\n$/, "")}</pre> : null}
+      {res.stderr ? <pre className="term-out is-err">{res.stderr.replace(/\n$/, "")}</pre> : null}
+      {typeof res.error === "string" && res.error && <pre className="term-out is-err">{res.error}</pre>}
+      {typeof code === "number" && code !== 0 && (
+        <div className="term-exit">{L(`退出码 ${code}`, `exit ${code}`)}{res.timed_out ? L("（超时）", " (timed out)") : ""}</div>
+      )}
+    </>
+  );
+}
+
+function Output({ answer, res, nameOf }: { answer: Message; res: ExecResult; nameOf: (n: string) => string }) {
+  const took = execDuration(res.duration_ms);
+  return (
+    <div className="term-cmd">
+      <div className="term-meta">
+        <span>{nameOf(answer.from)} · {stamp(answer.created_at)}</span>
+        {took && <span>{took}</span>}
+      </div>
+      <div className="term-line term-earlier"># {L("命令在更早的消息里", "the command is in earlier messages")}</div>
+      <ResultLines res={res} />
+    </div>
+  );
+}
+
 function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean }) {
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
-  const code = typeof res?.exit_code === "number" ? res.exit_code : undefined;
   const took = execDuration(res?.duration_ms);
   const pending = !answer && task.status !== "done" && task.status !== "failed";
   return (
@@ -78,13 +116,8 @@ function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Mes
         {took && <span>{took}</span>}
       </div>
       <div className="term-line"><span className="term-prompt">$</span>{task.body}</div>
-      {res?.stdout ? <pre className="term-out">{res.stdout.replace(/\n$/, "")}</pre> : null}
-      {res?.stderr ? <pre className="term-out is-err">{res.stderr.replace(/\n$/, "")}</pre> : null}
+      {res && <ResultLines res={res} />}
       {answer && !res && <pre className={cn("term-out", answer.type === "event" && "is-err")}>{answer.body}</pre>}
-      {typeof res?.error === "string" && res.error && <pre className="term-out is-err">{res.error}</pre>}
-      {typeof code === "number" && code !== 0 && (
-        <div className="term-exit">{L(`退出码 ${code}`, `exit ${code}`)}{res?.timed_out ? L("（超时）", " (timed out)") : ""}</div>
-      )}
       {pending && <div className="term-pending">{L("执行中…", "running…")}</div>}
       {!answer && !pending && task.status === "failed" && <div className="term-exit">{task.error || L("失败", "failed")}</div>}
     </div>
