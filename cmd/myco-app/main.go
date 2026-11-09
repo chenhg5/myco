@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/console"
@@ -43,7 +44,9 @@ func main() {
 	}
 	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI()}
 	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,
-		Update: &console.Updater{Version: version, Bundle: appBundle(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
+		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: windowsExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
+	// What a Windows update set aside is no longer running.
+	console.CleanOldExe(b.Update.Exe)
 	if p, err := local.EnsureCLI(); err != nil {
 		log.Printf("could not install the bundled myco CLI: %v", err)
 	} else if p != "" {
@@ -92,6 +95,22 @@ func appBundle() string {
 		return ""
 	}
 	return b
+}
+
+// windowsExe is the running app's exe on Windows ("" elsewhere), which an
+// update replaces in place.
+func windowsExe() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	return exe
 }
 
 // deviceName names this computer in console tokens: its host name,

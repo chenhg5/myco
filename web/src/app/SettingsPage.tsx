@@ -79,6 +79,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
     }
   }
   const failure = st.step === "failed" ? st.error : null;
+  const isWindows = /Windows/i.test(navigator.userAgent);
   const cli = local?.myco;
 
   return (
@@ -99,9 +100,13 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       </div>
       <ErrorText error={failure} />
       <p className="app-about-note">
-        {lang() === "zh"
-          ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
-          : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
+        {isWindows
+          ? lang() === "zh"
+            ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。</>
+            : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.</>
+          : lang() === "zh"
+            ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
+            : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
       </p>
       <p className="app-about-note">{L("节点、任务和对话都由 Hub 提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>

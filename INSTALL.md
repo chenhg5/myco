@@ -710,7 +710,7 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 
 - **下载**（[最新发布](https://github.com/chenhg5/myco/releases/latest)）：
   - Mac：`myco.dmg`，一个包同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并经 Apple 公证，双击打开后拖进「应用程序」即可。以后在 App 的「设置 → 关于」里一键更新。
-  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」；不支持一键更新和 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
+  - Windows（预览）：`myco-app-windows-amd64.exe`（ARM 电脑用 `-arm64`），下载后直接运行。还没有代码签名，第一次运行 SmartScreen 会提示，点「更多信息 → 仍要运行」。v0.18.6 起支持在「设置 → 关于」里一键更新：替换正在运行的 exe 并重新打开，这台电脑上的 myco 命令行工具也一起升级（v0.18.5 及之前的版本要手动下载一次新版）。还不支持 `myco://` 链接。App 用到的 myco 命令行工具可以在「设置 → Hub」里安装。
 - **自己构建**：Mac 上 `make app` 生成 `bin/myco.app`（需要 Go 和 Xcode 命令行工具），`scripts/mac-sign.sh` 生成签名、公证后的通用版和 DMG；Windows 版 `GOOS=windows go build ./cmd/myco-app` 即可（不需要 cgo）。
 - **第一次打开**：两个选择。
   - **在这台电脑上开始**：一键在本机启动 Hub（默认只在本机和局域网可用），App 自动接入它。

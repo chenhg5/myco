@@ -24,6 +24,9 @@ import (
 // a zip of myco.app (made with ditto --keepParent).
 func AppAsset(arch string) string { return "myco-app-darwin-" + arch + ".zip" }
 
+// WindowsAppAsset is the release asset holding the Windows app exe.
+func WindowsAppAsset(arch string) string { return "myco-app-windows-" + arch + ".exe" }
+
 const appZipMax = 300 << 20
 
 // Updater replaces the running app with a newer release and reopens it.
@@ -31,8 +34,11 @@ type Updater struct {
 	Version string
 	// Bundle is the running myco.app; "" when not running from one.
 	Bundle string
-	Arch   string // default runtime.GOARCH
-	HTTP   *http.Client
+	// Exe is the running app's exe on Windows ("" elsewhere): the update
+	// replaces it in place (Windows lets a running exe be renamed).
+	Exe  string
+	Arch string // default runtime.GOARCH
+	HTTP *http.Client
 	// API and Download are the release API and download base
 	// (release.APIURL / release.DownloadURL honour the env overrides).
 	API, Download string
@@ -80,7 +86,7 @@ func (u *Updater) canInstall() (bool, string) {
 	relaunch := u.relaunch
 	u.mu.Unlock()
 	switch {
-	case u.Bundle == "":
+	case u.Bundle == "" && u.Exe == "":
 		return false, "not running from myco.app"
 	case relaunch == nil:
 		return false, "only the app window can update itself"
@@ -139,6 +145,28 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, fmt.Errorf("cannot find the latest release: %w", err))
 		return
 	}
+	if u.Exe != "" {
+		exe, err := release.FetchAsset(ctx, hc, u.Download, latest, WindowsAppAsset(u.arch()), appZipMax)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if err := installExe(u.Exe, exe); err != nil {
+			writeErr(w, err)
+			return
+		}
+		// The myco CLI the app installed goes along (it has no service
+		// to restart on Windows); it runs on after the app quits.
+		if b.Local != nil {
+			b.Local.upgradeCLIDetached()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"installed": latest, "relaunching": true})
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			relaunch()
+		}()
+		return
+	}
 	// The signed universal build when the release has it, else this Mac's own.
 	zipped, err := release.FetchAsset(ctx, hc, u.Download, latest, AppAsset("universal"), appZipMax)
 	if err != nil && strings.Contains(err.Error(), "has no") {
@@ -185,6 +213,48 @@ func installBundle(bundle string, zipped []byte) error {
 		return fmt.Errorf("cannot put the new app in place: %w", err)
 	}
 	return nil
+}
+
+// installExe puts a new exe in place of the running one: the new one is
+// written next to it, the running one renamed to <exe>.old (Windows allows
+// that, not overwriting it), then the new one takes its name. The old one
+// is removed when the new app starts (CleanOldExe).
+func installExe(exe string, data []byte) error {
+	if len(data) < 2 || data[0] != 'M' || data[1] != 'Z' {
+		return errors.New("the downloaded app is not a Windows program")
+	}
+	fresh := exe + ".new"
+	if err := os.WriteFile(fresh, data, 0o755); err != nil {
+		return fmt.Errorf("cannot write next to %s (permissions?): %w", exe, err)
+	}
+	old := exe + ".old"
+	if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
+		// A previous old exe still in use: set this one aside under another name.
+		old = fmt.Sprintf("%s.old-%d", exe, time.Now().UnixNano())
+	}
+	if err := os.Rename(exe, old); err != nil {
+		_ = os.Remove(fresh)
+		return fmt.Errorf("cannot move the current app aside: %w", err)
+	}
+	if err := os.Rename(fresh, exe); err != nil {
+		_ = os.Rename(old, exe)
+		_ = os.Remove(fresh)
+		return fmt.Errorf("cannot put the new app in place: %w", err)
+	}
+	return nil
+}
+
+// CleanOldExe removes what installExe set aside (best effort: an old exe
+// still running stays until next time).
+func CleanOldExe(exe string) {
+	if exe == "" {
+		return
+	}
+	olds, _ := filepath.Glob(exe + ".old*")
+	for _, o := range olds {
+		_ = os.Remove(o)
+	}
+	_ = os.Remove(exe + ".new")
 }
 
 // unzipTo extracts a zip into dir, refusing paths that leave it, and

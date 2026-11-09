@@ -507,3 +507,19 @@ func (l *Local) ensureRunner(ctx context.Context) string {
 	}
 	return "running"
 }
+
+// upgradeCLIDetached starts `myco upgrade --no-restart` for the CLI on this
+// computer, if there is one, without waiting: it outlives the app, which is
+// about to quit after updating itself.
+func (l *Local) upgradeCLIDetached() {
+	p := l.mycoPath()
+	if p == "" {
+		return
+	}
+	cmd := exec.Command(p, "upgrade", "--no-restart", "--format", "json")
+	cmd.Env = l.env()
+	detach(cmd)
+	if err := cmd.Start(); err == nil {
+		go func() { _ = cmd.Wait() }()
+	}
+}

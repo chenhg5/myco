@@ -137,3 +137,72 @@ func TestUnzipRefusesEscapes(t *testing.T) {
 		t.Fatal("the installed app was touched")
 	}
 }
+
+// On Windows the app replaces its own exe: the new one takes its path, the
+// running one is set aside as .old (removed at the next start), and the
+// window relaunches. A download that is not a program is refused.
+func TestWindowsAppUpdate(t *testing.T) {
+	newExe := append([]byte("MZ"), []byte("new app")...)
+	serve := func(body []byte) *httptest.Server {
+		sum := sha256.Sum256(body)
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/latest":
+				fmt.Fprint(w, `{"tag_name":"v9.1.0"}`)
+			case "/dl/v9.1.0/SHA256SUMS":
+				fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), WindowsAppAsset("amd64"))
+			case "/dl/v9.1.0/" + WindowsAppAsset("amd64"):
+				w.Write(body)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+	}
+	run := func(body []byte) (string, *http.Response) {
+		rel := serve(body)
+		t.Cleanup(rel.Close)
+		dir := t.TempDir()
+		exe := filepath.Join(dir, "myco-app-windows-amd64.exe")
+		os.WriteFile(exe, []byte("MZold app"), 0o755)
+		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
+		relaunched := make(chan struct{}, 1)
+		u.SetRelaunch(func() { relaunched <- struct{}{} })
+		app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
+		t.Cleanup(app.Close)
+		resp, err := http.Post(app.URL+"/app/update", "application/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode == 200 {
+			select {
+			case <-relaunched:
+			case <-time.After(5 * time.Second):
+				t.Fatal("no relaunch")
+			}
+		}
+		return exe, resp
+	}
+
+	exe, resp := run(newExe)
+	if resp.StatusCode != 200 {
+		t.Fatalf("update: %d", resp.StatusCode)
+	}
+	if b, _ := os.ReadFile(exe); string(b) != string(newExe) {
+		t.Fatalf("exe not replaced: %q", b)
+	}
+	if b, _ := os.ReadFile(exe + ".old"); string(b) != "MZold app" {
+		t.Fatalf("old exe not kept aside: %q", b)
+	}
+	CleanOldExe(exe)
+	if _, err := os.Stat(exe + ".old"); !os.IsNotExist(err) {
+		t.Fatal("the old exe must be removed at the next start")
+	}
+
+	exe, resp = run([]byte("<html>not a program</html>"))
+	if resp.StatusCode == 200 {
+		t.Fatal("a download that is not a program must be refused")
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "MZold app" {
+		t.Fatalf("a refused update must leave the app alone: %q", b)
+	}
+}

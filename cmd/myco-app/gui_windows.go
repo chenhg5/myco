@@ -5,6 +5,9 @@ package main
 import (
 	_ "embed"
 	"net/http"
+	"os"
+	"os/exec"
+	"syscall"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -21,10 +24,10 @@ const guiShell = "browser"
 
 // runGUI opens the console as a Windows app: a window with the system title
 // bar, and a notification-area icon; closing the window hides it, and the
-// app keeps running until quit from that icon. The app does not update
-// itself on Windows (setRelaunch is not called), and myco:// links are not
-// registered.
-func runGUI(h http.Handler, _ func(string), _ func(func())) error {
+// app keeps running until quit from that icon. setRelaunch receives how to
+// reopen the app after an update put a new exe in place. myco:// links are
+// not registered.
+func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 	app := application.New(application.Options{
 		Name:        "myco",
 		Description: "Manage your myco hubs and agents",
@@ -62,6 +65,18 @@ func runGUI(h http.Handler, _ func(string), _ func(func())) error {
 	tray.SetTooltip("myco")
 	tray.SetMenu(menu)
 	tray.OnClick(show)
+
+	// The path as started: an update renames this exe and puts the new one here.
+	exe, exeErr := os.Executable()
+	setRelaunch(func() {
+		// Start the new exe, then quit this one.
+		if exeErr == nil {
+			cmd := exec.Command(exe)
+			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000200 | 0x00000008} // new process group, detached
+			_ = cmd.Start()
+		}
+		app.Quit()
+	})
 
 	return app.Run()
 }
