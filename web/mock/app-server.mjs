@@ -393,6 +393,8 @@ const local = {
     tailscale: null,
   },
   device: "glenn-mac",
+  machines: ["Studio Mac"],
+  shell_allowed: false,
 };
 if (SHOWCASE) {
   local.hostname = "glenns-mbp.local";
@@ -643,6 +645,11 @@ const server = http.createServer(async (req, res) => {
   // /app/local[...]
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
+    if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {
+      const body = await readBody(req);
+      local.shell_allowed = !!body.allow;
+      return send(res, 200, { shell_allowed: local.shell_allowed });
+    }
 
     // /app/local/providers and /app/local/agents/{name}/provider (cc-switch)
     if (parts.length === 3 && parts[2] === "providers" && method === "GET") {

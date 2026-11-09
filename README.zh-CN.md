@@ -96,7 +96,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 很多人想要这样：agent 跑在云端（claude.ai、服务器），但代码、工具和文件在**自己的电脑**上。myco 用 **Shell 节点** 支持其中的命令行部分：
 
-1. 在 App 里：**添加节点 → 在机器上新建 → Shell 节点**，选这台电脑和一个目录，再选哪些 agent 可以给它发命令。出于安全，这台电脑要先在本地允许一次：在 `~/.myco/machine.yaml` 里加上 `spawn: {max_access: full}`（远程无法替你打开）。
+1. 在 App 里：**添加节点 → 在机器上新建 → Shell 节点**，选这台电脑和一个目录，再选哪些 agent 可以给它发命令。第一次用时，App 会请你在这台电脑上点一下「允许」，并写明风险；只有这台电脑自己能打开，远程无法替你打开（它会在 `~/.myco/machine.yaml` 里设置 `spawn.max_access: full`）。
 2. 云端 agent 执行 `myco exec --to <Shell 节点> --cmd "..."`，拿回退出码、标准输出和错误输出。也可以直接用一句话交代，比如「看看我 Mac 上的构建过了没」，它会自己用 Shell 节点。
 
 ```bash

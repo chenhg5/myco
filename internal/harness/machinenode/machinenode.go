@@ -87,6 +87,10 @@ type Node struct {
 	CurrentSenders func() ([]string, error)
 	// FirstTurnTimeout bounds the session-creating first turn (default 5m).
 	FirstTurnTimeout time.Duration
+	// LoadPolicy, if set, re-reads the local policy before every request,
+	// so a change to machine.yaml (e.g. allowing shell nodes from the app)
+	// applies without restarting the runner. Policy is used if it fails.
+	LoadPolicy func() (Policy, error)
 }
 
 func (n *Node) Name() string       { return Name }
@@ -110,6 +114,11 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	var sr api.SpawnRequest
 	if err := json.Unmarshal([]byte(req.Body), &sr); err != nil {
 		return denied("the task body must be a spawn request (JSON), as sent by `myco agent spawn`: %v", err)
+	}
+	if n.LoadPolicy != nil {
+		if p, err := n.LoadPolicy(); err == nil {
+			n.Policy = p // one request at a time per node: no concurrent reader
+		}
 	}
 	plan, err := n.Check(sr)
 	if err != nil {

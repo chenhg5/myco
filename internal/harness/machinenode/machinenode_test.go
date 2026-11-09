@@ -280,6 +280,32 @@ func TestSpawnShellNode(t *testing.T) {
 	}
 }
 
+// The local policy is read again before every request: allowing shell
+// nodes in machine.yaml (from the app) applies without restarting the
+// runner, and so does taking it back.
+func TestPolicyReloadedPerRequest(t *testing.T) {
+	r := newRig(t)
+	r.node.Deps.Enroll = func(_ context.Context, p Plan, _ api.SpawnRequest, _ string) (string, error) { return p.Name, nil }
+	limit := harness.AccessWorkspace
+	r.node.LoadPolicy = func() (Policy, error) {
+		p := r.node.Policy
+		p.MaxAccess = limit
+		return p, nil
+	}
+	req := api.SpawnRequest{CLI: "exec", Dir: "~/code/app", EnrollToken: "tok"}
+	if res := r.run(t, "lead", req); !res.Denied {
+		t.Fatalf("not allowed yet: %+v", res)
+	}
+	limit = harness.AccessFull
+	if res := r.run(t, "lead", req); res.Denied || res.Error != "" {
+		t.Fatalf("allowed in machine.yaml since: %+v", res)
+	}
+	limit = harness.AccessWorkspace
+	if res := r.run(t, "lead", req); !res.Denied {
+		t.Fatalf("taken back: %+v", res)
+	}
+}
+
 type forkCLI struct{ *fakeCLI }
 
 func (forkCLI) CanFork() {}

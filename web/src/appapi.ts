@@ -133,6 +133,10 @@ export interface LocalState {
   device: string;
   /** This computer's host name, as its runners report it for their machine. */
   hostname?: string;
+  /** This computer's machine names, one per hub it joined. */
+  machines?: string[];
+  /** This computer allows shell nodes and full-access sessions (spawn.max_access: full). */
+  shell_allowed?: boolean;
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
 export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string }
@@ -333,6 +337,8 @@ export const appApi = {
     request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */
   restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
+  /** Allow (or stop allowing) shell nodes and full-access sessions on this computer. */
+  shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */

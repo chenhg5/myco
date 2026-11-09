@@ -179,7 +179,18 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 	host := hostname()
 	return &machinenode.Node{
 		Machine: m.Machine, Prefix: m.NamePrefix,
-		Policy:  machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: maxAccess},
+		Policy: machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: maxAccess},
+		LoadPolicy: func() (machinenode.Policy, error) {
+			mf, err := config.LoadMachine(e.defaultPath)
+			if err != nil || mf == nil {
+				return machinenode.Policy{}, errors.New("cannot read machine.yaml")
+			}
+			a, err := harness.ParseAccess(mf.Spawn.MaxAccess)
+			if err != nil {
+				return machinenode.Policy{}, err
+			}
+			return machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: a}, nil
+		},
 		Senders: me.AllowFrom, CurrentSenders: cachedAllowFrom(e.in.Ctx, c, 30*time.Second),
 		Deps: machinenode.Deps{
 			NewHarness: func(cli string, opts harness.Options) (harness.Harness, error) { return sh.registry.New(cli, opts) },

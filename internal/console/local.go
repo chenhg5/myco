@@ -270,6 +270,11 @@ type LocalStatus struct {
 	// Hostname is this computer's host name, as runners report it for
 	// their machine (so the app can tell which nodes run here).
 	Hostname string `json:"hostname,omitempty"`
+	// Machines are this computer's machine names, one per hub it joined.
+	Machines []string `json:"machines,omitempty"`
+	// ShellAllowed: this computer allows shell nodes (spawn.max_access:
+	// full in machine.yaml).
+	ShellAllowed bool `json:"shell_allowed"`
 }
 
 func toolAt(p string) *Tool {
@@ -283,6 +288,7 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 	l := b.Local
 	st := LocalStatus{Tools: map[string]*Tool{"cloudflared": toolAt(l.cloudflaredPath()), "tailscale": toolAt(l.tailscalePath())}, Device: l.Device}
 	st.Hostname, _ = os.Hostname()
+	st.Machines, st.ShellAllowed = l.localMachine()
 	if p := l.mycoPath(); p != "" {
 		st.Myco = &Tool{Path: p}
 		if out, err := l.run(ctx, "version", "--offline"); err == nil {

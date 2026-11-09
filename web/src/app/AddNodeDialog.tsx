@@ -9,6 +9,7 @@ import {
 import type { Agent, RuntimeAccess } from "@/api";
 import { CopyButton } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
+import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { agentKind } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { cn, timeAgo } from "@/lib/utils";
@@ -583,10 +584,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                     disabled={busy}
                   />
                 </div>
-                <div className="app-warn">
-                  <AlertTriangle />
-                  <span>{L("选中的节点能在那台机器上以它的用户身份运行任何命令，所以只有那台机器在本地允许完全权限（~/.myco/machine.yaml 里 spawn.max_access: full）时才能添加。", "The selected nodes can run any command on that machine as its user, so it can only be added where that machine allows full access locally (spawn.max_access: full in ~/.myco/machine.yaml).")}</span>
-                </div>
+                <LocalShellAccess machine={machine} what="shell" />
               </>
             )}
 
@@ -641,12 +639,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                 ))}
               </div>
             </div>
-            {access === "full" && (
-              <div className="app-warn">
-                <AlertTriangle />
-                <span>{L("完全权限可以让它读写那台机器上的任何文件，需要在那台机器上本地允许。", "Full access lets it read and write any file on that machine, and must be allowed locally on that machine.")}</span>
-              </div>
-            )}
+            {access === "full" && <LocalShellAccess machine={machine} what="full" />}
             </>)}
 
             <ErrorText error={error} />

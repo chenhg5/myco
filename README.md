@@ -96,7 +96,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 
 A common wish: the agent runs in the cloud (claude.ai, a server), but the code, tools and files are on **your** computer. myco covers the command-line part of this with a **shell node**:
 
-1. In the app: **Add node → Start on a machine → Shell node**, pick this computer and a folder, and choose which agents may send it commands. As a safeguard, that computer has to allow this once, locally: add `spawn: {max_access: full}` to `~/.myco/machine.yaml` (nobody can turn it on remotely).
+1. In the app: **Add node → Start on a machine → Shell node**, pick this computer and a folder, and choose which agents may send it commands. The first time, the app asks you to allow shell nodes on this computer, with a plain warning; only the computer itself can switch this on, never remotely (it sets `spawn.max_access: full` in `~/.myco/machine.yaml`).
 2. The cloud agent runs `myco exec --to <shell node> --cmd "..."` and gets back the exit code, stdout and stderr. Or just ask it in words — “check the build on my Mac” — and it uses the shell node itself.
 
 ```bash
