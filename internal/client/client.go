@@ -54,7 +54,7 @@ func New(base, token string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	// No global timeout: long-polls are bounded server-side and by ctx.
+	// No global timeout: do bounds each call (long-polls by their wait).
 	return &Client{base: u, token: token, http: &http.Client{}}, nil
 }
 
@@ -84,15 +84,37 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
+	// Bound every call, long-polls included (their wait plus a margin): a
+	// connection that died while the computer slept or changed networks
+	// otherwise hangs forever without an error, and a runner never retries.
+	rctx, cancel := context.WithTimeout(ctx, requestBound(query))
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, method, u.String(), body)
 	if err != nil {
 		return err
 	}
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return c.send(ctx, req, out)
+	err = c.send(rctx, req, out)
+	if err != nil && ctx.Err() == nil && rctx.Err() != nil {
+		return &Error{Code: CodeUnavailable, Message: fmt.Sprintf("no answer from hub %s in time; the connection may have dropped", c.base),
+			Suggestion: "this error is retryable", Retryable: true}
+	}
+	return err
 }
+
+// requestBound is how long one call may take: a long-poll's wait plus a
+// margin, otherwise two minutes.
+func requestBound(q url.Values) time.Duration {
+	if n, err := strconv.Atoi(q.Get("wait_seconds")); err == nil && n > 0 {
+		return time.Duration(n)*time.Second + boundMargin
+	}
+	return plainBound
+}
+
+// Bounds of a call (tests shorten them).
+var boundMargin, plainBound = 60 * time.Second, 2 * time.Minute
 
 func (c *Client) auth(req *http.Request) {
 	if c.token != "" {
