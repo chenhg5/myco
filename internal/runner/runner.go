@@ -286,6 +286,19 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Warn("ack failed; skipping (will be redelivered if the lease expires)", "err", err)
 		return
 	}
+	if m.Unreadable != "" {
+		// End-to-end encrypted, and this agent cannot open it (keys changed,
+		// or not sealed for it): never run it; tell the sender.
+		log.Warn("cannot decrypt message; not running it", "why", m.Unreadable)
+		if m.Type == "task" {
+			if _, err := r.hub.Fail(ctx, m.ID, "could not decrypt the message: "+m.Unreadable, false); err != nil {
+				log.Error("failing message failed", "err", err)
+			}
+		} else if err := r.hub.Complete(ctx, m.ID); err != nil {
+			log.Error("finishing message failed", "err", err)
+		}
+		return
+	}
 	_, executor := r.harness.(harness.CommandExecutor)
 	if m.Type == "steer" && !executor && r.routeSteer(ctx, log, m) {
 		return

@@ -140,6 +140,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
+	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
 			return m.Name

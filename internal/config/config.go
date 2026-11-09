@@ -37,6 +37,9 @@ type Config struct {
 	Harness   string `yaml:"harness,omitempty" json:"harness,omitempty"`
 	SessionID string `yaml:"session_id,omitempty" json:"session_id,omitempty"`
 	Runner    Runner `yaml:"runner,omitempty" json:"runner,omitempty"`
+	// E2EKey is this agent's private key pair for end-to-end encryption
+	// (internal/e2e), made on first use. Never sent anywhere.
+	E2EKey string `yaml:"e2e_key,omitempty" json:"-"`
 }
 
 // Runner configures `myco runner start`.

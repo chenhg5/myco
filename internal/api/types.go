@@ -141,9 +141,15 @@ type Message struct {
 	// the app, or the sending agent's owner (member name).
 	FromOwner   string       `json:"from_owner,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
-	LeaseUntil  *time.Time   `json:"lease_until,omitempty"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	// E2E: the body is end-to-end encrypted (an envelope only the
+	// message's readers can open; see docs/design/e2e-encryption.md).
+	E2E bool `json:"e2e,omitempty"`
+	// Unreadable says why a client could not decrypt an end-to-end
+	// encrypted body (set by the client, never by the hub).
+	Unreadable string     `json:"unreadable,omitempty"`
+	LeaseUntil *time.Time `json:"lease_until,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // RegisterRequest is the body of POST /v1/agents.
@@ -739,4 +745,42 @@ type PairingLink struct {
 // DeviceList is GET /v1/console/me/devices: the member's devices.
 type DeviceList struct {
 	Devices []ConsoleToken `json:"devices"`
+}
+
+// KeyHolder is one identity that can read a message, with its public keys.
+type KeyHolder struct {
+	// Who: an agent's name, or "@console:<member>" for a member's device.
+	Who string `json:"who"`
+	// Role: recipient, sender or owner (in GET /v1/keys/readers).
+	Role string `json:"role,omitempty"`
+	// Device names a member's device ("" for agents).
+	Device  string `json:"device,omitempty"`
+	EncKey  string `json:"enc_key"`
+	SignKey string `json:"sign_key"`
+}
+
+// Readers is GET /v1/keys/readers: who may read a message from one side to
+// the other, and the sides with no key (the message then stays plain).
+type Readers struct {
+	E2E     bool        `json:"e2e"`
+	Readers []KeyHolder `json:"readers"`
+	Missing []string    `json:"missing,omitempty"`
+}
+
+// KeyList is GET /v1/keys?who=a,b: each identity's keys.
+type KeyList struct {
+	E2E  bool                   `json:"e2e"`
+	Keys map[string][]KeyHolder `json:"keys"`
+}
+
+// PutKeysRequest is PUT /v1/me/keys and PUT /v1/console/me/keys.
+type PutKeysRequest struct {
+	EncKey  string `json:"enc_key"`
+	SignKey string `json:"sign_key"`
+}
+
+// HubSettings is GET/PUT /v1/hub/settings.
+type HubSettings struct {
+	// E2E: messages are end-to-end encrypted (the owner turns it on).
+	E2E bool `json:"e2e"`
 }

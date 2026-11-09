@@ -139,6 +139,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if err != nil {
 		return nil, err
 	}
+	e.withSealer(c, cfgPath, cfg)
 	c.Via = "runner" // yields to a session that keeps `inbox wait` running
 	me, err := c.Me(e.in.Ctx)
 	if err != nil {

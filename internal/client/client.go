@@ -46,6 +46,9 @@ type Client struct {
 	http  *http.Client
 	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
 	Via string
+	// Sealer, when set, encrypts and decrypts message bodies on hubs with
+	// end-to-end encryption on (see e2e.go).
+	Sealer *Sealer
 }
 
 // New returns a client for hub base URL authenticated with token.
@@ -247,6 +250,7 @@ func (c *Client) WaitPending(ctx context.Context, total time.Duration) ([]api.Me
 			continue
 		}
 		if len(out.Pending) > 0 || time.Until(deadline) <= 0 {
+			c.openAll(ctx, out.Pending)
 			return out.Pending, nil
 		}
 	}
@@ -308,6 +312,13 @@ func (c *Client) SetLabels(ctx context.Context, name string, req api.LabelsReque
 
 // Broadcast sends one message per agent matching req.Selector.
 func (c *Client) Broadcast(ctx context.Context, req api.BroadcastRequest, dry bool) (*api.BroadcastResponse, error) {
+	if c.Sealer != nil {
+		body, err := c.sealBroadcast(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		req.Body = body
+	}
 	var out api.BroadcastResponse
 	return &out, c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
 }
@@ -320,13 +331,27 @@ func (c *Client) BroadcastStatus(ctx context.Context, id string, consume bool) (
 		q.Set("consume", "true")
 	}
 	var out api.BroadcastStatus
-	return &out, c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), q, nil, &out)
+	if err := c.do(ctx, http.MethodGet, "/v1/broadcasts/"+esc(id), q, nil, &out); err != nil {
+		return &out, err
+	}
+	for i := range out.Deliveries {
+		c.open(ctx, &out.Deliveries[i].Message)
+		c.open(ctx, out.Deliveries[i].Reply)
+	}
+	return &out, nil
 }
 
 // Overview returns the network snapshot visible to this client's token.
 func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error) {
 	var out api.Overview
-	return &out, c.do(ctx, http.MethodGet, "/v1/overview", url.Values{"recent": {strconv.Itoa(recent)}}, nil, &out)
+	if err := c.do(ctx, http.MethodGet, "/v1/overview", url.Values{"recent": {strconv.Itoa(recent)}}, nil, &out); err != nil {
+		return &out, err
+	}
+	c.openAll(ctx, out.Recent)
+	for i := range out.Agents {
+		c.openAll(ctx, out.Agents[i].Current)
+	}
+	return &out, nil
 }
 
 // UpdateProfile changes display name/description of the caller (name "")
@@ -360,14 +385,29 @@ func (c *Client) RemoveAlias(ctx context.Context, alias string, dry bool) (map[s
 
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
+	if c.Sealer != nil {
+		body, err := c.seal(ctx, req.To, orType(req.Type), req.Body, req.Attachments)
+		if err != nil {
+			return nil, err
+		}
+		req.Body = body
+	}
 	var out api.SendResponse
-	return &out, c.do(ctx, http.MethodPost, "/v1/messages", dryQuery(dry), req, &out)
+	if err := c.do(ctx, http.MethodPost, "/v1/messages", dryQuery(dry), req, &out); err != nil {
+		return &out, err
+	}
+	c.open(ctx, &out.Message)
+	return &out, nil
 }
 
 // GetMessage returns a message visible to the caller.
 func (c *Client) GetMessage(ctx context.Context, id string) (*api.Message, error) {
 	var out api.Message
-	return &out, c.do(ctx, http.MethodGet, "/v1/messages/"+esc(id), nil, nil, &out)
+	if err := c.do(ctx, http.MethodGet, "/v1/messages/"+esc(id), nil, nil, &out); err != nil {
+		return &out, err
+	}
+	c.open(ctx, &out)
+	return &out, nil
 }
 
 // Transition applies "ack", "hold" or "done".
@@ -395,9 +435,17 @@ func (c *Client) Reply(ctx context.Context, id, body string, dry bool) (*api.Mes
 
 // ReplyWith answers a message with attachments (file ids).
 func (c *Client) ReplyWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, false, "reply", body, attachments)
+	if err != nil {
+		return nil, err
+	}
 	var out api.MessageResult
-	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry),
-		api.ReplyRequest{Body: body, Attachments: attachments}, &out)
+	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/reply", dryQuery(dry),
+		api.ReplyRequest{Body: body, Attachments: attachments}, &out); err != nil {
+		return &out.Message, err
+	}
+	c.open(ctx, &out.Message)
+	return &out.Message, nil
 }
 
 // Release defers a message for redelivery after delay (no failed attempt).
@@ -417,6 +465,10 @@ func (c *Client) ReleaseInUse(ctx context.Context, id string, delay time.Duratio
 
 // Fail closes a message as failed.
 func (c *Client) Fail(ctx context.Context, id, reason string, dry bool) (*api.Message, error) {
+	reason, err := c.sealAbout(ctx, id, false, "event", reason, nil)
+	if err != nil {
+		return nil, err
+	}
 	var out api.MessageResult
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/fail", dryQuery(dry), api.FailRequest{Reason: reason}, &out)
 }
@@ -440,6 +492,7 @@ func (c *Client) WaitReply(ctx context.Context, id string, total time.Duration) 
 			continue
 		}
 		if out.Reply != nil {
+			c.open(ctx, out.Reply)
 			return out.Reply, nil
 		}
 		if time.Until(deadline) <= 0 {
@@ -457,13 +510,16 @@ func (c *Client) Pull(ctx context.Context, limit int, wait time.Duration) ([]api
 func (c *Client) PullTypes(ctx context.Context, limit int, wait time.Duration, types []string) ([]api.Message, error) {
 	var out api.MessageList
 	err := c.do(ctx, http.MethodPost, "/v1/inbox/pull", nil, api.PullRequest{Limit: limit, WaitSeconds: int(wait.Seconds()), Types: types, Via: c.Via}, &out)
+	c.openAll(ctx, out.Messages)
 	return out.Messages, err
 }
 
 // Thread returns all messages of a thread.
 func (c *Client) Thread(ctx context.Context, id string) ([]api.Message, error) {
 	var out api.MessageList
-	return out.Messages, c.do(ctx, http.MethodGet, "/v1/threads/"+esc(id), nil, nil, &out)
+	err := c.do(ctx, http.MethodGet, "/v1/threads/"+esc(id), nil, nil, &out)
+	c.openAll(ctx, out.Messages)
+	return out.Messages, err
 }
 
 // AsError extracts a *Error from err.
@@ -482,6 +538,9 @@ func truncate(s string, n int) string {
 
 // UploadFile streams a local file to the hub and returns its metadata.
 func (c *Client) UploadFile(ctx context.Context, path string) (*api.File, error) {
+	if c.Sealer != nil && c.Sealer.ID != nil && c.E2EEnabled(ctx) {
+		return c.uploadSealed(ctx, path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -563,6 +622,14 @@ func (c *Client) DownloadFile(ctx context.Context, id, dest string) (*api.File, 
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return nil, "", err
 	}
+	if fk, ok := c.fileKeyOf(id); ok {
+		// An encrypted attachment: its key came in the message.
+		p, err := openDownloaded(fk, path)
+		if err != nil {
+			return nil, "", err
+		}
+		return &api.File{ID: id, Name: fk.Name, Size: fk.Size, SHA256: fk.SHA256, ContentType: fk.ContentType}, p, nil
+	}
 	return &api.File{ID: id, Name: name, Size: n, SHA256: got, ContentType: resp.Header.Get("Content-Type")}, path, nil
 }
 
@@ -581,12 +648,20 @@ func (c *Client) SetStatus(ctx context.Context, text string) (*api.Agent, error)
 
 // Progress posts an interim update on task id (as its recipient).
 func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, false, "progress", body, nil)
+	if err != nil {
+		return nil, err
+	}
 	var out api.MessageResult
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
 }
 
 // Steer sends a correction for open task id (as its sender).
 func (c *Client) Steer(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, true, "steer", body, nil)
+	if err != nil {
+		return nil, err
+	}
 	var out api.MessageResult
 	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/steer", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
 }
@@ -608,12 +683,14 @@ func (c *Client) WaitReplyProgress(ctx context.Context, id string, total time.Du
 			continue
 		}
 		for _, p := range out.Progress {
+			c.open(ctx, &p)
 			if onProgress != nil {
 				onProgress(p)
 			}
 			since = p.CreatedAt.UTC().Format(time.RFC3339Nano)
 		}
 		if out.Reply != nil {
+			c.open(ctx, out.Reply)
 			return out.Reply, nil
 		}
 		if time.Until(deadline) <= 0 {
@@ -678,14 +755,33 @@ func (c *Client) SpawnOnMachine(ctx context.Context, id string, req api.SpawnReq
 // ConsoleSend sends a message as the administrator from the console app
 // (admin or console token); the sender is "@console:<device>".
 func (c *Client) ConsoleSend(ctx context.Context, req api.SendRequest) (*api.SendResponse, error) {
+	if c.Sealer != nil {
+		body, err := c.seal(ctx, req.To, orType(req.Type), req.Body, req.Attachments)
+		if err != nil {
+			return nil, err
+		}
+		req.Body = body
+	}
 	var out api.SendResponse
-	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages", nil, req, &out)
+	if err := c.do(ctx, http.MethodPost, "/v1/console/messages", nil, req, &out); err != nil {
+		return &out, err
+	}
+	c.open(ctx, &out.Message)
+	return &out, nil
 }
 
 // ConsoleSteer corrects a task sent from the console.
 func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, true, "steer", body, nil)
+	if err != nil {
+		return nil, err
+	}
 	var out api.Message
-	return &out, c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body}, &out)
+	if err := c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body}, &out); err != nil {
+		return &out, err
+	}
+	c.open(ctx, &out)
+	return &out, nil
 }
 
 // ConsoleDismiss closes an open message for its recipient without a reply
@@ -711,7 +807,12 @@ func (c *Client) Conversations(ctx context.Context, agent, query string, before 
 		q.Set("limit", strconv.Itoa(limit))
 	}
 	var out api.ConversationList
-	return out.Conversations, c.do(ctx, http.MethodGet, "/v1/console/conversations", q, nil, &out)
+	err := c.do(ctx, http.MethodGet, "/v1/console/conversations", q, nil, &out)
+	for i := range out.Conversations {
+		c.open(ctx, &out.Conversations[i].First)
+		c.open(ctx, &out.Conversations[i].Last)
+	}
+	return out.Conversations, err
 }
 
 // CleanupAgents removes nodes offline for at least days (those the caller
@@ -724,7 +825,11 @@ func (c *Client) CleanupAgents(ctx context.Context, days int, dry bool) (*api.Cl
 // Peers lists the nodes agent exchanged messages with (console token).
 func (c *Client) Peers(ctx context.Context, agent string) ([]api.Peer, error) {
 	var out api.PeerList
-	return out.Peers, c.do(ctx, http.MethodGet, "/v1/console/agents/"+esc(agent)+"/peers", nil, nil, &out)
+	err := c.do(ctx, http.MethodGet, "/v1/console/agents/"+esc(agent)+"/peers", nil, nil, &out)
+	for i := range out.Peers {
+		c.open(ctx, out.Peers[i].Last)
+	}
+	return out.Peers, err
 }
 
 // Exchanges pages through the messages between nodes a and b, newest
@@ -738,7 +843,9 @@ func (c *Client) Exchanges(ctx context.Context, a, b string, before int64, limit
 		q.Set("limit", strconv.Itoa(limit))
 	}
 	var out api.Exchange
-	return &out, c.do(ctx, http.MethodGet, "/v1/console/exchanges", q, nil, &out)
+	err := c.do(ctx, http.MethodGet, "/v1/console/exchanges", q, nil, &out)
+	c.openAll(ctx, out.Messages)
+	return &out, err
 }
 
 // Whoami says which member a console token belongs to.

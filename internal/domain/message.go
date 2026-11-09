@@ -295,8 +295,13 @@ func (m *Message) Fail(by AgentName, eventID, reason string, now time.Time) (*Me
 		reason = "no reason given"
 	}
 	m.Status, m.Error, m.UpdatedAt = StatusFailed, reason, now
+	body := "task failed: " + reason
+	if IsSealed(reason) {
+		// Encrypted by the recipient for the sender: relayed as it is.
+		m.Error, body = "(encrypted)", reason
+	}
 	if !m.Type.ExpectsReply() {
 		return nil, nil
 	}
-	return NewMessage(eventID, m.To, m.From, TypeEvent, "task failed: "+reason, m.ThreadID, m.ID, "", now)
+	return NewMessage(eventID, m.To, m.From, TypeEvent, body, m.ThreadID, m.ID, "", now)
 }

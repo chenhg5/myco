@@ -89,7 +89,7 @@ func hubCommands() *Command {
 			})
 		},
 	}
-	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand())
+	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand(), hubSettingsCommand())
 }
 
 // tokenFromFile reads an admin token file: either just the token, or

@@ -187,7 +187,11 @@ func (e *env) agentClient() (*client.Client, error) {
 			"set MYCO_TOKEN or MYCO_ENROLL_TOKEN, or register this agent: myco agent register --name <name>",
 			"no agent token configured")
 	}
-	return client.New(hub, e.cfg.Token)
+	c, err := client.New(hub, e.cfg.Token)
+	if err != nil {
+		return nil, err
+	}
+	return e.withSealer(c, e.cfgPath, e.cfg), nil
 }
 
 // autoEnroll joins the network as the current session using

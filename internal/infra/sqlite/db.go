@@ -128,6 +128,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail     TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at);
+CREATE TABLE IF NOT EXISTS e2e_keys (
+  kind       TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  enc_key    TEXT NOT NULL,
+  sign_key   TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (kind, id)
+);
+CREATE TABLE IF NOT EXISTS hub_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 

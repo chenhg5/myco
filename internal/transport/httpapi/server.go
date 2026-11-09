@@ -36,6 +36,7 @@ type Server struct {
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
 	lan      atomic.Bool
+	e2e      *app.E2EService
 	version  string        // this hub's myco build
 	latest   func() string // newest known release ("" = unknown)
 	mux      *http.ServeMux
@@ -113,6 +114,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
 	m.HandleFunc("POST /v1/agents/cleanup", s.admin(s.cleanupAgents))
+	s.routesE2E(m)
 	m.HandleFunc("POST /v1/agents/{name}/kick", s.admin(s.kickAgent))
 	m.HandleFunc("GET /v1/machines", s.admin(s.listMachines))
 	m.HandleFunc("PATCH /v1/machines/{id}", s.admin(s.renameMachine))

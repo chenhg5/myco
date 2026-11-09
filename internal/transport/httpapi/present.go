@@ -102,7 +102,7 @@ func messageDTO(m *domain.Message) api.Message {
 		ID: m.ID, From: string(m.From), To: string(m.To), ThreadID: m.ThreadID, ReplyTo: m.ReplyTo,
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
-		FromOwner: m.FromOwner,
+		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
