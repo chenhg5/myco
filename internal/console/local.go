@@ -54,6 +54,8 @@ type Local struct {
 	appHubOnce sync.Once
 
 	lanOnce sync.Once
+	// joinOnce: add this computer to its local hub as a machine (once per run).
+	joinOnce sync.Once
 }
 
 // EnsureCLI installs the app's bundled myco CLI into ~/.local/bin when no
@@ -306,6 +308,8 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		if hl, err := c.Health(cctx); err == nil {
 			h.Running, h.PublicURL, h.Version = true, hl.PublicURL, hl.ServerVersion
+			// The hub's own computer should be one of its machines.
+			l.joinLocalHubOnce()
 		}
 		cancel()
 	}
@@ -466,6 +470,11 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 	if localURL == "" {
 		writeErr(w, errors.New("myco hub up finished but ~/.myco/hub/hub.env has no hub address"))
 		return
+	}
+	// This computer is the hub's first machine: sessions can be started on
+	// it right away (添加节点 → 在机器上新建).
+	if err := l.joinLocalHub(ctx); err != nil {
+		res.Warnings = append(res.Warnings, "这台电脑没能加入本机 Hub："+err.Error())
 	}
 	// Already in the app: nothing more to add.
 	if hubs, err := b.Store.List(); err == nil {

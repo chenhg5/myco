@@ -23,6 +23,7 @@ type fakeCLI struct {
 	calls    [][]string
 	failUp   bool
 	installs int
+	joins    int
 }
 
 func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...string) ([]byte, error) {
@@ -54,6 +55,20 @@ func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...stri
 		return json.Marshal(map[string]any{"token": res.Token})
 	case "hub down":
 		return []byte(`{"stopped":true}`), nil
+	case "runner service":
+		return []byte(`{"installed":true,"running":true}`), nil
+	case "link create":
+		if !slices.Contains(env, "MYCO_ADMIN_TOKEN="+adminToken) || !slices.Contains(env, "MYCO_HUB="+f.r.hubURL) {
+			f.r.t.Errorf("link create must use the local hub's admin token: %v", env)
+		}
+		return []byte(`{"join_url":"` + f.r.hubURL + `/j/myco_enroll_local"}`), nil
+	case "machine join":
+		if !slices.Contains(args, "--no-service") {
+			f.r.t.Errorf("a running runner must not be reinstalled (restarted) by the join: %v", args)
+		}
+		f.joins++
+		os.WriteFile(filepath.Join(f.home, ".myco", "machine.yaml"), []byte("hub: "+f.r.hubURL+"\nmachine: test-mac\nenroll_token: x\nname_prefix: test-mac-\n"), 0o600)
+		return []byte(`{"machine":"test-mac"}`), nil
 	}
 	f.r.t.Fatalf("unexpected myco call: %v", args)
 	return nil, nil
@@ -118,6 +133,9 @@ func TestLocalHub(t *testing.T) {
 	if r.secrets.m[res.Hub.ID] == "" {
 		t.Fatal("console token not stored")
 	}
+	if f.joins != 1 {
+		t.Fatalf("this computer must join its local hub as a machine: %d joins", f.joins)
+	}
 	_, _, raw = r.do("GET", "/app/local", nil)
 	if err := json.Unmarshal(raw, &st); err != nil || st.Myco == nil || st.Myco.Version != "v0.16.9" || st.Hub == nil || !st.Hub.Running || !st.Hub.Added || st.Hub.LocalURL != r.hubURL {
 		t.Fatalf("status after: %v %s", err, raw)
@@ -132,6 +150,9 @@ func TestLocalHub(t *testing.T) {
 	tokens := len(r.secrets.m)
 	if code, _, _ := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"}); code != 200 || len(r.secrets.m) != tokens {
 		t.Fatalf("second start: %d (tokens %d -> %d)", code, tokens, len(r.secrets.m))
+	}
+	if f.joins != 1 {
+		t.Fatalf("a computer that already joined must not join again: %d joins", f.joins)
 	}
 	if hubs, _ := console.NewStore(r.store).List(); len(hubs) != 1 {
 		t.Fatalf("hubs after a second start: %+v", hubs)
