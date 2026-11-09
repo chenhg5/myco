@@ -2270,11 +2270,6 @@ textarea.app-input {
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.conv-msg.is-me .conv-bubble {
-  --md-fade: var(--green-soft);
-  background: var(--green-soft);
-  box-shadow: none;
-}
 .conv-msg-meta {
   margin-top: 3px;
   font-size: 10.5px;
@@ -2515,9 +2510,6 @@ textarea.app-input {
 .dark .md :not(pre) > code {
   background: rgba(255, 255, 255, 0.08);
 }
-.conv-msg.is-me .md :not(pre) > code {
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
 .md table {
   display: block;
   width: max-content;
@@ -2567,9 +2559,6 @@ textarea.app-input {
 }
 .dark .md-code {
   background: rgba(0, 0, 0, 0.28);
-}
-.conv-msg.is-me .md-code {
-  background: color-mix(in srgb, currentColor 7%, transparent);
 }
 .md-code pre {
   margin: 0;
