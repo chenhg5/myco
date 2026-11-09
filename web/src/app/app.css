@@ -3204,3 +3204,41 @@ button.app-label:hover { filter: brightness(0.95); }
   color: #8d919b;
   white-space: pre-wrap;
 }
+
+/* End-to-end encryption marks */
+.conv-lock {
+  width: 11px;
+  height: 11px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  color: var(--muted);
+}
+.conv-plain {
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--amber, #d9a441) 18%, transparent);
+  color: var(--amber, #b7862a);
+  font-size: 10.5px;
+}
+.conv-unreadable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-style: italic;
+}
+.conv-unreadable svg {
+  width: 13px;
+  height: 13px;
+}
+.term-lock {
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.term-plain {
+  margin-left: 8px;
+  color: #d9b45c;
+}

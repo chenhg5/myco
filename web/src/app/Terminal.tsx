@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import type { Message } from "@/api";
 import { execDuration, parseExecResult } from "@/app/Markdown";
 import { cn } from "@/lib/utils";
@@ -14,10 +15,12 @@ function stamp(iso: string): string {
  * `$` line with who sent it and when, its output below, and the exit code
  * when it failed. Notes and other messages are shown as `#` comment lines.
  */
-export function Terminal({ messages, execNode, nameOf }: {
+export function Terminal({ messages, execNode, nameOf, hubE2E }: {
   messages: Message[];
   execNode: string;
   nameOf: (name: string) => string;
+  /** the hub encrypts: mark commands that were sent unencrypted */
+  hubE2E?: boolean;
 }) {
   // Answers (reply, or the failure event) by the command they answer.
   // (reply_to, or else the exec node's first answer in the same thread).
@@ -41,10 +44,14 @@ export function Terminal({ messages, execNode, nameOf }: {
     if (m.type === "task" && m.to === execNode) {
       const a = answers.get(m.id);
       if (a) used.add(a.id);
-      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} />);
+      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} />);
       continue;
     }
     if (m.type === "progress" || m.type === "steer") continue;
+    if (m.unreadable) {
+      items.push(<div className="term-comment" key={m.id}><span className="term-meta">{nameOf(m.from)} · {stamp(m.created_at)}</span><div># {L("已加密，只有双方的主人能看", "encrypted: only the owners of both sides can read it")}</div></div>);
+      continue;
+    }
     items.push(
       <div className="term-comment" key={m.id}>
         <span className="term-meta">{nameOf(m.from)} · {stamp(m.created_at)}</span>
@@ -55,7 +62,7 @@ export function Terminal({ messages, execNode, nameOf }: {
   return <div className="term">{items}</div>;
 }
 
-function Command({ task, answer, nameOf }: { task: Message; answer?: Message; nameOf: (n: string) => string }) {
+function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean }) {
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
   const code = typeof res?.exit_code === "number" ? res.exit_code : undefined;
   const took = execDuration(res?.duration_ms);
@@ -63,7 +70,11 @@ function Command({ task, answer, nameOf }: { task: Message; answer?: Message; na
   return (
     <div className="term-cmd">
       <div className="term-meta">
-        <span>{nameOf(task.from)} · {stamp(task.created_at)}</span>
+        <span>
+          {task.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
+          {nameOf(task.from)} · {stamp(task.created_at)}
+          {!task.e2e && hubE2E && <span className="term-plain">{L("未加密", "unencrypted")}</span>}
+        </span>
         {took && <span>{took}</span>}
       </div>
       <div className="term-line"><span className="term-prompt">$</span>{task.body}</div>

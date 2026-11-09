@@ -345,6 +345,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                         </span>
                       </span>
                     </div>
+                    <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
                     {localHub && (
                       <div className="app-kv">
                         <span className="app-kv-label">{L("访问", "Access")}</span>
@@ -665,5 +666,60 @@ function PublicAccessDialog({ open, onOpenChange, local, onDone }: {
         </>
       )}
     </Modal>
+  );
+}
+
+/** The hub's end-to-end encryption: shown to everyone, changed by its owner. */
+function E2ERow({ hubId, ov, onChanged }: { hubId: string; ov?: HubOverview; onChanged: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<boolean | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  if (!ov?.ok || !ov.me?.member) return null;
+  const on = !!ov.e2e;
+  const owner = ov.me.member.role === "owner";
+  const apply = async (next: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.setHubSettings(hubId, { e2e: next });
+      setConfirm(null);
+      await onChanged();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <div className="app-kv">
+        <span className="app-kv-label">{L("端到端加密", "End-to-end encryption")}</span>
+        <span className="app-kv-value">
+          <span className={cn("app-pill", on && "green")}>{on ? L("已开启", "On") : L("未开启", "Off")}</span>
+          {owner && (
+            <button type="button" className="app-btn app-btn-small" style={{ marginLeft: 8 }} disabled={busy} onClick={() => setConfirm(!on)}>
+              {on ? L("关闭", "Turn off") : L("开启", "Turn on")}
+            </button>
+          )}
+        </span>
+      </div>
+      <Modal open={confirm !== null} onOpenChange={(o) => !busy && !o && setConfirm(null)}
+        title={confirm ? L("开启端到端加密", "Turn on end-to-end encryption") : L("关闭端到端加密", "Turn off end-to-end encryption")}>
+        <p className="app-modal-note">
+          {confirm
+            ? L("开启后，新消息和附件只有收发双方、以及双方节点的主人能读；Hub、管理员和其他成员都读不到。适合几个人共用的 Hub。还没升级的节点会继续收发明文，并标为「未加密」。开启前的消息不会被加密。",
+              "New messages and attachments can then be read only by the two sides and the people who own them; the Hub, its admins and other members cannot. Meant for Hubs shared by several people. Nodes that are not upgraded yet keep sending plain messages, marked “Unencrypted”. Earlier messages stay as they are.")
+            : L("关闭后，新消息以明文保存在 Hub 上；已经加密的消息仍然只有当事人能读。",
+              "New messages are then stored in plain text on the Hub; messages already encrypted stay readable only by the people involved.")}
+        </p>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => setConfirm(null)} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void apply(!!confirm)} disabled={busy}>
+            {busy ? L("处理中…", "Working…") : confirm ? L("开启", "Turn on") : L("关闭", "Turn off")}
+          </button>
+        </div>
+      </Modal>
+    </>
   );
 }

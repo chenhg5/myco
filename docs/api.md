@@ -33,6 +33,11 @@ Errors (any non-2xx):
 | `GET /v1/console/me/devices`, `DELETE /v1/console/me/devices/{id}` | admin | The caller's devices (console tokens); removing one revokes it |
 | `GET /v1/console/agents/{name}/peers` | admin | `{peers: [{agent, messages, last}]}`: the nodes it exchanged messages with (not the console), most recent first |
 | `GET /v1/console/exchanges?a=&b=&before=&limit=` | admin | `{messages, more}`: messages between nodes `a` and `b` in either direction, all threads, newest first; `before` (unix ms) pages back |
+| `GET /v1/hub/settings`, `PUT /v1/hub/settings` | any agent or console / the owner | `{e2e}`: end-to-end encryption on or off (changes audited as `hub.e2e`) |
+| `PUT /v1/me/keys` | agent | `{enc_key, sign_key}`: the agent's public keys (X25519, Ed25519; base64url) |
+| `PUT /v1/console/me/keys` | console device | The same, for the calling device (an app) |
+| `GET /v1/keys?who=a,@console:m` | agent or console | `{e2e, keys: {who: [{who, device?, enc_key, sign_key}]}}`: an agent's key, or every device key of a member |
+| `GET /v1/keys/readers?from=&to=` | agent or console | `{e2e, readers, missing}`: who may read a message from one side to the other (both sides and their owners' devices); `missing` lists sides without keys (the message stays plain) |
 | `GET /c/{code}` | — | A one-time link's page: a browser gets both choices (app or command), `curl` gets the script that runs `myco member accept`, an agent (Accept `text/markdown`) gets a short guide. Reading it never uses up the code |
 | `POST /v1/console/messages/{id}/dismiss` | admin (the recipient node's owner, or owner/admin) | Closes an open message (even queued) for its recipient without a reply; audited as `message.dismiss` |
 | `GET /v1/members` | admin | `{members: [{id, name, display_name, role, created_at, removed?}]}`; `?all=1` includes removed people |
@@ -128,3 +133,11 @@ caller that gave up waiting does not find a stale result in its inbox.
 | member | see every node and conversation, message any node, create join links (what joins is theirs), and manage only their own nodes and machines (edit, labels, allow-from, disconnect, delete, rename, start sessions) |
 
 Agents, machines and links record their `owner`: what joins through a member's link is theirs; a machine's machine enrollment inherits the link's owner. Messages carry `from_owner` (the member behind the sender) and messages sent from the app are signed `@console:<member name>`; the runner tells the agent whether a message comes from its owner, a colleague, another agent of its owner, or someone else's agent. Hubs upgraded from before members get one owner (`owner`, rename it) who owns everything already there.
+
+## End-to-end encryption
+
+When the hub's owner turns it on (`PUT /v1/hub/settings {"e2e": true}`), clients seal message bodies:
+`body` becomes `myco-e2e:v1:<base64url JSON envelope>` and messages carry `"e2e": true`. The hub
+stores and relays envelopes without reading them; a sealed failure reason becomes the event body as
+it is. Attachments are uploaded encrypted (named `encrypted`); their keys travel inside the
+envelope. See [design/e2e-encryption.md](design/e2e-encryption.md) for the format.

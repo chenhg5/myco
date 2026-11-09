@@ -19,6 +19,8 @@ export interface HubOverview {
   overview?: Overview;
   /** who this app is on the hub (absent on hubs without members) */
   me?: Whoami;
+  /** the hub has end-to-end encryption on */
+  e2e?: boolean;
 }
 
 export interface AppOverview {
@@ -237,6 +239,9 @@ export const appApi = {
   overview: () => request<AppOverview>("GET", "app/overview"),
   thread: (hubId: string, threadId: string) =>
     request<{ messages: Message[] }>("GET", `app/hubs/${enc(hubId)}/threads/${enc(threadId)}`),
+  /** The hub's settings (end-to-end encryption); the owner may change them. */
+  hubSettings: (hubId: string) => request<{ e2e: boolean }>("GET", `app/hubs/${enc(hubId)}/settings`),
+  setHubSettings: (hubId: string, input: { e2e: boolean }) => request<{ e2e: boolean }>("PUT", `app/hubs/${enc(hubId)}/settings`, input),
   /** The nodes a node exchanged messages with (not the console), most recent first. */
   peers: (hubId: string, name: string) =>
     request<{ peers: Peer[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/peers`),

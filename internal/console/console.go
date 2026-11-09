@@ -162,6 +162,7 @@ type Backend struct {
 	Update *Updater
 
 	pending pendingLink
+	sealers sealers
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -333,15 +334,49 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("GET /app/hubs/{id}/conversations", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
 		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
-		cs, err := c.Conversations(r.Context(), q.Get("agent"), q.Get("q"), before, 0)
+		query := q.Get("q")
+		// The hub cannot search encrypted bodies: search the decrypted
+		// conversations here instead.
+		local := query != "" && c.E2EEnabled(r.Context())
+		hubQuery := query
+		if local {
+			hubQuery = ""
+		}
+		cs, err := c.Conversations(r.Context(), q.Get("agent"), hubQuery, before, 0)
 		if err != nil {
 			writeErr(w, err)
 			return
+		}
+		if local {
+			cs = filterConversations(cs, query)
 		}
 		if cs == nil {
 			cs = []api.Conversation{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		st, err := c.HubSettings(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.HubSettings
+		if !decode(w, r, &in) {
+			return
+		}
+		st, err := c.SetHubSettings(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if c.Sealer != nil {
+			_ = c.RegisterKeys(r.Context())
+		}
+		writeJSON(w, http.StatusOK, st)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/agents/cleanup", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
@@ -552,6 +587,7 @@ func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *h
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), d)
 		defer cancel()
+		b.withSealer(ctx, hub.ID, c)
 		h(w, r.WithContext(ctx), c)
 	}
 }
@@ -714,6 +750,7 @@ func (b *Backend) removeHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = b.Secrets.Delete(id) // already gone is fine
+	b.forgetSealer(id)
 	writeJSON(w, http.StatusOK, map[string]any{"removed": id})
 }
 
@@ -726,6 +763,8 @@ type HubOverview struct {
 	Overview *api.Overview `json:"overview,omitempty"`
 	// Me is who this app is on the hub (nil for hubs without members).
 	Me *api.Whoami `json:"me,omitempty"`
+	// E2E: the hub has end-to-end encryption on.
+	E2E bool `json:"e2e,omitempty"`
 }
 
 func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
@@ -744,6 +783,7 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), b.timeout())
 		defer cancel()
+		b.withSealer(ctx, h.ID, c)
 		ov, err := c.Overview(ctx, 50)
 		if err != nil {
 			out[i].Error = errText(err)
@@ -752,6 +792,9 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 		out[i].OK, out[i].Overview = true, ov
 		if me, err := c.Whoami(ctx); err == nil {
 			out[i].Me = me
+		}
+		if st, err := c.HubSettings(ctx); err == nil {
+			out[i].E2E = st.E2E
 		}
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"generated_at": time.Now().UTC(), "hubs": out})
@@ -849,4 +892,18 @@ func (b *Backend) deviceName() string {
 		return strings.TrimSuffix(h, ".local")
 	}
 	return "myco app"
+}
+
+// filterConversations keeps the conversations whose (decrypted) first or
+// last message, or other party, contains query (case-insensitive).
+func filterConversations(cs []api.Conversation, query string) []api.Conversation {
+	q := strings.ToLower(query)
+	out := cs[:0]
+	for _, c := range cs {
+		if strings.Contains(strings.ToLower(c.First.Body), q) || strings.Contains(strings.ToLower(c.Last.Body), q) ||
+			strings.Contains(strings.ToLower(c.Agent), q) {
+			out = append(out, c)
+		}
+	}
+	return out
 }

@@ -4,6 +4,7 @@ import { L } from "@/lib/i18n";
 /** summarize is a message's body as one plain line, for lists and previews
  * (Markdown, tables and code blocks flattened; exec results summarized). */
 export function summarize(m: Message): string {
+  if (m.unreadable) return L("🔒 已加密，只有双方的主人能看", "🔒 Encrypted: only the owners of both sides can read it");
   const body = (m.body || "").trim();
   if (!body) return L("（空消息）", "(Empty message)");
   if (body[0] === "{") {

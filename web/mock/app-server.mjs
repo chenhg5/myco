@@ -55,11 +55,16 @@ function makeMessage(over) {
   return { ...base, ...over };
 }
 
-const studioThread = [
+const studioThreadRaw = [
   makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "发布 v0.16.8：改 VERSION，跑 make check，打 tag 并推送。", created_at: iso(900), updated_at: iso(900) }),
   makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
   makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
 ];
+// MOCK_E2E: the console conversation is end-to-end encrypted, one message
+// in it was sealed for someone else.
+const studioThread = process.env.MOCK_E2E
+  ? studioThreadRaw.map((m, i) => i === 1 ? { ...m, e2e: true, unreadable: "not for this device", body: "[encrypted message]" } : { ...m, e2e: true })
+  : studioThreadRaw;
 
 // The App talks as "@console:<device>"; a thread counts as a conversation
 // only when it has one of these messages.
@@ -164,6 +169,7 @@ const state = {
   hubs: [
     {
       id: "hub_studio",
+      e2e: !!process.env.MOCK_E2E,
       name: "Glenn 的 MacBook Pro 本机 Hub",
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
@@ -421,6 +427,12 @@ function execHistory(agent) {
         : { exit_code: timedOut ? 124 : 0, stdout: outs[i], stderr: "", duration_ms: timedOut ? 60000 : 820, timed_out: timedOut, error: timedOut ? "killed after 1m0s (the node's timeout)" : "" }),
       created_at: iso(t - 30), updated_at: iso(t - 30) }));
   });
+  if (process.env.MOCK_E2E) {
+    for (const m of out) m.e2e = true;
+    // The newest command came from an agent that is not upgraded yet.
+    out[out.length - 2].e2e = false;
+    out[out.length - 1].e2e = false;
+  }
   execHistories[agent] = out;
   return out;
 }
@@ -501,7 +513,7 @@ function appOverview() {
   return {
     generated_at: iso(0),
     hubs: state.hubs.map((h) => h.ok
-      ? { id: h.id, name: h.name, ok: true, overview: overviewFor(h), me: whoami(h) }
+      ? { id: h.id, name: h.name, ok: true, overview: overviewFor(h), me: whoami(h), e2e: !!h.e2e }
       : { id: h.id, name: h.name, ok: false, error: h.error }),
   };
 }
@@ -890,6 +902,12 @@ const server = http.createServer(async (req, res) => {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       dismissed.add(parts[4]);
       return send(res, 200, makeMessage({ id: parts[4], status: "done" }));
+    }
+
+    // /app/hubs/{id}/settings — end-to-end encryption (MOCK_E2E=1 starts it on).
+    if (parts.length === 4 && parts[3] === "settings") {
+      if (method === "PUT") { const body = await readBody(req); hub.e2e = !!body.e2e; }
+      return send(res, 200, { e2e: !!hub.e2e });
     }
 
     // /app/hubs/{id}/agents/{name}/peers — other nodes it talked to (demo: an exec node).

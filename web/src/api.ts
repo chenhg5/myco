@@ -49,6 +49,10 @@ export interface Message {
   status: string; attempts: number; error?: string; broadcast_id?: string; attachments?: Attachment[];
   /** the person behind the sender (member name) */
   from_owner?: string;
+  /** end-to-end encrypted (decrypted by the app when it may read it) */
+  e2e?: boolean;
+  /** why the app could not decrypt it */
+  unreadable?: string;
   created_at: string; updated_at: string;
 }
 /** Another node a node exchanged messages with. */

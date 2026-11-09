@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Paperclip } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Lock, Paperclip } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -251,7 +251,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <div className="conv-bubble">
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
-            <MessageContent body={m.body} />
+            {m.unreadable
+              ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+              : <MessageContent body={m.body} />}
             {m.attachments && m.attachments.length > 0 && (
               <div className="conv-attach-list">
                 {m.attachments.map((a) => (
@@ -265,6 +267,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             )}
           </div>
           <div className={cn("conv-msg-meta", m.status === "failed" && "is-failed")}>
+            {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
+            {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
           </div>
         </div>
@@ -314,7 +318,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 </button>
               </div>
             )}
-            {execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} /> : shown.map((m, i) => {
+            {execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} /> : shown.map((m, i) => {
               // Exchange view: a new thread starts with a divider.
               const divider = exchange && i > 0 && shown[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
