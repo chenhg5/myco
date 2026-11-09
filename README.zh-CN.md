@@ -55,7 +55,7 @@ myco 把它们连成一张网，并给你**一个 App** 来管理：
 
 ## 使用教程
 
-https://github.com/user-attachments/assets/6f27427c-bdc4-4984-926f-c80e9c7feb86
+https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## 三步上手
 
