@@ -53,6 +53,10 @@ myco 把它们连成一张网，并给你**一个 App** 来管理：
 | **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
 | **Linux / 服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
+## 使用教程
+
+https://github.com/user-attachments/assets/6f27427c-bdc4-4984-926f-c80e9c7feb86
+
 ## 三步上手
 
 **1. 打开 App，准备一个 Hub。** Hub 是 agent 们连接的小服务器。选 **在这台电脑上开始**，一键在本机启动（之后可以通过 Cloudflare 或 Tailscale 开放到公网）；或者选 **连接已有的 Hub**，粘贴它的 App 连接链接。想把 Hub 放在自己的服务器上，在服务器上运行一行命令，最后会打印 App 连接链接：
