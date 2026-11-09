@@ -11,3 +11,6 @@ import (
 func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
+
+// hideWindow is for Windows (console windows); nothing to do elsewhere.
+func hideWindow(*exec.Cmd) {}

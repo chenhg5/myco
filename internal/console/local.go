@@ -192,6 +192,7 @@ func (l *Local) runIn(ctx context.Context, dir string, extra []string, args ...s
 func runCommand(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
+	hideWindow(cmd)
 	for _, kv := range env {
 		if d, ok := strings.CutPrefix(kv, "MYCO_APP_WORKDIR="); ok {
 			cmd.Dir = d // myco join takes the session's directory from its own

@@ -101,8 +101,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-left: auto;
+  padding-left: 6px;
   color: var(--fg);
+}
+/* On a Mac the traffic lights take the left, so the logo sits on the right. */
+.app-shell.shell-mac .app-sidebar-head .brand {
+  margin-left: auto;
+  padding-left: 0;
 }
 .app-sidebar-head .brand svg {
   flex: none;
