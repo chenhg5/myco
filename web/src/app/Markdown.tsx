@@ -22,6 +22,13 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/`/g, "&#96;");
 }
 
+/** Width in columns: CJK and other wide characters count two. */
+function displayWidth(s: string): number {
+  let w = 0;
+  for (const ch of s) w += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1;
+  return w;
+}
+
 // Code blocks carry their own copy button so every block gets one, without
 // mounting a React tree inside the rendered HTML. Links open outside the App.
 const md = new Marked({
@@ -36,6 +43,15 @@ const md = new Marked({
         `<pre><code${langClass}>${escapeHtml(text)}</code></pre>` +
         `</div>`
       );
+    },
+    // Short cells (a status, a number, a name) stay on one line: a narrow
+    // column would otherwise break 被拒绝 into 被拒 / 绝.
+    tablecell(token) {
+      const content = this.parser.parseInline(token.tokens);
+      const type = token.header ? "th" : "td";
+      const short = displayWidth(token.text) <= 14 ? ` class="md-nw"` : "";
+      const align = token.align ? ` align="${token.align}"` : "";
+      return `<${type}${align}${short}>${content}</${type}>\n`;
     },
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
