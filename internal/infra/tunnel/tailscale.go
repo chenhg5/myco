@@ -27,10 +27,16 @@ func (t *Tailscale) Prepare(ctx context.Context, local string) (string, error) {
 			Fix: "install Tailscale (https://tailscale.com/download) and log in"}
 	}
 	t.bin = bin
-	out, err := run(ctx, bin, "status", "--json")
+	// stdout only: the CLI may warn on stderr (e.g. a client/daemon version
+	// mismatch), which must not spoil the JSON.
+	out, errOut, _ := runSplit(ctx, bin, "status", "--json")
 	state, dns := tailscaleStatus(out)
-	if err != nil && state == "" {
-		return "", &Error{Msg: "cannot talk to Tailscale: " + strings.TrimSpace(out), Fix: "start Tailscale and log in: tailscale up"}
+	if state == "" {
+		msg := strings.TrimSpace(errOut + "\n" + out)
+		if len(msg) > 400 {
+			msg = msg[:400] + "…"
+		}
+		return "", &Error{Msg: "cannot read Tailscale's status (" + bin + "): " + msg, Fix: "start Tailscale and log in: tailscale up (or open the Tailscale app)"}
 	}
 	if state != "Running" || dns == "" {
 		return "", &Error{Msg: "Tailscale is not connected (state " + state + ")", Fix: "log in: tailscale up (or open the Tailscale app)"}
@@ -85,6 +91,10 @@ func tailscaleStatus(out string) (state, dns string) {
 	var st struct {
 		BackendState string
 		Self         struct{ DNSName string }
+	}
+	// Tolerate text around the JSON object.
+	if i, j := strings.Index(out, "{"), strings.LastIndex(out, "}"); i >= 0 && j > i {
+		out = out[i : j+1]
 	}
 	if json.Unmarshal([]byte(out), &st) != nil {
 		return "", ""

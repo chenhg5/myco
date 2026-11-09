@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Spec describes the service to install.
@@ -130,11 +131,29 @@ func Apply(p Plan, r Runner) error {
 		if strings.HasPrefix(name, "-") {
 			name, optional = name[1:], true
 		}
-		if _, err := r.Run(name, c[1:]...); err != nil && !optional {
+		_, err := r.Run(name, c[1:]...)
+		// launchd finishes a bootout in the background: a bootstrap right
+		// after it can fail ("Bootstrap failed: 5: Input/output error") and
+		// leave the service unloaded. Retry it for a few seconds.
+		for i := 0; err != nil && isBootstrap(name, c[1:]) && i < bootstrapRetries; i++ {
+			time.Sleep(bootstrapPause)
+			_, err = r.Run(name, c[1:]...)
+		}
+		if err != nil && !optional {
 			return err
 		}
 	}
 	return nil
+}
+
+// Retries of a failed launchctl bootstrap (tests shorten the pause).
+var (
+	bootstrapRetries = 10
+	bootstrapPause   = 500 * time.Millisecond
+)
+
+func isBootstrap(name string, args []string) bool {
+	return name == "launchctl" && len(args) > 0 && args[0] == "bootstrap"
 }
 
 // RemoveFile deletes the service definition after uninstalling.

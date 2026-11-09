@@ -45,6 +45,9 @@ func TestTailscaleStatus(t *testing.T) {
 	if state != "Running" || dns != "glenn-mac.tail1234.ts.net" {
 		t.Fatalf("got %q %q", state, dns)
 	}
+	if state, dns := tailscaleStatus("Warning: client version \"1.104\" != tailscaled server version \"1.102\"\n" + `{"BackendState":"Running","Self":{"DNSName":"m.tail1.ts.net."}}`); state != "Running" || dns != "m.tail1.ts.net" {
+		t.Fatalf("status after a warning line: %q %q", state, dns)
+	}
 	if state, _ := tailscaleStatus(`{"BackendState":"NeedsLogin","Self":{"DNSName":""}}`); state != "NeedsLogin" {
 		t.Fatalf("state %q", state)
 	}

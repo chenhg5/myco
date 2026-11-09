@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeRunner struct {
@@ -78,5 +79,49 @@ func TestSystemdUnit(t *testing.T) {
 	st, _ := s.Status()
 	if !st.Running || st.PID != 99 || st.Detail != "active/running" {
 		t.Fatalf("status: %+v", st)
+	}
+}
+
+// flakyRunner fails a command the first n times.
+type flakyRunner struct {
+	fakeRunner
+	failFirst map[string]int
+}
+
+func (f *flakyRunner) Run(name string, args ...string) (string, error) {
+	key := strings.Join(append([]string{name}, args...), " ")
+	f.calls = append(f.calls, append([]string{name}, args...))
+	if f.failFirst[key] > 0 {
+		f.failFirst[key]--
+		return "Bootstrap failed: 5: Input/output error", errors.New("exit status 5")
+	}
+	return "", nil
+}
+
+// A bootstrap right after a bootout can fail while launchd is still tearing
+// the old service down; Apply retries it instead of leaving it unloaded.
+func TestLaunchdBootstrapRetries(t *testing.T) {
+	bootstrapPause = 0
+	t.Cleanup(func() { bootstrapPause = 500 * time.Millisecond })
+	home := t.TempDir()
+	l := &Launchd{Home: home, UID: 501}
+	p, _ := l.PlanInstall(spec)
+	key := "launchctl bootstrap gui/501 " + l.file()
+	r := &flakyRunner{failFirst: map[string]int{key: 2}}
+	if err := Apply(p, r); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	n := 0
+	for _, c := range r.calls {
+		if strings.Join(c, " ") == key {
+			n++
+		}
+	}
+	if n != 3 {
+		t.Fatalf("bootstrap tried %d times, want 3", n)
+	}
+	r = &flakyRunner{failFirst: map[string]int{key: 100}}
+	if err := Apply(p, r); err == nil {
+		t.Fatal("a bootstrap that keeps failing must be reported")
 	}
 }

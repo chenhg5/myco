@@ -357,7 +357,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     )}
                   </div>
                   {localHub && !h.ok && !localRunning && (
-                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("本机 Hub 已停止。可以在下面重新启动。", "The local Hub has stopped. You can start it again below.")}</div>
+                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("本机 Hub 已停止，点「启动本机 Hub」重新启动。", "The local Hub has stopped. Start it again with “Start local Hub”.")}</div>
                   )}
 
                   <div className="app-setting-actions">
@@ -366,9 +366,15 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                         <button type="button" className="app-btn" onClick={() => setPublicOpen(true)} disabled={busy !== null}>
                           <Globe />{L("开放到公网…", "Open to the internet…")}
                         </button>
-                        <button type="button" className="app-btn app-btn-danger" onClick={() => setStopOpen(true)} disabled={busy !== null || !localRunning}>
-                          {L("停止本机 Hub", "Stop local Hub")}
-                        </button>
+                        {localRunning ? (
+                          <button type="button" className="app-btn app-btn-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
+                            {L("停止本机 Hub", "Stop local Hub")}
+                          </button>
+                        ) : (
+                          <button type="button" className="app-btn app-btn-primary" onClick={() => void startLocal()} disabled={busy !== null}>
+                            {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : L("启动本机 Hub", "Start local Hub")}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <button type="button" className="app-btn app-btn-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>

@@ -79,6 +79,15 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 	return string(out), nil
 }
 
+// runSplit runs a command and returns its stdout and stderr apart.
+func runSplit(ctx context.Context, name string, args ...string) (stdout, stderr string, err error) {
+	var o, e strings.Builder
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout, cmd.Stderr = &o, &e
+	err = cmd.Run()
+	return o.String(), e.String(), err
+}
+
 // supervise runs a long-lived child until ctx ends, restarting it with
 // backoff when it exits. Each output line is passed to onLine.
 func supervise(ctx context.Context, log *slog.Logger, name string, args []string, onLine func(string)) error {
