@@ -46,3 +46,15 @@ cd .. && make web    # rebuild internal/web/dist (commit the result)
 - Do not change `VERSION`. Maintainers cut releases.
 
 By contributing you agree that your contributions are licensed under the [MIT License](LICENSE).
+
+## Download counts (maintainers)
+
+myco has no telemetry. To see how many people download it, use the release download counts:
+
+```bash
+python3 scripts/downloads.py                      # totals by kind, platform and version
+git fetch origin stats && git show origin/stats:stats/downloads.csv > /tmp/downloads.csv
+python3 scripts/downloads.py --trend /tmp/downloads.csv 30   # downloads per day
+```
+
+The `downloads` workflow records a snapshot every day on the `stats` branch. The counts include updates and our own installs (CI, servers, checks after a release); the `.dmg` is the only file that is mostly first installs.

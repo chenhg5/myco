@@ -1,0 +1,50 @@
+# Records release download counts once a day on the `stats` branch
+# (stats/downloads.csv), so the trend can be read with
+#   python3 scripts/downloads.py --trend stats/downloads.csv
+# GitHub itself only keeps running totals.
+name: downloads
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: downloads
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: main
+      - name: Check out the stats branch
+        run: |
+          if git ls-remote --exit-code --heads "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" stats >/dev/null; then
+            git clone --depth 1 --branch stats "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" stats-branch
+          else
+            mkdir stats-branch && cd stats-branch && git init -q -b stats && git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Snapshot
+        run: |
+          mkdir -p stats-branch/stats
+          python3 main/scripts/downloads.py --snapshot stats-branch/stats/downloads.csv
+          python3 main/scripts/downloads.py --trend stats-branch/stats/downloads.csv 14 || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit
+        working-directory: stats-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stats/downloads.csv
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Download counts $(date -u +%F)"
+          git push -q origin stats
