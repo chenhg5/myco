@@ -40,6 +40,7 @@ myco 把它们连成一张网，并给你**一个 App** 来管理：
 - **所有 agent 一目了然**：谁在工作、谁有待办、谁离线，以及每个 agent 用的 CLI、模型和所在机器。
 - **在 App 里派任务**：给任意 agent 发一条任务，进度和回复按对话显示，Markdown、表格、代码都能正常渲染。
 - **agent 之间自己协作**：它们能互相找到对方、交接工作，每一段往来你都能看到。
+- **让云端 agent 用你自己的电脑**：claude.ai 上的 Claude Code（或别处的任何 agent）可以通过 Shell 节点，在你的 Mac、Windows 或 Linux 电脑上执行命令，不用开端口，只有你允许的 agent 能用。[怎么做 ↓](#让云端-agent-用你的电脑)
 - **一键加入 agent**：App 会找到这台电脑上已有的 Claude Code 和 Codex 会话，点一下就加入；别的电脑上的 agent，复制一句话发给它就行。
 - **分组和标签**：给 agent 分组、打标签，按状态、类型、机器、分组筛选。
 - **agent 有记忆**：每个任务都续接 agent **自己的那个会话**，上下文越积越多，不会每次从零开始。
@@ -90,6 +91,24 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 - **多个 Hub，一个窗口**：家里一个 Hub、团队一个 Hub，在侧边栏底部切换，或者同时看全部。
 - **离线会告诉你原因**：在这台电脑上的 agent，一键就能让它重新上线。离线期间发给它的任务会排队等它。
 - **中文和英文**、浅色和深色，跟随系统。
+
+## 让云端 agent 用你的电脑
+
+很多人想要这样：agent 跑在云端（claude.ai、服务器），但代码、工具和文件在**自己的电脑**上。myco 用 **Shell 节点** 支持其中的命令行部分：
+
+1. 在 App 里：**添加节点 → 在机器上新建 → Shell 节点**，选这台电脑和一个目录，再选哪些 agent 可以给它发命令。出于安全，这台电脑要先在本地允许一次：在 `~/.myco/machine.yaml` 里加上 `spawn: {max_access: full}`（远程无法替你打开）。
+2. 云端 agent 执行 `myco exec --to <Shell 节点> --cmd "..."`，拿回退出码、标准输出和错误输出。也可以直接用一句话交代，比如「看看我 Mac 上的构建过了没」，它会自己用 Shell 节点。
+
+```bash
+myco exec --to my-mac-shell --cmd "cd ~/code/app && git status && npm test"
+```
+
+- **Mac、Linux、Windows 都支持。** Mac 和 Linux 用 `sh` 执行，Windows 用 PowerShell（可以改成 cmd、pwsh，或通过 WSL 用 bash）。
+- **不用开端口。** 你的电脑只主动连接 Hub；它离线时发来的命令会排队等它上线。
+- **由你决定谁能用。** 只有你列出的 agent 能发命令，每条命令执行前都会再检查一次；还可以限制只允许某些命令。
+- **全程有记录。** 每条命令和输出都在 App 里按终端的样子显示，本机也有审计日志。
+
+目前**还不能**做的：命令一条一条执行，每条是独立的进程（不是交互式终端，`cd` 不会带到下一条），有超时（默认 60 秒）和输出上限（64 KB）；读写文件要靠命令，没有文件传输，也不能看屏幕、操作鼠标键盘。Shell 节点以你的用户身份运行，不是沙箱，只允许你信任的 agent 使用。详见 [INSTALL.md 4.10 节](INSTALL.md#410-exec-节点远程执行命令)。
 
 ## 更喜欢命令行？
 

@@ -40,6 +40,7 @@ myco connects them into one network and gives you **one app** to run it:
 - **See every agent in one place.** Which ones are working, which have tasks waiting, which are offline — with the CLI, model and machine each one runs on.
 - **Give tasks from the app.** Type a task to any agent; its progress and reply come back as a conversation, rendered as Markdown with tables and code.
 - **Let agents work together.** Agents find each other and hand off work on their own; you can read every exchange.
+- **Let a cloud agent use your own computer.** A Claude Code session on claude.ai (or any agent elsewhere) can run commands on your Mac, Windows PC or Linux box through a shell node — no open ports, only the agents you allow. [How it works ↓](#let-a-cloud-agent-use-your-computer)
 - **Add agents in one click.** The app finds the Claude Code and Codex sessions already on your computer. For another computer, it gives you one sentence to paste into that agent.
 - **Organize them.** Put agents in groups, tag them, filter by status, type, machine or group.
 - **Your agents keep their memory.** Every task resumes the agent's **own** session, so context builds up instead of resetting.
@@ -90,6 +91,24 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 - **Many hubs, one window.** Keep a hub at home and one for your team; switch between them at the bottom of the sidebar, or see all at once.
 - **Offline? It tells you why** — and on this computer, brings the agent back with one click. Tasks sent while an agent is offline wait for it.
 - **English and Chinese**, light and dark, following your system.
+
+## Let a cloud agent use your computer
+
+A common wish: the agent runs in the cloud (claude.ai, a server), but the code, tools and files are on **your** computer. myco covers the command-line part of this with a **shell node**:
+
+1. In the app: **Add node → Start on a machine → Shell node**, pick this computer and a folder, and choose which agents may send it commands. As a safeguard, that computer has to allow this once, locally: add `spawn: {max_access: full}` to `~/.myco/machine.yaml` (nobody can turn it on remotely).
+2. The cloud agent runs `myco exec --to <shell node> --cmd "..."` and gets back the exit code, stdout and stderr. Or just ask it in words — “check the build on my Mac” — and it uses the shell node itself.
+
+```bash
+myco exec --to my-mac-shell --cmd "cd ~/code/app && git status && npm test"
+```
+
+- **Mac, Linux and Windows.** Commands run with `sh` on Mac and Linux, and with PowerShell on Windows (configurable: cmd, pwsh, bash via WSL).
+- **No open ports.** Your computer only connects out to the hub; commands sent while it is offline wait for it.
+- **You decide who.** Only the agents you list may send commands, checked again on every command. You can also limit it to an allow-list of commands.
+- **Everything is recorded.** Each command and its output show up in the app as a terminal session, and in a local audit log.
+
+What it is **not** (yet): commands run one at a time, each as its own process (no interactive terminal, `cd` does not carry over), with a timeout (60 s by default) and an output cap (64 KB). Files are read and written with commands, there is no file transfer or screen control. A shell node runs with your user's permissions — it is not a sandbox, so only allow agents you trust. Details: [INSTALL.md §4.10](INSTALL.md#410-exec-节点远程执行命令).
 
 ## Prefer the command line?
 
