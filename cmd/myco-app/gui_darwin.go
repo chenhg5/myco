@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -77,16 +78,14 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	appMenu.AddRole(application.WindowMenu)
 	app.Menu.Set(appMenu)
 
-	menu := app.NewMenu()
-	menu.Add("Open myco").OnClick(func(*application.Context) { show() })
-	menu.AddSeparator()
-	menu.Add("Quit myco").OnClick(func(*application.Context) { app.Quit() })
-
+	// Clicking the menu-bar icon opens its menu (the Mac way): the agents'
+	// status at a glance, then open / restart the runner / quit.
+	menu := newTrayMenu(app, h, show, app.Quit)
 	tray := app.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon)
 	tray.SetTooltip("myco")
-	tray.SetMenu(menu)
-	tray.OnClick(show)
+	tray.SetMenu(menu.menu)
+	menu.keepFresh(30 * time.Second)
 
 	setRelaunch(func() {
 		if bundle := appBundle(); bundle != "" {

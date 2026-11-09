@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -55,16 +56,15 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		window.Focus()
 	}
 
-	menu := app.NewMenu()
-	menu.Add("Open myco").OnClick(func(*application.Context) { show() })
-	menu.AddSeparator()
-	menu.Add("Quit myco").OnClick(func(*application.Context) { app.Quit() })
-
+	// Clicking the tray icon opens the window, right-clicking shows the menu
+	// (the Windows way): the agents' status, open / restart the runner / quit.
+	menu := newTrayMenu(app, h, show, app.Quit)
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip("myco")
-	tray.SetMenu(menu)
+	tray.SetMenu(menu.menu)
 	tray.OnClick(show)
+	menu.keepFresh(30 * time.Second)
 
 	// The path as started: an update renames this exe and puts the new one here.
 	exe, exeErr := os.Executable()
