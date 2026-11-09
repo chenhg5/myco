@@ -90,10 +90,6 @@ func TestLocalHub(t *testing.T) {
 	if err := json.Unmarshal(raw, &st); err != nil || st.Myco != nil || st.Hub != nil || st.Tools["cloudflared"] == nil || st.Tools["tailscale"] != nil || st.Device != "test-mac" {
 		t.Fatalf("status before: %v %s", err, raw)
 	}
-	// Without the CLI, starting a hub says how to fix it.
-	if code, m, _ := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"}); code != 409 || m["error"] != "not_configured" {
-		t.Fatalf("start without myco: %d %v", code, m)
-	}
 	if code, m, _ := r.do("POST", "/app/local/myco", nil); code != 200 || !strings.HasPrefix(filepath.Base(m["path"].(string)), "myco") || filepath.Base(filepath.Dir(m["path"].(string))) != "bin" || f.installs != 1 {
 		t.Fatalf("install: %d %v", code, m)
 	}

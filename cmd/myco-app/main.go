@@ -42,7 +42,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI()}
+	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(),
+		// No launchd/systemd: the app runs the local hub itself.
+		NoServiceManager: runtime.GOOS == "windows"}
 	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,
 		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: windowsExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
 	// What a Windows update set aside is no longer running.

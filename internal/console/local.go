@@ -45,6 +45,13 @@ type Local struct {
 	// ServiceFile returns the local hub's service definition (tests replace
 	// it); default: from the service manager.
 	ServiceFile func() string
+	// NoServiceManager: this computer has no service manager myco can use
+	// (Windows), so the app runs the local hub itself (apphub.go).
+	NoServiceManager bool
+	// StartProcess starts a background process (tests replace it).
+	StartProcess func(command []string, logPath string, env []string) (pid int, err error)
+
+	appHubOnce sync.Once
 
 	lanOnce sync.Once
 }
@@ -293,6 +300,7 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 	// Older local hubs listened on 127.0.0.1 only: move this one onto the
 	// LAN (once, in the background).
 	l.moveHubToLAN()
+	l.keepAppHub()
 	if c, err := client.New(h.LocalURL, ""); err == nil {
 		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		if hl, err := c.Health(cctx); err == nil {
@@ -387,16 +395,49 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l := b.Local
-	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Minute)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 	defer cancel()
+	// The hub is the myco CLI: install it first when it is missing.
+	if l.mycoPath() == "" {
+		install := l.Install
+		if install == nil {
+			install = installLatest
+		}
+		if _, err := install(ctx, filepath.Join(l.Home, ".local", "bin")); err != nil {
+			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "install_failed", Message: "cannot install the myco command line: " + err.Error(),
+				Suggestion: "check the network and try again"})
+			return
+		}
+	}
 	args := []string{"hub", "up", "--tunnel", in.Tunnel}
 	if in.Hostname != "" {
 		args = append(args, "--hostname", in.Hostname)
+	}
+	if l.NoServiceManager {
+		// No service manager: prepare, then run the hub from the app.
+		args = append(args, "--no-service")
+		_ = l.stopAppHub()
 	}
 	out, err := l.run(ctx, args...)
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	if l.NoServiceManager {
+		var prep struct {
+			Command []string `json:"command"`
+		}
+		if json.Unmarshal(out, &prep) != nil || len(prep.Command) == 0 {
+			writeErr(w, errors.New("unexpected output from myco hub up --no-service"))
+			return
+		}
+		if err := l.startAppHub(ctx, &appHub{Command: prep.Command}); err != nil {
+			writeErr(w, err)
+			return
+		}
+		// Report what a service install would have (the public URL comes
+		// from the running hub).
+		out, _ = json.Marshal(map[string]any{"public_url": l.publicURLNow(ctx), "reachable": true})
 	}
 	var up struct {
 		PublicURL     string `json:"public_url"`
@@ -464,6 +505,14 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) stopLocal(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
+	if b.Local.NoServiceManager {
+		if err := b.Local.stopAppHub(); err != nil && !errors.Is(err, os.ErrNotExist) {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"stopped": true})
+		return
+	}
 	if _, err := b.Local.run(ctx, "hub", "down"); err != nil {
 		writeErr(w, err)
 		return
@@ -522,4 +571,20 @@ func (l *Local) upgradeCLIDetached() {
 	if err := cmd.Start(); err == nil {
 		go func() { _ = cmd.Wait() }()
 	}
+}
+
+// publicURLNow is the running local hub's public URL ("" when it has none).
+func (l *Local) publicURLNow(ctx context.Context) string {
+	u := l.hubEnv()[config.EnvHub]
+	c, err := client.New(u, "")
+	if err != nil {
+		return ""
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	h, err := c.Health(cctx)
+	if err != nil {
+		return ""
+	}
+	return h.PublicURL
 }
