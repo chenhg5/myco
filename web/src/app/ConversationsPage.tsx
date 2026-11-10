@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, MessageSquare, Plus, Search, Terminal } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, MessageSquare, Pin, PinOff, Plus, Search, Terminal } from "lucide-react";
 import { appApi, errorMessage, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { groupsOf, isMe, tagsOf } from "@/app/nodes";
@@ -30,6 +30,22 @@ function loadFilters(): ListFilters {
   } catch {
     return { scope: "all", state: "all", label: "all" };
   }
+}
+
+// Pinned rows, newest pin first, kept on this device with the row as last
+// seen: a pinned conversation stays on top even when it is older than the
+// pages loaded so far.
+const PINS_KEY = "myco-conv-pins";
+function loadPins(): ConversationRow[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINS_KEY) || "[]");
+    return Array.isArray(v) ? v.filter((r) => r && typeof r.hubId === "string" && r.item && typeof r.item.kind === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function savePins(pins: ConversationRow[]) {
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* not saved */ }
 }
 
 /** What the page had when the person opened a row: shown again on return. */
@@ -275,10 +291,64 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
     return summarize(it.last);
   };
 
-  const shown = items.filter((r) => matchesState(r.item, filters.state));
+  const [pins, setPins] = useState<ConversationRow[]>(loadPins);
+  const pinKeys = useMemo(() => new Set(pins.map(rowKey)), [pins]);
+  const togglePin = (r: ConversationRow) => {
+    setPins((ps) => {
+      const k = rowKey(r);
+      const next = ps.some((p) => rowKey(p) === k) ? ps.filter((p) => rowKey(p) !== k) : [r, ...ps];
+      savePins(next);
+      return next;
+    });
+  };
+  // Keep the pinned copies up to date with what was loaded.
+  useEffect(() => {
+    setPins((ps) => {
+      let changed = false;
+      const next = ps.map((p) => {
+        const fresh = items.find((r) => rowKey(r) === rowKey(p));
+        if (fresh && (fresh.item.updated_at !== p.item.updated_at || fresh.item.state !== p.item.state)) { changed = true; return fresh; }
+        return p;
+      });
+      if (!changed) return ps;
+      savePins(next);
+      return next;
+    });
+  }, [items]);
+
+  // Right-click menu on a row.
+  const [menu, setMenu] = useState<{ x: number; y: number; row: ConversationRow } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [menu]);
+
+  const matching = items.filter((r) => matchesState(r.item, filters.state));
   const firstLoad = loading && items.length === 0;
   const canLoadMore = Object.values(more).some(Boolean);
   const filtered = filters.scope !== "all" || filters.state !== "all" || filters.label !== "all" || !!query;
+  // Unfiltered: pinned rows first (the loaded copy when there is one), then
+  // the rest. Filtered: the matches in their usual order, pins marked.
+  const inView = (r: ConversationRow) => (hub === "all" || r.hubId === hub) && hubs.some((h) => h.id === r.hubId);
+  const shown = filtered
+    ? matching
+    : [
+        ...pins.filter(inView).map((p) => items.find((r) => rowKey(r) === rowKey(p)) ?? p).sort(byTime),
+        ...matching.filter((r) => !pinKeys.has(rowKey(r))),
+      ];
   const set = (p: Partial<ListFilters>) => setFilters((f) => ({ ...f, ...p }));
 
   const open = (r: ConversationRow) => {
@@ -374,12 +444,17 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
             const shell = shellRow(row);
             const Icon = shell ? Terminal : it.participants.some((p) => p.startsWith(CONSOLE)) ? MessageSquare : ArrowLeftRight;
             const key = rowKey(row);
+            const pinned = pinKeys.has(key);
             return (
               <button
                 key={key}
                 type="button"
                 className={cn("conv-row", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ x: Math.min(e.clientX, window.innerWidth - 168), y: Math.min(e.clientY, window.innerHeight - 52), row });
+                }}
                 title={tag.label || undefined}
               >
                 <span className={cn("conv-row-icon", shell && "is-shell")}>
@@ -390,6 +465,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
                     {hub === "all" && !compact && <span className="conv-row-hub">{row.hubName}</span>}
+                    {pinned && <Pin className="conv-row-pin" aria-label={L("已置顶", "Pinned")} />}
                     <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
                   </span>
                   <span className={cn("conv-row-summary", shell && "is-mono")}>{summaryOf(row)}</span>
@@ -404,6 +480,20 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
         <div className="app-actions" style={{ justifyContent: "center" }}>
           <button type="button" className="app-btn" onClick={() => void loadMore()} disabled={moreBusy}>
             {moreBusy ? L("正在加载…", "Loading…") : L("加载更多", "Load more")}
+          </button>
+        </div>
+      )}
+
+      {menu && (
+        <div
+          className="conv-menu"
+          role="menu"
+          style={{ left: menu.x, top: menu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button type="button" role="menuitem" className="conv-menu-item" autoFocus onClick={() => { togglePin(menu.row); setMenu(null); }}>
+            {pinKeys.has(rowKey(menu.row)) ? <><PinOff />{L("取消置顶", "Unpin")}</> : <><Pin />{L("置顶", "Pin to top")}</>}
           </button>
         </div>
       )}

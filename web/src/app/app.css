@@ -2236,6 +2236,52 @@ textarea.app-input {
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--amber) 0%, transparent);
   }
 }
+.conv-row-pin {
+  flex: none;
+  margin-left: auto;
+  width: 11px;
+  height: 11px;
+  color: var(--faint);
+  transform: rotate(45deg);
+}
+.conv-row-pin + .conv-row-time {
+  margin-left: 0;
+}
+.conv-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 150px;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  animation: app-pop 0.12s ease-out;
+}
+.conv-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.conv-menu-item:hover,
+.conv-menu-item:focus-visible {
+  outline: none;
+  background: var(--pill);
+}
+.conv-menu-item svg {
+  width: 13px;
+  height: 13px;
+  color: var(--muted);
+}
 .conv-row-summary.is-mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;

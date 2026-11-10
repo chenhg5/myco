@@ -315,6 +315,24 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const meta = PAGE_META[page];
   const isMac = info?.shell === "mac";
 
+  // macOS: double-clicking the top bar zooms the window (and again restores
+  // it), as in a title bar. The window runtime does this itself only when
+  // the double-click lands on the bar's own box, not on its text.
+  useEffect(() => {
+    if (!isMac) return;
+    const onDbl = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (!t?.closest?.(".app-crumbbar, .app-sidebar-head, .app-welcome-drag")) return;
+      if (t.closest("button, a, input, textarea, select, [role=button]")) return;
+      const invoke = (window as unknown as { _wails?: { invoke?: (m: string) => void } })._wails?.invoke;
+      if (!invoke) return;
+      e.preventDefault();
+      invoke("wails:drag:doubleclick");
+    };
+    window.addEventListener("dblclick", onDbl);
+    return () => window.removeEventListener("dblclick", onDbl);
+  }, [isMac]);
+
   if (hubs.length === 0) {
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
