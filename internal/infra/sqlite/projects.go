@@ -90,7 +90,8 @@ func (r *ProjectRepo) List(ctx context.Context) ([]*domain.Project, error) {
 }
 
 func (r *ProjectRepo) Delete(ctx context.Context, id string) error {
-	for _, q := range []string{`DELETE FROM project_members WHERE project=?`, `DELETE FROM project_docs WHERE project=?`, `DELETE FROM projects WHERE id=?`} {
+	// Its conversations stay, without the project.
+	for _, q := range []string{`UPDATE messages SET project='' WHERE project=(SELECT name FROM projects WHERE id=?)`, `DELETE FROM project_members WHERE project=?`, `DELETE FROM project_docs WHERE project=?`, `DELETE FROM projects WHERE id=?`} {
 		if _, err := r.db.ExecContext(ctx, q, id); err != nil {
 			return internal(err)
 		}

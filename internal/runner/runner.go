@@ -370,7 +370,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			Workdir:   r.opts.Workdir,
 			Body:      m.Body, From: m.From, Type: m.Type,
 			Env: append(r.env(),
-				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type),
+				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
+				"MYCO_PROJECT="+m.Project),
 		}
 		if r.opts.Provider != nil && !executor {
 			if p := r.opts.Provider(); p != nil {

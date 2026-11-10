@@ -1122,7 +1122,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dry := dryRun(r)
 	out, err := s.messages.Send(r.Context(), a, app.SendInput{
 		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
-		Attachments: req.Attachments, DryRun: dry,
+		Attachments: req.Attachments, Project: req.Project, DryRun: dry,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -1519,9 +1519,15 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name, memberID := s.consoleIdentity(r)
+	if req.Project != "" && req.ThreadID == "" {
+		if err := s.seesProject(r, req.Project); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	out, err := s.messages.SendFromMember(r.Context(), name, memberID, app.SendInput{
 		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
-		Attachments: req.Attachments,
+		Attachments: req.Attachments, Project: req.Project,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -1681,8 +1687,14 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	if p := q.Get("project"); p != "" {
+		if err := s.seesProject(r, p); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	items, more, err := s.messages.Recent(r.Context(), agents, app.RecentInput{Scope: sc, Mine: q.Get("scope") == "mine",
-		Label: q.Get("label"), Query: q.Get("q"), Before: before, Limit: limit})
+		Label: q.Get("label"), Query: q.Get("q"), Project: q.Get("project"), Before: before, Limit: limit})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1690,7 +1702,8 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 	out := api.RecentList{Items: make([]api.RecentItem, 0, len(items)), More: more}
 	for _, it := range items {
 		ri := api.RecentItem{Kind: it.Kind, ThreadID: it.ThreadID, Other: string(it.Other), Node: string(it.Node), UpdatedAt: it.UpdatedAt,
-			Messages: it.Messages, First: messageDTO(it.First), Last: messageDTO(it.Last), State: it.State, Participants: make([]string, 0, len(it.Participants))}
+			Messages: it.Messages, First: messageDTO(it.First), Last: messageDTO(it.Last), State: it.State, Participants: make([]string, 0, len(it.Participants)),
+			Project: it.First.Project}
 		for _, p := range it.Participants {
 			ri.Participants = append(ri.Participants, string(p))
 		}

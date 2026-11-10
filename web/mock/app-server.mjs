@@ -72,7 +72,7 @@ const CONSOLE = `@console:${"glenn-mac"}`;
 
 const consoleThreads = {
   th_console_release: [
-    makeMessage({ thread_id: "th_console_release", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: "整理 v0.16.8 的发布说明，列出主要变化和升级注意事项。", created_at: iso(7200), updated_at: iso(7200) }),
+    makeMessage({ thread_id: "th_console_release", project: "website", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: "整理 v0.16.8 的发布说明，列出主要变化和升级注意事项。", created_at: iso(7200), updated_at: iso(7200) }),
     makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "progress", status: "done", body: "正在读取 git log 和 CHANGELOG…", created_at: iso(7000), updated_at: iso(7000) }),
     makeMessage({
       thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done",
@@ -902,6 +902,7 @@ const server = http.createServer(async (req, res) => {
       const msg = makeMessage({
         thread_id: threadId, from: CONSOLE, to, type: "task", status: "queued",
         body: text, created_at: iso(0), updated_at: iso(0),
+        ...(body.project && !body.thread_id ? { project: body.project } : {}),
       });
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
@@ -995,7 +996,7 @@ const server = http.createServer(async (req, res) => {
         for (const m of msgs) for (const n of [m.from, m.to]) if (!participants.includes(n)) participants.push(n);
         const last = msgs[msgs.length - 1];
         items.push({ kind: "thread", thread_id: threadId, participants, updated_at: last.updated_at || last.created_at,
-          messages: msgs.length, first: msgs[0], last, ...stateOf(msgs) });
+          messages: msgs.length, first: msgs[0], last, ...stateOf(msgs), project: msgs[0].project || (threadId === "th_release" && hub.id === "hub_studio" ? "website" : undefined) });
       }
       const ex = execHistory("release-cloud");
       const newest = ex.reduce((a, m) => (new Date(m.updated_at) > new Date(a.updated_at) ? m : a), ex[0]);
@@ -1008,6 +1009,7 @@ const server = http.createServer(async (req, res) => {
         .filter((it) => !q || it.participants.some((p) => p.toLowerCase().includes(q)) ||
           [it.first, it.last, it.task, it.answer].some((m) => (m?.body || "").toLowerCase().includes(q)))
         .filter((it) => !before || new Date(it.updated_at).getTime() < before)
+        .filter((it) => !sp.get("project") || it.project === sp.get("project"))
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       return send(res, 200, { items: list.slice(0, 30), more: list.length > 30 });
     }

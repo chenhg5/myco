@@ -873,8 +873,13 @@ func (c *Client) Exchanges(ctx context.Context, a, b string, before int64, limit
 // readable), label "group:<name>" / "group:" / "tag:<name>", query, before
 // (unix ms) and limit. Bodies are decrypted where this client can.
 func (c *Client) Recent(ctx context.Context, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
+	return c.RecentIn(ctx, "", scope, label, query, before, limit)
+}
+
+// RecentIn is Recent for one project ("" = all).
+func (c *Client) RecentIn(ctx context.Context, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
 	q := url.Values{}
-	for k, v := range map[string]string{"scope": scope, "label": label, "q": query} {
+	for k, v := range map[string]string{"scope": scope, "label": label, "q": query, "project": project} {
 		if v != "" {
 			q.Set(k, v)
 		}

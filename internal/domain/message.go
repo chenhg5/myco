@@ -80,6 +80,9 @@ type Message struct {
 	IdempotencyKey string
 	// BroadcastID groups the per-recipient messages of one broadcast.
 	BroadcastID string
+	// Project is the name of the project the thread belongs to ("" for none):
+	// set by its first message, carried by every later message in it.
+	Project string
 	// Attachments reference uploaded files.
 	Attachments []Attachment
 	// FromOwner is the person behind the sender when it was sent: the
@@ -241,6 +244,7 @@ func (m *Message) Reply(by AgentName, replyID, body string, now time.Time) (*Mes
 	if err != nil {
 		return nil, err
 	}
+	r.Project = m.Project
 	m.Status, m.UpdatedAt = StatusDone, now
 	return r, nil
 }
@@ -262,6 +266,7 @@ func (m *Message) Progress(by AgentName, id, body string, now time.Time) (*Messa
 		return nil, err
 	}
 	p.Status = StatusDone
+	p.Project = m.Project
 	return p, nil
 }
 
@@ -278,7 +283,15 @@ func (m *Message) Steer(by AgentName, id, body string, now time.Time) (*Message,
 		return nil, Errf(CodeInvalidState, "task %s is already %s", m.ID, m.Status).
 			WithSuggestion("send a follow-up instead: myco message send --to %s --thread %s --body ...", m.To, m.ThreadID)
 	}
-	return NewMessage(id, m.From, m.To, TypeSteer, body, m.ThreadID, m.ID, "", now)
+	return m.follow(NewMessage(id, m.From, m.To, TypeSteer, body, m.ThreadID, m.ID, "", now))
+}
+
+// follow gives a message derived from m m's project.
+func (m *Message) follow(d *Message, err error) (*Message, error) {
+	if d != nil {
+		d.Project = m.Project
+	}
+	return d, err
 }
 
 // Fail closes the message as failed. If the sender expects a reply, an event
@@ -303,5 +316,5 @@ func (m *Message) Fail(by AgentName, eventID, reason string, now time.Time) (*Me
 	if !m.Type.ExpectsReply() {
 		return nil, nil
 	}
-	return NewMessage(eventID, m.To, m.From, TypeEvent, body, m.ThreadID, m.ID, "", now)
+	return m.follow(NewMessage(eventID, m.To, m.From, TypeEvent, body, m.ThreadID, m.ID, "", now))
 }

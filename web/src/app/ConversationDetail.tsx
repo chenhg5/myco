@@ -20,7 +20,7 @@ export interface ConversationTarget {
   // read-only, instead of one thread.
   peer?: string;
   // Where Back goes: the node panel it was opened from.
-  returnTo?: { page: string; node: { hubId: string; name: string } };
+  returnTo?: { page: string; node?: { hubId: string; name: string }; project?: { hubId: string; name: string } };
 }
 
 const CONSOLE_PREFIX = "@console:";
@@ -356,7 +356,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
-            aria-label={target.returnTo ? L("返回节点", "Back to the node") : L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
+            aria-label={target.returnTo?.project ? L("返回项目", "Back to the project") : target.returnTo ? L("返回节点", "Back to the node") : L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
             <ArrowLeft />
           </button>
         )}

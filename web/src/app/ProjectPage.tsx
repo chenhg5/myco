@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, FileText, Lock, MoreHorizontal, Pencil, Plus, Users } from "lucide-react";
-import { appApi, isOldHub } from "@/appapi";
+import { ArrowLeftRight, ExternalLink, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, SquarePen, Users } from "lucide-react";
+import { appApi, isOldHub, type RecentItem } from "@/appapi";
+import type { ConversationRow } from "@/app/ConversationsPage";
+import { summarize } from "@/app/summary";
 import type { Project, ProjectDoc, ProjectMember } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, nodeIcon } from "@/app/nodes";
+import { agentKind, canManage, isMe, nodeIcon } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { Markdown } from "@/app/Markdown";
 import { NodePicker } from "@/app/NodePicker";
@@ -41,7 +43,7 @@ type Dialog =
   | { kind: "delete" };
 
 /** One project: its goal, members, brief, shared documents and links. */
-export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted }: {
+export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
   target: ProjectRef;
   hubName: string;
   rows: AgentRow[];
@@ -51,6 +53,11 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
   onNewNode: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  onOpenConversation: (row: ConversationRow) => void;
+  /** The conversations page, filtered to this project. */
+  onAllConversations: () => void;
+  /** A new conversation in this project (with a member, when given). */
+  onNewConversation: (agent?: string) => void;
 }) {
   const [p, setP] = useState<Project | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -58,15 +65,22 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<unknown>(null);
   const [tick, setTick] = useState(0);
+  // The project's conversations (first page): its progress.
+  const [recent, setRecent] = useState<RecentItem[] | null>(null);
 
   useEffect(() => {
     let off = false;
     setP(null);
     setError(null);
-    const load = (silent: boolean) =>
-      appApi.project(target.hubId, target.name)
+    setRecent(null);
+    const load = (silent: boolean) => {
+      appApi.recent(target.hubId, { project: target.name })
+        .then((r) => { if (!off) setRecent(r.fallback ? [] : r.items); })
+        .catch(() => { if (!off && !silent) setRecent([]); });
+      return appApi.project(target.hubId, target.name)
         .then((r) => { if (!off) { setP(r); setError(null); } })
         .catch((e) => { if (!off && !silent) setError(e); });
+    };
     void load(false);
     const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(true); }, 8000);
     return () => { off = true; window.clearInterval(t); };
@@ -112,6 +126,19 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
   }
 
   const coordinators = p.members.filter((m) => m.role === "coordinator").length;
+  const threads = (recent || []).filter((it) => it.kind === "thread" || it.task);
+  const count = (st: RecentItem["state"]) => threads.filter((it) => it.state === st).length;
+  // What each member has on hand: open tasks addressed to it.
+  const onHand = (name: string) => {
+    const mine = threads.filter((it) => it.task?.to === name);
+    return { working: mine.filter((it) => it.state === "working").length, queued: mine.filter((it) => it.state === "queued").length };
+  };
+  const nameOf = (n?: string) => {
+    if (!n) return "";
+    if (n.startsWith("@console:")) return isMe(n, hub) ? L("你", "You") : n.slice(9);
+    return rowOf(n)?.st.agent.display_name || p.members.find((m) => m.name === n)?.agent?.display_name || n;
+  };
+  const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
   const hub = hubRows[0]?.hub;
   // Nodes this person may add: theirs (or all, when they manage the hub).
   const addable = hubRows
@@ -141,6 +168,21 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
           {p.can_edit && <button type="button" className="app-btn" onClick={() => open({ kind: "about" })}><Pencil />{L("编辑", "Edit")}</button>}
           {p.can_manage && <button type="button" className="app-btn app-btn-plain" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
         </div>
+      </div>
+
+      <div className="app-project-progress">
+        {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
+          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
+        ) : (
+          <>
+            {(["working", "queued", "failed", "done"] as const).map((st) => (
+              <span key={st} className={cn("app-project-stat", `is-${st}`)}><i />{stateLabel[st]} <b>{count(st)}</b></span>
+            ))}
+          </>
+        )}
+        <span className="app-project-progress-actions">
+          <button type="button" className="app-group-action" onClick={() => onNewConversation()} disabled={p.archived}><SquarePen />{L("发任务", "New task")}</button>
+        </span>
       </div>
 
       <section className="app-group">
@@ -181,6 +223,14 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
                     )}
                   </span>
                 </button>
+                {(() => {
+                  const h = onHand(m.name);
+                  return (h.working > 0 || h.queued > 0) ? (
+                    <span className="app-project-onhand">
+                      {[h.working ? L(`处理中 ${h.working}`, `${h.working} working`) : "", h.queued ? L(`排队 ${h.queued}`, `${h.queued} queued`) : ""].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null;
+                })()}
                 {mayAct && (
                   <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("成员设置", "Member settings")}
                     onClick={() => open({ kind: "member", member: m })}><MoreHorizontal /></button>
@@ -190,6 +240,37 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
           })}
         </div>
       </section>
+
+      {threads.length > 0 && (
+        <section className="app-group">
+          <div className="app-group-title">
+            <span className="name">{L("最近对话", "Recent conversations")}</span>
+            <button type="button" className="app-group-action" onClick={onAllConversations}>{L("全部对话", "All")}<span className="app-chev">›</span></button>
+          </div>
+          <div className="app-list">
+            {threads.slice(0, 6).map((it) => {
+              const ps = it.participants.length ? it.participants : [it.first.from, it.first.to];
+              const Icon = ps.some((x) => x.startsWith("@console:")) ? MessageSquare : ArrowLeftRight;
+              return (
+                <button key={it.thread_id} type="button" className="conv-row" onClick={() => onOpenConversation({ hubId: target.hubId, hubName, item: it })}
+                  title={it.state ? stateLabel[it.state] : undefined}>
+                  <span className="conv-row-icon">
+                    <Icon aria-hidden />
+                    {it.state && it.state !== "done" && <span className={cn("conv-row-state", `is-${it.state}`)} />}
+                  </span>
+                  <span className="conv-row-main">
+                    <span className="conv-row-top">
+                      <span className="conv-row-title">{`${nameOf(ps[0])} → ${nameOf(ps[1])}${ps.length > 2 ? ` +${ps.length - 2}` : ""}`}</span>
+                      <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
+                    </span>
+                    <span className="conv-row-summary">{summarize(it.last)}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="app-group">
         <div className="app-group-title">

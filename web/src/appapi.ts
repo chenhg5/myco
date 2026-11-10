@@ -116,8 +116,10 @@ export interface RecentItem {
   answer?: Message;
   /** queued | working | done | failed, or "" without a task */
   state?: "queued" | "working" | "done" | "failed" | "";
+  /** the project the thread belongs to */
+  project?: string;
 }
-export interface RecentQuery { scope?: "mine"; label?: string; q?: string; before?: number }
+export interface RecentQuery { scope?: "mine"; label?: string; q?: string; before?: number; project?: string }
 /** fallback: the hub predates the recent list; use its conversations. */
 export interface RecentList { items: RecentItem[]; more: boolean; fallback?: boolean }
 export interface SendMessageInput {
@@ -126,6 +128,8 @@ export interface SendMessageInput {
   /** Omit to start a new conversation. */
   thread_id?: string;
   type?: string;
+  /** Puts a new conversation in a project. */
+  project?: string;
 }
 
 /** How the App window is hosted: native macOS shell or a plain browser. */
@@ -331,6 +335,7 @@ export const appApi = {
     if (query.label && query.label !== "all") q.set("label", query.label);
     if (query.q) q.set("q", query.q);
     if (query.before) q.set("before", String(query.before));
+    if (query.project) q.set("project", query.project);
     const qs = q.toString();
     return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
   },

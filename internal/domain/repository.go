@@ -115,6 +115,8 @@ type RecentFilter struct {
 	// Query keeps threads and pairs with a message whose body, sender or
 	// recipient contains it.
 	Query string
+	// Project keeps the threads and exchanges of this project.
+	Project string
 	// Before (unix ms, 0 = now) pages back; Limit caps the result.
 	Before int64
 	Limit  int

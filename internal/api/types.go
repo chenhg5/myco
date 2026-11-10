@@ -144,6 +144,8 @@ type Message struct {
 	Error          string `json:"error,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 	BroadcastID    string `json:"broadcast_id,omitempty"`
+	// Project is the project its thread belongs to.
+	Project string `json:"project,omitempty"`
 	// FromOwner is the person behind the sender: the member who wrote it in
 	// the app, or the sending agent's owner (member name).
 	FromOwner   string       `json:"from_owner,omitempty"`
@@ -260,6 +262,10 @@ type SendRequest struct {
 	ThreadID       string   `json:"thread_id,omitempty"`
 	IdempotencyKey string   `json:"idempotency_key,omitempty"`
 	Attachments    []string `json:"attachments,omitempty"`
+	// Project puts a new thread in a project (name); a message in an
+	// existing thread belongs to the thread's project. Hubs before v0.18.26
+	// ignore it.
+	Project string `json:"project,omitempty"`
 }
 
 // Attachment is a file referenced by a message.
@@ -691,6 +697,8 @@ type RecentItem struct {
 	// command that exited non-zero is "done" here; its exit code is in
 	// Answer's body.
 	State string `json:"state,omitempty"`
+	// Project is the project the thread belongs to.
+	Project string `json:"project,omitempty"`
 }
 
 // RecentList is the body of GET /v1/console/recent; more says older rows

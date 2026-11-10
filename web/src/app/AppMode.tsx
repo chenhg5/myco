@@ -114,6 +114,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [project, setProject] = useState<ProjectRef | null>(null);
+  // The conversations page's project filter.
+  const [convProject, setConvProject] = useState<ProjectRef | null>(null);
   const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // A node created from a project page joins that project.
@@ -236,11 +238,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
   );
 
   // From a node's panel, Back returns to that node (on the page it was on).
-  const openConversation = (hubId: string, threadId: string, agent: string, extra?: { peer?: string; fromNode?: boolean }) => {
+  const openConversation = (hubId: string, threadId: string, agent: string, extra?: { peer?: string; fromNode?: boolean; fromProject?: boolean }) => {
     const hubName = namedHubs.find((h) => h.id === hubId)?.name
       || namedOv?.hubs.find((h) => h.id === hubId)?.name
       || hubId;
-    const returnTo = extra?.fromNode && inspect ? { page, node: inspect } : undefined;
+    const returnTo = extra?.fromNode && inspect ? { page, node: inspect }
+      : extra?.fromProject && project ? { page: "project", project } : undefined;
     setInspect(null);
     setPage("conversations");
     setConv({ hubId, hubName, threadId, agent, peer: extra?.peer, returnTo });
@@ -250,7 +253,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setConv(null);
     if (back) {
       setPage(back.page as Page);
-      setInspect(back.node);
+      if (back.node) setInspect(back.node);
+      if (back.project) setProject(back.project);
     }
   };
 
@@ -287,15 +291,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
     el.addEventListener("pointerup", up);
   };
 
-  const openConversationRow = (row: ConversationRow) => {
+  const openConversationRow = (row: ConversationRow, fromProject?: boolean) => {
     const it = row.item;
     // A shell node's exchange opens in the existing terminal view.
     if (it.kind === "pair") {
-      openConversation(row.hubId, "", it.other || "", { peer: it.node });
+      openConversation(row.hubId, "", it.other || "", { peer: it.node, fromProject });
       return;
     }
     const agent = it.participants.find((p) => !p.startsWith("@")) || "";
-    openConversation(row.hubId, it.thread_id, agent);
+    openConversation(row.hubId, it.thread_id, agent, { fromProject });
   };
 
   const openProject = (ref: ProjectRef) => {
@@ -527,8 +531,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 compact
                 onCollapse={() => setListCollapsed(true)}
                 selectedKey={conv ? convKey(conv) : ""}
-                onOpen={openConversationRow}
-                onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
+                onOpen={(r) => openConversationRow(r)}
+                onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
+                projects={projects}
+                project={convProject}
+                onProject={setConvProject}
               />
             </div>
             <div
@@ -585,8 +592,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 hub={filters.hub}
                 rows={rows}
                 now={now}
-                onOpen={openConversationRow}
-                onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
+                onOpen={(r) => openConversationRow(r)}
+                onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
+                projects={projects}
+                project={convProject}
+                onProject={setConvProject}
               />
             )}
 
@@ -603,8 +613,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   setSpawnTarget({ hubId: project.hubId });
                 }}
                 onChanged={() => void loadProjects(hubs.map((h) => h.id))}
+                onOpenConversation={(r) => openConversationRow(r, true)}
+                onAllConversations={() => { setConvProject(project); setPage("conversations"); }}
+                onNewConversation={(agent) => setNewConv({ hubId: project.hubId, agent, project: project.name })}
                 onDeleted={() => {
                   setProject(null);
+                  setConvProject(null);
                   setPage("nodes");
                   void loadProjects(hubs.map((h) => h.id));
                 }}
@@ -722,6 +736,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         target={newConv}
         hubs={namedHubs}
         rows={rows}
+        projects={projects}
         onClose={() => setNewConv(null)}
         onSent={(hubId, threadId, agent) => {
           setNewConv(null);

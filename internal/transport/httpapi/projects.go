@@ -48,6 +48,15 @@ func (s *Server) projectCaller(h func(w http.ResponseWriter, r *http.Request, c 
 	}
 }
 
+// seesProject checks that the person calling (from the app) can see a project.
+func (s *Server) seesProject(r *http.Request, name string) error {
+	if s.projects == nil {
+		return domain.Errf(domain.CodeInvalidArgument, "this hub has no projects")
+	}
+	_, err := s.projects.Get(r.Context(), s.actorOf(r), name)
+	return err
+}
+
 func (s *Server) recordAs(r *http.Request, by app.Actor, action, target, detail string) {
 	if s.audit != nil {
 		s.audit.Record(r.Context(), by, action, target, detail)

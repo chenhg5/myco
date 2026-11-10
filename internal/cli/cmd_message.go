@@ -26,6 +26,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			`myco message send --to coder --body-file task.md --wait 15m --format json`,
 			`echo "deploy finished" | myco message send --to ops --type note --body-file -`,
 			`myco message send --to reviewer --body "please review" --attach design.md --attach diagram.png`,
+			`myco message send --to backend --project myco --body "Add a project filter to /v1/console/recent"`,
 		},
 		Flags: []Flag{
 			{Name: "to", Kind: String, Required: true, Help: "Recipient agent name"},
@@ -33,6 +34,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "body-file", Kind: String, Help: "Read the message from a file ('-' = stdin)"},
 			{Name: "type", Kind: Enum, Values: []string{"task", "note"}, Default: "task", Help: "task expects a reply; note does not"},
 			{Name: "thread", Kind: String, Env: "MYCO_THREAD_ID", Help: "Continue an existing thread"},
+			{Name: "project", Kind: String, Env: "MYCO_PROJECT", Help: "Put a new thread in this project (you must be a member); a message in an existing thread belongs to its project"},
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending with the same key returns the original message"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the reply (tasks only)"},
 			attachFlag,
@@ -57,6 +59,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			res, err := c.Send(e.in.Ctx, api.SendRequest{
 				To: e.in.String("to"), Type: e.in.String("type"), Body: body,
 				ThreadID: e.in.String("thread"), IdempotencyKey: e.in.String("idempotency-key"), Attachments: atts,
+				Project: e.in.String("project"),
 			}, dry)
 			if err != nil {
 				return err

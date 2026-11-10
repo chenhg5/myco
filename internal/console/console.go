@@ -490,7 +490,8 @@ func (b *Backend) Handler() http.Handler {
 		if local {
 			hubQuery = ""
 		}
-		res, err := c.Recent(r.Context(), q.Get("scope"), q.Get("label"), hubQuery, before, 0)
+		project := q.Get("project")
+		res, err := c.RecentIn(r.Context(), project, q.Get("scope"), q.Get("label"), hubQuery, before, 0)
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Status == http.StatusNotFound || ce.Status == http.StatusMethodNotAllowed) {
 			// A hub from before the recent list: the app shows its
@@ -507,6 +508,16 @@ func (b *Backend) Handler() http.Handler {
 		}
 		if local {
 			res.Items = filterRecent(res.Items, query)
+		}
+		if project != "" {
+			// A hub before v0.18.26 ignores the filter: keep only what it marks.
+			kept := res.Items[:0]
+			for _, it := range res.Items {
+				if it.Project == project {
+					kept = append(kept, it)
+				}
+			}
+			res.Items = kept
 		}
 		if res.Items == nil {
 			res.Items = []api.RecentItem{}

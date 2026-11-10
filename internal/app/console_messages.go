@@ -179,6 +179,8 @@ type RecentInput struct {
 	// "group:" (no group) or "tag:<name>" (see domain.MatchesLabelFilter).
 	Label string
 	Query string
+	// Project keeps the threads and exchanges of this project.
+	Project string
 	// Before (unix ms, 0 = now) pages back.
 	Before int64
 	Limit  int
@@ -212,7 +214,7 @@ func (s *MessageService) Recent(ctx context.Context, agents []*domain.Agent, in 
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
-	f := domain.RecentFilter{Involve: in.Scope.involve(), Query: strings.TrimSpace(in.Query), Before: in.Before, Limit: limit + 1}
+	f := domain.RecentFilter{Involve: in.Scope.involve(), Query: strings.TrimSpace(in.Query), Project: in.Project, Before: in.Before, Limit: limit + 1}
 	if in.Mine && in.Scope.Names != nil {
 		f.Involve = Scope{Names: in.Scope.Names}.involve()
 	}

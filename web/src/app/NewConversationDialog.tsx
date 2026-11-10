@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Terminal } from "lucide-react";
 import { appApi, type Hub } from "@/appapi";
+import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 export interface NewConversationTarget {
   hubId?: string;
   agent?: string;
+  /** Puts the conversation in this project (of hubId). */
+  project?: string;
 }
 
 interface NodeOption {
@@ -26,16 +29,19 @@ function valueOf(o: NodeOption): string {
 }
 
 /** Starts a conversation with an AI or shell node. */
-export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
+export function NewConversationDialog({ target, hubs, rows, projects, onClose, onSent }: {
   target: NewConversationTarget | null;
   hubs: Hub[];
   rows: AgentRow[];
+  /** Projects of every hub: a conversation can be put in one. */
+  projects?: { hubId: string; p: Project }[] | null;
   onClose: () => void;
   onSent: (hubId: string, threadId: string, agent: string) => void;
 }) {
   const [hubId, setHubId] = useState("");
   const [agent, setAgent] = useState("");
   const [body, setBody] = useState("");
+  const [project, setProject] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -66,6 +72,7 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
     if (!target) return;
     setHubId(target.hubId || "");
     setAgent(target.agent || "");
+    setProject(target.project || "");
     setBody("");
     setBusy(false);
     setError(null);
@@ -85,6 +92,14 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
     if (!list.some((o) => o.name === agent)) setAgent(list[0]?.name || "");
   }, [target, hubId, agent, options]);
 
+  const hubProjects = (projects || []).filter((x) => x.hubId === hubId && !x.p.archived).map((x) => x.p);
+  // A project of another hub does not follow the node there.
+  useEffect(() => {
+    if (project && projects && !hubProjects.some((p) => p.name === project)) setProject("");
+  }, [hubId, project, projects, hubProjects]);
+  // In a project, its members come first.
+  const members = new Set(hubProjects.find((p) => p.name === project)?.members.map((m) => m.name) || []);
+
   const close = () => { if (!busy) onClose(); };
 
   const send = async () => {
@@ -92,7 +107,7 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
     setBusy(true);
     setError(null);
     try {
-      const m = await appApi.sendMessage(hubId, { to: agent, body: body.trim() });
+      const m = await appApi.sendMessage(hubId, { to: agent, body: body.trim(), ...(project ? { project } : {}) });
       onSent(hubId, m.thread_id, agent);
     } catch (e) {
       setError(e);
@@ -138,7 +153,8 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
               disabled={busy}
             >
               {hubs.map((h) => {
-                const list = options.filter((o) => o.hubId === h.id);
+                const list = options.filter((o) => o.hubId === h.id)
+                  .sort((a, b) => Number(members.has(b.name)) - Number(members.has(a.name)));
                 if (list.length === 0) return null;
                 return (
                   <optgroup key={h.id} label={h.name}>
@@ -150,6 +166,16 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
               })}
             </select>
           </label>
+
+          {hubProjects.length > 0 && (
+            <label className="app-field">
+              <span className="app-field-label">{L("项目", "Project")}</span>
+              <select className="app-select-field" value={project} onChange={(e) => setProject(e.target.value)} disabled={busy}>
+                <option value="">{L("不属于项目", "None")}</option>
+                {hubProjects.map((p) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
+              </select>
+            </label>
+          )}
 
           {node?.shell && (
             <div className="app-notice">

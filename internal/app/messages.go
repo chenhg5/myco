@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,7 +39,11 @@ type MessageService struct {
 	presence *Presence // nil: no session/runner arbitration
 	// memberName resolves a member id to their name (nil: no members).
 	memberName func(ctx context.Context, id string) string
+	projects   domain.ProjectRepository // nil: no projects
 }
+
+// SetProjects lets messages belong to a project.
+func (s *MessageService) SetProjects(repo domain.ProjectRepository) { s.projects = repo }
 
 // SetMemberNames lets messages record the person behind their sender.
 func (s *MessageService) SetMemberNames(f func(ctx context.Context, id string) string) {
@@ -90,7 +95,10 @@ type SendInput struct {
 	IdempotencyKey string
 	// Attachments are file ids (from upload) the sender may share.
 	Attachments []string
-	DryRun      bool
+	// Project puts a new thread in a project; a message in an existing
+	// thread always belongs to the thread's project.
+	Project string
+	DryRun  bool
 }
 
 // SendOutput reports the stored message; Duplicate is true when an earlier
@@ -144,8 +152,15 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, domain.Errf(domain.CodePermissionDenied, "agent %s does not accept messages from %s", to, sender.Name).
 			WithSuggestion("ask the hub admin to add %s to %s's allow-from list", sender.Name, to)
 	}
+	project := ""
 	if in.ThreadID != "" {
-		if err := s.requireThreadParticipant(ctx, sender.Name, in.ThreadID); err != nil {
+		msgs, err := s.threadOf(ctx, sender.Name, in.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		project = msgs[0].Project
+	} else if in.Project != "" {
+		if project, err = s.checkProject(ctx, sender, in.Project); err != nil {
 			return nil, err
 		}
 	}
@@ -153,6 +168,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 	if err != nil {
 		return nil, err
 	}
+	m.Project = project
 	m.FromOwner = s.ownerName(ctx, sender)
 	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {
 		return nil, err
@@ -179,17 +195,55 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 }
 
 func (s *MessageService) requireThreadParticipant(ctx context.Context, agent domain.AgentName, threadID string) error {
+	_, err := s.threadOf(ctx, agent, threadID)
+	return err
+}
+
+// threadOf returns a thread's messages (oldest first) when agent takes part in it.
+func (s *MessageService) threadOf(ctx context.Context, agent domain.AgentName, threadID string) ([]*domain.Message, error) {
 	msgs, err := s.messages.ListThread(ctx, threadID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, m := range msgs {
 		if m.Involves(agent) {
-			return nil
+			return msgs, nil
 		}
 	}
-	return domain.Errf(domain.CodeNotFound, "thread %s not found", threadID).
+	return nil, domain.Errf(domain.CodeNotFound, "thread %s not found", threadID).
 		WithSuggestion("omit --thread to start a new thread")
+}
+
+// checkProject resolves the project a new thread is put in: it must exist
+// and be active, and an agent must be one of its members. (Who may see a
+// project from the app is checked by the caller.)
+func (s *MessageService) checkProject(ctx context.Context, sender *domain.Agent, name string) (string, error) {
+	if s.projects == nil {
+		return "", domain.Errf(domain.CodeInvalidArgument, "this hub has no projects")
+	}
+	p, err := s.projects.Get(ctx, name)
+	if err != nil {
+		if domain.IsCode(err, domain.CodeNotFound) {
+			return "", domain.Errf(domain.CodeNotFound, "project %s not found", name).
+				WithSuggestion("list your projects with: myco project list")
+		}
+		return "", err
+	}
+	if p.Archived {
+		return "", domain.Errf(domain.CodeInvalidState, "project %s is archived", p.Name).
+			WithSuggestion("send without --project, or ask its owner to unarchive it")
+	}
+	if !IsConsoleSender(sender.Name) {
+		members, err := s.projects.Members(ctx, p.ID)
+		if err != nil {
+			return "", err
+		}
+		if !slices.ContainsFunc(members, func(m *domain.ProjectMember) bool { return m.Agent == sender.Name }) {
+			return "", domain.Errf(domain.CodePermissionDenied, "%s is not a member of project %s", sender.Name, p.Name).
+				WithSuggestion("send without --project, or ask the project's owner to add you")
+		}
+	}
+	return p.Name, nil
 }
 
 // Pull leases up to limit due messages for agent, long-polling up to wait.

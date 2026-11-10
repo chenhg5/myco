@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ChevronDown, MessageSquare, PanelLeftClose, Pin, PinOff, Plus, Search, SquarePen, Terminal } from "lucide-react";
 import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
+import type { Project } from "@/api";
+import type { ProjectRef } from "@/app/ProjectPage";
 import { ErrorText } from "@/app/dialogs";
 import type { AgentRow } from "@/app/types";
 import { groupsOf, isMe, tagsOf } from "@/app/nodes";
@@ -86,8 +88,13 @@ function matchesState(it: RecentItem, f: StateFilter): boolean {
   return it.state === f;
 }
 
-export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact, onCollapse }: {
+export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact, onCollapse, projects, project, onProject }: {
   hubs: Hub[];
+  /** Projects of every hub, for the project filter. */
+  projects?: { hubId: string; p: Project }[] | null;
+  /** The project filter: null for all conversations. */
+  project?: ProjectRef | null;
+  onProject?: (p: ProjectRef | null) => void;
   /** The Hub selected in the switcher: "all" or a hub id. */
   hub: string;
   rows: AgentRow[];
@@ -104,7 +111,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   const [filters, setFilters] = useState<ListFilters>(loadFilters);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const listKey = JSON.stringify([hub, filters.scope, filters.label, query]);
+  const projectKey = project ? `${project.hubId}/${project.name}` : "";
+  const listKey = JSON.stringify([hub, filters.scope, filters.label, query, projectKey]);
   const restored = saved && saved.key === listKey ? saved : null;
   const [items, setItems] = useState<ConversationRow[]>(restored?.items ?? []);
   const [selected, setSelected] = useState(restored?.selected ?? "");
@@ -123,8 +131,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   const listKeyRef = useRef(listKey); listKeyRef.current = listKey;
 
   const targets = useMemo(
-    () => hubs.filter((h) => (hub === "all" || h.id === hub) && h.ok),
-    [hubs, hub],
+    () => hubs.filter((h) => (hub === "all" || h.id === hub) && h.ok && (!project || h.id === project.hubId)),
+    [hubs, hub, project],
   );
   // Hubs in view whatever their state (their rows stay while one is down).
   const inViewIds = hubs.filter((h) => hub === "all" || h.id === hub).map((h) => h.id).join(",");
@@ -157,8 +165,9 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   }, [items]);
 
   const fetchPage = async (h: Hub, before?: number) => {
-    const r = await appApi.recent(h.id, { scope: filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before });
+    const r = await appApi.recent(h.id, { scope: filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before, project: project?.name });
     if (!r.fallback) return { items: r.items, more: r.more };
+    if (project) return { items: [], more: false };
     // A hub from before the recent list: its conversations.
     const c = await appApi.conversations(h.id, { q: query || undefined, before });
     return { items: c.conversations.map(fromConversation), more: c.conversations.length >= PAGE };
@@ -359,7 +368,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   const matching = items.filter((r) => matchesState(r.item, filters.state));
   const firstLoad = loading && items.length === 0;
   const canLoadMore = Object.values(more).some(Boolean);
-  const filtered = filters.scope !== "all" || filters.state !== "all" || filters.label !== "all" || !!query;
+  const filtered = filters.scope !== "all" || filters.state !== "all" || filters.label !== "all" || !!query || !!project;
+  const projectTitle = (hubId: string, name?: string) =>
+    name ? projects?.find((x) => x.hubId === hubId && x.p.name === name)?.p.title || name : "";
+  const projectOptions = (projects || []).filter((x) => (hub === "all" || x.hubId === hub) && (!x.p.archived || `${x.hubId}/${x.p.name}` === projectKey));
   // Unfiltered: pinned rows first (the loaded copy when there is one), then
   // the rest. Filtered: the matches in their usual order, pins marked.
   const inView = (r: ConversationRow) => (hub === "all" || r.hubId === hub) && hubs.some((h) => h.id === r.hubId);
@@ -434,8 +446,24 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           <ChevronDown />
         </span>
         <span className="app-select-wrap">
-          <select className={cn("app-select", filters.label !== "all" && "is-set")} value={filters.label} onChange={(e) => set({ label: e.target.value })} aria-label={L("按分组和标签筛选", "Filter by group and tag")}>
-            <option value="all">{L("分组和标签", "Groups and tags")}</option>
+          <select className={cn("app-select", (filters.label !== "all" || project) && "is-set")} value={project ? `project:${projectKey}` : filters.label}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v.startsWith("project:")) {
+                const k = v.slice(8), i = k.indexOf("/");
+                set({ label: "all" });
+                onProject?.({ hubId: k.slice(0, i), name: k.slice(i + 1) });
+                return;
+              }
+              onProject?.(null);
+              set({ label: v });
+            }} aria-label={L("按项目、分组和标签筛选", "Filter by project, group and tag")}>
+            <option value="all">{projectOptions.length ? L("项目和分组", "Projects and groups") : L("分组和标签", "Groups and tags")}</option>
+            {projectOptions.length > 0 && (
+              <optgroup label={L("项目", "Projects")}>
+                {projectOptions.map((x) => <option key={`${x.hubId}/${x.p.name}`} value={`project:${x.hubId}/${x.p.name}`}>{x.p.title || x.p.name}</option>)}
+              </optgroup>
+            )}
             {labelOptions.groups.length > 0 && (
               <optgroup label={L("分组", "Groups")}>
                 {labelOptions.groups.map((g) => <option key={g} value={"group:" + g}>{g}</option>)}
@@ -505,6 +533,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                 <span className="conv-row-main">
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
+                    {it.project && !project && !compact && <span className="conv-row-project">{projectTitle(row.hubId, it.project)}</span>}
                     {hub === "all" && !compact && <span className="conv-row-hub">{row.hubName}</span>}
                     {pinned && <Pin className="conv-row-pin" aria-label={L("已置顶", "Pinned")} />}
                     <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>

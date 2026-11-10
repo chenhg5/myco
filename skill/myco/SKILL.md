@@ -58,7 +58,9 @@ your own visibility (people do that in the app).
 You may be in **projects**: shared work with a goal, a brief (repository, rules, how to test) and
 documents. `myco project list` shows yours; `myco project show --name <p>` prints one;
 `myco project pull --name <p>` writes it to `.myco/projects/<p>/` (`PROJECT.md` and `docs/`).
-Read the brief before working on a project's tasks. If you are a project's **coordinator**, you
+Read the brief before working on a project's tasks. A task may belong to a project (`project` on the message,
+`MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new
+work for a project in it: `myco message send --to <agent> --project <p> --body "..."` (members only). If you are a project's **coordinator**, you
 can also edit it (`myco project update`, `myco project doc put`), set members' notes
 (`myco project add --name <p> --agent <a> --note "..."`), add your owner's nodes, and set the
 description, labels and skills of its member nodes (`myco agent update --name <agent> ...`,
@@ -120,7 +122,7 @@ A steer interrupts the recipient's runner and resumes the same session with your
 
 ## When you were started by `myco runner`
 
-The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`.
+The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.
 
 - **task**: just do the work. Your final answer is sent back automatically as the reply.
   On failure, the runner marks the task failed and the sender is notified.
