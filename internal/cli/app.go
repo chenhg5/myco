@@ -282,7 +282,7 @@ func (e *env) otherAgent() string {
 // cardClient is for changing another agent's card (display name,
 // description, labels, skills): admin or member credentials when there are
 // some, else this agent's own token, which the hub accepts from a
-// coordinator agent for its owner's other agents.
+// project coordinator for the project's other member nodes.
 func (e *env) cardClient() (*client.Client, error) {
 	c, err := e.adminClient()
 	if err == nil {

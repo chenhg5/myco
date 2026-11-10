@@ -157,6 +157,9 @@ func Build(o Options) (*Hub, error) {
 		return domain.VisibilityTeam
 	}
 	agents.SetDefaultVisibility(defaultVisibility)
+	projectRepo := sqlite.NewProjectRepo(db)
+	agents.SetProjects(projectRepo)
+	srv.SetProjects(app.NewProjectService(projectRepo, agentsRepo, ids, clock))
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {

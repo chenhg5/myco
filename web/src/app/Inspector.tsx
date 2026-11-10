@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, MessageSquare, Pencil, Plus, Trash2, X } from "lucide-react";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import type { AuditEntry, Member, Peer, Skill } from "@/api";
+import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
@@ -16,7 +16,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 
-type Action = null | "profile" | "skills" | "visibility" | "coordinator" | "allow" | "kick" | "delete" | "owner" | "copy";
+type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
 
 // A skill being edited: examples as one text, one per line.
 interface SkillDraft { name: string; summary: string; examples: string }
@@ -534,7 +534,7 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
   );
 }
 
-export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine }: {
+export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged }: {
   row: AgentRow | null;
   now: number;
   onClose: () => void;
@@ -544,6 +544,10 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
   onPeer: (hubId: string, agent: string, peer: string) => void;
   onMessage: (row: AgentRow) => void;
   onOpenMachine: (hubId: string, machineId: string) => void;
+  /** Projects of every hub, as the sidebar lists them. */
+  projects?: { hubId: string; p: Project }[] | null;
+  onOpenProject?: (ref: { hubId: string; name: string }) => void;
+  onProjectsChanged?: () => void;
 }) {
   const ag = row?.st.agent;
   const [action, setAction] = useState<Action>(null);
@@ -556,7 +560,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [skillDrafts, setSkillDrafts] = useState<SkillDraft[]>([]);
   const [visChoice, setVisChoice] = useState<"team" | "private">("team");
-  const [coordChoice, setCoordChoice] = useState(false);
+  const [joinChoice, setJoinChoice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -615,6 +619,11 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
     appApi.members(hubId).then((r) => setPeople(r.members)).catch(() => {});
     openAction("owner");
   };
+
+  const hubProjects = (projects || []).filter((x) => x.hubId === hubId).map((x) => x.p);
+  const inProjects = hubProjects.filter((p) => p.members.some((m) => m.name === ag.name));
+  const joinable = hubProjects.filter((p) => !p.archived && !p.members.some((m) => m.name === ag.name));
+  const roleIn = (p: Project) => p.members.find((m) => m.name === ag.name)?.role;
 
   const openAction = (a: Exclude<Action, null>) => { setError(null); setAction(a); };
   const closeAction = () => { if (!busy) { setAction(null); setError(null); } };
@@ -745,15 +754,20 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                   </span>
                 </div>
               )}
-              {kind === "agent" && row.hub.me?.member && ag.owner && (
+              {kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
                 <div className="app-kv">
-                  <span className="app-kv-label">{L("协调者", "Coordinator")}</span>
-                  <span className="app-kv-value">
-                    {mayManage ? (
-                      <button type="button" className="app-kv-link" onClick={() => { setCoordChoice(!!ag.coordinator); openAction("coordinator"); }}>
-                        {ag.coordinator ? L("是", "Yes") : L("否", "No")}<span className="app-chev">›</span>
+                  <span className="app-kv-label">{L("项目", "Projects")}</span>
+                  <span className="app-kv-value app-kv-projects">
+                    {inProjects.map((p) => (
+                      <button key={p.name} type="button" className="app-kv-link" onClick={() => onOpenProject?.({ hubId, name: p.name })}>
+                        {p.title || p.name}{roleIn(p) === "coordinator" && <span className="app-kv-note">{L("（协调者）", " (coordinator)")}</span>}
                       </button>
-                    ) : ag.coordinator ? L("是", "Yes") : L("否", "No")}
+                    ))}
+                    {mayManage && joinable.length > 0 && (
+                      <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
+                        {L("加入项目…", "Join…")}
+                      </button>
+                    )}
                   </span>
                 </div>
               )}
@@ -868,7 +882,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
               <div className="app-group-title"><span className="name">{L("修改记录", "Changes")}</span></div>
               <div className="app-list">
                 <HistoryRows row={row} now={now}
-                  stamp={[ag.display_name, ag.description, ag.labels.join(","), (ag.skills || []).map((x) => `${x.name}:${x.summary}:${(x.examples || []).join("|")}`).join(","), ag.visibility, ag.owner, ag.allow_from.join(","), String(ag.coordinator)].join("\u0000")} />
+                  stamp={[ag.display_name, ag.description, ag.labels.join(","), (ag.skills || []).map((x) => `${x.name}:${x.summary}:${(x.examples || []).join("|")}`).join(","), ag.visibility, ag.owner, ag.allow_from.join(",")].join("\u0000")} />
               </div>
             </section>
           )}
@@ -984,36 +998,6 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
       </Modal>
 
       <Modal
-        open={action === "coordinator"}
-        onOpenChange={(o) => !o && closeAction()}
-        title={L("协调者", "Coordinator")}
-        description={L(`协调者可以直接修改 ${ag.owner || "主人"} 的其他节点的显示名、介绍、分组和标签、技能，用来给团队分工。改不了可见范围、谁能派活和主人；它改了什么都记在那些节点的修改记录里。只有主人和管理员能设置。`, `A coordinator can directly edit the display name, description, group and tags, and skills of ${ag.owner || "its owner"}'s other nodes, to organise a team. It cannot change visibility, who can give tasks, or the owner; its changes appear in those nodes' history. Only the owner and admins can set this.`)}
-      >
-        <div className="app-provider-list" role="radiogroup">
-          <label className={cn("app-provider-opt", coordChoice && "picked")}>
-            <input type="radio" name="coordinator" checked={coordChoice} onChange={() => setCoordChoice(true)} disabled={busy} />
-            <span>
-              <b>{L("是协调者", "Coordinator")}</b>
-              <small>{L(`可以给 ${ag.owner || "主人"} 的其他节点写介绍和技能`, `Can write the descriptions and skills of ${ag.owner || "its owner"}'s other nodes`)}</small>
-            </span>
-          </label>
-          <label className={cn("app-provider-opt", !coordChoice && "picked")}>
-            <input type="radio" name="coordinator" checked={!coordChoice} onChange={() => setCoordChoice(false)} disabled={busy} />
-            <span>
-              <b>{L("不是", "Not a coordinator")}</b>
-              <small>{L("只能改自己的介绍和技能", "Can change only its own description and skills")}</small>
-            </span>
-          </label>
-        </div>
-        <ErrorText error={error} />
-        <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="button" className="app-btn app-btn-primary" disabled={busy || coordChoice === !!ag.coordinator}
-            onClick={() => void run(() => appApi.setCoordinator(hubId, ag.name, coordChoice), "close-action")}>{L("保存", "Save")}</button>
-        </div>
-      </Modal>
-
-      <Modal
         open={action === "visibility"}
         onOpenChange={(o) => !o && closeAction()}
         title={L("可见范围", "Who can see it")}
@@ -1040,6 +1024,31 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
           <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" disabled={busy || visChoice === (ag.visibility === "private" ? "private" : "team")}
             onClick={() => void run(() => appApi.setVisibility(hubId, ag.name, visChoice), "close-action")}>{L("保存", "Save")}</button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={action === "projects"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("加入项目", "Join a project")}
+        description={L("加入后它能用 myco project show / pull 读到项目的目标、说明和文档。", "Once in, it reads the project's goal, brief and documents with myco project show / pull.")}
+      >
+        <div className="app-provider-list" role="radiogroup">
+          {joinable.map((p) => (
+            <label key={p.name} className={cn("app-provider-opt", joinChoice === p.name && "picked")}>
+              <input type="radio" name="join-project" checked={joinChoice === p.name} onChange={() => setJoinChoice(p.name)} disabled={busy} />
+              <span>
+                <b>{p.title || p.name}</b>
+                {p.goal && <small>{p.goal}</small>}
+              </span>
+            </label>
+          ))}
+        </div>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" disabled={busy || !joinChoice}
+            onClick={() => void run(async () => { await appApi.putProjectMember(hubId, joinChoice, ag.name); onProjectsChanged?.(); }, "close-action")}>{L("加入", "Join")}</button>
         </div>
       </Modal>
 

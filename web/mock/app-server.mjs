@@ -524,6 +524,39 @@ function appOverview() {
   };
 }
 
+
+// Projects (studio hub only).
+const projects = [
+  {
+    name: "website", title: "官网改版", goal: "11 月底前上线新版官网：首页、文档站和下载页，中英双语。",
+    brief: "## 仓库\n- 代码在 `myco-web`，分支 `redesign`，PR 合到 `main` 才会部署。\n\n## 规则\n- 改文案先改中文，再同步英文。\n- 截图统一 2x。\n\n## 怎么测试\n`npm run build && npm run preview`，在 1280 和 390 两个宽度下看一遍。",
+    links: [{ title: "仓库", url: "https://github.com/acme/myco-web" }, { title: "设计稿", url: "https://figma.com/file/demo" }],
+    visibility: "members", owner: "glenn", owner_id: "mem_glenn", archived: false, created_at: iso(86400 * 5), updated_at: iso(3600),
+    members: [
+      { name: "pm-codex", role: "coordinator", note: "拆任务、验收", added_by: "glenn", added_at: iso(86400 * 5) },
+      { name: "docs-claude", role: "member", note: "文档站", added_by: "laohu", added_at: iso(86400 * 4) },
+      { name: "release-cloud", role: "member", note: "部署和发版", added_by: "glenn", added_at: iso(86400 * 2) },
+    ],
+    docs: [
+      { name: "design", body: "# 设计约定\n\n- 主色 #2f6feb\n- 圆角 12px\n", updated_by: "pm-codex", updated_at: iso(7200) },
+      { name: "copy-zh", body: "# 首页文案\n\n让你的 agent 互相派活。\n", updated_by: "docs-claude", updated_at: iso(86400) },
+    ],
+  },
+  {
+    name: "ios", title: "iOS 客户端", goal: "", brief: "", links: [],
+    visibility: "team", owner: "matthew", owner_id: "mem_matthew", archived: false, created_at: iso(86400 * 2), updated_at: iso(86400),
+    members: [{ name: "ios-shell", role: "member", note: "", added_by: "matthew", added_at: iso(86400) }], docs: [],
+  },
+];
+function projectView(hub, p, bodies) {
+  return {
+    ...p,
+    members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
+    docs: p.docs.map((d) => ({ name: d.name, size: d.body.length, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies ? { body: d.body } : {}) })),
+    can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
+  };
+}
+
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -993,6 +1026,53 @@ const server = http.createServer(async (req, res) => {
       const before = Number(q.get("before") || 0);
       const all = execHistory(a).slice().reverse().filter((m) => !before || new Date(m.created_at).getTime() < before);
       return send(res, 200, { messages: all.slice(0, 4), more: all.length > 4 });
+    }
+    // /app/hubs/{id}/projects…
+    if (parts[3] === "projects") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const list = hub.id === "hub_studio" ? projects : (hub.projects ||= []);
+      if (parts.length === 4 && method === "GET") return send(res, 200, { projects: list.map((p) => projectView(hub, p)) });
+      if (parts.length === 4 && method === "POST") {
+        const b = await readBody(req);
+        if (list.some((p) => p.name === b.name)) return fail(res, 409, "conflict", `project ${b.name} already exists`);
+        const p = { name: b.name, title: b.title || b.name, goal: b.goal || "", brief: "", links: [], visibility: b.visibility || "members",
+          owner: meName, owner_id: "mem_" + meName, archived: false, created_at: iso(), updated_at: iso(), members: [], docs: [] };
+        list.push(p);
+        return send(res, 201, projectView(hub, p));
+      }
+      const p = list.find((x) => x.name === parts[4]);
+      if (!p) return fail(res, 404, "not_found", `no project ${parts[4]}`);
+      if (parts.length === 5 && method === "GET") return send(res, 200, projectView(hub, p, url.searchParams.get("docs") === "body"));
+      if (parts.length === 5 && method === "PATCH") {
+        const b = await readBody(req);
+        for (const k of ["title", "goal", "brief", "links", "visibility", "archived"]) if (b[k] !== undefined) p[k] = b[k];
+        p.updated_at = iso();
+        return send(res, 200, projectView(hub, p));
+      }
+      if (parts.length === 5 && method === "DELETE") { list.splice(list.indexOf(p), 1); return send(res, 204); }
+      if (parts.length === 7 && parts[5] === "members") {
+        if (method === "PUT") {
+          const b = await readBody(req);
+          let m = p.members.find((x) => x.name === parts[6]);
+          if (!m) { m = { name: parts[6], role: "member", note: "", added_by: meName, added_at: iso() }; p.members.push(m); }
+          if (b.role) m.role = b.role;
+          if (b.note !== undefined && b.note !== null) m.note = b.note;
+          return send(res, 200, projectView(hub, p));
+        }
+        if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }
+      }
+      if (parts.length === 7 && parts[5] === "docs") {
+        const i = p.docs.findIndex((d) => d.name === parts[6]);
+        if (method === "GET") return i < 0 ? fail(res, 404, "not_found", "no such document") : send(res, 200, { ...p.docs[i], size: p.docs[i].body.length });
+        if (method === "PUT") {
+          const b = await readBody(req);
+          const d = { name: parts[6], body: b.body || "", updated_by: meName, updated_at: iso() };
+          if (i < 0) p.docs.push(d); else p.docs[i] = d;
+          return send(res, 200, { ...d, size: d.body.length });
+        }
+        if (method === "DELETE") { if (i >= 0) p.docs.splice(i, 1); return send(res, 204); }
+      }
+      return fail(res, 404, "not_found", "no such route");
     }
     // /app/hubs/{id}/agents/cleanup — offline nodes (demo: every offline one).
     if (parts.length === 5 && parts[3] === "agents" && parts[4] === "cleanup" && method === "POST") {

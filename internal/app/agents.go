@@ -18,6 +18,7 @@ type AgentService struct {
 	wakers       Wakers
 	aliases      domain.AliasRepository
 	visibility   func(ctx context.Context, owner string) domain.Visibility
+	projects     domain.ProjectRepository
 }
 
 // SetDefaultVisibility decides the visibility of new agents from their
@@ -250,11 +251,19 @@ func (s *AgentService) Remove(ctx context.Context, name string, dryRun bool) (*d
 			return nil, err
 		}
 	}
+	if s.projects != nil {
+		if err := s.projects.DeleteAgent(ctx, a.Name); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.agents.Delete(ctx, a.Name); err != nil {
 		return nil, err
 	}
 	return a, nil
 }
+
+// SetProjects takes removed agents out of their projects.
+func (s *AgentService) SetProjects(repo domain.ProjectRepository) { s.projects = repo }
 
 // Kick signs an agent out: its token stops working at once (a fresh one is
 // issued and thrown away), and it counts as offline. Its record, labels,
@@ -338,21 +347,6 @@ func (s *AgentService) SetVisibility(ctx context.Context, name string, v string)
 			WithSuggestion("give it to a member first: myco agent owner set --name %s --owner <member>", a.Name)
 	}
 	a.Visibility = vis
-	return a, s.agents.Save(ctx, a)
-}
-
-// SetCoordinator lets an agent edit (or stops it editing) the cards of its
-// owner's other agents.
-func (s *AgentService) SetCoordinator(ctx context.Context, name string, on bool) (*domain.Agent, error) {
-	a, err := s.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	if on && a.Owner == "" {
-		return nil, domain.Errf(domain.CodeInvalidState, "%s has no owner, so it has no other agents to coordinate", a.Name).
-			WithSuggestion("give it to a member first: myco agent owner set --name %s --owner <member>", a.Name)
-	}
-	a.Coordinator = on
 	return a, s.agents.Save(ctx, a)
 }
 

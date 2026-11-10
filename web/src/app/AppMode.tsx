@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, RefreshCw, WifiOff,
+  FolderKanban, LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, Plus, RefreshCw, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -19,6 +19,8 @@ import { MachineInspector, type MachineRef } from "@/app/MachineInspector";
 import { MachinesPage } from "@/app/MachinesPage";
 import { NewConversationDialog, type NewConversationTarget } from "@/app/NewConversationDialog";
 import { NodesPage } from "@/app/NodesPage";
+import { NewProjectDialog, ProjectPage, type ProjectRef } from "@/app/ProjectPage";
+import type { Project } from "@/api";
 import { SettingsPage } from "@/app/SettingsPage";
 import { Welcome } from "@/app/Welcome";
 import { LogoWordmark } from "@/components/brand";
@@ -42,13 +44,14 @@ function readPendingLink(): Promise<string> {
   return p;
 }
 
-type Page = "conversations" | "nodes" | "machines" | "settings";
+type Page = "conversations" | "nodes" | "machines" | "settings" | "project";
 
 const PAGE_META: Record<Page, { group: string; label: string }> = {
   conversations: { get group() { return L("消息", "Messages"); }, get label() { return L("对话", "Conversations"); } },
   nodes: { get group() { return L("管理", "Manage"); }, get label() { return L("节点", "Nodes"); } },
   machines: { get group() { return L("管理", "Manage"); }, get label() { return L("机器", "Machines"); } },
   settings: { group: "App", get label() { return L("设置", "Settings"); } },
+  project: { get group() { return L("项目", "Projects"); }, label: "" },
 };
 
 const NAV: { group: string; items: { page: Page; label: string; icon: typeof LayoutGrid }[] }[] = [
@@ -110,6 +113,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [conv, setConv] = useState<ConversationTarget | null>(null);
   const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [project, setProject] = useState<ProjectRef | null>(null);
+  const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // A node created from a project page joins that project.
+  const joinProject = useRef<ProjectRef | null>(null);
   /** Bumped to make the settings page show its Hub section. */
   const [hubSettingsRequest] = useState(0);
 
@@ -123,6 +131,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // One refresh at a time: with a slow hub a refresh can take longer than
   // the poll interval, and piling them up only makes it slower.
   const refreshing = useRef(false);
+  // Projects of every reachable hub; a hub too old to have them has none.
+  const loadProjects = useCallback(async (hubIds: string[]) => {
+    const lists = await Promise.all(hubIds.map((id) =>
+      appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
+    setProjects((prev) => {
+      // Keep what a hub showed last time when it fails just now.
+      const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
+      return hubIds.flatMap((id, i) => lists[i] ?? keep(id));
+    });
+  }, []);
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
     refreshing.current = true;
@@ -136,6 +154,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       ]);
       setHubs(h);
       setOv(o);
+      void loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id));
       setError(null);
       setNow(Date.now());
       setLocalTick((t) => t + 1);
@@ -149,7 +168,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       refreshing.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [loadProjects]);
 
   useEffect(() => {
     void refresh();
@@ -279,7 +298,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
     openConversation(row.hubId, it.thread_id, agent);
   };
 
+  const openProject = (ref: ProjectRef) => {
+    setInspect(null);
+    setProject(ref);
+    setPage("project");
+  };
   const nodeAdded = (hubId: string, name: string) => {
+    const join = joinProject.current;
+    joinProject.current = null;
+    if (join && join.hubId === hubId) {
+      void appApi.putProjectMember(hubId, join.name, name).catch(() => undefined).finally(() => {
+        openProject(join);
+        void refresh();
+      });
+      return;
+    }
     setHighlight({ hubId, name });
     setMachineInspect(null);
     setPage("nodes");
@@ -326,7 +359,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
     });
   };
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
-  const meta = PAGE_META[page];
+  const sideProjects = (projects || [])
+    .filter((x) => filters.hub === "all" || x.hubId === filters.hub)
+    .filter((x) => !x.p.archived || (project && project.hubId === x.hubId && project.name === x.p.name));
+  const currentProject = project && projects?.find((x) => x.hubId === project.hubId && x.p.name === project.name);
+  const meta = page === "project"
+    ? { group: PAGE_META.project.group, label: currentProject?.p.title || project?.name || "" }
+    : PAGE_META[page];
   const isMac = info?.shell === "mac";
 
   // macOS: double-clicking the top bar zooms the window (and again restores
@@ -389,6 +428,35 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 ))}
               </div>
             ))}
+            <div className="app-nav-group">
+              <div className="app-nav-title app-nav-title-row">
+                <span>{L("项目", "Projects")}</span>
+                <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
+                  onClick={() => setNewProjectOpen(true)}><Plus /></button>
+              </div>
+              {sideProjects.map((x) => {
+                const active = page === "project" && project?.hubId === x.hubId && project.name === x.p.name;
+                return (
+                  <button
+                    key={`${x.hubId}/${x.p.name}`}
+                    type="button"
+                    className={cn("app-nav-item", active && "active", x.p.archived && "muted")}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => openProject({ hubId: x.hubId, name: x.p.name })}
+                    title={x.p.goal || x.p.title}
+                  >
+                    <FolderKanban strokeWidth={1.75} />
+                    <span className="app-nav-label">{x.p.title || x.p.name}</span>
+                  </button>
+                );
+              })}
+              {projects !== null && sideProjects.length === 0 && (
+                <button type="button" className="app-nav-item muted" onClick={() => setNewProjectOpen(true)}>
+                  <Plus strokeWidth={1.75} />
+                  <span>{L("新建项目", "New project")}</span>
+                </button>
+              )}
+            </div>
           </nav>
 
           <div className="app-sidebar-foot">
@@ -522,6 +590,27 @@ export default function AppMode({ initialHubs, initialInfo }: {
               />
             )}
 
+            {page === "project" && project && (
+              <ProjectPage
+                key={`${project.hubId}/${project.name}`}
+                target={project}
+                hubName={namedHubs.find((h) => h.id === project.hubId)?.name || project.hubId}
+                rows={rows}
+                now={now}
+                onOpenNode={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
+                onNewNode={() => {
+                  joinProject.current = project;
+                  setSpawnTarget({ hubId: project.hubId });
+                }}
+                onChanged={() => void loadProjects(hubs.map((h) => h.id))}
+                onDeleted={() => {
+                  setProject(null);
+                  setPage("nodes");
+                  void loadProjects(hubs.map((h) => h.id));
+                }}
+              />
+            )}
+
             {page === "nodes" && (
               <NodesPage
                 rows={rows}
@@ -587,6 +676,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <Inspector
         row={current}
         now={now}
+        projects={projects}
+        onOpenProject={openProject}
+        onProjectsChanged={() => void loadProjects(hubs.map((h) => h.id))}
         onClose={() => setInspect(null)}
         onRefresh={refresh}
         onThread={(hubId, threadId, agent) => openConversation(hubId, threadId, agent, { fromNode: true })}
@@ -621,7 +713,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         hubs={namedHubs}
         hubsOv={namedOv?.hubs}
         defaultHubId={filters.hub === "all" ? undefined : filters.hub}
-        onClose={() => setSpawnTarget(null)}
+        onClose={() => { setSpawnTarget(null); joinProject.current = null; }}
         onSpawned={(hubId, agent) => nodeAdded(hubId, agent.name)}
         onJoined={nodeAdded}
       />
@@ -635,6 +727,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
           setNewConv(null);
           openConversation(hubId, threadId, agent);
           void refresh();
+        }}
+      />
+
+      <NewProjectDialog
+        open={newProjectOpen}
+        hubs={namedHubs.filter((h) => namedOv?.hubs.find((o) => o.id === h.id)?.ok !== false)}
+        defaultHubId={filters.hub === "all" ? undefined : filters.hub}
+        onClose={() => setNewProjectOpen(false)}
+        onCreated={(ref) => {
+          setNewProjectOpen(false);
+          openProject(ref);
+          void loadProjects(hubs.map((h) => h.id));
         }}
       />
 

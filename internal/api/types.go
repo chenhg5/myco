@@ -50,18 +50,15 @@ type Agent struct {
 	Skills []Skill `json:"skills,omitempty"`
 	// Visibility: "team" (everyone on the hub) or "private" (only its owner
 	// and the owner's agents). Absent on hubs before v0.18.22: team.
-	Visibility string `json:"visibility,omitempty"`
-	// Coordinator: may edit the cards of its owner's other agents (set by
-	// people only).
-	Coordinator bool       `json:"coordinator,omitempty"`
-	Labels      []string   `json:"labels"`
-	Binding     Binding    `json:"binding"`
-	Delivery    Delivery   `json:"delivery"`
-	AllowFrom   []string   `json:"allow_from"`
-	EnrolledBy  string     `json:"enrolled_by,omitempty"`
-	Online      bool       `json:"online"`
-	CreatedAt   time.Time  `json:"created_at"`
-	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+	Visibility string     `json:"visibility,omitempty"`
+	Labels     []string   `json:"labels"`
+	Binding    Binding    `json:"binding"`
+	Delivery   Delivery   `json:"delivery"`
+	AllowFrom  []string   `json:"allow_from"`
+	EnrolledBy string     `json:"enrolled_by,omitempty"`
+	Online     bool       `json:"online"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	// Kind is agent (an AI session), shell (exec/shell node), human, or
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
@@ -181,11 +178,6 @@ type Skill struct {
 	Name     string   `json:"name"`
 	Summary  string   `json:"summary,omitempty"`
 	Examples []string `json:"examples,omitempty"`
-}
-
-// CoordinatorRequest is the body of PUT /v1/agents/{name}/coordinator.
-type CoordinatorRequest struct {
-	Coordinator bool `json:"coordinator"`
 }
 
 // VisibilityRequest is the body of PUT /v1/agents/{name}/visibility.
@@ -847,4 +839,87 @@ type PutKeysRequest struct {
 type HubSettings struct {
 	// E2E: messages are end-to-end encrypted (the owner turns it on).
 	E2E bool `json:"e2e"`
+}
+
+// Project is a piece of work several agents and people do together.
+type Project struct {
+	Name       string          `json:"name"`
+	Title      string          `json:"title"`
+	Goal       string          `json:"goal,omitempty"`
+	Brief      string          `json:"brief,omitempty"`
+	Links      []ProjectLink   `json:"links"`
+	Visibility string          `json:"visibility"` // members | team
+	Owner      string          `json:"owner,omitempty"`
+	OwnerID    string          `json:"owner_id,omitempty"`
+	Archived   bool            `json:"archived,omitempty"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	Members    []ProjectMember `json:"members"`
+	Docs       []ProjectDoc    `json:"docs"`
+	// What the caller may do: edit the content (owner, admins,
+	// coordinators), manage it (people: roles, visibility, archive, delete).
+	CanEdit   bool `json:"can_edit"`
+	CanManage bool `json:"can_manage"`
+}
+
+// ProjectLink points at material kept elsewhere.
+type ProjectLink struct {
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url"`
+}
+
+// ProjectMember is a node in a project. Agent is its card when the caller
+// may see the node (a private node of someone else shows only its name).
+type ProjectMember struct {
+	Name    string    `json:"name"`
+	Role    string    `json:"role"` // member | coordinator
+	Note    string    `json:"note,omitempty"`
+	AddedBy string    `json:"added_by,omitempty"`
+	AddedAt time.Time `json:"added_at"`
+	Agent   *Agent    `json:"agent,omitempty"`
+}
+
+// ProjectDoc is a shared document; Body only when asked for (?docs=body,
+// or GET …/docs/{name}).
+type ProjectDoc struct {
+	Name      string    `json:"name"`
+	Size      int       `json:"size"`
+	UpdatedBy string    `json:"updated_by,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body,omitempty"`
+}
+
+// ProjectList wraps projects.
+type ProjectList struct {
+	Projects []Project `json:"projects"`
+}
+
+// CreateProjectRequest is the body of POST /v1/projects.
+type CreateProjectRequest struct {
+	Name       string `json:"name"`
+	Title      string `json:"title,omitempty"`
+	Goal       string `json:"goal,omitempty"`
+	Visibility string `json:"visibility,omitempty"`
+}
+
+// UpdateProjectRequest is the body of PATCH /v1/projects/{name}; absent
+// fields stay. Visibility and Archived are for people managing it.
+type UpdateProjectRequest struct {
+	Title      *string        `json:"title,omitempty"`
+	Goal       *string        `json:"goal,omitempty"`
+	Brief      *string        `json:"brief,omitempty"`
+	Links      *[]ProjectLink `json:"links,omitempty"`
+	Visibility *string        `json:"visibility,omitempty"`
+	Archived   *bool          `json:"archived,omitempty"`
+}
+
+// ProjectMemberRequest is the body of PUT /v1/projects/{name}/members/{agent}.
+type ProjectMemberRequest struct {
+	Role *string `json:"role,omitempty"`
+	Note *string `json:"note,omitempty"`
+}
+
+// ProjectDocRequest is the body of PUT /v1/projects/{name}/docs/{doc}.
+type ProjectDocRequest struct {
+	Body string `json:"body"`
 }

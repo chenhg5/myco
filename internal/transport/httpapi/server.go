@@ -47,6 +47,7 @@ type Server struct {
 	machines *app.MachineService
 	members  *app.MemberService
 	audit    *app.AuditService
+	projects *app.ProjectService
 	namesMu  sync.Mutex
 	names    map[string]string // member id -> name (see ownerName)
 	namesAt  time.Time
@@ -55,6 +56,10 @@ type Server struct {
 // SetMachines enables machine reporting, /v1/machines and machines in the
 // admin overview.
 func (s *Server) SetMachines(m *app.MachineService) { s.machines = m }
+
+// SetProjects enables /v1/projects (and project coordinators editing their
+// members' cards).
+func (s *Server) SetProjects(p *app.ProjectService) { s.projects = p }
 
 // SetConsole enables console tokens (per-device admin credentials) and the
 // /v1/console/tokens endpoints.
@@ -149,6 +154,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/agents/{name}/owner", s.admin(s.setAgentOwner))
 	m.HandleFunc("PUT /v1/machines/{id}/owner", s.admin(s.setMachineOwner))
 	m.HandleFunc("GET /v1/audit", s.admin(s.listAudit))
+	s.routeProjects(m)
 	m.HandleFunc("POST /v1/enrollments", s.admin(s.createEnrollment))
 	m.HandleFunc("GET /v1/enrollments", s.admin(s.listEnrollments))
 	m.HandleFunc("DELETE /v1/enrollments/{id}", s.admin(s.revokeEnrollment))
@@ -174,7 +180,6 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/agents/{name}/skills", s.cardEditor("edit the skills of", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
 		s.setSkills(w, r, r.PathValue("name"), by)
 	}))
-	m.HandleFunc("PUT /v1/agents/{name}/coordinator", s.admin(s.setCoordinator))
 	m.HandleFunc("PUT /v1/agents/{name}/visibility", s.admin(s.setVisibility))
 	m.HandleFunc("GET /v1/agents/{name}/history", s.admin(s.agentHistory))
 	m.HandleFunc("PUT /v1/agents/{name}/profile", s.cardEditor("edit", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {

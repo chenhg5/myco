@@ -12,11 +12,15 @@ const NAME = /^[a-z0-9][a-z0-9._-]*$/;
  * searchable list of the hub's nodes to tick. A name not in the list
  * (e.g. a node that has not joined yet) can be typed and added with Enter.
  */
-export function NodePicker({ nodes, value, onChange, disabled }: {
+export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder, listedOnly }: {
   nodes: Agent[];
   value: string[];
   onChange: (names: string[]) => void;
   disabled?: boolean;
+  /** Shown in the search box while nothing is picked. */
+  emptyPlaceholder?: string;
+  /** Only nodes in the list can be picked (no typed names). */
+  listedOnly?: boolean;
 }) {
   const [q, setQ] = useState("");
   const byName = useMemo(() => new Map(nodes.map((n) => [n.name, n])), [nodes]);
@@ -26,7 +30,7 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
   const add = () => {
     const first = list.find((n) => !value.includes(n.name));
     if (first) toggle(first.name);
-    else if (NAME.test(query) && !value.includes(query)) onChange([...value, query]);
+    else if (!listedOnly && NAME.test(query) && !value.includes(query)) onChange([...value, query]);
     setQ("");
   };
   const label = (name: string) => byName.get(name)?.display_name || name;
@@ -48,7 +52,7 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
             if (e.key === "Enter") { e.preventDefault(); add(); }
             if (e.key === "Backspace" && !q && value.length) onChange(value.slice(0, -1));
           }}
-          placeholder={value.length ? L("搜索或输入名字", "Search or type a name") : L("任何人（不限制）", "Anyone (no limit)")}
+          placeholder={value.length ? (listedOnly ? L("搜索", "Search") : L("搜索或输入名字", "Search or type a name")) : emptyPlaceholder ?? L("任何人（不限制）", "Anyone (no limit)")}
           aria-label={L("搜索节点", "Search nodes")}
           disabled={disabled}
         />
@@ -56,7 +60,7 @@ export function NodePicker({ nodes, value, onChange, disabled }: {
       <div className="app-picker-list" role="listbox" aria-multiselectable="true">
         {list.length === 0 && (
           <div className="app-picker-empty">
-            {NAME.test(query) ? L(`按回车添加「${query}」`, `Press Return to add “${query}”`) : L("没有匹配的节点", "No matching nodes")}
+            {!listedOnly && NAME.test(query) ? L(`按回车添加「${query}」`, `Press Return to add “${query}”`) : L("没有匹配的节点", "No matching nodes")}
           </div>
         )}
         {list.map((n) => {

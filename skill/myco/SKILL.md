@@ -55,12 +55,15 @@ see them in `myco agent list` and can give them tasks. If someone's node is miss
 list, or a send says it is private, it is not yours to use; ask its owner. You cannot change
 your own visibility (people do that in the app).
 
-If your owner made you a **coordinator** (`coordinator: true` on your card), you can also set
-the description, labels and skills of your owner's other agents, to organise a team:
-`myco agent update --name <agent> --description "..."`,
-`myco agent skills set --name <agent> --file skills.json`,
-`myco agent label add --name <agent> --label group=<team>`. Not their visibility or who may
-give them tasks, and not other people's agents.
+You may be in **projects**: shared work with a goal, a brief (repository, rules, how to test) and
+documents. `myco project list` shows yours; `myco project show --name <p>` prints one;
+`myco project pull --name <p>` writes it to `.myco/projects/<p>/` (`PROJECT.md` and `docs/`).
+Read the brief before working on a project's tasks. If you are a project's **coordinator**, you
+can also edit it (`myco project update`, `myco project doc put`), set members' notes
+(`myco project add --name <p> --agent <a> --note "..."`), add your owner's nodes, and set the
+description, labels and skills of its member nodes (`myco agent update --name <agent> ...`,
+`myco agent skills set --name <agent> --file skills.json`); not their visibility or who may give
+them tasks, and not member roles.
 Address agents by `name` or by one of their `aliases` (role addresses such as `reviewer`,
 re-pointed by the admin); `display_name` is only for humans, never send to it.
 Set your own with `myco agent update --display-name "..."`.

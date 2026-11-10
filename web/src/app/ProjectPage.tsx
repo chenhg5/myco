@@ -1,0 +1,539 @@
+import { useEffect, useMemo, useState } from "react";
+import { ExternalLink, FileText, Lock, MoreHorizontal, Pencil, Plus, Users } from "lucide-react";
+import { appApi, isOldHub } from "@/appapi";
+import type { Project, ProjectDoc, ProjectMember } from "@/api";
+import type { AgentRow } from "@/app/types";
+import { agentKind, canManage, nodeIcon } from "@/app/nodes";
+import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
+import { Markdown } from "@/app/Markdown";
+import { NodePicker } from "@/app/NodePicker";
+import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
+import { stateMeta } from "@/components/status";
+import { cn, timeAgo } from "@/lib/utils";
+import { L } from "@/lib/i18n";
+
+export interface ProjectRef { hubId: string; name: string }
+
+type Dialog =
+  | null
+  | { kind: "about" }
+  | { kind: "brief" }
+  | { kind: "links" }
+  | { kind: "add" }
+  | { kind: "member"; member: ProjectMember }
+  | { kind: "doc"; doc: string | null; edit: boolean }
+  | { kind: "settings" }
+  | { kind: "delete" };
+
+/** One project: its goal, members, brief, shared documents and links. */
+export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted }: {
+  target: ProjectRef;
+  hubName: string;
+  rows: AgentRow[];
+  now: number;
+  onOpenNode: (row: AgentRow) => void;
+  /** Opens 添加节点; a node added there joins this project. */
+  onNewNode: () => void;
+  onChanged: () => void;
+  onDeleted: () => void;
+}) {
+  const [p, setP] = useState<Project | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let off = false;
+    setP(null);
+    setError(null);
+    const load = (silent: boolean) =>
+      appApi.project(target.hubId, target.name)
+        .then((r) => { if (!off) { setP(r); setError(null); } })
+        .catch((e) => { if (!off && !silent) setError(e); });
+    void load(false);
+    const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(true); }, 8000);
+    return () => { off = true; window.clearInterval(t); };
+  }, [target.hubId, target.name, tick]);
+
+  const reload = () => setTick((t) => t + 1);
+  const run = async (fn: () => Promise<unknown>, close = true) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const r = await fn();
+      if (r && typeof r === "object" && "members" in (r as Project)) setP(r as Project);
+      else reload();
+      if (close) setDialog(null);
+      onChanged();
+    } catch (e) {
+      setActionError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const open = (d: Dialog) => { setActionError(null); setDialog(d); };
+
+  const hubRows = useMemo(() => rows.filter((r) => r.hub.id === target.hubId), [rows, target.hubId]);
+  const rowOf = (name: string) => hubRows.find((r) => r.st.agent.name === name);
+
+  if (error) {
+    return (
+      <div className="app-page">
+        {isOldHub(error)
+          ? <div className="app-empty-note">{L("这个 Hub 的版本较旧，还没有项目。在「设置 → Hub」里升级后就能用。", "This hub is older and has no projects yet. Upgrade it in Settings → Hubs.")}</div>
+          : <ErrorText error={error} />}
+      </div>
+    );
+  }
+  if (!p) {
+    return (
+      <div className="app-page">
+        <div className="app-page-head"><p className="app-summary"><TextSkeleton width={160} /></p></div>
+        <RowsSkeleton rows={4} />
+      </div>
+    );
+  }
+
+  const coordinators = p.members.filter((m) => m.role === "coordinator").length;
+  const hub = hubRows[0]?.hub;
+  // Nodes this person may add: theirs (or all, when they manage the hub).
+  const addable = hubRows
+    .map((r) => r.st.agent)
+    .filter((a) => agentKind(a) !== "human" && a.binding.harness !== "machine" && !p.members.some((m) => m.name === a.name))
+    .filter((a) => canManage(hub, a.owner_id));
+
+  return (
+    <div className="app-page app-project">
+      <div className="app-project-head">
+        <div className="app-project-titles">
+          <h1>
+            {p.title || p.name}
+            {p.archived && <span className="app-pill">{L("已归档", "Archived")}</span>}
+          </h1>
+          <p className={cn("app-project-goal", !p.goal && "is-empty")}>{p.goal || L("还没有写目标。", "No goal yet.")}</p>
+          <p className="app-project-meta">
+            <span>{p.name}</span>
+            <span>{hubName}</span>
+            {p.owner && <span>{L(`${p.owner} 创建`, `by ${p.owner}`)}</span>}
+            <span className="app-project-vis">
+              {p.visibility === "members" ? <><Lock />{L("参与者可见", "Participants")}</> : <><Users />{L("团队可见", "Team")}</>}
+            </span>
+          </p>
+        </div>
+        <div className="app-project-actions">
+          {p.can_edit && <button type="button" className="app-btn" onClick={() => open({ kind: "about" })}><Pencil />{L("编辑", "Edit")}</button>}
+          {p.can_manage && <button type="button" className="app-btn app-btn-plain" aria-label={L("项目设置", "Project settings")} title={L("项目设置", "Project settings")} onClick={() => open({ kind: "settings" })}><MoreHorizontal /></button>}
+        </div>
+      </div>
+
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
+          <span className="app-group-actions">
+            <button type="button" className="app-group-action" onClick={() => open({ kind: "add" })} disabled={p.archived}><Plus />{L("添加节点", "Add nodes")}</button>
+            <button type="button" className="app-group-action" onClick={onNewNode} disabled={p.archived}>{L("新建节点", "New node")}</button>
+          </span>
+        </div>
+        <div className="app-list">
+          {p.members.length === 0 && <div className="app-empty-note">{L("还没有节点。添加已有的节点，或新建一个。", "No nodes yet. Add existing ones, or create one.")}</div>}
+          {p.members.map((m) => {
+            const row = rowOf(m.name);
+            const a = m.agent;
+            const Icon = a ? nodeIcon(a) : Users;
+            const st = row?.st.state;
+            const skills = a?.skills?.length ? a.skills.map((s) => s.name) : a?.capabilities || [];
+            const mayAct = p.can_edit || p.can_manage || (a && canManage(hub, a.owner_id));
+            return (
+              <div className="app-project-member" key={m.name}>
+                <button type="button" className="app-project-member-main" onClick={() => row && onOpenNode(row)} disabled={!row}>
+                  <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                  <span className="app-row-main">
+                    <span className="app-row-titleline">
+                      <span className="app-row-title">{a?.display_name || m.name}</span>
+                      {m.role === "coordinator" && <span className="app-label group">{L("协调者", "Coordinator")}</span>}
+                      {st && <span className={cn("dot", st)} title={stateMeta[st].label} />}
+                    </span>
+                    <span className="app-row-sub">
+                      {m.note || (a?.description ? a.description : a ? "" : L("别人的节点（仅自己可见）", "Someone's private node"))}
+                    </span>
+                    {skills.length > 0 && (
+                      <span className="app-project-skills">
+                        {skills.slice(0, 4).map((s) => <span key={s} className="app-label">{s}</span>)}
+                        {skills.length > 4 && <span className="app-label">+{skills.length - 4}</span>}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {mayAct && (
+                  <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("成员设置", "Member settings")}
+                    onClick={() => open({ kind: "member", member: m })}><MoreHorizontal /></button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L("项目说明", "Brief")}</span>
+          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "brief" })}><Pencil />{L("编辑", "Edit")}</button>}
+        </div>
+        <div className="app-list app-project-brief">
+          {p.brief ? <Markdown text={p.brief} /> : (
+            <div className="app-empty-note">{L("写下所有成员都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。agent 用 myco project show / pull 读取。", "Write what every member should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
+          )}
+        </div>
+      </section>
+
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L("共享文档", "Documents")}</span>
+          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "doc", doc: null, edit: true })}><Plus />{L("新建", "New")}</button>}
+        </div>
+        <div className="app-list">
+          {p.docs.length === 0 && <div className="app-empty-note">{L("还没有文档。设计、约定这类较长的资料放这里，成员 pull 时一起拉到本地。", "No documents yet. Put longer material (design, conventions) here; members get it with pull.")}</div>}
+          {p.docs.map((d) => (
+            <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d.name, edit: false })}>
+              <span className="app-row-icon"><FileText strokeWidth={1.75} /></span>
+              <span className="app-row-main">
+                <span className="app-row-title">{d.name}</span>
+                <span className="app-row-sub">{[d.updated_by, timeAgo(d.updated_at, now), `${Math.max(1, Math.round(d.size / 1024))} KB`].filter(Boolean).join(" · ")}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="app-group">
+        <div className="app-group-title">
+          <span className="name">{L("资料链接", "Links")}</span>
+          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "links" })}><Pencil />{L("编辑", "Edit")}</button>}
+        </div>
+        <div className="app-list">
+          {p.links.length === 0 && <div className="app-empty-note">{L("仓库、设计稿、看板等放这里。", "Repository, designs, boards and the like.")}</div>}
+          {p.links.map((l) => (
+            <a key={l.url} className="app-row app-project-link" href={l.url} target="_blank" rel="noreferrer">
+              <span className="app-row-icon"><ExternalLink strokeWidth={1.75} /></span>
+              <span className="app-row-main">
+                <span className="app-row-title">{l.title || l.url}</span>
+                {l.title && <span className="app-row-sub mono">{l.url}</span>}
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <AboutDialog open={dialog?.kind === "about"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onSave={(title, goal) => void run(() => appApi.updateProject(target.hubId, p.name, { title, goal }))} />
+      <BriefDialog open={dialog?.kind === "brief"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onSave={(brief) => void run(() => appApi.updateProject(target.hubId, p.name, { brief }))} />
+      <LinksDialog open={dialog?.kind === "links"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onSave={(links) => void run(() => appApi.updateProject(target.hubId, p.name, { links }))} />
+      <AddDialog open={dialog?.kind === "add"} nodes={addable} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onAdd={(names) => void run(async () => {
+          let last: Project | undefined;
+          for (const n of names) last = await appApi.putProjectMember(target.hubId, p.name, n);
+          return last;
+        })} />
+      {dialog?.kind === "member" && (
+        <MemberDialog member={dialog.member} project={p} mayRemove={p.can_edit || !!(dialog.member.agent && canManage(hub, dialog.member.agent.owner_id))}
+          busy={busy} error={actionError} onClose={() => setDialog(null)}
+          onSave={(input) => void run(() => appApi.putProjectMember(target.hubId, p.name, dialog.member.name, input))}
+          onRemove={() => void run(() => appApi.removeProjectMember(target.hubId, p.name, dialog.member.name))} />
+      )}
+      {dialog?.kind === "doc" && (
+        <DocDialog hubId={target.hubId} project={p} name={dialog.doc} startEditing={dialog.edit} busy={busy} error={actionError}
+          onClose={() => setDialog(null)}
+          onSave={(name, body) => void run(() => appApi.putProjectDoc(target.hubId, p.name, name, body))}
+          onDelete={(name) => void run(() => appApi.deleteProjectDoc(target.hubId, p.name, name))} />
+      )}
+      <SettingsDialog open={dialog?.kind === "settings"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
+        onVisibility={(visibility) => void run(() => appApi.updateProject(target.hubId, p.name, { visibility }), false)}
+        onArchive={(archived) => void run(() => appApi.updateProject(target.hubId, p.name, { archived }), false)}
+        onDelete={() => open({ kind: "delete" })} />
+      <ConfirmDialog
+        open={dialog?.kind === "delete"}
+        onOpenChange={(o) => !o && setDialog(null)}
+        title={L(`删除项目 ${p.title || p.name}`, `Delete ${p.title || p.name}`)}
+        description={L("项目的成员关系、说明、文档和链接都会删除；节点本身和它们的对话不受影响。", "Its members, brief, documents and links are deleted; the nodes and their conversations stay.")}
+        confirmLabel={L("删除", "Delete")}
+        busy={busy}
+        error={actionError ? <ErrorText error={actionError} /> : undefined}
+        onConfirm={() => void (async () => {
+          setBusy(true);
+          try {
+            await appApi.deleteProject(target.hubId, p.name);
+            setDialog(null);
+            onDeleted();
+          } catch (e) {
+            setActionError(e);
+          } finally {
+            setBusy(false);
+          }
+        })()}
+      />
+    </div>
+  );
+}
+
+function Actions({ busy, onCancel, onSave, saveLabel, disabled }: { busy: boolean; onCancel: () => void; onSave: () => void; saveLabel?: string; disabled?: boolean }) {
+  return (
+    <div className="app-modal-actions">
+      <button type="button" className="app-btn" onClick={onCancel} disabled={busy}>{L("取消", "Cancel")}</button>
+      <button type="button" className="app-btn app-btn-primary" onClick={onSave} disabled={busy || disabled}>{busy ? L("正在保存…", "Saving…") : saveLabel || L("保存", "Save")}</button>
+    </div>
+  );
+}
+
+function AboutDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (title: string, goal: string) => void }) {
+  const [title, setTitle] = useState("");
+  const [goal, setGoal] = useState("");
+  useEffect(() => { if (open) { setTitle(project.title); setGoal(project.goal || ""); } }, [open, project]);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("编辑项目", "Edit project")}>
+      <label className="app-field">
+        <span className="app-field-label">{L("名称", "Title")}</span>
+        <input className="app-input" value={title} onChange={(e) => setTitle(e.target.value)} disabled={busy} />
+      </label>
+      <label className="app-field">
+        <span className="app-field-label">{L("目标", "Goal")}</span>
+        <textarea className="app-input" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} disabled={busy}
+          placeholder={L("这个项目要做成什么，一两句话", "What this project should achieve, in a sentence or two")} />
+      </label>
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onSave(title.trim(), goal.trim())} disabled={!title.trim()} />
+    </Modal>
+  );
+}
+
+function BriefDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (brief: string) => void }) {
+  const [brief, setBrief] = useState("");
+  useEffect(() => { if (open) setBrief(project.brief || ""); }, [open, project]);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目说明", "Brief")} wide
+      description={L("所有成员都该知道的事（Markdown，8 KB 以内）。agent 用 myco project show / pull 读取。", "What every member should know (Markdown, up to 8 KB). Agents read it with myco project show / pull.")}>
+      <textarea className="app-input app-project-editor" rows={16} value={brief} onChange={(e) => setBrief(e.target.value)} disabled={busy}
+        placeholder={L("## 仓库\n…\n\n## 规则\n…\n\n## 怎么测试\n…", "## Repository\n…\n\n## Rules\n…\n\n## Testing\n…")} />
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onSave(brief)} />
+    </Modal>
+  );
+}
+
+function LinksDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (links: { title?: string; url: string }[]) => void }) {
+  const [text, setText] = useState("");
+  useEffect(() => { if (open) setText(project.links.map((l) => (l.title ? `${l.title} ${l.url}` : l.url)).join("\n")); }, [open, project]);
+  const parse = () => text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+    const i = l.search(/\S+:\/\/\S+$/);
+    return i > 0 ? { title: l.slice(0, i).trim(), url: l.slice(i) } : { url: l };
+  });
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("资料链接", "Links")}
+      description={L("每行一个：名称和地址，例如「仓库 https://github.com/owner/repo」。", "One per line: a title and the address, e.g. “Repo https://github.com/owner/repo”.")}>
+      <textarea className="app-input mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} />
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onSave(parse())} />
+    </Modal>
+  );
+}
+
+function AddDialog({ open, nodes, busy, error, onClose, onAdd }: { open: boolean; nodes: import("@/api").Agent[]; busy: boolean; error: unknown; onClose: () => void; onAdd: (names: string[]) => void }) {
+  const [picked, setPicked] = useState<string[]>([]);
+  useEffect(() => { if (open) setPicked([]); }, [open]);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加节点", "Add nodes")}
+      description={L("选你的节点加入这个项目（管理员可以选任何节点）。别人的节点由它的主人加入。", "Pick your nodes to add (admins can pick any). Other people add their own.")}>
+      {nodes.length === 0
+        ? <div className="app-empty-note">{L("没有可以添加的节点了。", "No more nodes you can add.")}</div>
+        : <NodePicker nodes={nodes} value={picked} onChange={setPicked} disabled={busy} listedOnly emptyPlaceholder={L("搜索节点", "Search nodes")} />}
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onAdd(picked)} saveLabel={L(`添加 ${picked.length || ""}`.trim(), `Add ${picked.length || ""}`.trim())} disabled={picked.length === 0} />
+    </Modal>
+  );
+}
+
+function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave, onRemove }: {
+  member: ProjectMember; project: Project; mayRemove: boolean; busy: boolean; error: unknown;
+  onClose: () => void; onSave: (input: { role?: "member" | "coordinator"; note?: string }) => void; onRemove: () => void;
+}) {
+  const [note, setNote] = useState(member.note || "");
+  const [role, setRole] = useState(member.role);
+  const name = member.agent?.display_name || member.name;
+  return (
+    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={name}>
+      <label className="app-field">
+        <span className="app-field-label">{L("在这个项目里负责什么", "What it does here")}</span>
+        <input className="app-input" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy || !project.can_edit}
+          placeholder={L("例如：后端、界面、测试", "e.g. backend, UI, tests")} />
+      </label>
+      {project.can_manage && (
+        <div className="app-provider-list" role="radiogroup">
+          <label className={cn("app-provider-opt", role === "member" && "picked")}>
+            <input type="radio" name="role" checked={role === "member"} onChange={() => setRole("member")} disabled={busy} />
+            <span><b>{L("成员", "Member")}</b><small>{L("读项目说明和文档，接活", "Reads the brief and documents, takes work")}</small></span>
+          </label>
+          <label className={cn("app-provider-opt", role === "coordinator" && "picked")}>
+            <input type="radio" name="role" checked={role === "coordinator"} onChange={() => setRole("coordinator")} disabled={busy} />
+            <span><b>{L("协调者", "Coordinator")}</b><small>{L("还能改项目说明、文档、链接，改其他成员的介绍和技能，加入同一主人的节点", "Also edits the brief, documents and links, other members' descriptions and skills, and adds nodes of its owner")}</small></span>
+          </label>
+        </div>
+      )}
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        {mayRemove && <button type="button" className="app-btn app-btn-danger" onClick={onRemove} disabled={busy} style={{ marginRight: "auto" }}>{L("移出项目", "Remove")}</button>}
+        <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
+        <button type="button" className="app-btn app-btn-primary" disabled={busy || (note === (member.note || "") && role === member.role)}
+          onClick={() => onSave({ ...(note !== (member.note || "") ? { note } : {}), ...(role !== member.role ? { role } : {}) })}>{L("保存", "Save")}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function DocDialog({ hubId, project, name, startEditing, busy, error, onClose, onSave, onDelete }: {
+  hubId: string; project: Project; name: string | null; startEditing: boolean; busy: boolean; error: unknown;
+  onClose: () => void; onSave: (name: string, body: string) => void; onDelete: (name: string) => void;
+}) {
+  const [doc, setDoc] = useState<ProjectDoc | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [editing, setEditing] = useState(startEditing);
+  const [docName, setDocName] = useState(name || "");
+  const [body, setBody] = useState("");
+  useEffect(() => {
+    if (!name) return;
+    let off = false;
+    appApi.projectDoc(hubId, project.name, name)
+      .then((d) => { if (!off) { setDoc(d); setBody(d.body || ""); } })
+      .catch((e) => { if (!off) setLoadError(e); });
+    return () => { off = true; };
+  }, [hubId, project.name, name]);
+  return (
+    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={name || L("新建文档", "New document")} wide>
+      {name && !doc && !loadError && <RowsSkeleton rows={3} className="is-flat" />}
+      <ErrorText error={loadError} />
+      {editing ? (
+        <>
+          {!name && (
+            <label className="app-field">
+              <span className="app-field-label">{L("名字", "Name")}</span>
+              <input className="app-input mono" value={docName} onChange={(e) => setDocName(e.target.value)} disabled={busy}
+                placeholder={L("例如 design、conventions", "e.g. design, conventions")} />
+            </label>
+          )}
+          <textarea className="app-input app-project-editor" rows={18} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy}
+            placeholder={L("Markdown，64 KB 以内", "Markdown, up to 64 KB")} />
+        </>
+      ) : doc && <div className="app-project-doc-body"><Markdown text={doc.body || ""} /></div>}
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        {project.can_edit && name && !editing && (
+          <button type="button" className="app-btn app-btn-danger" onClick={() => onDelete(name)} disabled={busy} style={{ marginRight: "auto" }}>{L("删除", "Delete")}</button>
+        )}
+        <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{editing ? L("取消", "Cancel") : L("关闭", "Close")}</button>
+        {project.can_edit && !editing && doc && <button type="button" className="app-btn app-btn-primary" onClick={() => setEditing(true)}>{L("编辑", "Edit")}</button>}
+        {editing && (
+          <button type="button" className="app-btn app-btn-primary" onClick={() => onSave(name || docName.trim(), body)} disabled={busy || !(name || docName.trim())}>
+            {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function SettingsDialog({ open, project, busy, error, onClose, onVisibility, onArchive, onDelete }: {
+  open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void;
+  onVisibility: (v: "members" | "team") => void; onArchive: (archived: boolean) => void; onDelete: () => void;
+}) {
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目设置", "Project settings")}>
+      <div className="app-provider-list" role="radiogroup">
+        <label className={cn("app-provider-opt", project.visibility === "members" && "picked")}>
+          <input type="radio" name="pvis" checked={project.visibility === "members"} onChange={() => onVisibility("members")} disabled={busy} />
+          <span><b>{L("参与者可见", "Participants")}</b><small>{L("项目的创建者、成员节点的主人和成员节点能看到；管理员也能看到", "Its creator, the owners of its member nodes and the nodes themselves; admins too")}</small></span>
+        </label>
+        <label className={cn("app-provider-opt", project.visibility === "team" && "picked")}>
+          <input type="radio" name="pvis" checked={project.visibility === "team"} onChange={() => onVisibility("team")} disabled={busy} />
+          <span><b>{L("团队可见", "Team")}</b><small>{L("Hub 上所有人都能看到，也能把自己的节点加进来", "Everyone on the hub sees it and can add their own nodes")}</small></span>
+        </label>
+      </div>
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn app-btn-danger" onClick={onDelete} disabled={busy} style={{ marginRight: "auto" }}>{L("删除项目", "Delete")}</button>
+        <button type="button" className="app-btn" onClick={() => onArchive(!project.archived)} disabled={busy}>{project.archived ? L("恢复", "Unarchive") : L("归档", "Archive")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={onClose} disabled={busy}>{L("完成", "Done")}</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** A new project: name (address), title, goal. */
+export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated }: {
+  open: boolean;
+  hubs: { id: string; name: string }[];
+  defaultHubId?: string;
+  onClose: () => void;
+  onCreated: (ref: ProjectRef) => void;
+}) {
+  const [hubId, setHubId] = useState("");
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [goal, setGoal] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => {
+    if (!open) return;
+    setHubId(defaultHubId || hubs[0]?.id || "");
+    setName(""); setTitle(""); setGoal(""); setError(null);
+  }, [open, defaultHubId, hubs]);
+  const slug = name.trim().toLowerCase();
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const p = await appApi.createProject(hubId, { name: slug, title: title.trim() || undefined, goal: goal.trim() || undefined });
+      onCreated({ hubId, name: p.name });
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("新建项目", "New project")}
+      description={L("把要一起干的节点放进一个项目，给它们共享的目标、说明和文档。", "Put the nodes that work together in a project, with a shared goal, brief and documents.")}>
+      {hubs.length > 1 && (
+        <label className="app-field">
+          <span className="app-field-label">Hub</span>
+          <select className="app-select-field" value={hubId} onChange={(e) => setHubId(e.target.value)} disabled={busy}>
+            {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        </label>
+      )}
+      <label className="app-field">
+        <span className="app-field-label">{L("名称", "Title")}</span>
+        <input className="app-input" value={title} onChange={(e) => {
+          setTitle(e.target.value);
+          if (!name || name === slugOf(title)) setName(slugOf(e.target.value));
+        }} disabled={busy} placeholder={L("例如 myco 开发", "e.g. myco development")} autoFocus />
+      </label>
+      <label className="app-field">
+        <span className="app-field-label">{L("短名（命令里用）", "Short name (for commands)")}</span>
+        <input className="app-input mono" value={name} onChange={(e) => setName(e.target.value)} disabled={busy} placeholder="myco" />
+      </label>
+      <label className="app-field">
+        <span className="app-field-label">{L("目标", "Goal")}</span>
+        <textarea className="app-input" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} disabled={busy}
+          placeholder={L("这个项目要做成什么，一两句话", "What this project should achieve, in a sentence or two")} />
+      </label>
+      <ErrorText error={error} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => void create()} saveLabel={L("创建", "Create")} disabled={!slug || !hubId} />
+    </Modal>
+  );
+}
+
+function slugOf(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}

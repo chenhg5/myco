@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -345,9 +345,25 @@ export const appApi = {
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
-  /** Lets a node edit the cards of its owner's other nodes. */
-  setCoordinator: (hubId: string, name: string, coordinator: boolean) =>
-    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/coordinator`, { coordinator }),
+  // Projects
+  projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
+  project: (hubId: string, name: string, bodies = false) =>
+    request<Project>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}${bodies ? "?docs=body" : ""}`),
+  createProject: (hubId: string, input: { name: string; title?: string; goal?: string; visibility?: "members" | "team" }) =>
+    request<Project>("POST", `app/hubs/${enc(hubId)}/projects`, input),
+  updateProject: (hubId: string, name: string, input: { title?: string; goal?: string; brief?: string; links?: ProjectLink[]; visibility?: "members" | "team"; archived?: boolean }) =>
+    request<Project>("PATCH", `app/hubs/${enc(hubId)}/projects/${enc(name)}`, input),
+  deleteProject: (hubId: string, name: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}`),
+  putProjectMember: (hubId: string, name: string, agent: string, input: { role?: "member" | "coordinator"; note?: string } = {}) =>
+    request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
+  removeProjectMember: (hubId: string, name: string, agent: string) =>
+    request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`),
+  projectDoc: (hubId: string, name: string, doc: string) =>
+    request<ProjectDoc>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`),
+  putProjectDoc: (hubId: string, name: string, doc: string, body: string) =>
+    request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`, { body }),
+  deleteProjectDoc: (hubId: string, name: string, doc: string) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`),
   /** Makes a node visible to the team or private to its owner. */
   setVisibility: (hubId: string, name: string, visibility: "team" | "private") =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/visibility`, { visibility }),

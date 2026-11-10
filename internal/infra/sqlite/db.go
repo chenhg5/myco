@@ -140,6 +140,37 @@ CREATE TABLE IF NOT EXISTS hub_settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS projects (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  title      TEXT NOT NULL DEFAULT '',
+  goal       TEXT NOT NULL DEFAULT '',
+  brief      TEXT NOT NULL DEFAULT '',
+  links      TEXT NOT NULL DEFAULT '[]',
+  visibility TEXT NOT NULL DEFAULT 'members',
+  owner      TEXT NOT NULL DEFAULT '',
+  archived   INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_members (
+  project  TEXT NOT NULL,
+  agent    TEXT NOT NULL,
+  role     TEXT NOT NULL DEFAULT 'member',
+  note     TEXT NOT NULL DEFAULT '',
+  added_by TEXT NOT NULL DEFAULT '',
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (project, agent)
+);
+CREATE INDEX IF NOT EXISTS idx_project_members_agent ON project_members(agent);
+CREATE TABLE IF NOT EXISTS project_docs (
+  project    TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  body       TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (project, name)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -218,7 +249,7 @@ var agentColumnsV2 = [][2]string{
 	{"skills", "TEXT NOT NULL DEFAULT '[]'"},
 	// team / private; "" (agents from before) is team.
 	{"visibility", "TEXT NOT NULL DEFAULT ''"},
-	// 1: may edit the cards of its owner's other agents.
+	// v0.18.24 only (coordinators are now a project role); unused.
 	{"coordinator", "INTEGER NOT NULL DEFAULT 0"},
 	// Reported by runners (v0.16.9): the machine the agent runs on, and
 	// its CLI and model.

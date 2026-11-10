@@ -243,18 +243,100 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
-	// Whether a node may edit its owner's other nodes' cards.
-	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/coordinator", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		var in api.CoordinatorRequest
-		if !decode(w, r, &in) {
-			return
-		}
-		a, err := c.SetCoordinator(r.Context(), r.PathValue("name"), in.Coordinator)
+	// Projects of a hub (proxied as they are).
+	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		list, err := c.ListProjects(r.Context(), r.URL.Query().Get("mine") == "true")
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, a)
+		writeJSON(w, http.StatusOK, api.ProjectList{Projects: list})
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.CreateProjectRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		p, err := c.CreateProject(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, p)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/projects/{name}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		p, err := c.GetProject(r.Context(), r.PathValue("name"), r.URL.Query().Get("docs") == "body")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("PATCH /app/hubs/{id}/projects/{name}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.UpdateProjectRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		p, err := c.UpdateProject(r.Context(), r.PathValue("name"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if err := c.DeleteProject(r.Context(), r.PathValue("name")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ProjectMemberRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		p, err := c.PutProjectMember(r.Context(), r.PathValue("name"), r.PathValue("agent"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/members/{agent}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		p, err := c.RemoveProjectMember(r.Context(), r.PathValue("name"), r.PathValue("agent"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/projects/{name}/docs/{doc}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		d, err := c.GetProjectDoc(r.Context(), r.PathValue("name"), r.PathValue("doc"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, d)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/docs/{doc}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ProjectDocRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		d, err := c.PutProjectDoc(r.Context(), r.PathValue("name"), r.PathValue("doc"), in.Body)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, d)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/projects/{name}/docs/{doc}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if err := c.DeleteProjectDoc(r.Context(), r.PathValue("name"), r.PathValue("doc")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 	}))
 	// Who can find and use a node: team or private.
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/visibility", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {

@@ -94,8 +94,8 @@ func clip(s string, n int) string {
 }
 
 // cardEditor guards a change to a node's card: people who own it (or
-// manage the hub) through the console, or a coordinator agent of the same
-// owner through its own token. h gets the editing agent (nil for a person).
+// manage the hub) through the console, or, through its own token, an agent
+// coordinating a project the node is in. h gets the editing agent (nil for a person).
 func (s *Server) cardEditor(what string, h func(w http.ResponseWriter, r *http.Request, by *domain.Agent)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -111,39 +111,21 @@ func (s *Server) cardEditor(what string, h func(w http.ResponseWriter, r *http.R
 				writeError(w, err)
 				return
 			}
-			if !domain.MayEditCard(by, target) {
+			ok := false
+			if s.projects != nil {
+				if ok, err = s.projects.MayEditCard(r.Context(), by, target); err != nil {
+					writeError(w, err)
+					return
+				}
+			}
+			if !ok {
 				writeError(w, domain.Errf(domain.CodePermissionDenied, "%s may not %s %s", by.Name, what, target.Name).
-					WithSuggestion("only its owner, an admin, or a coordinator agent of the same owner can; change your own card with /v1/me"))
+					WithSuggestion("only its owner, an admin, or a coordinator of a project it is in can; change your own card with /v1/me"))
 				return
 			}
 			h(w, r, by)
 		})(w, r)
 	}
-}
-
-// setCoordinator: people only (the node's owner or an admin).
-func (s *Server) setCoordinator(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !s.mayOwnAgent(w, r, name, "make a coordinator of") {
-		return
-	}
-	var req api.CoordinatorRequest
-	if !decode(w, r, &req) {
-		return
-	}
-	a, err := s.agents.SetCoordinator(r.Context(), name, req.Coordinator)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	detail := "off"
-	if a.Coordinator {
-		detail = "on"
-	}
-	s.record(r, "agent.coordinator", string(a.Name), detail)
-	dto := s.agentDTO(a)
-	s.enrich(r.Context(), &dto)
-	writeJSON(w, http.StatusOK, dto)
 }
 
 // cardBefore reads name's card before a change (writing the error if the

@@ -3965,3 +3965,42 @@ body.is-resizing {
 .app-history-more:hover {
   background: var(--pill);
 }
+
+/* Projects */
+.app-group-actions { margin-left: auto; display: inline-flex; gap: 2px; }
+.app-group-actions .app-group-action { margin-left: 0; }
+.app-group-action:disabled { opacity: 0.45; cursor: default; }
+.app-project { display: flex; flex-direction: column; gap: 6px; }
+.app-project-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+.app-project-titles { flex: 1; min-width: 0; }
+.app-project-titles h1 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 600; color: var(--fg); }
+.app-project-goal { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--fg-2); white-space: pre-wrap; }
+.app-project-goal.is-empty { color: var(--muted); }
+.app-project-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.app-project-vis { display: inline-flex; align-items: center; gap: 4px; }
+.app-project-vis svg { width: 12px; height: 12px; }
+.app-project-actions { display: flex; gap: 6px; flex: none; }
+.app-project-actions svg { width: 14px; height: 14px; }
+.app-project-member { display: flex; align-items: center; border-top: 1px solid var(--line-2); }
+.app-project-member:first-child { border-top: 0; }
+.app-project-member-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 10px 12px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.app-project-member-main:hover:not(:disabled) { background: var(--pill); }
+.app-project-member-main:disabled { cursor: default; }
+.app-project-member-main .app-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.app-project-member-more { margin-right: 8px; }
+.app-project-member-more svg { width: 15px; height: 15px; }
+.app-project-skills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.app-project-brief { padding: 10px 16px; font-size: 13px; }
+.app-project-brief .app-empty-note { margin: 8px -16px; }
+.app-project-doc .app-row-main, .app-project-link .app-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-project-link { text-decoration: none; }
+.app-project-editor { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; resize: vertical; min-height: 240px; }
+.app-project-doc-body { max-height: 60vh; overflow: auto; font-size: 13px; margin-bottom: 10px; }
+.app-nav-title-row { display: flex; align-items: center; justify-content: space-between; padding-right: 2px; }
+.app-nav-add { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
+.app-nav-add:hover { background: var(--nav-hover); color: var(--fg); }
+.app-nav-add svg { width: 13px; height: 13px; }
+.app-nav-item.muted { color: var(--muted); }
+.app-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.app-kv-projects { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 10px; }
+.app-modal .app-field + .app-provider-list { margin-top: 14px; }

@@ -20,6 +20,26 @@ export interface Runtime {
   provider_source?: ProviderSource;
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
+
+/** A project: nodes working together on a goal (hubs from v0.18.25). */
+export interface Project {
+  name: string; title: string; goal?: string; brief?: string;
+  links: ProjectLink[];
+  visibility: "members" | "team";
+  owner?: string; owner_id?: string; archived?: boolean;
+  created_at: string; updated_at: string;
+  members: ProjectMember[];
+  docs: ProjectDoc[];
+  /** edit the content (owner, admins, coordinators); manage it (people) */
+  can_edit: boolean; can_manage: boolean;
+}
+export interface ProjectLink { title?: string; url: string }
+export interface ProjectMember {
+  name: string; role: "member" | "coordinator"; note?: string; added_by?: string; added_at: string;
+  /** its card, when the viewer may see the node */
+  agent?: Agent;
+}
+export interface ProjectDoc { name: string; size: number; updated_by?: string; updated_at: string; body?: string }
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   status_text?: string; status_at?: string;
@@ -29,8 +49,6 @@ export interface Agent {
   skills?: Skill[];
   /** team (everyone on the hub) or private (only its owner and their agents); absent = team */
   visibility?: "team" | "private";
-  /** may edit the cards of its owner's other agents (set by people) */
-  coordinator?: boolean;
   labels: string[];
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
