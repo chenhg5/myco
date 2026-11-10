@@ -51,14 +51,15 @@ function fromConversation(c: Conversation): RecentItem {
     messages: c.messages, first: c.first, last: c.last, task, state };
 }
 
-function stateTag(s: RecentItem["state"]): { label: string; cls: "" | "green" | "amber" | "red" } {
+// Shown as a dot on the row's icon (none when done); the label is its tooltip.
+function stateTag(s: RecentItem["state"]): { label: string } {
   switch (s) {
-    case "queued": return { label: L("排队中", "Queued"), cls: "" };
-    case "working": return { label: L("处理中", "Working"), cls: "amber" };
-    case "failed": return { label: L("失败", "Failed"), cls: "red" };
-    case "done": return { label: L("已完成", "Done"), cls: "green" };
+    case "queued": return { label: L("排队中", "Queued") };
+    case "working": return { label: L("处理中", "Working") };
+    case "failed": return { label: L("失败", "Failed") };
+    case "done": return { label: L("已完成", "Done") };
   }
-  return { label: "", cls: "" };
+  return { label: "" };
 }
 
 function matchesState(it: RecentItem, f: StateFilter): boolean {
@@ -379,8 +380,12 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                 type="button"
                 className={cn("conv-row", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
+                title={tag.label || undefined}
               >
-                <span className={cn("conv-row-icon", shell && "is-shell")} aria-hidden><Icon /></span>
+                <span className={cn("conv-row-icon", shell && "is-shell")}>
+                  <Icon aria-hidden />
+                  {it.state !== "done" && tag.label && <span className={cn("conv-row-state", `is-${it.state}`)} role="img" aria-label={tag.label} />}
+                </span>
                 <span className="conv-row-main">
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
@@ -389,7 +394,6 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                   </span>
                   <span className={cn("conv-row-summary", shell && "is-mono")}>{summaryOf(row)}</span>
                 </span>
-                {tag.label && <span className={cn("app-pill", tag.cls)}>{tag.label}</span>}
               </button>
             );
           })}
