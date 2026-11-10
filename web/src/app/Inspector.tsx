@@ -16,7 +16,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 
-type Action = null | "profile" | "skills" | "allow" | "kick" | "delete" | "owner" | "copy";
+type Action = null | "profile" | "skills" | "visibility" | "allow" | "kick" | "delete" | "owner" | "copy";
 
 // A skill being edited: examples as one text, one per line.
 interface SkillDraft { name: string; summary: string; examples: string }
@@ -358,10 +358,14 @@ function receivingLabel(r?: string) {
 }
 
 function receivingNote(r?: string, cloud?: boolean) {
-  if (r === "session" && cloud) return L("会话自己挂着 inbox wait 收消息；停止等待后就收不到了，回到会话里让它重新开始等待。", "The session keeps inbox wait running and reads its own messages. If it stops waiting it can't receive; go back to the session and have it start waiting again.");
-  if (r === "session") return L("会话自己挂着 inbox wait 收消息，runner 暂时让开；会话停止等待约 30 分钟后（多半已经关掉了），runner 自动接手。", "The session keeps inbox wait running and reads its own messages, so the runner stands aside. About 30 minutes after the session stops waiting (by then it is most likely closed), the runner takes over.");
-  if (r === "runner") return L("有消息时，runner 在后台唤醒这个会话处理，你不用开着它。", "When a message arrives, the runner wakes this session in the background to handle it. You don't need to keep it open.");
+  if (r === "session" && cloud) return L("它自己在会话里等消息；停止等待就收不到了。", "It waits for messages in its session; once it stops waiting it can't receive.");
+  if (r === "session") return L("它自己在会话里等消息；关掉约 30 分钟后由后台接手。", "It waits for messages in its session; about 30 minutes after it closes, the background takes over.");
+  if (r === "runner") return L("有消息时在后台唤醒它，不用开着会话。", "Woken in the background when a message arrives; the session needn't stay open.");
   return "";
+}
+
+function visibilityLabel(v?: string) {
+  return v === "private" ? L("仅自己", "Only its owner") : L("团队可见", "Everyone on the hub");
 }
 
 // InUseCard: the runner found the session open elsewhere (a terminal or the
@@ -482,6 +486,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
   const [description, setDescription] = useState("");
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [skillDrafts, setSkillDrafts] = useState<SkillDraft[]>([]);
+  const [visChoice, setVisChoice] = useState<"team" | "private">("team");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -659,22 +664,14 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                 </div>
               )}
               {kind !== "human" && row.hub.me?.member && (
-                <div className="app-kv has-help">
+                <div className="app-kv">
                   <span className="app-kv-label">{L("可见范围", "Who can see it")}</span>
                   <span className="app-kv-value">
                     {mayManage && ag.owner ? (
-                      <select className="app-select-field app-kv-select" value={ag.visibility || "team"} disabled={busy}
-                        aria-label={L("可见范围", "Who can see it")}
-                        onChange={(e) => void run(() => appApi.setVisibility(hubId, ag.name, e.target.value as "team" | "private"), "stay")}>
-                        <option value="team">{L("团队可见", "Everyone on the hub")}</option>
-                        <option value="private">{L("仅自己", "Only its owner")}</option>
-                      </select>
-                    ) : ag.visibility === "private" ? L("仅自己", "Only its owner") : L("团队可见", "Everyone on the hub")}
-                  </span>
-                  <span className="app-kv-help">
-                    {ag.visibility === "private"
-                      ? L(`只有 ${ag.owner || L("主人", "its owner")} 和 ${ag.owner || L("主人", "its owner")} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, `Only ${ag.owner || "its owner"} and their own agents can find it and give it tasks; replies from others still arrive.`)
-                      : L("Hub 上的人和 agent 都能找到它；谁能派活看「允许谁派任务」。", "Everyone on the hub can find it; who can give it tasks is set under Who can give tasks.")}
+                      <button type="button" className="app-kv-link" onClick={() => { setVisChoice(ag.visibility === "private" ? "private" : "team"); openAction("visibility"); }}>
+                        {visibilityLabel(ag.visibility)}<span className="app-chev">›</span>
+                      </button>
+                    ) : visibilityLabel(ag.visibility)}
                   </span>
                 </div>
               )}
@@ -892,6 +889,36 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={saveProfile} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={action === "visibility"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("可见范围", "Who can see it")}
+        description={L("谁能在列表里找到它、给它派活。只有它的主人和管理员能改，agent 自己改不了。", "Who can find it and give it tasks. Only its owner and admins can change this; the agent itself cannot.")}
+      >
+        <div className="app-provider-list" role="radiogroup">
+          <label className={cn("app-provider-opt", visChoice === "team" && "picked")}>
+            <input type="radio" name="visibility" checked={visChoice === "team"} onChange={() => setVisChoice("team")} disabled={busy} />
+            <span>
+              <b>{L("团队可见", "Everyone on the hub")}</b>
+              <small>{L("Hub 上的人和 agent 都能找到它；谁能派活看「允许谁派任务」。", "Everyone on the hub can find it; who can give it tasks is set under Who can give tasks.")}</small>
+            </span>
+          </label>
+          <label className={cn("app-provider-opt", visChoice === "private" && "picked")}>
+            <input type="radio" name="visibility" checked={visChoice === "private"} onChange={() => setVisChoice("private")} disabled={busy} />
+            <span>
+              <b>{L("仅自己", "Only its owner")}</b>
+              <small>{L(`只有 ${ag.owner || "主人"} 和 ${ag.owner || "主人"} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, `Only ${ag.owner || "its owner"} and their own agents can find it and give it tasks; replies from others still arrive.`)}</small>
+            </span>
+          </label>
+        </div>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" disabled={busy || visChoice === (ag.visibility === "private" ? "private" : "team")}
+            onClick={() => void run(() => appApi.setVisibility(hubId, ag.name, visChoice), "close-action")}>{L("保存", "Save")}</button>
         </div>
       </Modal>
 
