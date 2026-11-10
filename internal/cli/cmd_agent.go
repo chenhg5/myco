@@ -355,7 +355,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 				}
 				var c *client.Client
 				var err error
-				if e.in.String("name") != "" {
+				if e.otherAgent() != "" {
 					c, err = e.cardClient()
 				} else {
 					c, err = e.agentClient()
@@ -364,9 +364,9 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 					return err
 				}
 				if e.in.Bool("dry-run") {
-					return e.dryRun(map[string]any{"action": "label_" + verb, "agent": orDefault(e.in.String("name"), e.cfg.Agent), "labels": e.in.List("label")})
+					return e.dryRun(map[string]any{"action": "label_" + verb, "agent": orDefault(e.otherAgent(), e.cfg.Agent), "labels": e.in.List("label")})
 				}
-				a, err := c.SetLabels(e.in.Ctx, e.in.String("name"), req)
+				a, err := c.SetLabels(e.in.Ctx, e.otherAgent(), req)
 				if err != nil {
 					return err
 				}

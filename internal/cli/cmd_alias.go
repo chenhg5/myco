@@ -153,6 +153,11 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				req.Description = &v
 			}
 			name := e.in.String("name")
+			if e.in.IsSet("allow-from") || e.in.Bool("allow-anyone") {
+				// allow_from is a person's call, even on yourself
+			} else {
+				name = e.otherAgent()
+			}
 			switch {
 			case e.in.IsSet("allow-from") && e.in.Bool("allow-anyone"):
 				return errorf("invalid_usage", ExitUsage, "use one of them", "--allow-from and --allow-anyone conflict")

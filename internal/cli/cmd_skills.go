@@ -18,13 +18,13 @@ func agentSkillsCommands() *Command {
 		{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
 	}
 	clientFor := func(e *env) (*client.Client, error) {
-		if e.in.String("name") != "" {
+		if e.otherAgent() != "" {
 			return e.cardClient()
 		}
 		return e.agentClient()
 	}
 	current := func(e *env, c *client.Client) (*api.Agent, error) {
-		if n := e.in.String("name"); n != "" {
+		if n := e.otherAgent(); n != "" {
 			return c.GetAgent(e.in.Ctx, n)
 		}
 		return c.Me(e.in.Ctx)
@@ -34,9 +34,9 @@ func agentSkillsCommands() *Command {
 	}
 	save := func(e *env, c *client.Client, action string, skills []api.Skill) error {
 		if e.in.Bool("dry-run") {
-			return e.dryRun(map[string]any{"action": action, "agent": orDefault(e.in.String("name"), e.cfg.Agent), "skills": skills})
+			return e.dryRun(map[string]any{"action": action, "agent": orDefault(e.otherAgent(), e.cfg.Agent), "skills": skills})
 		}
-		a, err := c.SetSkills(e.in.Ctx, e.in.String("name"), skills)
+		a, err := c.SetSkills(e.in.Ctx, e.otherAgent(), skills)
 		if err != nil {
 			return err
 		}

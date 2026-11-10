@@ -269,6 +269,16 @@ func runnerHarnessFor(h string) string {
 }
 
 // adminClient returns a client authenticated with the hub admin token.
+// otherAgent is --name, or "" when it names the calling agent itself (whose
+// own card is changed through /v1/me, which needs no coordinator).
+func (e *env) otherAgent() string {
+	n := e.in.String("name")
+	if n != "" && e.cfg != nil && n == e.cfg.Agent {
+		return ""
+	}
+	return n
+}
+
 // cardClient is for changing another agent's card (display name,
 // description, labels, skills): admin or member credentials when there are
 // some, else this agent's own token, which the hub accepts from a
