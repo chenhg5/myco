@@ -66,6 +66,11 @@ func TestJoinPageValidLink(t *testing.T) {
 		{"browser gets HTML", "", map[string]string{"Accept": "text/html,application/xhtml+xml", "User-Agent": "Mozilla/5.0"}, "text/html",
 			[]string{"<!doctype html>", "还可接入 3 台机器", "curl -fsSL " + h.url + path + " | bash"}},
 		{"default is markdown", "", map[string]string{"User-Agent": "python-requests/2"}, "text/markdown", []string{"# Join the myco network"}},
+		{"PowerShell gets the PowerShell script", "", map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26100; zh-CN) PowerShell/7.5.0"}, "text/plain",
+			[]string{"$env:MYCO_JOIN_TOKEN = '" + tok + "'", "$env:MYCO_HUB = '" + h.url + "'", "install-client.ps1", "machine join", "Remove-Item Env:MYCO_JOIN_TOKEN"}},
+		{"Windows PowerShell 5.1", "", map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-CN) WindowsPowerShell/5.1.26100"}, "text/plain", []string{"install-client.ps1"}},
+		{"format=ps1", "?format=ps1", nil, "text/plain", []string{"install-client.ps1"}},
+		{"guide has the Windows command", "?format=md", nil, "text/markdown", []string{"irm '" + h.url + path + "?format=ps1' | iex"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

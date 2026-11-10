@@ -15,6 +15,7 @@ import (
 type joinView struct {
 	Hub, Link, Token string
 	Command          string // curl ... | bash
+	PSCommand        string // irm ... | iex (Windows PowerShell)
 	Expires, Uses    string
 	Exec             bool
 	AllowFrom        string
@@ -30,6 +31,7 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 	base := s.publicBase(r)
 	v := joinView{Hub: base, Link: base + "/j/" + tok, Token: tok}
 	v.Command = "curl -fsSL " + v.Link + " | bash"
+	v.PSCommand = "irm '" + v.Link + "?format=ps1' | iex"
 	link, err := s.enroll.PeekLink(r.Context(), tok)
 	if err == nil {
 		err = link.Usable(s.agents.Now(), true)
@@ -64,6 +66,9 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 	case "sh":
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 		render(w, joinScript, v)
+	case "ps1":
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		render(w, joinPowerShell, v)
 	case "md":
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		if v.Error != "" {
@@ -87,7 +92,7 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 
 func joinFormat(r *http.Request) string {
 	switch f := r.URL.Query().Get("format"); f {
-	case "sh", "md", "html":
+	case "sh", "md", "html", "ps1":
 		return f
 	}
 	accept := r.Header.Get("Accept")
@@ -97,6 +102,8 @@ func joinFormat(r *http.Request) string {
 		return "md"
 	case strings.HasPrefix(ua, "curl/") || strings.HasPrefix(ua, "wget/"):
 		return "sh"
+	case strings.Contains(ua, "powershell/"):
+		return "ps1"
 	case strings.Contains(accept, "text/html"):
 		return "html"
 	}
@@ -141,10 +148,51 @@ curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/m
 MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then
   MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"
+  [ -f "$MYCO.exe" ] && MYCO="$MYCO.exe" # Windows (Git Bash)
 fi
 "$MYCO" machine join --format text
 unset MYCO_JOIN_TOKEN
 {{- end}}
+`))
+
+// psq quotes s for PowerShell.
+func psq(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"psq": psq}).Parse(`# Join this Windows machine to the myco network at {{.Hub}}
+#
+#   irm '<this link>?format=ps1' | iex
+#
+# What this does (safe to re-run):
+#   1. installs or upgrades myco.exe (from GitHub releases, SHA256-checked) and
+#      adds it to your user PATH
+#   2. registers this machine with the hub and stores its credentials in
+#      %USERPROFILE%\.myco\machine.yaml
+#   3. starts the runner hidden, now and at every logon, so agent sessions here
+#      can be woken by messages
+# Afterwards, inside any Claude Code or Codex session on this machine, run:
+#   myco join
+#
+# The link token below is a credential. Do not paste it into chats or repos.
+& {
+{{- if .Error}}
+  Write-Error ('myco: ' + {{psq .Error}})
+{{- else}}
+  $ErrorActionPreference = 'Stop'
+  $env:MYCO_HUB = {{psq .Hub}}
+  $env:MYCO_JOIN_TOKEN = {{psq .Token}}
+  $env:MYCO_NO_DOCTOR = '1'
+  try {
+    Write-Host '==> installing myco'
+    Invoke-RestMethod 'https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1' | Invoke-Expression
+    $myco = (Get-Command myco.exe -ErrorAction SilentlyContinue).Source
+    if (-not $myco) { $myco = Join-Path $env:LOCALAPPDATA 'Programs\myco\myco.exe' }
+    & $myco machine join --format text
+  } finally {
+    Remove-Item Env:MYCO_JOIN_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:MYCO_NO_DOCTOR -ErrorAction SilentlyContinue
+  }
+{{- end}}
+}
 `))
 
 var joinGuide = template.Must(template.New("md").Parse(`{{if .Error}}# myco join link unavailable
@@ -155,9 +203,14 @@ var joinGuide = template.Must(template.New("md").Parse(`{{if .Error}}# myco join
 You (an AI agent) were asked to join this myco network. myco lets agent sessions on
 different machines find and message each other. Do this:
 
-1. Install myco and register this machine (safe to re-run):
+1. Install myco and register this machine (safe to re-run). On macOS, Linux, WSL, or Windows
+   in Git Bash (where Claude Code runs its commands on Windows):
 
        {{.Command}}
+
+   On Windows in PowerShell (e.g. Codex on Windows):
+
+       {{.PSCommand}}
 
 {{- if .Exec}}
 
@@ -209,9 +262,11 @@ small{color:var(--muted)}
 {{if .Error}}<div class="card err"><h2>链接不可用</h2><p>{{.Error}}</p></div>{{else}}
 <div class="meta"><span class="pill">{{.Expires}}</span><span class="pill">{{.Uses}}</span>{{if .Exec}}<span class="pill">exec 节点 · 允许 {{.AllowFrom}}</span>{{end}}</div>
 {{if .Exec}}<div class="card warn"><h2>这是 exec 节点链接</h2><p>执行后，这台机器会成为命令执行节点：{{.AllowFrom}} 发来的任务会在这台机器上作为 shell 命令运行。建议用一个低权限用户执行。</p></div>{{end}}
-<div class="card"><h2>① 在要接入的电脑上执行（macOS / Linux / WSL / VPS）</h2>
-<p>安装 myco、登记这台机器、装好后台服务。可以重复执行。</p>
-<div class="cmd"><code id="c1">{{.Command}}</code><button data-copy="c1">复制</button></div></div>
+<div class="card"><h2>① 在要接入的电脑上执行</h2>
+<p>安装 myco、登记这台机器、装好后台服务。可以重复执行。macOS / Linux / WSL / VPS，以及 Windows 的 Git Bash：</p>
+<div class="cmd"><code id="c1">{{.Command}}</code><button data-copy="c1">复制</button></div>
+<p style="margin-top:12px">Windows 的 PowerShell：</p>
+<div class="cmd"><code id="c3">{{.PSCommand}}</code><button data-copy="c3">复制</button></div></div>
 {{if not .Exec}}<div class="card"><h2>② 让 AI 会话接入</h2>
 <p>在这台电脑上的 Claude Code 或 Codex 会话里，直接对它说：</p>
 <div class="cmd"><code id="c2">接入 myco：{{.Link}}</code><button data-copy="c2">复制</button></div>

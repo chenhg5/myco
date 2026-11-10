@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install or upgrade the myco CLI on macOS / Linux, then run a health check.
+# Install or upgrade the myco CLI on macOS / Linux / Windows (Git Bash, MSYS2,
+# Cygwin), then run a health check. In PowerShell use install-client.ps1.
 #
 #   curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | bash
 #
@@ -15,15 +16,21 @@ set -euo pipefail
 REPO="chenhg5/myco"
 VERSION="${MYCO_VERSION:-latest}"
 
+EXE=""
 case "$(uname -s)" in
   Darwin) OS=darwin ;;
   Linux)  OS=linux ;;
-  *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
+  MINGW*|MSYS*|CYGWIN*) OS=windows; EXE=".exe" ;;
+  *) echo "unsupported OS: $(uname -s) (on Windows use Git Bash, or PowerShell with install-client.ps1)" >&2; exit 1 ;;
 esac
-case "$(uname -m)" in
-  x86_64|amd64) ARCH=amd64 ;;
-  arm64|aarch64) ARCH=arm64 ;;
-  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+MACHINE="$(uname -m)"
+if [[ "$OS" == windows && -n "${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-}}" ]]; then
+  MACHINE="${PROCESSOR_ARCHITEW6432:-$PROCESSOR_ARCHITECTURE}"
+fi
+case "$MACHINE" in
+  x86_64|amd64|AMD64) ARCH=amd64 ;;
+  arm64|aarch64|ARM64) ARCH=arm64 ;;
+  *) echo "unsupported architecture: $MACHINE" >&2; exit 1 ;;
 esac
 
 if [[ -n "${MYCO_INSTALL_DIR:-}" ]]; then
@@ -40,27 +47,29 @@ if [[ "$VERSION" == "latest" ]]; then
 else
   BASE="https://github.com/$REPO/releases/download/$VERSION"
 fi
-ASSET="myco-$OS-$ARCH"
+ASSET="myco-$OS-$ARCH$EXE"
 
 echo "==> current: $(command -v myco >/dev/null 2>&1 && myco version || echo 'not installed')"
 echo "==> downloading $BASE/$ASSET"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 # GitHub's download redirect answers 502/504 now and then: retry those.
-curl -fsSL --retry 5 --retry-delay 2 "$BASE/$ASSET" -o "$tmp/myco"
+curl -fsSL --retry 5 --retry-delay 2 "$BASE/$ASSET" -o "$tmp/myco$EXE"
 curl -fsSL --retry 5 --retry-delay 2 "$BASE/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
 want="$(awk -v f="$ASSET" '$2==f {print $1}' "$tmp/SHA256SUMS")"
-if command -v shasum >/dev/null; then got="$(shasum -a 256 "$tmp/myco" | awk '{print $1}')"; else got="$(sha256sum "$tmp/myco" | awk '{print $1}')"; fi
+if command -v shasum >/dev/null; then got="$(shasum -a 256 "$tmp/myco$EXE" | awk '{print $1}')"; else got="$(sha256sum "$tmp/myco$EXE" | awk '{print $1}')"; fi
 if [[ -z "$want" || "$want" != "$got" ]]; then
   echo "checksum mismatch for $ASSET (want $want, got $got); aborting" >&2
   exit 1
 fi
 echo "==> checksum ok"
 
-chmod +x "$tmp/myco"
-if [[ -w "$DIR" ]]; then
-  mv "$tmp/myco" "$DIR/myco"
+chmod +x "$tmp/myco$EXE"
+if [[ -w "$DIR" || "$OS" == windows ]]; then
+  # Windows: a running myco.exe cannot be overwritten, but it can be renamed.
+  [[ "$OS" == windows && -f "$DIR/myco.exe" ]] && mv -f "$DIR/myco.exe" "$DIR/myco.exe.old" 2>/dev/null || true
+  mv -f "$tmp/myco$EXE" "$DIR/myco$EXE"
 else
   echo "==> $DIR is not writable, using sudo"
   sudo mv "$tmp/myco" "$DIR/myco"
@@ -68,7 +77,7 @@ fi
 # Downloads via curl are not quarantined, but clear the flag just in case.
 [[ "$OS" == darwin ]] && xattr -d com.apple.quarantine "$DIR/myco" 2>/dev/null || true
 
-echo "==> installed: $DIR/myco $("$DIR/myco" version)"
+echo "==> installed: $DIR/myco$EXE $("$DIR/myco$EXE" version)"
 case ":$PATH:" in
   *":$DIR:"*) ;;
   *)
@@ -81,6 +90,12 @@ case ":$PATH:" in
         fi
       done
       echo "==> added $DIR to PATH in your shell profile (open a new terminal to use it)"
+      if [[ "$OS" == windows ]] && command -v cygpath >/dev/null && command -v powershell.exe >/dev/null; then
+        # Also for PowerShell, cmd and agent CLIs started from Windows itself.
+        WINDIR_PATH="$(cygpath -w "$DIR")"
+        powershell.exe -NoProfile -Command "\$d='$WINDIR_PATH'; \$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not ((\$p -split ';') -contains \$d)) { [Environment]::SetEnvironmentVariable('Path', ((@(\$p, \$d) | Where-Object { \$_ }) -join ';'), 'User') }" >/dev/null 2>&1 \
+          && echo "==> added $WINDIR_PATH to your Windows user PATH"
+      fi
     else
       echo "NOTE: $DIR is not on PATH. Add it, e.g.: echo 'export PATH=\"$DIR:\$PATH\"' >> ~/.zshrc"
     fi
@@ -93,7 +108,7 @@ fi
 
 echo
 echo "==> myco doctor --all"
-if "$DIR/myco" doctor --all --format text; then
+if "$DIR/myco$EXE" doctor --all --format text; then
   echo
   echo "All checks passed."
 else

@@ -56,9 +56,18 @@ notes are never auto-answered. Logs go to stderr.`,
 			{Name: "busy-retry", Kind: Duration, Default: "2m", Help: "Max delay between retries while the session is busy (starts at 10s, doubles)"},
 			{Name: "rebind", Kind: Bool, Help: "Allow taking over an agent bound to another environment or harness"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity"},
+			{Name: "log-file", Kind: String, Help: "Append the log to this file instead of stderr (used by the Windows background runner)"},
 		},
 		Run: handler(func(e *env) error {
 			log := newLogger(e.in.String("log-level"))
+			if path := e.in.String("log-file"); path != "" {
+				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+				if err != nil {
+					return errorf("invalid_argument", ExitUsage, "pass a writable file to --log-file", "cannot open log file: %v", err)
+				}
+				defer f.Close()
+				log = newLoggerTo(f, e.in.String("log-level"))
+			}
 			shared := runnerShared{
 				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,

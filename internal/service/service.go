@@ -1,5 +1,6 @@
 // Package service installs `myco runner start --all` as a per-user background
-// service: launchd on macOS, systemd --user on Linux.
+// service: launchd on macOS, systemd --user on Linux, a logon command on
+// Windows.
 package service
 
 import (
@@ -95,7 +96,7 @@ func (id ID) orDefault() ID {
 }
 
 // ErrUnsupported is returned on platforms without a supported manager.
-var ErrUnsupported = errors.New("no supported service manager on this platform (launchd on macOS, systemd on Linux); on Windows run `myco runner start` in a terminal for now")
+var ErrUnsupported = errors.New("no supported service manager on this platform (launchd on macOS, systemd on Linux, a logon command on Windows for the runner)")
 
 // Detect returns the runner service's manager for this OS.
 func Detect(home string, r Runner) (Manager, error) { return DetectID(home, r, RunnerID) }
@@ -110,6 +111,10 @@ func DetectID(home string, r Runner, id ID) (Manager, error) {
 			return nil, fmt.Errorf("%w: systemctl not found", ErrUnsupported)
 		}
 		return &Systemd{Home: home, R: r, ID: id}, nil
+	case "windows":
+		if id.orDefault() == RunnerID {
+			return &WindowsLogon{Home: home, R: r, ID: id}, nil
+		}
 	}
 	return nil, ErrUnsupported
 }

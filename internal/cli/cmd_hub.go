@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -103,8 +104,10 @@ func tokenFromFile(content string) string {
 	return strings.TrimSpace(content)
 }
 
-func newLogger(level string) *slog.Logger {
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stderr, level) }
+
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var l slog.Level
 	_ = l.UnmarshalText([]byte(level))
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l}))
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: l}))
 }
