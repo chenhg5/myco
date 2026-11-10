@@ -3730,3 +3730,9 @@ body.is-resizing {
   height: 11px;
   margin-top: 7px;
 }
+.conv-retry-note {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}

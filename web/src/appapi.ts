@@ -181,6 +181,18 @@ export class ApiError extends Error {
   }
 }
 
+/** The hub could not be reached or answered too slowly: a later try may
+ *  well work, and the raw text ("context deadline exceeded") means nothing
+ *  to a person. */
+export function isTransient(e: unknown): boolean {
+  if (e instanceof ApiError) {
+    if (e.code === "unavailable" || e.code === "timeout") return true;
+    if (e.status === 502 || e.status === 503 || e.status === 504) return true;
+    return /deadline exceeded|timed? ?out|connection (refused|reset)|no such host|EOF/i.test(e.message);
+  }
+  return e instanceof TypeError; // fetch itself failed
+}
+
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   return e instanceof Error ? e.message : String(e);

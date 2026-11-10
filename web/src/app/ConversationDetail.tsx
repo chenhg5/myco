@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUp, Loader2, Lock, Paperclip } from "lucide-react";
-import { appApi } from "@/appapi";
+import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { cliName, isMe, personLabel } from "@/app/nodes";
@@ -379,8 +379,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className={cn("conv-timeline", shellMode && "is-shell")}>
           {shown === null ? (
-            loadError ? (
+            loadError && !isTransient(loadError) ? (
               <ErrorText error={loadError} />
+            ) : loadError ? (
+              // The hub is slow or down: keep the placeholders, say so
+              // quietly; polling retries and the note goes once it answers.
+              <>
+                <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
+                <div className="conv-retry-note">{L("暂时连不上这个 Hub，正在重试…", "Can't reach this hub right now; retrying…")}</div>
+              </>
             ) : (
               <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
             )

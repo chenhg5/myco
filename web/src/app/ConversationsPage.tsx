@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ChevronDown, MessageSquare, PanelLeftClose, Pin, PinOff, Plus, Search, SquarePen, Terminal } from "lucide-react";
-import { appApi, errorMessage, type Conversation, type Hub, type RecentItem } from "@/appapi";
+import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
+import { ErrorText } from "@/app/dialogs";
 import type { AgentRow } from "@/app/types";
 import { groupsOf, isMe, tagsOf } from "@/app/nodes";
 import { parseExecResult } from "@/app/Markdown";
@@ -117,6 +118,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   const moreRef = useRef(more); moreRef.current = more;
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const keyRef = useRef(listKey);
+  const inFlight = useRef(false);
   const listKeyRef = useRef(listKey); listKeyRef.current = listKey;
 
   const targets = useMemo(
@@ -166,6 +168,9 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   useEffect(() => {
     let cancelled = false;
     const changed = keyRef.current !== listKey;
+    // A background refresh while the last one still waits on a slow hub:
+    // skip it rather than pile requests up (a new filter always goes).
+    if (!changed && inFlight.current) return;
     keyRef.current = listKey;
     if (changed) {
       setItems([]);
@@ -174,7 +179,9 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       scroller()?.scrollTo({ top: 0 });
     }
     setLoading(true);
+    const myKey = listKey;
     const run = async () => {
+      inFlight.current = true;
       const results = await Promise.all(targets.map(async (h) => {
         try {
           return { h, ...(await fetchPage(h)), failed: null as unknown };
@@ -182,7 +189,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           return { h, items: [] as RecentItem[], more: false, failed: e };
         }
       }));
-      if (cancelled) return;
+      inFlight.current = false;
+      // Superseded only by a new filter or hub: a background refresh skipped
+      // while this one waited still wants its answer.
+      if (cancelled && listKeyRef.current !== myKey) return;
       const fresh: ConversationRow[] = results.flatMap((r) => r.items.map((item) => ({ hubId: r.h.id, hubName: r.h.name, item })));
       setItems((prev) => {
         // Rows of every hub still in view: a hub that is briefly offline, or
@@ -208,6 +218,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       // After a refresh, older pages already loaded still stand: keep what
       // "more" said for them.
       setMore((prev) => Object.fromEntries(results.map((r) => [r.h.id, r.failed && !changed ? (prev[r.h.id] ?? false) : changed || prev[r.h.id] === undefined ? r.more : prev[r.h.id]])));
+      // A refresh that failed while rows are on screen says nothing: the rows
+      // stay and the next refresh tries again. Only an empty list explains.
       setError(results.find((r) => r.failed)?.failed ?? null);
       setLoading(false);
     };
@@ -439,8 +451,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
         </span>
       </div>
 
-      {error !== null && (
-        <div className="app-error-text" style={{ marginBottom: 12 }}>{errorMessage(error)}</div>
+      {/* A refresh that failed while rows are on screen says nothing: the
+          rows stay and the next refresh tries again. */}
+      {error !== null && shown.length === 0 && (
+        <div style={{ marginBottom: 12 }}><ErrorText error={error} /></div>
       )}
 
       {firstLoad ? (

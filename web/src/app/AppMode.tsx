@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, RefreshCw, Settings, WifiOff,
 } from "lucide-react";
@@ -120,7 +120,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { cancelled = true; };
   }, []);
 
+  // One refresh at a time: with a slow hub a refresh can take longer than
+  // the poll interval, and piling them up only makes it slower.
+  const refreshing = useRef(false);
   const refresh = useCallback(async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
     setLoading(true);
     try {
       const [h, o, pending] = await Promise.all([
@@ -141,6 +146,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     } catch (e) {
       setError(e);
     } finally {
+      refreshing.current = false;
       setLoading(false);
     }
   }, []);

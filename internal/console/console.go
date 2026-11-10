@@ -149,7 +149,8 @@ func randomHex(n int) string {
 type Backend struct {
 	Store   *Store
 	Secrets Secrets
-	// Timeout bounds each call to a hub (default 5s; adding a hub 15s).
+	// Timeout bounds each call to a hub (default 12s: a hub far away takes
+	// a few seconds a request; adding a hub 15s).
 	Timeout time.Duration
 	// NewClient builds a hub client (tests replace it); default client.New.
 	NewClient func(hubURL, token string) (*client.Client, error)
@@ -170,7 +171,7 @@ func (b *Backend) timeout() time.Duration {
 	if b.Timeout > 0 {
 		return b.Timeout
 	}
-	return 5 * time.Second
+	return 12 * time.Second
 }
 
 func (b *Backend) client(h Hub) (*client.Client, error) {
