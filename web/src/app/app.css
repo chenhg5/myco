@@ -3565,13 +3565,54 @@ body.is-resizing {
   cursor: col-resize;
   user-select: none;
 }
-.conv-split-collapse {
-  position: absolute;
-  top: 10px;
-  right: 8px;
-  z-index: 1;
+/* The narrow list's header: count, then new and hide as icon buttons. */
+.conv-list-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  margin-bottom: 10px;
 }
-.conv-split-collapse svg,
+.conv-list-count {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-head-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.conv-head-icon:hover {
+  background: var(--pill);
+  color: var(--fg);
+}
+.conv-head-icon.is-primary {
+  color: var(--accent);
+}
+.conv-head-icon.is-primary:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.conv-head-icon:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.conv-head-icon svg {
+  width: 17px;
+  height: 17px;
+}
 .conv-split-rail svg {
   width: 16px;
   height: 16px;
@@ -3611,10 +3652,9 @@ body.is-resizing {
   max-width: none;
   padding: 12px 0 24px;
 }
-.conv-list-compact .app-page-head {
-  padding-right: 44px !important;
+.conv-list-compact .conv-list-head {
+  padding: 0 8px 0 14px;
 }
-.conv-list-compact .app-page-head,
 .conv-list-compact .app-toolbar,
 .conv-list-compact .app-error-text,
 .conv-list-compact .app-empty-note {

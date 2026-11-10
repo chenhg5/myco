@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, MessageSquare, Pin, PinOff, Plus, Search, Terminal } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, MessageSquare, PanelLeftClose, Pin, PinOff, Plus, Search, SquarePen, Terminal } from "lucide-react";
 import { appApi, errorMessage, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { groupsOf, isMe, tagsOf } from "@/app/nodes";
@@ -84,7 +84,7 @@ function matchesState(it: RecentItem, f: StateFilter): boolean {
   return it.state === f;
 }
 
-export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact }: {
+export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact, onCollapse }: {
   hubs: Hub[];
   /** The Hub selected in the switcher: "all" or a hub id. */
   hub: string;
@@ -96,6 +96,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   selectedKey?: string;
   /** Split view: the list is a narrow column. */
   compact?: boolean;
+  /** Split view: hides the list (a button in its header). */
+  onCollapse?: () => void;
 }) {
   const [filters, setFilters] = useState<ListFilters>(loadFilters);
   const [q, setQ] = useState("");
@@ -359,14 +361,33 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
 
   return (
     <div className={cn("app-page", compact && "conv-list-compact")} ref={listRef}>
-      <div className="app-page-head">
-        <p className="app-summary">
-          {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
-        </p>
-        <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
-          <Plus />{L("新对话", "New conversation")}
-        </button>
-      </div>
+      {compact ? (
+        // The narrow list: a quiet count and two matching icon buttons.
+        <div className="conv-list-head">
+          <span className="conv-list-count">
+            {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
+          </span>
+          <button type="button" className="conv-head-icon is-primary" onClick={onNew}
+            aria-label={L("新对话", "New conversation")} title={L("新对话", "New conversation")}>
+            <SquarePen />
+          </button>
+          {onCollapse && (
+            <button type="button" className="conv-head-icon" onClick={onCollapse}
+              aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
+              <PanelLeftClose />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="app-page-head">
+          <p className="app-summary">
+            {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
+          </p>
+          <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
+            <Plus />{L("新对话", "New conversation")}
+          </button>
+        </div>
+      )}
 
       <div className="app-toolbar">
         <div className="app-search">

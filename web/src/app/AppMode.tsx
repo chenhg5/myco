@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftClose, PanelLeftOpen, RefreshCw, Settings, WifiOff,
+  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, RefreshCw, Settings, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -445,16 +445,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
               </div>
             ) : (<>
             <div className="conv-split-list app-scroll" style={{ width: listWidth }}>
-              <button type="button" className="app-btn app-btn-plain conv-split-collapse" onClick={() => setListCollapsed(true)}
-                aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
-                <PanelLeftClose />
-              </button>
               <ConversationsPage
                 hubs={namedHubs}
                 hub={filters.hub}
                 rows={rows}
                 now={now}
                 compact
+                onCollapse={() => setListCollapsed(true)}
                 selectedKey={conv ? convKey(conv) : ""}
                 onOpen={openConversationRow}
                 onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
