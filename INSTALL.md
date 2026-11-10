@@ -697,6 +697,7 @@ myco schema --all                    # 所有命令的参数定义（JSON），�
 | 10 | dry-run 校验通过 | 可以去掉 `--dry-run` 正式执行 |
 
 不在终端里运行时输出 JSON；错误以 JSON 输出到 stderr，字段有 `error`、`message`、`suggestion`、`retryable`。
+如果输入了本机 CLI 不认识的命令，并且已配置的 Hub 版本比本机新，`suggestion` 会提示两个版本号及 `myco upgrade`。Hub 未配置或暂时不可用时仍按普通用法错误处理。
 
 ---
 

@@ -58,6 +58,12 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	if err != nil {
 		e := toError(err, cmd.Path())
+		var usage *cmdkit.UsageError
+		if errors.As(err, &usage) && strings.HasPrefix(usage.Message, "unknown command ") {
+			if hint := unknownCommandUpgradeHint(ctx, args, getenv); hint != "" {
+				e.Suggestion += "; " + hint
+			}
+		}
 		p.PrintError(e)
 		return e.Exit
 	}
