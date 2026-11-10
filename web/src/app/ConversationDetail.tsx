@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Lock, Paperclip } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUp, Loader2, Lock, Paperclip } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -63,6 +63,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [sending, setSending] = useState(false);
   const [steerMode, setSteerMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // grow with the text, up to about eight lines, then scroll
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [draft]);
   const atBottom = useRef(true);
 
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
@@ -215,6 +223,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setDraft("");
       setSteerMode(false);
       atBottom.current = true;
+      inputRef.current?.focus();
     } catch (e) {
       setSendError(e);
     } finally {
@@ -362,31 +371,35 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {steerOn && (
           <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}
-        <div className="conv-compose-box">
+        <div className={cn("conv-compose-box", steerOn && "is-steer")} onClick={() => inputRef.current?.focus()}>
           <textarea
-            className="app-input"
+            ref={inputRef}
+            className="conv-compose-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder={steerOn ? L("修改刚才的任务…", "Change the last task…") : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
-            rows={2}
-            disabled={sending}
+            rows={1}
             aria-label={L("消息", "Message")}
           />
-          <button
-            type="button"
-            className="app-btn app-btn-primary"
-            onClick={() => void send()}
-            disabled={sending || !draft.trim()}
-          >
-            {sending ? L("发送中…", "Sending…") : steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
-          </button>
-        </div>
-        <div className="conv-compose-hint">
-          {L("Enter 发送，Shift+Enter 换行", "Enter to send, Shift+Enter for a new line")}
-          {messages && messages.length > 0 && (
-            <span className="conv-compose-ago">{lang() === "zh" ? <>更新于 {timeAgo(messages[messages.length - 1]?.updated_at, now)}</> : <>Updated {timeAgo(messages[messages.length - 1]?.updated_at, now)}</>}</span>
-          )}
+          <div className="conv-compose-bar">
+            {/* left: room for attachments and voice input later */}
+            <div className="conv-compose-tools" />
+            <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
+            {messages && messages.length > 0 && (
+              <span className="conv-compose-ago">{lang() === "zh" ? <>更新于 {timeAgo(messages[messages.length - 1]?.updated_at, now)}</> : <>Updated {timeAgo(messages[messages.length - 1]?.updated_at, now)}</>}</span>
+            )}
+            <button
+              type="button"
+              className="conv-send"
+              onClick={(e) => { e.stopPropagation(); void send(); }}
+              disabled={sending || !draft.trim()}
+              title={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
+              aria-label={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
+            >
+              {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
+            </button>
+          </div>
         </div>
         <ErrorText error={sendError} />
       </div>
