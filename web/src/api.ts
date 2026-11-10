@@ -19,9 +19,15 @@ export interface Runtime {
   provider?: string;
   provider_source?: ProviderSource;
 }
+export interface Skill { name: string; summary?: string; examples?: string[] }
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
-  status_text?: string; status_at?: string; capabilities: string[]; labels: string[];
+  status_text?: string; status_at?: string;
+  /** names of skills (hubs before skills: the only list) */
+  capabilities: string[];
+  /** what others can pick it for; absent on hubs before v0.18.21 */
+  skills?: Skill[];
+  labels: string[];
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;

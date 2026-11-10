@@ -213,6 +213,9 @@ var agentColumnsV2 = [][2]string{
 	{"display_name", "TEXT NOT NULL DEFAULT ''"},
 	{"status_text", "TEXT NOT NULL DEFAULT ''"},
 	{"status_at", "INTEGER NOT NULL DEFAULT 0"},
+	// Skills (JSON); empty for agents stored before them: their
+	// capabilities stand in as bare skills.
+	{"skills", "TEXT NOT NULL DEFAULT '[]'"},
 	// Reported by runners (v0.16.9): the machine the agent runs on, and
 	// its CLI and model.
 	{"machine_id", "TEXT NOT NULL DEFAULT ''"},

@@ -243,6 +243,19 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	// What a node can be asked to do.
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/skills", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.SkillsRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		a, err := c.SetSkills(r.Context(), r.PathValue("name"), in.Skills)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
 	// Groups (group=…) and tags (bare labels) of a node.
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/labels", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.LabelsRequest

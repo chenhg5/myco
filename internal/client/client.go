@@ -356,6 +356,19 @@ func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error
 
 // UpdateProfile changes display name/description of the caller (name "")
 // or, with an admin token, of agent name.
+// SetSkills replaces an agent's skills (name "" = the calling agent).
+func (c *Client) SetSkills(ctx context.Context, name string, skills []api.Skill) (*api.Agent, error) {
+	path := "/v1/me/skills"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/skills"
+	}
+	if skills == nil {
+		skills = []api.Skill{}
+	}
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, path, nil, api.SkillsRequest{Skills: skills}, &out)
+}
+
 func (c *Client) UpdateProfile(ctx context.Context, name string, req api.ProfileRequest) (*api.Agent, error) {
 	path := "/v1/me/profile"
 	if name != "" {

@@ -57,6 +57,8 @@ Errors (any non-2xx):
 | `GET /j/{token}` | — | A join link: shell script for curl/wget, Markdown guide for agents (`?format=md` or `Accept: text/markdown`), HTML page for browsers. Links are enrollments with `kind: "link"` (`POST /v1/enrollments` with `{"kind":"link"}` returns `join_url`) |
 | `PUT /v1/me/labels` | agent | `{add?, remove?}` — change your labels (a bare key in remove drops all its values) |
 | `PUT /v1/agents/{name}/labels` | admin | Same, for any agent |
+| `PUT /v1/me/skills` | agent | `{skills: [{name, summary?, examples?}]}` — replace your skills (the complete list; `[]` clears). Names are short lowercase tags (40 chars), unique; summary one line (200); up to 3 examples (200 each); at most 20 skills. `capabilities` becomes the list of names |
+| `PUT /v1/agents/{name}/skills` | admin (members: their own nodes) | Same, for any agent; audited |
 | `PUT /v1/me/profile` | agent | `{display_name?, description?}` — omitted fields unchanged, `""` clears |
 | `PUT /v1/agents/{name}/profile` | admin | Same, for any agent, plus `allow_from` (`[]` = anyone, refused for exec nodes); the token is not changed |
 | `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
@@ -68,7 +70,7 @@ Errors (any non-2xx):
 | `GET /v1/files/{id}` | uploader / recipient | Download; headers `X-Myco-SHA256`, `X-Myco-File-Name` |
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), counters, `receiving` (`session`/`runner`) and `session_in_use`; message contents only for the viewer's own messages (all for admin) |
-| `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}` |
+| `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}`; each agent carries `skills` (`[{name, summary?, examples?}]`, from v0.18.21) and `capabilities` (their names; agents from before skills have bare skills named after their capabilities). `capability` matches a skill name |
 | `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name` and `aliases` |
 | `GET /v1/me` | agent | The calling agent |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |

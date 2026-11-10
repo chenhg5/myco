@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Check, MessageSquare, X } from "lucide-react";
+import { Check, MessageSquare, Pencil, Plus, Trash2, X } from "lucide-react";
 import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import type { Member, Peer } from "@/api";
+import type { Member, Peer, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
@@ -16,7 +16,18 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 
-type Action = null | "profile" | "allow" | "kick" | "delete" | "owner" | "copy";
+type Action = null | "profile" | "skills" | "allow" | "kick" | "delete" | "owner" | "copy";
+
+// A skill being edited: examples as one text, one per line.
+interface SkillDraft { name: string; summary: string; examples: string }
+const toDraft = (s: Skill): SkillDraft => ({ name: s.name, summary: s.summary || "", examples: (s.examples || []).join("\n") });
+const fromDraft = (d: SkillDraft): Skill => ({
+  name: d.name.trim().toLowerCase(), summary: d.summary.trim() || undefined,
+  examples: d.examples.split("\n").map((x) => x.trim()).filter(Boolean),
+});
+/** A node's skills; a hub before skills only has bare capability names. */
+const skillsOf = (a: { skills?: Skill[]; capabilities: string[] }): Skill[] =>
+  a.skills?.length ? a.skills : a.capabilities.map((name) => ({ name }));
 
 const pillClass: Record<string, string> = { working: "green", pending: "amber", idle: "", offline: "" };
 
@@ -470,6 +481,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
+  const [skillDrafts, setSkillDrafts] = useState<SkillDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -551,6 +563,16 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
     () => appApi.updateProfile(hubId, ag.name, { display_name: displayName.trim(), description: description.trim() }),
     "close-action",
   );
+  const openSkills = () => {
+    const have = skillsOf(ag).map(toDraft);
+    setSkillDrafts(have.length ? have : [{ name: "", summary: "", examples: "" }]);
+    openAction("skills");
+  };
+  const editDraft = (i: number, p: Partial<SkillDraft>) => setSkillDrafts((ds) => ds.map((d, j) => (j === i ? { ...d, ...p } : d)));
+  const saveSkills = () => void run(
+    () => appApi.setSkills(hubId, ag.name, skillDrafts.filter((d) => d.name.trim()).map(fromDraft)),
+    "close-action",
+  );
   const saveAllowFrom = () => void run(
     () => appApi.updateAllowFrom(hubId, ag.name, allowFrom),
     "close-action",
@@ -582,6 +604,40 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
 
           {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
           {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <InUseCard />}
+
+          {kind !== "human" && (
+            <section className="app-group">
+              <div className="app-group-title">
+                <span className="name">{L("介绍与技能", "About and skills")}</span>
+                {mayManage && (
+                  <button type="button" className="app-group-action" onClick={openSkills}>
+                    <Pencil />{L("编辑技能", "Edit skills")}
+                  </button>
+                )}
+              </div>
+              <div className="app-list">
+                <div className={cn("app-about", !ag.description && "is-empty")}>
+                  {ag.description || L("还没有介绍。", "No description yet.")}
+                  {mayManage && (
+                    <button type="button" className="app-about-edit" onClick={() => openAction("profile")} aria-label={L("修改介绍", "Edit description")} title={L("修改介绍", "Edit description")}>
+                      <Pencil />
+                    </button>
+                  )}
+                </div>
+                {skillsOf(ag).length === 0 ? (
+                  <div className="app-skill-empty">
+                    {L("还没有技能。技能告诉别的 agent 可以把什么活派给它；它自己也能用 myco agent skills add 添加。", "No skills yet. Skills tell other agents what work to hand it; it can add them itself with myco agent skills add.")}
+                  </div>
+                ) : skillsOf(ag).map((s) => (
+                  <div className="app-skill" key={s.name}>
+                    <span className="app-skill-name">{s.name}</span>
+                    {s.summary && <span className="app-skill-summary">{s.summary}</span>}
+                    {s.examples?.map((x) => <span className="app-skill-example" key={x}>{L("例：", "e.g. ")}{x}</span>)}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
@@ -816,6 +872,38 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={saveProfile} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={action === "skills"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("技能", "Skills")}
+        description={L("别的 agent 按技能挑人派活。每个技能一个短名字、一句话说明，可以加几个例子。agent 自己也能改，以后写的为准。", "Other agents pick who to hand work to by skill: a short name, one line on what it covers, and a few examples. The agent can change them too; the last change wins.")}
+      >
+        <div className="app-skill-edit-list">
+          {skillDrafts.map((d, i) => (
+            <div className="app-skill-edit" key={i}>
+              <div className="app-skill-edit-row">
+                <input className="app-input mono" value={d.name} placeholder={L("名字，如 ios-release", "name, e.g. ios-release")}
+                  onChange={(e) => editDraft(i, { name: e.target.value })} disabled={busy} aria-label={L("技能名", "Skill name")} />
+                <button type="button" className="app-btn app-btn-plain" onClick={() => setSkillDrafts((ds) => ds.filter((_, j) => j !== i))}
+                  disabled={busy} aria-label={L("删除这个技能", "Remove this skill")} title={L("删除", "Remove")}><Trash2 /></button>
+              </div>
+              <input className="app-input" value={d.summary} placeholder={L("一句话说明它能做什么", "One line: what it covers")}
+                onChange={(e) => editDraft(i, { summary: e.target.value })} disabled={busy} aria-label={L("说明", "Summary")} />
+              <textarea className="app-input app-skill-examples" value={d.examples} rows={2}
+                placeholder={L("例子（可选，每行一个，最多 3 个）", "Examples (optional, one per line, up to 3)")}
+                onChange={(e) => editDraft(i, { examples: e.target.value })} disabled={busy} aria-label={L("例子", "Examples")} />
+            </div>
+          ))}
+          <button type="button" className="app-btn app-skill-add" onClick={() => setSkillDrafts((ds) => [...ds, { name: "", summary: "", examples: "" }])}
+            disabled={busy || skillDrafts.length >= 20}><Plus />{L("添加技能", "Add a skill")}</button>
+        </div>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={saveSkills} disabled={busy}>{busy ? L("正在保存…", "Saving…") : L("保存", "Save")}</button>
         </div>
       </Modal>
 

@@ -115,7 +115,8 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			`myco agent list --selector "group=loops,machine=mac"`,
 		},
 		Flags: []Flag{
-			{Name: "capability", Kind: String, Help: "Only agents advertising this capability"},
+			{Name: "capability", Kind: String, Help: "Only agents with this skill (same as --skill)"},
+			{Name: "skill", Kind: String, Help: "Only agents with this skill, e.g. code-review"},
 			{Name: "online", Kind: Bool, Help: "Only agents seen recently"},
 			{Name: "selector", Kind: String, Help: "Label selector: key, !key, key=value, key!=value, comma = AND (virtual keys: name, harness, capability)"},
 		},
@@ -124,7 +125,7 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 			if err != nil {
 				return err
 			}
-			agents, err := c.ListAgents(e.in.Ctx, e.in.String("capability"), e.in.Bool("online"), e.in.String("selector"))
+			agents, err := c.ListAgents(e.in.Ctx, orDefault(e.in.String("skill"), e.in.String("capability")), e.in.Bool("online"), e.in.String("selector"))
 			if err != nil {
 				return err
 			}
@@ -378,7 +379,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove, agentCleanupCommand())
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentSkillsCommands(), agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove, agentCleanupCommand())
 }
 
 // bindingFromFlags merges --detect results with explicit flags.

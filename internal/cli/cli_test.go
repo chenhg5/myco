@@ -384,6 +384,30 @@ func TestLabelsAndBroadcast(t *testing.T) {
 		t.Fatalf("selector list: %s", out)
 	}
 
+	// Skills: add (and replace), find by skill, remove, dry-run.
+	if code, _, e := c.run("agent", "skills", "add", "--skill", "ios-release", "--summary", "Build iOS test builds", "--example", "ship main"); code != 0 {
+		t.Fatalf("skills add: %s", e)
+	}
+	if code, _, e := c.run("agent", "skills", "add", "--skill", "ios-release", "--summary", "Build and upload iOS test builds"); code != 0 {
+		t.Fatalf("skills replace: %s", e)
+	}
+	code, out, _ = boss.run("agent", "list", "--skill", "ios-release", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"name": "mac-c"`) || !strings.Contains(out, "Build and upload iOS test builds") || strings.Count(out, `"name": "ios-release"`) != 1 {
+		t.Fatalf("list --skill: %s", out)
+	}
+	if code, _, _ := c.run("agent", "skills", "remove", "--skill", "nope"); code != ExitNotFound {
+		t.Fatalf("removing a missing skill: exit %d", code)
+	}
+	if code, _, _ := c.run("agent", "skills", "remove", "--skill", "ios-release", "--dry-run"); code != ExitDryRun {
+		t.Fatalf("skills remove dry-run: exit %d", code)
+	}
+	if code, _, e := c.run("agent", "skills", "remove", "--skill", "ios-release"); code != 0 {
+		t.Fatalf("skills remove: %s", e)
+	}
+	if _, out, _ := boss.run("agent", "list", "--skill", "ios-release", "--format", "json"); strings.Contains(out, `"name": "mac-c"`) {
+		t.Fatalf("still listed after remove: %s", out)
+	}
+
 	if code, _, _ := boss.run("broadcast", "send", "--selector", "group=loops", "--body", "x", "--dry-run"); code != ExitDryRun {
 		t.Fatalf("dry-run exit %d", code)
 	}

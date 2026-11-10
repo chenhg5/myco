@@ -13,10 +13,30 @@ import (
 	"github.com/chenhg5/myco/internal/domain"
 )
 
+func skillsDTO(in []domain.Skill) []api.Skill {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]api.Skill, len(in))
+	for i, s := range in {
+		out[i] = api.Skill{Name: s.Name, Summary: s.Summary, Examples: s.Examples}
+	}
+	return out
+}
+
+func skillsFromAPI(in []api.Skill) []domain.Skill {
+	out := make([]domain.Skill, len(in))
+	for i, s := range in {
+		out[i] = domain.Skill{Name: s.Name, Summary: s.Summary, Examples: s.Examples}
+	}
+	return out
+}
+
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
 		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
+		Skills:       skillsDTO(a.Skills),
 		Labels:       nonNil(a.Labels),
 		Binding: api.Binding{Harness: a.Binding.Harness, SessionID: a.Binding.SessionID,
 			Environment: a.Binding.Environment, Workdir: a.Binding.Workdir},

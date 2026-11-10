@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -336,6 +336,9 @@ export const appApi = {
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Replaces a node's skills. */
+  setSkills: (hubId: string, name: string, skills: Skill[]) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/skills`, { skills }),
   /** Adds and removes labels (group=… and tags) of a node. */
   setLabels: (hubId: string, name: string, change: { add?: string[]; remove?: string[] }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/labels`, change),

@@ -20,15 +20,15 @@ var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
   harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at,
-  machine_id, runtime, owner`
+  machine_id, runtime, owner, skills`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner)
+		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -39,10 +39,10 @@ func (r *AgentRepo) Save(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
 	res, err := r.db.ExecContext(ctx, `UPDATE agents SET description=?, capabilities=?, delivery=?, allow_from=?, token_hash=?,
-		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=?, display_name=?, status_text=?, status_at=?, owner=? WHERE name=?`,
+		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=?, display_name=?, status_text=?, status_at=?, owner=?, skills=? WHERE name=?`,
 		a.Description, caps, d.Mode, allow, a.TokenHash,
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.Owner, a.Name)
+		a.StatusText, ms(a.StatusAt), a.Owner, skillsJSON(a.Skills), a.Name)
 	if err != nil {
 		return internal(err)
 	}
@@ -117,12 +117,12 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 		a                           domain.Agent
 		caps, allow, params, labels string
 		created, lastSeen, statusAt int64
-		runtime                     string
+		runtime, skills             string
 	)
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
 		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt,
-		&a.MachineID, &runtime, &a.Owner); err != nil {
+		&a.MachineID, &runtime, &a.Owner, &skills); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)
@@ -130,8 +130,18 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	_ = json.Unmarshal([]byte(params), &d.Params)
 	_ = json.Unmarshal([]byte(labels), &a.Labels)
 	_ = json.Unmarshal([]byte(runtime), &a.Runtime)
+	_ = json.Unmarshal([]byte(skills), &a.Skills)
+	a.NormalizeSkills()
 	a.CreatedAt, a.LastSeenAt, a.StatusAt = fromMS(created), fromMS(lastSeen), fromMS(statusAt)
 	return &a, nil
+}
+
+func skillsJSON(s []domain.Skill) string {
+	if len(s) == 0 {
+		return "[]"
+	}
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func encodeLists(a *domain.Agent) (caps, allow, params string) {

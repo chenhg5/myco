@@ -167,6 +167,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
+	m.HandleFunc("PUT /v1/agents/{name}/skills", s.admin(s.adminSkills))
 	m.HandleFunc("PUT /v1/agents/{name}/profile", s.admin(s.adminProfile))
 	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
 	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
@@ -176,6 +177,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
+	m.HandleFunc("PUT /v1/me/skills", s.agent(s.mySkills))
 	m.HandleFunc("PUT /v1/me/profile", s.agent(s.myProfile))
 	m.HandleFunc("PUT /v1/me/status", s.agent(s.myStatus))
 	m.HandleFunc("POST /v1/broadcasts", s.agent(s.broadcast))
@@ -726,6 +728,35 @@ func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string) 
 		return
 	}
 	writeJSON(w, http.StatusOK, s.agentDTO(a))
+}
+
+func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, admin bool) {
+	var req api.SkillsRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	a, err := s.agents.SetSkills(r.Context(), name, skillsFromAPI(req.Skills))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if admin {
+		s.record(r, "agent.skills", string(a.Name), orNone(strings.Join(a.Capabilities, ", ")))
+	}
+	dto := s.agentDTO(a)
+	s.enrich(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (s *Server) mySkills(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	s.setSkills(w, r, string(a.Name), false)
+}
+
+func (s *Server) adminSkills(w http.ResponseWriter, r *http.Request) {
+	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the skills of") {
+		return
+	}
+	s.setSkills(w, r, r.PathValue("name"), true)
 }
 
 func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agent) {

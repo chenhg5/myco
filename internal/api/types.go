@@ -40,18 +40,22 @@ type Agent struct {
 	InProgress int    `json:"in_progress"`
 	Held       int    `json:"held"`
 	// StatusText is the agent's public progress line (myco agent status set).
-	StatusText   string     `json:"status_text,omitempty"`
-	StatusAt     *time.Time `json:"status_at,omitempty"`
-	Description  string     `json:"description"`
-	Capabilities []string   `json:"capabilities"`
-	Labels       []string   `json:"labels"`
-	Binding      Binding    `json:"binding"`
-	Delivery     Delivery   `json:"delivery"`
-	AllowFrom    []string   `json:"allow_from"`
-	EnrolledBy   string     `json:"enrolled_by,omitempty"`
-	Online       bool       `json:"online"`
-	CreatedAt    time.Time  `json:"created_at"`
-	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
+	StatusText  string     `json:"status_text,omitempty"`
+	StatusAt    *time.Time `json:"status_at,omitempty"`
+	Description string     `json:"description"`
+	// Capabilities are the names of Skills (older clients read these).
+	Capabilities []string `json:"capabilities"`
+	// Skills: what others can pick this agent for (hubs before v0.18.21
+	// leave it out; read Capabilities then).
+	Skills     []Skill    `json:"skills,omitempty"`
+	Labels     []string   `json:"labels"`
+	Binding    Binding    `json:"binding"`
+	Delivery   Delivery   `json:"delivery"`
+	AllowFrom  []string   `json:"allow_from"`
+	EnrolledBy string     `json:"enrolled_by,omitempty"`
+	Online     bool       `json:"online"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	// Kind is agent (an AI session), shell (exec/shell node), human, or
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
@@ -166,6 +170,19 @@ type RegisterRequest struct {
 }
 
 // LabelsRequest adds/removes labels (a bare key in Remove drops all its values).
+// Skill is one kind of work an agent can be asked to do.
+type Skill struct {
+	Name     string   `json:"name"`
+	Summary  string   `json:"summary,omitempty"`
+	Examples []string `json:"examples,omitempty"`
+}
+
+// SkillsRequest is the body of PUT /v1/me/skills and
+// /v1/agents/{name}/skills: the complete new list ([] clears it).
+type SkillsRequest struct {
+	Skills []Skill `json:"skills"`
+}
+
 type LabelsRequest struct {
 	Add    []string `json:"add,omitempty"`
 	Remove []string `json:"remove,omitempty"`

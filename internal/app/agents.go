@@ -301,6 +301,18 @@ func (s *AgentService) SetLabels(ctx context.Context, name string, add, remove [
 	return a, s.agents.Save(ctx, a)
 }
 
+// SetSkills replaces an agent's skills (its capabilities follow).
+func (s *AgentService) SetSkills(ctx context.Context, name string, skills []domain.Skill) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.SetSkills(skills); err != nil {
+		return nil, err
+	}
+	return a, s.agents.Save(ctx, a)
+}
+
 // DeliveryModes lists supported delivery modes.
 func (s *AgentService) DeliveryModes() []string { return s.wakers.Modes() }
 

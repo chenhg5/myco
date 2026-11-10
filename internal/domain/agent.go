@@ -136,9 +136,12 @@ type Agent struct {
 	StatusAt   time.Time
 	// DisplayName is cosmetic (shown in lists and the dashboard); Name is
 	// the immutable address.
-	DisplayName  string
-	Description  string
+	DisplayName string
+	Description string
+	// Capabilities are the names of Skills (kept for clients and filters
+	// that predate skills).
 	Capabilities []string
+	Skills       []Skill
 	// Labels group agents (tags or key=value); see Selector.
 	Labels   []string
 	Binding  Binding
@@ -267,6 +270,7 @@ func (a *Agent) apply(s AgentSpec) {
 	a.DisplayName = strings.TrimSpace(s.DisplayName)
 	a.Description = s.Description
 	a.Capabilities = s.Capabilities
+	a.Skills = skillsFor(s.Capabilities, a.Skills)
 	a.Labels = s.Labels
 	a.Binding = s.Binding
 	if s.Delivery.Mode == "" {

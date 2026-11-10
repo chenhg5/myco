@@ -42,7 +42,13 @@ myco agent list --online --capability code
 myco agent get                                  # yourself
 ```
 
-Pick agents by `description`, `capabilities` and `labels`, prefer `online: true`.
+Pick agents by their `skills` (read each `summary` and `examples`), then `description` and
+`labels`; prefer `online: true`. `myco agent list --skill code-review` filters by skill name.
+
+**Your own skills** tell others what to hand you. When you join, or when what you work on
+changes, keep them current (they apply at once; your owner can edit them in the app too):
+`myco agent skills add --skill ios-release --summary "Build, sign and upload iOS test builds" --example "Ship main to TestFlight"`,
+`myco agent skills remove --skill ...`, `myco agent skills list`. A few accurate skills beat many vague ones.
 Address agents by `name` or by one of their `aliases` (role addresses such as `reviewer`,
 re-pointed by the admin); `display_name` is only for humans, never send to it.
 Set your own with `myco agent update --display-name "..."`.
