@@ -13,6 +13,16 @@ type trayStatus struct {
 	Working, Pending, Idle, Offline int
 	Down                            []string // hubs the app cannot reach
 	Hubs                            int
+	// Busy are the nodes at work (working first, then those with tasks
+	// waiting), for the menu.
+	Busy []trayNode
+}
+
+// trayNode is a busy node as the menu shows it.
+type trayNode struct {
+	Name    string // display name, else name
+	Status  string // its status line ("" if none)
+	Working bool   // false: tasks waiting
 }
 
 // readTrayStatus asks the app's own backend (in-process, no network) for
@@ -27,7 +37,10 @@ func readTrayStatus(h http.Handler) trayStatus {
 			Overview *struct {
 				Agents []struct {
 					Agent struct {
-						Binding struct {
+						Name        string `json:"name"`
+						DisplayName string `json:"display_name"`
+						StatusText  string `json:"status_text"`
+						Binding     struct {
 							Harness string `json:"harness"`
 						} `json:"binding"`
 					} `json:"agent"`
@@ -41,6 +54,7 @@ func readTrayStatus(h http.Handler) trayStatus {
 		return st
 	}
 	st.Hubs = len(out.Hubs)
+	var waiting []trayNode
 	for _, hub := range out.Hubs {
 		if !hub.OK || hub.Overview == nil {
 			st.Down = append(st.Down, hub.Name)
@@ -50,11 +64,18 @@ func readTrayStatus(h http.Handler) trayStatus {
 			if a.Agent.Binding.Harness == "machine" {
 				continue
 			}
+			node := trayNode{Name: a.Agent.DisplayName, Status: strings.TrimSpace(a.Agent.StatusText)}
+			if node.Name == "" {
+				node.Name = a.Agent.Name
+			}
 			switch a.State {
 			case "working":
 				st.Working++
+				node.Working = true
+				st.Busy = append(st.Busy, node)
 			case "pending":
 				st.Pending++
+				waiting = append(waiting, node)
 			case "offline":
 				st.Offline++
 			default:
@@ -62,6 +83,7 @@ func readTrayStatus(h http.Handler) trayStatus {
 			}
 		}
 	}
+	st.Busy = append(st.Busy, waiting...)
 	return st
 }
 
@@ -86,12 +108,47 @@ func (zh trayText) summary(st trayStatus) string {
 			parts = append(parts, fmt.Sprintf(zh.s("%d 个"+cn, "%d "+en), n))
 		}
 	}
-	add(st.Working, "工作中", "working")
-	add(st.Pending, "待处理", "pending")
+	add(st.Working, "在干活", "working")
+	add(st.Pending, "有活待接", "with tasks waiting")
 	add(st.Idle, "空闲", "idle")
 	add(st.Offline, "离线", "offline")
 	if len(parts) == 0 {
 		return zh.s("还没有节点", "No nodes yet")
 	}
 	return strings.Join(parts, " · ")
+}
+
+// nodeLine is a busy node's menu line: "⚡ PM (Codex) — reviewing the branch".
+func (zh trayText) nodeLine(n trayNode) string {
+	icon, status := "⚡", n.Status
+	if !n.Working {
+		icon = "📬"
+		if status == "" {
+			status = zh.s("有任务在排队", "tasks waiting")
+		}
+	}
+	line := icon + " " + clip(n.Name, 24)
+	if status != "" {
+		line += " — " + clip(strings.Join(strings.Fields(status), " "), 36)
+	}
+	return line
+}
+
+// clip shortens s to n characters with an ellipsis.
+func clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// wakeLabel is the menu item that restarts this computer's runner.
+func (zh trayText) wakeLabel() string {
+	return zh.s("唤醒本机节点", "Wake this computer's nodes")
+}
+
+// downLine names the hubs the app cannot reach.
+func (zh trayText) downLine(down []string) string {
+	return "⚠️ " + zh.s("连不上 ", "Can't reach ") + clip(strings.Join(down, zh.s("、", ", ")), 40)
 }
