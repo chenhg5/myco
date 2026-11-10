@@ -198,6 +198,10 @@ const state = {
           runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=官网改版", "role=pm", "review", "release"], capabilities: ["review", "release"],
+          skills: [
+            { name: "review", summary: "审查 Go 和 TypeScript 的改动，指出问题和风险", examples: ["帮我看下 PR 128", "这个分支能合吗"] },
+            { name: "release", summary: "写发布说明、打 tag、发版" },
+          ],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" }, session_in_use: true,
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
@@ -1170,6 +1174,13 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
+        return send(res, 200, agent);
+      }
+      if (parts.length === 6 && parts[5] === "skills" && method === "PUT") {
+        const body = await readBody(req);
+        const skills = (body?.skills || []).map((x) => ({ name: String(x.name || "").trim().toLowerCase(), summary: x.summary || undefined, examples: (x.examples || []).filter(Boolean) }));
+        if (skills.some((x) => !/^[a-z0-9][a-z0-9._-]*$/.test(x.name))) return fail(res, 400, "invalid_argument", "invalid skill name");
+        agent.skills = skills; agent.capabilities = skills.map((x) => x.name);
         return send(res, 200, agent);
       }
       if (parts.length === 6 && parts[5] === "labels" && method === "PUT") {
