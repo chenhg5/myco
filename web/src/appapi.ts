@@ -194,6 +194,15 @@ export function isTransient(e: unknown): boolean {
   return e instanceof TypeError; // fetch itself failed
 }
 
+/** The hub is older than the app and lacks this feature: it answers an
+ *  unknown path with 404 ("no route for …", or Go's plain "404 page not
+ *  found") or 405. A real "agent x not found" is not this. */
+export function isOldHub(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false;
+  if (e.status === 405) return true;
+  return e.status === 404 && /no route for|404 page not found|^HTTP 404$/i.test(e.message);
+}
+
 /** A hub's status error (raw text from the App backend) for people. The
  *  raw text stays available as a tooltip. */
 export function hubErrorText(raw?: string): string {

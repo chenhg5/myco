@@ -2,7 +2,7 @@ import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle } from "lucide-react";
 import { L } from "@/lib/i18n";
-import { isTransient } from "@/appapi";
+import { isOldHub, isTransient } from "@/appapi";
 import { cn } from "@/lib/utils";
 
 /** macOS-style centered sheet. Portals carry .app-portal so the scoped tokens apply. */
@@ -69,12 +69,17 @@ export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null;
   // A hub that is down or slow: say so in words, not the error text.
   const transient = isTransient(error);
-  const message = transient
-    ? L("暂时连不上这个 Hub，或者它响应太慢。", "Can't reach this hub right now, or it is answering too slowly.")
-    : error instanceof Error ? error.message : String(error);
-  const suggestion = transient
-    ? L("会自动重试，不用做什么。一直这样的话，到「设置 → Hub」看看它的状态。", "It retries by itself. If this keeps happening, check the hub in Settings → Hubs.")
-    : (error as { suggestion?: string } | null)?.suggestion;
+  const old = isOldHub(error);
+  const message = old
+    ? L("这个 Hub 的版本较旧，还不支持这个功能。", "This hub runs an older version that doesn't support this yet.")
+    : transient
+      ? L("暂时连不上这个 Hub，或者它响应太慢。", "Can't reach this hub right now, or it is answering too slowly.")
+      : error instanceof Error ? error.message : String(error);
+  const suggestion = old
+    ? L("在「设置 → Hub」里升级这个 Hub 后再试。", "Upgrade the hub in Settings → Hubs, then try again.")
+    : transient
+      ? L("会自动重试，不用做什么。一直这样的话，到「设置 → Hub」看看它的状态。", "It retries by itself. If this keeps happening, check the hub in Settings → Hubs.")
+      : (error as { suggestion?: string } | null)?.suggestion;
   return (
     <div className="app-error-text">
       <div>{message}</div>

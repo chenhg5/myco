@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, MessageSquare, Pencil, Plus, Trash2, X } from "lucide-react";
-import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
+import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Skill } from "@/api";
 import {
@@ -118,6 +118,9 @@ function HistoryRows({ row, now, stamp }: { row: AgentRow; now: number; stamp: s
       .catch((e) => { if (!off) setError(e); });
     return () => { off = true; };
   }, [row.hub.id, ag.name, stamp]);
+  if (error && !entries && isOldHub(error)) {
+    return <div className="app-empty-note">{L("升级这个 Hub 后，这里会显示谁在什么时候改了它。", "Once this hub is upgraded, this shows who changed it and when.")}</div>;
+  }
   if (error && !entries) return <ErrorText error={error} />;
   if (!entries) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!entries.length) return <div className="app-empty-note">{L("还没有修改记录。", "No changes yet.")}</div>;
