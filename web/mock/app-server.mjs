@@ -1176,6 +1176,16 @@ const server = http.createServer(async (req, res) => {
         if (body?.description !== undefined) agent.description = body.description;
         return send(res, 200, agent);
       }
+      if (parts.length === 6 && parts[5] === "history" && method === "GET") {
+        const t = (min) => new Date(Date.now() - min * 60000).toISOString();
+        return send(res, 200, { entries: [
+          { id: "aud_5", at: t(3), actor: "glenn", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "skills: +release ~review" },
+          { id: "aud_4", at: t(40), actor: agent.name, actor_kind: "agent", action: "agent.edit", target: agent.name, detail: "description: 规划发布并审查 PR。\nlabels: +group=官网改版 −group=web" },
+          { id: "aud_3", at: t(180), actor: "glenn", actor_kind: "member", action: "agent.visibility", target: agent.name, detail: "team" },
+          { id: "aud_2", at: t(60 * 26), actor: agent.name, actor_kind: "agent", action: "agent.edit", target: agent.name, detail: "skills: +review" },
+          { id: "aud_1", at: t(60 * 50), actor: "glenn", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "display_name: — → PM (Codex)" },
+        ] });
+      }
       if (parts.length === 6 && parts[5] === "visibility" && method === "PUT") {
         const body = await readBody(req);
         if (!["team", "private"].includes(body?.visibility)) return fail(res, 400, "invalid_argument", "invalid visibility");

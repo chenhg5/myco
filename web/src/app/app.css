@@ -3920,3 +3920,48 @@ body.is-resizing {
   padding: 0 26px 0 8px;
   font-size: 12px;
 }
+
+/* Node details: changes to its card */
+.app-history {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-2);
+}
+.app-history:first-child {
+  border-top: 0;
+}
+.app-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+.app-history-who {
+  color: var(--fg);
+}
+.app-history-time {
+  flex: none;
+  color: var(--faint);
+}
+.app-history-line {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.app-history-more {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.app-history-more:hover {
+  background: var(--pill);
+}

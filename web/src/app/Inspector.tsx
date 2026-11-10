@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, MessageSquare, Pencil, Plus, Trash2, X } from "lucide-react";
 import { appApi, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import type { Member, Peer, Skill } from "@/api";
+import type { AuditEntry, Member, Peer, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
@@ -65,6 +65,87 @@ function MessageRows({ row, now, onThread }: {
 
 // PeerRows lists the other nodes this node exchanged messages with, one row
 // per node (however many threads); a row opens their whole history.
+// What a history line says about a field ("labels: +a −b" → 标签 …).
+const FIELD_LABEL: Record<string, () => string> = {
+  display_name: () => L("显示名", "Display name"),
+  description: () => L("介绍", "Description"),
+  labels: () => L("分组和标签", "Group and tags"),
+  skills: () => L("技能", "Skills"),
+};
+
+/** One audit entry about a node, as lines a person reads. */
+function historyLines(e: AuditEntry): string[] {
+  if (e.action === "agent.edit") {
+    return (e.detail || "").split("\n").filter(Boolean).map((line) => {
+      const i = line.indexOf(": ");
+      const key = i > 0 ? line.slice(0, i) : "";
+      if (!FIELD_LABEL[key]) return line;
+      let text = line.slice(i + 2);
+      // "+a −b ~c" (labels, skills) in words.
+      if (key === "labels" || key === "skills") {
+        const groups: Record<string, string[]> = { "+": [], "−": [], "~": [] };
+        for (const tok of text.split(" ").filter(Boolean)) (groups[tok[0]] ?? groups["~"]).push(tok.slice(1));
+        text = [
+          groups["+"].length ? L(`新增 ${groups["+"].join("、")}`, `added ${groups["+"].join(", ")}`) : "",
+          groups["−"].length ? L(`去掉 ${groups["−"].join("、")}`, `removed ${groups["−"].join(", ")}`) : "",
+          groups["~"].length ? L(`修改 ${groups["~"].join("、")}`, `edited ${groups["~"].join(", ")}`) : "",
+        ].filter(Boolean).join(L("；", "; "));
+      }
+      return `${FIELD_LABEL[key]()}：${text}`;
+    });
+  }
+  switch (e.action) {
+    case "agent.visibility": return [L(`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, `Visibility set to ${e.detail === "private" ? "only its owner" : "everyone on the hub"}`)];
+    case "agent.owner": return [L(`转交：${e.detail || ""}`, `Given: ${e.detail || ""}`)];
+    case "agent.update": return [e.detail?.startsWith("allow_from: ") ? L(`允许谁派任务：${e.detail.slice(12)}`, `Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
+    case "agent.kick": return [L("踢下线", "Disconnected")];
+    case "agent.register": return [L("注册", "Registered")];
+    case "agent.rotate_token": return [L("更换了令牌", "Token replaced")];
+  }
+  return [e.detail ? `${e.action} ${e.detail}` : e.action];
+}
+
+/** Changes to a node's card and settings, newest first: who and when. */
+function HistoryRows({ row, now, stamp }: { row: AgentRow; now: number; stamp: string }) {
+  const ag = row.st.agent;
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    let off = false;
+    appApi.agentHistory(row.hub.id, ag.name)
+      .then((r) => { if (!off) { setEntries(r.entries); setError(null); } })
+      .catch((e) => { if (!off) setError(e); });
+    return () => { off = true; };
+  }, [row.hub.id, ag.name, stamp]);
+  if (error && !entries) return <ErrorText error={error} />;
+  if (!entries) return <RowsSkeleton rows={2} className="is-flat" />;
+  if (!entries.length) return <div className="app-empty-note">{L("还没有修改记录。", "No changes yet.")}</div>;
+  const shown = all ? entries : entries.slice(0, 5);
+  const who = (e: AuditEntry) =>
+    e.actor_kind === "agent" ? (e.actor === ag.name ? L("它自己", "Itself") : e.actor)
+      : e.actor_kind === "admin" ? L("管理员", "Admin")
+        : row.hub.me?.member?.name === e.actor ? L("你", "You") : e.actor;
+  return (
+    <>
+      {shown.map((e) => (
+        <div className="app-history" key={e.id}>
+          <div className="app-history-head">
+            <span className="app-history-who">{who(e)}</span>
+            <span className="app-history-time" title={new Date(e.at).toLocaleString(locale(), { hour12: false })}>{timeAgo(e.at, now)}</span>
+          </div>
+          {historyLines(e).map((l, i) => <div className="app-history-line" key={i}>{l}</div>)}
+        </div>
+      ))}
+      {entries.length > 5 && (
+        <button type="button" className="app-history-more" onClick={() => setAll((v) => !v)}>
+          {all ? L("收起", "Show less") : L(`显示全部 ${entries.length} 条`, `Show all ${entries.length}`)}
+        </button>
+      )}
+    </>
+  );
+}
+
 function PeerRows({ row, now, onPeer }: {
   row: AgentRow;
   now: number;
@@ -764,6 +845,16 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
             </div>
             <div className="app-list"><PeerRows row={row} now={now} onPeer={onPeer} /></div>
           </section>
+
+          {mayManage && row.hub.me?.member && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("修改记录", "Changes")}</span></div>
+              <div className="app-list">
+                <HistoryRows row={row} now={now}
+                  stamp={[ag.display_name, ag.description, ag.labels.join(","), (ag.skills || []).map((x) => `${x.name}:${x.summary}:${(x.examples || []).join("|")}`).join(","), ag.visibility, ag.owner, ag.allow_from.join(",")].join("\u0000")} />
+              </div>
+            </section>
+          )}
 
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>

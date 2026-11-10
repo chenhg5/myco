@@ -169,6 +169,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
 	m.HandleFunc("PUT /v1/agents/{name}/skills", s.admin(s.adminSkills))
 	m.HandleFunc("PUT /v1/agents/{name}/visibility", s.admin(s.setVisibility))
+	m.HandleFunc("GET /v1/agents/{name}/history", s.admin(s.agentHistory))
 	m.HandleFunc("PUT /v1/agents/{name}/profile", s.admin(s.adminProfile))
 	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
 	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
@@ -745,9 +746,14 @@ func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
 }
 
-func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string) {
+// by is the agent changing itself (nil: a person); see recordEdit.
+func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string, by *domain.Agent) {
 	var req api.LabelsRequest
 	if !decode(w, r, &req) {
+		return
+	}
+	was, ok := s.cardBefore(w, r, name)
+	if !ok {
 		return
 	}
 	a, err := s.agents.SetLabels(r.Context(), name, req.Add, req.Remove)
@@ -755,12 +761,17 @@ func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string) 
 		writeError(w, err)
 		return
 	}
+	s.recordEdit(r, by, was, a)
 	writeJSON(w, http.StatusOK, s.agentDTO(a))
 }
 
-func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, admin bool) {
+func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, by *domain.Agent) {
 	var req api.SkillsRequest
 	if !decode(w, r, &req) {
+		return
+	}
+	was, ok := s.cardBefore(w, r, name)
+	if !ok {
 		return
 	}
 	a, err := s.agents.SetSkills(r.Context(), name, skillsFromAPI(req.Skills))
@@ -768,9 +779,7 @@ func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, 
 		writeError(w, err)
 		return
 	}
-	if admin {
-		s.record(r, "agent.skills", string(a.Name), orNone(strings.Join(a.Capabilities, ", ")))
-	}
+	s.recordEdit(r, by, was, a)
 	dto := s.agentDTO(a)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
@@ -799,29 +808,31 @@ func (s *Server) setVisibility(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) mySkills(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	s.setSkills(w, r, string(a.Name), false)
+	s.setSkills(w, r, string(a.Name), a)
 }
 
 func (s *Server) adminSkills(w http.ResponseWriter, r *http.Request) {
 	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the skills of") {
 		return
 	}
-	s.setSkills(w, r, r.PathValue("name"), true)
+	s.setSkills(w, r, r.PathValue("name"), nil)
 }
 
 func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	s.setLabels(w, r, string(a.Name))
+	s.setLabels(w, r, string(a.Name), a)
 }
 
 func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
 	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the labels of") {
 		return
 	}
-	s.record(r, "agent.labels", r.PathValue("name"), "")
-	s.setLabels(w, r, r.PathValue("name"))
+	s.setLabels(w, r, r.PathValue("name"), nil)
 }
 
-func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name string, admin bool) {
+// by is the agent changing itself (nil: a person, who may also change
+// allow_from).
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name string, by *domain.Agent) {
+	admin := by == nil
 	var req api.ProfileRequest
 	if !decode(w, r, &req) {
 		return
@@ -831,23 +842,18 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-from <agents>", name))
 		return
 	}
+	was, ok := s.cardBefore(w, r, name)
+	if !ok {
+		return
+	}
 	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	if admin {
-		var what []string
-		if req.DisplayName != nil {
-			what = append(what, "display name")
-		}
-		if req.Description != nil {
-			what = append(what, "description")
-		}
-		if req.AllowFrom != nil {
-			what = append(what, "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
-		}
-		s.record(r, "agent.update", string(a.Name), strings.Join(what, "; "))
+	s.recordEdit(r, by, was, a)
+	if admin && req.AllowFrom != nil {
+		s.record(r, "agent.update", string(a.Name), "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
 	}
 	dto := s.agentDTO(a)
 	s.enrich(r.Context(), &dto)
@@ -870,14 +876,14 @@ func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agen
 }
 
 func (s *Server) myProfile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	s.updateProfile(w, r, string(a.Name), false)
+	s.updateProfile(w, r, string(a.Name), a)
 }
 
 func (s *Server) adminProfile(w http.ResponseWriter, r *http.Request) {
 	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit") {
 		return
 	}
-	s.updateProfile(w, r, r.PathValue("name"), true)
+	s.updateProfile(w, r, r.PathValue("name"), nil)
 }
 
 func (s *Server) listAliases(w http.ResponseWriter, r *http.Request) {

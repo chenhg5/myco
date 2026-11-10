@@ -153,7 +153,7 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 		got = append(got, e.Actor+" "+e.Action+" "+e.Target)
 	}
 	all := strings.Join(got, "\n")
-	for _, want := range []string{"admin member.invite laohu", "laohu device.add laohu-mac", "laohu device.remove laohu-pc", "laohu link.create", "laohu agent.labels laohu-claude", "laohu agent.kick laohu-claude", "laohu message.dismiss laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
+	for _, want := range []string{"admin member.invite laohu", "laohu device.add laohu-mac", "laohu device.remove laohu-pc", "laohu link.create", "laohu agent.edit laohu-claude", "laohu agent.kick laohu-claude", "laohu message.dismiss laohu-claude", "laohu message.task glenn-bot", "admin agent.register glenn-bot"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("audit lacks %q:\n%s", want, all)
 		}

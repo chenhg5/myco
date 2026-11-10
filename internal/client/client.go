@@ -952,6 +952,16 @@ type AuditFilter struct {
 }
 
 // Audit reads the audit log, newest first (owner or admin).
+// AgentHistory lists changes to a node, newest first (its owner or an admin).
+func (c *Client) AgentHistory(ctx context.Context, name string, limit int) ([]api.AuditEntry, error) {
+	q := url.Values{}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out api.AuditList
+	return out.Entries, c.do(ctx, http.MethodGet, "/v1/agents/"+esc(name)+"/history", q, nil, &out)
+}
+
 func (c *Client) Audit(ctx context.Context, f AuditFilter) ([]api.AuditEntry, error) {
 	q := url.Values{}
 	if f.Actor != "" {

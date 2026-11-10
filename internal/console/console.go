@@ -578,6 +578,15 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
+	m.HandleFunc("GET /app/hubs/{id}/agents/{name}/history", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		list, err := c.AgentHistory(r.Context(), r.PathValue("name"), limit)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.AuditList{Entries: list})
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/audit", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
 		f := client.AuditFilter{Actor: q.Get("actor"), Target: q.Get("target")}

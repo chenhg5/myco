@@ -379,6 +379,9 @@ export const appApi = {
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/owner`, { owner }),
   setMachineOwner: (hubId: string, machineId: string, owner: string) =>
     request<{ ok: boolean }>("PUT", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/owner`, { owner }),
+  /** Changes to a node (its card, visibility, owner…), newest first. */
+  agentHistory: (hubId: string, name: string, limit = 30) =>
+    request<{ entries: AuditEntry[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/history?limit=${limit}`),
   audit: (hubId: string, q: { actor?: string; target?: string; before?: number; limit?: number } = {}) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(q)) if (v) p.set(k, String(v));
