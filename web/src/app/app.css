@@ -2190,6 +2190,13 @@ textarea.app-input {
   flex: none;
 }
 /* The row last opened: stays marked on return. */
+/* Pinned rows at the top: a faint tint, a little lighter than hover. */
+.conv-row.is-pinned {
+  background: color-mix(in srgb, var(--pill) 60%, var(--card));
+}
+.conv-row.is-pinned:hover {
+  background: var(--pill);
+}
 .conv-row.is-selected {
   background: var(--pill);
   box-shadow: inset 2px 0 0 var(--accent);
@@ -2224,6 +2231,9 @@ textarea.app-input {
   border-radius: 999px;
   border: 2px solid var(--card);
   box-sizing: border-box;
+}
+.conv-row.is-pinned .conv-row-state {
+  border-color: color-mix(in srgb, var(--pill) 60%, var(--card));
 }
 .conv-row:hover .conv-row-state,
 .conv-row.is-selected .conv-row-state {

@@ -449,7 +449,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
               <button
                 key={key}
                 type="button"
-                className={cn("conv-row", (selectedKey ?? selected) === key && "is-selected")}
+                className={cn("conv-row", pinned && !filtered && "is-pinned", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
                 onContextMenu={(e) => {
                   e.preventDefault();
