@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ExternalLink, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, SquarePen, Users } from "lucide-react";
+import { ArrowLeftRight, Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, SquarePen, Upload, Users } from "lucide-react";
 import { appApi, isOldHub, type RecentItem } from "@/appapi";
 import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
@@ -38,7 +38,7 @@ type Dialog =
   | { kind: "links" }
   | { kind: "add" }
   | { kind: "member"; member: ProjectMember }
-  | { kind: "doc"; doc: string | null; edit: boolean }
+  | { kind: "doc"; doc: ProjectDoc }
   | { kind: "settings" }
   | { kind: "delete" };
 
@@ -67,6 +67,25 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<unknown>(null);
   const [tick, setTick] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const [dragging, setDragging] = useState(false);
+  const upload = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploadError(null);
+    try {
+      for (const f of files) {
+        setUploading(f.name);
+        await appApi.uploadProjectFile(target.hubId, target.name, f);
+      }
+      setTick((t) => t + 1);
+    } catch (e) {
+      setUploadError(e);
+    } finally {
+      setUploading(null);
+    }
+  };
   // The project's conversations (first page): its progress.
   const [recent, setRecent] = useState<RecentItem[] | null>(null);
 
@@ -286,22 +305,38 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
       </section>
 
-      <section className="app-group">
+      <section className={cn("app-group app-project-files", dragging && "is-dragging")}
+        onDragOver={(e) => { if (!p.archived && e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragging(true); } }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); if (!p.archived) void upload(Array.from(e.dataTransfer.files)); }}>
         <div className="app-group-title">
-          <span className="name">{L("共享文档", "Documents")}</span>
-          {p.can_edit && <button type="button" className="app-group-action" onClick={() => open({ kind: "doc", doc: null, edit: true })}><Plus />{L("新建", "New")}</button>}
+          <span className="name">{L(`文件 ${p.docs.length || ""}`.trim(), `Files ${p.docs.length || ""}`.trim())}</span>
+          <button type="button" className="app-group-action" onClick={() => fileInput.current?.click()} disabled={p.archived || uploading !== null}><Upload />{L("上传", "Upload")}</button>
+          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; void upload(fs); }} />
         </div>
         <div className="app-list">
-          {p.docs.length === 0 && <div className="app-empty-note">{L("还没有文档。设计、约定这类较长的资料放这里，成员 pull 时一起拉到本地。", "No documents yet. Put longer material (design, conventions) here; members get it with pull.")}</div>}
-          {p.docs.map((d) => (
-            <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d.name, edit: false })}>
-              <span className="app-row-icon"><FileText strokeWidth={1.75} /></span>
-              <span className="app-row-main">
-                <span className="app-row-title">{d.name}</span>
-                <span className="app-row-sub">{[d.updated_by, timeAgo(d.updated_at, now), `${Math.max(1, Math.round(d.size / 1024))} KB`].filter(Boolean).join(" · ")}</span>
-              </span>
-            </button>
-          ))}
+          {uploading !== null && (
+            <div className="app-row app-row-static app-project-uploading">
+              <span className="app-spinner" />
+              <span className="app-row-main"><span className="app-row-sub">{L(`正在上传 ${uploading}…`, `Uploading ${uploading}…`)}</span></span>
+            </div>
+          )}
+          {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
+          {p.docs.length === 0 && uploading === null && (
+            <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
+          )}
+          {p.docs.map((d) => {
+            const Icon = fileIcon(d);
+            return (
+              <button type="button" key={d.name} className="app-row app-project-doc" onClick={() => open({ kind: "doc", doc: d })}>
+                <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                <span className="app-row-main">
+                  <span className="app-row-title">{d.name}</span>
+                  <span className="app-row-sub">{[d.updated_by, timeAgo(d.updated_at, now), fileSize(d.size)].filter(Boolean).join(" · ")}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -343,9 +378,8 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           onRemove={() => void run(() => appApi.removeProjectMember(target.hubId, p.name, dialog.member.name))} />
       )}
       {dialog?.kind === "doc" && (
-        <DocDialog hubId={target.hubId} project={p} name={dialog.doc} startEditing={dialog.edit} busy={busy} error={actionError}
+        <FileDialog hubId={target.hubId} project={p} doc={dialog.doc} busy={busy} error={actionError}
           onClose={() => setDialog(null)}
-          onSave={(name, body) => void run(() => appApi.putProjectDoc(target.hubId, p.name, name, body))}
           onDelete={(name) => void run(() => appApi.deleteProjectDoc(target.hubId, p.name, name))} />
       )}
       <SettingsDialog open={dialog?.kind === "settings"} project={p} busy={busy} error={actionError} onClose={() => setDialog(null)}
@@ -490,52 +524,69 @@ function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave
   );
 }
 
-function DocDialog({ hubId, project, name, startEditing, busy, error, onClose, onSave, onDelete }: {
-  hubId: string; project: Project; name: string | null; startEditing: boolean; busy: boolean; error: unknown;
-  onClose: () => void; onSave: (name: string, body: string) => void; onDelete: (name: string) => void;
+function fileIcon(d: ProjectDoc) {
+  const t = d.content_type || "";
+  if (t.startsWith("image/")) return FileImage;
+  if (!d.binary) return FileText;
+  return FileIcon;
+}
+
+function fileSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** A project file: text is shown (Markdown), images previewed, the rest downloaded. */
+function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
+  hubId: string; project: Project; doc: ProjectDoc; busy: boolean; error: unknown;
+  onClose: () => void; onDelete: (name: string) => void;
 }) {
-  const [doc, setDoc] = useState<ProjectDoc | null>(null);
+  const [full, setFull] = useState<ProjectDoc | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [editing, setEditing] = useState(startEditing);
-  const [docName, setDocName] = useState(name || "");
-  const [body, setBody] = useState("");
+  const [saved, setSaved] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const image = (doc.content_type || "").startsWith("image/");
   useEffect(() => {
-    if (!name) return;
+    if (doc.binary) return;
     let off = false;
-    appApi.projectDoc(hubId, project.name, name)
-      .then((d) => { if (!off) { setDoc(d); setBody(d.body || ""); } })
+    appApi.projectDoc(hubId, project.name, doc.name)
+      .then((d) => { if (!off) setFull(d); })
       .catch((e) => { if (!off) setLoadError(e); });
     return () => { off = true; };
-  }, [hubId, project.name, name]);
+  }, [hubId, project.name, doc.name, doc.binary]);
+  const save = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const r = await appApi.saveProjectFile(hubId, project.name, doc.name);
+      setSaved(r.path);
+    } catch (e) {
+      setSaveError(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const markdown = !doc.binary && (!doc.content_type || /markdown|text\/plain/.test(doc.content_type) || /\.(md|markdown|txt)$/i.test(doc.name));
   return (
-    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={name || L("新建文档", "New document")} wide>
-      {name && !doc && !loadError && <RowsSkeleton rows={3} className="is-flat" />}
+    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={doc.name} wide
+      description={[doc.updated_by && L(`${doc.updated_by} 上传`, `by ${doc.updated_by}`), fileSize(doc.size)].filter(Boolean).join(" · ")}>
+      {!doc.binary && !full && !loadError && <RowsSkeleton rows={3} className="is-flat" />}
       <ErrorText error={loadError} />
-      {editing ? (
-        <>
-          {!name && (
-            <label className="app-field">
-              <span className="app-field-label">{L("名字", "Name")}</span>
-              <input className="app-input mono" value={docName} onChange={(e) => setDocName(e.target.value)} disabled={busy}
-                placeholder={L("例如 design、conventions", "e.g. design, conventions")} />
-            </label>
-          )}
-          <textarea className="app-input app-project-editor" rows={18} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy}
-            placeholder={L("Markdown，64 KB 以内", "Markdown, up to 64 KB")} />
-        </>
-      ) : doc && <div className="app-project-doc-body"><Markdown text={doc.body || ""} /></div>}
-      <ErrorText error={error} />
+      {full && (markdown
+        ? <div className="app-project-doc-body"><Markdown text={full.body || ""} /></div>
+        : <pre className="app-project-doc-body app-project-doc-code">{full.body}</pre>)}
+      {image && <div className="app-project-preview"><img src={appApi.projectFileURL(hubId, project.name, doc.name)} alt={doc.name} /></div>}
+      {doc.binary && !image && <div className="app-empty-note">{L("这个文件不能在这里预览，下载后用对应的应用打开。", "This file can't be previewed here; download it and open it in its app.")}</div>}
+      {saved && <div className="app-success"><Check /><span>{L(`已保存到 ${saved}`, `Saved to ${saved}`)}</span></div>}
+      <ErrorText error={saveError ?? error} />
       <div className="app-modal-actions">
-        {project.can_edit && name && !editing && (
-          <button type="button" className="app-btn app-btn-danger" onClick={() => onDelete(name)} disabled={busy} style={{ marginRight: "auto" }}>{L("删除", "Delete")}</button>
-        )}
-        <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{editing ? L("取消", "Cancel") : L("关闭", "Close")}</button>
-        {project.can_edit && !editing && doc && <button type="button" className="app-btn app-btn-primary" onClick={() => setEditing(true)}>{L("编辑", "Edit")}</button>}
-        {editing && (
-          <button type="button" className="app-btn app-btn-primary" onClick={() => onSave(name || docName.trim(), body)} disabled={busy || !(name || docName.trim())}>
-            {busy ? L("正在保存…", "Saving…") : L("保存", "Save")}
-          </button>
-        )}
+        <button type="button" className="app-btn app-btn-danger" onClick={() => onDelete(doc.name)} disabled={busy} style={{ marginRight: "auto" }}>{L("删除", "Delete")}</button>
+        <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("关闭", "Close")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={saving}>
+          <Download />{saving ? L("正在下载…", "Downloading…") : L("下载", "Download")}
+        </button>
       </div>
     </Modal>
   );

@@ -106,7 +106,10 @@ A project groups the nodes that work on one thing, with a shared goal, a brief, 
 | `DELETE /v1/projects/{name}` | its owner, hub owner/admins | Deletes members, documents and links; nodes stay |
 | `PUT /v1/projects/{name}/members/{agent}` | see below | `{role?, note?}`. Adding: a person adds nodes they own (admins any), an agent adds itself, a coordinator adds nodes of its own owner. `role` (`member`\|`coordinator`): its owner and hub owner/admins only. `note` (what it does here): editors or the node's owner |
 | `DELETE /v1/projects/{name}/members/{agent}` | editors, the node's owner | A coordinator cannot remove another coordinator |
-| `GET/PUT/DELETE /v1/projects/{name}/docs/{doc}` | read: who can see it; write: editors | `{body}` (Markdown, up to 64 KB; 30 documents) |
+| `GET/PUT/DELETE /v1/projects/{name}/docs/{doc}` | read: who can see it; write: editors | `{body}` (Markdown, up to 64 KB) — documents written as text |
+| `PUT /v1/projects/{name}/files/{file}` | anyone involved (member agents, people whose nodes are in it, editors); replacing someone else's file: editors | Upload a file (from v0.18.29): the body is its content, `Content-Type` its type; up to 20 MB, 100 files a project. Text up to 64 KB (Markdown, txt, json, …) comes with the project like a document (`body`, read by agents); anything else has `binary: true`. Names are plain file names (no folders) |
+| `GET /v1/projects/{name}/files/{file}` | who can see it | The file's content (any file, documents too) |
+| `DELETE /v1/projects/{name}/files/{file}` | its uploader, or editors | Remove it |
 
 Conversations: a thread belongs to the project of its first message (`project` on `POST /v1/messages` and `POST /v1/console/messages`; from the app the person must see the project). `GET /v1/console/recent?project=` lists a project's conversations; their task states are the project's progress. Deleting a project keeps its conversations, without the project.
 

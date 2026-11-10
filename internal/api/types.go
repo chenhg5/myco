@@ -895,6 +895,11 @@ type ProjectDoc struct {
 	UpdatedBy string    `json:"updated_by,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Body      string    `json:"body,omitempty"`
+	// ContentType is set for uploaded files ("" for documents written as
+	// text). Binary is true when the content is not text: read it with GET
+	// /v1/projects/{name}/files/{file} (from v0.18.29).
+	ContentType string `json:"content_type,omitempty"`
+	Binary      bool   `json:"binary,omitempty"`
 }
 
 // ProjectList wraps projects.

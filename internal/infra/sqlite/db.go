@@ -167,6 +167,9 @@ CREATE TABLE IF NOT EXISTS project_docs (
   project    TEXT NOT NULL,
   name       TEXT NOT NULL,
   body       TEXT NOT NULL DEFAULT '',
+  content_type TEXT NOT NULL DEFAULT '',
+  size       INTEGER NOT NULL DEFAULT 0,
+  blob       TEXT NOT NULL DEFAULT '',
   updated_by TEXT NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (project, name)
@@ -209,6 +212,7 @@ func Open(path string) (*sql.DB, error) {
 	for table, cols := range map[string][][2]string{
 		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
+		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()

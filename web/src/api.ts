@@ -39,7 +39,13 @@ export interface ProjectMember {
   /** its card, when the viewer may see the node */
   agent?: Agent;
 }
-export interface ProjectDoc { name: string; size: number; updated_by?: string; updated_at: string; body?: string }
+export interface ProjectDoc {
+  name: string; size: number; updated_by?: string; updated_at: string; body?: string;
+  /** set for uploaded files (from v0.18.29) */
+  content_type?: string;
+  /** not text: download it (files/{name}) */
+  binary?: boolean;
+}
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   status_text?: string; status_at?: string;

@@ -65,14 +65,22 @@ type ProjectMember struct {
 	AddedAt time.Time
 }
 
-// ProjectDoc is a shared document of a project (Markdown).
+// ProjectDoc is a shared file of a project: a document or any uploaded
+// file. Text (Markdown and the like, up to 64 KB) is kept in Body so agents
+// read it with the project; anything else is a blob.
 type ProjectDoc struct {
-	Project   string
-	Name      string // e.g. design, conventions
-	Body      string
-	UpdatedBy string
-	UpdatedAt time.Time
+	Project     string
+	Name        string // a file name, e.g. design.md or 设计稿.pdf; older documents have none (design)
+	Body        string
+	ContentType string // "" for documents written as text
+	Size        int64
+	Blob        string // blob id when the content is not in Body
+	UpdatedBy   string
+	UpdatedAt   time.Time
 }
+
+// IsBlob reports whether the content is in the blob store.
+func (d *ProjectDoc) IsBlob() bool { return d.Blob != "" }
 
 const (
 	maxProjectTitle = 80
@@ -81,8 +89,30 @@ const (
 	maxProjectLinks = 20
 	maxProjectNote  = 200
 	maxProjectDoc   = 64 << 10
-	MaxProjectDocs  = 30
+	MaxProjectDocs  = 100
+	// MaxProjectFile bounds an uploaded file.
+	MaxProjectFile = 20 << 20
+	// MaxProjectText is the largest text file kept inline (read by agents
+	// with the project).
+	MaxProjectText = maxProjectDoc
 )
+
+// ParseFileName checks the name of a project file: a plain file name (no
+// directories), kept as given.
+func ParseFileName(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	bad := s == "" || utf8.RuneCountInString(s) > 120 || strings.HasPrefix(s, ".") || strings.ContainsAny(s, "/\\:*?\"<>|")
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			bad = true
+		}
+	}
+	if bad {
+		return "", Errf(CodeInvalidArgument, "invalid file name %q", s).
+			WithSuggestion("use a plain file name such as design.md or notes.pdf (no folders, not starting with a dot)")
+	}
+	return s, nil
+}
 
 // ParseProjectName checks a project's short name.
 func ParseProjectName(s string) (string, error) {

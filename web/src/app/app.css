@@ -4020,3 +4020,10 @@ body.is-resizing {
 .app-progress small { font-size: 11px; color: var(--muted); }
 .app-spawned { margin: 10px 0 8px; }
 .app-spawned .app-kv-value.mono { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; }
+.app-project-files.is-dragging .app-list { box-shadow: 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.app-project-uploading { gap: 10px; }
+.app-project-upload-error { padding: 8px 12px; }
+.app-project-preview { display: flex; justify-content: center; max-height: 60vh; overflow: auto; margin-bottom: 10px; border-radius: 10px; background: var(--pill); }
+.app-project-preview img { max-width: 100%; height: auto; object-fit: contain; }
+.app-project-doc-code { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--pill); }
+.app-modal-actions .app-btn svg { width: 14px; height: 14px; }

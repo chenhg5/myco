@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -337,6 +338,37 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+	}))
+	// Project files: upload (the body is the file), download, and save to
+	// this computer's Downloads folder (shown in Finder / Explorer).
+	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, d)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		rc, ct, err := c.OpenProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		defer rc.Close()
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": r.PathValue("file")}))
+		io.Copy(w, rc)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/projects/{name}/files/{file}/save", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		path, err := saveToDownloads(r.Context(), c, r.PathValue("name"), r.PathValue("file"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		revealFile(path)
+		writeJSON(w, http.StatusOK, map[string]string{"path": path})
 	}))
 	// Who can find and use a node: team or private.
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/visibility", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {

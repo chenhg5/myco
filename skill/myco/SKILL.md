@@ -57,7 +57,9 @@ your own visibility (people do that in the app).
 
 You may be in **projects**: shared work with a goal, a brief (repository, rules, how to test) and
 documents. `myco project list` shows yours; `myco project show --name <p>` prints one;
-`myco project pull --name <p>` writes it to `.myco/projects/<p>/` (`PROJECT.md` and `docs/`).
+`myco project pull --name <p>` writes it to `.myco/projects/<p>/` (`PROJECT.md` and its files in `docs/`).
+Share a file with the project (design, notes, screenshots, up to 20 MB):
+`myco project file put --name <p> --path design.md`; get one: `myco project file get --name <p> --file <name>`.
 Read the brief before working on a project's tasks (when the runner wakes you for one, it puts the
 project's goal, members and brief in front of the message, once per session). A task may belong to a project (`project` on the message,
 `MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new

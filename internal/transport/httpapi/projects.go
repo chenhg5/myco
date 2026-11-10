@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"errors"
+	"io"
+	"mime"
 	"net/http"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -24,6 +27,9 @@ func (s *Server) routeProjects(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/projects/{name}/docs/{doc}", s.projectCaller(s.getProjectDoc))
 	m.HandleFunc("PUT /v1/projects/{name}/docs/{doc}", s.projectCaller(s.putProjectDoc))
 	m.HandleFunc("DELETE /v1/projects/{name}/docs/{doc}", s.projectCaller(s.deleteProjectDoc))
+	m.HandleFunc("PUT /v1/projects/{name}/files/{file}", s.projectCaller(s.putProjectFile))
+	m.HandleFunc("GET /v1/projects/{name}/files/{file}", s.projectCaller(s.getProjectFile))
+	m.HandleFunc("DELETE /v1/projects/{name}/files/{file}", s.projectCaller(s.deleteProjectDoc))
 }
 
 // projectCall is who calls: a person (console/admin token) or an agent.
@@ -86,8 +92,8 @@ func (s *Server) projectDTO(r *http.Request, c projectCall, v *app.ProjectView, 
 		out.Members = append(out.Members, pm)
 	}
 	for _, d := range v.Docs {
-		doc := api.ProjectDoc{Name: d.Name, Size: len(d.Body), UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt}
-		if bodies {
+		doc := docDTO(d)
+		if bodies && !d.IsBlob() {
 			doc.Body = d.Body
 		}
 		out.Docs = append(out.Docs, doc)
@@ -234,18 +240,60 @@ func (s *Server) getProjectDoc(w http.ResponseWriter, r *http.Request, c project
 		writeError(w, err)
 		return
 	}
-	n, err := domain.ParseDocName(r.PathValue("doc"))
+	want := r.PathValue("doc")
+	n, _ := domain.ParseDocName(want)
+	for _, d := range v.Docs {
+		if d.Name == want || d.Name == n {
+			out := docDTO(d)
+			if !d.IsBlob() {
+				out.Body = d.Body
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
+	}
+	writeError(w, domain.Errf(domain.CodeNotFound, "document %s not found in project %s", want, v.Project.Name))
+}
+
+func docDTO(d *domain.ProjectDoc) api.ProjectDoc {
+	size := int(d.Size)
+	if !d.IsBlob() {
+		size = len(d.Body)
+	}
+	return api.ProjectDoc{Name: d.Name, Size: size, UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt, ContentType: d.ContentType, Binary: d.IsBlob()}
+}
+
+// putProjectFile uploads a file: the request body is its content.
+func (s *Server) putProjectFile(w http.ResponseWriter, r *http.Request, c projectCall) {
+	d, err := s.projects.PutFile(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), c.by.Name(), r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			err = domain.Errf(domain.CodeInvalidArgument, "the file is larger than %d MB", domain.MaxProjectFile>>20)
+		}
+		writeError(w, err)
+		return
+	}
+	s.recordAs(r, c.by, "project.file", r.PathValue("name"), d.Name)
+	writeJSON(w, http.StatusOK, docDTO(d))
+}
+
+// getProjectFile serves a file's content.
+func (s *Server) getProjectFile(w http.ResponseWriter, r *http.Request, c projectCall) {
+	d, rc, err := s.projects.OpenFile(r.Context(), c.by, r.PathValue("name"), r.PathValue("file"))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	for _, d := range v.Docs {
-		if d.Name == n {
-			writeJSON(w, http.StatusOK, api.ProjectDoc{Name: d.Name, Size: len(d.Body), UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt, Body: d.Body})
-			return
-		}
+	defer rc.Close()
+	ct := d.ContentType
+	if ct == "" {
+		ct = "text/markdown; charset=utf-8"
 	}
-	writeError(w, domain.Errf(domain.CodeNotFound, "document %s not found in project %s", n, v.Project.Name))
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": d.Name}))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	io.Copy(w, rc)
 }
 
 func (s *Server) putProjectDoc(w http.ResponseWriter, r *http.Request, c projectCall) {
@@ -263,10 +311,14 @@ func (s *Server) putProjectDoc(w http.ResponseWriter, r *http.Request, c project
 }
 
 func (s *Server) deleteProjectDoc(w http.ResponseWriter, r *http.Request, c projectCall) {
-	if err := s.projects.DeleteDoc(r.Context(), c.by, r.PathValue("name"), r.PathValue("doc")); err != nil {
+	doc := r.PathValue("doc")
+	if doc == "" {
+		doc = r.PathValue("file")
+	}
+	if err := s.projects.DeleteDoc(r.Context(), c.by, r.PathValue("name"), doc, c.by.Name()); err != nil {
 		writeError(w, err)
 		return
 	}
-	s.recordAs(r, c.by, "project.doc_remove", r.PathValue("name"), r.PathValue("doc"))
+	s.recordAs(r, c.by, "project.doc_remove", r.PathValue("name"), doc)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }

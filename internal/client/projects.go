@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -73,4 +74,42 @@ func (c *Client) PutProjectDoc(ctx context.Context, project, doc, body string) (
 // DeleteProjectDoc removes a shared document.
 func (c *Client) DeleteProjectDoc(ctx context.Context, project, doc string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/projects/"+esc(project)+"/docs/"+esc(doc), nil, nil, nil)
+}
+
+// PutProjectFile uploads a file into a project (any kind, up to 20 MB);
+// contentType "" lets the hub guess it from the name.
+func (c *Client) PutProjectFile(ctx context.Context, project, name, contentType string, body io.Reader, size int64) (*api.ProjectDoc, error) {
+	u := c.urlFor("/v1/projects/" + esc(project) + "/files/" + esc(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), body)
+	if err != nil {
+		return nil, err
+	}
+	if size >= 0 {
+		req.ContentLength = size
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	var out api.ProjectDoc
+	return &out, c.send(ctx, req, &out)
+}
+
+// OpenProjectFile streams a project file's content; the caller closes it.
+func (c *Client) OpenProjectFile(ctx context.Context, project, name string) (io.ReadCloser, string, error) {
+	u := c.urlFor("/v1/projects/" + esc(project) + "/files/" + esc(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, "", &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, "", decodeError(resp.StatusCode, data)
+	}
+	return resp.Body, resp.Header.Get("Content-Type"), nil
 }

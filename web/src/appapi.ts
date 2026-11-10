@@ -233,12 +233,13 @@ export function errorSuggestion(e: unknown): string | undefined {
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const raw = body instanceof Blob;
+  if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
   const r = await fetch(path, {
     method,
     credentials: "same-origin",
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
   });
   const text = await r.text();
   let data: unknown = null;
@@ -369,6 +370,14 @@ export const appApi = {
     request<Project>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`, input),
   removeProjectMember: (hubId: string, name: string, agent: string) =>
     request<Project>("DELETE", `app/hubs/${enc(hubId)}/projects/${enc(name)}/members/${enc(agent)}`),
+  /** Uploads a file into a project (any kind, up to 20 MB). */
+  uploadProjectFile: (hubId: string, name: string, file: File, as?: string) =>
+    request<ProjectDoc>("PUT", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(as || file.name)}`, file),
+  /** A project file's URL (for a browser download or an image preview). */
+  projectFileURL: (hubId: string, name: string, file: string) => `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}`,
+  /** Saves a project file to this computer's Downloads folder and shows it there. */
+  saveProjectFile: (hubId: string, name: string, file: string) =>
+    request<{ path: string }>("POST", `app/hubs/${enc(hubId)}/projects/${enc(name)}/files/${enc(file)}/save`),
   projectDoc: (hubId: string, name: string, doc: string) =>
     request<ProjectDoc>("GET", `app/hubs/${enc(hubId)}/projects/${enc(name)}/docs/${enc(doc)}`),
   putProjectDoc: (hubId: string, name: string, doc: string, body: string) =>

@@ -100,6 +100,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && r.URL.Path == "/v1/files" && s.files != nil {
 		limit = s.files.Policy().MaxSize + 1 // FileService reports "too large" itself
 	}
+	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/files/") {
+		limit = domain.MaxProjectFile + 1 // ProjectService reports "too large" itself
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	s.mux.ServeHTTP(w, r)
 }

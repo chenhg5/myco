@@ -1,8 +1,15 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"mime"
+	"net/http"
+	"path/filepath"
 	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/domain"
 )
@@ -21,7 +28,11 @@ type ProjectService struct {
 	agents   domain.AgentRepository
 	ids      IDGenerator
 	clock    Clock
+	blobs    domain.BlobStore // nil: text files only
 }
+
+// SetBlobs lets projects keep uploaded files of any kind.
+func (s *ProjectService) SetBlobs(b domain.BlobStore) { s.blobs = b }
 
 // NewProjectService wires the project use cases.
 func NewProjectService(projects domain.ProjectRepository, agents domain.AgentRepository, ids IDGenerator, clock Clock) *ProjectService {
@@ -245,7 +256,15 @@ func (s *ProjectService) Delete(ctx context.Context, by Actor, name string) (*Pr
 	if !s.manages(by, v) {
 		return nil, denied("delete project " + v.Project.Name)
 	}
-	return v, s.projects.Delete(ctx, v.Project.ID)
+	if err := s.projects.Delete(ctx, v.Project.ID); err != nil {
+		return nil, err
+	}
+	for _, d := range v.Docs {
+		if d.IsBlob() && s.blobs != nil {
+			_ = s.blobs.Delete(ctx, d.Blob)
+		}
+	}
+	return v, nil
 }
 
 // MemberEdit adds a node to a project or changes its role or note; nil
@@ -377,20 +396,152 @@ func (s *ProjectService) PutDoc(ctx context.Context, by Actor, name, doc, body, 
 	return d, s.projects.PutDoc(ctx, d)
 }
 
-// DeleteDoc removes a shared document.
-func (s *ProjectService) DeleteDoc(ctx context.Context, by Actor, name, doc string) error {
+// DeleteDoc removes a shared document or file: its editors, or whoever
+// uploaded it.
+func (s *ProjectService) DeleteDoc(ctx context.Context, by Actor, name, doc, byName string) error {
 	v, err := s.Get(ctx, by, name)
 	if err != nil {
 		return err
 	}
-	if !s.edits(by, v) {
-		return denied("change the documents of project " + v.Project.Name)
+	d := v.doc(doc)
+	if d == nil {
+		if n, err := domain.ParseDocName(doc); err == nil {
+			d = v.doc(n)
+		}
 	}
-	n, err := domain.ParseDocName(doc)
-	if err != nil {
+	if d == nil {
+		return domain.Errf(domain.CodeNotFound, "no file %s in project %s", doc, v.Project.Name)
+	}
+	if !s.edits(by, v) && (byName == "" || d.UpdatedBy != byName) {
+		return denied("remove " + d.Name + " (only its uploader and the project's editors can)")
+	}
+	if err := s.projects.DeleteDoc(ctx, v.Project.ID, d.Name); err != nil {
 		return err
 	}
-	return s.projects.DeleteDoc(ctx, v.Project.ID, n)
+	if d.IsBlob() && s.blobs != nil {
+		_ = s.blobs.Delete(ctx, d.Blob)
+	}
+	return nil
+}
+
+func (v *ProjectView) doc(name string) *domain.ProjectDoc {
+	for _, d := range v.Docs {
+		if d.Name == name {
+			return d
+		}
+	}
+	return nil
+}
+
+// textTypes are file types kept inline when small: agents read them with
+// the project.
+var textExts = []string{".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".toml", ".csv", ".html", ".xml", ".sh", ".go", ".ts", ".tsx", ".js", ".py", ".sql"}
+
+func isText(name, contentType string, data []byte) bool {
+	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+		return false
+	}
+	if strings.HasPrefix(contentType, "text/") {
+		return true
+	}
+	lower := strings.ToLower(name)
+	for _, e := range textExts {
+		if strings.HasSuffix(lower, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// PutFile uploads (or replaces) a file in a project: anyone involved in it
+// may add one (its member agents, the people whose nodes are in it, its
+// editors); replacing someone else's is for editors.
+func (s *ProjectService) PutFile(ctx context.Context, by Actor, name, file, contentType, byName string, r io.Reader) (*domain.ProjectDoc, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return nil, err
+	}
+	if !s.edits(by, v) && !s.involved(ctx, by, v) {
+		return nil, denied("add files to project " + v.Project.Name + " (its members and editors can)")
+	}
+	if v.Project.Archived {
+		return nil, domain.Errf(domain.CodeInvalidState, "project %s is archived", v.Project.Name)
+	}
+	n, err := domain.ParseFileName(file)
+	if err != nil {
+		return nil, err
+	}
+	prev := v.doc(n)
+	if prev != nil && !s.edits(by, v) && prev.UpdatedBy != byName {
+		return nil, denied("replace " + n + " (uploaded by " + prev.UpdatedBy + "); upload it under another name")
+	}
+	if prev == nil && len(v.Docs) >= domain.MaxProjectDocs {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "project %s already has %d files", v.Project.Name, domain.MaxProjectDocs).
+			WithSuggestion("remove some, or keep large material in the repository and add a link")
+	}
+	data, err := io.ReadAll(io.LimitReader(r, domain.MaxProjectFile+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > domain.MaxProjectFile {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "%s is larger than %d MB", n, domain.MaxProjectFile>>20).
+			WithSuggestion("keep large files elsewhere and add a link to the project")
+	}
+	if contentType == "" || contentType == "application/octet-stream" {
+		if t := mime.TypeByExtension(strings.ToLower(filepath.Ext(n))); t != "" {
+			contentType = t
+		} else if contentType == "" {
+			contentType = http.DetectContentType(data)
+		}
+	}
+	d := &domain.ProjectDoc{Project: v.Project.ID, Name: n, ContentType: contentType, Size: int64(len(data)), UpdatedBy: byName, UpdatedAt: s.clock.Now()}
+	if len(data) <= domain.MaxProjectText && isText(n, contentType, data) {
+		d.Body = string(data)
+	} else {
+		if s.blobs == nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "this hub keeps text files only (up to 64 KB)")
+		}
+		d.Blob = s.ids.New("pfile")
+		if _, _, err := s.blobs.Put(ctx, d.Blob, bytes.NewReader(data), domain.MaxProjectFile); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.projects.PutDoc(ctx, d); err != nil {
+		if d.IsBlob() {
+			_ = s.blobs.Delete(ctx, d.Blob)
+		}
+		return nil, err
+	}
+	if prev != nil && prev.IsBlob() && s.blobs != nil {
+		_ = s.blobs.Delete(ctx, prev.Blob)
+	}
+	return d, nil
+}
+
+// OpenFile returns a project file and its content, for whoever may see the
+// project.
+func (s *ProjectService) OpenFile(ctx context.Context, by Actor, name, file string) (*domain.ProjectDoc, io.ReadCloser, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	d := v.doc(file)
+	if d == nil {
+		if n, err := domain.ParseDocName(file); err == nil {
+			d = v.doc(n)
+		}
+	}
+	if d == nil {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "no file %s in project %s", file, v.Project.Name)
+	}
+	if !d.IsBlob() {
+		return d, io.NopCloser(strings.NewReader(d.Body)), nil
+	}
+	if s.blobs == nil {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "file %s is not available on this hub", d.Name)
+	}
+	rc, err := s.blobs.Open(ctx, d.Blob)
+	return d, rc, err
 }
 
 // MayEditCard reports whether editor (an agent) may change target's card:

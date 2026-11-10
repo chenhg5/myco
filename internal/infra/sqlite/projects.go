@@ -153,9 +153,14 @@ func (r *ProjectRepo) DeleteAgent(ctx context.Context, agent domain.AgentName) e
 }
 
 func (r *ProjectRepo) PutDoc(ctx context.Context, d *domain.ProjectDoc) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO project_docs (project, name, body, updated_by, updated_at) VALUES (?,?,?,?,?)
-		ON CONFLICT(project, name) DO UPDATE SET body=excluded.body, updated_by=excluded.updated_by, updated_at=excluded.updated_at`,
-		d.Project, d.Name, d.Body, d.UpdatedBy, ms(d.UpdatedAt))
+	size := d.Size
+	if !d.IsBlob() {
+		size = int64(len(d.Body))
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO project_docs (project, name, body, content_type, size, blob, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT(project, name) DO UPDATE SET body=excluded.body, content_type=excluded.content_type, size=excluded.size, blob=excluded.blob,
+		updated_by=excluded.updated_by, updated_at=excluded.updated_at`,
+		d.Project, d.Name, d.Body, d.ContentType, size, d.Blob, d.UpdatedBy, ms(d.UpdatedAt))
 	return internal(err)
 }
 
@@ -164,8 +169,8 @@ func (r *ProjectRepo) GetDoc(ctx context.Context, project, name string) (*domain
 		d  domain.ProjectDoc
 		at int64
 	)
-	err := r.db.QueryRowContext(ctx, `SELECT project, name, body, updated_by, updated_at FROM project_docs WHERE project=? AND name=?`, project, name).
-		Scan(&d.Project, &d.Name, &d.Body, &d.UpdatedBy, &at)
+	err := r.db.QueryRowContext(ctx, `SELECT project, name, body, content_type, size, blob, updated_by, updated_at FROM project_docs WHERE project=? AND name=?`, project, name).
+		Scan(&d.Project, &d.Name, &d.Body, &d.ContentType, &d.Size, &d.Blob, &d.UpdatedBy, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.Errf(domain.CodeNotFound, "document %s not found", name)
 	}
@@ -188,7 +193,7 @@ func (r *ProjectRepo) DeleteDoc(ctx context.Context, project, name string) error
 }
 
 func (r *ProjectRepo) Docs(ctx context.Context, project string) ([]*domain.ProjectDoc, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT project, name, body, updated_by, updated_at FROM project_docs WHERE project=? ORDER BY name`, project)
+	rows, err := r.db.QueryContext(ctx, `SELECT project, name, body, content_type, size, blob, updated_by, updated_at FROM project_docs WHERE project=? ORDER BY updated_at DESC, name`, project)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -199,7 +204,7 @@ func (r *ProjectRepo) Docs(ctx context.Context, project string) ([]*domain.Proje
 			d  domain.ProjectDoc
 			at int64
 		)
-		if err := rows.Scan(&d.Project, &d.Name, &d.Body, &d.UpdatedBy, &at); err != nil {
+		if err := rows.Scan(&d.Project, &d.Name, &d.Body, &d.ContentType, &d.Size, &d.Blob, &d.UpdatedBy, &at); err != nil {
 			return nil, internal(err)
 		}
 		d.UpdatedAt = fromMS(at)

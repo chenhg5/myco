@@ -75,9 +75,21 @@ func ValidateHubURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {
+// urlFor is the hub URL of an escaped path (names in it already went
+// through esc, so it must not be escaped again).
+func (c *Client) urlFor(escapedPath string) url.URL {
 	u := *c.base
-	u.Path = strings.TrimRight(u.Path, "/") + path
+	u.RawPath = strings.TrimRight(c.base.EscapedPath(), "/") + escapedPath
+	if p, err := url.PathUnescape(u.RawPath); err == nil {
+		u.Path = p
+	} else {
+		u.Path, u.RawPath = strings.TrimRight(u.Path, "/")+escapedPath, ""
+	}
+	return u
+}
+
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {
+	u := c.urlFor(path)
 	u.RawQuery = query.Encode()
 	var body io.Reader
 	if in != nil {

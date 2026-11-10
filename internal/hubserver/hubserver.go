@@ -160,7 +160,9 @@ func Build(o Options) (*Hub, error) {
 	projectRepo := sqlite.NewProjectRepo(db)
 	agents.SetProjects(projectRepo)
 	messages.SetProjects(projectRepo)
-	srv.SetProjects(app.NewProjectService(projectRepo, agentsRepo, ids, clock))
+	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
+	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
+	srv.SetProjects(projectSvc)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {

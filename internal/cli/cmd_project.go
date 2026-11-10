@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,8 +108,12 @@ the project no longer has are left alone.`,
 				return err
 			}
 			for _, d := range p.Docs {
-				f := filepath.Join(dir, "docs", d.Name+".md")
-				if err := os.WriteFile(f, []byte(d.Body), 0o644); err != nil {
+				f := filepath.Join(dir, "docs", docFileName(d))
+				if d.Binary {
+					if err := saveProjectFile(e.in.Ctx, c, p.Name, d.Name, f); err != nil {
+						return err
+					}
+				} else if err := os.WriteFile(f, []byte(d.Body), 0o644); err != nil {
 					return err
 				}
 				files = append(files, f)
@@ -378,9 +384,92 @@ the project no longer has are left alone.`,
 			return e.p.Print(map[string]any{"deleted": true}, func(w io.Writer) { fmt.Fprintln(w, "deleted") })
 		}),
 	}
-	doc := (&Command{Name: "doc", Summary: "A project's shared documents"}).Add(docShow, docPut, docRemove)
-	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and documents"}).
-		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), doc, del)
+	fileFlag := Flag{Name: "file", Kind: String, Required: true, Help: "File name in the project"}
+	filePut := &Command{
+		Name: "put", Summary: "Upload a file into a project (any kind, up to 20 MB; its members and editors)", Mutating: true,
+		Long: `Uploads a local file under its own name (or --as). Small text files (Markdown, txt, json, …
+up to 64 KB) are read by agents with the project; anything else is kept as a file to download.
+Uploading the same name again replaces it (your own files, or any file for the project's editors).`,
+		Examples: []string{"myco project file put --name myco --path docs/design.md", "myco project file put --name myco --path mockup.png --as 首页设计.png"},
+		Flags: []Flag{nameFlag, {Name: "path", Kind: String, Required: true, Help: "Local file to upload"},
+			{Name: "as", Kind: String, Help: "Name in the project (default: the file's name)"}, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "path"); err != nil {
+				return err
+			}
+			path := e.in.String("path")
+			f, err := os.Open(path)
+			if err != nil {
+				return errorf("invalid_argument", ExitUsage, "pass an existing file to --path", "%v", err)
+			}
+			defer f.Close()
+			st, err := f.Stat()
+			if err != nil || st.IsDir() {
+				return errorf("invalid_argument", ExitUsage, "pass a file, not a folder (zip it first)", "%s is not a file", path)
+			}
+			as := orDefault(e.in.String("as"), filepath.Base(path))
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "project_file_put", "project": e.in.String("name"), "file": as, "bytes": st.Size()})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			d, err := c.PutProjectFile(e.in.Ctx, e.in.String("name"), as, mime.TypeByExtension(strings.ToLower(filepath.Ext(path))), f, st.Size())
+			if err != nil {
+				return err
+			}
+			return e.p.Print(d, func(w io.Writer) { fmt.Fprintf(w, "uploaded %s (%d bytes)\n", d.Name, d.Size) })
+		}),
+	}
+	fileGet := &Command{
+		Name: "get", Summary: "Download a project file",
+		Examples: []string{"myco project file get --name myco --file design.md", "myco project file get --name myco --file 首页设计.png --out /tmp/"},
+		Flags:    []Flag{nameFlag, fileFlag, {Name: "out", Kind: String, Help: "Where to write it: a file, or a folder (default: the current folder)"}, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "file"); err != nil {
+				return err
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			name := filepath.Base(e.in.String("file"))
+			out := orDefault(e.in.String("out"), name)
+			if st, err := os.Stat(out); err == nil && st.IsDir() {
+				out = filepath.Join(out, name)
+			}
+			if err := saveProjectFile(e.in.Ctx, c, e.in.String("name"), e.in.String("file"), out); err != nil {
+				return err
+			}
+			return e.p.Print(map[string]any{"path": out}, func(w io.Writer) { fmt.Fprintf(w, "wrote %s\n", out) })
+		}),
+	}
+	fileRemove := &Command{
+		Name: "remove", Summary: "Remove a project file (its uploader, or the project's editors)", Mutating: true,
+		Examples: []string{"myco project file remove --name myco --file old-notes.md"},
+		Flags:    []Flag{nameFlag, fileFlag, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "file"); err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "project_file_remove", "project": e.in.String("name"), "file": e.in.String("file")})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			if err := c.DeleteProjectDoc(e.in.Ctx, e.in.String("name"), e.in.String("file")); err != nil {
+				return err
+			}
+			return e.p.Print(map[string]any{"deleted": true}, func(w io.Writer) { fmt.Fprintln(w, "removed") })
+		}),
+	}
+	doc := (&Command{Name: "doc", Summary: "A project's shared documents written as text (see also: project file)"}).Add(docShow, docPut, docRemove)
+	file := (&Command{Name: "file", Summary: "A project's files: upload, download, remove"}).Add(filePut, fileGet, fileRemove)
+	return (&Command{Name: "project", Summary: "Projects: nodes working together on a goal, with a shared brief and files"}).
+		Add(list, show, pull, create, update, memberCmd("add"), memberCmd("remove"), file, doc, del)
 }
 
 // projectMarkdown is a project as Markdown (PROJECT.md, myco project show).
@@ -450,13 +539,52 @@ func projectMarkdown(p *api.Project, forFile bool) string {
 	if len(p.Docs) > 0 {
 		b.WriteString("## Documents\n\n")
 		for _, d := range p.Docs {
-			if forFile {
-				fmt.Fprintf(&b, "- [%s](docs/%s.md)\n", d.Name, d.Name)
-			} else {
-				fmt.Fprintf(&b, "- %s (%d bytes; myco project doc show --name %s --doc %s)\n", d.Name, d.Size, p.Name, d.Name)
+			switch {
+			case forFile:
+				fmt.Fprintf(&b, "- [%s](docs/%s)\n", d.Name, docFileName(d))
+			case d.Binary:
+				fmt.Fprintf(&b, "- %s (%d bytes, %s; myco project file get --name %s --file %q)\n", d.Name, d.Size, orDefault(d.ContentType, "file"), p.Name, d.Name)
+			default:
+				fmt.Fprintf(&b, "- %s (%d bytes; myco project file get --name %s --file %q)\n", d.Name, d.Size, p.Name, d.Name)
 			}
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// docFileName is a project file's local name: older documents have no
+// extension and are Markdown.
+func docFileName(d api.ProjectDoc) string {
+	n := filepath.Base(d.Name)
+	if !strings.Contains(n, ".") {
+		n += ".md"
+	}
+	return n
+}
+
+// saveProjectFile downloads a project file to path (through a temporary
+// file, so a failed download leaves nothing half written).
+func saveProjectFile(ctx context.Context, c *client.Client, project, name, path string) error {
+	rc, _, err := c.OpenProjectFile(ctx, project, name)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".myco-file-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := io.Copy(tmp, rc); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

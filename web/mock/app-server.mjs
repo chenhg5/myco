@@ -538,7 +538,8 @@ const projects = [
       { name: "release-cloud", role: "member", note: "部署和发版", added_by: "glenn", added_at: iso(86400 * 2) },
     ],
     docs: [
-      { name: "design", body: "# 设计约定\n\n- 主色 #2f6feb\n- 圆角 12px\n", updated_by: "pm-codex", updated_at: iso(7200) },
+      { name: "design.md", body: "# 设计约定\n\n- 主色 #2f6feb\n- 圆角 12px\n", content_type: "text/markdown; charset=utf-8", updated_by: "pm-codex", updated_at: iso(7200) },
+      { name: "首页设计稿.pdf", body: "", content_type: "application/pdf", binary: true, size: 2412032, updated_by: "glenn", updated_at: iso(5400) },
       { name: "copy-zh", body: "# 首页文案\n\n让你的 agent 互相派活。\n", updated_by: "docs-claude", updated_at: iso(86400) },
     ],
   },
@@ -552,7 +553,7 @@ function projectView(hub, p, bodies) {
   return {
     ...p,
     members: p.members.map((m) => ({ ...m, agent: hub.agents.find((a) => a.name === m.name && a.visibility !== "private") })),
-    docs: p.docs.map((d) => ({ name: d.name, size: d.body.length, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies ? { body: d.body } : {}) })),
+    docs: p.docs.map((d) => ({ name: d.name, size: d.size ?? d.body.length, content_type: d.content_type, binary: !!d.binary, updated_by: d.updated_by, updated_at: d.updated_at, ...(bodies && !d.binary ? { body: d.body } : {}) })),
     can_edit: true, can_manage: p.owner_id === "mem_" + meName || meName === "glenn",
   };
 }
@@ -1088,9 +1089,31 @@ const server = http.createServer(async (req, res) => {
         }
         if (method === "DELETE") { p.members = p.members.filter((x) => x.name !== parts[6]); return send(res, 200, projectView(hub, p)); }
       }
+      if (parts[5] === "files" && parts.length >= 7) {
+        const i = p.docs.findIndex((d) => d.name === parts[6]);
+        if (parts.length === 8 && parts[7] === "save" && method === "POST") {
+          return i < 0 ? fail(res, 404, "not_found", "no such file") : send(res, 200, { path: `/Users/glenn/Downloads/${parts[6]}` });
+        }
+        if (method === "PUT") {
+          const chunks = [];
+          for await (const c of req) chunks.push(c);
+          const buf = Buffer.concat(chunks);
+          const ct = req.headers["content-type"] || "application/octet-stream";
+          const text = /^text\/|json|markdown/.test(ct) || /\.(md|txt|json)$/i.test(parts[6]);
+          const d = { name: parts[6], body: text ? buf.toString("utf8") : "", content_type: ct, binary: !text, bytes: buf, size: buf.length, updated_by: meName, updated_at: iso() };
+          if (i < 0) p.docs.unshift(d); else p.docs[i] = d;
+          return send(res, 200, { name: d.name, size: d.size, content_type: ct, binary: d.binary, updated_by: d.updated_by, updated_at: d.updated_at });
+        }
+        if (method === "GET") {
+          if (i < 0) return fail(res, 404, "not_found", "no such file");
+          const d = p.docs[i];
+          res.writeHead(200, { "Content-Type": d.content_type || "text/markdown" });
+          return res.end(d.bytes || d.body);
+        }
+      }
       if (parts.length === 7 && parts[5] === "docs") {
         const i = p.docs.findIndex((d) => d.name === parts[6]);
-        if (method === "GET") return i < 0 ? fail(res, 404, "not_found", "no such document") : send(res, 200, { ...p.docs[i], size: p.docs[i].body.length });
+        if (method === "GET") return i < 0 ? fail(res, 404, "not_found", "no such document") : send(res, 200, { name: p.docs[i].name, body: p.docs[i].body, content_type: p.docs[i].content_type, binary: !!p.docs[i].binary, updated_by: p.docs[i].updated_by, updated_at: p.docs[i].updated_at, size: p.docs[i].size ?? p.docs[i].body.length });
         if (method === "PUT") {
           const b = await readBody(req);
           const d = { name: parts[6], body: b.body || "", updated_by: meName, updated_at: iso() };
