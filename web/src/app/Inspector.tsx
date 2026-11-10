@@ -641,9 +641,9 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                   <span className="app-kv-value">
                     {me?.can_manage ? (
                       <button type="button" className="app-kv-link" onClick={openOwner}>
-                        {ag.owner}{me.member?.id === ag.owner_id ? L("（你）", " (you)") : ""}<span className="app-chev">›</span>
+                        {me.member?.id === ag.owner_id ? <span title={ag.owner}>{L("你", "You")}</span> : ag.owner}<span className="app-chev">›</span>
                       </button>
-                    ) : <>{ag.owner}{me?.member?.id === ag.owner_id ? L("（你）", " (you)") : ""}</>}
+                    ) : <>{me?.member?.id === ag.owner_id ? <span title={ag.owner}>{L("你", "You")}</span> : ag.owner}</>}
                   </span>
                 </div>
               )}
