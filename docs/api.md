@@ -76,7 +76,7 @@ Errors (any non-2xx):
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
 | `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id]}` → `{message, duplicate, via_alias?}`; `to` may be an alias (the message stores the real name); attaching grants the recipient access |
 | `GET /v1/messages/{id}` | agent | A message you sent or received |
-| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 5 minutes after) |
+| `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 30 minutes after, so a session that is still open between two waits is not resumed behind it) |
 | `POST /v1/messages/{id}/ack` | recipient | Take ownership (stops redelivery) |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply; also works on a queued message (drop it without pulling) |

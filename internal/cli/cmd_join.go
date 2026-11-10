@@ -494,6 +494,11 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			if cloud {
+				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits"
+			} else {
+				out["receive"] = openSessionNote
+			}
 			return e.p.Print(out, func(w io.Writer) {
 				verb := "joined as"
 				if !res.Created {
@@ -504,13 +509,18 @@ Safe to re-run: the same session gets the same agent back.`,
 					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
 					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
 				} else {
-					fmt.Fprintln(w, "The machine's runner service will wake this session when a message arrives (within ~30s of joining).")
+					fmt.Fprintln(w, openSessionNote)
 				}
 				fmt.Fprintln(w, "Others can now reach it: myco message send --to "+res.Agent.Name+" --body \"...\"")
 			})
 		}),
 	}
 }
+
+// openSessionNote tells a local session how it receives: by itself while it
+// stays open, through the runner once it is closed. Waking an open session
+// from the runner would continue it behind the open window.
+const openSessionNote = "If this session stays open (desktop app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits: the open session then receives its own messages. Once it is closed, the machine's runner wakes it in the background (about 30 minutes after its last wait)."
 
 func machineName(m *config.MachineHub) string {
 	if m == nil {

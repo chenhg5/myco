@@ -293,7 +293,9 @@ myco agent get        # 确认 binding.harness=claude，binding.session_id 是�
 myco runner start --all
 ```
 
-**会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试（App 里会显示"会话正在被使用"）。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait --timeout 55m`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 5 分钟后，runner 自动接手，在后台唤醒它。
+**会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试（App 里会显示"会话正在被使用"）。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait --timeout 55m`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 30 分钟后，runner 自动接手，在后台唤醒它。
+
+**沿用正在用的会话**：会话开着（桌面 App、IDE、终端）时，请让它自己挂着 `inbox wait` 收消息，不要只靠 runner。runner 判断会话是否被占用，靠的是它最近 90 秒内有没有动静；开着但闲着的会话会被当成空闲，在后台被续接，结果是后台做的事不会出现在你开着的窗口里，你接着在窗口里聊时对话就分叉了。`myco join` 的输出（`receive` 一项）和 App 生成的邀请话术都会这样提醒 agent。v0.18.18 起，会话最后一次等待后 30 分钟内 runner 都不会接手（以前是 5 分钟），挂着等待的会话在两次等待之间不会被后台续接。
 
 **选择服务商**：后台唤醒时，Claude Code 默认用这台电脑自己的设置（包括 cc-switch 当前选中的服务商，它会写进 `~/.claude/settings.json`）。想让某个节点固定用一个服务商，在 App 的节点详情里点"服务商"一行选择（节点在这台电脑上时可选）。也可以用命令行：
 ```bash

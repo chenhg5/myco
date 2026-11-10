@@ -65,7 +65,10 @@ const isShell = (cli: string) => cli === "exec";
 // One sentence for the agent on the other computer: install and register
 // the machine (safe to re-run if myco is already there), then join the session.
 function inviteSentence(command: string): string {
-  return L(`接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入。`, `Join the myco network: run ${command} in a terminal, then run myco join to add the current session.`);
+  return L(
+    `接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入，并按它输出里 receive 的说明接收消息（会话开着时，在后台一直挂着 myco inbox wait --timeout 55m）。`,
+    `Join the myco network: run ${command} in a terminal, then run myco join to add the current session, and receive messages as its "receive" output says (while the session stays open, keep myco inbox wait --timeout 55m running in the background).`,
+  );
 }
 
 export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onSpawned, onJoined }: {

@@ -347,7 +347,7 @@ function receivingLabel(r?: string) {
 
 function receivingNote(r?: string, cloud?: boolean) {
   if (r === "session" && cloud) return L("会话自己挂着 inbox wait 收消息；停止等待后就收不到了，回到会话里让它重新开始等待。", "The session keeps inbox wait running and reads its own messages. If it stops waiting it can't receive; go back to the session and have it start waiting again.");
-  if (r === "session") return L("会话自己挂着 inbox wait 收消息，runner 暂时让开；会话停止等待约 5 分钟后，runner 自动接手。", "The session keeps inbox wait running and reads its own messages, so the runner stands aside. About 5 minutes after the session stops waiting, the runner takes over.");
+  if (r === "session") return L("会话自己挂着 inbox wait 收消息，runner 暂时让开；会话停止等待约 30 分钟后（多半已经关掉了），runner 自动接手。", "The session keeps inbox wait running and reads its own messages, so the runner stands aside. About 30 minutes after the session stops waiting (by then it is most likely closed), the runner takes over.");
   if (r === "runner") return L("有消息时，runner 在后台唤醒这个会话处理，你不用开着它。", "When a message arrives, the runner wakes this session in the background to handle it. You don't need to keep it open.");
   return "";
 }

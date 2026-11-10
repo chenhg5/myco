@@ -83,7 +83,11 @@ func Build(o Options) (*Hub, error) {
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
-	messages.SetPresence(app.NewPresence(clock, 5*time.Minute))
+	// A session that waited in the last 30 minutes is most likely still open
+	// in front of someone (a desktop app or a terminal) between two waits:
+	// the runner keeps away from it, so it is not resumed in the background
+	// behind that open window. A closed session is taken over after that.
+	messages.SetPresence(app.NewPresence(clock, 30*time.Minute))
 	enroll := app.NewEnrollmentService(sqlite.NewEnrollmentRepo(db), agentsRepo, security.Tokens{}, ids, clock)
 	aliasRepo := sqlite.NewAliasRepo(db)
 	if n, err := aliasRepo.DeleteDangling(context.Background()); err != nil {

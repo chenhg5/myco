@@ -956,6 +956,11 @@ func TestJoinLinks(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `"name": "test-box-claude-ef56"`) || !strings.Contains(out, "machine=test-box") {
 		t.Fatalf("claude join: %d %s %s", code, out, e)
 	}
+	// A local session is told to keep inbox wait running while it stays open
+	// (the runner would continue it behind the open window).
+	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "stays open") {
+		t.Fatalf("join does not say how to receive while open: %s", out)
+	}
 	// ...and Codex, found from its active rollout in this directory.
 	wd, _ := os.Getwd()
 	day := filepath.Join(home, ".codex", "sessions", "2026", "11", "05")
