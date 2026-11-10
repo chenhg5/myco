@@ -5,6 +5,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export interface NewConversationTarget {
   hubId?: string;
@@ -158,13 +159,14 @@ export function NewConversationDialog({ target, hubs, rows, onClose, onSent }: {
           )}
 
           <label className="app-field">
-            <span className="app-field-label">{L("任务", "Task")}</span>
+            <span className="app-field-label">{node?.shell ? L("命令", "Command") : L("任务", "Task")}</span>
             <textarea
-              className="app-input"
+              className={cn("app-input", node?.shell && "is-mono")}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder={L("要让它做什么？", "What should it do?")}
+              placeholder={node?.shell ? L("例如 uptime", "e.g. uptime") : L("要让它做什么？", "What should it do?")}
+              spellCheck={!node?.shell}
               autoFocus
               disabled={busy}
             />

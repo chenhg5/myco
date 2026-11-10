@@ -15,8 +15,11 @@ function stamp(iso: string): string {
  * `$` line with who sent it and when, its output below, and the exit code
  * when it failed. Notes and other messages are shown as `#` comment lines.
  */
-export function Terminal({ messages, execNode, nameOf, hubE2E }: {
+export function Terminal({ messages, execNode, nameOf, hubE2E, live, children }: {
   messages: Message[];
+  /** a session you type into: fills the space, ends with the prompt (children) */
+  live?: boolean;
+  children?: React.ReactNode;
   execNode: string;
   nameOf: (name: string) => string;
   /** the hub encrypts: mark commands that were sent unencrypted */
@@ -68,7 +71,7 @@ export function Terminal({ messages, execNode, nameOf, hubE2E }: {
       </div>,
     );
   }
-  return <div className="term">{items}</div>;
+  return <div className={cn("term", live && "is-live")}>{items}{children}</div>;
 }
 
 type ExecResult = NonNullable<ReturnType<typeof parseExecResult>>;

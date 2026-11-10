@@ -2862,7 +2862,8 @@ textarea.app-input {
   .conv-compose {
     padding: 6px 10px 10px;
   }
-  .conv-compose-hint {
+  .conv-compose-hint,
+  .term-foot span + span {
     display: none;
   }
   .app-addnode-tabs .seg-btn {
@@ -3323,6 +3324,61 @@ button.app-label:hover { filter: brightness(0.95); }
   color: #7c808b;
 }
 
+/* Your own session with a shell node: a terminal you type into. */
+.conv-timeline.is-shell {
+  min-height: 100%;
+  gap: 6px;
+  padding-bottom: 12px;
+}
+.term-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.term.is-live {
+  flex: 1;
+  cursor: text;
+}
+.term-input-line {
+  display: flex;
+  align-items: flex-start;
+}
+.term.is-live > .term-cmd + .term-input-line,
+.term.is-live > .term-comment + .term-input-line {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #2c2e35;
+}
+.term-cwd {
+  color: #7aa2d6;
+}
+.term-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 200px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f2f3f5;
+  caret-color: #52a685;
+  font: inherit;
+  resize: none;
+  overflow-y: auto;
+}
+.term-input::placeholder {
+  color: #5d616b;
+}
+.term-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* End-to-end encryption marks */
 .conv-lock {
   width: 11px;
@@ -3485,4 +3541,8 @@ body.is-resizing {
 }
 .conv-list-compact .app-empty {
   padding: 0 16px;
+}
+.app-input.is-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
 }

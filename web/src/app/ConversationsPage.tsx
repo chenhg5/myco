@@ -246,7 +246,14 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
     return ps.length > 2 ? `${head} +${ps.length - 2}` : head;
   };
 
-  const summaryOf = (it: RecentItem): string => {
+  // A person's thread with an exec node reads as a terminal too.
+  const isExec = (hubId: string, name: string) =>
+    rows.some((r) => r.hub.id === hubId && r.st.agent.name === name && r.st.agent.binding.harness === "exec");
+  const shellRow = (r: ConversationRow) =>
+    r.item.kind === "pair" || r.item.participants.some((p) => isExec(r.hubId, p));
+
+  const summaryOf = (row: ConversationRow): string => {
+    const it = row.item;
     if (it.kind === "pair" && it.task) {
       if (it.task.unreadable) return summarize(it.task);
       const cmd = `$ ${(it.task.body || "").split("\n")[0]}`;
@@ -254,6 +261,15 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       if (res && typeof res.exit_code === "number") return `${cmd} · exit ${res.exit_code}`;
       if (it.answer?.type === "event") return `${cmd} · ${summarize(it.answer)}`;
       return cmd;
+    }
+    const last = it.last;
+    if (last && !last.unreadable && it.kind !== "pair" && shellRow(row)) {
+      if (last.type === "task") return `$ ${(last.body || "").split("\n")[0]}`;
+      const res = last.type === "reply" ? parseExecResult(last.body) : null;
+      if (res) {
+        const out = ((res.stdout || res.stderr || "") as string).trim().split("\n")[0];
+        return typeof res.exit_code === "number" ? (out ? `${out} · exit ${res.exit_code}` : `exit ${res.exit_code}`) : out;
+      }
     }
     return summarize(it.last);
   };
@@ -354,7 +370,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           {shown.map((row) => {
             const it = row.item;
             const tag = stateTag(it.state);
-            const Icon = it.kind === "pair" ? Terminal : it.participants.some((p) => p.startsWith(CONSOLE)) ? MessageSquare : ArrowLeftRight;
+            const shell = shellRow(row);
+            const Icon = shell ? Terminal : it.participants.some((p) => p.startsWith(CONSOLE)) ? MessageSquare : ArrowLeftRight;
             const key = rowKey(row);
             return (
               <button
@@ -363,14 +380,14 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                 className={cn("conv-row", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
               >
-                <span className={cn("conv-row-icon", it.kind === "pair" && "is-shell")} aria-hidden><Icon /></span>
+                <span className={cn("conv-row-icon", shell && "is-shell")} aria-hidden><Icon /></span>
                 <span className="conv-row-main">
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
                     {hub === "all" && !compact && <span className="conv-row-hub">{row.hubName}</span>}
                     <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
                   </span>
-                  <span className={cn("conv-row-summary", it.kind === "pair" && "is-mono")}>{summaryOf(it)}</span>
+                  <span className={cn("conv-row-summary", shell && "is-mono")}>{summaryOf(row)}</span>
                 </span>
                 {tag.label && <span className={cn("app-pill", tag.cls)}>{tag.label}</span>}
               </button>

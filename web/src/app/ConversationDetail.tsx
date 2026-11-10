@@ -203,6 +203,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // With an exec (shell) node on one side, the messages read as a terminal.
   const isExecNode = (n?: string) => !!n && rows.some((x) => x.hub.id === target.hubId && x.st.agent.name === n && x.st.agent.binding.harness === "exec");
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
+  // Your own session with a shell node: you type at a prompt, as in a terminal.
+  const shellMode = !observed && isExecNode(target.agent);
+  // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
+  const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
+  const histPos = useRef(-1);
+  const histDraft = useRef("");
 
   const nameOf = (from: string): string => {
     if (isConsole(from)) return personLabel(from, row?.hub);
@@ -221,6 +227,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : await appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id: target.threadId });
       setMessages((prev) => (prev ? [...prev, m] : [m]));
       setDraft("");
+      histPos.current = -1;
       setSteerMode(false);
       atBottom.current = true;
       inputRef.current?.focus();
@@ -232,6 +239,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (shellMode && (e.key === "ArrowUp" || e.key === "ArrowDown") && !e.nativeEvent.isComposing && !draft.includes("\n") && history.length > 0) {
+      e.preventDefault();
+      let pos = histPos.current;
+      if (e.key === "ArrowUp") {
+        if (pos === -1) { histDraft.current = draft; pos = history.length - 1; } else if (pos > 0) pos -= 1;
+      } else {
+        if (pos === -1) return;
+        pos = pos + 1 < history.length ? pos + 1 : -1;
+      }
+      histPos.current = pos;
+      setDraft(pos === -1 ? histDraft.current : history[pos]);
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     void send();
@@ -314,14 +334,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       </header>
 
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className="conv-timeline">
+        <div className={cn("conv-timeline", shellMode && "is-shell")}>
           {shown === null ? (
             loadError ? (
               <ErrorText error={loadError} />
             ) : (
               <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
             )
-          ) : shown.length === 0 ? (
+          ) : shown.length === 0 && !shellMode ? (
             <div className="app-empty-note">{exchange ? L("还没有消息。", "No messages yet.") : L("还没有消息。发一条任务开始。", "No messages yet. Give a task to get started.")}</div>
           ) : (
             <>
@@ -332,7 +352,36 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 </button>
               </div>
             )}
-            {execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} /> : shown.map((m, i) => {
+            {shellMode ? (
+              <>
+              <div onMouseUp={() => { if (window.getSelection()?.isCollapsed !== false) inputRef.current?.focus(); }} className="term-wrap">
+                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live>
+                  <div className="term-input-line">
+                    <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir} </span> : null}$</span>
+                    <textarea
+                      ref={inputRef}
+                      className="term-input"
+                      value={draft}
+                      onChange={(e) => { setDraft(e.target.value); histPos.current = -1; }}
+                      onKeyDown={onKeyDown}
+                      rows={1}
+                      autoFocus
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      placeholder={shown.length === 0 ? L("输入命令，回车执行", "Type a command, Enter to run") : ""}
+                      aria-label={L("命令", "Command")}
+                    />
+                  </div>
+                </Terminal>
+              </div>
+              <div className="term-foot">
+                <span>{L(`在 ${agentName} 上执行`, `Runs on ${agentName}`)}</span>
+                <span>{L("回车执行 · Shift+Enter 换行 · ↑↓ 历史命令", "Enter to run · Shift+Enter for a new line · ↑↓ history")}</span>
+              </div>
+              <ErrorText error={sendError} />
+              </>
+            ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} /> : shown.map((m, i) => {
               // Exchange view: a new thread starts with a divider.
               const divider = exchange && i > 0 && shown[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
@@ -345,7 +394,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
       </div>
 
-      {observed ? (
+      {shellMode ? null : observed ? (
         <div className="conv-observe">
           <span>{L("这是节点之间的协作记录，你只能查看。", "This is a record of nodes working together. You can only view it.")}</span>
           <button type="button" className="app-btn" onClick={() => onNewConversation(target.hubId, target.agent)}>
