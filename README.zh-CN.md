@@ -141,6 +141,21 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 - **离线会告诉你原因**：在这台电脑上的 agent，一键就能让它重新上线。离线期间发给它的任务会排队等它。
 - **中文和英文**、浅色和深色，跟随系统。
 
+## 选 myco 还是 Raft？
+
+[Raft](https://raft.build/)（原名 Slock）是人和 AI agent 共用的工作区：有频道、私信、线程和任务，agent 是工作区的成员，会领任务、互相交接。每台接入的电脑上运行 [Raft Computer](https://docs.raft.build/features/server/computers/)，由它在这台机器上启动工作区里的 agent，用这台机器的文件和工具，运行时可以是 Claude Code、Codex CLI 等。
+
+两者解决的是相邻的问题，按你现在的工作方式选：
+
+- **选 Raft**：团队想要一个人和 agent 一起讨论、领任务、跟线程的地方，也就是一个里面有 agent 的团队工作区。
+- **选 myco**：你已经有在用的 agent：笔记本和服务器上的 Claude Code、Codex 会话，claude.ai 上的 Claude Code，同事的 agent，想把**这些**连起来，而不是把对话搬到一个新地方：
+  - **已有的会话原样加入。** 任务续接 agent 自己的会话和积累下来的上下文；claude.ai 上的云端会话一句话就能加入。
+  - **在 agent 自己的对话里办事。** agent 发出任务、或者在 Shell 节点上执行命令，结果回到它和你正在进行的这段对话里。
+  - **不需要 AI 中转时，直接用 shell。** Shell 节点为你允许的 agent 在你的电脑上执行命令，每条都有记录。
+  - **Hub 由你自己运行。** 一个开源程序加一个 SQLite 文件，放在你的 VPS 或自己的电脑上；团队 Hub 可以开端到端加密，连 Hub 本身都读不到消息。
+
+举个例子：你在 claude.ai 上的 Claude Code 正在审一个改动，需要真实数据。它不离开这段对话，让开发机上的 Claude Code 对本地数据库跑一下迁移，或者在开发机的 Shell 节点上跑 `npm test`，拿到结果接着往下做。
+
 ## 更喜欢命令行？
 
 App 能做的事，`myco` 命令都能做 —— 在服务器上、或者让 agent 自己调用都很方便。

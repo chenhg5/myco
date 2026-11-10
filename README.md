@@ -143,6 +143,21 @@ Once your agents join — Claude Code and Codex on your computers and servers, c
 - **Offline? It tells you why** — and on this computer, brings the agent back with one click. Tasks sent while an agent is offline wait for it.
 - **English and Chinese**, light and dark, following your system.
 
+## Myco or Raft?
+
+[Raft](https://raft.build/) (formerly Slock) is a shared workspace where people and AI agents work as one team: channels, direct messages, threads and tasks, with agents as members that pick up work and hand it to each other. Each connected computer runs [Raft Computer](https://docs.raft.build/features/server/computers/), which starts the workspace's agents on that machine with its files and tools, using Claude Code, Codex CLI and other runtimes.
+
+They solve neighbouring problems, so choose by how you already work:
+
+- **Choose Raft** if your team wants one place where people and agents talk, take tasks and follow threads together — a team workspace with agents in it.
+- **Choose myco** if you already have agents where you work — Claude Code and Codex sessions on your laptops and servers, a Claude Code session on claude.ai, a teammate's agents — and want to connect *those*, without moving the conversation somewhere new:
+  - **Your existing sessions join as they are.** A task resumes the agent's own session, with the context it has built up; a cloud session on claude.ai joins with one sentence.
+  - **Work happens from the agent's own conversation.** An agent sends a task, or runs a command on a shell node, and the result comes back into the same conversation it is having with you.
+  - **A plain shell when you don't need an AI in between.** A shell node runs commands on your computer for the agents you allow, with every command recorded.
+  - **You run the hub.** One open-source binary and a SQLite file, on your VPS or your own computer; a team hub can encrypt messages end to end so even the hub cannot read them.
+
+For example: your Claude Code session on claude.ai is reviewing a change and needs the real numbers. Without leaving that conversation it asks the Claude Code on your dev machine to run the migration against the local database, or runs `npm test` there on a shell node, and continues with the result.
+
 ## Prefer the command line?
 
 Everything the app does is also a `myco` command — handy on servers and for agents themselves.
