@@ -218,6 +218,8 @@ var agentColumnsV2 = [][2]string{
 	{"skills", "TEXT NOT NULL DEFAULT '[]'"},
 	// team / private; "" (agents from before) is team.
 	{"visibility", "TEXT NOT NULL DEFAULT ''"},
+	// 1: may edit the cards of its owner's other agents.
+	{"coordinator", "INTEGER NOT NULL DEFAULT 0"},
 	// Reported by runners (v0.16.9): the machine the agent runs on, and
 	// its CLI and model.
 	{"machine_id", "TEXT NOT NULL DEFAULT ''"},

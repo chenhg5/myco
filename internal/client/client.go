@@ -356,6 +356,13 @@ func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error
 
 // UpdateProfile changes display name/description of the caller (name "")
 // or, with an admin token, of agent name.
+// SetCoordinator lets an agent edit its owner's other agents' cards (its
+// owner or an admin).
+func (c *Client) SetCoordinator(ctx context.Context, name string, on bool) (*api.Agent, error) {
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, "/v1/agents/"+esc(name)+"/coordinator", nil, api.CoordinatorRequest{Coordinator: on}, &out)
+}
+
 // SetVisibility makes an agent visible to the team or private to its owner
 // (its owner or an admin).
 func (c *Client) SetVisibility(ctx context.Context, name, visibility string) (*api.Agent, error) {

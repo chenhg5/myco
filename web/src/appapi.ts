@@ -345,6 +345,9 @@ export const appApi = {
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Lets a node edit the cards of its owner's other nodes. */
+  setCoordinator: (hubId: string, name: string, coordinator: boolean) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/coordinator`, { coordinator }),
   /** Makes a node visible to the team or private to its owner. */
   setVisibility: (hubId: string, name: string, visibility: "team" | "private") =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/visibility`, { visibility }),

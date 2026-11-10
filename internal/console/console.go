@@ -243,6 +243,19 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	// Whether a node may edit its owner's other nodes' cards.
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/coordinator", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.CoordinatorRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		a, err := c.SetCoordinator(r.Context(), r.PathValue("name"), in.Coordinator)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
 	// Who can find and use a node: team or private.
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/visibility", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.VisibilityRequest

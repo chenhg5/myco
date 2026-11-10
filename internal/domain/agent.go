@@ -166,6 +166,9 @@ type Agent struct {
 	// the owner and the owner's agents). Set only by people, never by the
 	// agent itself.
 	Visibility Visibility
+	// Coordinator lets this agent edit the card (display name, description,
+	// labels, skills) of its owner's other agents. Set only by people.
+	Coordinator bool
 }
 
 // AgentSpec is the mutable profile of an agent.

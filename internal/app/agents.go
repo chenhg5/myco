@@ -341,6 +341,21 @@ func (s *AgentService) SetVisibility(ctx context.Context, name string, v string)
 	return a, s.agents.Save(ctx, a)
 }
 
+// SetCoordinator lets an agent edit (or stops it editing) the cards of its
+// owner's other agents.
+func (s *AgentService) SetCoordinator(ctx context.Context, name string, on bool) (*domain.Agent, error) {
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if on && a.Owner == "" {
+		return nil, domain.Errf(domain.CodeInvalidState, "%s has no owner, so it has no other agents to coordinate", a.Name).
+			WithSuggestion("give it to a member first: myco agent owner set --name %s --owner <member>", a.Name)
+	}
+	a.Coordinator = on
+	return a, s.agents.Save(ctx, a)
+}
+
 // DeliveryModes lists supported delivery modes.
 func (s *AgentService) DeliveryModes() []string { return s.wakers.Modes() }
 

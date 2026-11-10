@@ -1186,6 +1186,11 @@ const server = http.createServer(async (req, res) => {
           { id: "aud_1", at: t(60 * 50), actor: "glenn", actor_kind: "member", action: "agent.edit", target: agent.name, detail: "display_name: — → PM (Codex)" },
         ] });
       }
+      if (parts.length === 6 && parts[5] === "coordinator" && method === "PUT") {
+        const body = await readBody(req);
+        agent.coordinator = !!body?.coordinator;
+        return send(res, 200, agent);
+      }
       if (parts.length === 6 && parts[5] === "visibility" && method === "PUT") {
         const body = await readBody(req);
         if (!["team", "private"].includes(body?.visibility)) return fail(res, 400, "invalid_argument", "invalid visibility");

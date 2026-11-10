@@ -50,15 +50,18 @@ type Agent struct {
 	Skills []Skill `json:"skills,omitempty"`
 	// Visibility: "team" (everyone on the hub) or "private" (only its owner
 	// and the owner's agents). Absent on hubs before v0.18.22: team.
-	Visibility string     `json:"visibility,omitempty"`
-	Labels     []string   `json:"labels"`
-	Binding    Binding    `json:"binding"`
-	Delivery   Delivery   `json:"delivery"`
-	AllowFrom  []string   `json:"allow_from"`
-	EnrolledBy string     `json:"enrolled_by,omitempty"`
-	Online     bool       `json:"online"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	Visibility string `json:"visibility,omitempty"`
+	// Coordinator: may edit the cards of its owner's other agents (set by
+	// people only).
+	Coordinator bool       `json:"coordinator,omitempty"`
+	Labels      []string   `json:"labels"`
+	Binding     Binding    `json:"binding"`
+	Delivery    Delivery   `json:"delivery"`
+	AllowFrom   []string   `json:"allow_from"`
+	EnrolledBy  string     `json:"enrolled_by,omitempty"`
+	Online      bool       `json:"online"`
+	CreatedAt   time.Time  `json:"created_at"`
+	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
 	// Kind is agent (an AI session), shell (exec/shell node), human, or
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
@@ -178,6 +181,11 @@ type Skill struct {
 	Name     string   `json:"name"`
 	Summary  string   `json:"summary,omitempty"`
 	Examples []string `json:"examples,omitempty"`
+}
+
+// CoordinatorRequest is the body of PUT /v1/agents/{name}/coordinator.
+type CoordinatorRequest struct {
+	Coordinator bool `json:"coordinator"`
 }
 
 // VisibilityRequest is the body of PUT /v1/agents/{name}/visibility.

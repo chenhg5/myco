@@ -61,6 +61,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if a.Private() {
 		out.Visibility = string(domain.VisibilityPrivate)
 	}
+	out.Coordinator = a.Coordinator
 	return out
 }
 

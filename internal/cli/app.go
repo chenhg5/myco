@@ -269,6 +269,21 @@ func runnerHarnessFor(h string) string {
 }
 
 // adminClient returns a client authenticated with the hub admin token.
+// cardClient is for changing another agent's card (display name,
+// description, labels, skills): admin or member credentials when there are
+// some, else this agent's own token, which the hub accepts from a
+// coordinator agent for its owner's other agents.
+func (e *env) cardClient() (*client.Client, error) {
+	c, err := e.adminClient()
+	if err == nil {
+		return c, nil
+	}
+	if a, aerr := e.agentClient(); aerr == nil {
+		return a, nil
+	}
+	return nil, err
+}
+
 func (e *env) adminClient() (*client.Client, error) {
 	hub, err := e.hubURL()
 	if err != nil {

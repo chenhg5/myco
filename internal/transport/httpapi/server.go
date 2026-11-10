@@ -166,11 +166,20 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
-	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
-	m.HandleFunc("PUT /v1/agents/{name}/skills", s.admin(s.adminSkills))
+	// A node's card: its owner and admins (console), or a coordinator agent
+	// of the same owner (its own token).
+	m.HandleFunc("PUT /v1/agents/{name}/labels", s.cardEditor("edit the labels of", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
+		s.setLabels(w, r, r.PathValue("name"), by)
+	}))
+	m.HandleFunc("PUT /v1/agents/{name}/skills", s.cardEditor("edit the skills of", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
+		s.setSkills(w, r, r.PathValue("name"), by)
+	}))
+	m.HandleFunc("PUT /v1/agents/{name}/coordinator", s.admin(s.setCoordinator))
 	m.HandleFunc("PUT /v1/agents/{name}/visibility", s.admin(s.setVisibility))
 	m.HandleFunc("GET /v1/agents/{name}/history", s.admin(s.agentHistory))
-	m.HandleFunc("PUT /v1/agents/{name}/profile", s.admin(s.adminProfile))
+	m.HandleFunc("PUT /v1/agents/{name}/profile", s.cardEditor("edit", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
+		s.updateProfile(w, r, r.PathValue("name"), by)
+	}))
 	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
 	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
 	m.HandleFunc("DELETE /v1/aliases/{alias}", s.admin(s.removeAlias))
@@ -811,22 +820,8 @@ func (s *Server) mySkills(w http.ResponseWriter, r *http.Request, a *domain.Agen
 	s.setSkills(w, r, string(a.Name), a)
 }
 
-func (s *Server) adminSkills(w http.ResponseWriter, r *http.Request) {
-	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the skills of") {
-		return
-	}
-	s.setSkills(w, r, r.PathValue("name"), nil)
-}
-
 func (s *Server) myLabels(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	s.setLabels(w, r, string(a.Name), a)
-}
-
-func (s *Server) adminLabels(w http.ResponseWriter, r *http.Request) {
-	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit the labels of") {
-		return
-	}
-	s.setLabels(w, r, r.PathValue("name"), nil)
 }
 
 // by is the agent changing itself (nil: a person, who may also change
@@ -877,13 +872,6 @@ func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agen
 
 func (s *Server) myProfile(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	s.updateProfile(w, r, string(a.Name), a)
-}
-
-func (s *Server) adminProfile(w http.ResponseWriter, r *http.Request) {
-	if !s.mayOwnAgent(w, r, r.PathValue("name"), "edit") {
-		return
-	}
-	s.updateProfile(w, r, r.PathValue("name"), nil)
 }
 
 func (s *Server) listAliases(w http.ResponseWriter, r *http.Request) {

@@ -177,9 +177,12 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				c   *client.Client
 				err error
 			)
-			if name != "" {
+			switch {
+			case name != "" && req.AllowFrom == nil:
+				c, err = e.cardClient() // a coordinator may change the card
+			case name != "":
 				c, err = e.adminClient()
-			} else {
+			default:
 				c, err = e.agentClient()
 			}
 			if err != nil {

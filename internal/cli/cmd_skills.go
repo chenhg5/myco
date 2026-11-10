@@ -14,12 +14,12 @@ import (
 // agentSkillsCommands: what an agent can be asked to do (myco agent skills).
 func agentSkillsCommands() *Command {
 	target := []Flag{
-		{Name: "name", Kind: String, Help: "Another agent (its owner or an admin); default: yourself"},
+		{Name: "name", Kind: String, Help: "Another agent (its owner, an admin, or a coordinator agent of the same owner); default: yourself"},
 		{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
 	}
 	clientFor := func(e *env) (*client.Client, error) {
 		if e.in.String("name") != "" {
-			return e.adminClient()
+			return e.cardClient()
 		}
 		return e.agentClient()
 	}
@@ -226,6 +226,51 @@ func agentVisibilityCommand() *Command {
 					fmt.Fprintf(w, "%s is now private: only its owner and the owner's agents can find it and give it tasks\n", a.Name)
 				} else {
 					fmt.Fprintf(w, "%s is now visible to everyone on the hub\n", a.Name)
+				}
+			})
+		}),
+	}
+}
+
+// agentCoordinatorCommand: let an agent edit its owner's other agents'
+// cards (people only).
+func agentCoordinatorCommand() *Command {
+	return &Command{
+		Name: "coordinator", Summary: "Let an agent edit the cards (description, labels, skills) of its owner's other agents", Mutating: true,
+		Examples: []string{
+			"myco agent coordinator --name cloud-hdkwmcki --on",
+			"myco agent coordinator --name cloud-hdkwmcki --off",
+		},
+		Flags: []Flag{
+			{Name: "name", Kind: String, Required: true, Help: "The agent"},
+			{Name: "on", Kind: Bool, Help: "Make it a coordinator"},
+			{Name: "off", Kind: Bool, Help: "Stop it being one"},
+			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name"); err != nil {
+				return err
+			}
+			on, off := e.in.Bool("on"), e.in.Bool("off")
+			if on == off {
+				return &UsageError{Message: "pass --on or --off", Suggestion: "e.g. myco agent coordinator --name <agent> --on", Command: e.in.Cmd.Path()}
+			}
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "coordinator", "agent": e.in.String("name"), "coordinator": on})
+			}
+			a, err := c.SetCoordinator(e.in.Ctx, e.in.String("name"), on)
+			if err != nil {
+				return err
+			}
+			return e.p.Print(a, func(w io.Writer) {
+				if a.Coordinator {
+					fmt.Fprintf(w, "%s may now edit the description, labels and skills of %s's other agents\n", a.Name, a.Owner)
+				} else {
+					fmt.Fprintf(w, "%s is no longer a coordinator\n", a.Name)
 				}
 			})
 		}),

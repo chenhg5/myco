@@ -16,7 +16,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 
-type Action = null | "profile" | "skills" | "visibility" | "allow" | "kick" | "delete" | "owner" | "copy";
+type Action = null | "profile" | "skills" | "visibility" | "coordinator" | "allow" | "kick" | "delete" | "owner" | "copy";
 
 // A skill being edited: examples as one text, one per line.
 interface SkillDraft { name: string; summary: string; examples: string }
@@ -98,6 +98,7 @@ function historyLines(e: AuditEntry): string[] {
     case "agent.visibility": return [L(`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, `Visibility set to ${e.detail === "private" ? "only its owner" : "everyone on the hub"}`)];
     case "agent.owner": return [L(`转交：${e.detail || ""}`, `Given: ${e.detail || ""}`)];
     case "agent.update": return [e.detail?.startsWith("allow_from: ") ? L(`允许谁派任务：${e.detail.slice(12)}`, `Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
+    case "agent.coordinator": return [e.detail === "on" ? L("设为协调者", "Made a coordinator") : L("不再是协调者", "No longer a coordinator")];
     case "agent.kick": return [L("踢下线", "Disconnected")];
     case "agent.register": return [L("注册", "Registered")];
     case "agent.rotate_token": return [L("更换了令牌", "Token replaced")];
@@ -555,6 +556,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [skillDrafts, setSkillDrafts] = useState<SkillDraft[]>([]);
   const [visChoice, setVisChoice] = useState<"team" | "private">("team");
+  const [coordChoice, setCoordChoice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -743,6 +745,18 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                   </span>
                 </div>
               )}
+              {kind === "agent" && row.hub.me?.member && ag.owner && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("协调者", "Coordinator")}</span>
+                  <span className="app-kv-value">
+                    {mayManage ? (
+                      <button type="button" className="app-kv-link" onClick={() => { setCoordChoice(!!ag.coordinator); openAction("coordinator"); }}>
+                        {ag.coordinator ? L("是", "Yes") : L("否", "No")}<span className="app-chev">›</span>
+                      </button>
+                    ) : ag.coordinator ? L("是", "Yes") : L("否", "No")}
+                  </span>
+                </div>
+              )}
               {kind !== "human" && row.st.receiving && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
@@ -854,7 +868,7 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
               <div className="app-group-title"><span className="name">{L("修改记录", "Changes")}</span></div>
               <div className="app-list">
                 <HistoryRows row={row} now={now}
-                  stamp={[ag.display_name, ag.description, ag.labels.join(","), (ag.skills || []).map((x) => `${x.name}:${x.summary}:${(x.examples || []).join("|")}`).join(","), ag.visibility, ag.owner, ag.allow_from.join(",")].join("\u0000")} />
+                  stamp={[ag.display_name, ag.description, ag.labels.join(","), (ag.skills || []).map((x) => `${x.name}:${x.summary}:${(x.examples || []).join("|")}`).join(","), ag.visibility, ag.owner, ag.allow_from.join(","), String(ag.coordinator)].join("\u0000")} />
               </div>
             </section>
           )}
@@ -966,6 +980,36 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="button" className="app-btn app-btn-primary" onClick={saveProfile} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={action === "coordinator"}
+        onOpenChange={(o) => !o && closeAction()}
+        title={L("协调者", "Coordinator")}
+        description={L(`协调者可以直接修改 ${ag.owner || "主人"} 的其他节点的显示名、介绍、分组和标签、技能，用来给团队分工。改不了可见范围、谁能派活和主人；它改了什么都记在那些节点的修改记录里。只有主人和管理员能设置。`, `A coordinator can directly edit the display name, description, group and tags, and skills of ${ag.owner || "its owner"}'s other nodes, to organise a team. It cannot change visibility, who can give tasks, or the owner; its changes appear in those nodes' history. Only the owner and admins can set this.`)}
+      >
+        <div className="app-provider-list" role="radiogroup">
+          <label className={cn("app-provider-opt", coordChoice && "picked")}>
+            <input type="radio" name="coordinator" checked={coordChoice} onChange={() => setCoordChoice(true)} disabled={busy} />
+            <span>
+              <b>{L("是协调者", "Coordinator")}</b>
+              <small>{L(`可以给 ${ag.owner || "主人"} 的其他节点写介绍和技能`, `Can write the descriptions and skills of ${ag.owner || "its owner"}'s other nodes`)}</small>
+            </span>
+          </label>
+          <label className={cn("app-provider-opt", !coordChoice && "picked")}>
+            <input type="radio" name="coordinator" checked={!coordChoice} onChange={() => setCoordChoice(false)} disabled={busy} />
+            <span>
+              <b>{L("不是", "Not a coordinator")}</b>
+              <small>{L("只能改自己的介绍和技能", "Can change only its own description and skills")}</small>
+            </span>
+          </label>
+        </div>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={closeAction} disabled={busy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" disabled={busy || coordChoice === !!ag.coordinator}
+            onClick={() => void run(() => appApi.setCoordinator(hubId, ag.name, coordChoice), "close-action")}>{L("保存", "Save")}</button>
         </div>
       </Modal>
 

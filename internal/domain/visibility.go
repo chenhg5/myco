@@ -46,6 +46,12 @@ func (v Viewer) Sees(a *Agent) bool {
 	return v.Member != "" && v.Member == a.Owner
 }
 
+// MayEditCard reports whether editor, an agent, may change target's card:
+// only a coordinator, and only for another agent of the same owner.
+func MayEditCard(editor, target *Agent) bool {
+	return editor.Coordinator && editor.Owner != "" && editor.Owner == target.Owner && editor.Name != target.Name
+}
+
 // MaySendTo reports whether sender may give a private agent tasks and notes:
 // only its owner (from the app) and the owner's own agents. Senders without
 // an owner (the hub's admin token, hubs without members) may.

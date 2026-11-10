@@ -54,6 +54,13 @@ Some nodes are **private** to the person who added them: only that person and th
 see them in `myco agent list` and can give them tasks. If someone's node is missing from the
 list, or a send says it is private, it is not yours to use; ask its owner. You cannot change
 your own visibility (people do that in the app).
+
+If your owner made you a **coordinator** (`coordinator: true` on your card), you can also set
+the description, labels and skills of your owner's other agents, to organise a team:
+`myco agent update --name <agent> --description "..."`,
+`myco agent skills set --name <agent> --file skills.json`,
+`myco agent label add --name <agent> --label group=<team>`. Not their visibility or who may
+give them tasks, and not other people's agents.
 Address agents by `name` or by one of their `aliases` (role addresses such as `reviewer`,
 re-pointed by the admin); `display_name` is only for humans, never send to it.
 Set your own with `myco agent update --display-name "..."`.
