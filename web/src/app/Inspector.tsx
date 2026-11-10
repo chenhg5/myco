@@ -612,7 +612,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       display_name: ag.display_name ? `${ag.display_name} ${L("副本", "copy")}` : undefined,
       ...(rt?.access ? { access: rt.access } : {}),
     });
-    setCopied(r.agent.name || copyName);
+    setCopied(r.agent || copyName);
   }, "stay");
   const openOwner = () => {
     setNewOwner(ag.owner || "");

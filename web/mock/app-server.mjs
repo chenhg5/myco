@@ -1148,7 +1148,7 @@ const server = http.createServer(async (req, res) => {
           binding: { harness: "exec", environment: "macOS", workdir: dir }, allow_from: body.allow_from,
         });
         hub.agents.push(agent);
-        return send(res, 200, { agent, session_id: "", cli: "exec", workdir: dir, access: "full" });
+        return send(res, 200, { agent: agent.name, session_id: "", cli: "exec", workdir: dir, access: "full" });
       }
       if (!body || !(body.cli in CLI_MODELS)) {
         return fail(res, 400, "invalid_request", "cli 必须是 claude、codex、pi、kiro、cursor、gemini 或 opencode。");
@@ -1196,7 +1196,7 @@ const server = http.createServer(async (req, res) => {
       hub.agents.push(agent);
 
       return send(res, 200, {
-        agent,
+        agent: agent.name,
         session_id: agent.binding.session_id,
         cli: body.cli,
         workdir: dir,

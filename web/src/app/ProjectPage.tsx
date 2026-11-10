@@ -43,8 +43,10 @@ type Dialog =
   | { kind: "delete" };
 
 /** One project: its goal, members, brief, shared documents and links. */
-export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
+export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode, onNewNode, onChanged, onDeleted, onOpenConversation, onAllConversations, onNewConversation }: {
   target: ProjectRef;
+  /** Changes when something outside the page changed the project. */
+  reloadKey?: number;
   hubName: string;
   rows: AgentRow[];
   now: number;
@@ -84,7 +86,7 @@ export function ProjectPage({ target, hubName, rows, now, onOpenNode, onNewNode,
     void load(false);
     const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(true); }, 8000);
     return () => { off = true; window.clearInterval(t); };
-  }, [target.hubId, target.name, tick]);
+  }, [target.hubId, target.name, tick, reloadKey]);
 
   const reload = () => setTick((t) => t + 1);
   const run = async (fn: () => Promise<unknown>, close = true) => {

@@ -116,6 +116,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [project, setProject] = useState<ProjectRef | null>(null);
   // The conversations page's project filter.
   const [convProject, setConvProject] = useState<ProjectRef | null>(null);
+  // Bumped when a node joins a project from here: the page reloads it.
+  const [projectReload, setProjectReload] = useState(0);
   const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // A node created from a project page joins that project.
@@ -313,6 +315,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (join && join.hubId === hubId) {
       void appApi.putProjectMember(hubId, join.name, name).catch(() => undefined).finally(() => {
         openProject(join);
+        setProjectReload((n) => n + 1);
+        void loadProjects(hubs.map((h) => h.id));
         void refresh();
       });
       return;
@@ -604,13 +608,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <ProjectPage
                 key={`${project.hubId}/${project.name}`}
                 target={project}
+                reloadKey={projectReload}
                 hubName={namedHubs.find((h) => h.id === project.hubId)?.name || project.hubId}
                 rows={rows}
                 now={now}
                 onOpenNode={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
                 onNewNode={() => {
                   joinProject.current = project;
-                  setSpawnTarget({ hubId: project.hubId });
+                  setSpawnTarget({ hubId: project.hubId, project: { name: project.name, title: currentProject?.p.title || project.name } });
                 }}
                 onChanged={() => void loadProjects(hubs.map((h) => h.id))}
                 onOpenConversation={(r) => openConversationRow(r, true)}
@@ -728,7 +733,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
         hubsOv={namedOv?.hubs}
         defaultHubId={filters.hub === "all" ? undefined : filters.hub}
         onClose={() => { setSpawnTarget(null); joinProject.current = null; }}
-        onSpawned={(hubId, agent) => nodeAdded(hubId, agent.name)}
+        onSpawned={nodeAdded}
+        onMessage={(hubId, name) => {
+          const join = spawnTarget?.project;
+          setSpawnTarget(null);
+          setNewConv({ hubId, agent: name, ...(join ? { project: join.name } : {}) });
+        }}
         onJoined={nodeAdded}
       />
 

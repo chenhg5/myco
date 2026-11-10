@@ -53,7 +53,8 @@ export interface SpawnInput {
   display_name?: string;
 }
 export interface SpawnResult {
-  agent: Agent;
+  /** the new node's name */
+  agent: string;
   session_id: string;
   cli: string;
   workdir: string;

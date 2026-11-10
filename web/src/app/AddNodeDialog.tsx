@@ -6,7 +6,7 @@ import {
   appApi, type Hub, type HubOverview, type JoinLink, type LocalJoinResult,
   type LocalSession, type SpawnCli, type SpawnResult,
 } from "@/appapi";
-import type { Agent, RuntimeAccess } from "@/api";
+import type { RuntimeAccess } from "@/api";
 import { CopyButton } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
@@ -15,7 +15,12 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { cn, timeAgo } from "@/lib/utils";
 import { L } from "@/lib/i18n";
 
-export interface SpawnTarget { hubId?: string; machineId?: string }
+export interface SpawnTarget {
+  hubId?: string;
+  machineId?: string;
+  /** The project a new node joins (opened from a project page). */
+  project?: { name: string; title: string };
+}
 
 type Tab = "local" | "link" | "new";
 
@@ -42,7 +47,7 @@ const ACCESS: { value: RuntimeAccess; label: string }[] = [
   { value: "full", get label() { return L("完全", "Full"); } },
 ];
 
-const noSpawn = () => L("这台机器的 myco 版本太旧，或者它的 runner 没在运行。", "This machine's myco is too old, or its runner isn't running.");
+const noSpawn = () => L("runner 没在运行，或 myco 版本太旧。", "their runner isn't running, or their myco is too old.");
 
 function sameHub(a?: string, b?: string): boolean {
   if (!a || !b) return false;
@@ -71,14 +76,16 @@ function inviteSentence(command: string): string {
   );
 }
 
-export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onSpawned, onJoined }: {
+export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onSpawned, onJoined, onMessage }: {
   target: SpawnTarget | null;
   hubs: Hub[];
   hubsOv: HubOverview[] | undefined;
   /** The Hub selected in the switcher, when it is a specific one. */
   defaultHubId?: string;
   onClose: () => void;
-  onSpawned: (hubId: string, agent: Agent) => void;
+  onSpawned: (hubId: string, name: string) => void;
+  /** Opens a new conversation with the node just added. */
+  onMessage?: (hubId: string, name: string) => void;
   onJoined: (hubId: string, agent: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("local");
@@ -94,6 +101,14 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<SpawnResult | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
+  const [, setTick] = useState(0);
+  // The wait is long (the CLI runs a first turn on that machine): show it.
+  useEffect(() => {
+    if (!busy) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [busy]);
 
   // Local sessions on this computer.
   const [sessions, setSessions] = useState<LocalSession[] | null>(null);
@@ -224,6 +239,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
     setBusy(true);
     setError(null);
     try {
+      setStartedAt(Date.now());
       const r = await appApi.spawn(hubId, machineId, isShell(cli)
         ? {
           cli,
@@ -502,11 +518,22 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           <>
             <div className="app-success">
               <Check />
-              <span>{L(`已启动 ${result.agent.display_name || result.agent.name}`, `Started ${result.agent.display_name || result.agent.name}`)}</span>
+              <span>{L(`${result.agent} 已在 ${machine?.name || "那台机器"} 上启动`, `${result.agent} is running on ${machine?.name || "that machine"}`)}</span>
             </div>
-            {result.reply && <div className="app-reply">{result.reply}</div>}
-            <div className="app-hint">{L("新节点已经加到节点列表里，会用绿色标记一会儿。", "The new node was added to the node list and is highlighted in green for a moment.")}</div>
+            <div className="app-list app-spawned">
+              <div className="app-kv"><span className="app-kv-label">{L("类型", "Type")}</span><span className="app-kv-value">{CLIS.find((c) => c.value === result.cli)?.label || result.cli || "—"}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("目录", "Directory")}</span><span className="app-kv-value mono">{result.workdir || dir}</span></div>
+              {!isShell(cli) && <div className="app-kv"><span className="app-kv-label">{L("权限", "Access")}</span><span className="app-kv-value">{ACCESS.find((a) => a.value === (result.access || access))?.label || result.access}</span></div>}
+            </div>
+            <div className="app-hint">
+              {target?.project
+                ? L(`它已加入项目「${target.project.title}」，可以直接给它发任务了。`, `It joined the project “${target.project.title}”; you can give it tasks now.`)
+                : L("它已经在节点列表里了（绿色标记），可以直接给它发任务。", "It is in the node list now (marked in green); you can give it tasks now.")}
+            </div>
             <div className="app-modal-actions">
+              {onMessage && !isShell(cli) && (
+                <button type="button" className="app-btn" onClick={() => onMessage(hubId, result.agent)}>{L("给它发任务", "Give it a task")}</button>
+              )}
               <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
             </div>
           </>
@@ -541,11 +568,11 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                     <span>{L("这台机器现在离线，会话可能启动不了。", "This machine is offline right now, so the session may not start.")}</span>
                   </div>
                 )}
-                {unavailable.map((m) => (
-                  <div className="app-small-note" key={m.id} style={{ marginTop: 6 }}>
-                    {L(`${m.name} 不可用：${noSpawn()}`, `${m.name} is unavailable: ${noSpawn()}`)}
+                {unavailable.length > 0 && (
+                  <div className="app-small-note" style={{ marginTop: 6 }} title={unavailable.map((m) => m.name).join("\n")}>
+                    {L(`另有 ${unavailable.length} 台机器现在不能新建（列表里标了「不可用」）：${noSpawn()}`, `${unavailable.length} more machine${unavailable.length > 1 ? "s" : ""} can't start nodes now (marked unavailable): ${noSpawn()}`)}
                   </div>
-                ))}
+                )}
               </>
             )}
 
@@ -648,7 +675,11 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             <ErrorText error={error} />
             {busy && (
               <div className="app-progress">
-                <span className="app-spinner" />{isShell(cli) ? L("正在那台机器上添加…", "Adding it on that machine…") : L("正在那台机器上启动会话，可能需要一两分钟…", "Starting the session on that machine. This can take a minute or two…")}
+                <span className="app-spinner" />
+                <span>
+                  {isShell(cli) ? L("正在那台机器上添加…", "Adding it on that machine…") : L(`正在 ${machine?.name || "那台机器"} 上启动 ${CLIS.find((c) => c.value === cli)?.label || cli} 会话… ${Math.max(0, Math.round((Date.now() - startedAt) / 1000))} 秒`, `Starting a ${CLIS.find((c) => c.value === cli)?.label || cli} session on ${machine?.name || "that machine"}… ${Math.max(0, Math.round((Date.now() - startedAt) / 1000))}s`)}
+                  {!isShell(cli) && <small>{L("它要在那台机器上先跑一轮简短的对话来建好会话，通常要半分钟到一分钟，取决于模型的速度。", "It runs one short turn on that machine to create the session; usually 30–60 seconds, depending on the model.")}</small>}
+                </span>
               </div>
             )}
             <div className="app-modal-actions">
