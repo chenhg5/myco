@@ -28,6 +28,9 @@ type trayMenu struct {
 	more    *application.MenuItem
 	down    *application.MenuItem
 	wake    *application.MenuItem
+	update  *application.MenuItem
+	// checked is when the latest release was last looked up.
+	checked time.Time
 	zh      trayText
 	h       http.Handler
 	mu      sync.Mutex
@@ -46,6 +49,8 @@ func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayM
 	t.more = t.menu.Add("").SetEnabled(false).SetHidden(true)
 	t.down = t.menu.Add("").SetEnabled(false).SetHidden(true)
 	t.menu.AddSeparator()
+	// A newer release: opening the window shows the update (sidebar).
+	t.update = t.menu.Add("").SetHidden(true).OnClick(func(*application.Context) { show() })
 	t.menu.Add(zh.s("打开 myco", "Open myco")).OnClick(func(*application.Context) { show() })
 	t.wake = t.menu.Add(zh.wakeLabel()).OnClick(func(*application.Context) { go t.wakeNodes() })
 	t.menu.AddSeparator()
@@ -88,11 +93,28 @@ func (t *trayMenu) wakeNodes() {
 	t.mu.Unlock()
 }
 
-// refresh reads the status and updates the menu.
+// trayUpdateEvery is how often the menu looks for a newer release.
+const trayUpdateEvery = 6 * time.Hour
+
+// refresh reads the status (and, now and then, the latest release) and
+// updates the menu.
 func (t *trayMenu) refresh() {
 	st := readTrayStatus(t.h)
+	var latest string
+	check := time.Since(t.checked) >= trayUpdateEvery
+	if check {
+		latest = readTrayUpdate(t.h)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if check {
+		t.checked = time.Now()
+		if latest != "" {
+			t.update.SetLabel(t.zh.updateLine(latest)).SetHidden(false)
+		} else {
+			t.update.SetHidden(true)
+		}
+	}
 	t.summary.SetLabel(t.zh.summary(st))
 	for i, it := range t.busy {
 		if i < len(st.Busy) {

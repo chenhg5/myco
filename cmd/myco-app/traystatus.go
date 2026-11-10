@@ -152,3 +152,24 @@ func (zh trayText) wakeLabel() string {
 func (zh trayText) downLine(down []string) string {
 	return "⚠️ " + zh.s("连不上 ", "Can't reach ") + clip(strings.Join(down, zh.s("、", ", ")), 40)
 }
+
+// readTrayUpdate is the newer release the app can update to ("" if none,
+// or when it cannot tell).
+func readTrayUpdate(h http.Handler) string {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/update", nil))
+	var u struct {
+		Latest    string `json:"latest"`
+		Available bool   `json:"available"`
+		Error     string `json:"error"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &u) != nil || !u.Available || u.Error != "" {
+		return ""
+	}
+	return u.Latest
+}
+
+// updateLine is the menu item for a newer release.
+func (zh trayText) updateLine(latest string) string {
+	return "⬆️ " + zh.s("有新版本 "+latest+"，点此更新", "myco "+latest+" is out — update")
+}

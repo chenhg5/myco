@@ -4027,3 +4027,14 @@ body.is-resizing {
 .app-project-preview img { max-width: 100%; height: auto; object-fit: contain; }
 .app-project-doc-code { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--pill); }
 .app-modal-actions .app-btn svg { width: 14px; height: 14px; }
+.app-update-notice { position: relative; display: flex; gap: 10px; margin: 0 0 8px; padding: 10px 10px 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, var(--card)); box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 35%, transparent); font-size: 12px; }
+.app-update-icon { width: 18px; height: 18px; flex: none; color: var(--accent); margin-top: 1px; }
+.app-update-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--muted); }
+.app-update-text b { color: var(--fg); font-weight: 600; font-size: 12.5px; }
+.app-update-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.app-update-actions .app-btn { height: 26px; padding: 0 12px; font-size: 12px; }
+.app-update-link { color: var(--accent); text-decoration: none; font-size: 12px; }
+.app-update-link:hover { text-decoration: underline; }
+.app-update-close { position: absolute; top: 6px; right: 6px; display: inline-flex; padding: 3px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
+.app-update-close:hover { background: var(--nav-hover); color: var(--fg); }
+.app-update-close svg { width: 13px; height: 13px; }

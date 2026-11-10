@@ -22,6 +22,7 @@ import { NodesPage } from "@/app/NodesPage";
 import { NewProjectDialog, ProjectPage, type ProjectRef } from "@/app/ProjectPage";
 import type { Project } from "@/api";
 import { SettingsPage } from "@/app/SettingsPage";
+import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { LogoWordmark } from "@/components/brand";
 import { useTextSize, useThemeMode } from "@/lib/theme";
@@ -470,6 +471,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </nav>
 
           <div className="app-sidebar-foot">
+            <UpdateNotice onOpenSettings={() => setPage("settings")} />
             <HubSwitcher
               hubs={namedHubs}
               hubsOv={namedOv?.hubs}

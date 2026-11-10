@@ -44,3 +44,25 @@ func TestTrayStatus(t *testing.T) {
 		t.Errorf("no hubs: %q", got)
 	}
 }
+
+func TestTrayUpdate(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"current":"v0.18.28","latest":"v0.18.29","available":true}`:  "v0.18.29",
+		`{"current":"v0.18.29","latest":"v0.18.29","available":false}`: "",
+		`{"current":"v0.18.28","available":false,"error":"offline"}`:   "",
+	} {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/app/update" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Write([]byte(body))
+		})
+		if got := readTrayUpdate(h); got != want {
+			t.Errorf("%s: got %q, want %q", body, got, want)
+		}
+	}
+	if got := trayText(true).updateLine("v0.18.29"); got != "⬆️ 有新版本 v0.18.29，点此更新" {
+		t.Errorf("line: %q", got)
+	}
+}
