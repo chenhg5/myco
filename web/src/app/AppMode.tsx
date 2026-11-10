@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LayoutGrid, MessageSquare, Monitor, PanelLeft, RefreshCw, Settings, WifiOff,
+  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftClose, PanelLeftOpen, RefreshCw, Settings, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -231,6 +231,36 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   // The split view needs room for both columns.
   const wide = useWideWindow(1100);
+  // Its list: as wide as the person dragged it, or hidden.
+  const [listWidth, setListWidthState] = useState(() => clampWidth(Number(readPref("myco-conv-list-width")) || LIST_WIDTH));
+  const [listCollapsed, setListCollapsedState] = useState(() => readPref("myco-conv-list-collapsed") === "1");
+  const setListWidth = (w: number) => {
+    const v = clampWidth(w);
+    setListWidthState(v);
+    writePref("myco-conv-list-width", String(v));
+  };
+  const setListCollapsed = (v: boolean) => {
+    setListCollapsedState(v);
+    writePref("myco-conv-list-collapsed", v ? "1" : "0");
+  };
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = listWidth;
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    document.body.classList.add("is-resizing");
+    const move = (ev: PointerEvent) => setListWidthState(clampWidth(startW + ev.clientX - startX));
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture(ev.pointerId);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      document.body.classList.remove("is-resizing");
+      setListWidth(startW + ev.clientX - startX);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
 
   const openConversationRow = (row: ConversationRow) => {
     const it = row.item;
@@ -387,8 +417,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "conversations" && wide ? (
           // Wide windows: the list on the left, the open conversation on the
           // right; another row switches it, like any messaging app.
-          <div className="conv-split">
-            <div className="conv-split-list app-scroll">
+          <div className={cn("conv-split", listCollapsed && "is-collapsed")}>
+            {listCollapsed ? (
+              <div className="conv-split-rail">
+                <button type="button" className="app-btn app-btn-plain" onClick={() => setListCollapsed(false)}
+                  aria-label={L("展开对话列表", "Show the conversation list")} title={L("展开对话列表", "Show the conversation list")}>
+                  <PanelLeftOpen />
+                </button>
+              </div>
+            ) : (<>
+            <div className="conv-split-list app-scroll" style={{ width: listWidth }}>
+              <button type="button" className="app-btn app-btn-plain conv-split-collapse" onClick={() => setListCollapsed(true)}
+                aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
+                <PanelLeftClose />
+              </button>
               <ConversationsPage
                 hubs={namedHubs}
                 hub={filters.hub}
@@ -400,6 +442,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
               />
             </div>
+            <div
+              className="conv-split-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={L("拖动调整列表宽度，双击恢复", "Drag to resize the list; double-click to reset")}
+              title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")}
+              onPointerDown={startResize}
+              onDoubleClick={() => setListWidth(LIST_WIDTH)}
+            />
+            </>)}
             <div className="conv-split-detail">
               {conv ? (
                 <ConversationDetail
@@ -414,7 +466,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               ) : (
                 <div className="conv-split-empty">
                   <MessageSquare />
-                  <p>{L("在左边选一个对话", "Pick a conversation on the left")}</p>
+                  <p>{listCollapsed ? L("展开左边的列表，选一个对话", "Show the list on the left and pick a conversation") : L("在左边选一个对话", "Pick a conversation on the left")}</p>
                 </div>
               )}
             </div>
@@ -590,4 +642,15 @@ function useWideWindow(min: number): boolean {
     return () => mq.removeEventListener("change", on);
   }, [query]);
   return wide;
+}
+
+const LIST_WIDTH = 380;
+function clampWidth(w: number): number {
+  return Math.min(600, Math.max(280, Math.round(w)));
+}
+function readPref(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* not kept */ }
 }

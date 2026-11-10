@@ -3298,7 +3298,51 @@ select optgroup {
 }
 .conv-split-list {
   flex: none;
-  width: 380px;
+  position: relative;
+}
+/* Between the list and the conversation: drag to resize. */
+.conv-split-handle {
+  flex: none;
+  width: 9px;
+  margin: 0 -4px;
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.conv-split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: var(--line);
+  transition: background 0.12s ease;
+}
+.conv-split-handle:hover::after,
+body.is-resizing .conv-split-handle::after {
+  inset: 0 3px;
+  background: var(--accent);
+}
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.conv-split-collapse {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  z-index: 1;
+}
+.conv-split-collapse svg,
+.conv-split-rail svg {
+  width: 16px;
+  height: 16px;
+}
+.conv-split-rail {
+  flex: none;
+  width: 44px;
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
   border-right: 1px solid var(--line);
 }
 .conv-split-detail {
@@ -3327,6 +3371,9 @@ select optgroup {
 .conv-list-compact {
   max-width: none;
   padding: 12px 0 24px;
+}
+.conv-list-compact .app-page-head {
+  padding-right: 44px !important;
 }
 .conv-list-compact .app-page-head,
 .conv-list-compact .app-toolbar,
