@@ -3690,3 +3690,43 @@ body.is-resizing {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12.5px;
 }
+
+/* A conversation loading for the first time: placeholders in its shape. */
+.conv-skel {
+  display: block;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--pill) 25%, var(--pill-hover) 50%, var(--pill) 75%);
+  background-size: 300% 100%;
+  animation: conv-skel-shine 1.4s ease-in-out infinite;
+}
+@keyframes conv-skel-shine {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conv-skel { animation: none; }
+}
+.conv-skel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 4px;
+}
+.conv-skel-row {
+  display: flex;
+}
+.conv-skel-row.is-me {
+  justify-content: flex-end;
+}
+.conv-skel-term .conv-skel {
+  background: linear-gradient(90deg, #22242a 25%, #2c2f36 50%, #22242a 75%);
+  background-size: 300% 100%;
+  border-radius: 4px;
+}
+.conv-skel-cmd + .conv-skel-cmd {
+  margin-top: 16px;
+}
+.conv-skel-line {
+  height: 11px;
+  margin-top: 7px;
+}

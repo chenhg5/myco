@@ -45,6 +45,43 @@ function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
 }
 
+// Conversations opened in this window, newest last: reopening one shows it
+// at once while it refreshes. Kept in memory only (nothing decrypted goes
+// to disk); the hub stays the source of truth.
+const seen = new Map<string, { messages: Message[]; more: boolean }>();
+const SEEN_MAX = 40;
+const cacheKey = (t: ConversationTarget) => [t.hubId, t.threadId || "", t.agent, t.peer || ""].join("\u0000");
+function remember(key: string, messages: Message[], more: boolean) {
+  seen.delete(key);
+  seen.set(key, { messages, more });
+  if (seen.size > SEEN_MAX) seen.delete(seen.keys().next().value!);
+}
+
+/** While a conversation loads for the first time: its shape, not a word. */
+function LoadingSkeleton({ shell }: { shell: boolean }) {
+  if (shell) {
+    return (
+      <div className="term conv-skel-term" aria-busy="true" aria-label={L("正在加载", "Loading")}>
+        {[62, 38, 74].map((w, i) => (
+          <div key={i} className="conv-skel-cmd">
+            <span className="conv-skel conv-skel-line" style={{ width: "22%" }} />
+            <span className="conv-skel conv-skel-line" style={{ width: `${w}%` }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="conv-skel-list" aria-busy="true" aria-label={L("正在加载", "Loading")}>
+      {[{ me: true, w: 46, h: 1 }, { me: false, w: 72, h: 3 }, { me: true, w: 34, h: 1 }, { me: false, w: 58, h: 2 }].map((b, i) => (
+        <div key={i} className={cn("conv-skel-row", b.me && "is-me")}>
+          <span className="conv-skel conv-skel-bubble" style={{ width: `${b.w}%`, height: 18 + b.h * 18 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ConversationDetail({ target, rows, now, onBack, onNewConversation, showBack = true }: {
   target: ConversationTarget;
   rows: AgentRow[];
@@ -87,13 +124,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   useEffect(() => {
     let cancelled = false;
-    setMessages(null);
+    // Seen before in this window: show it at once, refresh behind it.
+    const key = cacheKey(target);
+    const hit = seen.get(key);
+    setMessages(hit ? hit.messages : null);
     setLoadError(null);
     setSendError(null);
     setDraft("");
     setSteerMode(false);
     setOlder([]);
-    setMore(false);
+    setMore(hit?.more ?? false);
     atBottom.current = true;
     const run = async (silent: boolean) => {
       try {
@@ -101,9 +141,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           // The newest page, polled; older pages stay as loaded.
           const r = await appApi.exchanges(target.hubId, target.agent, target.peer);
           if (!cancelled) {
-            setMessages([...r.messages].reverse());
+            const ms = [...r.messages].reverse();
+            setMessages(ms);
             if (!silent) setMore(r.more);
             setLoadError(null);
+            remember(key, ms, r.more);
           }
           return;
         }
@@ -111,6 +153,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         if (!cancelled) {
           setMessages(r.messages);
           setLoadError(null);
+          remember(key, r.messages, false);
         }
       } catch (e) {
         if (!cancelled && !silent) setLoadError(e);
@@ -339,7 +382,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             loadError ? (
               <ErrorText error={loadError} />
             ) : (
-              <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
+              <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
             )
           ) : shown.length === 0 && !shellMode ? (
             <div className="app-empty-note">{exchange ? L("还没有消息。", "No messages yet.") : L("还没有消息。发一条任务开始。", "No messages yet. Give a task to get started.")}</div>
