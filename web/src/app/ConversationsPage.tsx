@@ -67,7 +67,7 @@ function matchesState(it: RecentItem, f: StateFilter): boolean {
   return it.state === f;
 }
 
-export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
+export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact }: {
   hubs: Hub[];
   /** The Hub selected in the switcher: "all" or a hub id. */
   hub: string;
@@ -75,6 +75,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
   now: number;
   onOpen: (row: ConversationRow) => void;
   onNew: () => void;
+  /** Split view: the conversation open on the right (its row key). */
+  selectedKey?: string;
+  /** Split view: the list is a narrow column. */
+  compact?: boolean;
 }) {
   const [filters, setFilters] = useState<ListFilters>(loadFilters);
   const [q, setQ] = useState("");
@@ -267,7 +271,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
   };
 
   return (
-    <div className="app-page" ref={listRef}>
+    <div className={cn("app-page", compact && "conv-list-compact")} ref={listRef}>
       <div className="app-page-head">
         <p className="app-summary">
           {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
@@ -356,14 +360,14 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew }: {
               <button
                 key={key}
                 type="button"
-                className={cn("conv-row", selected === key && "is-selected")}
+                className={cn("conv-row", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
               >
                 <span className={cn("conv-row-icon", it.kind === "pair" && "is-shell")} aria-hidden><Icon /></span>
                 <span className="conv-row-main">
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
-                    {hub === "all" && <span className="conv-row-hub">{row.hubName}</span>}
+                    {hub === "all" && !compact && <span className="conv-row-hub">{row.hubName}</span>}
                     <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
                   </span>
                   <span className={cn("conv-row-summary", it.kind === "pair" && "is-mono")}>{summaryOf(it)}</span>

@@ -45,11 +45,14 @@ function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, showBack = true }: {
   target: ConversationTarget;
   rows: AgentRow[];
   now: number;
   onBack: () => void;
+  /** Next to the list (split view) there is nothing to go back to, unless
+   *  the conversation was opened from a node. */
+  showBack?: boolean;
   // Starts a new conversation of yours with the agent (from a read-only thread).
   onNewConversation: (hubId: string, agent: string) => void;
 }) {
@@ -278,10 +281,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   return (
     <div className="conv-detail">
       <header className="conv-head">
-        <button type="button" className="app-btn app-btn-plain" onClick={onBack}
-          aria-label={target.returnTo ? L("返回节点", "Back to the node") : L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
-          <ArrowLeft />
-        </button>
+        {(showBack || target.returnTo) && (
+          <button type="button" className="app-btn app-btn-plain" onClick={onBack}
+            aria-label={target.returnTo ? L("返回节点", "Back to the node") : L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
+            <ArrowLeft />
+          </button>
+        )}
         <div className="conv-head-titles">
           <h2>{observed ? parties.map(nameOf).join(" ↔ ") : agentName}</h2>
           <p>

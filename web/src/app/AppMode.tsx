@@ -229,6 +229,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
     }
   };
 
+  // The split view needs room for both columns.
+  const wide = useWideWindow(1100);
+
   const openConversationRow = (row: ConversationRow) => {
     const it = row.item;
     // A shell node's exchange opens in the existing terminal view.
@@ -381,7 +384,42 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
         </header>
 
-        {page === "conversations" && conv ? (
+        {page === "conversations" && wide ? (
+          // Wide windows: the list on the left, the open conversation on the
+          // right; another row switches it, like any messaging app.
+          <div className="conv-split">
+            <div className="conv-split-list app-scroll">
+              <ConversationsPage
+                hubs={namedHubs}
+                hub={filters.hub}
+                rows={rows}
+                now={now}
+                compact
+                selectedKey={conv ? convKey(conv) : ""}
+                onOpen={openConversationRow}
+                onNew={() => setNewConv({ hubId: filters.hub === "all" ? undefined : filters.hub })}
+              />
+            </div>
+            <div className="conv-split-detail">
+              {conv ? (
+                <ConversationDetail
+                  key={convKey(conv)}
+                  target={conv}
+                  rows={rows}
+                  now={now}
+                  showBack={false}
+                  onBack={closeConversation}
+                  onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
+                />
+              ) : (
+                <div className="conv-split-empty">
+                  <MessageSquare />
+                  <p>{L("在左边选一个对话", "Pick a conversation on the left")}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : page === "conversations" && conv ? (
           <ConversationDetail
             target={conv}
             rows={rows}
@@ -534,4 +572,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
       />
     </div>
   );
+}
+
+/** The list row key of an open conversation (see rowKey). */
+function convKey(c: { hubId: string; threadId: string; agent: string; peer?: string }): string {
+  return c.peer ? `${c.hubId}\u0000${c.agent}\u0000${c.peer}` : `${c.hubId}\u0000${c.threadId}`;
+}
+
+/** Whether the window is at least min pixels wide (follows resizing). */
+function useWideWindow(min: number): boolean {
+  const query = `(min-width: ${min}px)`;
+  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setWide(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return wide;
 }

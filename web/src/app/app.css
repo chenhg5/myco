@@ -3289,3 +3289,74 @@ select option,
 select optgroup {
   font-family: "SF Pro Text", "Helvetica Neue", "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
 }
+
+/* ---------- conversations: split view (wide windows) ---------- */
+.conv-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.conv-split-list {
+  flex: none;
+  width: 380px;
+  border-right: 1px solid var(--line);
+}
+.conv-split-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.conv-split-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.conv-split-empty svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.5;
+}
+/* The list as a narrow column: tighter, the search on its own line, rows
+   edge to edge so the selection reads as one band. */
+.conv-list-compact {
+  max-width: none;
+  padding: 12px 0 24px;
+}
+.conv-list-compact .app-page-head,
+.conv-list-compact .app-toolbar,
+.conv-list-compact .app-error-text,
+.conv-list-compact .app-empty-note {
+  padding: 0 12px;
+}
+.conv-list-compact .app-toolbar {
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.conv-list-compact .app-search {
+  flex: 1 1 100%;
+}
+.conv-list-compact .app-select-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.conv-list-compact .app-select-wrap .app-select {
+  width: 100%;
+}
+.conv-list-compact .app-list {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: none;
+}
+.conv-list-compact .conv-row {
+  padding: 9px 12px;
+}
+.conv-list-compact .app-empty {
+  padding: 0 16px;
+}
