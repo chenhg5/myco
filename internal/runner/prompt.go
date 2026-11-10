@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 )
@@ -114,4 +115,69 @@ func orStr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// maxBriefInPrompt caps the project brief in a prompt; the rest is one
+// `myco project show` away.
+const maxBriefInPrompt = 4 << 10
+
+// projectSection describes the project a message belongs to: its goal, who
+// does what, and the brief.
+func projectSection(self string, p *api.Project) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n--- project ---\nThis message belongs to project %q", p.Name)
+	if p.Title != "" && p.Title != p.Name {
+		fmt.Fprintf(&b, " (%s)", p.Title)
+	}
+	b.WriteString(". What you send in this thread stays in the project.\n")
+	if p.Goal != "" {
+		fmt.Fprintf(&b, "Goal: %s\n", p.Goal)
+	}
+	if len(p.Members) > 0 {
+		b.WriteString("Members:\n")
+		for _, m := range p.Members {
+			fmt.Fprintf(&b, "- %s", m.Name)
+			if m.Name == self {
+				b.WriteString(" (you)")
+			}
+			if m.Role == "coordinator" {
+				b.WriteString(" [coordinator]")
+			}
+			if m.Note != "" {
+				fmt.Fprintf(&b, ": %s", m.Note)
+			}
+			b.WriteString("\n")
+		}
+	}
+	if brief := strings.TrimSpace(p.Brief); brief != "" {
+		b.WriteString("Brief:\n")
+		if len(brief) > maxBriefInPrompt {
+			cut := maxBriefInPrompt
+			for cut > 0 && !utf8.RuneStart(brief[cut]) {
+				cut--
+			}
+			brief = brief[:cut] + "\n… (cut short; the rest: `myco project show --name " + p.Name + "`)"
+		}
+		b.WriteString(brief + "\n")
+	}
+	if len(p.Docs) > 0 {
+		names := make([]string, 0, len(p.Docs))
+		for _, d := range p.Docs {
+			names = append(names, d.Name)
+		}
+		fmt.Fprintf(&b, "Shared documents: %s. `myco project pull --name %s` writes them to .myco/projects/%s/.\n", strings.Join(names, ", "), p.Name, p.Name)
+	}
+	return b.String()
+}
+
+// withProject puts the project section before the message body.
+func withProject(prompt, section string) string {
+	if section == "" {
+		return prompt
+	}
+	const body = "\n--- message body ---\n"
+	if i := strings.Index(prompt, body); i >= 0 {
+		return prompt[:i] + section + prompt[i:]
+	}
+	return prompt + section
 }

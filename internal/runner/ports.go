@@ -26,6 +26,12 @@ type Hub interface {
 	GetMessage(ctx context.Context, id string) (*api.Message, error)
 }
 
+// ProjectReader reads a project for the prompt (a hub client has it; hubs
+// before v0.18.25 answer not found, and the prompt goes without it).
+type ProjectReader interface {
+	GetProject(ctx context.Context, name string, bodies bool) (*api.Project, error)
+}
+
 // SessionStore resolves which harness session a message runs in. The key is
 // chosen by the runner's SessionScope ("agent" for the agent's single bound
 // session, or a thread ID).

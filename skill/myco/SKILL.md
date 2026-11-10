@@ -58,7 +58,8 @@ your own visibility (people do that in the app).
 You may be in **projects**: shared work with a goal, a brief (repository, rules, how to test) and
 documents. `myco project list` shows yours; `myco project show --name <p>` prints one;
 `myco project pull --name <p>` writes it to `.myco/projects/<p>/` (`PROJECT.md` and `docs/`).
-Read the brief before working on a project's tasks. A task may belong to a project (`project` on the message,
+Read the brief before working on a project's tasks (when the runner wakes you for one, it puts the
+project's goal, members and brief in front of the message, once per session). A task may belong to a project (`project` on the message,
 `MYCO_PROJECT` when the runner wakes you); everything you send in its thread stays in it. Start new
 work for a project in it: `myco message send --to <agent> --project <p> --body "..."` (members only). If you are a project's **coordinator**, you
 can also edit it (`myco project update`, `myco project doc put`), set members' notes

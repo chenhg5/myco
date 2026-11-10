@@ -75,6 +75,8 @@ type Runner struct {
 	mu         sync.Mutex
 	ownRunEnd  map[string]time.Time // session id -> when our last run ended
 	busyStreak map[string]int       // session key -> consecutive busy releases
+	// projectSeen: session key + project whose context this run already gave.
+	projectSeen map[string]bool
 	// tasks are the tasks this runner has accepted and not finished; steers
 	// for them are routed here. pendingSteers hold steers for tasks that
 	// were still queued when the steer arrived.
@@ -341,7 +343,12 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
 	deadline := start.Add(r.opts.Timeout)
-	prompt := r.prompt.Build(r.opts.Self, m, files)
+	project := ""
+	if !executor {
+		project = r.projectContext(ctx, log, key, sessionID, m)
+	}
+	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
+	prompt := build()
 	var (
 		res    harness.Result
 		runErr error
@@ -351,7 +358,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		// previous run was interrupted by them).
 		if steers := r.takeSteers(m.ID); len(steers) > 0 {
 			if first || sessionID == "" {
-				prompt = r.prompt.Build(r.opts.Self, m, files) + steerSection(steers)
+				prompt = build() + steerSection(steers)
 			} else {
 				prompt = resumePrompt(m, steers)
 			}
@@ -479,6 +486,35 @@ func (r *Runner) downloadAttachments(ctx context.Context, log *slog.Logger, m ap
 		out = append(out, lf)
 	}
 	return out, []string{dir}
+}
+
+// projectContext is the project section for m's prompt: once per session
+// and project while this runner runs, and again in a new session (the
+// agent has it in its context after that; `myco project show` has it all).
+func (r *Runner) projectContext(ctx context.Context, log *slog.Logger, key, sessionID string, m api.Message) string {
+	pr, ok := r.hub.(ProjectReader)
+	if m.Project == "" || !ok {
+		return ""
+	}
+	seen := key + "\x00" + m.Project
+	r.mu.Lock()
+	done := r.projectSeen[seen] && sessionID != ""
+	r.mu.Unlock()
+	if done {
+		return ""
+	}
+	p, err := pr.GetProject(ctx, m.Project, false)
+	if err != nil {
+		log.Info("project not readable; prompt goes without it", "project", m.Project, "err", err)
+		return ""
+	}
+	r.mu.Lock()
+	if r.projectSeen == nil {
+		r.projectSeen = map[string]bool{}
+	}
+	r.projectSeen[seen] = true
+	r.mu.Unlock()
+	return projectSection(r.opts.Self, p)
 }
 
 func (r *Runner) sessionKey(m api.Message) string {
