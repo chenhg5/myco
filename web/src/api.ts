@@ -27,6 +27,8 @@ export interface Agent {
   capabilities: string[];
   /** what others can pick it for; absent on hubs before v0.18.21 */
   skills?: Skill[];
+  /** team (everyone on the hub) or private (only its owner and their agents); absent = team */
+  visibility?: "team" | "private";
   labels: string[];
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;

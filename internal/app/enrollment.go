@@ -21,6 +21,13 @@ type EnrollmentService struct {
 	ids         IDGenerator
 	clock       Clock
 	aliases     domain.AliasRepository
+	visibility  func(ctx context.Context, owner string) domain.Visibility
+}
+
+// SetDefaultVisibility decides the visibility of enrolled agents from their
+// owner (see DefaultVisibility).
+func (s *EnrollmentService) SetDefaultVisibility(f func(ctx context.Context, owner string) domain.Visibility) {
+	s.visibility = f
 }
 
 // SetAliases makes enrollment avoid names already used as aliases.
@@ -311,6 +318,9 @@ func (s *EnrollmentService) Enroll(ctx context.Context, enrollToken string, in E
 	}
 	a.EnrolledBy = e.ID
 	a.Owner = e.Owner
+	if s.visibility != nil {
+		a.Visibility = s.visibility(ctx, a.Owner)
+	}
 	if in.DryRun {
 		return &RegisterOutput{Agent: a, Created: true}, nil
 	}

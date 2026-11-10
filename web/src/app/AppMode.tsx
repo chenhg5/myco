@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, RefreshCw, Settings, WifiOff,
+  LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, RefreshCw, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -111,7 +111,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   /** Bumped to make the settings page show its Hub section. */
-  const [hubSettingsRequest, setHubSettingsRequest] = useState(0);
+  const [hubSettingsRequest] = useState(0);
 
   // The boot probe already carries app/info; retry once in case it failed.
   useEffect(() => {
@@ -297,10 +297,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("nodes");
   };
 
-  const openHubSettings = () => {
-    setHubSettingsRequest((n) => n + 1);
-    setPage("settings");
-  };
+  // Settings live in the hub menu at the bottom of the sidebar, and on
+  // ⌘, / Ctrl+, as in other apps.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "," && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setPage("settings");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const startLocal = async () => {
     const r = await appApi.startLocalHub({ tunnel: "none" });
@@ -384,21 +392,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </nav>
 
           <div className="app-sidebar-foot">
-            <button
-              type="button"
-              className={cn("app-nav-item", page === "settings" && "active")}
-              onClick={() => setPage("settings")}
-            >
-              <Settings strokeWidth={1.75} />
-              <span>{L("设置", "Settings")}</span>
-            </button>
             <HubSwitcher
               hubs={namedHubs}
               hubsOv={namedOv?.hubs}
               value={filters.hub}
               onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
               onAdd={() => setConnectOpen(true)}
-              onSettings={openHubSettings}
+              onSettings={() => setPage("settings")}
             />
           </div>
         </aside>
@@ -423,7 +423,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               value={filters.hub}
               onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
               onAdd={() => setConnectOpen(true)}
-              onSettings={openHubSettings}
+              onSettings={() => setPage("settings")}
             />
           )}
           <nav className="app-crumbs" aria-label={L("位置", "Location")}>

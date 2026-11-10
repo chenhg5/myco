@@ -37,6 +37,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
 		Skills:       skillsDTO(a.Skills),
+		Visibility:   string(domain.VisibilityTeam),
 		Labels:       nonNil(a.Labels),
 		Binding: api.Binding{Harness: a.Binding.Harness, SessionID: a.Binding.SessionID,
 			Environment: a.Binding.Environment, Workdir: a.Binding.Workdir},
@@ -56,6 +57,9 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource}
+	}
+	if a.Private() {
+		out.Visibility = string(domain.VisibilityPrivate)
 	}
 	return out
 }

@@ -168,6 +168,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.admin(s.adminLabels))
 	m.HandleFunc("PUT /v1/agents/{name}/skills", s.admin(s.adminSkills))
+	m.HandleFunc("PUT /v1/agents/{name}/visibility", s.admin(s.setVisibility))
 	m.HandleFunc("PUT /v1/agents/{name}/profile", s.admin(s.adminProfile))
 	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
 	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
@@ -300,8 +301,28 @@ func (s *Server) adminOrAgent(h http.HandlerFunc) http.HandlerFunc {
 			h(w, r)
 			return
 		}
-		s.agent(func(w http.ResponseWriter, r *http.Request, _ *domain.Agent) { h(w, r) })(w, r)
+		s.agent(func(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+			h(w, r.WithContext(context.WithValue(r.Context(), callerAgentKey{}, a)))
+		})(w, r)
 	}
+}
+
+// callerAgentKey: the agent behind an adminOrAgent request (absent for the
+// admin and console tokens).
+type callerAgentKey struct{}
+
+// viewerOf is who is looking at agents: an agent (its own token), a member
+// (the app), or someone who sees everything (the admin token, owners and
+// admins, hubs without members).
+func (s *Server) viewerOf(r *http.Request) domain.Viewer {
+	if a, ok := r.Context().Value(callerAgentKey{}).(*domain.Agent); ok {
+		return domain.Viewer{Agent: a}
+	}
+	actor := s.actorOf(r)
+	if actor.Manages() || actor.Member == nil {
+		return domain.Viewer{All: true}
+	}
+	return domain.Viewer{Member: actor.Member.ID}
 }
 
 // ---- handlers ----
@@ -463,8 +484,11 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := api.AgentList{Agents: make([]api.Agent, 0, len(list))}
+	v := s.viewerOf(r)
 	for _, a := range list {
-		out.Agents = append(out.Agents, s.agentDTO(a))
+		if v.Sees(a) {
+			out.Agents = append(out.Agents, s.agentDTO(a))
+		}
 	}
 	ptrs := make([]*api.Agent, len(out.Agents))
 	for i := range out.Agents {
@@ -476,6 +500,10 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 	a, err := s.agents.Get(r.Context(), r.PathValue("name"))
+	if err == nil && !s.viewerOf(r).Sees(a) {
+		err = domain.Errf(domain.CodeNotFound, "agent %s not found", r.PathValue("name")).
+			WithSuggestion("list agents with: myco agent list")
+	}
 	if err != nil {
 		writeError(w, err)
 		return
@@ -748,6 +776,28 @@ func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, 
 	writeJSON(w, http.StatusOK, dto)
 }
 
+// setVisibility: only people (the node's owner or the hub's admins) decide
+// who can find and use a node; there is no /v1/me form.
+func (s *Server) setVisibility(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !s.mayOwnAgent(w, r, name, "change who can see") {
+		return
+	}
+	var req api.VisibilityRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	a, err := s.agents.SetVisibility(r.Context(), name, req.Visibility)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.record(r, "agent.visibility", string(a.Name), string(a.Visibility))
+	dto := s.agentDTO(a)
+	s.enrich(r.Context(), &dto)
+	writeJSON(w, http.StatusOK, dto)
+}
+
 func (s *Server) mySkills(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	s.setSkills(w, r, string(a.Name), false)
 }
@@ -969,7 +1019,14 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	see := domain.Viewer{Agent: viewer}
+	if viewer == nil {
+		see = s.viewerOf(r)
+	}
 	for _, a := range ov.Agents {
+		if !see.Sees(a.Agent) {
+			continue
+		}
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
 		st.Receiving, st.SessionInUse = s.messages.Presence().State(a.Agent.Name, s.agents.OnlineWindow())
 		st.Agent.Aliases = aliasMap[a.Agent.Name]

@@ -162,6 +162,10 @@ type Agent struct {
 	Runtime   Runtime
 	// Owner is the member who added the agent ("" on hubs without members).
 	Owner string
+	// Visibility: team (everyone; "" before it existed) or private (only
+	// the owner and the owner's agents). Set only by people, never by the
+	// agent itself.
+	Visibility Visibility
 }
 
 // AgentSpec is the mutable profile of an agent.

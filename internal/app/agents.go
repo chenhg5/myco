@@ -17,6 +17,13 @@ type AgentService struct {
 	onlineWindow time.Duration
 	wakers       Wakers
 	aliases      domain.AliasRepository
+	visibility   func(ctx context.Context, owner string) domain.Visibility
+}
+
+// SetDefaultVisibility decides the visibility of new agents from their
+// owner (see DefaultVisibility).
+func (s *AgentService) SetDefaultVisibility(f func(ctx context.Context, owner string) domain.Visibility) {
+	s.visibility = f
 }
 
 // NewAgentService wires the agent use cases. wakers validates push delivery
@@ -144,6 +151,9 @@ func (s *AgentService) Register(ctx context.Context, in RegisterInput) (*Registe
 		return nil, err
 	}
 	a.Owner = in.Owner
+	if s.visibility != nil {
+		a.Visibility = s.visibility(ctx, a.Owner)
+	}
 	if err := s.wakers.Validate(a); err != nil {
 		return nil, err
 	}
@@ -310,6 +320,24 @@ func (s *AgentService) SetSkills(ctx context.Context, name string, skills []doma
 	if err := a.SetSkills(skills); err != nil {
 		return nil, err
 	}
+	return a, s.agents.Save(ctx, a)
+}
+
+// SetVisibility makes an agent visible to the team or private to its owner.
+func (s *AgentService) SetVisibility(ctx context.Context, name string, v string) (*domain.Agent, error) {
+	vis, err := domain.ParseVisibility(v)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if vis == domain.VisibilityPrivate && a.Owner == "" {
+		return nil, domain.Errf(domain.CodeInvalidState, "%s has no owner, so it cannot be private", a.Name).
+			WithSuggestion("give it to a member first: myco agent owner set --name %s --owner <member>", a.Name)
+	}
+	a.Visibility = vis
 	return a, s.agents.Save(ctx, a)
 }
 

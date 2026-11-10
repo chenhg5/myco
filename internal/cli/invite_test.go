@@ -83,9 +83,12 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `"name": "laohu-mbp-claude-ef56"`) {
 		t.Fatalf("join: %d %s %s", code, out, e)
 	}
-	_, out, _ = admin.run("agent", "get", "--name", "laohu-mbp-claude-ef56", "--format", "json")
-	if !strings.Contains(out, `"owner": "laohu"`) {
-		t.Fatalf("the session must be laohu's: %s", out)
+	// (The admin token alone: glenn-bot, saved in admin's config, no longer
+	// sees laohu's node, which is private to laohu by default.)
+	root := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(t.TempDir(), "root.yaml")}}
+	_, out, e = root.run("agent", "get", "--name", "laohu-mbp-claude-ef56", "--format", "json")
+	if !strings.Contains(out, `"owner": "laohu"`) || !strings.Contains(out, `"visibility": "private"`) {
+		t.Fatalf("the session must be laohu's, private to him: %s %s", out, e)
 	}
 
 	// His credential manages his own nodes, not others', and pairs the app.

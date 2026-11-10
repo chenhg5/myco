@@ -188,3 +188,46 @@ func writeSkills(w io.Writer, a *api.Agent) {
 		}
 	}
 }
+
+// agentVisibilityCommand: who can find and use a node (people only).
+func agentVisibilityCommand() *Command {
+	return &Command{
+		Name: "visibility", Summary: "Make a node visible to the team or private to its owner", Mutating: true,
+		Examples: []string{
+			"myco agent visibility --name laohu-claude --visibility private",
+			"myco agent visibility --name laohu-claude --visibility team",
+		},
+		Flags: []Flag{
+			{Name: "name", Kind: String, Required: true, Help: "The node"},
+			{Name: "visibility", Kind: String, Required: true, Help: "team (everyone on the hub) or private (only its owner and the owner's agents)"},
+			{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("name", "visibility"); err != nil {
+				return err
+			}
+			v := e.in.String("visibility")
+			if v != "team" && v != "private" {
+				return &UsageError{Message: fmt.Sprintf("invalid --visibility %q", v), Suggestion: "use team or private", Command: e.in.Cmd.Path()}
+			}
+			c, err := e.adminClient()
+			if err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "visibility", "agent": e.in.String("name"), "visibility": v})
+			}
+			a, err := c.SetVisibility(e.in.Ctx, e.in.String("name"), v)
+			if err != nil {
+				return err
+			}
+			return e.p.Print(a, func(w io.Writer) {
+				if a.Visibility == "private" {
+					fmt.Fprintf(w, "%s is now private: only its owner and the owner's agents can find it and give it tasks\n", a.Name)
+				} else {
+					fmt.Fprintf(w, "%s is now visible to everyone on the hub\n", a.Name)
+				}
+			})
+		}),
+	}
+}

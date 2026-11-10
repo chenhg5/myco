@@ -47,7 +47,10 @@ type Agent struct {
 	Capabilities []string `json:"capabilities"`
 	// Skills: what others can pick this agent for (hubs before v0.18.21
 	// leave it out; read Capabilities then).
-	Skills     []Skill    `json:"skills,omitempty"`
+	Skills []Skill `json:"skills,omitempty"`
+	// Visibility: "team" (everyone on the hub) or "private" (only its owner
+	// and the owner's agents). Absent on hubs before v0.18.22: team.
+	Visibility string     `json:"visibility,omitempty"`
 	Labels     []string   `json:"labels"`
 	Binding    Binding    `json:"binding"`
 	Delivery   Delivery   `json:"delivery"`
@@ -175,6 +178,11 @@ type Skill struct {
 	Name     string   `json:"name"`
 	Summary  string   `json:"summary,omitempty"`
 	Examples []string `json:"examples,omitempty"`
+}
+
+// VisibilityRequest is the body of PUT /v1/agents/{name}/visibility.
+type VisibilityRequest struct {
+	Visibility string `json:"visibility"`
 }
 
 // SkillsRequest is the body of PUT /v1/me/skills and

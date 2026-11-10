@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { ver } from "./nodes";
-import { AlertTriangle, ChevronDown, Plus, Search, Server } from "lucide-react";
+import { AlertTriangle, ChevronDown, Lock, Plus, Search, Server } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
@@ -63,6 +63,11 @@ export function NodeRowView({ row, highlight, onClick }: {
       <span className="app-row-main">
         <span className="app-row-titleline">
           <span className="app-row-title">{a.display_name || a.name}</span>
+          {a.visibility === "private" && (
+            <span className="app-private" title={L("仅自己：只有主人和主人的 agent 能找到它、给它派活", "Private: only its owner and the owner's agents can find it and give it tasks")}>
+              <Lock aria-hidden />{L("仅自己", "Private")}
+            </span>
+          )}
           {groupsOf(a).map((g) => <span key={"g" + g} className="app-label group">{g}</span>)}
           {tagsOf(a).slice(0, 3).map((t) => <span key={"t" + t} className="app-label">#{t}</span>)}
           {tagsOf(a).length > 3 && <span className="app-label">+{tagsOf(a).length - 3}</span>}

@@ -243,6 +243,19 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	// Who can find and use a node: team or private.
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/visibility", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.VisibilityRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		a, err := c.SetVisibility(r.Context(), r.PathValue("name"), in.Visibility)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
 	// What a node can be asked to do.
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/skills", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.SkillsRequest

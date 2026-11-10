@@ -206,7 +206,7 @@ const state = {
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
-          name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。",
+          name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
           runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly", provider: "DeepSeek", provider_source: "machine" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
@@ -1174,6 +1174,12 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
+        return send(res, 200, agent);
+      }
+      if (parts.length === 6 && parts[5] === "visibility" && method === "PUT") {
+        const body = await readBody(req);
+        if (!["team", "private"].includes(body?.visibility)) return fail(res, 400, "invalid_argument", "invalid visibility");
+        agent.visibility = body.visibility;
         return send(res, 200, agent);
       }
       if (parts.length === 6 && parts[5] === "skills" && method === "PUT") {

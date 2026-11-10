@@ -61,6 +61,7 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 		switch {
 		case !sel.Matches(a):
 		case a.Name == sender.Name && !in.IncludeSelf:
+		case !domain.MaySendTo(sender, a): // private to someone else: not even listed
 		case !a.Accepts(sender.Name):
 			out.Skipped = append(out.Skipped, Skipped{a.Name, "does not accept messages from " + string(sender.Name)})
 		default:

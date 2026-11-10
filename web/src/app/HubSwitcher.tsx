@@ -261,7 +261,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
-                    {e.kind === "add" ? L("添加 Hub…", "Add Hub…") : L("Hub 设置…", "Hub settings…")}
+                    {e.kind === "add" ? L("添加 Hub…", "Add Hub…") : L("设置…", "Settings…")}
                   </span>
                 </button>
               </Fragment>

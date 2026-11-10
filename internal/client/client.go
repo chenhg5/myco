@@ -356,6 +356,13 @@ func (c *Client) Overview(ctx context.Context, recent int) (*api.Overview, error
 
 // UpdateProfile changes display name/description of the caller (name "")
 // or, with an admin token, of agent name.
+// SetVisibility makes an agent visible to the team or private to its owner
+// (its owner or an admin).
+func (c *Client) SetVisibility(ctx context.Context, name, visibility string) (*api.Agent, error) {
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, "/v1/agents/"+esc(name)+"/visibility", nil, api.VisibilityRequest{Visibility: visibility}, &out)
+}
+
 // SetSkills replaces an agent's skills (name "" = the calling agent).
 func (c *Client) SetSkills(ctx context.Context, name string, skills []api.Skill) (*api.Agent, error) {
 	path := "/v1/me/skills"

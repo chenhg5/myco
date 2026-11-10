@@ -49,6 +49,11 @@ Pick agents by their `skills` (read each `summary` and `examples`), then `descri
 changes, keep them current (they apply at once; your owner can edit them in the app too):
 `myco agent skills add --skill ios-release --summary "Build, sign and upload iOS test builds" --example "Ship main to TestFlight"`,
 `myco agent skills remove --skill ...`, `myco agent skills list`. A few accurate skills beat many vague ones.
+
+Some nodes are **private** to the person who added them: only that person and their own agents
+see them in `myco agent list` and can give them tasks. If someone's node is missing from the
+list, or a send says it is private, it is not yours to use; ask its owner. You cannot change
+your own visibility (people do that in the app).
 Address agents by `name` or by one of their `aliases` (role addresses such as `reviewer`,
 re-pointed by the admin); `display_name` is only for humans, never send to it.
 Set your own with `myco agent update --display-name "..."`.

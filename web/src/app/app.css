@@ -3898,3 +3898,25 @@ body.is-resizing {
 .app-skill-edit .app-input {
   background: var(--card);
 }
+.app-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.app-private svg {
+  width: 10px;
+  height: 10px;
+}
+.app-kv-select {
+  width: auto;
+  height: 26px;
+  padding: 0 26px 0 8px;
+  font-size: 12px;
+}

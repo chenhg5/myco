@@ -658,6 +658,26 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                   </span>
                 </div>
               )}
+              {kind !== "human" && row.hub.me?.member && (
+                <div className="app-kv has-help">
+                  <span className="app-kv-label">{L("可见范围", "Who can see it")}</span>
+                  <span className="app-kv-value">
+                    {mayManage && ag.owner ? (
+                      <select className="app-select-field app-kv-select" value={ag.visibility || "team"} disabled={busy}
+                        aria-label={L("可见范围", "Who can see it")}
+                        onChange={(e) => void run(() => appApi.setVisibility(hubId, ag.name, e.target.value as "team" | "private"), "stay")}>
+                        <option value="team">{L("团队可见", "Everyone on the hub")}</option>
+                        <option value="private">{L("仅自己", "Only its owner")}</option>
+                      </select>
+                    ) : ag.visibility === "private" ? L("仅自己", "Only its owner") : L("团队可见", "Everyone on the hub")}
+                  </span>
+                  <span className="app-kv-help">
+                    {ag.visibility === "private"
+                      ? L(`只有 ${ag.owner || L("主人", "its owner")} 和 ${ag.owner || L("主人", "its owner")} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, `Only ${ag.owner || "its owner"} and their own agents can find it and give it tasks; replies from others still arrive.`)
+                      : L("Hub 上的人和 agent 都能找到它；谁能派活看「允许谁派任务」。", "Everyone on the hub can find it; who can give it tasks is set under Who can give tasks.")}
+                  </span>
+                </div>
+              )}
               {kind !== "human" && row.st.receiving && (
                 <div className="app-kv has-help">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>

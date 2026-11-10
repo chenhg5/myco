@@ -336,6 +336,9 @@ export const appApi = {
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Makes a node visible to the team or private to its owner. */
+  setVisibility: (hubId: string, name: string, visibility: "team" | "private") =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/visibility`, { visibility }),
   /** Replaces a node's skills. */
   setSkills: (hubId: string, name: string, skills: Skill[]) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/skills`, { skills }),

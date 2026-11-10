@@ -216,6 +216,8 @@ var agentColumnsV2 = [][2]string{
 	// Skills (JSON); empty for agents stored before them: their
 	// capabilities stand in as bare skills.
 	{"skills", "TEXT NOT NULL DEFAULT '[]'"},
+	// team / private; "" (agents from before) is team.
+	{"visibility", "TEXT NOT NULL DEFAULT ''"},
 	// Reported by runners (v0.16.9): the machine the agent runs on, and
 	// its CLI and model.
 	{"machine_id", "TEXT NOT NULL DEFAULT ''"},

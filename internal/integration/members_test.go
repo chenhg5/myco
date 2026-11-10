@@ -123,6 +123,14 @@ func TestMembersOwnershipPermissionsAndAudit(t *testing.T) {
 	// He may clear what waits for his own node, not for someone else's.
 	_, err = laohu.ConsoleDismiss(c, msg.Message.ID)
 	denied("dismiss a message of someone else's node", err)
+	// (His node is private to him by default; the hub's owner sees it but
+	// cannot write to it until he shares it.)
+	if _, err := admin.ConsoleSend(c, api.SendRequest{To: "laohu-claude", Type: "note", Body: "x"}); err == nil {
+		t.Fatal("the hub's owner wrote to a member's private node")
+	}
+	if _, err := laohu.SetVisibility(c, "laohu-claude", "team"); err != nil {
+		t.Fatal(err)
+	}
 	toHim, err := admin.ConsoleSend(c, api.SendRequest{To: "laohu-claude", Type: "note", Body: "旧消息"})
 	if err != nil {
 		t.Fatal(err)

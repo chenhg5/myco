@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/app"
+	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/infra/blob"
 	"github.com/chenhg5/myco/internal/infra/notify"
 	"github.com/chenhg5/myco/internal/infra/security"
@@ -144,6 +145,19 @@ func Build(o Options) (*Hub, error) {
 		return nil, err
 	}
 	srv.SetMembers(members, audit)
+	// New nodes of a plain member are private to them; the hub's owner and
+	// admins add nodes for the team.
+	defaultVisibility := func(ctx context.Context, owner string) domain.Visibility {
+		if owner == "" {
+			return domain.VisibilityTeam
+		}
+		if m, err := members.Get(ctx, owner); err == nil && !m.Role.Manages() {
+			return domain.VisibilityPrivate
+		}
+		return domain.VisibilityTeam
+	}
+	agents.SetDefaultVisibility(defaultVisibility)
+	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
