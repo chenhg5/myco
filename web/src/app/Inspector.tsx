@@ -220,14 +220,6 @@ function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: 
 // ProviderRow: which model provider (endpoint + key) the node's CLI uses.
 // A node on this computer can be pinned to a cc-switch provider, given an
 // endpoint by hand, or follow the computer's own setting.
-function providerSourceNote(src?: string) {
-  if (src === "pinned") return L("为它指定", "Chosen for it");
-  if (src === "env_file") return L("手动填写", "Entered by hand");
-  if (src === "missing") return L("指定的服务商已不存在，暂用本机设置", "The chosen provider is gone; using the machine's setting");
-  if (src === "machine") return L("跟随本机设置", "Follows the machine");
-  return "";
-}
-
 function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
@@ -278,7 +270,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const current = list?.providers.find((p) => p.current);
   const name = rt?.provider || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
   return (
-    <div className={cn("app-kv", (rt?.provider_source || saved) && "has-help")}>
+    <div className={cn("app-kv", saved && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
         {editable ? (
@@ -287,7 +279,6 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
           </button>
         ) : name}
       </span>
-      {rt?.provider_source && <span className="app-kv-help">{providerSourceNote(rt.provider_source)}</span>}
       {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
@@ -355,13 +346,6 @@ function receivingLabel(r?: string) {
   if (r === "session") return L("会话里在线接收", "In the session");
   if (r === "runner") return L("后台唤醒", "Woken in the background");
   return "—";
-}
-
-function receivingNote(r?: string, cloud?: boolean) {
-  if (r === "session" && cloud) return L("它自己在会话里等消息；停止等待就收不到了。", "It waits for messages in its session; once it stops waiting it can't receive.");
-  if (r === "session") return L("它自己在会话里等消息；关掉约 30 分钟后由后台接手。", "It waits for messages in its session; about 30 minutes after it closes, the background takes over.");
-  if (r === "runner") return L("有消息时在后台唤醒它，不用开着会话。", "Woken in the background when a message arrives; the session needn't stay open.");
-  return "";
 }
 
 function visibilityLabel(v?: string) {
@@ -676,10 +660,9 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                 </div>
               )}
               {kind !== "human" && row.st.receiving && (
-                <div className="app-kv has-help">
+                <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
                   <span className="app-kv-value">{receivingLabel(row.st.receiving)}</span>
-                  <span className="app-kv-help">{receivingNote(row.st.receiving, isCloud(ag))}</span>
                 </div>
               )}
               <div className="app-kv">
