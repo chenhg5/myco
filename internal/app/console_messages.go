@@ -181,6 +181,9 @@ type RecentInput struct {
 	Query string
 	// Project keeps the threads and exchanges of this project.
 	Project string
+	// ByPair lists one row per pair of parties (all their messages, every
+	// thread) instead of one per thread.
+	ByPair bool
 	// Before (unix ms, 0 = now) pages back.
 	Before int64
 	Limit  int
@@ -232,6 +235,9 @@ func (s *MessageService) Recent(ctx context.Context, agents []*domain.Agent, in 
 			f.Match = append(f.Match, a.Name)
 		}
 	}
+	if in.ByPair {
+		return s.recentPairs(ctx, f, in, limit)
+	}
 	threads, err := s.messages.ListRecentThreads(ctx, f)
 	if err != nil {
 		return nil, false, err
@@ -259,6 +265,63 @@ func (s *MessageService) Recent(ctx context.Context, agents []*domain.Agent, in 
 		items, more = items[:limit], true
 	}
 	return items, more, nil
+}
+
+// recentPairs is Recent with one row per pair of parties: the console (or
+// another node) as Other, the node as Node.
+func (s *MessageService) recentPairs(ctx context.Context, f domain.RecentFilter, in RecentInput, limit int) ([]RecentItem, bool, error) {
+	f.AllPairs = true
+	f.Skip = append(f.Skip, AdminSender)
+	pairs, err := s.messages.ListRecentPairs(ctx, f)
+	if err != nil {
+		return nil, false, err
+	}
+	var items []RecentItem
+	for _, p := range pairs {
+		// A person (console) is always the Other side.
+		if IsConsoleSender(p.Node) && !IsConsoleSender(p.Other) {
+			p.Other, p.Node = p.Node, p.Other
+		}
+		msgs, err := s.messages.ListBetween(ctx, p.Other, p.Node, 0, 20)
+		if err != nil || len(msgs) == 0 {
+			continue
+		}
+		it := pairItem(p, msgs)
+		it.anyDirection(msgs)
+		items = append(items, it)
+	}
+	more := len(items) > limit
+	if more {
+		items = items[:limit]
+	}
+	return items, more, nil
+}
+
+// anyDirection sets the row's task and state from the newest task either
+// way (two agents give each other tasks; pairItem only looks at Node's).
+func (it *RecentItem) anyDirection(msgs []*domain.Message) {
+	it.Task, it.Answer = nil, nil
+	var open *domain.Message
+	for _, m := range msgs { // newest first
+		if m.Type != domain.TypeTask {
+			continue
+		}
+		if it.Task == nil {
+			it.Task = m
+		}
+		if open == nil && !m.Status.Terminal() {
+			open = m
+		}
+	}
+	if it.Task != nil {
+		for _, m := range msgs {
+			if m.ReplyTo == it.Task.ID && (m.Type == domain.TypeReply || m.Type == domain.TypeEvent) {
+				it.Answer = m
+				break
+			}
+		}
+	}
+	it.State = taskState(it.Task, it.Answer, open)
 }
 
 // threadItem summarizes a thread (msgs oldest first).

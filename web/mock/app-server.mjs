@@ -1003,6 +1003,22 @@ const server = http.createServer(async (req, res) => {
       const sorted = ex.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       items.push({ kind: "pair", thread_id: newest.thread_id, other: "release-cloud", node: "mac-exec", participants: ["release-cloud", "mac-exec"],
         updated_at: newest.updated_at, messages: ex.length, first: sorted[0], last: sorted[sorted.length - 1], ...stateOf(sorted, "mac-exec") });
+      // group=pair: one row per pair of parties (threads merged).
+      if (sp.get("group") === "pair") {
+        const byPair = new Map();
+        for (const it of items) {
+          if (it.kind !== "thread") { byPair.set(`${it.other}|${it.node}`, it); continue; }
+          const [x, y] = it.participants;
+          const con = [x, y].find((n) => n.startsWith("@console:"));
+          const other = con || (x < y ? x : y), node = other === x ? y : x;
+          const key = [other, node].sort().join("|");
+          const prev = byPair.get(key);
+          if (!prev || new Date(it.updated_at) > new Date(prev.updated_at)) {
+            byPair.set(key, { ...it, kind: "pair", other, node, participants: [other, node], messages: (prev?.messages || 0) + it.messages, first: prev?.first || it.first });
+          } else prev.messages += it.messages;
+        }
+        items.splice(0, items.length, ...byPair.values());
+      }
       const list = items
         .filter((it) => !mine || it.participants.some((p) => p.startsWith("@console:")) || it.kind === "pair")
         .filter((it) => labelOk(it.participants))
@@ -1026,6 +1042,15 @@ const server = http.createServer(async (req, res) => {
       const q = new URL(req.url, "http://x").searchParams;
       const a = q.get("a") === "mac-exec" ? q.get("b") : q.get("a");
       const before = Number(q.get("before") || 0);
+      if (q.get("a") !== "mac-exec" && q.get("b") !== "mac-exec") {
+        // Two parties: every message between them, all threads, newest first.
+        const pair = [q.get("a"), q.get("b")];
+        const all = Object.values(hub.threads || {}).flat()
+          .filter((m) => pair.includes(m.from) && pair.includes(m.to))
+          .filter((m) => !before || new Date(m.created_at).getTime() < before)
+          .sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
+        return send(res, 200, { messages: all.slice(0, 50), more: all.length > 50 });
+      }
       const all = execHistory(a).slice().reverse().filter((m) => !before || new Date(m.created_at).getTime() < before);
       return send(res, 200, { messages: all.slice(0, 4), more: all.length > 4 });
     }

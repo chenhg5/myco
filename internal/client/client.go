@@ -878,8 +878,14 @@ func (c *Client) Recent(ctx context.Context, scope, label, query string, before 
 
 // RecentIn is Recent for one project ("" = all).
 func (c *Client) RecentIn(ctx context.Context, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
+	return c.RecentGrouped(ctx, "", project, scope, label, query, before, limit)
+}
+
+// RecentGrouped is RecentIn with group "pair": one row per pair of parties
+// (hubs before v0.18.28 ignore it and list threads).
+func (c *Client) RecentGrouped(ctx context.Context, group, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
 	q := url.Values{}
-	for k, v := range map[string]string{"scope": scope, "label": label, "q": query, "project": project} {
+	for k, v := range map[string]string{"scope": scope, "label": label, "q": query, "project": project, "group": group} {
 		if v != "" {
 			q.Set(k, v)
 		}

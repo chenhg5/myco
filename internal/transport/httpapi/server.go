@@ -1694,7 +1694,7 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	items, more, err := s.messages.Recent(r.Context(), agents, app.RecentInput{Scope: sc, Mine: q.Get("scope") == "mine",
-		Label: q.Get("label"), Query: q.Get("q"), Project: q.Get("project"), Before: before, Limit: limit})
+		Label: q.Get("label"), Query: q.Get("q"), Project: q.Get("project"), ByPair: q.Get("group") == "pair", Before: before, Limit: limit})
 	if err != nil {
 		writeError(w, err)
 		return

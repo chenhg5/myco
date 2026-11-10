@@ -236,8 +236,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // A thread you take no part in (two nodes working together) is only
   // shown: writing into it would land in their conversation, not yours.
-  const observed = exchange || (!!messages && messages.length > 0 &&
-    !messages.some((m) => isMe(m.from, row?.hub) || isMe(m.to, row?.hub)));
+  const observed = exchange
+    ? !isMe(target.agent, row?.hub) && !isMe(target.peer || "", row?.hub)
+    : !!messages && messages.length > 0 && !messages.some((m) => isMe(m.from, row?.hub) || isMe(m.to, row?.hub));
   const parties = exchange
     ? [target.agent, target.peer!]
     : observed && messages
@@ -268,7 +269,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     try {
       const m = openTask && steerOn
         ? await appApi.steer(target.hubId, openTask.id, body)
-        : await appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id: target.threadId });
+        : await appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id: exchange ? shown?.[shown.length - 1]?.thread_id : target.threadId });
       setMessages((prev) => (prev ? [...prev, m] : [m]));
       setDraft("");
       histPos.current = -1;
@@ -363,7 +364,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <div className="conv-head-titles">
           <h2>{observed ? parties.map(nameOf).join(" ↔ ") : agentName}</h2>
           <p>
-            {exchange
+            {exchange && observed
               ? <>{L("两个节点之间的全部消息", "All messages between the two nodes")} · </>
               : observed && <>{L("其他节点之间的消息", "Messages between other nodes")} · </>}
             {target.hubName}

@@ -120,7 +120,11 @@ export interface RecentItem {
   /** the project the thread belongs to */
   project?: string;
 }
-export interface RecentQuery { scope?: "mine"; label?: string; q?: string; before?: number; project?: string }
+export interface RecentQuery {
+  scope?: "mine"; label?: string; q?: string; before?: number; project?: string;
+  /** "pair": one row per pair of parties (hubs before v0.18.28 list threads) */
+  group?: "pair";
+}
 /** fallback: the hub predates the recent list; use its conversations. */
 export interface RecentList { items: RecentItem[]; more: boolean; fallback?: boolean }
 export interface SendMessageInput {
@@ -337,6 +341,7 @@ export const appApi = {
     if (query.q) q.set("q", query.q);
     if (query.before) q.set("before", String(query.before));
     if (query.project) q.set("project", query.project);
+    if (query.group) q.set("group", query.group);
     const qs = q.toString();
     return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
   },

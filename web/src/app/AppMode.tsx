@@ -11,7 +11,7 @@ import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { CleanupDialog } from "@/app/CleanupDialog";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
-import { ConversationsPage, type ConversationRow } from "@/app/ConversationsPage";
+import { ConversationsPage, pairKey, type ConversationRow } from "@/app/ConversationsPage";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { useHubNames } from "@/app/hubNames";
 import { Inspector } from "@/app/Inspector";
@@ -297,7 +297,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const it = row.item;
     // A shell node's exchange opens in the existing terminal view.
     if (it.kind === "pair") {
-      openConversation(row.hubId, "", it.other || "", { peer: it.node, fromProject });
+      // With you on one side, the node is the one you talk to.
+      if (it.other?.startsWith("@console:")) openConversation(row.hubId, "", it.node || "", { peer: it.other, fromProject });
+      else openConversation(row.hubId, "", it.other || "", { peer: it.node, fromProject });
       return;
     }
     const agent = it.participants.find((p) => !p.startsWith("@")) || "";
@@ -748,9 +750,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
         rows={rows}
         projects={projects}
         onClose={() => setNewConv(null)}
-        onSent={(hubId, threadId, agent) => {
+        onSent={(hubId, threadId, agent, from) => {
           setNewConv(null);
-          openConversation(hubId, threadId, agent);
+          // The whole conversation with that node, this task at the end.
+          openConversation(hubId, threadId, agent, from ? { peer: from } : undefined);
           void refresh();
         }}
       />
@@ -778,7 +781,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
 /** The list row key of an open conversation (see rowKey). */
 function convKey(c: { hubId: string; threadId: string; agent: string; peer?: string }): string {
-  return c.peer ? `${c.hubId}\u0000${c.agent}\u0000${c.peer}` : `${c.hubId}\u0000${c.threadId}`;
+  return c.peer ? `${c.hubId}\u0000${pairKey(c.agent, c.peer)}` : `${c.hubId}\u0000${c.threadId}`;
 }
 
 /** Whether the window is at least min pixels wide (follows resizing). */

@@ -36,7 +36,8 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
   /** Projects of every hub: a conversation can be put in one. */
   projects?: { hubId: string; p: Project }[] | null;
   onClose: () => void;
-  onSent: (hubId: string, threadId: string, agent: string) => void;
+  /** from: your sender name on that hub (the conversation's other side) */
+  onSent: (hubId: string, threadId: string, agent: string, from?: string) => void;
 }) {
   const [hubId, setHubId] = useState("");
   const [agent, setAgent] = useState("");
@@ -108,7 +109,7 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
     setError(null);
     try {
       const m = await appApi.sendMessage(hubId, { to: agent, body: body.trim(), ...(project ? { project } : {}) });
-      onSent(hubId, m.thread_id, agent);
+      onSent(hubId, m.thread_id, agent, m.from);
     } catch (e) {
       setError(e);
       setBusy(false);

@@ -117,6 +117,9 @@ type RecentFilter struct {
 	Query string
 	// Project keeps the threads and exchanges of this project.
 	Project string
+	// AllPairs: ListRecentPairs lists every pair of names that exchanged
+	// messages (one conversation per pair), not only those with Nodes.
+	AllPairs bool
 	// Before (unix ms, 0 = now) pages back; Limit caps the result.
 	Before int64
 	Limit  int

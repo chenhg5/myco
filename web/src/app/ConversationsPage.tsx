@@ -56,7 +56,9 @@ function savePins(pins: ConversationRow[]) {
 let saved: { key: string; items: ConversationRow[]; more: Record<string, boolean>; scrollTop: number; selected: string } | null = null;
 
 export const rowKey = (r: ConversationRow) =>
-  `${r.hubId}\u0000${r.item.kind === "pair" ? `${r.item.other}\u0000${r.item.node}` : r.item.thread_id}`;
+  `${r.hubId}\u0000${r.item.kind === "pair" ? pairKey(r.item.other || "", r.item.node || "") : r.item.thread_id}`;
+/** The two sides of a pair, in a fixed order. */
+export const pairKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
 const timeOf = (r: ConversationRow) => new Date(r.item.updated_at).getTime() || 0;
 const byTime = (a: ConversationRow, b: ConversationRow) => timeOf(b) - timeOf(a);
 
@@ -165,7 +167,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   }, [items]);
 
   const fetchPage = async (h: Hub, before?: number) => {
-    const r = await appApi.recent(h.id, { scope: filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before, project: project?.name });
+    // One row per pair of parties: all their messages, every task, in one place.
+    const r = await appApi.recent(h.id, { scope: filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before, project: project?.name, group: "pair" });
     if (!r.fallback) return { items: r.items, more: r.more };
     if (project) return { items: [], more: false };
     // A hub from before the recent list: its conversations.
@@ -286,7 +289,11 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
 
   const parties = (r: ConversationRow): string => {
     const it = r.item;
-    if (it.kind === "pair") return `${nameOf(r.hubId, it.other)} → ${nameOf(r.hubId, it.node)}`;
+    if (it.kind === "pair") {
+      return it.other?.startsWith(CONSOLE)
+        ? `${nameOf(r.hubId, it.other)} → ${nameOf(r.hubId, it.node)}`
+        : `${nameOf(r.hubId, it.other)} ↔ ${nameOf(r.hubId, it.node)}`;
+    }
     const ps = it.participants.length ? it.participants : [it.first.from, it.first.to];
     const head = `${nameOf(r.hubId, ps[0])} → ${nameOf(r.hubId, ps[1])}`;
     return ps.length > 2 ? `${head} +${ps.length - 2}` : head;
@@ -296,11 +303,13 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   const isExec = (hubId: string, name: string) =>
     rows.some((r) => r.hub.id === hubId && r.st.agent.name === name && r.st.agent.binding.harness === "exec");
   const shellRow = (r: ConversationRow) =>
-    r.item.kind === "pair" || r.item.participants.some((p) => isExec(r.hubId, p));
+    r.item.kind === "pair"
+      ? isExec(r.hubId, r.item.node || "") || isExec(r.hubId, r.item.other || "")
+      : r.item.participants.some((p) => isExec(r.hubId, p));
 
   const summaryOf = (row: ConversationRow): string => {
     const it = row.item;
-    if (it.kind === "pair" && it.task) {
+    if (it.kind === "pair" && it.task && shellRow(row)) {
       if (it.task.unreadable) return summarize(it.task);
       const cmd = `$ ${(it.task.body || "").split("\n")[0]}`;
       const res = it.answer && !it.answer.unreadable && it.answer.type === "reply" ? parseExecResult(it.answer.body) : null;

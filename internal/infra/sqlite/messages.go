@@ -327,6 +327,9 @@ func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilt
 }
 
 func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter) ([]domain.PairRef, error) {
+	if f.AllPairs {
+		return r.listAllPairs(ctx, f)
+	}
 	if len(f.Nodes) == 0 || excludes(f.Involve) || excludes(f.Match) {
 		return nil, nil
 	}
@@ -353,6 +356,63 @@ func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter
 		args = append(args, like, like, like)
 	}
 	q += ` GROUP BY other, node`
+	if f.Before > 0 {
+		q += ` HAVING u < ?`
+		args = append(args, f.Before)
+	}
+	q += ` ORDER BY u DESC LIMIT ?`
+	args = append(args, recentLimit(f.Limit))
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	var out []domain.PairRef
+	for rows.Next() {
+		var p domain.PairRef
+		var u int64
+		if err := rows.Scan(&p.Other, &p.Node, &p.Messages, &u); err != nil {
+			return nil, internal(err)
+		}
+		p.UpdatedAt = fromMS(u)
+		out = append(out, p)
+	}
+	return out, internal(rows.Err())
+}
+
+// listAllPairs lists every pair of names that exchanged messages, newest
+// first: A is the alphabetically first name, B the other.
+func (r *MessageRepo) listAllPairs(ctx context.Context, f domain.RecentFilter) ([]domain.PairRef, error) {
+	if excludes(f.Involve) || excludes(f.Match) {
+		return nil, nil
+	}
+	q := `SELECT CASE WHEN from_agent < to_agent THEN from_agent ELSE to_agent END AS a,
+		CASE WHEN from_agent < to_agent THEN to_agent ELSE from_agent END AS b,
+		COUNT(*), MAX(updated_at) AS u
+		FROM messages WHERE from_agent != to_agent`
+	var args []any
+	if len(f.Skip) > 0 {
+		in, a := inNames(f.Skip)
+		q += ` AND from_agent NOT` + in + ` AND to_agent NOT` + in
+		args = append(args, append(a, a...)...)
+	}
+	for _, names := range [][]domain.AgentName{f.Involve, f.Match} {
+		if names != nil {
+			in, a := inNames(names)
+			q += ` AND (from_agent` + in + ` OR to_agent` + in + `)`
+			args = append(args, append(a, a...)...)
+		}
+	}
+	if f.Project != "" {
+		q += ` AND project=?`
+		args = append(args, f.Project)
+	}
+	if f.Query != "" {
+		like := "%" + escapeLike(f.Query) + "%"
+		q += ` AND (body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
+		args = append(args, like, like, like)
+	}
+	q += ` GROUP BY a, b`
 	if f.Before > 0 {
 		q += ` HAVING u < ?`
 		args = append(args, f.Before)
