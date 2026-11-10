@@ -266,7 +266,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const current = list?.providers.find((p) => p.current);
   const name = rt?.provider || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
   return (
-    <div className="app-kv">
+    <div className={cn("app-kv", (rt?.provider_source || saved) && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
         {editable ? (
@@ -274,9 +274,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             {name}<span className="app-chev">›</span>
           </button>
         ) : name}
-        {rt?.provider_source && <span className="app-kv-note app-kv-block">{providerSourceNote(rt.provider_source)}</span>}
-        {saved && <span className="app-kv-note app-kv-block app-offline-ok">{saved}</span>}
       </span>
+      {rt?.provider_source && <span className="app-kv-help">{providerSourceNote(rt.provider_source)}</span>}
+      {saved && <span className="app-kv-help app-offline-ok">{saved}</span>}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={L(`后台唤醒这个节点时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个节点，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this node's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this node is affected; keys stay on this computer.`)}>
@@ -602,12 +602,10 @@ export function Inspector({ row, now, onClose, onRefresh, onThread, onPeer, onMe
                 </div>
               )}
               {kind !== "human" && row.st.receiving && (
-                <div className="app-kv">
+                <div className="app-kv has-help">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
-                  <span className="app-kv-value" title={receivingNote(row.st.receiving, isCloud(ag))}>
-                    {receivingLabel(row.st.receiving)}
-                    <span className="app-kv-note app-kv-block">{receivingNote(row.st.receiving, isCloud(ag))}</span>
-                  </span>
+                  <span className="app-kv-value">{receivingLabel(row.st.receiving)}</span>
+                  <span className="app-kv-help">{receivingNote(row.st.receiving, isCloud(ag))}</span>
                 </div>
               )}
               <div className="app-kv">
