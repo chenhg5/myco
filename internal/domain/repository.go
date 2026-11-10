@@ -58,11 +58,12 @@ type MessageRepository interface {
 	// ListRecent returns the most recently updated messages; with agent set,
 	// only those it sent or received.
 	ListRecent(ctx context.Context, agent AgentName, limit int) ([]*Message, error)
-	// ListThreads returns the ids of threads with a message from or to a
-	// sender starting with senderPrefix, most recently updated first;
-	// optionally only threads with agent in them, or a message containing
-	// query. before (unix ms, 0 = now) pages back.
-	ListThreads(ctx context.Context, senderPrefix string, agent AgentName, query string, before int64, limit int) ([]ThreadRef, error)
+	// ListRecentThreads returns threads matching f, most recently updated
+	// first (see RecentFilter).
+	ListRecentThreads(ctx context.Context, f RecentFilter) ([]ThreadRef, error)
+	// ListRecentPairs returns the exchanges with the nodes in f.Nodes, one
+	// per (other party, node), most recently updated first.
+	ListRecentPairs(ctx context.Context, f RecentFilter) ([]PairRef, error)
 	// ListPeers returns the agents agent exchanged messages with (consoles
 	// excluded), most recent first, with how many messages and the newest.
 	ListPeers(ctx context.Context, agent AgentName, limit int) ([]PeerRef, error)
@@ -91,6 +92,40 @@ type PeerRef struct {
 	Agent    AgentName
 	Messages int
 	Last     *Message
+}
+
+// RecentFilter narrows ListRecentThreads and ListRecentPairs. For the name
+// lists, nil means no condition and an empty, non-nil list matches nothing.
+type RecentFilter struct {
+	// SenderPrefix keeps threads with a message from or to a name starting
+	// with it (e.g. "@console:").
+	SenderPrefix string
+	// Involve keeps threads and pairs one of these names takes part in (what
+	// a viewer may read).
+	Involve []AgentName
+	// Match keeps threads and pairs one of these names takes part in (a
+	// filter the viewer chose).
+	Match []AgentName
+	// Nodes are the nodes whose exchanges are listed per pair (shell nodes):
+	// threads with them are left out of ListRecentThreads.
+	Nodes []AgentName
+	// Skip are names whose threads are left out of ListRecentThreads
+	// (machine nodes).
+	Skip []AgentName
+	// Query keeps threads and pairs with a message whose body, sender or
+	// recipient contains it.
+	Query string
+	// Before (unix ms, 0 = now) pages back; Limit caps the result.
+	Before int64
+	Limit  int
+}
+
+// PairRef is the exchange between an agent (or console) and a node.
+type PairRef struct {
+	Other     AgentName
+	Node      AgentName
+	Messages  int
+	UpdatedAt time.Time
 }
 
 type ThreadRef struct {

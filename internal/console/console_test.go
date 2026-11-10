@@ -304,3 +304,56 @@ func TestBackendMachinesAndLinks(t *testing.T) {
 		t.Fatalf("links: %d %v", code, m)
 	}
 }
+
+// A hub from before the recent list answers 404: the app falls back to the
+// conversations list instead of showing an error.
+func TestRecentFallsBackOnOldHub(t *testing.T) {
+	old := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(old.Close)
+	r := newRig(t)
+	h, err := console.NewStore(r.store).Add("old hub", old.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.secrets.m[h.ID] = "myco_console_x"
+	code, m, raw := r.do("GET", "/app/hubs/"+h.ID+"/recent", nil)
+	if code != 200 || m["fallback"] != true {
+		t.Fatalf("old hub: %d %s", code, raw)
+	}
+}
+
+// The recent list through the app: a shell command that failed shows as
+// failed, while the hub only knows the task was answered.
+func TestRecentThroughTheApp(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	reg := func(name, harness string, allow ...string) *client.Client {
+		res, err := r.admin.Register(ctx, api.RegisterRequest{Name: name, AllowFrom: allow, Binding: api.Binding{Harness: harness, SessionID: "s-" + name}}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, _ := client.New(r.hubURL, res.Token)
+		return c
+	}
+	lead := reg("lead", "claude")
+	box := reg("box", "exec", "lead")
+	m, err := lead.Send(ctx, api.SendRequest{To: "box", Body: "go vet ./..."}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box.Pull(ctx, 1, 0)
+	box.Reply(ctx, m.Message.ID, `{"exit_code":1,"stderr":"vet: bad"}`, false)
+
+	code, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("test-mac")})
+	if code != 201 {
+		t.Fatalf("add hub: %d %v", code, h)
+	}
+	var out console.RecentResponse
+	_, _, raw := r.do("GET", "/app/hubs/"+h["id"].(string)+"/recent", nil)
+	if err := json.Unmarshal(raw, &out); err != nil || out.Fallback || len(out.Items) != 1 {
+		t.Fatalf("recent: %v %s", err, raw)
+	}
+	if it := out.Items[0]; it.Kind != "pair" || it.Other != "lead" || it.Node != "box" || it.State != "failed" {
+		t.Fatalf("row: %+v", it)
+	}
+}

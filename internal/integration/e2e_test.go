@@ -97,9 +97,9 @@ func TestEndToEndEncryption(t *testing.T) {
 	if err != nil || len(th) != 1 || th[0].Body != "the launch date is secret" {
 		t.Fatalf("owner's app: %v %+v", err, th)
 	}
-	th, _ = matthewApp.Thread(c, sent.Message.ThreadID)
-	if len(th) != 1 || th[0].Unreadable == "" || strings.Contains(th[0].Body, "launch") {
-		t.Fatalf("another member must not read it: %+v", th)
+	// Another member's app does not even list it: the thread is not theirs.
+	if th, err = matthewApp.Thread(c, sent.Message.ThreadID); err == nil {
+		t.Fatalf("another member must not get the thread: %+v", th)
 	}
 	// The answer comes back encrypted too.
 	if _, err := laohuBot.Reply(c, got[0].ID, "next friday", false); err != nil {

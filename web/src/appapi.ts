@@ -99,6 +99,26 @@ export interface Conversation {
   messages: number;
 }
 export interface ConversationQuery { agent?: string; q?: string; before?: number }
+/** One row of the recent list: a thread, or an agent's exchange with a shell node. */
+export interface RecentItem {
+  kind: "thread" | "pair";
+  thread_id: string;
+  /** pair: the agent (or console) and the shell node */
+  other?: string;
+  node?: string;
+  participants: string[];
+  updated_at: string;
+  messages: number;
+  first: Message;
+  last: Message;
+  task?: Message;
+  answer?: Message;
+  /** queued | working | done | failed, or "" without a task */
+  state?: "queued" | "working" | "done" | "failed" | "";
+}
+export interface RecentQuery { scope?: "mine"; label?: string; q?: string; before?: number }
+/** fallback: the hub predates the recent list; use its conversations. */
+export interface RecentList { items: RecentItem[]; more: boolean; fallback?: boolean }
 export interface SendMessageInput {
   to: string;
   body: string;
@@ -271,6 +291,16 @@ export const appApi = {
     return request<{ conversations: Conversation[] }>(
       "GET", `app/hubs/${enc(hubId)}/conversations${qs ? `?${qs}` : ""}`,
     );
+  },
+  /** The recent list: threads and shell-node exchanges the caller may read. */
+  recent: (hubId: string, query: RecentQuery = {}) => {
+    const q = new URLSearchParams();
+    if (query.scope) q.set("scope", query.scope);
+    if (query.label && query.label !== "all") q.set("label", query.label);
+    if (query.q) q.set("q", query.q);
+    if (query.before) q.set("before", String(query.before));
+    const qs = q.toString();
+    return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>

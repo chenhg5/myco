@@ -2177,6 +2177,32 @@ textarea.app-input {
 .conv-row > .app-pill {
   flex: none;
 }
+/* The row last opened: stays marked on return. */
+.conv-row.is-selected {
+  background: var(--pill);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.conv-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--muted);
+}
+.conv-row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.conv-row-icon.is-shell {
+  color: var(--fg-2);
+}
+.conv-row-summary.is-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+}
 
 /* ---------- conversation detail ---------- */
 .conv-detail {

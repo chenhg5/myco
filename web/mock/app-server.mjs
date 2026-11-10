@@ -917,6 +917,64 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { e2e: !!hub.e2e });
     }
 
+    // /app/hubs/{id}/recent — threads and shell-node exchanges, newest first.
+    if (parts.length === 4 && parts[3] === "recent" && method === "GET") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const sp = url.searchParams;
+      const q = (sp.get("q") || "").trim().toLowerCase();
+      const label = sp.get("label") || "";
+      const mine = sp.get("scope") === "mine";
+      const before = Number(sp.get("before") || 0);
+      const agentOf = (n) => (hub.agents || []).find((a) => a.name === n);
+      const labelOk = (names) => {
+        if (!label) return true;
+        return names.some((n) => {
+          const a = agentOf(n);
+          if (!a) return false;
+          const groups = (a.labels || []).filter((l) => l.startsWith("group=")).map((l) => l.slice(6));
+          const tags = (a.labels || []).filter((l) => !l.includes("="));
+          if (label === "group:") return groups.length === 0;
+          if (label.startsWith("group:")) return groups.includes(label.slice(6));
+          if (label.startsWith("tag:")) return tags.includes(label.slice(4));
+          return true;
+        });
+      };
+      const stateOf = (msgs, node) => {
+        const tasks = msgs.filter((m) => m.type === "task" && (!node || m.to === node));
+        const task = tasks[tasks.length - 1];
+        if (!task) return { state: "" };
+        const answer = msgs.find((m) => m.reply_to === task.id && (m.type === "reply" || m.type === "event"));
+        const open = tasks.find((m) => !["done", "failed"].includes(m.status));
+        let state = "done";
+        if (open) state = open.status === "queued" ? "queued" : "working";
+        else if (task.status === "failed" || answer?.type === "event") state = "failed";
+        else if (node && answer) { try { if (JSON.parse(answer.body).exit_code) state = "failed"; } catch { /* not json */ } }
+        return { state, task, answer };
+      };
+      const items = [];
+      for (const [threadId, msgs] of Object.entries(hub.threads || {})) {
+        if (!msgs.length) continue;
+        const participants = [];
+        for (const m of msgs) for (const n of [m.from, m.to]) if (!participants.includes(n)) participants.push(n);
+        const last = msgs[msgs.length - 1];
+        items.push({ kind: "thread", thread_id: threadId, participants, updated_at: last.updated_at || last.created_at,
+          messages: msgs.length, first: msgs[0], last, ...stateOf(msgs) });
+      }
+      const ex = execHistory("release-cloud");
+      const newest = ex.reduce((a, m) => (new Date(m.updated_at) > new Date(a.updated_at) ? m : a), ex[0]);
+      const sorted = ex.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      items.push({ kind: "pair", thread_id: newest.thread_id, other: "release-cloud", node: "mac-exec", participants: ["release-cloud", "mac-exec"],
+        updated_at: newest.updated_at, messages: ex.length, first: sorted[0], last: sorted[sorted.length - 1], ...stateOf(sorted, "mac-exec") });
+      const list = items
+        .filter((it) => !mine || it.participants.some((p) => p.startsWith("@console:")) || it.kind === "pair")
+        .filter((it) => labelOk(it.participants))
+        .filter((it) => !q || it.participants.some((p) => p.toLowerCase().includes(q)) ||
+          [it.first, it.last, it.task, it.answer].some((m) => (m?.body || "").toLowerCase().includes(q)))
+        .filter((it) => !before || new Date(it.updated_at).getTime() < before)
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      return send(res, 200, { items: list.slice(0, 30), more: list.length > 30 });
+    }
+
     // /app/hubs/{id}/agents/{name}/peers — other nodes it talked to (demo: an exec node).
     if (parts.length === 6 && parts[3] === "agents" && parts[5] === "peers" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");

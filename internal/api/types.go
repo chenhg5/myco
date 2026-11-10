@@ -644,6 +644,37 @@ type Exchange struct {
 	More     bool      `json:"more"`
 }
 
+// RecentItem is one row of GET /v1/console/recent: a thread, or the
+// exchange between an agent (or the console) and a shell node.
+type RecentItem struct {
+	// Kind is "thread" or "pair".
+	Kind     string `json:"kind"`
+	ThreadID string `json:"thread_id"`
+	// Other and Node: a pair's two sides (Node is the shell node).
+	Other string `json:"other,omitempty"`
+	Node  string `json:"node,omitempty"`
+	// Participants, in order of first appearance.
+	Participants []string  `json:"participants"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Messages     int       `json:"messages"`
+	First        Message   `json:"first"`
+	Last         Message   `json:"last"`
+	// Task is the newest task, Answer its reply or failure event.
+	Task   *Message `json:"task,omitempty"`
+	Answer *Message `json:"answer,omitempty"`
+	// State: "queued", "working", "done", "failed" or "" (no task). A shell
+	// command that exited non-zero is "done" here; its exit code is in
+	// Answer's body.
+	State string `json:"state,omitempty"`
+}
+
+// RecentList is the body of GET /v1/console/recent; more says older rows
+// exist (page with before = the last row's updated_at in unix ms).
+type RecentList struct {
+	Items []RecentItem `json:"items"`
+	More  bool         `json:"more"`
+}
+
 // SteerRequest is the body of POST /v1/console/messages/{id}/steer.
 type SteerRequest struct {
 	Body string `json:"body"`

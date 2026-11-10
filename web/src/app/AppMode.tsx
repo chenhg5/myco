@@ -230,7 +230,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   const openConversationRow = (row: ConversationRow) => {
-    openConversation(row.hubId, row.conv.thread_id, row.conv.agent || "");
+    const it = row.item;
+    // A shell node's exchange opens in the existing terminal view.
+    if (it.kind === "pair") {
+      openConversation(row.hubId, "", it.other || "", { peer: it.node });
+      return;
+    }
+    const agent = it.participants.find((p) => !p.startsWith("@")) || "";
+    openConversation(row.hubId, it.thread_id, agent);
   };
 
   const nodeAdded = (hubId: string, name: string) => {

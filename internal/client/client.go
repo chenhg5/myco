@@ -848,6 +848,37 @@ func (c *Client) Exchanges(ctx context.Context, a, b string, before int64, limit
 	return &out, err
 }
 
+// Recent lists the hub's recent threads and shell-node exchanges the console
+// may read (GET /v1/console/recent): scope "mine" or "" (everything
+// readable), label "group:<name>" / "group:" / "tag:<name>", query, before
+// (unix ms) and limit. Bodies are decrypted where this client can.
+func (c *Client) Recent(ctx context.Context, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
+	q := url.Values{}
+	for k, v := range map[string]string{"scope": scope, "label": label, "q": query} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if before > 0 {
+		q.Set("before", strconv.FormatInt(before, 10))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out api.RecentList
+	if err := c.do(ctx, http.MethodGet, "/v1/console/recent", q, nil, &out); err != nil {
+		return nil, err
+	}
+	for i := range out.Items {
+		it := &out.Items[i]
+		c.open(ctx, &it.First)
+		c.open(ctx, &it.Last)
+		c.open(ctx, it.Task)
+		c.open(ctx, it.Answer)
+	}
+	return &out, nil
+}
+
 // Whoami says which member a console token belongs to.
 func (c *Client) Whoami(ctx context.Context) (*api.Whoami, error) {
 	var out api.Whoami

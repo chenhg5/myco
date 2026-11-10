@@ -132,6 +132,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("GET /v1/console/agents/{name}/peers", s.admin(s.consolePeers))
 	m.HandleFunc("GET /v1/console/exchanges", s.admin(s.consoleExchanges))
+	m.HandleFunc("GET /v1/console/recent", s.admin(s.consoleRecent))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	// Members (people) and the audit log. Console tokens act as their member;
 	// handlers check what that member may do.
@@ -916,7 +917,16 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := api.Overview{GeneratedAt: ov.GeneratedAt, Viewer: v, OnlineWindowSeconds: int(s.agents.OnlineWindow().Seconds()),
-		Agents: make([]api.AgentStatus, 0, len(ov.Agents)), Recent: messageList(ov.Recent).Messages}
+		Agents: make([]api.AgentStatus, 0, len(ov.Agents))}
+	// A member sees the hub's nodes, but only messages they may read.
+	sc := app.Scope{All: true}
+	if viewer == nil {
+		if sc, _, err = s.scopeOf(r); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	out.Recent = messageList(readable(sc, ov.Recent)).Messages
 	aliasMap, _ := s.agents.AliasMap(r.Context())
 	var where map[domain.AgentName]string
 	if viewer == nil && s.machines != nil { // admin view
@@ -935,8 +945,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if id, ok := where[a.Agent.Name]; ok {
 			st.Agent.MachineID = id
 		}
-		if len(a.Current) > 0 {
-			st.Current = messageList(a.Current).Messages
+		if cur := readable(sc, a.Current); len(cur) > 0 {
+			st.Current = messageList(cur).Messages
 		}
 		out.Agents = append(out.Agents, st)
 		out.Totals.Agents++
@@ -1205,6 +1215,15 @@ func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
 		msgs, err := s.messages.ThreadAll(r.Context(), r.PathValue("id"))
 		if err != nil {
 			writeError(w, err)
+			return
+		}
+		sc, _, err := s.scopeOf(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if !sc.Readable(msgs) {
+			writeError(w, domain.Errf(domain.CodeNotFound, "thread %s not found", r.PathValue("id")))
 			return
 		}
 		writeJSON(w, http.StatusOK, messageList(msgs))
@@ -1489,7 +1508,12 @@ func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) consolePeers(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	ps, err := s.messages.Peers(r.Context(), domain.AgentName(r.PathValue("name")), limit)
+	sc, _, err := s.scopeOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	ps, err := s.messages.Peers(r.Context(), sc, domain.AgentName(r.PathValue("name")), limit)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1513,7 +1537,12 @@ func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	ms, err := s.messages.Between(r.Context(), domain.AgentName(q.Get("a")), domain.AgentName(q.Get("b")), before, limit+1)
+	sc, _, err := s.scopeOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	ms, err := s.messages.Between(r.Context(), sc, domain.AgentName(q.Get("a")), domain.AgentName(q.Get("b")), before, limit+1)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1528,11 +1557,79 @@ func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// scopeOf is what the request may read from the console: the whole hub for
+// the admin token, owners and admins; for a member, what their console name
+// or the nodes they own take part in. Names are the reader's own (nil on
+// hubs without members, where everything is theirs). It also returns the
+// hub's agents.
+func (s *Server) scopeOf(r *http.Request) (app.Scope, []*domain.Agent, error) {
+	agents, err := s.agents.List(r.Context(), app.AgentFilter{})
+	if err != nil {
+		return app.Scope{}, nil, err
+	}
+	a := s.actorOf(r)
+	sc := app.Scope{All: a.Manages()}
+	name, memberID := s.consoleIdentity(r)
+	if memberID == "" {
+		if !sc.All {
+			sc.Names = []domain.AgentName{}
+		}
+		return sc, agents, nil
+	}
+	sc.Names = []domain.AgentName{app.ConsoleSender(name)}
+	for _, ag := range agents {
+		if ag.Owner == memberID {
+			sc.Names = append(sc.Names, ag.Name)
+		}
+	}
+	return sc, agents, nil
+}
+
+func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	sc, agents, err := s.scopeOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items, more, err := s.messages.Recent(r.Context(), agents, app.RecentInput{Scope: sc, Mine: q.Get("scope") == "mine",
+		Label: q.Get("label"), Query: q.Get("q"), Before: before, Limit: limit})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := api.RecentList{Items: make([]api.RecentItem, 0, len(items)), More: more}
+	for _, it := range items {
+		ri := api.RecentItem{Kind: it.Kind, ThreadID: it.ThreadID, Other: string(it.Other), Node: string(it.Node), UpdatedAt: it.UpdatedAt,
+			Messages: it.Messages, First: messageDTO(it.First), Last: messageDTO(it.Last), State: it.State, Participants: make([]string, 0, len(it.Participants))}
+		for _, p := range it.Participants {
+			ri.Participants = append(ri.Participants, string(p))
+		}
+		if it.Task != nil {
+			m := messageDTO(it.Task)
+			ri.Task = &m
+		}
+		if it.Answer != nil {
+			m := messageDTO(it.Answer)
+			ri.Answer = &m
+		}
+		out.Items = append(out.Items, ri)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	cs, err := s.messages.Conversations(r.Context(), q.Get("agent"), q.Get("q"), before, limit)
+	sc, _, err := s.scopeOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cs, err := s.messages.Conversations(r.Context(), sc, q.Get("agent"), q.Get("q"), before, limit)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1543,4 +1640,18 @@ func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {
 			First: messageDTO(c.First), Last: messageDTO(c.Last), Messages: c.Messages})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// readable keeps the messages the scope may read.
+func readable(sc app.Scope, ms []*domain.Message) []*domain.Message {
+	if sc.All {
+		return ms
+	}
+	var out []*domain.Message
+	for _, m := range ms {
+		if sc.Allows(m.From, m.To) {
+			out = append(out, m)
+		}
+	}
+	return out
 }

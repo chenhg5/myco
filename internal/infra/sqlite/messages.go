@@ -255,26 +255,57 @@ func scanMessage(s scanner) (*domain.Message, error) {
 	return &m, nil
 }
 
-func (r *MessageRepo) ListThreads(ctx context.Context, senderPrefix string, agent domain.AgentName, query string, before int64, limit int) ([]domain.ThreadRef, error) {
-	like := escapeLike(senderPrefix) + "%"
-	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages
-		WHERE thread_id IN (SELECT thread_id FROM messages WHERE from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
-	args := []any{like, like}
-	if agent != "" {
-		q += ` AND thread_id IN (SELECT thread_id FROM messages WHERE from_agent=? OR to_agent=?)`
-		args = append(args, agent, agent)
+// inNames is " IN (?,?,…)" for names, with its arguments.
+func inNames(names []domain.AgentName) (string, []any) {
+	args := make([]any, len(names))
+	for i, n := range names {
+		args[i] = string(n)
 	}
-	if query != "" {
-		q += ` AND thread_id IN (SELECT thread_id FROM messages WHERE body LIKE ? ESCAPE '\')`
-		args = append(args, "%"+escapeLike(query)+"%")
+	return " IN (?" + strings.Repeat(",?", len(names)-1) + ")", args
+}
+
+// excludes reports whether a name list that must match rules everything out.
+func excludes(names []domain.AgentName) bool { return names != nil && len(names) == 0 }
+
+func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilter) ([]domain.ThreadRef, error) {
+	if excludes(f.Involve) || excludes(f.Match) {
+		return nil, nil
+	}
+	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages WHERE 1=1`
+	var args []any
+	inThreads := func(not bool, cond string, a ...any) {
+		op := " IN "
+		if not {
+			op = " NOT IN "
+		}
+		q += ` AND thread_id` + op + `(SELECT thread_id FROM messages WHERE ` + cond + `)`
+		args = append(args, a...)
+	}
+	if f.SenderPrefix != "" {
+		like := escapeLike(f.SenderPrefix) + "%"
+		inThreads(false, `from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\'`, like, like)
+	}
+	if skip := append(append([]domain.AgentName{}, f.Nodes...), f.Skip...); len(skip) > 0 {
+		in, a := inNames(skip)
+		inThreads(true, `from_agent`+in+` OR to_agent`+in, append(a, a...)...)
+	}
+	for _, names := range [][]domain.AgentName{f.Involve, f.Match} {
+		if names != nil {
+			in, a := inNames(names)
+			inThreads(false, `from_agent`+in+` OR to_agent`+in, append(a, a...)...)
+		}
+	}
+	if f.Query != "" {
+		like := "%" + escapeLike(f.Query) + "%"
+		inThreads(false, `body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\'`, like, like, like)
 	}
 	q += ` GROUP BY thread_id`
-	if before > 0 {
+	if f.Before > 0 {
 		q += ` HAVING u < ?`
-		args = append(args, before)
+		args = append(args, f.Before)
 	}
 	q += ` ORDER BY u DESC LIMIT ?`
-	args = append(args, limit)
+	args = append(args, recentLimit(f.Limit))
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, internal(err)
@@ -290,6 +321,60 @@ func (r *MessageRepo) ListThreads(ctx context.Context, senderPrefix string, agen
 		out = append(out, domain.ThreadRef{ID: id, UpdatedAt: fromMS(u)})
 	}
 	return out, internal(rows.Err())
+}
+
+func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter) ([]domain.PairRef, error) {
+	if len(f.Nodes) == 0 || excludes(f.Involve) || excludes(f.Match) {
+		return nil, nil
+	}
+	nodes, na := inNames(f.Nodes)
+	q := `SELECT CASE WHEN to_agent` + nodes + ` THEN from_agent ELSE to_agent END AS other,
+		CASE WHEN to_agent` + nodes + ` THEN to_agent ELSE from_agent END AS node,
+		COUNT(*), MAX(updated_at) AS u
+		FROM messages WHERE (to_agent` + nodes + ` OR from_agent` + nodes + `) AND from_agent != to_agent`
+	args := append(append(append(append([]any{}, na...), na...), na...), na...)
+	for _, names := range [][]domain.AgentName{f.Involve, f.Match} {
+		if names != nil {
+			in, a := inNames(names)
+			q += ` AND (from_agent` + in + ` OR to_agent` + in + `)`
+			args = append(args, append(a, a...)...)
+		}
+	}
+	if f.Query != "" {
+		like := "%" + escapeLike(f.Query) + "%"
+		q += ` AND (body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
+		args = append(args, like, like, like)
+	}
+	q += ` GROUP BY other, node`
+	if f.Before > 0 {
+		q += ` HAVING u < ?`
+		args = append(args, f.Before)
+	}
+	q += ` ORDER BY u DESC LIMIT ?`
+	args = append(args, recentLimit(f.Limit))
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	var out []domain.PairRef
+	for rows.Next() {
+		var p domain.PairRef
+		var u int64
+		if err := rows.Scan(&p.Other, &p.Node, &p.Messages, &u); err != nil {
+			return nil, internal(err)
+		}
+		p.UpdatedAt = fromMS(u)
+		out = append(out, p)
+	}
+	return out, internal(rows.Err())
+}
+
+func recentLimit(n int) int {
+	if n <= 0 || n > 200 {
+		return 50
+	}
+	return n
 }
 
 func escapeLike(s string) string {

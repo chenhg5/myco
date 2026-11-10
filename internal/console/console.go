@@ -356,6 +356,40 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"conversations": cs})
 	}))
+	// The recent list: threads and shell-node exchanges, newest first.
+	m.HandleFunc("GET /app/hubs/{id}/recent", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		q := r.URL.Query()
+		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+		query := strings.TrimSpace(q.Get("q"))
+		// Encrypted bodies cannot be searched on the hub: search here.
+		local := query != "" && c.E2EEnabled(r.Context())
+		hubQuery := query
+		if local {
+			hubQuery = ""
+		}
+		res, err := c.Recent(r.Context(), q.Get("scope"), q.Get("label"), hubQuery, before, 0)
+		var ce *client.Error
+		if errors.As(err, &ce) && (ce.Status == http.StatusNotFound || ce.Status == http.StatusMethodNotAllowed) {
+			// A hub from before the recent list: the app shows its
+			// conversations instead.
+			writeJSON(w, http.StatusOK, RecentResponse{RecentList: api.RecentList{Items: []api.RecentItem{}}, Fallback: true})
+			return
+		}
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		for i := range res.Items {
+			refineRecent(&res.Items[i])
+		}
+		if local {
+			res.Items = filterRecent(res.Items, query)
+		}
+		if res.Items == nil {
+			res.Items = []api.RecentItem{}
+		}
+		writeJSON(w, http.StatusOK, RecentResponse{RecentList: *res})
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		st, err := c.HubSettings(r.Context())
 		if err != nil {
@@ -893,6 +927,48 @@ func (b *Backend) deviceName() string {
 		return strings.TrimSuffix(h, ".local")
 	}
 	return "myco app"
+}
+
+// RecentResponse is GET /app/hubs/{id}/recent. Fallback: the hub has no
+// recent list (older version); show its conversations instead.
+type RecentResponse struct {
+	api.RecentList
+	Fallback bool `json:"fallback,omitempty"`
+}
+
+// refineRecent marks a shell command that exited non-zero as failed: the
+// hub cannot tell (the exit code is in the reply body, maybe encrypted).
+func refineRecent(it *api.RecentItem) {
+	if it.Kind != "pair" || it.Answer == nil || it.Answer.Type != "reply" || it.Answer.Unreadable != "" {
+		return
+	}
+	var res api.ExecResult
+	if json.Unmarshal([]byte(it.Answer.Body), &res) == nil && res.ExitCode != 0 && it.State == "done" {
+		it.State = "failed"
+	}
+}
+
+// filterRecent keeps the rows whose (decrypted) messages or participants
+// contain query.
+func filterRecent(items []api.RecentItem, query string) []api.RecentItem {
+	q := strings.ToLower(query)
+	out := items[:0]
+	for _, it := range items {
+		hay := []string{it.First.Body, it.Last.Body, it.Other, it.Node}
+		hay = append(hay, it.Participants...)
+		for _, m := range []*api.Message{it.Task, it.Answer} {
+			if m != nil {
+				hay = append(hay, m.Body)
+			}
+		}
+		for _, h := range hay {
+			if strings.Contains(strings.ToLower(h), q) {
+				out = append(out, it)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // filterConversations keeps the conversations whose (decrypted) first or

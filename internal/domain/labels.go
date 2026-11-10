@@ -160,3 +160,39 @@ func (a *Agent) labelValues(key string) []string {
 	}
 	return out
 }
+
+// GroupsOf is a node's groups: its "group=<name>" labels.
+func GroupsOf(a *Agent) []string {
+	var out []string
+	for _, l := range a.Labels {
+		if g, ok := strings.CutPrefix(l, "group="); ok {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// TagsOf is a node's tags: its bare labels (key=value labels are not tags).
+func TagsOf(a *Agent) []string {
+	var out []string
+	for _, l := range a.Labels {
+		if !strings.Contains(l, "=") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// MatchesLabelFilter is the app's group and tag filter: "group:<name>",
+// "group:" (no group), "tag:<name>"; anything else matches every node.
+func MatchesLabelFilter(a *Agent, v string) bool {
+	switch {
+	case v == "group:":
+		return len(GroupsOf(a)) == 0
+	case strings.HasPrefix(v, "group:"):
+		return slices.Contains(GroupsOf(a), strings.TrimPrefix(v, "group:"))
+	case strings.HasPrefix(v, "tag:"):
+		return slices.Contains(TagsOf(a), strings.TrimPrefix(v, "tag:"))
+	}
+	return true
+}
