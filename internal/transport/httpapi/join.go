@@ -20,6 +20,9 @@ type joinView struct {
 	Exec             bool
 	AllowFrom        string
 	Error            string
+	// ErrorEN is Error in English, for the PowerShell script: Windows
+	// PowerShell 5.1 can misread non-ASCII text, so that script is ASCII.
+	ErrorEN string
 }
 
 // joinPage serves GET /j/{token}: a shell script for curl/wget, a Markdown
@@ -38,8 +41,10 @@ func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		v.Error = "这个入网链接不可用（已过期、已作废、次数已用完，或者不是入网链接）。请让管理员重新生成：myco link create"
+		v.ErrorEN = "this join link cannot be used (expired, revoked, used up, or not a join link); ask an admin for a new one: myco link create"
 		if domain.IsCode(err, domain.CodeUnauthenticated) {
 			v.Error = "这个入网链接不存在（可能复制不完整，或者来自另一个 Hub）。"
+			v.ErrorEN = "this join link does not exist (copied incompletely, or from another hub)"
 		}
 	} else {
 		v.Expires = "长期有效"
@@ -175,7 +180,7 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
 # The link token below is a credential. Do not paste it into chats or repos.
 & {
 {{- if .Error}}
-  Write-Error ('myco: ' + {{psq .Error}})
+  Write-Error ('myco: ' + {{psq .ErrorEN}})
 {{- else}}
   $ErrorActionPreference = 'Stop'
   $env:MYCO_HUB = {{psq .Hub}}

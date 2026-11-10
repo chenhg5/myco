@@ -76,6 +76,13 @@ func TestJoinPageValidLink(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h.t = t
 			r := h.doReq("GET", path+tc.query, "", nil, tc.hdr).want(t, 200)
+			if tc.wantType == "text/plain" {
+				for i, c := range string(r.raw) {
+					if c > 127 {
+						t.Fatalf("PowerShell script has non-ASCII %q at %d (Windows PowerShell 5.1 may misread it)", c, i)
+					}
+				}
+			}
 			if ct := r.header.Get("Content-Type"); !strings.HasPrefix(ct, tc.wantType) {
 				t.Errorf("Content-Type %q, want %s", ct, tc.wantType)
 			}
