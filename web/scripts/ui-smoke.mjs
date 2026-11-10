@@ -133,7 +133,7 @@ async function loadPlaywright() {
   const tryImport = async (specifier, label) => {
     try {
       const mod = await import(specifier);
-      return { label, chromium: mod.chromium };
+      return { label, chromium: mod.chromium ?? mod.default?.chromium };
     } catch (err) {
       attempts.push(`${label}: ${err.code || err.message}`);
       return null;
@@ -160,7 +160,7 @@ async function loadPlaywright() {
       try {
         const resolved = fromRoot.resolve(pkg);
         const mod = await import(pathToFileURL(resolved).href);
-        return { label: `${pkg} (${resolved})`, chromium: mod.chromium };
+        return { label: `${pkg} (${resolved})`, chromium: mod.chromium ?? mod.default?.chromium };
       } catch (err) {
         attempts.push(`${pkg} under ${root}: ${err.code || err.message}`);
       }
