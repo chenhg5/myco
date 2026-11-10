@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, FileText, Lock, MoreHorizontal, Pencil, Plus, Users } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
 import type { Project, ProjectDoc, ProjectMember } from "@/api";
@@ -13,6 +13,21 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L } from "@/lib/i18n";
 
 export interface ProjectRef { hubId: string; name: string }
+
+/**
+ * Runs fn when a dialog opens, never while it stays open: the page re-renders
+ * every second and polls the project, and a reset then would throw away what
+ * the person is typing or picking.
+ */
+function useOnOpen(open: boolean, fn: () => void) {
+  const was = useRef(false);
+  const latest = useRef(fn);
+  latest.current = fn;
+  useEffect(() => {
+    if (open && !was.current) latest.current();
+    was.current = open;
+  }, [open]);
+}
 
 type Dialog =
   | null
@@ -291,7 +306,7 @@ function Actions({ busy, onCancel, onSave, saveLabel, disabled }: { busy: boolea
 function AboutDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (title: string, goal: string) => void }) {
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
-  useEffect(() => { if (open) { setTitle(project.title); setGoal(project.goal || ""); } }, [open, project]);
+  useOnOpen(open, () => { setTitle(project.title); setGoal(project.goal || ""); });
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("编辑项目", "Edit project")}>
       <label className="app-field">
@@ -311,7 +326,7 @@ function AboutDialog({ open, project, busy, error, onClose, onSave }: { open: bo
 
 function BriefDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (brief: string) => void }) {
   const [brief, setBrief] = useState("");
-  useEffect(() => { if (open) setBrief(project.brief || ""); }, [open, project]);
+  useOnOpen(open, () => setBrief(project.brief || ""));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目说明", "Brief")} wide
       description={L("所有成员都该知道的事（Markdown，8 KB 以内）。agent 用 myco project show / pull 读取。", "What every member should know (Markdown, up to 8 KB). Agents read it with myco project show / pull.")}>
@@ -325,7 +340,7 @@ function BriefDialog({ open, project, busy, error, onClose, onSave }: { open: bo
 
 function LinksDialog({ open, project, busy, error, onClose, onSave }: { open: boolean; project: Project; busy: boolean; error: unknown; onClose: () => void; onSave: (links: { title?: string; url: string }[]) => void }) {
   const [text, setText] = useState("");
-  useEffect(() => { if (open) setText(project.links.map((l) => (l.title ? `${l.title} ${l.url}` : l.url)).join("\n")); }, [open, project]);
+  useOnOpen(open, () => setText(project.links.map((l) => (l.title ? `${l.title} ${l.url}` : l.url)).join("\n")));
   const parse = () => text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
     const i = l.search(/\S+:\/\/\S+$/);
     return i > 0 ? { title: l.slice(0, i).trim(), url: l.slice(i) } : { url: l };
@@ -342,7 +357,7 @@ function LinksDialog({ open, project, busy, error, onClose, onSave }: { open: bo
 
 function AddDialog({ open, nodes, busy, error, onClose, onAdd }: { open: boolean; nodes: import("@/api").Agent[]; busy: boolean; error: unknown; onClose: () => void; onAdd: (names: string[]) => void }) {
   const [picked, setPicked] = useState<string[]>([]);
-  useEffect(() => { if (open) setPicked([]); }, [open]);
+  useOnOpen(open, () => setPicked([]));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加节点", "Add nodes")}
       description={L("选你的节点加入这个项目（管理员可以选任何节点）。别人的节点由它的主人加入。", "Pick your nodes to add (admins can pick any). Other people add their own.")}>
@@ -483,11 +498,12 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  useEffect(() => {
-    if (!open) return;
+  useOnOpen(open, () => {
     setHubId(defaultHubId || hubs[0]?.id || "");
     setName(""); setTitle(""); setGoal(""); setError(null);
-  }, [open, defaultHubId, hubs]);
+  });
+  // With a hub picked in the switcher the project goes there; otherwise pick one.
+  const fixedHub = defaultHubId ? hubs.find((h) => h.id === defaultHubId) : hubs.length === 1 ? hubs[0] : undefined;
   const slug = name.trim().toLowerCase();
   const create = async () => {
     setBusy(true);
@@ -504,7 +520,12 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("新建项目", "New project")}
       description={L("把要一起干的节点放进一个项目，给它们共享的目标、说明和文档。", "Put the nodes that work together in a project, with a shared goal, brief and documents.")}>
-      {hubs.length > 1 && (
+      {fixedHub ? (
+        <div className="app-field">
+          <span className="app-field-label">Hub</span>
+          <span className="app-field-static">{fixedHub.name}</span>
+        </div>
+      ) : (
         <label className="app-field">
           <span className="app-field-label">Hub</span>
           <select className="app-select-field" value={hubId} onChange={(e) => setHubId(e.target.value)} disabled={busy}>

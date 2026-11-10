@@ -4004,3 +4004,4 @@ body.is-resizing {
 .app-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .app-kv-projects { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 10px; }
 .app-modal .app-field + .app-provider-list { margin-top: 14px; }
+.app-field-static { display: block; padding: 6px 0 2px; font-size: 13px; color: var(--fg); }
