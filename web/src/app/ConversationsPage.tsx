@@ -123,7 +123,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
     () => hubs.filter((h) => (hub === "all" || h.id === hub) && h.ok),
     [hubs, hub],
   );
-  const targetIds = targets.map((h) => h.id).join(",");
+  // Hubs in view whatever their state (their rows stay while one is down).
+  const inViewIds = hubs.filter((h) => hub === "all" || h.id === hub).map((h) => h.id).join(",");
 
   useEffect(() => {
     try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* not saved */ }
@@ -184,7 +185,11 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       if (cancelled) return;
       const fresh: ConversationRow[] = results.flatMap((r) => r.items.map((item) => ({ hubId: r.h.id, hubName: r.h.name, item })));
       setItems((prev) => {
-        const base = changed ? [] : prev.filter((p) => targetIds.split(",").includes(p.hubId));
+        // Rows of every hub still in view: a hub that is briefly offline, or
+        // whose refresh failed this time, keeps its rows until it answers
+        // again, instead of the list emptying and filling back.
+        const base = changed ? [] : prev.filter((p) => inViewIds.split(",").includes(p.hubId));
+        const answered = new Set(results.filter((r) => !r.failed).map((r) => r.h.id));
         const keys = new Set(fresh.map(rowKey));
         const cutoff: Record<string, number> = {};
         for (const r of results) {
@@ -192,7 +197,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           cutoff[r.h.id] = r.more && ts.length ? Math.min(...ts) : -Infinity;
         }
         // Keep older loaded pages; within the first page, the hub's answer wins.
-        const kept = base.filter((p) => !keys.has(rowKey(p)) && timeOf(p) < (cutoff[p.hubId] ?? -Infinity));
+        const kept = base.filter((p) => !answered.has(p.hubId) || (!keys.has(rowKey(p)) && timeOf(p) < (cutoff[p.hubId] ?? -Infinity)));
         const next = [...fresh, ...kept].sort(byTime);
         const el = scroller();
         if (el && el.scrollTop > 0 && prev.length > 0 && next[0] && prev[0] && rowKey(next[0]) !== rowKey(prev[0])) {
@@ -202,7 +207,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       });
       // After a refresh, older pages already loaded still stand: keep what
       // "more" said for them.
-      setMore((prev) => Object.fromEntries(results.map((r) => [r.h.id, changed || prev[r.h.id] === undefined ? r.more : prev[r.h.id]])));
+      setMore((prev) => Object.fromEntries(results.map((r) => [r.h.id, r.failed && !changed ? (prev[r.h.id] ?? false) : changed || prev[r.h.id] === undefined ? r.more : prev[r.h.id]])));
       setError(results.find((r) => r.failed)?.failed ?? null);
       setLoading(false);
     };

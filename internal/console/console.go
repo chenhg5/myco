@@ -163,6 +163,7 @@ type Backend struct {
 
 	pending pendingLink
 	sealers sealers
+	steady  steady
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -658,6 +659,8 @@ func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
 	out := make([]HubStatus, len(hubs))
 	each(hubs, func(i int, h Hub) {
 		out[i] = HubStatus{Hub: h}
+		var failed error // a failed health check (not a missing token)
+		defer func() { out[i] = b.steady.hubStatus(out[i], failed, time.Now()) }()
 		c, err := b.client(h)
 		if err != nil {
 			out[i].Error = errText(err)
@@ -667,6 +670,7 @@ func (b *Backend) listHubs(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		hl, err := c.Health(ctx)
 		if err != nil {
+			failed = err
 			out[i].Error = errText(err)
 			return
 		}
@@ -811,6 +815,8 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 	out := make([]HubOverview, len(hubs))
 	each(hubs, func(i int, h Hub) {
 		out[i] = HubOverview{ID: h.ID, Name: h.Name}
+		var failed error // a failed overview (not a missing token)
+		defer func() { out[i] = b.steady.hubOverview(out[i], failed, time.Now()) }()
 		c, err := b.client(h)
 		if err != nil {
 			out[i].Error = errText(err)
@@ -819,16 +825,37 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), b.timeout())
 		defer cancel()
 		b.withSealer(ctx, h.ID, c)
-		ov, err := c.Overview(ctx, 50)
-		if err != nil {
-			out[i].Error = errText(err)
+		// Three calls at once rather than one after another: a hub far away
+		// otherwise needs three round trips within the timeout.
+		var (
+			wg  sync.WaitGroup
+			me  *api.Whoami
+			st  *api.HubSettings
+			ov  *api.Overview
+			oer error
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if v, err := c.Whoami(ctx); err == nil {
+				me = v
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if v, err := c.HubSettings(ctx); err == nil {
+				st = v
+			}
+		}()
+		ov, oer = c.Overview(ctx, 50)
+		wg.Wait()
+		if oer != nil {
+			failed = oer
+			out[i].Error = errText(oer)
 			return
 		}
-		out[i].OK, out[i].Overview = true, ov
-		if me, err := c.Whoami(ctx); err == nil {
-			out[i].Me = me
-		}
-		if st, err := c.HubSettings(ctx); err == nil {
+		out[i].OK, out[i].Overview, out[i].Me = true, ov, me
+		if st != nil {
 			out[i].E2E = st.E2E
 		}
 	})
