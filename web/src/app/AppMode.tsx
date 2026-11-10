@@ -506,7 +506,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <div className="app-banner-wrap">
                 <div className="app-error-row">
                   <WifiOff />
-                  <span className="err" title={errorMessage(error)}>{L(`无法获取 App 数据：${errorMessage(error)}`, `Couldn’t load app data: ${errorMessage(error)}`)}</span>
+                  <span className="err" title={errorMessage(error)}>{L("App 暂时拿不到最新数据，正在重试…", "The app can't get fresh data right now; retrying…")}</span>
                 </div>
               </div>
             )}

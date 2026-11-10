@@ -14,6 +14,7 @@ import { summarize } from "@/app/summary";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
+import { RowsSkeleton } from "@/app/Skeleton";
 
 type Action = null | "profile" | "allow" | "kick" | "delete" | "owner" | "copy";
 
@@ -72,7 +73,7 @@ function PeerRows({ row, now, onPeer }: {
     return () => { cancelled = true; };
   }, [hubId, name, stamp]);
   if (error && !peers) return <ErrorText error={error} />;
-  if (!peers) return <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>;
+  if (!peers) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!peers.length) return <div className="app-empty-note">{L("还没有和其他节点的往来", "No exchanges with other nodes yet")}</div>;
   const nameOf = (n: string) => (row.hub.overview?.agents || []).find((x) => x.agent.name === n)?.agent.display_name || n;
   return (

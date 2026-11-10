@@ -4,6 +4,8 @@ import type { Hub, HubOverview } from "@/appapi";
 import { machineSubtitle, osInfo } from "@/app/nodes";
 import { cn } from "@/lib/utils";
 import { L } from "@/lib/i18n";
+import { RowsSkeleton } from "@/app/Skeleton";
+import { hubErrorText } from "@/appapi";
 
 /** Real machines that run nodes, grouped by hub. Cloud sessions are not machines. */
 export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine, onAdd }: {
@@ -29,7 +31,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
       online ? L(`${online} 台在线`, `${online} online`) : "",
       L(`${hubs.length} 个 Hub`, `${hubs.length} Hub${hubs.length === 1 ? "" : "s"}`),
     ].filter(Boolean).join(" · ")
-    : L("正在加载…", "Loading…");
+    : null;
 
   return (
     <div className="app-page">
@@ -41,7 +43,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
       </div>
 
       {!hubsOv ? (
-        loading && <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
+        loading && <RowsSkeleton rows={3} />
       ) : all.length === 0 && !hasUnreachable ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Monitor /></div>
@@ -67,11 +69,11 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
             )}
             <div className="app-list">
               {!g.ov ? (
-                <div className="app-empty-note">{L("正在读取这个 Hub 的机器…", "Loading this Hub’s machines…")}</div>
+                <RowsSkeleton rows={2} className="is-flat" />
               ) : !g.ov.ok ? (
                 <div className="app-error-row">
                   <AlertTriangle />
-                  <span className="err" title={g.ov.error || undefined}>{g.ov.error || L("App 无法连接这个 Hub。", "The app can’t connect to this Hub.")}</span>
+                  <span className="err" title={g.ov.error || undefined}>{hubErrorText(g.ov.error)}</span>
                 </div>
               ) : g.machines.length === 0 ? (
                 <div className="app-empty-note">{L("这个 Hub 还没有上报机器。", "This Hub hasn’t reported any machines yet.")}</div>

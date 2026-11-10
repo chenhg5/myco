@@ -3736,3 +3736,69 @@ body.is-resizing {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Loading placeholders shared by lists (nodes, machines, conversations,
+   members): grey shapes with a slow shine. */
+.skel {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--pill) 25%, var(--pill-hover) 50%, var(--pill) 75%);
+  background-size: 300% 100%;
+  animation: conv-skel-shine 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+}
+.skel-rows {
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  overflow: hidden;
+}
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.skel-row + .skel-row {
+  border-top: 1px solid var(--line-2);
+}
+.skel-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.skel-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.skel-line {
+  height: 10px;
+}
+.skel-line.is-thin {
+  height: 8px;
+  opacity: 0.7;
+}
+.skel-text {
+  display: inline-block;
+  height: 10px;
+  vertical-align: middle;
+}
+.skel-spin {
+  width: 13px;
+  height: 13px;
+  animation: conv-spin 0.9s linear infinite;
+}
+.skel-rows.is-flat {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.conv-list-compact .skel-rows {
+  border-radius: 0;
+  box-shadow: none;
+}

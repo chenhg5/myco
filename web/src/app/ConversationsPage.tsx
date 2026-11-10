@@ -8,6 +8,7 @@ import { parseExecResult } from "@/app/Markdown";
 import { cn, timeAgo } from "@/lib/utils";
 import { summarize } from "@/app/summary";
 import { L, locale } from "@/lib/i18n";
+import { Busy, RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 
 /** A row of the recent list, with the hub it comes from. */
 export interface ConversationRow {
@@ -382,7 +383,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
         // The narrow list: a quiet count and two matching icon buttons.
         <div className="conv-list-head">
           <span className="conv-list-count">
-            {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
+            {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
           </span>
           <button type="button" className="conv-head-icon is-primary" onClick={onNew}
             aria-label={L("新对话", "New conversation")} title={L("新对话", "New conversation")}>
@@ -398,7 +399,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       ) : (
         <div className="app-page-head">
           <p className="app-summary">
-            {firstLoad ? L("正在加载…", "Loading…") : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
+            {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
           </p>
           <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
             <Plus />{L("新对话", "New conversation")}
@@ -458,7 +459,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       )}
 
       {firstLoad ? (
-        <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
+        <RowsSkeleton rows={6} className="conv-skel-rows" />
       ) : shown.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><MessageSquare /></div>
@@ -519,7 +520,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
       {canLoadMore && (
         <div className="app-actions" style={{ justifyContent: "center" }}>
           <button type="button" className="app-btn" onClick={() => void loadMore()} disabled={moreBusy}>
-            {moreBusy ? L("正在加载…", "Loading…") : L("加载更多", "Load more")}
+            <Busy busy={moreBusy}>{L("加载更多", "Load more")}</Busy>
           </button>
         </div>
       )}

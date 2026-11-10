@@ -9,6 +9,7 @@ import { Terminal } from "@/app/Terminal";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
+import { Busy } from "@/app/Skeleton";
 
 export interface ConversationTarget {
   hubId: string;
@@ -398,7 +399,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {exchange && more && (
               <div className="conv-older">
                 <button type="button" className="app-btn app-btn-small" onClick={() => void loadOlder()} disabled={loadingOlder}>
-                  {loadingOlder ? L("正在加载…", "Loading…") : L("加载更早的消息", "Load earlier messages")}
+                  <Busy busy={loadingOlder}>{L("加载更早的消息", "Load earlier messages")}</Busy>
                 </button>
               </div>
             )}

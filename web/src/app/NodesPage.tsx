@@ -11,6 +11,8 @@ import {
 import { stateMeta } from "@/components/status";
 import { cn } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
+import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
+import { hubErrorText } from "@/appapi";
 
 function host(url: string) {
   try { return new URL(url).host || url; } catch { return url; }
@@ -206,7 +208,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
     <div className="app-page">
       <div className="app-page-head">
         <p className="app-summary">
-          {hubs ? summary : L("正在加载…", "Loading…")}
+          {hubs ? summary : <TextSkeleton width={140} />}
           {hubs && counts.offline > 0 && onCleanup && (
             <button type="button" className="app-summary-action" onClick={onCleanup}>{L("清理离线节点", "Clean up offline nodes")}</button>
           )}
@@ -279,7 +281,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
       </div>
 
       {!hubs ? (
-        loading && <div className="app-empty-note">{L("正在加载…", "Loading…")}</div>
+        loading && <RowsSkeleton rows={5} />
       ) : !hasUnreachable && hubScoped.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><Server /></div>
@@ -313,7 +315,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
               {!g.hub.ok ? (
                 <div className="app-error-row">
                   <AlertTriangle />
-                  <span className="err" title={g.hub.error || undefined}>{g.hub.error || L("App 无法连接这个 Hub。", "The app can’t connect to this Hub.")}</span>
+                  <span className="err" title={g.hub.error || undefined}>{hubErrorText(g.hub.error)}</span>
                 </div>
               ) : g.rows.length === 0 ? (
                 <div className="app-empty-note">{L("这个 Hub 上还没有节点。", "No nodes on this Hub yet.")}</div>

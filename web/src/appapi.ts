@@ -1,4 +1,5 @@
 import type { Agent, AuditEntry, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
+import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 export interface Hub {
@@ -191,6 +192,16 @@ export function isTransient(e: unknown): boolean {
     return /deadline exceeded|timed? ?out|connection (refused|reset)|no such host|EOF/i.test(e.message);
   }
   return e instanceof TypeError; // fetch itself failed
+}
+
+/** A hub's status error (raw text from the App backend) for people. The
+ *  raw text stays available as a tooltip. */
+export function hubErrorText(raw?: string): string {
+  if (!raw) return L("App 无法连接这个 Hub。", "The app can’t connect to this Hub.");
+  if (/keychain|token|unauthori|permission|revoked/i.test(raw)) {
+    return L("这台设备在这个 Hub 上的凭据失效了，到「设置 → Hub」重新添加。", "This device's credentials for this hub no longer work. Add the hub again in Settings → Hubs.");
+  }
+  return L("暂时连不上这个 Hub，或者它响应太慢。会自动重试。", "Can't reach this hub right now, or it is answering too slowly. It retries by itself.");
 }
 
 export function errorMessage(e: unknown): string {

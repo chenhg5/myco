@@ -6,6 +6,7 @@ import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { L, locale } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
+import { RowsSkeleton } from "@/app/Skeleton";
 
 export function roleLabel(r: MemberRole): string {
   if (r === "owner") return L("所有者", "Owner");
@@ -109,7 +110,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
 
       <section className="app-setting-card app-members">
         <ErrorText error={error} />
-        {members === null && !error && <div className="app-small-note">{L("正在加载…", "Loading…")}</div>}
+        {members === null && !error && <RowsSkeleton rows={2} className="is-flat" />}
         {members?.map((m) => (
           <div key={m.id} className="app-member-row">
             <span className="app-member-avatar">{(m.display_name || m.name).slice(0, 1).toUpperCase()}</span>
