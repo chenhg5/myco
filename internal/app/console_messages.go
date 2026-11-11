@@ -470,7 +470,9 @@ func (s *MessageService) BetweenSince(ctx context.Context, sc Scope, a, b domain
 	if !sc.Allows(a, b) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "you can only read exchanges your own nodes take part in")
 	}
-	if limit <= 0 || limit > 500 {
+	// The HTTP handler asks for one extra row to determine whether more
+	// than 500 changes exist. Keep that sentinel row intact.
+	if limit <= 0 || limit > 501 {
 		limit = 500
 	}
 	return s.messages.ListBetweenSince(ctx, a, b, since, limit)
