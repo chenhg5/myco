@@ -3,7 +3,7 @@ import { ver } from "./nodes";
 import { X } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, cliName, kindLabel, nodeIcon, osInfo } from "@/app/nodes";
+import { agentKind, canManage, cliName, kindLabel, nodeIcon, osInfo, nodeName } from "@/app/nodes";
 import { NodePicker } from "@/app/NodePicker";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { stateMeta } from "@/components/status";
@@ -90,7 +90,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
   const spawners = machineNode?.allow_from || [];
   const anySpawner = spawners.length === 0 || spawners.includes("*");
   const mayManage = !!machineNode && canManage(hub, machineNode.owner_id);
-  const nameOf = (n: string) => hub.overview?.agents.find((x) => x.agent.name === n)?.agent.display_name || n;
+  const nameOf = (n: string) => { const x = hub.overview?.agents.find((y) => y.agent.name === n); return x ? nodeName(x.agent, hub) : n; };
   const openAllow = () => {
     setAllowFrom(spawners);
     setError(null);
@@ -208,11 +208,11 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
                       type="button"
                       className={cn("app-row", r.st.state === "offline" && "offline")}
                       onClick={() => onOpenNode(r)}
-                      title={a.display_name || a.name}
+                      title={a.name}
                     >
                       <span className="app-row-icon"><Icon /></span>
                       <span className="app-row-main">
-                        <span className="app-row-title">{a.display_name || a.name}</span>
+                        <span className="app-row-title">{nodeName(a, hub)}</span>
                         <span className="app-row-sub">
                           <span className={cn("dot", r.st.state)} />
                           <span>{state.label}</span>

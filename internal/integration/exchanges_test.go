@@ -176,3 +176,18 @@ func TestUpdatedSince(t *testing.T) {
 		t.Fatal("exchanges since need a console credential")
 	}
 }
+
+// A pulled message names its sender as the app shows it.
+func TestPullCarriesSenderDisplayName(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	lead := h.client(h.register(api.RegisterRequest{Name: "lead", DisplayName: "Lead · Studio Mac"}))
+	box := h.client(h.register(api.RegisterRequest{Name: "box"}))
+	if _, err := lead.Send(c, api.SendRequest{To: "box", Type: "task", Body: "hi"}, false); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := box.Pull(c, 1, 0)
+	if err != nil || len(msgs) != 1 || msgs[0].FromDisplay != "Lead · Studio Mac" {
+		t.Fatalf("%v %+v", err, msgs)
+	}
+}

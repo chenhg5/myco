@@ -202,7 +202,7 @@ const state = {
             { name: "review", summary: "审查 Go 和 TypeScript 的改动，指出问题和风险", examples: ["帮我看下 PR 128", "这个分支能合吗"] },
             { name: "release", summary: "写发布说明、打 tag、发版" },
           ],
-          binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco" }, session_in_use: true,
+          binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco", session_id: "01a1-pm-session" }, session_in_use: true,
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
         }),
         makeAgent({
@@ -1356,7 +1356,7 @@ const server = http.createServer(async (req, res) => {
 
       const model = typeof body.model === "string" ? body.model.trim() : "";
       const osLabel = { darwin: "macOS", linux: "Linux", windows: "Windows", cloud: "云端" }[machine.os] || machine.os;
-      const agent = makeAgent({
+      const agent = makeAgent({ ...(typeof body.display_name === "string" && body.display_name ? { display_name: body.display_name } : {}),
         name,
         description: typeof body.description === "string" ? body.description : "",
         kind: "agent",

@@ -9,7 +9,7 @@ import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
 import { ErrorText } from "@/app/dialogs";
 import type { AgentRow } from "@/app/types";
-import { groupsOf, isMe, tagsOf } from "@/app/nodes";
+import { groupsOf, isMe, tagsOf, nodeName } from "@/app/nodes";
 import { parseExecResult } from "@/app/Markdown";
 import { cn, timeAgo } from "@/lib/utils";
 import { summarize } from "@/app/summary";
@@ -305,7 +305,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
       return isMe(name, h) ? L("你", "You") : name.slice(CONSOLE.length);
     }
     const row = rows.find((r) => r.hub.id === hubId && r.st.agent.name === name);
-    return row?.st.agent.display_name || name;
+    return row ? nodeName(row.st.agent, row.hub) : name;
   };
 
   const parties = (r: ConversationRow): string => {

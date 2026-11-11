@@ -212,3 +212,41 @@ export function canManage(hub: HubOverview | undefined, ownerId?: string): boole
   if (!me) return true; // hubs without members: every app is the admin
   return me.can_manage || (!!me.member && !!ownerId && ownerId === me.member.id);
 }
+
+/** The runner found the node's session open elsewhere (a terminal, an editor,
+ *  a desktop app) and leaves it alone: its messages wait. */
+export function sessionBusy(st: { state: string; session_in_use?: boolean; receiving?: string }): boolean {
+  return st.state !== "offline" && !!st.session_in_use && st.receiving !== "session";
+}
+
+/** The state shown for a node: a busy session reads as such, not "Working". */
+export function stateLabel(st: { state: string; session_in_use?: boolean; receiving?: string }, label: string): { dot: string; label: string } {
+  return sessionBusy(st) ? { dot: "pending", label: L("会话被占用", "Session in use") } : { dot: st.state, label };
+}
+
+/**
+ * What a node is called in the App: its display name, or else one made from
+ * what it is (CLI · machine · folder, e.g. "Codex · Studio Mac · myco"), so
+ * a node joined with a generated name still reads clearly. The node's own
+ * name is what agents and the CLI use; it stays visible in its details.
+ */
+export function nodeName(a: Agent, hub?: HubOverview): string {
+  if (a.display_name) return a.display_name;
+  const dir = a.binding?.workdir;
+  if (!a.machine_id || !dir || (a.kind && a.kind !== "agent" && a.kind !== "shell")) return a.name;
+  const machine = hub ? machinesOfHub(hub).find((m) => m.id === a.machine_id) : undefined;
+  // A name someone chose ("mac-exec", "docs-claude") stays; one made up
+  // when the node joined (host name, CLI, a random suffix) is replaced.
+  if (!generatedName(a.name, machine?.hostname)) return a.name;
+  const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
+  const parts = [a.runtime?.cli || a.binding.harness ? cliName(a) : "", machine?.name, folder === "~" ? "" : folder].filter(Boolean);
+  return parts.length >= 2 ? parts.join(" · ") : a.name;
+}
+
+/** A node name made up by `myco join` or a spawn: it starts with the
+ *  machine's host name, or ends in the CLI and a short hex id. */
+function generatedName(name: string, hostname?: string): boolean {
+  const slug = (hostname || "").toLowerCase().replace(/\.local$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (slug.length >= 4 && name.toLowerCase().startsWith(slug)) return true;
+  return /-(claude|codex|gemini|cursor|opencode|pi|kiro|exec|shell)-[0-9a-f]{3,}$/i.test(name);
+}

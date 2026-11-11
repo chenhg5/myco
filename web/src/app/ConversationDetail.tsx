@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Papercli
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { cliName, isMe, personLabel } from "@/app/nodes";
+import { canManage, cliName, isMe, machineOfRow, personLabel, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -101,7 +101,7 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, showBack = true }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true }: {
   target: ConversationTarget;
   rows: AgentRow[];
   now: number;
@@ -111,6 +111,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   showBack?: boolean;
   // Starts a new conversation of yours with the agent (from a read-only thread).
   onNewConversation: (hubId: string, agent: string) => void;
+  /** Opens your conversation with another node (a copy just made). */
+  onOpen?: (hubId: string, agent: string, peer: string) => void;
 }) {
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -131,7 +133,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
   const agent = row?.st.agent;
-  const agentName = agent?.display_name || target.agent;
+  const agentName = agent && row ? nodeName(agent, row.hub) : target.agent;
   const cli = agent ? cliName(agent) : "";
   const model = agent?.runtime?.model;
 
@@ -268,7 +270,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     : [];
   const stopped = lastTask?.status === "failed" && lastTask.error === STOPPED;
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
-  const state = openTask
+  const busy = !!row && sessionBusy(row.st);
+  const state = busy
+    ? { dot: "pending", label: L("会话被占用", "Session in use") }
+    : openTask
     ? { dot: "working", label: L("处理中", "Working") }
     : stopped
       ? { dot: "idle", label: L("已停止", "Stopped") }
@@ -280,10 +285,45 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const steerOn = steerMode && !!openTask;
   // The runner found the agent's session open elsewhere (a terminal, an
   // editor, the Codex app): it waits and retries rather than write into it.
-  const waitingReason = openTask && row?.st.session_in_use && row.st.receiving !== "session"
-    ? L("这个会话正开在别处（终端、编辑器或 Codex / Claude 桌面版），myco 不会同时写进去，每 2 分钟重试一次。关掉那边的会话，就会开始处理。",
-      "This session is open somewhere else (a terminal, an editor, or the Codex / Claude desktop app). myco won't write into it at the same time and retries every 2 minutes. Close it there and the task starts.")
+  const waitingReason = openTask && busy
+    ? L("会话正开在别处（终端、编辑器或桌面版），等它空出来…", "The session is open elsewhere (a terminal, an editor or a desktop app); waiting until it is free…")
     : undefined;
+
+  // Busy elsewhere: a copy of the session (a new node on the same machine
+  // and folder) can take the work now; the original stays as it is.
+  const machine = row ? machineOfRow(row) : undefined;
+  const forkable = !!agent && (agent.binding.harness === "claude" || agent.binding.harness === "codex") &&
+    !!agent.binding.session_id && !!agent.binding.workdir && !!machine?.can_spawn && canManage(row?.hub, machine?.owner_id);
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState<unknown>(null);
+  const copyAndContinue = async () => {
+    if (!agent || !machine || !row) return;
+    setCopying(true);
+    setCopyError(null);
+    try {
+      const names = new Set((row.hub.overview?.agents || []).map((x) => x.agent.name));
+      let n = 2;
+      while (names.has(`${agent.name}-${n}`)) n++;
+      const r = await appApi.spawn(target.hubId, machine.id, {
+        cli: agent.binding.harness as "claude" | "codex", dir: agent.binding.workdir || "", fork_from: agent.binding.session_id,
+        name: `${agent.name}-${n}`, description: agent.description || undefined,
+        display_name: `${nodeName(agent, row.hub)} ${L("副本", "copy")}`,
+        ...(agent.runtime?.access ? { access: agent.runtime.access } : {}),
+      });
+      const copy = r.agent || `${agent.name}-${n}`;
+      // The waiting task moves to the copy.
+      if (openTask) {
+        await appApi.stop(target.hubId, openTask.id).catch(() => {});
+        await appApi.sendMessage(target.hubId, { to: copy, body: openTask.body });
+      }
+      const me = row.hub.me?.member ? CONSOLE_PREFIX + row.hub.me.member.name : target.peer || "";
+      onOpen?.(target.hubId, copy, target.peer || me);
+    } catch (e) {
+      setCopyError(e);
+    } finally {
+      setCopying(false);
+    }
+  };
 
   // A thread you take no part in (two nodes working together) is only
   // shown: writing into it would land in their conversation, not yours.
@@ -309,7 +349,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const nameOf = (from: string): string => {
     if (isConsole(from)) return personLabel(from, row?.hub);
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
-    return r?.st.agent.display_name || from;
+    return r ? nodeName(r.st.agent, r.hub) : from;
   };
 
   // The thread a message continues in the exchange view: the latest one you
@@ -565,6 +605,26 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
       ) : (
       <div className="conv-compose">
+        {busy && (
+          <div className="conv-busy">
+            <span className="dot pending" />
+            <span className="conv-busy-text">
+              {openTask
+                ? L("这个会话正开在别处，任务在等它空出来。", "This session is open somewhere else; the task waits until it is free.")
+                : L("这个会话正开在别处（终端、编辑器或桌面版），现在发的消息要等它空出来才会处理。", "This session is open somewhere else (a terminal, an editor or a desktop app); messages wait until it is free.")}
+            </span>
+            {forkable && onOpen && (
+              <button type="button" className="conv-steer-btn" disabled={copying} onClick={() => void copyAndContinue()}
+                title={L("复制这个会话成一个新节点（同一台机器、同一个目录），在副本里接着做；原来的会话不动", "Copy this session into a new node (same machine and folder) and carry on there; the original session is left alone")}>
+                {copying ? L("正在复制…", "Copying…") : openTask ? L("复制一份接着做", "Continue in a copy") : L("复制一份来对话", "Talk to a copy")}
+              </button>
+            )}
+            {openTask && (
+              <button type="button" className="conv-steer-btn" onClick={() => void stop(openTask)}>{L("停止", "Stop")}</button>
+            )}
+          </div>
+        )}
+        {busy && <ErrorText error={copyError} />}
         {steerOn && (
           <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}

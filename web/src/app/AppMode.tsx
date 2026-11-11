@@ -578,6 +578,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   showBack={false}
                   onBack={closeConversation}
                   onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
+                  onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
                 />
               ) : (
                 <div className="conv-split-empty">
@@ -594,6 +595,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             now={now}
             onBack={closeConversation}
             onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
+                  onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
           />
         ) : (
           <div className="app-scroll">

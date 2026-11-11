@@ -3,7 +3,7 @@ import { IconPrompt } from "@/components/icons";
 import { appApi, type Hub } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind } from "@/app/nodes";
+import { agentKind, nodeName } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
           hubId: r.hub.id,
           hubName: byHub.get(r.hub.id)?.name || r.hub.name,
           name: a.name,
-          label: `${a.display_name || a.name}${shell ? L("（Shell）", " (Shell)") : ""}${r.st.state === "offline" ? L("（离线）", " (offline)") : ""}`,
+          label: `${nodeName(a, r.hub)}${shell ? L("（Shell）", " (Shell)") : ""}${r.st.state === "offline" ? L("（离线）", " (offline)") : ""}`,
           shell,
           offline: r.st.state === "offline",
         };

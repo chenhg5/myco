@@ -47,12 +47,12 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 	case fromMember:
 		fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from %s, another member of this network, not your owner (your owner is %s), writing in the myco app.\n", self, m.Type, person, p.Owner)
 	case fromOwnAgent:
-		fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %q, another agent of your owner (%s).\n", self, m.Type, m.From, person)
+		fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %s, another agent of your owner (%s).\n", self, m.Type, senderName(m), person)
 	default:
 		if person != "" {
-			fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %q, which belongs to %s (not your owner).\n", self, m.Type, m.From, person)
+			fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %s, which belongs to %s (not your owner).\n", self, m.Type, senderName(m), person)
 		} else {
-			fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %q.\n", self, m.Type, m.From)
+			fmt.Fprintf(&b, "[myco] You are agent %q on a myco network. You received a %s from agent %s.\n", self, m.Type, senderName(m))
 		}
 	}
 	fmt.Fprintf(&b, "message_id: %s\nthread_id: %s\n", m.ID, m.ThreadID)
@@ -180,4 +180,14 @@ func withProject(prompt, section string) string {
 		return prompt[:i] + section + prompt[i:]
 	}
 	return prompt + section
+}
+
+// senderName is the sending agent's name, quoted, and what the app calls it
+// when that differs: the agent addresses it by name and can tell its person
+// which node that is.
+func senderName(m api.Message) string {
+	if m.FromDisplay != "" && m.FromDisplay != m.From {
+		return fmt.Sprintf("%q (shown as %q in the app)", m.From, m.FromDisplay)
+	}
+	return fmt.Sprintf("%q", m.From)
 }

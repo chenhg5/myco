@@ -8,7 +8,7 @@ import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
 import type { Project, ProjectDoc, ProjectMember } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, canManage, isMe, nodeIcon } from "@/app/nodes";
+import { agentKind, canManage, isMe, nodeIcon, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { Markdown } from "@/app/Markdown";
 import { NodePicker } from "@/app/NodePicker";
@@ -166,7 +166,10 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   const nameOf = (n?: string) => {
     if (!n) return "";
     if (n.startsWith("@console:")) return isMe(n, hub) ? L("你", "You") : n.slice(9);
-    return rowOf(n)?.st.agent.display_name || p.members.find((m) => m.name === n)?.agent?.display_name || n;
+    const row = rowOf(n);
+    if (row) return nodeName(row.st.agent, row.hub);
+    const a = p.members.find((m) => m.name === n)?.agent;
+    return a ? nodeName(a, hub) : n;
   };
   const stateLabel: Record<string, string> = { queued: L("排队中", "Queued"), working: L("处理中", "Working"), failed: L("失败", "Failed"), done: L("已完成", "Done") };
   const hub = hubRows[0]?.hub;
@@ -250,7 +253,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
                   <span className="app-row-icon"><Icon /></span>
                   <span className="app-row-main">
                     <span className="app-row-titleline">
-                      <span className="app-row-title">{a?.display_name || m.name}</span>
+                      <span className="app-row-title">{a ? nodeName(a, hub) : m.name}</span>
                       {m.role === "coordinator" && <span className="app-label group">{L("协调者", "Coordinator")}</span>}
                       {st && <span className={cn("dot", st)} title={stateMeta[st].label} />}
                     </span>
@@ -514,7 +517,7 @@ function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave
 }) {
   const [note, setNote] = useState(member.note || "");
   const [role, setRole] = useState(member.role);
-  const name = member.agent?.display_name || member.name;
+  const name = member.agent ? nodeName(member.agent) : member.name;
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={name}>
       <label className="app-field">

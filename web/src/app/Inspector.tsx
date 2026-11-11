@@ -8,7 +8,7 @@ import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
-} from "@/app/nodes";
+  sessionBusy, stateLabel, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
@@ -49,7 +49,7 @@ function MessageRows({ row, now, onThread }: {
     .filter((m) => (seen.has(m.thread_id) ? false : (seen.add(m.thread_id), true)))
     .slice(0, 6);
   if (!msgs.length) return <div className="app-empty-note">{L("你还没有和它对话", "No conversation with it yet")}</div>;
-  const label = (n: string) => (isConsole(n) ? personLabel(n, row.hub) : n === name ? (row.st.agent.display_name || n) : n);
+  const label = (n: string) => (isConsole(n) ? personLabel(n, row.hub) : n === name ? nodeName(row.st.agent, row.hub) : n);
   return (
     <>
       {msgs.map((m) => (
@@ -161,7 +161,7 @@ function PeerRows({ row, now, onPeer }: {
   if (error && !peers) return <ErrorText error={error} />;
   if (!peers) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!peers.length) return <div className="app-empty-note">{L("还没有和其他节点的往来", "No exchanges with other nodes yet")}</div>;
-  const nameOf = (n: string) => (row.hub.overview?.agents || []).find((x) => x.agent.name === n)?.agent.display_name || n;
+  const nameOf = (n: string) => { const x = (row.hub.overview?.agents || []).find((y) => y.agent.name === n); return x ? nodeName(x.agent, row.hub) : n; };
   return (
     <>
       {peers.map((p) => (
@@ -661,14 +661,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   return (
     <>
       <div className="app-inspector-backdrop" onClick={onClose} />
-      <aside className="app-inspector" role="dialog" aria-label={L(`${ag.display_name || ag.name} 详情`, `${ag.display_name || ag.name} details`)}>
+      <aside className="app-inspector" role="dialog" aria-label={L(`${nodeName(ag, row.hub)} 详情`, `${nodeName(ag, row.hub)} details`)}>
         <div className="app-inspector-head">
           <span className="app-row-icon"><Icon /></span>
           <div className="titles">
-            <h2 title={ag.display_name || ag.name}>{ag.display_name || ag.name}</h2>
+            <h2 title={ag.name}>{nodeName(ag, row.hub)}</h2>
           </div>
-          <span className={cn("app-pill", pillClass[row.st.state])}>
-            <span className={cn("dot", row.st.state)} />{state.label}
+          <span className={cn("app-pill", sessionBusy(row.st) ? pillClass.pending : pillClass[row.st.state])}>
+            <span className={cn("dot", stateLabel(row.st, state.label).dot)} />{stateLabel(row.st, state.label).label}
           </span>
           <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>
             <X />

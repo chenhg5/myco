@@ -1301,7 +1301,25 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, messageList(msgs))
+	out := messageList(msgs)
+	// The sender's display name, so the agent can tell the person what the
+	// app calls it.
+	names := map[string]string{}
+	for i := range out.Messages {
+		from := out.Messages[i].From
+		if strings.HasPrefix(from, "@") {
+			continue
+		}
+		dn, ok := names[from]
+		if !ok {
+			if ag, err := s.agents.Get(r.Context(), from); err == nil {
+				dn = ag.DisplayName
+			}
+			names[from] = dn
+		}
+		out.Messages[i].FromDisplay = dn
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // threadAny serves participants (agent token) and the admin (any thread).

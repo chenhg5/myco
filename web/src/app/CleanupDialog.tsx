@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { nodeName } from "@/app/nodes";
 import { AlertTriangle } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
 import type { Agent } from "@/api";
@@ -94,7 +95,7 @@ export function CleanupDialog({ open, onOpenChange, hubs, defaultHub, onDone }: 
             ) : (
               preview.map((a) => (
                 <div className="app-kv" key={a.name}>
-                  <span className="app-kv-label">{a.display_name || a.name}</span>
+                  <span className="app-kv-label">{nodeName(a)}</span>
                   <span className="app-kv-value">{a.last_seen_at ? L(`${timeAgo(a.last_seen_at, now)}在线`, `seen ${timeAgo(a.last_seen_at, now)}`) : L("从未上线", "never seen")}</span>
                 </div>
               ))

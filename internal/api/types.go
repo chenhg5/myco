@@ -151,7 +151,10 @@ type Message struct {
 	Project string `json:"project,omitempty"`
 	// FromOwner is the person behind the sender: the member who wrote it in
 	// the app, or the sending agent's owner (member name).
-	FromOwner   string       `json:"from_owner,omitempty"`
+	FromOwner string `json:"from_owner,omitempty"`
+	// FromDisplay is the sending node's display name, when it has one: what
+	// people call it (inbox pulls, from v0.18.36). Address it by From.
+	FromDisplay string       `json:"from_display,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).

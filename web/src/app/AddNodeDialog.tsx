@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Agent } from "@/api";
 import {
   AlertTriangle, Check, ChevronDown, Link2, RefreshCw,
 } from "lucide-react";
@@ -11,7 +12,7 @@ import type { RuntimeAccess } from "@/api";
 import { CopyButton } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
-import { agentKind } from "@/app/nodes";
+import { agentKind, nodeName } from "@/app/nodes";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { cn, timeAgo } from "@/lib/utils";
 import { L } from "@/lib/i18n";
@@ -89,6 +90,14 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
   onMessage?: (hubId: string, name: string) => void;
   onJoined: (hubId: string, agent: string) => void;
 }) {
+  // A node's name as the App shows it (its display name, or CLI · machine ·
+  // folder), when the hub already lists it; else what it is called.
+  const named = (hid: string | undefined, n: string, guess?: Partial<Agent>) => {
+    const h = hubsOv?.find((x) => x.id === hid);
+    const a = h?.overview?.agents.find((x) => x.agent.name === n)?.agent;
+    if (a && h) return nodeName(a, h);
+    return guess && h ? nodeName({ name: n, kind: "agent", ...guess } as Agent, h) : n;
+  };
   const [tab, setTab] = useState<Tab>("local");
   const [hubId, setHubId] = useState("");
   const [machineId, setMachineId] = useState("");
@@ -337,7 +346,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             <>
               <div className="app-success">
                 <Check />
-                <span>{L(`已加入为 ${joined.agent}`, `Joined as ${joined.agent}`)}</span>
+                <span>{L(`已加入为 ${named(hubId, joined.agent)}`, `Joined as ${named(hubId, joined.agent)}`)}</span>
               </div>
               {joined.runner !== "running" && (
                 <div className="app-notice">
@@ -408,9 +417,9 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                           <span className="app-row-title">{s.title || dirName(s.workdir)}</span>
                           <span className="app-row-sub">
                             {joinedElsewhere ? (
-                              <span>{L(`已加入另一个 Hub · ${s.joined?.agent}`, `Joined another Hub · ${s.joined?.agent}`)}</span>
+                              <span>{L(`已加入另一个 Hub · ${named(s.joined?.hub, s.joined?.agent || "")}`, `Joined another Hub · ${named(s.joined?.hub, s.joined?.agent || "")}`)}</span>
                             ) : joinedHere ? (
-                              <span>{L(`已加入 · ${s.joined?.agent}`, `Joined · ${s.joined?.agent}`)}</span>
+                              <span>{L(`已加入 · ${named(s.joined?.hub, s.joined?.agent || "")}`, `Joined · ${named(s.joined?.hub, s.joined?.agent || "")}`)}</span>
                             ) : (
                               <>
                                 <span className="txt">{s.workdir}</span>
@@ -519,7 +528,10 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           <>
             <div className="app-success">
               <Check />
-              <span>{L(`${result.agent} 已在 ${machine?.name || "那台机器"} 上启动`, `${result.agent} is running on ${machine?.name || "that machine"}`)}</span>
+              <span>{(() => {
+                const n = named(hubId, result.agent, { machine_id: machine?.id, binding: { harness: result.cli, workdir: result.workdir } as Agent["binding"] });
+                return L(`${n} 已在 ${machine?.name || "那台机器"} 上启动`, `${n} is running on ${machine?.name || "that machine"}`);
+              })()}</span>
             </div>
             <div className="app-list app-spawned">
               <div className="app-kv"><span className="app-kv-label">{L("类型", "Type")}</span><span className="app-kv-value">{CLIS.find((c) => c.value === result.cli)?.label || result.cli || "—"}</span></div>

@@ -10,7 +10,7 @@ import type { AgentRow, Filters, NodeKind } from "@/app/types";
 import {
   CLOUD_FILTER, agentKind, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, tagsOf,
   parseMachineFilter,
-} from "@/app/nodes";
+  stateLabel, nodeName } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
@@ -62,12 +62,12 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
       className={cn("app-row", row.st.state === "offline" && "offline", highlight && "is-new")}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      title={a.display_name || a.name}
+      title={a.name}
     >
       <span className="app-row-icon"><Icon /></span>
       <span className="app-row-main">
         <span className="app-row-titleline">
-          <span className="app-row-title">{a.display_name || a.name}</span>
+          <span className="app-row-title">{nodeName(a, row.hub)}</span>
           {a.visibility === "private" && (
             <span className="app-private" title={L("仅自己：只有主人和主人的 agent 能找到它、给它派活", "Private: only its owner and the owner's agents can find it and give it tasks")}>
               <Lock aria-hidden />{L("仅自己", "Private")}
@@ -78,8 +78,8 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
           {tagsOf(a).length > 3 && <span className="app-label">+{tagsOf(a).length - 3}</span>}
         </span>
         <span className="app-row-sub">
-          <span className={cn("dot", row.st.state)} />
-          <span>{state.label}</span>
+          <span className={cn("dot", stateLabel(row.st, state.label).dot)} />
+          <span>{stateLabel(row.st, state.label).label}</span>
           <span className="sep">·</span>
           <span className="txt">{cliName(a)}</span>
           {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}

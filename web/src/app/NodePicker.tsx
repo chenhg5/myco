@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import type { Agent } from "@/api";
-import { agentKind, nodeIcon } from "@/app/nodes";
+import { agentKind, nodeIcon, nodeName } from "@/app/nodes";
 import { cn } from "@/lib/utils";
 import { L } from "@/lib/i18n";
 
@@ -33,7 +33,7 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
     else if (!listedOnly && NAME.test(query) && !value.includes(query)) onChange([...value, query]);
     setQ("");
   };
-  const label = (name: string) => byName.get(name)?.display_name || name;
+  const label = (name: string) => { const n = byName.get(name); return n ? nodeName(n) : name; };
 
   return (
     <div className={cn("app-picker", disabled && "is-disabled")}>
@@ -78,7 +78,7 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
             >
               <span className="app-picker-check">{on && <Check />}</span>
               <Icon />
-              <span className="app-picker-name">{n.display_name || n.name}</span>
+              <span className="app-picker-name">{nodeName(n)}</span>
               {n.display_name && <span className="app-picker-sub mono">{n.name}</span>}
               <span className="app-picker-kind">{agentKind(n) === "human" ? L("人", "Human") : ""}</span>
             </button>

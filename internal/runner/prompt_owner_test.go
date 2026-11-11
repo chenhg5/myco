@@ -42,3 +42,15 @@ func TestPromptKnowsWhoIsBehindAMessage(t *testing.T) {
 		t.Errorf("peer of another owner:\n%s", got)
 	}
 }
+
+func TestPromptNamesTheSenderAsTheAppShowsIt(t *testing.T) {
+	p := DefaultPrompt{Owner: "glenn"}
+	got := p.Build("me", api.Message{ID: "m1", Type: "task", From: "chickendemacbook-codex-1120", FromOwner: "glenn", FromDisplay: "Codex · Studio Mac · loops"}, nil)
+	if !strings.Contains(got, `from agent "chickendemacbook-codex-1120" (shown as "Codex · Studio Mac · loops" in the app)`) {
+		t.Fatalf("prompt:\n%s", got)
+	}
+	got = p.Build("me", api.Message{ID: "m2", Type: "task", From: "lead"}, nil)
+	if !strings.Contains(got, `from agent "lead".`) {
+		t.Fatalf("without a display name:\n%s", got)
+	}
+}
