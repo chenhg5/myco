@@ -278,9 +278,9 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `codex` | Native: stable |
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | Preset: stable |
 | [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | Preset: stable |
-| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | Preset: experimental |
+| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP: experimental |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP: experimental |
-| [OpenCode](https://opencode.ai) | `opencode` | `opencode` | Preset: experimental |
+| [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP: experimental |
 
 - **Native**: a dedicated adapter. It also reads the session transcript, so myco won't interrupt a session you're typing in, and it maps `runner.access` (`readonly` / `workspace` / `full`) to the CLI's own permission flags.
 - **Preset**: a built-in command-line template. *Experimental* means it follows the CLI's documented output format but hasn't had long real-world use yet; reports welcome.

@@ -276,9 +276,9 @@ sequenceDiagram
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `codex` | 原生适配：稳定 |
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | 预设：稳定 |
 | [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | 预设：稳定 |
-| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | 预设：实验性 |
+| [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP：实验性 |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP：实验性 |
-| [OpenCode](https://opencode.ai) | `opencode` | `opencode` | 预设：实验性 |
+| [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP：实验性 |
 
 - **原生适配**：专门写的适配器。它还会读会话记录，所以你正在用的会话 myco 不会去打断；并且会把 `runner.access`（`readonly` / `workspace` / `full`）翻译成该 CLI 自己的权限参数。
 - **预设**：内置的命令行模板。**实验性**表示按该 CLI 文档中的输出格式实现，但还没有经过长期的真实使用，欢迎反馈。

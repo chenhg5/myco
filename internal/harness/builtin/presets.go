@@ -6,9 +6,8 @@ import (
 )
 
 // Presets are TemplateSpecs for CLIs without a dedicated adapter. pi and
-// kiro follow formats used in production by chenhg5/bot-connect; cursor and
-// opencode are best-effort and marked experimental. Any field can be
-// overridden per agent with runner.template in its config.
+// kiro follow formats used in production by chenhg5/bot-connect. Any field
+// can be overridden per agent with runner.template in its config.
 var Presets = map[string]harness.TemplateSpec{
 	"pi": {
 		Binary:     "pi",
@@ -35,29 +34,6 @@ var Presets = map[string]harness.TemplateSpec{
 		Error:       &harness.Extract{Path: "message", When: map[string]string{"type": "error"}},
 		Transcripts: []string{"~/.kiro/sessions/sess_%s/messages.jsonl"},
 	},
-	// experimental
-	"cursor": {
-		Binary:     "cursor-agent",
-		Args:       []string{"-p", "--output-format", "json", "{prompt}"},
-		ResumeArgs: []string{"-p", "--output-format", "json", "--resume", "{session}", "{prompt}"},
-		ModelArgs:  []string{"--model", "{model}"},
-		AccessArgs: map[harness.Access][]string{harness.AccessFull: {"--force"}},
-		Output:     "json",
-		Text:       &harness.Extract{Path: "result"},
-		Session:    &harness.Extract{Path: "session_id"},
-		Error:      &harness.Extract{Path: "result", When: map[string]string{"is_error": "true"}},
-	},
-	// experimental
-	"opencode": {
-		Binary:     "opencode",
-		Args:       []string{"run", "--format", "json", "{prompt}"},
-		ResumeArgs: []string{"run", "--format", "json", "--session", "{session}", "{prompt}"},
-		ModelArgs:  []string{"--model", "{model}"},
-		Output:     "jsonl",
-		Text:       &harness.Extract{Path: "part.text", When: map[string]string{"type": "text"}, Append: true},
-		Session:    &harness.Extract{Path: "sessionID"},
-		Error:      &harness.Extract{Path: "error.data.message"},
-	},
 }
 
 // ACPPresets are CLIs driven over the Agent Client Protocol, which reports
@@ -74,11 +50,59 @@ var ACPPresets = map[string]acp.Spec{
 		DirArgs: []string{"--include-directories", "{dir}"},
 		Login:   "run gemini once on this machine and sign in, or set GEMINI_API_KEY",
 	},
+	// Options go before the acp subcommand.
+	"cursor": {
+		Binary:    "cursor-agent",
+		Sub:       []string{"acp"},
+		ModelArgs: []string{"--model", "{model}"},
+		AccessArgs: map[harness.Access][]string{
+			harness.AccessFull: {"--force"},
+		},
+		DirArgs: []string{"--add-dir", "{dir}"},
+		Login:   "run cursor-agent login on this machine, or set CURSOR_API_KEY",
+	},
+	// opencode allows every tool unless configured to ask: below full
+	// access it asks, and myco answers from the access level.
+	"opencode": {
+		Binary:      "opencode",
+		Args:        []string{"acp"},
+		ModelConfig: "model",
+		AccessEnv: map[harness.Access][]string{
+			harness.AccessDefault:   {opencodeAsk},
+			harness.AccessReadonly:  {opencodeAsk},
+			harness.AccessWorkspace: {opencodeAsk},
+		},
+		Login: "run opencode auth login on this machine",
+	},
 }
+
+// opencodeAsk makes opencode ask before shell commands and edits.
+const opencodeAsk = `OPENCODE_CONFIG_CONTENT={"permission":{"bash":"ask","edit":"ask"}}`
 
 // legacyTemplates are how ACP presets were driven before ACP: an agent whose
 // config has runner.template still runs this way, its fields over these.
 var legacyTemplates = map[string]harness.TemplateSpec{
+	"cursor": {
+		Binary:     "cursor-agent",
+		Args:       []string{"-p", "--output-format", "json", "{prompt}"},
+		ResumeArgs: []string{"-p", "--output-format", "json", "--resume", "{session}", "{prompt}"},
+		ModelArgs:  []string{"--model", "{model}"},
+		AccessArgs: map[harness.Access][]string{harness.AccessFull: {"--force"}},
+		Output:     "json",
+		Text:       &harness.Extract{Path: "result"},
+		Session:    &harness.Extract{Path: "session_id"},
+		Error:      &harness.Extract{Path: "result", When: map[string]string{"is_error": "true"}},
+	},
+	"opencode": {
+		Binary:     "opencode",
+		Args:       []string{"run", "--format", "json", "{prompt}"},
+		ResumeArgs: []string{"run", "--format", "json", "--session", "{session}", "{prompt}"},
+		ModelArgs:  []string{"--model", "{model}"},
+		Output:     "jsonl",
+		Text:       &harness.Extract{Path: "part.text", When: map[string]string{"type": "text"}, Append: true},
+		Session:    &harness.Extract{Path: "sessionID"},
+		Error:      &harness.Extract{Path: "error.data.message"},
+	},
 	"gemini": {
 		Binary:     "gemini",
 		Args:       []string{"--output-format", "json", "-p", "{prompt}"},

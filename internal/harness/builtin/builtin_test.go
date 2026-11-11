@@ -63,11 +63,13 @@ func TestEveryHarnessBuildsWithItsMinimalOptions(t *testing.T) {
 }
 
 func TestPresetSpecsAreSane(t *testing.T) {
-	if len(Presets) != 4 {
-		t.Fatalf("presets = %d, want pi kiro cursor opencode", len(Presets))
+	if len(Presets) != 2 {
+		t.Fatalf("presets = %d, want pi kiro", len(Presets))
 	}
-	if _, ok := ACPPresets["gemini"]; !ok {
-		t.Fatal("gemini runs over ACP")
+	for _, name := range []string{"gemini", "cursor", "opencode"} {
+		if _, ok := ACPPresets[name]; !ok {
+			t.Errorf("%s runs over ACP", name)
+		}
 	}
 	for name, spec := range Presets {
 		if spec.Binary == "" || len(spec.Args) == 0 || len(spec.ResumeArgs) == 0 {

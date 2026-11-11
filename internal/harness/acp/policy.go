@@ -19,8 +19,9 @@ import (
 // Running myco itself (the agent's channel to reply, report progress and
 // delegate) is always allowed; other commands only with full access.
 type policy struct {
-	access harness.Access
-	dirs   []string // working directory and extra directories
+	access  harness.Access
+	dirs    []string // working directory and extra directories
+	refused *[]string
 }
 
 type permissionRequest struct {
@@ -37,6 +38,8 @@ func (p policy) answer(params json.RawMessage) map[string]any {
 	want := []string{"reject_once", "reject_always"}
 	if p.allows(req.ToolCall) {
 		want = []string{"allow_once", "allow_always"}
+	} else if p.refused != nil {
+		*p.refused = append(*p.refused, describe(req.ToolCall))
 	}
 	for _, kind := range want {
 		for _, o := range req.Options {
@@ -136,4 +139,15 @@ func isMyco(cmd string) bool {
 		}
 	}
 	return quote == 0
+}
+
+// describe names a call for the sender: the command, the file, or the title.
+func describe(t update) string {
+	if c := command(t); t.Kind == "execute" && c != "" {
+		return "`" + c + "`"
+	}
+	if len(t.Locations) > 0 && t.Locations[0].Path != "" {
+		return t.Kind + " " + t.Locations[0].Path
+	}
+	return t.Title
 }
