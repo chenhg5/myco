@@ -4043,8 +4043,6 @@ body.is-resizing {
 .app-project .app-group-title { margin: 0 2px 8px; font-size: 13px; }
 .app-project .app-group-title .name { font-size: 15px; font-weight: 600; color: var(--fg); }
 .app-project .app-group-note { font-size: 12.5px; }
-.app-project .app-group-action { font-size: 13px; }
-.app-project .app-group-action svg { width: 14px; height: 14px; }
 .app-project-titles h1 { font-size: 24px; }
 .app-project-goal { font-size: 14.5px; }
 .app-project-meta { font-size: 12.5px; }
