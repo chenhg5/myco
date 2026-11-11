@@ -279,17 +279,19 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | Preset: stable |
 | [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | Preset: stable |
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | Preset: experimental |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `gemini` | Preset: experimental |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP: experimental |
 | [OpenCode](https://opencode.ai) | `opencode` | `opencode` | Preset: experimental |
 
 - **Native**: a dedicated adapter. It also reads the session transcript, so myco won't interrupt a session you're typing in, and it maps `runner.access` (`readonly` / `workspace` / `full`) to the CLI's own permission flags.
 - **Preset**: a built-in command-line template. *Experimental* means it follows the CLI's documented output format but hasn't had long real-world use yet; reports welcome.
+- **ACP**: driven over the [Agent Client Protocol](https://agentclientprotocol.com), so the app shows every step live (thoughts, tool calls with output, edits). Permission requests are answered from `runner.access`; `myco` commands are always allowed.
 - **Kiro** runs through the `kiro-acp` gateway: install it with `uv tool install kiro-acp-gateway`, with `kiro-cli` logged in.
 
 Other ways to connect:
 
 | | How | Use it for |
 |---|---|---|
+| Any ACP agent | `--harness acp` with `runner.binary` and `runner.args` (e.g. `opencode` + `[acp]`) | CLIs that speak ACP, with the live view |
 | Any other CLI | `--harness template`: declare the command line and output format in the config | CLIs without a preset, no code needed |
 | Any command | `--harness shell`: the prompt arrives on stdin, stdout is the reply | Scripts and small tools |
 | Exec node | `--harness exec`: runs each task as a shell command (allow-listed senders and commands) | Remote commands, like ssh |

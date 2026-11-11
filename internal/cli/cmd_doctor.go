@@ -41,14 +41,21 @@ func harnessCommands() *Command {
 				if _, ok := builtin.Presets[n]; ok {
 					r.Kind = "preset"
 				}
+				if _, ok := builtin.ACPPresets[n]; ok {
+					r.Kind = "acp"
+				}
 				opts := harness.Options{Command: "true"}
 				if n == "template" {
 					r.Kind = "generic"
 					rows = append(rows, r)
 					continue
 				}
-				if n == "shell" || n == "exec" {
+				if n == "shell" || n == "exec" || n == "acp" {
 					r.Kind = "generic"
+				}
+				if n == "acp" {
+					rows = append(rows, r)
+					continue
 				}
 				if h, err := reg.New(n, opts); err == nil {
 					if c, ok := h.(harness.Checker); ok {

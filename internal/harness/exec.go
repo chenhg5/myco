@@ -45,8 +45,10 @@ type ProcessResult struct {
 
 const maxCapture = 8 << 20
 
-// Exec runs p, killing its whole process group when ctx is done.
-func Exec(ctx context.Context, p Process) (ProcessResult, error) {
+// Command prepares p (binary, arguments, directory, environment) in its own
+// process group: when ctx is done the group is interrupted, then killed.
+// Stdin, stdout and stderr are left for the caller.
+func Command(ctx context.Context, p Process) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, p.Binary, p.Args...)
 	cmd.Dir = p.Workdir
 	if p.CleanEnv {
@@ -54,6 +56,14 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	} else {
 		cmd.Env = append(filterEnv(os.Environ(), p.UnsetEnv), p.Env...)
 	}
+	setProcessGroup(cmd)
+	cmd.WaitDelay = interruptGrace + 2*time.Second
+	return cmd
+}
+
+// Exec runs p, killing its whole process group when ctx is done.
+func Exec(ctx context.Context, p Process) (ProcessResult, error) {
+	cmd := Command(ctx, p)
 	cmd.Stdin = strings.NewReader(p.Stdin)
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxCapture, maxCapture
@@ -70,8 +80,6 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		errLines = &lineTee{next: &stderr, fn: p.OnStderrLine}
 		cmd.Stderr = errLines
 	}
-	setProcessGroup(cmd)
-	cmd.WaitDelay = interruptGrace + 2*time.Second
 	err := cmd.Run()
 	if lines != nil {
 		lines.flush()
@@ -156,6 +164,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *limitedBuffer) String() string { return b.buf.String() }
+
+// Tail is the last n bytes of s, trimmed (for error messages).
+func Tail(s string, n int) string { return tail(s, n) }
 
 func tail(s string, n int) string {
 	s = strings.TrimSpace(s)

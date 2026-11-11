@@ -14,7 +14,7 @@ import (
 )
 
 // readmeHarnesses are the harnesses the README advertises.
-var readmeHarnesses = []string{"claude", "codex", "cursor", "exec", "gemini", "kiro", "opencode", "pi", "shell", "template"}
+var readmeHarnesses = []string{"acp", "claude", "codex", "cursor", "exec", "gemini", "kiro", "opencode", "pi", "shell", "template"}
 
 func TestRegistryHasEveryAdvertisedHarness(t *testing.T) {
 	got := Registry().Names()
@@ -30,6 +30,7 @@ func TestEveryHarnessBuildsWithItsMinimalOptions(t *testing.T) {
 	r := Registry()
 	opts := map[string]harness.Options{
 		"shell":    {Command: "cat"},
+		"acp":      {Binary: "some-agent", Args: []string{"acp"}},
 		"template": {Template: &harness.TemplateSpec{Binary: "x", Args: []string{"{prompt}"}}},
 	}
 	for _, name := range readmeHarnesses {
@@ -43,7 +44,7 @@ func TestEveryHarnessBuildsWithItsMinimalOptions(t *testing.T) {
 		}
 	}
 	// Generic harnesses refuse to start unconfigured.
-	for _, name := range []string{"shell", "template"} {
+	for _, name := range []string{"shell", "template", "acp"} {
 		if _, err := r.New(name, harness.Options{}); err == nil {
 			t.Errorf("New(%s) without config should fail", name)
 		}
@@ -62,8 +63,11 @@ func TestEveryHarnessBuildsWithItsMinimalOptions(t *testing.T) {
 }
 
 func TestPresetSpecsAreSane(t *testing.T) {
-	if len(Presets) != 5 {
-		t.Fatalf("presets = %d, want pi kiro cursor gemini opencode", len(Presets))
+	if len(Presets) != 4 {
+		t.Fatalf("presets = %d, want pi kiro cursor opencode", len(Presets))
+	}
+	if _, ok := ACPPresets["gemini"]; !ok {
+		t.Fatal("gemini runs over ACP")
 	}
 	for name, spec := range Presets {
 		if spec.Binary == "" || len(spec.Args) == 0 || len(spec.ResumeArgs) == 0 {
@@ -91,7 +95,7 @@ func TestPresetSpecsAreSane(t *testing.T) {
 		}
 	}
 	for name := range Experimental {
-		if _, ok := Presets[name]; !ok {
+		if Binary(name) == "" {
 			t.Errorf("experimental %q is not a preset", name)
 		}
 	}
@@ -134,7 +138,6 @@ func TestPresetsRunEndToEnd(t *testing.T) {
 		"pi":       `{"type":"session","id":"S1"}` + "\n" + `{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}`,
 		"kiro":     `{"type":"content","text":"hi"}` + "\n" + `{"type":"content","text":"there"}` + "\n" + `{"type":"done","session_id":"S1"}`,
 		"cursor":   `{"result":"hi","session_id":"S1","is_error":false}`,
-		"gemini":   `{"response":"hi","session_id":"S1"}`,
 		"opencode": `{"type":"step_start","sessionID":"S1"}` + "\n" + `{"type":"text","part":{"text":"hi"},"sessionID":"S1"}` + "\n" + `{"type":"text","part":{"text":"there"},"sessionID":"S1"}`,
 	}
 	want := map[string]string{"kiro": "hi\nthere", "opencode": "hi\nthere"}
@@ -210,7 +213,7 @@ func TestPresetUserOverride(t *testing.T) {
 		t.Fatalf("argv = %q", got)
 	}
 	// The override must not mutate the shared preset.
-	if Presets["gemini"].Binary != "gemini" {
-		t.Fatalf("preset mutated: %+v", Presets["gemini"])
+	if legacyTemplates["gemini"].Binary != "gemini" {
+		t.Fatalf("preset mutated: %+v", legacyTemplates["gemini"])
 	}
 }

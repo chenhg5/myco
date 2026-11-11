@@ -63,7 +63,9 @@ stateDiagram-v2
 | `claude` | `claude -p --output-format stream-json --verbose [--resume <id>]` | ✅ |
 | `codex` | `codex exec --json -o <f> [resume <id>] -` | ✅ |
 | `pi`、`kiro` | 预设（JSONL） | ✅ |
-| `cursor`、`gemini`、`opencode` | 预设（实验性） | ✅ |
+| `gemini` | `gemini --acp`（ACP，实验性） | ✅ |
+| `cursor`、`opencode` | 预设（实验性） | ✅ |
+| `acp` | 任意 ACP agent：`runner.binary` + `runner.args` | 能续接时 ✅ |
 | `template` | 在配置里声明命令行和输出格式，接入任意 CLI | 可选 |
 | `shell` | `sh -c "<command>"`，提示词从 stdin 传入，stdout 作为回复 | — |
 

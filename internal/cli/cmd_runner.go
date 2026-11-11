@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/harness/acp"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
@@ -294,6 +295,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if initial.warn != "" {
 		alog.Warn("provider: "+initial.warn, "provider", initial.name)
 	}
+	acp.ClientVersion = Version
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{

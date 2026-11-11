@@ -23,8 +23,8 @@ import (
 
 // spawnBinary is the executable each spawnable CLI needs on PATH.
 func spawnBinary(cli string) string {
-	if p, ok := builtin.Presets[cli]; ok {
-		return p.Binary
+	if b := builtin.Binary(cli); b != "" {
+		return b
 	}
 	return cli // claude, codex
 }
