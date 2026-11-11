@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, SquarePen, Upload, Users } from "lucide-react";
+import { ArrowLeftRight, Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
+import { IconNewChat } from "@/components/icons";
 import { appApi, isOldHub, type RecentItem } from "@/appapi";
 import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
@@ -202,7 +203,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           </>
         )}
         <span className="app-project-progress-actions">
-          <button type="button" className="app-group-action" onClick={() => onNewConversation()} disabled={p.archived}><SquarePen />{L("发任务", "New task")}</button>
+          <button type="button" className="app-group-action" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
         </span>
       </div>
 

@@ -83,10 +83,10 @@
 }
 
 /* Line icons: one weight everywhere, lighter than the library's 2px so
-   they sit with 13px text. */
+   they sit with 13px text (about 1.2px at 16px, like components/icons). */
 .app-shell svg.lucide,
 .app-portal svg.lucide {
-  stroke-width: 1.5;
+  stroke-width: 1.75;
 }
 
 .app-mono,
@@ -406,8 +406,8 @@ a.app-btn {
   border-radius: 6px;
 }
 .app-btn-plain svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .app-btn-plain:hover {
   background: var(--nav-hover);
@@ -3634,8 +3634,8 @@ body.is-resizing {
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 30px;
-  margin-bottom: 10px;
+  min-height: 26px;
+  margin-bottom: 6px;
 }
 .conv-list-count {
   flex: 1;
@@ -3674,8 +3674,8 @@ body.is-resizing {
   box-shadow: 0 0 0 3px var(--ring);
 }
 .conv-head-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .conv-split-rail svg {
   width: 16px;
@@ -3724,7 +3724,7 @@ body.is-resizing {
    edge to edge so the selection reads as one band. */
 .conv-list-compact {
   max-width: none;
-  padding: 12px 0 24px;
+  padding: 8px 0 24px;
 }
 .conv-list-compact .conv-list-head {
   padding: 0 8px 0 14px;

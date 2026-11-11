@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, MessageSquare, PanelLeftClose, Pin, PinOff, Plus, Search, SquarePen, Terminal } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, MessageSquare, Pin, PinOff, Plus, Search, Terminal } from "lucide-react";
+import { IconCollapseLeft, IconNewChat } from "@/components/icons";
 import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
@@ -408,12 +409,12 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           </span>
           <button type="button" className="conv-head-icon is-primary" onClick={onNew}
             aria-label={L("新对话", "New conversation")} title={L("新对话", "New conversation")}>
-            <SquarePen />
+            <IconNewChat />
           </button>
           {onCollapse && (
             <button type="button" className="conv-head-icon" onClick={onCollapse}
               aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
-              <PanelLeftClose />
+              <IconCollapseLeft />
             </button>
           )}
         </div>

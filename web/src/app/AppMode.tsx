@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FolderKanban, LayoutGrid, MessageSquare, Monitor, PanelLeft, PanelLeftOpen, Plus, RefreshCw, WifiOff,
+  FolderKanban, LayoutGrid, MessageSquare, Monitor, Plus, RefreshCw, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -25,6 +25,7 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { LogoSymbol, LogoWordmark } from "@/components/brand";
+import { IconExpandRight, IconSidebar } from "@/components/icons";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -493,7 +494,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             aria-label={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
             title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
           >
-            <PanelLeft />
+            <IconSidebar />
           </button>
           {collapsed && (
             <HubSwitcher
@@ -526,7 +527,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <div className="conv-split-rail">
                 <button type="button" className="app-btn app-btn-plain" onClick={() => setListCollapsed(false)}
                   aria-label={L("展开对话列表", "Show the conversation list")} title={L("展开对话列表", "Show the conversation list")}>
-                  <PanelLeftOpen />
+                  <IconExpandRight />
                 </button>
               </div>
             ) : (<>
