@@ -852,6 +852,8 @@ func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *h
 			// The hub no longer takes this app's token: what it showed may
 			// no longer be this person's to see.
 			b.forgetCache(hub.ID)
+		} else if rec.status >= http.StatusOK && rec.status < http.StatusMultipleChoices && b.Cache != nil {
+			b.Cache.AllowHub(hub.ID)
 		}
 	}
 }
@@ -869,9 +871,19 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+func (s *statusRecorder) Write(p []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(p)
+}
+
 // Flush passes streaming through (file downloads).
 func (s *statusRecorder) Flush() {
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		if s.status == 0 {
+			s.status = http.StatusOK
+		}
 		f.Flush()
 	}
 }
@@ -1116,6 +1128,9 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out[i].OK, out[i].Overview, out[i].Me = true, ov, me
+		if b.Cache != nil {
+			b.Cache.AllowHub(h.ID)
+		}
 		if st != nil {
 			out[i].E2E = st.E2E
 		}

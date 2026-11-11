@@ -35,6 +35,9 @@ type Cache struct {
 	// recently used entries go first. Default 50 MB.
 	Max int64
 	mu  sync.Mutex
+	// rejected blocks delayed UI writes after this hub returned 401 or was
+	// removed. It is memory-only: a new App process starts with no stale UI.
+	rejected map[string]bool
 }
 
 // cacheVersion changes when entries written before cannot be read: the
@@ -224,7 +227,7 @@ func (c *Cache) Put(entries []CacheEntry, del []string) error {
 	}
 	now := time.Now().UnixMilli()
 	for i, e := range entries {
-		if e.Key == "" || !json.Valid(e.Data) {
+		if e.Key == "" || !json.Valid(e.Data) || (e.Hub != "" && c.rejected[e.Hub]) {
 			continue
 		}
 		_, err := tx.Exec(`INSERT INTO entries (key, hub, data, used) VALUES (?, ?, ?, ?)
@@ -273,8 +276,19 @@ func (c *Cache) trim() error {
 func (c *Cache) ForgetHub(hub string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.rejected == nil {
+		c.rejected = make(map[string]bool)
+	}
+	c.rejected[hub] = true
 	_, err := c.db.Exec(`DELETE FROM entries WHERE hub = ? OR hub = ''`, hub)
 	return err
+}
+
+// AllowHub accepts writes again after a successful answer from this hub.
+func (c *Cache) AllowHub(hub string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.rejected, hub)
 }
 
 // Clear deletes everything.
