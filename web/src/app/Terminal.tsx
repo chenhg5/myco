@@ -17,8 +17,10 @@ function stamp(iso: string): string {
  * `$` line with who sent it and when, its output below, and the exit code
  * when it failed. Notes and other messages are shown as `#` comment lines.
  */
-export function Terminal({ messages, execNode, nameOf, hubE2E, live, children, hubId, onGrow, onStop, canStop }: {
+export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, children, hubId, onGrow, onStop, canStop }: {
   messages: Message[];
+  /** the node's working directory, shown in front of each $ of a live session */
+  cwd?: string;
   /** show a running command's output as it comes (from the run trace) */
   hubId?: string;
   onGrow?: () => void;
@@ -55,7 +57,7 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, children, h
     if (m.type === "task" && m.to === execNode) {
       const a = answers.get(m.id);
       if (a) used.add(a.id);
-      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} onStop={onStop && (!canStop || canStop(m)) ? onStop : undefined} />);
+      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} onStop={onStop && (!canStop || canStop(m)) ? onStop : undefined} plain={live} cwd={cwd} />);
       continue;
     }
     if (m.type === "progress" || m.type === "steer") continue;
@@ -114,9 +116,11 @@ function Output({ answer, res, nameOf }: { answer: Message; res: ExecResult; nam
 
 export const STOPPED = "stopped by the sender";
 
-function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop }: {
+function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop, plain, cwd }: {
   task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean;
   hubId?: string; onGrow?: () => void; onStop?: (task: Message) => void;
+  /** your own session: as a terminal prints it (prompt, command, output), nothing around it */
+  plain?: boolean; cwd?: string;
 }) {
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
   const took = execDuration(res?.duration_ms);
@@ -124,8 +128,27 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop }: {
   const stopped = !answer && task.status === "failed" && task.error === STOPPED;
   const failed = answer?.type === "event" || (!answer && task.status === "failed" && !stopped)
     || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
+  if (plain) {
+    // When, and how long it took, are a hover away; a terminal shows neither.
+    const when = [stamp(task.created_at), took].filter(Boolean).join(" · ");
+    return (
+      <div className="term-cmd">
+        <div className="term-line" title={when}>
+          <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}$</span>{task.body}
+        </div>
+        {res && <ResultLines res={res} />}
+        {answer && !res && <pre className={cn("term-out", answer.type === "event" && "is-err")}>{answer.body}</pre>}
+        {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} />}
+        {/* Running: a block cursor after what it has printed so far. Stopping
+            is Ctrl+C, or the line under the terminal. */}
+        {pending && <div className="term-pending"><span className="term-cursor" role="img" aria-label={L("执行中", "running")} /></div>}
+        {stopped && <div className="term-exit is-stopped">^C</div>}
+        {!answer && !pending && task.status === "failed" && !stopped && <div className="term-exit">{task.error || L("失败", "failed")}</div>}
+      </div>
+    );
+  }
   return (
-    <div className={cn("term-cmd", failed && "is-failed")} data-turn={task.id}>
+    <div className={cn("term-cmd", failed && "is-failed")}>
       <div className="term-meta">
         <span>
           {task.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}

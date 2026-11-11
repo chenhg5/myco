@@ -374,17 +374,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The rail at the left: each turn, with how the answer starts. In your own
   // conversation a turn is something you said. Watching two nodes, it is a
   // task either of them gave the other, and the preview says who gave it.
-  // With a shell node (shown as a terminal), it is each command.
-  const termNode = shellMode ? target.agent : execNode;
+  // A terminal has no rail: it is read from the bottom, like a terminal.
   const turns: Turn[] = [];
   for (const m of shown || []) {
     if (m.type === "progress" || m.type === "event") continue;
-    const starts = termNode ? m.type === "task" && m.to === termNode : observed ? m.type === "task" : isMe(m.from, row?.hub);
+    const starts = observed ? m.type === "task" : isMe(m.from, row?.hub);
     if (starts) turns.push({ id: m.id, who: observed ? nameOf(m.from) : undefined, question: summarize(m), answer: "" });
     else if (turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = summarize(m);
   }
   const turnIds = new Set(turns.map((t) => t.id));
-  const hasRail = turns.length >= 2;
+  const hasRail = !shellMode && !execNode && turns.length >= 2;
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
@@ -580,7 +579,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </span>}
       </header>
 
-      <div className={cn("conv-body", hasRail && "has-rail")}>
+      <div className={cn("conv-body", hasRail && "has-rail", shellMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className={cn("conv-timeline", shellMode && "is-shell", observed && "is-observed")}>
@@ -611,10 +610,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {shellMode ? (
               <>
               <div onMouseUp={() => { if (window.getSelection()?.isCollapsed !== false) inputRef.current?.focus(); }} className="term-wrap">
-                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live
+                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live cwd={agent?.binding.workdir}
                   hubId={target.hubId} onGrow={followBottom} onStop={(t) => void stop(t)} canStop={(t) => isMe(t.from, row?.hub)}>
                   <div className="term-input-line">
-                    <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir} </span> : null}$</span>
+                    <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir}</span> : null}$</span>
                     <textarea
                       ref={inputRef}
                       className="term-input"
@@ -633,7 +632,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 </Terminal>
               </div>
               <div className="term-foot">
-                <span>{L(`在 ${agentName} 上执行`, `Runs on ${agentName}`)}</span>
+                {openTask
+                  ? <button type="button" className="term-foot-stop" onClick={() => void stop(openTask)}>{L("正在执行 · Ctrl+C 停止", "Running · Ctrl+C to stop")}</button>
+                  : <span>{L(`在 ${agentName} 上执行`, `Runs on ${agentName}`)}</span>}
                 <span>{L("回车执行 · Shift+Enter 换行 · ↑↓ 历史命令", "Enter to run · Shift+Enter for a new line · ↑↓ history")}</span>
               </div>
               <ErrorText error={sendError || stopError} />
