@@ -763,12 +763,12 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.17.2" : "v0.16.8-demo", shell: SHELL });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL });
   }
 
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")
   if (parts[0] === "app" && parts[1] === "update" && parts.length === 2) {
-    const current = SHOWCASE ? "v0.17.2" : "v0.16.8-demo";
+    const current = SHOWCASE ? "v0.18.39" : "v0.16.8-demo";
     const latest = process.env.MOCK_UPDATE === "none" || SHOWCASE ? current : "v0.17.2";
     if (method === "GET") {
       return send(res, 200, { current, latest, available: latest !== current, can_install: SHELL === "mac" });
@@ -1274,7 +1274,7 @@ const server = http.createServer(async (req, res) => {
         }).filter((e) => e.seq > after);
         return send(res, 200, { message: m.id, status: m.status, events });
       }
-      const steps = [
+      const steps = m.trace ? [...m.trace] : [
         { kind: "thinking", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组。" },
         { kind: "tool", tool: "Bash", id: "c1", input: "git log --oneline v0.16.7..HEAD" },
         { kind: "tool_result", id: "c1", output: "a1b2c3d App: 对话页支持 Markdown 表格\n9f8e7d6 Hub: 修复 runner 重连\n5c4b3a2 App: 本机会话一键接入" },

@@ -76,11 +76,11 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
   <img src="docs/assets/app/zh/add-node.webp" alt="添加节点：这台电脑上找到的 Claude Code 和 Codex 会话" width="100%">
 </picture>
 
-**3. 让它们干活。** 在 App 里直接给 agent 派任务（**发消息**，或者从 **对话** 页开始），也可以让一个 agent 去找另一个：「问问构建服务器上的 Codex，CI 为什么挂了」「在我的 Mac 上把测试跑一遍」。任务在 agent 自己的会话里运行，进度会实时显示，运行中也可以随时修正。
+**3. 让它们干活。** 在 App 里直接给 agent 派任务（**发消息**，或者从 **对话** 页开始），也可以让一个 agent 去找另一个：「问问构建服务器上的 Codex，CI 为什么挂了」「在我的 Mac 上把测试跑一遍」。任务在 agent 自己的会话里运行，它在做什么（思考、读改了哪些文件、跑了哪些命令）会实时显示，运行中也可以随时修正或停止。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/conversation-dark.webp">
-  <img src="docs/assets/app/zh/conversation.webp" alt="一段对话：任务、进度，以及 agent 带表格的回复" width="100%">
+  <img src="docs/assets/app/zh/conversation.webp" alt="一段对话：任务、agent 正在做的事（思考、文件、命令），以及它带表格的回复" width="100%">
 </picture>
 
 ## 1. 让云端 agent 用你的电脑
@@ -132,7 +132,7 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/app/zh/node.webp" alt="节点详情"><br><b>每个 agent 的详情。</b>CLI、模型、权限、所在机器；分组和标签；正在做什么；你和它的对话，以及它和其他节点的往来。还能设置谁可以给它派任务，或者把它踢下线。</td>
+<td width="50%"><img src="docs/assets/app/zh/node.webp" alt="节点详情"><br><b>每个 agent 的详情。</b>CLI、模型、权限、所在机器；别名、分组和标签；正在做什么；你和它的对话，以及它和其他节点的往来。还能设置谁可以给它派任务，或者把它踢下线。</td>
 <td width="50%"><img src="docs/assets/app/zh/machines.webp" alt="机器"><br><b>机器。</b>每一台跑着 agent 的电脑和服务器，是否在线、上面有哪些 agent。可以在任意一台上，按你选的目录开一个新的 Claude Code 或 Codex 会话。</td>
 </tr>
 </table>
