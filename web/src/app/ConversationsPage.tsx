@@ -575,7 +575,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
                 className={cn("conv-row", pinned && !filtered && "is-pinned", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
                 onContextMenu={(e) => menu.open(e, rowMenu(row))}
-                title={tag.label || undefined}
+                // Which hub it is on matters only with all hubs in view, and
+                // then only now and then: it is in the tooltip, and in the
+                // conversation's own header once opened.
+                title={[tag.label, hub === "all" ? row.hubName : ""].filter(Boolean).join(" · ") || undefined}
               >
                 <span className={cn("conv-row-icon", shell && "is-shell")}>
                   <Icon aria-hidden />
@@ -585,7 +588,6 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
                   <span className="conv-row-top">
                     <span className="conv-row-title">{parties(row)}</span>
                     {it.project && !project && !compact && <span className="conv-row-project">{projectTitle(row.hubId, it.project)}</span>}
-                    {hub === "all" && !compact && <span className="conv-row-hub">{row.hubName}</span>}
                     {pinned && <Pin className="conv-row-pin" aria-label={L("已置顶", "Pinned")} />}
                     <span className="conv-row-time">{timeAgo(it.updated_at, now)}</span>
                   </span>

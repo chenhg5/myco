@@ -2357,18 +2357,6 @@ textarea.app-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.conv-row-hub {
-  flex: none;
-  max-width: 130px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--pill);
-  color: var(--muted);
-  font-size: 10.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .conv-row-time {
   margin-left: auto;
   flex: none;
