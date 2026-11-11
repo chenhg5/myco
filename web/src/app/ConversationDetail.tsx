@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUp, Loader2, Lock, Paperclip } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -8,6 +8,7 @@ import { MessageContent } from "@/app/Markdown";
 import { STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { ErrorText } from "@/app/dialogs";
+import { useCopy } from "@/app/copy";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
@@ -334,8 +335,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const renderMessage = (m: Message) => {
       if (m.type === "progress") {
         return (
-          <div className="conv-progress" key={m.id}>
-            <span className="conv-progress-label">{L("进度：", "Progress: ")}</span>
+          <div className="conv-progress" key={m.id} title={clockTime(m.created_at)}>
+            <span className="conv-progress-dot" aria-hidden />
             <span>{m.body}</span>
           </div>
         );
@@ -351,8 +352,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
       // In an observed thread, the node you opened is on the right.
       const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub);
+      const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
+        : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} key={m.id}>
+        <Fragment key={m.id}>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")}>
           <div className="conv-msg-name">{nameOf(m.from)}</div>
           <div className="conv-bubble">
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
@@ -372,15 +376,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </div>
             )}
           </div>
-          <div className={cn("conv-msg-meta", m.status === "failed" && m.error !== STOPPED && "is-failed")}>
+          {/* The time and copy stay out of the way until the pointer is on the
+              message; a failure or an encryption mark is always shown. */}
+          <div className={cn("conv-msg-meta", failedNote && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
-            {m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
-              : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
+            {failedNote || clockTime(m.created_at)}
+            {!mine && !m.unreadable && <CopyMessage text={m.body} />}
           </div>
-          {/* What the agent did for a task you gave it (its runner reports it). */}
-          {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} />}
         </div>
+        {/* What the agent did for a task you gave it (its runner reports it):
+            the start of its turn, on its side of the conversation. */}
+        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} />}
+        </Fragment>
       );
   };
 
@@ -414,7 +422,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       </header>
 
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className={cn("conv-timeline", shellMode && "is-shell")}>
+        <div className={cn("conv-timeline", shellMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
             loadError && !isTransient(loadError) ? (
               <ErrorText error={loadError} />
@@ -491,29 +499,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
       ) : (
       <div className="conv-compose">
-        {openTask && (
-          <div className="conv-working">
-            <span className="dot working" />
-            <span>{L("Agent 正在处理…", "Agent is working…")}</span>
-            <button
-              type="button"
-              className={cn("conv-steer-btn", steerMode && "active")}
-              aria-pressed={steerMode}
-              onClick={() => setSteerMode((s) => !s)}
-              title={L("打断当前处理，让 agent 按你新的要求继续", "Interrupt the current work so the agent continues with your new instructions")}
-            >
-              {L("修正", "Correct")}
-            </button>
-            <button
-              type="button"
-              className="conv-steer-btn"
-              onClick={() => void stop(openTask)}
-              title={L("停止这个任务：agent 不再继续做", "Stop this task: the agent stops working on it")}
-            >
-              {L("停止", "Stop")}
-            </button>
-          </div>
-        )}
         {steerOn && (
           <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}
@@ -529,24 +514,60 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             aria-label={L("消息", "Message")}
           />
           <div className="conv-compose-bar">
-            {/* left: room for attachments and voice input later */}
-            <div className="conv-compose-tools" />
+            {/* left: what you can do to the running task; room for attachments
+                and voice input later */}
+            <div className="conv-compose-tools">
+              {openTask && (
+                <button
+                  type="button"
+                  className={cn("conv-steer-btn", steerMode && "active")}
+                  aria-pressed={steerMode}
+                  onClick={(e) => { e.stopPropagation(); setSteerMode((s) => !s); }}
+                  title={L("打断当前处理，让 agent 按你新的要求继续", "Interrupt the current work so the agent continues with your new instructions")}
+                >
+                  {L("修正", "Correct")}
+                </button>
+              )}
+            </div>
             <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
-            <button
-              type="button"
-              className="conv-send"
-              onClick={(e) => { e.stopPropagation(); void send(); }}
-              disabled={sending || !draft.trim()}
-              title={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
-              aria-label={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
-            >
-              {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
-            </button>
+            {openTask && !draft.trim() && !sending ? (
+              // Nothing to send while it works: the same button stops it.
+              <button
+                type="button"
+                className="conv-send is-stop"
+                onClick={(e) => { e.stopPropagation(); void stop(openTask); }}
+                title={L("停止这个任务：agent 不再继续做", "Stop this task: the agent stops working on it")}
+                aria-label={L("停止", "Stop")}
+              >
+                <Square size={11} strokeWidth={0} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="conv-send"
+                onClick={(e) => { e.stopPropagation(); void send(); }}
+                disabled={sending || !draft.trim()}
+                title={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
+                aria-label={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
+              >
+                {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
+              </button>
+            )}
           </div>
         </div>
         <ErrorText error={sendError || stopError} />
       </div>
       )}
     </div>
+  );
+}
+
+/** Copies a reply; shown with the time when the pointer is on the message. */
+function CopyMessage({ text }: { text: string }) {
+  const { copied, copy } = useCopy(text);
+  return (
+    <button type="button" className="conv-msg-copy" onClick={() => void copy()} title={L("复制", "Copy")} aria-label={L("复制", "Copy")}>
+      {copied ? <Check /> : <Copy />}
+    </button>
   );
 }

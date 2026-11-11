@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
+import { Brain, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
 import type { Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
@@ -117,7 +117,18 @@ export function TraceView({ hubId, task, onGrow }: { hubId: string; task: Messag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events?.length, running]);
 
-  useEffect(() => { if (running) setOpen(true); }, [running]);
+  // Open while it runs; when it finishes, fold to the one-line summary.
+  // A beat later, so the last steps and the usage line (fetched once more
+  // when it stops) are in before the block folds.
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    const was = wasRunning.current;
+    wasRunning.current = running;
+    if (running) { setOpen(true); return; }
+    if (!was) return;
+    const t = window.setTimeout(() => setOpen(false), 1200);
+    return () => window.clearTimeout(t);
+  }, [running]);
 
   useEffect(() => {
     if (!open || gone) return;
@@ -150,8 +161,14 @@ export function TraceView({ hubId, task, onGrow }: { hubId: string; task: Messag
   if (!running && events !== null && rows.length === 0) return null;
 
   const summary = summaryOf(rows);
+  // While it runs, the line says what it is doing right now.
+  const lastRow = rows[rows.length - 1];
+  const doing = !lastRow ? L("正在处理", "Working")
+    : lastRow.kind === "tool" ? `${toolLabel(lastRow.call.tool)} ${(lastRow.call.input || "").split("\n")[0]}`.trim()
+    : lastRow.kind === "thinking" ? L("正在思考", "Thinking")
+    : L("正在处理", "Working");
   const head = running
-    ? L("正在处理…", "Working…")
+    ? doing
     : events === null ? L("查看过程", "Show what it did")
     : summary || L("过程", "What it did");
 
@@ -159,7 +176,7 @@ export function TraceView({ hubId, task, onGrow }: { hubId: string; task: Messag
     <div className={cn("trace", running && "is-live", open && "is-open")}>
       <button type="button" className="trace-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         {running ? <Loader2 className="trace-spin" /> : <ChevronRight className="trace-chev" />}
-        <span className="trace-title">{head}</span>
+        <span className={cn("trace-title", running && "is-shimmer")}>{head}</span>
         {!running && usage && <span className="trace-usage">{usageLine(usage)}</span>}
       </button>
       {open && (
@@ -202,7 +219,7 @@ function TraceRow({ row, live }: { row: Row; live: boolean }) {
         <span className="trace-name">{toolLabel(tool.call.tool)}</span>
         {tool.call.input && <span className="trace-arg mono">{tool.call.input.split("\n")[0]}</span>}
         <span className="trace-state">
-          {r ? (r.failed ? <X className="is-bad" /> : <Check className="is-ok" />) : live ? <Loader2 className="trace-spin" /> : null}
+          {r ? (r.failed ? <X className="is-bad" /> : null) : live ? <Loader2 className="trace-spin" /> : null}
         </span>
       </button>
       {open && (

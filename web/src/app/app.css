@@ -2574,52 +2574,125 @@ textarea.app-input {
   overflow-y: auto;
   overflow-x: hidden;
 }
+/* A conversation with an agent, as in the agents' own apps: one column;
+   what you say is a small bubble on the right, what the agent says is plain
+   text across the column, and its work sits between the two as quiet lines. */
 .conv-timeline {
-  max-width: 820px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 18px 20px 14px;
+  padding: 20px 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .conv-msg {
+  position: relative;
   display: flex;
   flex-direction: column;
-  max-width: 82%;
   min-width: 0;
 }
 .conv-msg.is-agent {
-  align-self: flex-start;
+  align-self: stretch;
   align-items: flex-start;
 }
 .conv-msg.is-me {
   align-self: flex-end;
   align-items: flex-end;
+  max-width: 78%;
+  margin-top: 10px;
 }
+.conv-timeline > .conv-msg.is-me:first-child {
+  margin-top: 0;
+}
+/* Names matter only when you watch two nodes talk to each other. */
 .conv-msg-name {
+  display: none;
   margin: 0 2px 4px;
   font-size: 11px;
   color: var(--muted);
 }
+.conv-timeline.is-observed .conv-msg-name {
+  display: block;
+}
 .conv-bubble {
-  --md-fade: var(--card);
+  --md-fade: var(--bg);
   min-width: 0;
   max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: 0 0 0 0.5px var(--line);
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }
+.conv-msg.is-me .conv-bubble {
+  --md-fade: var(--pill);
+  padding: 8px 13px;
+  border-radius: 16px;
+  background: var(--pill);
+  line-height: 1.55;
+}
+.conv-msg.is-me .conv-bubble .md > :last-child,
+.conv-msg.is-agent .conv-bubble .md > :last-child {
+  margin-bottom: 0;
+}
+/* Watching two nodes: the other side gets a bubble too, so the two read
+   as two speakers. */
+.conv-timeline.is-observed .conv-msg.is-agent {
+  align-self: flex-start;
+  max-width: 78%;
+}
+.conv-timeline.is-observed .conv-msg.is-agent .conv-bubble {
+  --md-fade: var(--card);
+  padding: 8px 13px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
 .conv-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
   margin-top: 3px;
   font-size: 10.5px;
   color: var(--faint);
+  opacity: 0;
+}
+.conv-msg:hover .conv-msg-meta,
+.conv-msg:focus-within .conv-msg-meta,
+.conv-msg-meta.is-shown {
+  opacity: 1;
 }
 .conv-msg-meta.is-failed {
   color: var(--red);
+}
+/* Under your own bubble the time floats, so the agent's turn follows the
+   bubble closely. */
+.conv-msg.is-me .conv-msg-meta:not(.is-shown) {
+  position: absolute;
+  top: 100%;
+  right: 4px;
+  margin-top: 1px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.conv-msg-copy {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: default;
+}
+.conv-msg-copy:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.conv-msg-copy svg {
+  width: 12px;
+  height: 12px;
 }
 .conv-tag {
   display: inline-block;
@@ -2631,23 +2704,29 @@ textarea.app-input {
   font-size: 10px;
 }
 .conv-tag.neutral {
-  background: var(--pill);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
   color: var(--muted);
 }
+/* What the agent reports while it works (myco message progress): a quiet
+   line on its side. */
 .conv-progress {
-  align-self: center;
+  align-self: flex-start;
   display: flex;
-  gap: 6px;
-  max-width: 80%;
-  padding: 2px 0;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
-  text-align: center;
 }
-.conv-progress-label {
+.conv-progress-dot {
   flex: none;
-  color: var(--faint);
+  width: 5px;
+  height: 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--faint);
+  transform: translateY(-2px);
 }
 .conv-event {
   align-self: stretch;
@@ -2720,7 +2799,7 @@ textarea.app-input {
 .conv-working,
 .conv-steer-hint,
 .conv-compose-box {
-  max-width: 820px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -2729,12 +2808,35 @@ textarea.app-input {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 11.5px;
+  padding: 0 4px;
+  font-size: 12px;
   color: var(--muted);
 }
+/* "Working", with a slow sheen passing through it while it lasts. */
+.conv-working-text,
+.trace-title.is-shimmer {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--fg) 50%, var(--muted) 65%, var(--muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: conv-sheen 2.2s linear infinite;
+}
+@keyframes conv-sheen {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conv-working-text,
+  .trace-title.is-shimmer {
+    animation: none;
+    background: none;
+    color: var(--muted);
+  }
+}
 .conv-steer-btn {
-  margin-left: auto;
-  padding: 2px 10px;
+  height: 22px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   background: var(--pill);
@@ -2858,6 +2960,10 @@ textarea.app-input {
   color: var(--faint);
   cursor: default;
 }
+.conv-send.is-stop {
+  background: var(--fg);
+  color: var(--card);
+}
 .conv-compose-box.is-steer .conv-send:not(:disabled) {
   background: var(--amber);
 }
@@ -2950,18 +3056,22 @@ textarea.app-input {
   display: block;
   width: max-content;
   max-width: 100%;
-  margin: 8px 0;
-  border-collapse: collapse;
+  margin: 10px 0;
+  border: 1px solid color-mix(in srgb, currentColor 13%, transparent);
+  border-radius: 8px;
+  border-collapse: separate;
+  border-spacing: 0;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.5;
 }
-/* Lines and the header tint follow the text colour, so a table reads the
-   same on a plain card and on the green "mine" bubble, light or dark. */
+/* A rounded frame with rules between rows only; lines and the header tint
+   follow the text colour, so a table reads the same on any surface. */
 .md th,
 .md td {
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  padding: 6px 12px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
   text-align: left;
   vertical-align: top;
   /* "anywhere" lets the table squeeze a column down to one character, so
@@ -2969,8 +3079,10 @@ textarea.app-input {
   overflow-wrap: break-word;
 }
 .md th {
-  background: color-mix(in srgb, currentColor 7%, transparent);
-  font-weight: 600;
+  border-top: 0;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  color: color-mix(in srgb, currentColor 78%, transparent);
+  font-weight: 500;
   white-space: nowrap;
 }
 .md .md-nw {
@@ -3980,6 +4092,8 @@ body.is-resizing {
 }
 .conv-list-compact .app-select-wrap .app-select {
   width: 100%;
+  /* The toolbar's cap would leave the chevron hanging outside the field. */
+  max-width: none;
 }
 .conv-list-compact .app-list {
   border-radius: 0;
@@ -4426,3 +4540,77 @@ body.is-resizing {
 .trace-line { padding: 3px 6px; }
 .trace-row.is-text { padding: 4px 6px; }
 .trace-detail { margin-left: 27px; }
+
+
+/* Run trace in the agent's column: starts at the reply's left edge and
+   spans the column. No tick on every step that went fine; only what is
+   still running or failed is marked. */
+.trace,
+.trace.is-open {
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.trace-head {
+  margin-left: -4px;
+  font-size: 12px;
+}
+.trace-head svg {
+  width: 13px;
+  height: 13px;
+}
+.trace-body {
+  gap: 0;
+  margin: 4px 0 2px 2px;
+  padding: 0 0 0 12px;
+  border-left: 1px solid var(--line-2);
+}
+.trace-line {
+  padding: 4px 8px;
+  cursor: default;
+}
+.trace-line > svg {
+  width: 14px;
+  height: 14px;
+}
+.trace-name {
+  font-weight: 400;
+  color: var(--fg-2);
+}
+.trace-arg.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+}
+.trace-row.is-text {
+  padding: 5px 8px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.trace-detail {
+  margin: 2px 8px 6px 29px;
+}
+.trace-pre {
+  border-radius: 8px;
+  background: var(--pill);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--fg-2);
+}
+.trace-head,
+.trace-chev {
+  cursor: default;
+}
+.trace-head {
+  max-width: 100%;
+}
+.trace-title {
+  flex: 0 1 auto;
+}
+.trace-usage {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
