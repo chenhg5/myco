@@ -298,6 +298,12 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
 
   const parties = (r: ConversationRow): string => {
     const it = r.item;
+    // Under "mine" every row is you and a node, so the row is just the node.
+    if (side === "me") {
+      if (it.kind === "pair" && it.other?.startsWith(CONSOLE) && it.node) return nameOf(r.hubId, it.node);
+      const nodes = it.kind === "pair" ? [] : it.participants.filter((p) => !p.startsWith("@"));
+      if (nodes.length) return nodes.map((n) => nameOf(r.hubId, n)).join(L("、", ", "));
+    }
     if (it.kind === "pair") {
       return it.other?.startsWith(CONSOLE)
         ? `${nameOf(r.hubId, it.other)} → ${nameOf(r.hubId, it.node)}`
