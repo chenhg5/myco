@@ -22,6 +22,9 @@ export interface HubOverview {
   me?: Whoami;
   /** the hub has end-to-end encryption on */
   e2e?: boolean;
+  /** set by the App: the hub could not be reached, and this is what it
+   *  showed last (at: when; error: why it is unreachable now) */
+  stale?: { at: string; error?: string };
 }
 
 export interface AppOverview {
@@ -270,13 +273,17 @@ async function probeAppInfo(): Promise<AppInfo> {
  * Probe for App mode. Returns the hub list when the App backend answers 200;
  * otherwise null, which means "plain `myco ui`" and the existing UI is used.
  */
+import { hydrate } from "@/lib/memo";
+
 export async function probeAppMode(): Promise<AppBootstrap | null> {
   try {
     const r = await fetch("app/hubs", { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!r.ok) return null;
     const data: unknown = await r.json();
     if (!Array.isArray(data)) return null;
-    return { hubs: data as Hub[], info: await probeAppInfo() };
+    // The App: what the pages showed last time, before the first one draws.
+    const [info] = await Promise.all([probeAppInfo(), hydrate()]);
+    return { hubs: data as Hub[], info };
   } catch {
     return null;
   }
@@ -292,7 +299,11 @@ export interface AppUpdate {
   error?: string;
 }
 
+/** GET /app/cache/stats: the saved page data. */
+export interface CacheStats { enabled: boolean; entries: number; bytes: number }
+
 export const appApi = {
+  cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
   update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */

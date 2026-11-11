@@ -4675,3 +4675,8 @@ body.is-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A hub that cannot be reached: what it showed last, and since when. */
+.app-stale {
+  color: var(--muted);
+}

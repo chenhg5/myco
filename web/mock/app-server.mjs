@@ -610,6 +610,7 @@ function readBody(req) {
   });
 }
 
+const cacheStore = new Map(); // key -> {key, hub, data}, oldest first
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
@@ -696,6 +697,26 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, appOverview());
   }
 
+  // /app/cache — what the pages showed last (the real backend encrypts it
+  // on disk; here it lives as long as the mock runs: reload the page to see
+  // a restart).
+  if (parts[0] === "app" && parts[1] === "cache") {
+    if (parts.length === 3 && parts[2] === "stats") {
+      const bytes = [...cacheStore.values()].reduce((n, e) => n + JSON.stringify(e.data).length, 0);
+      return send(res, 200, { enabled: true, entries: cacheStore.size, bytes });
+    }
+    if (method === "GET") {
+      const entries = [...cacheStore.values()].reverse();
+      return send(res, 200, { enabled: true, entries });
+    }
+    if (method === "PUT") {
+      const body = await readBody(req);
+      for (const k of body?.delete || []) cacheStore.delete(k);
+      for (const e of body?.entries || []) { cacheStore.delete(e.key); cacheStore.set(e.key, e); }
+      return send(res, 204);
+    }
+    if (method === "DELETE") { cacheStore.clear(); return send(res, 204); }
+  }
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);

@@ -1,10 +1,10 @@
-import { forgetHub, recall, remember } from "@/lib/memo";
+import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
-  appApi, type AppInfo, type AppUpdate, type Hub, type HubOverview, type LocalState,
+  appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
   type LocalTunnel, type StartLocalHubResult,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
@@ -13,7 +13,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { L, lang, type LangChoice } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { bytes, cn } from "@/lib/utils";
 
 type Section = "hubs" | "members" | "audit" | "appearance" | "about";
 
@@ -98,6 +98,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-label">{L("更新", "Updates")}</span>
           <span className="app-kv-value">{status}{action}</span>
         </div>
+        <CacheRow />
       </div>
       <ErrorText error={failure} />
       <p className="app-about-note">
@@ -111,6 +112,41 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       </p>
       <p className="app-about-note">{L("节点、任务和对话都由 Hub 提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>
+  );
+}
+
+/** The saved page data (app-cache.db): its size, and a way to empty it. */
+function CacheRow() {
+  const [stats, setStats] = useState<CacheStats | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const load = useCallback(() => { appApi.cacheStats().then(setStats).catch(() => setStats(null)); }, []);
+  useEffect(load, [load]);
+  if (!stats?.enabled) return null;
+  const clear = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await clearAll();
+      load();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="app-kv app-about-update">
+      <span className="app-kv-label">{L("本机缓存", "Local cache")}</span>
+      <span className="app-kv-value">
+        <span className="app-about-status">{stats.entries ? bytes(stats.bytes) : L("空", "Empty")}</span>
+        <button type="button" className="app-btn" disabled={busy || !stats.entries} onClick={() => void clear()}
+          title={L("页面上次显示的内容（加密存在这台电脑上），App 重开时先显示它", "What pages showed last (stored encrypted on this computer), shown first when the app reopens")}>
+          {L("清除", "Clear")}
+        </button>
+        <ErrorText error={error} />
+      </span>
+    </div>
   );
 }
 

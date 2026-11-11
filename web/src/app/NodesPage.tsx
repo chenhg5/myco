@@ -12,7 +12,7 @@ import {
   parseMachineFilter,
 } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 import { hubErrorText } from "@/appapi";
@@ -330,6 +330,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
                 {g.meta?.hub_version && <><span className="sep">·</span><span className="part">{ver(g.meta.hub_version)}</span></>}
                 {g.meta?.update_available && <span className="app-update-pill">{L("可更新", "Update available")}</span>}
                 {!g.hub.ok && <><span className="sep">·</span><span className="part" style={{ color: "var(--red)" }}>{L("连不上", "Unreachable")}</span></>}
+                {g.hub.stale && <><span className="sep">·</span><span className="part app-stale" title={g.hub.stale.error || undefined}>{L(`离线 · 显示的是 ${timeAgo(g.hub.stale.at)}的数据`, `Offline · showing data from ${timeAgo(g.hub.stale.at)}`)}</span></>}
               </span>
             </div>
             <div className="app-list">

@@ -47,6 +47,14 @@ func main() {
 		NoServiceManager: runtime.GOOS == "windows"}
 	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,
 		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: windowsExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
+	// Pages open with what they showed last time (MYCO_APP_CACHE=off: no).
+	if os.Getenv("MYCO_APP_CACHE") != "off" {
+		if c, err := openCache(); err != nil {
+			log.Printf("app cache off: %v", err)
+		} else {
+			b.Cache = c
+		}
+	}
 	// What a Windows update set aside is no longer running.
 	console.CleanOldExe(b.Update.Exe)
 	if p, err := local.EnsureCLI(); err != nil {
@@ -191,4 +199,16 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'")
 		h.ServeHTTP(w, r)
 	})
+}
+
+func openCache() (*console.Cache, error) {
+	path, err := console.DefaultCachePath()
+	if err != nil {
+		return nil, err
+	}
+	key, err := console.KeychainCacheKey()
+	if err != nil {
+		return nil, err
+	}
+	return console.OpenCache(path, key)
 }

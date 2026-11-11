@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -162,6 +163,9 @@ type Backend struct {
 	Version, Shell string
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
+	// Cache, when set, keeps what the pages fetched across restarts
+	// (/app/cache); nil leaves the UI with its in-memory data only.
+	Cache *Cache
 
 	pending pendingLink
 	sealers sealers
@@ -191,6 +195,7 @@ func (b *Backend) client(h Hub) (*client.Client, error) {
 // Handler returns the /app/ API.
 func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
+	b.cacheRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": b.Version, "shell": orStr(b.Shell, "browser")})
 	})
@@ -816,7 +821,41 @@ func (b *Backend) withHubTimeout(d time.Duration, h func(http.ResponseWriter, *h
 		ctx, cancel := context.WithTimeout(r.Context(), d)
 		defer cancel()
 		b.withSealer(ctx, hub.ID, c)
-		h(w, r.WithContext(ctx), c)
+		rec := &statusRecorder{ResponseWriter: w}
+		h(rec, r.WithContext(ctx), c)
+		if rec.status == http.StatusUnauthorized {
+			// The hub no longer takes this app's token: what it showed may
+			// no longer be this person's to see.
+			b.forgetCache(hub.ID)
+		}
+	}
+}
+
+// statusRecorder notes the status a handler answered with.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// Flush passes streaming through (file downloads).
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (b *Backend) forgetCache(hubID string) {
+	if b.Cache != nil {
+		if err := b.Cache.ForgetHub(hubID); err != nil {
+			log.Printf("app cache: forget hub: %v", err)
+		}
 	}
 }
 
@@ -982,6 +1021,7 @@ func (b *Backend) removeHub(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = b.Secrets.Delete(id) // already gone is fine
 	b.forgetSealer(id)
+	b.forgetCache(id)
 	writeJSON(w, http.StatusOK, map[string]any{"removed": id})
 }
 
@@ -1044,6 +1084,10 @@ func (b *Backend) overview(w http.ResponseWriter, r *http.Request) {
 		if oer != nil {
 			failed = oer
 			out[i].Error = errText(oer)
+			var ce *client.Error
+			if errors.As(oer, &ce) && ce.Status == http.StatusUnauthorized {
+				b.forgetCache(h.ID) // the token no longer works here
+			}
 			return
 		}
 		out[i].OK, out[i].Overview, out[i].Me = true, ov, me

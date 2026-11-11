@@ -8,6 +8,7 @@ import { MessageContent } from "@/app/Markdown";
 import { STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { ErrorText } from "@/app/dialogs";
+import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
@@ -48,16 +49,13 @@ function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
 }
 
-// Conversations opened in this window, newest last: reopening one shows it
-// at once while it refreshes. Kept in memory only (nothing decrypted goes
-// to disk); the hub stays the source of truth.
-const seen = new Map<string, { messages: Message[]; more: boolean }>();
-const SEEN_MAX = 40;
-const cacheKey = (t: ConversationTarget) => [t.hubId, t.threadId || "", t.agent, t.peer || ""].join("\u0000");
+// Conversations opened before: reopening one shows it at once while it
+// refreshes (the shared page memory, saved across restarts in the app; see
+// lib/memo). The hub stays the source of truth.
+type SeenConversation = { messages: Message[]; more: boolean };
+const cacheKey = (t: ConversationTarget) => ["conv", t.hubId, t.threadId || "", t.agent, t.peer || ""].join("\u0000");
 function remember(key: string, messages: Message[], more: boolean) {
-  seen.delete(key);
-  seen.set(key, { messages, more });
-  if (seen.size > SEEN_MAX) seen.delete(seen.keys().next().value!);
+  rememberMemo<SeenConversation>(key, { messages, more });
 }
 
 /** While a conversation loads for the first time: its shape, not a word. */
@@ -129,7 +127,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     let cancelled = false;
     // Seen before in this window: show it at once, refresh behind it.
     const key = cacheKey(target);
-    const hit = seen.get(key);
+    const hit = recall<SeenConversation>(key);
     setMessages(hit ? hit.messages : null);
     setLoadError(null);
     setSendError(null);
@@ -429,6 +427,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {target.hubName}
             {cli && <> · {cli}</>}
             {model && <> · <span className="mono">{model}</span></>}
+            {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`离线 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的数据`, `Offline · showing data from ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
         {!observed && <span

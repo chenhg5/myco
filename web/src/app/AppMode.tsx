@@ -11,6 +11,7 @@ import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { CleanupDialog } from "@/app/CleanupDialog";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
+import { recall, remember } from "@/lib/memo";
 import { ConversationsPage, pairKey, type ConversationRow } from "@/app/ConversationsPage";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { useHubNames } from "@/app/hubNames";
@@ -99,7 +100,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
-  const [ov, setOv] = useState<AppOverview | null>(null);
+  // The nodes as last seen (also from before a restart) until the hubs answer.
+  const [ov, setOv] = useState<AppOverview | null>(() => recall<AppOverview>("overview") ?? null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -123,7 +125,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [convProject, setConvProject] = useState<ProjectRef | null>(null);
   // Bumped when a node joins a project from here: the page reloads it.
   const [projectReload, setProjectReload] = useState(0);
-  const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(null);
+  const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // A node created from a project page joins that project.
   const joinProject = useRef<ProjectRef | null>(null);
@@ -147,7 +149,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setProjects((prev) => {
       // Keep what a hub showed last time when it fails just now.
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
-      return hubIds.flatMap((id, i) => lists[i] ?? keep(id));
+      return remember("projects", hubIds.flatMap((id, i) => lists[i] ?? keep(id)));
     });
   }, []);
   const refresh = useCallback(async () => {
@@ -162,7 +164,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         readPendingLink(),
       ]);
       setHubs(h);
-      setOv(o);
+      setOv(remember("overview", keepOffline(o, recall<AppOverview>("overview"))));
       void loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id));
       setError(null);
       setNow(Date.now());
@@ -823,4 +825,21 @@ function readPref(key: string): string | null {
 }
 function writePref(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch { /* not kept */ }
+}
+
+/**
+ * A hub that cannot be reached now but answered before keeps what it showed
+ * (marked stale, with when), instead of its nodes disappearing.
+ */
+export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): AppOverview {
+  if (!prev) return fresh;
+  return {
+    ...fresh,
+    hubs: fresh.hubs.map((h) => {
+      if (h.ok) return h;
+      const before = prev.hubs.find((p) => p.id === h.id);
+      if (!before?.ok || !before.overview) return h;
+      return { ...before, name: h.name, stale: { at: before.stale?.at ?? prev.generated_at, error: h.error } };
+    }),
+  };
 }
