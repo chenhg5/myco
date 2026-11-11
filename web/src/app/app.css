@@ -2585,7 +2585,8 @@ textarea.app-input {
   overflow-x: hidden;
 }
 /* Jumping to a turn leaves a little air above it. */
-.conv-msg[data-turn] {
+.conv-msg[data-turn],
+.term-cmd[data-turn] {
   scroll-margin-top: 14px;
 }
 /* One tick per thing you said. The turn in view is longer; ticks swell
@@ -2666,6 +2667,14 @@ textarea.app-input {
   box-shadow: var(--pop-shadow);
   pointer-events: none;
   animation: app-fade 0.1s ease-out;
+}
+.conv-rail-who {
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .conv-rail-q,
 .conv-rail-a {

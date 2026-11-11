@@ -3,16 +3,18 @@ import type { RefObject } from "react";
 import { cn } from "@/lib/utils";
 import { L } from "@/lib/i18n";
 
-/** One thing you asked, and how the answer starts. */
+/** One thing that was asked, and how the answer starts. `who` is set when
+ * it was not you who asked (two nodes talking). */
 export interface Turn {
   id: string;
+  who?: string;
   question: string;
   answer: string;
 }
 
 /**
- * A rail of small ticks at the left of a conversation, one per thing you
- * asked: where you are in a long conversation, what each turn was about
+ * A rail of small ticks at the left of a conversation, one per turn (a thing
+ * you asked, or a task one node gave another): where you are, what each turn was about
  * (hover a tick), and a way to jump there (click it). The tick for the turn
  * in view is longer; ticks swell under the pointer.
  *
@@ -76,7 +78,7 @@ export function TurnRail({ turns, scroller }: { turns: Turn[]; scroller: RefObje
 
   return (
     <>
-      <div className="conv-rail" ref={rail} role="navigation" aria-label={L("这段对话里你说过的话", "What you said in this conversation")} onMouseLeave={() => setHover(null)}>
+      <div className="conv-rail" ref={rail} role="navigation" aria-label={L("这段对话的每一轮", "The turns of this conversation")} onMouseLeave={() => setHover(null)}>
         {turns.map((t, i) => (
           <button
             key={t.id}
@@ -93,6 +95,7 @@ export function TurnRail({ turns, scroller }: { turns: Turn[]; scroller: RefObje
       </div>
       {shown && (
         <div className="conv-rail-card" ref={card} style={{ top: cardTop }} aria-hidden>
+          {shown.who && <div className="conv-rail-who">{shown.who}</div>}
           <div className="conv-rail-q">{shown.question}</div>
           {shown.answer && <div className="conv-rail-a">{shown.answer}</div>}
         </div>

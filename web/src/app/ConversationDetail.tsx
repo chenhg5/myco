@@ -360,14 +360,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
 
-  // The rail at the left: each thing you said, with how the answer starts.
-  const turns: Turn[] = [];
-  for (const m of shown || []) {
-    if (m.type === "progress" || m.type === "event") continue;
-    if (isMe(m.from, row?.hub)) turns.push({ id: m.id, question: summarize(m), answer: "" });
-    else if (turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = summarize(m);
-  }
-  const hasRail = !shellMode && !observed && !execNode && turns.length >= 2;
   // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
   const histPos = useRef(-1);
@@ -378,6 +370,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
     return r ? nodeName(r.st.agent, r.hub) : from;
   };
+
+  // The rail at the left: each turn, with how the answer starts. In your own
+  // conversation a turn is something you said. Watching two nodes, it is a
+  // task either of them gave the other, and the preview says who gave it.
+  // With a shell node (shown as a terminal), it is each command.
+  const termNode = shellMode ? target.agent : execNode;
+  const turns: Turn[] = [];
+  for (const m of shown || []) {
+    if (m.type === "progress" || m.type === "event") continue;
+    const starts = termNode ? m.type === "task" && m.to === termNode : observed ? m.type === "task" : isMe(m.from, row?.hub);
+    if (starts) turns.push({ id: m.id, who: observed ? nameOf(m.from) : undefined, question: summarize(m), answer: "" });
+    else if (turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = summarize(m);
+  }
+  const turnIds = new Set(turns.map((t) => t.id));
+  const hasRail = turns.length >= 2;
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
@@ -507,7 +514,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-turn={mine && !observed ? m.id : undefined}>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-turn={turnIds.has(m.id) ? m.id : undefined}>
           <div className="conv-msg-name">{nameOf(m.from)}</div>
           <div className="conv-bubble">
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}

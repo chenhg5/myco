@@ -125,7 +125,7 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop }: {
   const failed = answer?.type === "event" || (!answer && task.status === "failed" && !stopped)
     || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
   return (
-    <div className={cn("term-cmd", failed && "is-failed")}>
+    <div className={cn("term-cmd", failed && "is-failed")} data-turn={task.id}>
       <div className="term-meta">
         <span>
           {task.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
