@@ -237,6 +237,19 @@ async function clickVisible(page, locator) {
   await locator.first().click();
 }
 
+function compactText(s) {
+  return (s || "").replace(/\s+/g, " ").trim();
+}
+
+/** Opens the picker's list on the conversations page (leaving an open
+ *  conversation, which the page remembers until you leave it). */
+async function openConversationList(page, narrow) {
+  await go(page, "节点", narrow);
+  await go(page, "对话", narrow);
+  await clickVisible(page, page.getByRole("button", { name: /新对话|New conversation/ }));
+  await page.getByRole("dialog").waitFor();
+}
+
 async function go(page, label, narrow) {
   await sidebar(page, true);
   await clickVisible(page, page.locator(".app-nav-item:visible", { hasText: label }));
@@ -330,6 +343,168 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "conversation-detail");
+    });
+
+    // A new conversation: search narrows the node list, picking one opens its
+    // chat, and the first message lands there. A task nobody picked up yet
+    // says so in a line, with no spinner.
+    await step("对话 · 新对话搜索", async () => {
+      await openConversationList(page, narrow);
+      const search = page.getByRole("dialog").locator(".app-convpick-input");
+      await search.fill("Review");
+      let onlyOne = true;
+      try {
+        await page.waitForFunction(
+          () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
+          null,
+          { timeout: 5000 },
+        );
+      } catch {
+        onlyOne = false;
+      }
+      const picks = page.locator(".app-convpick-list .app-row");
+      const count = await picks.count();
+      if (!onlyOne) throw new Error(`搜索「Review」后列表应只剩 1 个节点，实际 ${count} 个`);
+      const title = compactText(await picks.first().innerText());
+      if (!/Review/.test(title)) throw new Error(`搜索「Review」找到的不是 Review 节点：「${title}」`);
+      await settle(page, 400);
+      await shot(page, size, scheme, "dialog-new-conversation-review");
+      await picks.first().click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      const head = page.locator(".conv-detail .conv-head h2");
+      await head.waitFor({ timeout: 20_000 });
+      const headText = compactText(await head.innerText());
+      if (!/Review/.test(headText)) throw new Error(`点选节点后应直接进入它的对话，标题是「${headText}」`);
+    });
+
+    await step("对话 · 新对话第一条消息", async () => {
+      const body = "帮我看一下这个分支的改动。";
+      const input = page.locator(".conv-compose-input");
+      await input.waitFor({ timeout: 20_000 });
+      // Start watching before sending: the queue line is replaced by the first
+      // step a few seconds in, so check for it (and no spinner) as it appears.
+      const waitingOk = page.waitForFunction(
+        () => {
+          const detail = document.querySelector(".conv-detail");
+          const line = detail?.querySelector(".trace.is-waiting");
+          return !!line
+            && (line.textContent || "").includes("排队中")
+            && detail.querySelectorAll(".trace-spin").length === 0;
+        },
+        null,
+        { timeout: 20_000 },
+      ).then(() => true, () => false);
+      await input.fill(body);
+      await input.press("Enter");
+      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
+      if (!(await waitingOk)) {
+        const spin = await page.locator(".conv-detail .trace-spin").count();
+        if (spin > 0) throw new Error(`排队中的任务不应转圈，实际有 ${spin} 个 .trace-spin`);
+        throw new Error("还没开始的任务应显示一行「排队中…」的说明，没有找到 .trace.is-waiting");
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-first-message");
+    });
+
+    // PM (Codex) has session_in_use in the mock: its node row and chat say
+    // the session is busy, the input is disabled, and a copy can talk.
+    await step("节点 · 会话被占用", async () => {
+      await go(page, "节点", narrow);
+      const pm = page.locator(".app-page .app-row:visible", { hasText: "PM (Codex)" }).first();
+      await pm.waitFor({ timeout: 20_000 });
+      const text = compactText(await pm.innerText());
+      if (!text.includes("会话被占用")) throw new Error(`PM (Codex) 节点应显示「会话被占用」，实际是「${text}」`);
+      await pm.click();
+      await page.locator(".app-inspector").waitFor({ timeout: 20_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "node-session-in-use");
+    });
+
+    await step("对话 · 会话被占用", async () => {
+      const inspector = page.locator(".app-inspector");
+      await clickVisible(page, inspector.getByRole("button", { name: /发消息|Message/ }));
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.waitForFunction(
+        () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("会话被占用"),
+        null,
+        { timeout: 10_000 },
+      );
+      const input = page.locator(".conv-compose-input");
+      if (!(await input.isDisabled())) throw new Error("会话被占用时输入框应禁用，实际可以输入");
+      const fork = page.locator(".conv-busy button", { hasText: "复制一份来对话" });
+      if (!(await fork.first().isVisible().catch(() => false))) {
+        throw new Error("会话被占用时，输入框上方应有「复制一份来对话」按钮");
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-session-in-use");
+    });
+
+    // A run that only says something leaves no process block; a run that
+    // called tools keeps one.
+    await step("对话 · 只回一句话", async () => {
+      await openConversationList(page, narrow);
+      const search = page.getByRole("dialog").locator(".app-convpick-input");
+      await search.fill("legacy");
+      await page.waitForFunction(
+        () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
+        null,
+        { timeout: 5000 },
+      ).catch(() => undefined);
+      const picks = page.locator(".app-convpick-list .app-row");
+      const count = await picks.count();
+      if (count !== 1) throw new Error(`搜索「legacy」后列表应只剩 1 个节点，实际 ${count} 个`);
+      await picks.first().click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      const head = page.locator(".conv-detail .conv-head h2");
+      await head.waitFor({ timeout: 20_000 });
+      const headText = compactText(await head.innerText());
+      if (!/legacy-codex/.test(headText)) throw new Error(`搜索「legacy」后进入的不是 legacy-codex：「${headText}」`);
+
+      const body = "你好，收到请回复 收到";
+      const input = page.locator(".conv-compose-input");
+      await input.fill(body);
+      await input.press("Enter");
+      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
+      // The mock replies only in text 6 s after the task, so this waits for
+      // the finished state, then for the final trace to be read (and dropped).
+      await page.locator(".conv-detail .conv-head-state", { hasText: "已完成" }).waitFor({ timeout: 30_000 });
+      await page.waitForTimeout(600);
+      const traces = await page.locator(".conv-detail .trace").count();
+      if (traces !== 0) throw new Error(`只回一句话的任务不应出现过程块，实际有 ${traces} 个 .trace`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-text-only");
+    });
+
+    await step("对话 · 有工具调用", async () => {
+      const body = "整理一下这次发布的主要变化，列成要点。";
+      const input = page.locator(".conv-compose-input");
+      await input.fill(body);
+      await input.press("Enter");
+      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
+      // The header still says 已完成 from the previous task: wait for this one
+      // to be picked up, then for it to finish.
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector(".conv-detail .conv-head-state");
+          return !!el && !(el.textContent || "").includes("已完成");
+        },
+        null,
+        { timeout: 10_000 },
+      );
+      await page.locator(".conv-detail .conv-head-state", { hasText: "已完成" }).waitFor({ timeout: 30_000 });
+      await page.waitForFunction(
+        () => {
+          const detail = document.querySelector(".conv-detail");
+          return !!detail && detail.querySelectorAll(".trace").length > 0
+            && detail.querySelectorAll(".trace-spin").length === 0;
+        },
+        null,
+        { timeout: 10_000 },
+      );
+      const traces = await page.locator(".conv-detail .trace").count();
+      if (traces === 0) throw new Error("有工具调用的任务完成后应有过程块，实际没有 .trace");
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-tool-trace");
     });
 
     await step("项目页", async () => {
