@@ -1119,7 +1119,8 @@ textarea.app-input {
 .app-action-row:hover {
   background: var(--pill);
 }
-.app-action-row .chev {
+.app-action-row .chev,
+.app-action-row .app-chev {
   margin-left: auto;
 }
 .app-action-row.danger {
@@ -2750,6 +2751,16 @@ textarea.app-input {
 .md ol {
   margin: 0 0 8px;
   padding-left: 20px;
+}
+/* The base reset strips list markers; a message's lists need them back. */
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md ul ul {
+  list-style: circle;
 }
 .md li {
   margin: 2px 0;

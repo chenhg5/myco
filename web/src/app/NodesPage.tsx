@@ -305,8 +305,16 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           <h2>{L("没有匹配的节点", "No matching nodes")}</h2>
           <p>{L("换一个搜索或筛选条件试试。", "Try a different search or filter.")}</p>
         </div>
-      ) : (
-        groups.map((g) => (
+      ) : (<>
+        {/* Nothing matches, and an unreachable hub is still listed below. */}
+        {filters.hub === "all" && filtered.length === 0 && hubScoped.length > 0 && (
+          <div className="app-empty" style={{ margin: "6vh auto 6vh" }}>
+            <div className="app-empty-icon"><IconNodes /></div>
+            <h2>{L("没有匹配的节点", "No matching nodes")}</h2>
+            <p>{L("换一个搜索或筛选条件试试。", "Try a different search or filter.")}</p>
+          </div>
+        )}
+        {groups.map((g) => (
           <section className="app-group" key={g.hub.id}>
             <div className="app-group-title">
               <span className="name">{g.hub.name}</span>
@@ -324,7 +332,11 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
                   <span className="err" title={g.hub.error || undefined}>{hubErrorText(g.hub.error)}</span>
                 </div>
               ) : g.rows.length === 0 ? (
-                <div className="app-empty-note">{L("这个 Hub 上还没有节点。", "No nodes on this Hub yet.")}</div>
+                <div className="app-empty-note">
+                  {hubScoped.some((r) => r.hub.id === g.hub.id)
+                    ? L("没有匹配的节点，换一个搜索或筛选条件试试。", "No matching nodes. Try a different search or filter.")
+                    : L("这个 Hub 上还没有节点。", "No nodes on this Hub yet.")}
+                </div>
               ) : (
                 g.rows.map((r) => (
                   <NodeRowView
@@ -337,8 +349,8 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
               )}
             </div>
           </section>
-        ))
-      )}
+        ))}
+      </>)}
     </div>
   );
 }
