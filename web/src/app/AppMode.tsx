@@ -105,7 +105,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
   const [page, setPage] = useState<Page>("nodes");
-  const [filters, setFilters] = useState<Filters>({ query: "", hub: "all", machine: "all", state: "all", kind: "all", label: "all" });
+  // The hub picked last time is picked again (until it is removed).
+  const [filters, setFilters] = useState<Filters>(() => ({ query: "", hub: readPref(HUB_KEY) || "all", machine: "all", state: "all", kind: "all", label: "all" }));
+  useEffect(() => { writePref(HUB_KEY, filters.hub); }, [filters.hub]);
   const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
   const [machineInspect, setMachineInspect] = useState<MachineRef | null>(null);
   const [spawnTarget, setSpawnTarget] = useState<SpawnTarget | null>(null);
@@ -190,12 +192,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
   }, [refresh]);
 
-  // A removed hub must not stay selected.
+  // A removed hub must not stay selected (once the list has loaded: the
+  // remembered hub is not in the empty list the App starts with).
   useEffect(() => {
-    if (filters.hub !== "all" && !hubs.some((h) => h.id === filters.hub)) {
+    if (ov && filters.hub !== "all" && !hubs.some((h) => h.id === filters.hub)) {
       setFilters((f) => ({ ...f, hub: "all" }));
     }
-  }, [hubs, filters.hub]);
+  }, [hubs, filters.hub, ov]);
 
   useEffect(() => {
     if (page !== "machines") setMachineInspect(null);
@@ -810,6 +813,7 @@ function useWideWindow(min: number): boolean {
   return wide;
 }
 
+const HUB_KEY = "myco-app-hub";
 const LIST_WIDTH = 380;
 function clampWidth(w: number): number {
   return Math.min(600, Math.max(280, Math.round(w)));
