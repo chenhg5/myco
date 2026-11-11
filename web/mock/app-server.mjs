@@ -70,8 +70,28 @@ const studioThread = process.env.MOCK_E2E
 // only when it has one of these messages.
 const CONSOLE = `@console:${"glenn-mac"}`;
 
+// Earlier turns of the conversation with PM (Codex), so the chat is long
+// enough to scroll and its turn rail has something to show.
+const earlierTurns = [
+  ["上周的发布有没有遗留问题？", "没有阻塞的。还剩两个低优先级的界面问题，已经记在看板上。"],
+  ["把 CHANGELOG 里 0.16.7 的条目按模块分一下组。", "分好了：App 4 条、Hub 2 条、CLI 1 条。改动在 `CHANGELOG.md`。"],
+  ["runner 重连那个修复，影响旧版本的 Hub 吗？", "不影响。旧 Hub 不认识新字段会直接忽略，行为和以前一样。"],
+  ["那 Windows 上测过没有？", "CI 的 Windows job 通过了；真机我没有，建议你在台式机上点一遍。"],
+  ["帮我看下 make check 现在要跑多久。", "本机 2 分 10 秒：vet 8 秒，test 1 分 40 秒，smoke 22 秒。"],
+  ["test 里最慢的是哪个包？", "`internal/infra/sqlite`，约 13 秒，主要是迁移测试。"],
+  ["先不管它。发布分支拉了吗？", "拉了，`release/v0.16.8`，基于 main 的最新提交。"],
+  ["版本号现在是多少？", "`VERSION` 还是 v0.16.7，等你说发再改。"],
+].flatMap(([q, a], i) => {
+  const at = 7200 + (8 - i) * 900;
+  return [
+    makeMessage({ thread_id: "th_console_release", project: "website", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: q, created_at: iso(at), updated_at: iso(at) }),
+    makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done", body: a, created_at: iso(at - 120), updated_at: iso(at - 120) }),
+  ];
+});
+
 const consoleThreads = {
   th_console_release: [
+    ...earlierTurns,
     makeMessage({ thread_id: "th_console_release", project: "website", from: CONSOLE, to: "pm-codex", type: "task", status: "done", body: "整理 v0.16.8 的发布说明，列出主要变化和升级注意事项。", created_at: iso(7200), updated_at: iso(7200) }),
     makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "progress", status: "done", body: "正在读取 git log 和 CHANGELOG…", created_at: iso(7000), updated_at: iso(7000) }),
     makeMessage({

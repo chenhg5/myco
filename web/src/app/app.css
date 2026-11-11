@@ -2570,11 +2570,123 @@ textarea.app-input {
 .dot.failed {
   background: var(--red);
 }
+/* The scrolling conversation, with the turn rail floating at its left. */
+.conv-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .conv-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+/* Jumping to a turn leaves a little air above it. */
+.conv-msg[data-turn] {
+  scroll-margin-top: 14px;
+}
+/* One tick per thing you said. The turn in view is longer; ticks swell
+   under the pointer (this one motion is the point of the control). */
+/* The rail keeps to its own narrow lane, so it never sits over the text or
+   takes clicks meant for it; the timeline gives it a little room. */
+.conv-body.has-rail .conv-timeline {
+  padding-left: 36px;
+}
+.conv-rail {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: 30px;
+  max-height: calc(100% - 40px);
+  padding: 6px 0;
+  transform: translateY(-50%);
+}
+.conv-rail-tick {
+  flex: 0 1 10px;
+  min-height: 3px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0 0 0 6px;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+.conv-rail-tick::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--faint);
+  transition: width 0.12s ease, background-color 0.12s ease;
+}
+.conv-rail-tick.is-active::before {
+  width: 15px;
+  background: var(--fg-2);
+}
+.conv-rail-tick:hover + .conv-rail-tick + .conv-rail-tick::before,
+.conv-rail-tick:has(+ .conv-rail-tick + .conv-rail-tick:hover)::before {
+  width: 12px;
+}
+.conv-rail-tick:hover + .conv-rail-tick::before,
+.conv-rail-tick:has(+ .conv-rail-tick:hover)::before {
+  width: 17px;
+  background: var(--muted);
+}
+.conv-rail-tick:hover::before,
+.conv-rail-tick:focus-visible::before {
+  width: 22px;
+  background: var(--fg);
+}
+.conv-rail-tick:focus-visible {
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .conv-rail-tick::before { transition: none; }
+}
+/* Too narrow for the rail to stay clear of the text. */
+@media (max-width: 640px) {
+  .conv-rail { display: none; }
+}
+.conv-rail-card {
+  position: absolute;
+  left: 36px;
+  z-index: 4;
+  width: min(320px, calc(100% - 52px));
+  padding: 10px 12px 11px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  pointer-events: none;
+  animation: app-fade 0.1s ease-out;
+}
+.conv-rail-q,
+.conv-rail-a {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.conv-rail-q {
+  -webkit-line-clamp: 2;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--fg);
+}
+.conv-rail-a {
+  -webkit-line-clamp: 3;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 /* A conversation with an agent, as in the agents' own apps: one column;
    what you say is a small bubble on the right, what the agent says is plain

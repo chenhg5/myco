@@ -7,6 +7,8 @@ import { canManage, cliName, isMe, machineOfRow, personLabel, sessionBusy, nodeN
 import { MessageContent } from "@/app/Markdown";
 import { STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
+import { TurnRail, type Turn } from "@/app/TurnRail";
+import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
 import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
@@ -357,6 +359,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+
+  // The rail at the left: each thing you said, with how the answer starts.
+  const turns: Turn[] = [];
+  for (const m of shown || []) {
+    if (m.type === "progress" || m.type === "event") continue;
+    if (isMe(m.from, row?.hub)) turns.push({ id: m.id, question: summarize(m), answer: "" });
+    else if (turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = summarize(m);
+  }
+  const hasRail = !shellMode && !observed && !execNode && turns.length >= 2;
   // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
   const histPos = useRef(-1);
@@ -496,7 +507,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")}>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-turn={mine && !observed ? m.id : undefined}>
           <div className="conv-msg-name">{nameOf(m.from)}</div>
           <div className="conv-bubble">
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
@@ -562,6 +573,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </span>}
       </header>
 
+      <div className={cn("conv-body", hasRail && "has-rail")}>
+      {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className={cn("conv-timeline", shellMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
@@ -629,6 +642,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             </>
           )}
         </div>
+      </div>
       </div>
 
       {shellMode ? null : observed ? (
