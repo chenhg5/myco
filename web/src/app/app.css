@@ -4,6 +4,7 @@
   --bg: #f8f8fa;
   --card: #ffffff;
   --chrome: #ebebef;
+  --focus: rgba(20, 22, 30, 0.34);
   --btn: #26262c;
   --btn-hover: #37373f;
   --btn-active: #17171b;
@@ -44,6 +45,7 @@
   --bg: #1b1b1f;
   --card: #232327;
   --chrome: #121215;
+  --focus: rgba(255, 255, 255, 0.36);
   --btn: #e8e8ed;
   --btn-hover: #ffffff;
   --btn-active: #cfcfd6;
@@ -475,7 +477,7 @@ a.app-btn {
   color: var(--muted);
 }
 .app-input:focus {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
 textarea.app-input {
   height: auto;
@@ -560,7 +562,7 @@ textarea.app-input {
   color: var(--muted);
 }
 .app-search:focus-within {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
 .app-select-wrap {
   position: relative;
@@ -594,7 +596,7 @@ textarea.app-input {
   background: var(--pill-hover);
 }
 .app-select:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
 
 /* ---------- groups & lists ---------- */
@@ -890,22 +892,28 @@ textarea.app-input {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(20, 22, 30, 0.14);
+  background: rgba(20, 22, 30, 0.1);
   animation: app-fade 0.16s ease-out;
 }
+.dark .app-inspector-backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+/* A sheet floating inside the window, with the page panel's inset and
+   corners, rather than a slab on the window's edge. */
 .app-inspector {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 41;
   display: flex;
   flex-direction: column;
   width: 420px;
-  max-width: 100%;
+  max-width: calc(100% - 16px);
+  border-radius: 10px;
   background: var(--card);
-  border-left: 1px solid var(--line);
-  box-shadow: -10px 0 30px rgba(20, 22, 30, 0.1);
+  box-shadow: var(--pop-shadow);
+  overflow: hidden;
   animation: app-slide-in 0.18s ease-out;
 }
 .app-inspector-head {
@@ -1196,21 +1204,32 @@ textarea.app-input {
   border-top-color: var(--accent);
   animation: app-spin 0.7s linear infinite;
 }
-/* Full-width native select inside dialogs. */
+/* Full-width select inside dialogs and settings: the system's menu, but the
+   app's own field and chevron (the same mid grey works on both themes). */
 .app-select-field {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 28px 0 10px;
   border: 0;
   border-radius: 7px;
-  background: var(--pill);
+  background-color: var(--pill);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8a93' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.4 6.3 8 9.9l3.6-3.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px 14px;
   color: var(--fg);
   font: inherit;
   font-size: 12.5px;
   outline: none;
+  cursor: default;
+}
+.app-select-field:hover:not(:disabled) {
+  background-color: var(--pill-hover);
 }
 .app-select-field:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
 .app-select-field:disabled {
   opacity: 0.6;
@@ -2332,7 +2351,7 @@ textarea.app-input {
   box-sizing: border-box;
 }
 .conv-row-state.is-working {
-  background: var(--amber);
+  background: var(--green);
   animation: conv-state-pulse 1.8s ease-out infinite;
 }
 .conv-row-state.is-queued {
@@ -2343,11 +2362,11 @@ textarea.app-input {
 }
 @keyframes conv-state-pulse {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 55%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--amber) 0%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 0%, transparent);
   }
 }
 .conv-row-pin {
@@ -2646,8 +2665,7 @@ textarea.app-input {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .conv-compose-box:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--ring);
+  border-color: var(--focus);
 }
 .conv-compose-box.is-steer,
 .conv-compose-box.is-steer:focus-within {
@@ -3253,7 +3271,7 @@ button.app-label:hover { filter: brightness(0.95); }
   font-size: 12.5px;
   outline: none;
 }
-.app-tag-box:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+.app-tag-box:focus-within { box-shadow: inset 0 0 0 1px var(--focus); }
 
 /* the nodes page's filters: one line of compact dropdowns */
 .app-toolbar .app-search {
@@ -4141,9 +4159,11 @@ body.is-resizing {
 .app-project-progress .muted { color: var(--muted); }
 .app-project-stat { display: inline-flex; align-items: center; gap: 6px; }
 .app-project-stat i { width: 7px; height: 7px; border-radius: 999px; background: var(--faint); }
-.app-project-stat.is-working i { background: var(--amber); }
+/* The same colours as a node's dot and a conversation's: working is green,
+   queued faint, failed red, done the quiet grey. */
+.app-project-stat.is-working i { background: var(--green); }
 .app-project-stat.is-failed i { background: var(--red); }
-.app-project-stat.is-done i { background: var(--accent); }
+.app-project-stat.is-done i { background: var(--muted); }
 .app-project-stat b { font-weight: 600; color: var(--fg); }
 .app-project-progress-actions { margin-left: auto; }
 .app-project-onhand { flex: none; font-size: 12px; color: var(--muted); margin-right: 4px; }
