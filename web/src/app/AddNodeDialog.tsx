@@ -360,7 +360,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                 </span>
                 <button
                   type="button"
-                  className="app-btn app-btn-small"
+                  className="app-group-action"
                   onClick={() => { setSessions(null); void loadSessions(); }}
                   disabled={sessionsBusy}
                   title={L("重新读取会话", "Reload sessions")}

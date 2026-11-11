@@ -108,8 +108,10 @@ function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Mes
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
   const took = execDuration(res?.duration_ms);
   const pending = !answer && task.status !== "done" && task.status !== "failed";
+  const failed = answer?.type === "event" || (!answer && task.status === "failed")
+    || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
   return (
-    <div className="term-cmd">
+    <div className={cn("term-cmd", failed && "is-failed")}>
       <div className="term-meta">
         <span>
           {task.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}

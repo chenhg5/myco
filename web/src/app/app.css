@@ -2262,7 +2262,8 @@ textarea.app-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  min-height: 24px;
+  margin: 14px 0 6px;
 }
 .app-addnode-bar .app-small-note {
   flex: 1;
@@ -3602,70 +3603,104 @@ button.app-label:hover { filter: brightness(0.95); }
   text-decoration: underline;
 }
 
-/* Exchanges with an exec node, as a terminal. */
+/* Exchanges with an exec node, as a terminal. Dark in both themes, like a
+   terminal window: one block per command (who and when in small UI type,
+   the command, its output), hairlines between blocks, a red edge on a
+   command that failed. */
 .term {
-  background: #15161a;
-  color: #d9dbe0;
-  border: 1px solid var(--line);
+  --term-bg: #101115;
+  --term-fg: #e9eaee;
+  --term-out: #aeb2bc;
+  --term-dim: #6c707b;
+  --term-rule: rgba(255, 255, 255, 0.065);
+  --term-green: #5fcb9f;
+  --term-red: #f08a8c;
+  background: var(--term-bg);
+  color: var(--term-fg);
   border-radius: 10px;
-  padding: 14px 16px;
-  font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.09), 0 1px 3px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  font: 12px/1.5 ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  tab-size: 4;
   /* Long unbroken output (base64, hashes, URLs) wraps instead of making
      the whole terminal scroll sideways. */
   overflow-wrap: anywhere;
   min-width: 0;
+  overflow: hidden;
+}
+.term ::selection {
+  background: rgba(110, 160, 255, 0.35);
+}
+.term-cmd,
+.term-comment {
+  padding: 10px 16px 11px;
 }
 .term-cmd + .term-cmd,
 .term-cmd + .term-comment,
 .term-comment + .term-cmd,
 .term-comment + .term-comment {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed #2c2e35;
+  border-top: 1px solid var(--term-rule);
 }
+.term-cmd.is-failed {
+  box-shadow: inset 2px 0 0 #d9575b;
+}
+/* Who sent it, when, and how long it took: UI type, not terminal type. */
 .term-meta {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: #7c808b;
-  font-size: 11px;
-  margin-bottom: 2px;
+  margin-bottom: 5px;
+  color: var(--term-dim);
+  font: 10.5px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
+/* A wrapped command continues under its first character, not under the $. */
 .term-line {
+  padding-left: 2ch;
+  text-indent: -2ch;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #f2f3f5;
+  color: var(--term-fg);
 }
 .term-prompt {
-  color: #52a685;
-  margin-right: 8px;
+  display: inline-block;
+  width: 2ch;
+  text-indent: 0;
+  color: var(--term-green);
   user-select: none;
 }
 .term-out {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: inherit;
-  color: #c3c6cd;
+  color: var(--term-out);
 }
 .term-out.is-err {
-  color: #f0a3a3;
+  color: var(--term-red);
 }
 .term-exit {
-  margin-top: 4px;
-  color: #f08c8c;
+  display: inline-block;
+  margin-top: 7px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(240, 90, 95, 0.15);
+  color: var(--term-red);
+  font-size: 11px;
 }
 .term-pending {
-  margin-top: 4px;
-  color: #d9b45c;
+  margin-top: 6px;
+  color: #dcb25e;
 }
 .term-comment {
-  color: #8d919b;
+  color: #8a8e99;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .term-line.term-earlier {
-  color: #7c808b;
+  color: var(--term-dim);
 }
 
 /* Your own session with a shell node: a terminal you type into. */
@@ -3687,12 +3722,11 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-input-line {
   display: flex;
   align-items: flex-start;
+  padding: 10px 16px 11px;
 }
 .term.is-live > .term-cmd + .term-input-line,
 .term.is-live > .term-comment + .term-input-line {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed #2c2e35;
+  border-top: 1px solid var(--term-rule);
 }
 .term-cwd {
   color: #7aa2d6;
@@ -3705,8 +3739,8 @@ button.app-label:hover { filter: brightness(0.95); }
   border: 0;
   outline: none;
   background: transparent;
-  color: #f2f3f5;
-  caret-color: #52a685;
+  color: var(--term-fg);
+  caret-color: var(--term-green);
   font: inherit;
   resize: none;
   overflow-y: auto;
@@ -4302,17 +4336,17 @@ body.is-resizing {
 .app-update-close:hover { background: var(--nav-hover); color: var(--fg); }
 .app-update-close svg { width: 13px; height: 13px; }
 
-/* Project page: a document-like page, so larger type than the lists. */
-.app-project .app-group-title { margin: 0 2px 8px; font-size: 13px; }
-.app-project .app-group-title .name { font-size: 15px; font-weight: 600; color: var(--fg); }
-.app-project .app-group-note { font-size: 12.5px; }
-.app-project-titles h1 { font-size: 24px; }
-.app-project-goal { font-size: 14.5px; }
-.app-project-meta { font-size: 12.5px; }
-.app-project-progress { font-size: 13.5px; }
-.app-project .app-row-title { font-size: 14px; }
-.app-project .app-row-sub { font-size: 12.5px; }
-.app-project-brief { font-size: 14px; }
-.app-project .app-empty-note { font-size: 13px; }
-.app-project .conv-row-title { font-size: 14px; }
-.app-project .conv-row-summary { font-size: 12.5px; }
+/* Project page: a document-like page, so type half a step larger than the lists. */
+.app-project .app-group-title { margin: 0 2px 8px; font-size: 12.5px; }
+.app-project .app-group-title .name { font-size: 14px; font-weight: 600; color: var(--fg); }
+.app-project .app-group-note { font-size: 12px; }
+.app-project-titles h1 { font-size: 21px; }
+.app-project-goal { font-size: 13.5px; }
+.app-project-meta { font-size: 12px; }
+.app-project-progress { font-size: 13px; }
+.app-project .app-row-title { font-size: 13.5px; }
+.app-project .app-row-sub { font-size: 12px; }
+.app-project-brief { font-size: 13.5px; }
+.app-project .app-empty-note { font-size: 12.5px; }
+.app-project .conv-row-title { font-size: 13.5px; }
+.app-project .conv-row-summary { font-size: 12px; }
