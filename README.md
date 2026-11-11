@@ -70,7 +70,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 **2. Add your agents.** Click **Add node**. Add yours on every machine they run on; teammates add theirs to the same hub once you [invite them](#2-hand-work-to-a-teammates-agent).
 
 - **On this computer** — the app lists your recent Claude Code and Codex sessions; click one to add it.
-- **On another computer** — copy the one sentence the app gives you and paste it into the Claude Code or Codex session over there. It installs myco and joins by itself.
+- **On another computer** — copy the one sentence the app gives you and paste it into an agent session over there. It installs myco and joins by itself. Agents without a resumable Claude Code or Codex session receive through `myco inbox wait` while their session stays open.
 - **Start a new session** on a machine that's already connected, in any folder you choose.
 
 <picture>

@@ -1000,10 +1000,54 @@ func TestJoinLinks(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".myco", "agents", "test-box-codex-4a5b.yaml")); err != nil {
 		t.Fatal("codex profile missing")
 	}
-	// No session at all: a clear error, not a guess.
+	// No resumable session: register a stable inbox-only agent.
 	os.RemoveAll(filepath.Join(home, ".codex"))
-	if code, _, _ := cx.run("join"); code != ExitNotFound {
-		t.Fatalf("join without a session: exit %d", code)
+	code, out, e = cx.run("join", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "runner cannot wake this agent") {
+		t.Fatalf("inbox join: %d %s %s", code, out, e)
+	}
+	var inboxJoin struct{ Agent struct{ Name string } }
+	if err := json.Unmarshal([]byte(out), &inboxJoin); err != nil {
+		t.Fatal(err)
+	}
+	code, out, e = cx.run("join", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"created": false`) || !strings.Contains(out, `"name": "`+inboxJoin.Agent.Name+`"`) {
+		t.Fatalf("repeat inbox join: %d %s %s", code, out, e)
+	}
+	code, out, e = admin.run("message", "send", "--to", inboxJoin.Agent.Name, "--body", "hello", "--format", "json")
+	if code != 0 {
+		t.Fatalf("send to inbox agent: %d %s", code, e)
+	}
+	var sent struct{ Message struct{ ID string } }
+	if err := json.Unmarshal([]byte(out), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, e := cx.run("runner", "start", "--all", "--once", "--log-level", "error"); code != 0 {
+		t.Fatalf("runner should skip inbox profile: %d %s", code, e)
+	}
+	code, out, e = admin.run("message", "get", "--id", sent.Message.ID, "--format", "json")
+	if code != 0 || !strings.Contains(out, `"status": "queued"`) {
+		t.Fatalf("runner must leave inbox task for inbox wait: %d %s %s", code, out, e)
+	}
+	inboxCfg, err := config.Load(filepath.Join(home, ".myco", "agents", inboxJoin.Agent.Name+".yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inboxCfg.Runner.Harness != "" {
+		t.Fatalf("inbox profile must also be skipped by older runners: %+v %v", inboxCfg, err)
+	}
+	inboxClient, err := client.New(hub, inboxCfg.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := inboxClient.Overview(context.Background(), 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range view.Agents {
+		if st.Agent.Name == inboxJoin.Agent.Name && st.Receiving != app.ReceivingSession {
+			t.Fatalf("inbox receiving = %q, want session", st.Receiving)
+		}
 	}
 
 	// Exec links make exec nodes.

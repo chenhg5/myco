@@ -3,6 +3,8 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -388,7 +390,7 @@ func execBinding(e *env, name, workdir string) (api.Binding, error) {
 func joinCommand() *Command {
 	return &Command{
 		Name:     "join",
-		Summary:  "Register the current agent session (Claude Code, Codex, claude.ai) on this machine's network",
+		Summary:  "Register this agent on the network (Claude Code, Codex, or inbox-only)",
 		Mutating: true,
 		Long: `Run it inside the session that should become an agent. It detects the session, names the agent
 <machine>-<cli>-<id> and stores its credentials; the machine's runner service then wakes the session
@@ -397,16 +399,17 @@ Safe to re-run: the same session gets the same agent back.`,
 		Examples: []string{
 			"myco join",
 			`myco join --description "reviews PRs for the web app" --display-name "Web reviewer"`,
-			"myco join --harness codex --session-id 0199a1b2-...   # if detection fails",
+			"myco join --harness inbox                         # agent receives through inbox wait only",
+			"myco join --harness codex --session-id 0199a1b2-...   # specify a resumable session",
 			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
 			"myco join --fork                                      # join a copy; keep using this session yourself",
 		},
 		Flags: []Flag{
-			{Name: "name", Kind: String, Help: "Agent name (default: <machine>-<cli>-<short session id>)"},
+			{Name: "name", Kind: String, Help: "Agent name (default: <machine>-<cli>-<short id>; inbox uses <machine>-agent-<short id>)"},
 			{Name: "display-name", Kind: String, Help: "Human-friendly name"},
 			{Name: "description", Kind: String, Help: "What this agent does (helps others pick it)"},
 			{Name: "label", Kind: List, Help: "Extra labels, e.g. group=web"},
-			{Name: "harness", Kind: String, Help: "claude or codex (default: detected)"},
+			{Name: "harness", Kind: String, Help: "claude, codex, or inbox (default: detect session; inbox if none)"},
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
@@ -492,10 +495,13 @@ Safe to re-run: the same session gets the same agent back.`,
 			if dry {
 				return e.dryRun(map[string]any{"action": "join", "agent": res.Agent, "detected": how})
 			}
-			cloud := b.Harness == "claude-cloud"
+			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
 			if cloud {
 				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits"
+				if b.Harness == "inbox" {
+					out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; a runner cannot wake this agent, so it stops receiving when the session closes"
+				}
 			} else {
 				out["receive"] = openSessionNote
 			}
@@ -508,6 +514,9 @@ Safe to re-run: the same session gets the same agent back.`,
 				if cloud {
 					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
 					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
+					if b.Harness == "inbox" {
+						fmt.Fprintln(w, "This agent cannot be woken by a runner; it stops receiving when its session closes.")
+					}
 				} else {
 					fmt.Fprintln(w, openSessionNote)
 				}
@@ -533,6 +542,8 @@ func shortHarness(h string) string {
 	switch h {
 	case "claude-cloud":
 		return "claude"
+	case "inbox":
+		return "agent"
 	case "":
 		return "agent"
 	}
@@ -558,6 +569,9 @@ func slug(id string, n int) string {
 // Codex session most recently active in this directory.
 func detectSession(e *env) (api.Binding, string, error) {
 	wd, _ := os.Getwd()
+	if e.in.String("harness") == "inbox" && e.in.String("session-id") == "" {
+		return inboxBinding(wd), "inbox-only agent", nil
+	}
 	if id := e.in.String("session-id"); id != "" {
 		h := e.in.String("harness")
 		if h == "" {
@@ -583,9 +597,18 @@ func detectSession(e *env) (api.Binding, string, error) {
 				"detected codex session " + id + " (" + filepath.Base(file) + ")", nil
 		}
 	}
+	if e.in.String("harness") == "" {
+		return inboxBinding(wd), "inbox-only agent (no resumable session detected)", nil
+	}
 	return api.Binding{}, "", errorf("not_found", ExitNotFound,
-		"run this inside a Claude Code or Codex session; if it still fails pass --harness <claude|codex> --session-id <id> (never guess the id)",
-		"no agent session detected here")
+		"use --harness inbox for an agent that receives with inbox wait, or pass --harness <claude|codex> --session-id <id> for a resumable session",
+		"no %s session detected here", e.in.String("harness"))
+}
+
+func inboxBinding(wd string) api.Binding {
+	home, _ := os.UserHomeDir()
+	sum := sha256.Sum256([]byte(hostname() + "\x00" + home + "\x00" + wd))
+	return api.Binding{Harness: "inbox", SessionID: "inbox:" + hex.EncodeToString(sum[:6]), Environment: hostname(), Workdir: wd}
 }
 
 // findCodexSession returns the Codex session that was active most recently

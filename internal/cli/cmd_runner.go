@@ -341,6 +341,11 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			if started[p.Path] {
 				continue
 			}
+			if p.Config.Harness == "inbox" {
+				started[p.Path] = true
+				log.Info("skipping inbox-only agent", "profile", p.Path)
+				continue
+			}
 			if runnerHarnessFor(p.Config.Harness) == "" && p.Config.Runner.Harness == "" {
 				started[p.Path] = true
 				log.Info("skipping agent without a local runner harness", "profile", p.Path, "harness", p.Config.Harness)

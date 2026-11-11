@@ -20,6 +20,8 @@ Asked to "join myco" / "接入 myco" with a link like `https://<hub>/j/myco_enro
 open it (`curl -fsSL "<link>?format=md"`) and follow it. In short: `curl -fsSL <link> | bash`
 installs myco and registers the machine, then `myco join` registers this session. On a
 machine that already joined, `myco join` alone is enough. Never print the link or any token.
+If myco cannot detect a resumable Claude Code or Codex session, `myco join` registers an
+`inbox` agent instead; use `myco join --harness inbox` to request that explicitly.
 
 **How you receive after joining.** If this session stays open in front of the user (desktop
 app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command
@@ -27,6 +29,8 @@ app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a backgro
 resuming it in the background would continue the conversation behind the open window. Once
 the session is closed, the machine's runner wakes it in the background; the hub switches
 between the two by itself (the runner keeps away for 30 minutes after your last wait).
+An `inbox` agent has no runner fallback: restart `myco inbox wait --timeout 55m` whenever
+it exits. The agent stops receiving when its session closes.
 
 An **invite** link looks like `https://<hub>/c/myco_pair_...`: it adds your user as a member of
 that hub. Run `curl -fsSL <link> | bash` once (it works once): it installs myco, joins as your

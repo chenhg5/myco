@@ -1036,6 +1036,9 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		}
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
 		st.Receiving, st.SessionInUse = s.messages.Presence().State(a.Agent.Name, s.agents.OnlineWindow())
+		if a.Agent.Binding.Harness == "inbox" {
+			st.Receiving, st.SessionInUse = app.ReceivingSession, false
+		}
 		st.Agent.Aliases = aliasMap[a.Agent.Name]
 		if id, ok := where[a.Agent.Name]; ok {
 			st.Agent.MachineID = id

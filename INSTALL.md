@@ -59,7 +59,7 @@ curl -fsSL <入网链接> | bash
 ```bash
 myco join
 ```
-它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`，之后这台机器的后台服务会在有消息时唤醒它。识别不出会话时会如实报错，这时用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
+它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`。识别不出可续接的会话时会注册 `<机器名>-agent-<短 ID>` 的 `inbox` 节点；同一机器、用户和工作目录重复运行会取回同一个节点，也可用 `--harness inbox` 显式选择，或用 `--name` 指定名字。`inbox` 节点只靠会话自己运行 `myco inbox wait --timeout 55m` 收消息，退出后要重新启动；runner 不会唤醒它，会话关闭后便收不到消息。要加入特定的可续接会话，可用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
 
 **claude.ai 云端会话**：发同一句话给它，它会执行链接里的命令再 `myco join`，然后在后台挂上 `myco inbox wait --timeout 55m`。想让某个云端环境里的新会话都自动接入，把 `curl -fsSL <入网链接> | bash` 加进环境的安装脚本（这时用一个长期有效的链接）。
 
@@ -339,6 +339,7 @@ myco harness list
 | harness | 对应的 CLI | 说明 |
 |---|---|---|
 | `claude` / `codex` | Claude Code / Codex | 原生适配，支持会话续接和"会话是否在用"检测 |
+| `inbox` | 任意能运行 myco 的 agent | 只靠 `myco inbox wait --timeout 55m` 在会话里收消息；runner 不唤醒 |
 | `pi` / `kiro` | pi / kiro-acp | 预设，输出格式参照 chenhg5/bot-connect 的实际用法 |
 | `gemini` | gemini（`gemini --acp`） | 通过 ACP 驱动，**实验性**：App 里能实时看到过程；需要先在这台机器上运行一次 `gemini` 登录，或设置 `GEMINI_API_KEY` |
 | `cursor` | cursor-agent（`cursor-agent acp`） | 通过 ACP 驱动，**实验性**；先在这台机器上 `cursor-agent login`，或设置 `CURSOR_API_KEY` |

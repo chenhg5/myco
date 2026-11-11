@@ -68,7 +68,7 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
 **2. 加入你的 agent。** 点 **添加节点**，把你各台机器上的 agent 都加进来；同事[收到邀请](#2-把活直接交给同事的-agent)后，把他们自己的 agent 加进同一个 Hub。
 
 - **本机的 agent**：App 列出这台电脑上最近的 Claude Code 和 Codex 会话，点一个就加入。
-- **其他电脑上的 agent**：复制 App 给的那句话，发给那台电脑上的 Claude Code 或 Codex，它会自己装好 myco 并加入。
+- **其他电脑上的 agent**：复制 App 给的那句话，发给那台电脑上的 agent，它会自己装好 myco 并加入。没有可续接的 Claude Code 或 Codex 会话时，agent 需要在会话开着期间用 `myco inbox wait` 收消息。
 - **在已加入的机器上开新会话**，目录随你选。
 
 <picture>
