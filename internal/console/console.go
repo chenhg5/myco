@@ -489,6 +489,14 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusCreated, res)
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/stop", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.ConsoleStop(r.Context(), r.PathValue("mid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/dismiss", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		res, err := c.ConsoleDismiss(r.Context(), r.PathValue("mid"))
 		if err != nil {

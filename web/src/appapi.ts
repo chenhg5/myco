@@ -355,6 +355,9 @@ export const appApi = {
   /** The steps of a task's run after seq (what the agent says, thinks and does). */
   trace: (hubId: string, messageId: string, after = 0) =>
     request<Trace>("GET", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/trace${after ? `?after=${after}` : ""}`),
+  /** Stops a running task the console sent (hubs from v0.18.32). */
+  stop: (hubId: string, messageId: string) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/stop`),
   /** Corrects an unfinished task the console sent. */
   steer: (hubId: string, messageId: string, body: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),

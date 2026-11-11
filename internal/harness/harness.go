@@ -55,14 +55,16 @@ type Request struct {
 	Provider *ProviderSettings
 	// OnEvent, when set, gets the run's steps as they happen (what the
 	// agent says, thinks and does), for the live view in the app. Harnesses
-	// that cannot tell leave it uncalled.
+	// that cannot tell leave it uncalled. It may be called from several goroutines.
 	OnEvent func(Event)
 }
 
 // Event is one step of a run.
 type Event struct {
-	// Kind: text, thinking, tool, tool_result, usage or error.
-	Kind string `json:"kind"`
+	// Kind: text, thinking, tool, tool_result, usage, error, or output (a
+	// shell command's output as it runs; Stream says stdout or stderr).
+	Kind   string `json:"kind"`
+	Stream string `json:"stream,omitempty"`
 	// Text: what the agent said or thought, or the error.
 	Text string `json:"text,omitempty"`
 	// Tool is the tool's name; ID pairs a call with its result.

@@ -816,6 +816,17 @@ func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Messag
 	return &out, nil
 }
 
+// ConsoleStop stops a running task sent from the console: the task is
+// closed as failed, and the recipient's runner ends the run.
+func (c *Client) ConsoleStop(ctx context.Context, id string) (*api.Message, error) {
+	var out api.Message
+	if err := c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/stop", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	c.open(ctx, &out)
+	return &out, nil
+}
+
 // ConsoleDismiss closes an open message for its recipient without a reply
 // (the recipient node's owner, or a hub admin).
 func (c *Client) ConsoleDismiss(ctx context.Context, id string) (*api.Message, error) {

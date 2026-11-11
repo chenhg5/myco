@@ -86,3 +86,39 @@ func TestRunTraceSummaryAndOff(t *testing.T) {
 		t.Fatalf("an encrypted task was traced")
 	}
 }
+
+func TestTracerJoinsOutputLines(t *testing.T) {
+	hub := &traceHub{fakeHub: newFakeHub()}
+	tr := newTracer(context.Background(), hub, "t1", TraceFull, quiet())
+	for i := 0; i < 3; i++ {
+		tr.add(harness.Event{Kind: "output", Stream: "stdout", Text: "line"})
+	}
+	tr.add(harness.Event{Kind: "output", Stream: "stderr", Text: "oops"})
+	tr.add(harness.Event{Kind: "output", Stream: "stdout", Text: strings.Repeat("y", traceOutChunk)})
+	tr.close()
+	var got []harness.Event
+	for _, e := range hub.events {
+		var ev harness.Event
+		json.Unmarshal(e.Data, &ev)
+		got = append(got, ev)
+	}
+	if len(got) != 3 || got[0].Text != "line\nline\nline\n" || got[1].Stream != "stderr" || got[2].Stream != "stdout" {
+		t.Fatalf("lines not joined per stream: %+v", got)
+	}
+
+	// Past the live limit, output stops (the result still has it).
+	hub = &traceHub{fakeHub: newFakeHub()}
+	tr = newTracer(context.Background(), hub, "t1", TraceFull, quiet())
+	big := strings.Repeat("z", 1000)
+	for i := 0; i < traceMaxLive/1000+50; i++ {
+		tr.add(harness.Event{Kind: "output", Stream: "stdout", Text: big})
+	}
+	tr.close()
+	n := 0
+	for _, e := range hub.events {
+		n += len(e.Data)
+	}
+	if n > traceMaxLive+traceMaxLive/10 || !strings.Contains(string(hub.events[len(hub.events)-1].Data), "more output") {
+		t.Fatalf("live output not capped: %d bytes", n)
+	}
+}

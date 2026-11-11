@@ -27,6 +27,8 @@ type Process struct {
 	// OnStdoutLine, when set, gets each line of stdout as it is written
 	// (without the newline), for live views; stdout is still captured.
 	OnStdoutLine func(line []byte)
+	// OnStderrLine is the same for stderr; the two may be called concurrently.
+	OnStderrLine func(line []byte)
 }
 
 // ProcessResult holds captured output.
@@ -59,16 +61,23 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		stdout.max, stderr.max = p.MaxOutput, p.MaxOutput
 	}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	var lines *lineTee
+	var lines, errLines *lineTee
 	if p.OnStdoutLine != nil {
 		lines = &lineTee{next: &stdout, fn: p.OnStdoutLine}
 		cmd.Stdout = lines
+	}
+	if p.OnStderrLine != nil {
+		errLines = &lineTee{next: &stderr, fn: p.OnStderrLine}
+		cmd.Stderr = errLines
 	}
 	setProcessGroup(cmd)
 	cmd.WaitDelay = interruptGrace + 2*time.Second
 	err := cmd.Run()
 	if lines != nil {
 		lines.flush()
+	}
+	if errLines != nil {
+		errLines.flush()
 	}
 	res := ProcessResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1, Truncated: stdout.cut || stderr.cut}
 	if cmd.ProcessState != nil {

@@ -33,6 +33,11 @@ const (
 	traceMaxText   = 8000
 	traceMaxInput  = 1000
 	traceMaxOutput = 4000
+	// A shell command's live output: lines are joined into chunks of about
+	// this size, and the live view stops after traceMaxLive bytes (the reply
+	// still carries the output as the node captured it).
+	traceOutChunk = 4000
+	traceMaxLive  = 1 << 20
 )
 
 // tracer collects a run's steps and uploads them in batches.
@@ -44,6 +49,8 @@ type tracer struct {
 	log   *slog.Logger
 	mu    sync.Mutex
 	queue []api.TraceEvent
+	out   *harness.Event // output lines not queued yet
+	live  int            // output bytes so far
 	seq   int
 	fails int
 	off   bool
@@ -60,6 +67,10 @@ func newTracer(ctx context.Context, up TraceUploader, id, mode string, log *slog
 
 // add records a step (harness.Request.OnEvent).
 func (t *tracer) add(ev harness.Event) {
+	if ev.Kind == "output" {
+		t.addOutput(ev)
+		return
+	}
 	if t.mode == TraceSummary {
 		ev.Input, ev.Output = "", ""
 		if ev.Kind == "thinking" || ev.Kind == "text" {
@@ -69,13 +80,54 @@ func (t *tracer) add(ev harness.Event) {
 	ev.Text = clip(ev.Text, traceMaxText)
 	ev.Input = clip(ev.Input, traceMaxInput)
 	ev.Output = clip(ev.Output, traceMaxOutput)
-	data, err := json.Marshal(ev)
-	if err != nil {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.queueOutput()
+	t.push(ev)
+}
+
+// addOutput joins output lines of one stream into chunks.
+func (t *tracer) addOutput(ev harness.Event) {
+	if t.mode == TraceSummary {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.live >= traceMaxLive {
+		return
+	}
+	line := ev.Text + "\n"
+	t.live += len(line)
+	if t.live >= traceMaxLive {
+		line += "… (more output; see the result)\n"
+	}
+	if t.out != nil && (t.out.Stream != ev.Stream || len(t.out.Text)+len(line) > traceOutChunk) {
+		t.queueOutput()
+	}
+	if t.out == nil {
+		t.out = &harness.Event{Kind: "output", Stream: ev.Stream}
+	}
+	t.out.Text += line
+}
+
+// queueOutput moves the pending output chunk to the queue. Holds t.mu.
+func (t *tracer) queueOutput() {
+	if t.out == nil {
+		return
+	}
+	ev := *t.out
+	t.out = nil
+	ev.Text = clip(ev.Text, traceMaxText)
+	t.push(ev)
+}
+
+// push queues one step. Holds t.mu.
+func (t *tracer) push(ev harness.Event) {
 	if t.off {
+		return
+	}
+	data, err := json.Marshal(ev)
+	if err != nil {
 		return
 	}
 	t.seq++
@@ -99,6 +151,7 @@ func (t *tracer) loop() {
 
 func (t *tracer) flush() {
 	t.mu.Lock()
+	t.queueOutput()
 	batch := t.queue
 	t.queue = nil
 	off := t.off

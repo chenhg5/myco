@@ -137,6 +137,7 @@ func (s *Server) routes() {
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
+	m.HandleFunc("POST /v1/console/messages/{id}/stop", s.admin(s.consoleStop))
 	m.HandleFunc("GET /v1/console/messages/{id}/trace", s.admin(s.consoleTrace))
 	m.HandleFunc("POST /v1/console/messages/{id}/dismiss", s.admin(s.consoleDismiss))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
@@ -1577,6 +1578,17 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, messageDTO(m))
+}
+
+// consoleStop stops a running task sent from the console.
+func (s *Server) consoleStop(w http.ResponseWriter, r *http.Request) {
+	name, _ := s.consoleIdentity(r)
+	m, err := s.messages.StopFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, messageDTO(m))
 }
 
 // consoleDismiss closes an open message for its recipient (owner of the

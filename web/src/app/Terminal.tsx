@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
-import type { Message } from "@/api";
+import type { Message, TraceStep } from "@/api";
+import { appApi, isOldHub } from "@/appapi";
 import { execDuration, parseExecResult } from "@/app/Markdown";
 import { cn } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
@@ -15,8 +17,14 @@ function stamp(iso: string): string {
  * `$` line with who sent it and when, its output below, and the exit code
  * when it failed. Notes and other messages are shown as `#` comment lines.
  */
-export function Terminal({ messages, execNode, nameOf, hubE2E, live, children }: {
+export function Terminal({ messages, execNode, nameOf, hubE2E, live, children, hubId, onGrow, onStop, canStop }: {
   messages: Message[];
+  /** show a running command's output as it comes (from the run trace) */
+  hubId?: string;
+  onGrow?: () => void;
+  /** offered on running commands you may stop */
+  onStop?: (task: Message) => void;
+  canStop?: (task: Message) => boolean;
   /** a session you type into: fills the space, ends with the prompt (children) */
   live?: boolean;
   children?: React.ReactNode;
@@ -47,7 +55,7 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, children }:
     if (m.type === "task" && m.to === execNode) {
       const a = answers.get(m.id);
       if (a) used.add(a.id);
-      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} />);
+      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} onStop={onStop && (!canStop || canStop(m)) ? onStop : undefined} />);
       continue;
     }
     if (m.type === "progress" || m.type === "steer") continue;
@@ -104,11 +112,17 @@ function Output({ answer, res, nameOf }: { answer: Message; res: ExecResult; nam
   );
 }
 
-function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean }) {
+export const STOPPED = "stopped by the sender";
+
+function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop }: {
+  task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean;
+  hubId?: string; onGrow?: () => void; onStop?: (task: Message) => void;
+}) {
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
   const took = execDuration(res?.duration_ms);
   const pending = !answer && task.status !== "done" && task.status !== "failed";
-  const failed = answer?.type === "event" || (!answer && task.status === "failed")
+  const stopped = !answer && task.status === "failed" && task.error === STOPPED;
+  const failed = answer?.type === "event" || (!answer && task.status === "failed" && !stopped)
     || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
   return (
     <div className={cn("term-cmd", failed && "is-failed")}>
@@ -123,8 +137,56 @@ function Command({ task, answer, nameOf, hubE2E }: { task: Message; answer?: Mes
       <div className="term-line"><span className="term-prompt">$</span>{task.body}</div>
       {res && <ResultLines res={res} />}
       {answer && !res && <pre className={cn("term-out", answer.type === "event" && "is-err")}>{answer.body}</pre>}
-      {pending && <div className="term-pending">{L("执行中…", "running…")}</div>}
-      {!answer && !pending && task.status === "failed" && <div className="term-exit">{task.error || L("失败", "failed")}</div>}
+      {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} />}
+      {pending && (
+        <div className="term-pending">
+          {L("执行中…", "running…")}
+          {onStop && <button type="button" className="term-stop" onClick={() => onStop(task)}>{L("停止", "Stop")}</button>}
+        </div>
+      )}
+      {stopped && <div className="term-exit is-stopped">{L("已停止", "stopped")}</div>}
+      {!answer && !pending && task.status === "failed" && !stopped && <div className="term-exit">{task.error || L("失败", "failed")}</div>}
     </div>
   );
+}
+
+const LIVE_POLL_MS = 1000;
+
+/** A running command's output so far (or a stopped one's), from its run trace. */
+function LiveOutput({ hubId, task, live, onGrow }: { hubId: string; task: Message; live: boolean; onGrow?: () => void }) {
+  const [chunks, setChunks] = useState<TraceStep[]>([]);
+  const [gone, setGone] = useState(false);
+  const last = useRef(0);
+  useEffect(() => {
+    if (gone) return;
+    let off = false;
+    const load = async () => {
+      try {
+        const r = await appApi.trace(hubId, task.id, last.current);
+        if (off || !r.events.length) return;
+        last.current = r.events[r.events.length - 1].seq;
+        const out = r.events.map((e) => e.data).filter((d) => d.kind === "output" && d.text);
+        if (out.length) setChunks((prev) => [...prev, ...out]);
+      } catch (e) {
+        // A hub or runner without traces: the output comes with the result.
+        const code = (e as { code?: string }).code;
+        if (!off && (isOldHub(e) || code === "not_found" || code === "permission_denied")) setGone(true);
+      }
+    };
+    void load();
+    if (!live) return () => { off = true; };
+    const t = window.setInterval(() => void load(), LIVE_POLL_MS);
+    return () => { off = true; window.clearInterval(t); };
+  }, [hubId, task.id, gone, live]);
+  useEffect(() => { if (chunks.length) onGrow?.(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [chunks.length]);
+  if (!chunks.length) return null;
+  // Consecutive chunks of one stream read as one block.
+  const blocks: { err: boolean; text: string }[] = [];
+  for (const c of chunks) {
+    const err = c.stream === "stderr";
+    const b = blocks[blocks.length - 1];
+    if (b && b.err === err) b.text += c.text;
+    else blocks.push({ err, text: c.text || "" });
+  }
+  return <>{blocks.map((b, i) => <pre key={i} className={cn("term-out", b.err && "is-err")}>{b.text.replace(/\n$/, "")}</pre>)}</>;
 }

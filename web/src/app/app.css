@@ -2744,6 +2744,9 @@ textarea.app-input {
 .conv-steer-btn:hover {
   background: var(--pill-hover);
 }
+.conv-steer-btn + .conv-steer-btn {
+  margin-left: 0;
+}
 .conv-steer-btn.active {
   background: var(--amber-soft);
   color: var(--amber);
@@ -3693,6 +3696,24 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-pending {
   margin-top: 6px;
   color: #dcb25e;
+}
+.term-stop {
+  margin-left: 10px;
+  padding: 0 6px;
+  border: 1px solid rgba(220, 178, 94, 0.4);
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.term-stop:hover {
+  background: rgba(220, 178, 94, 0.12);
+}
+.term-exit.is-stopped {
+  background: rgba(150, 155, 165, 0.15);
+  color: #a0a4ad;
 }
 .term-comment {
   color: #8a8e99;

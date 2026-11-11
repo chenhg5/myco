@@ -354,7 +354,7 @@ function scheduleReply(hub, threadId, agent, taskId) {
   });
   later(6000, () => {
     const msgs = hub.threads[threadId];
-    if (!msgs) return;
+    if (!msgs || msgs.find((m) => m.id === taskId)?.status === "failed") return; // stopped
     const r = consoleReply();
     msgs.push(makeMessage({
       thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
@@ -367,6 +367,38 @@ function scheduleReply(hub, threadId, agent, taskId) {
       task.updated_at = iso(0);
     }
   });
+}
+
+// A shell command that prints a line every 0.7 s, for the live terminal.
+const execLines = () => [
+  "Resolving dependencies…",
+  "go: downloading github.com/chenhg5/myco v0.18.31",
+  "ok  	github.com/chenhg5/myco/internal/domain	0.018s",
+  "ok  	github.com/chenhg5/myco/internal/app	1.001s",
+  "ok  	github.com/chenhg5/myco/internal/runner	1.158s",
+  "--- warning: 2 tests skipped on this platform",
+  "ok  	github.com/chenhg5/myco/internal/integration	6.265s",
+  "PASS",
+];
+const EXEC_LINE_MS = 700;
+
+function scheduleExec(hub, threadId, agent, taskId) {
+  const lines = execLines();
+  const t = setTimeout(() => {
+    const msgs = hub.threads[threadId];
+    const task = msgs?.find((m) => m.id === taskId);
+    if (!task || task.status === "failed") return; // stopped
+    const out = lines.filter((l) => !l.startsWith("---")).join("\n") + "\n";
+    const err = lines.filter((l) => l.startsWith("---")).join("\n") + "\n";
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
+      body: JSON.stringify({ exit_code: 0, stdout: out, stderr: err, duration_ms: lines.length * EXEC_LINE_MS }),
+      reply_to: taskId, created_at: iso(0), updated_at: iso(0),
+    }));
+    task.status = "done";
+    task.updated_at = iso(0);
+  }, lines.length * EXEC_LINE_MS + 500);
+  if (typeof t.unref === "function") t.unref();
 }
 
 function conversationAgent(msgs) {
@@ -909,8 +941,21 @@ const server = http.createServer(async (req, res) => {
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
       hub.threads[threadId].push(msg);
       hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
-      scheduleReply(hub, threadId, to, msg.id);
+      if (target.binding?.harness === "exec") scheduleExec(hub, threadId, to, msg.id);
+      else scheduleReply(hub, threadId, to, msg.id);
       return send(res, 201, msg);
+    }
+
+    // /app/hubs/{id}/messages/{mid}/stop — stop an unfinished task.
+    if (parts.length === 6 && parts[3] === "messages" && parts[5] === "stop" && method === "POST") {
+      const task = Object.values(hub.threads || {}).flat().find((m) => m.id === parts[4]);
+      if (!task) return fail(res, 404, "not_found", "没有这条消息");
+      if (!task.from.startsWith("@console:")) return fail(res, 403, "permission_denied", "只有从 App 发出的任务可以停止。");
+      if (!["queued", "delivered", "acked", "held"].includes(task.status)) return fail(res, 409, "invalid_state", "这个任务已经结束了。");
+      task.status = "failed";
+      task.error = "stopped by the sender";
+      task.updated_at = iso(0);
+      return send(res, 200, task);
     }
 
     // /app/hubs/{id}/messages/{mid}/steer — correct an unfinished task.
@@ -1057,7 +1102,12 @@ const server = http.createServer(async (req, res) => {
           .sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
         return send(res, 200, { messages: all.slice(0, 50), more: all.length > 50 });
       }
-      const all = execHistory(a).slice().reverse().filter((m) => !before || new Date(m.created_at).getTime() < before);
+      // The canned history plus what was typed in this session.
+      const typed = Object.values(hub.threads || {}).flat()
+        .filter((m) => (m.from === a && m.to === "mac-exec") || (m.from === "mac-exec" && m.to === a));
+      const all = [...execHistory(a), ...typed]
+        .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+        .filter((m) => !before || new Date(m.created_at).getTime() < before);
       return send(res, 200, { messages: all.slice(0, 4), more: all.length > 4 });
     }
     // /app/hubs/{id}/projects…
@@ -1135,6 +1185,18 @@ const server = http.createServer(async (req, res) => {
       const all = Object.values(hub.threads || {}).flat();
       const m = all.find((x) => x.id === parts[4]);
       if (!m) return fail(res, 404, "not_found", "message not found");
+      const node = (hub.agents || []).find((a) => a.name === m.to);
+      if (node?.binding?.harness === "exec") {
+        const lines = execLines();
+        const end = m.status === "failed" ? new Date(m.updated_at).getTime() : Date.now();
+        const n = m.status === "done" ? lines.length : Math.min(lines.length, Math.floor((end - new Date(m.created_at).getTime()) / EXEC_LINE_MS));
+        const after = Number(url.searchParams.get("after") || 0);
+        const events = lines.slice(0, n).map((l, i) => {
+          const d = { kind: "output", stream: l.startsWith("---") ? "stderr" : "stdout", text: l + "\n" };
+          return { seq: i + 1, kind: "output", data: d };
+        }).filter((e) => e.seq > after);
+        return send(res, 200, { message: m.id, status: m.status, events });
+      }
       const steps = [
         { kind: "thinking", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组。" },
         { kind: "tool", tool: "Bash", id: "c1", input: "git log --oneline v0.16.7..HEAD" },
