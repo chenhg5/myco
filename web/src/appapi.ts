@@ -419,6 +419,11 @@ export const appApi = {
   /** Adds and removes labels (group=… and tags) of a node. */
   setLabels: (hubId: string, name: string, change: { add?: string[]; remove?: string[] }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/labels`, change),
+  /** Points an alias at a node: messages to it reach that node. */
+  setAlias: (hubId: string, alias: string, target: string) =>
+    request<void>("PUT", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`, { target }),
+  removeAlias: (hubId: string, alias: string) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`),
   updateAllowFrom: (hubId: string, name: string, allowFrom: string[]) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, { allow_from: allowFrom }),
   kick: (hubId: string, name: string) =>

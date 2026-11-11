@@ -255,6 +255,15 @@ export function nodeName(a: Agent, hub?: HubOverview): string {
   return parts.length >= 2 ? parts.join(" · ") : a.name;
 }
 
+/** A node's aliases as one short line for a row subtitle: "@a, @b +1".
+ *  Two at most, so the rest of the subtitle stays readable. */
+export function aliasSummary(a: Agent): string | undefined {
+  const aliases = (a.aliases || []).filter(Boolean);
+  if (!aliases.length) return undefined;
+  const shown = aliases.slice(0, 2).map((x) => "@" + x).join(", ");
+  return aliases.length > 2 ? `${shown} +${aliases.length - 2}` : shown;
+}
+
 /** A node name made up by `myco join` or a spawn: it starts with the
  *  machine's host name, or ends in the CLI and a short hex id. */
 function generatedName(name: string, hostname?: string): boolean {

@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import type { Hub } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, cliName, machineLabel, nodeIcon, nodeName, stateLabel } from "@/app/nodes";
+import { agentKind, aliasSummary, cliName, machineLabel, nodeIcon, nodeName, stateLabel } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
 import { Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
@@ -44,7 +44,7 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
         if (target?.hubId && target.project && r.hub.id !== target.hubId) return false;
         if (!q) return true;
         const a = r.st.agent;
-        return [nodeName(a, r.hub), a.name, a.description, cliName(a), machineLabel(r) || ""].some((s) => (s || "").toLowerCase().includes(q));
+        return [nodeName(a, r.hub), a.name, a.description, cliName(a), machineLabel(r) || "", ...(a.aliases || [])].some((s) => (s || "").toLowerCase().includes(q));
       })
       .sort((a, b) =>
         Number(members.has(b.st.agent.name)) - Number(members.has(a.st.agent.name))
@@ -98,6 +98,7 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
                 const Icon = nodeIcon(a);
                 const st = stateLabel(r.st, stateMeta[r.st.state].label);
                 const machine = machineLabel(r);
+                const aliases = aliasSummary(a);
                 return (
                   <button key={a.name} type="button" className={cn("app-row", r.st.state === "offline" && "offline")} onClick={() => pick(r)} title={a.name}>
                     <span className="app-row-icon"><Icon /></span>
@@ -109,6 +110,12 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
                       <span className="app-row-sub">
                         <span className={cn("dot", st.dot)} />
                         <span>{st.label}</span>
+                        {aliases && (
+                          <>
+                            <span className="sep">·</span>
+                            <span className="txt mono alias" title={(a.aliases || []).map((x) => "@" + x).join(", ")}>{aliases}</span>
+                          </>
+                        )}
                         <span className="sep">·</span>
                         <span className="txt">{cliName(a)}</span>
                         {machine && <><span className="sep">·</span><span className="txt">{machine}</span></>}

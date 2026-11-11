@@ -1469,6 +1469,31 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, a);
     }
 
+    // /app/hubs/{id}/aliases/{alias} — an address others can message a node by.
+    if (parts.length === 5 && parts[3] === "aliases" && (method === "PUT" || method === "DELETE")) {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const alias = parts[4];
+      if (!/^[a-z0-9][a-z0-9._-]{0,62}$/.test(alias)) {
+        return fail(res, 400, "invalid_argument", "别名只能用 1-63 位小写字母、数字、点、下划线或连字符，并以字母或数字开头。");
+      }
+      const holder = (hub.agents || []).find((a) => (a.aliases || []).includes(alias));
+      if (method === "DELETE") {
+        if (!holder) return fail(res, 404, "not_found", `没有名为 ${alias} 的别名`);
+        holder.aliases = holder.aliases.filter((x) => x !== alias);
+        return send(res, 200, { alias: { alias, target: holder.name }, removed: true });
+      }
+      const body = await readBody(req);
+      const target = typeof body?.target === "string" ? body.target.trim() : "";
+      const agent = (hub.agents || []).find((a) => a.name === target);
+      if (!agent) return fail(res, 404, "not_found", `没有名为 ${target} 的节点`);
+      if ((hub.agents || []).some((a) => a.name === alias)) {
+        return fail(res, 409, "conflict", `${alias} 已经是节点名，别名和节点名不能重名。`);
+      }
+      for (const a of hub.agents || []) a.aliases = (a.aliases || []).filter((x) => x !== alias);
+      agent.aliases = [...(agent.aliases || []), alias];
+      return send(res, 200, { alias: { alias, target: agent.name }, dry_run: false });
+    }
+
     if (parts.length >= 5 && parts[3] === "agents") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const agent = hub.agents.find((a) => a.name === parts[4]);

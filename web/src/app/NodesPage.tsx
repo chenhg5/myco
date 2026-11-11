@@ -8,7 +8,7 @@ import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
 import {
-  CLOUD_FILTER, agentKind, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, tagsOf,
+  CLOUD_FILTER, agentKind, aliasSummary, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, tagsOf,
   parseMachineFilter,
   stateLabel, nodeName } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
@@ -55,6 +55,7 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
   const Icon = nodeIcon(a);
   const machine = machineLabel(row);
   const model = a.runtime?.model;
+  const aliases = aliasSummary(a);
   const tasks = tasksOf(row);
   return (
     <button
@@ -80,6 +81,12 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
         <span className="app-row-sub">
           <span className={cn("dot", stateLabel(row.st, state.label).dot)} />
           <span>{stateLabel(row.st, state.label).label}</span>
+          {aliases && (
+            <>
+              <span className="sep">·</span>
+              <span className="txt mono alias" title={(a.aliases || []).map((x) => "@" + x).join(", ")}>{aliases}</span>
+            </>
+          )}
           <span className="sep">·</span>
           <span className="txt">{cliName(a)}</span>
           {model && <><span className="sep">·</span><span className="txt mono">{model}</span></>}
@@ -178,7 +185,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
         (filters.state === "all" || r.st.state === filters.state) &&
         (!q || [
           a.name, a.display_name, a.description, cliName(a), a.runtime?.model, machineLabel(r),
-          ...a.labels,
+          ...(a.aliases || []), ...a.labels,
         ].filter(Boolean).some((x) => String(x).toLowerCase().includes(q)));
     });
   }, [nodes, filters]);
