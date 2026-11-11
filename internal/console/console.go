@@ -523,7 +523,7 @@ func (b *Backend) Handler() http.Handler {
 			hubQuery = ""
 		}
 		project := q.Get("project")
-		res, err := c.RecentGrouped(r.Context(), q.Get("group"), project, q.Get("scope"), q.Get("label"), hubQuery, before, 0)
+		res, err := c.RecentGrouped(r.Context(), q.Get("group"), q.Get("side"), project, q.Get("scope"), q.Get("label"), hubQuery, before, 0)
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Status == http.StatusNotFound || ce.Status == http.StatusMethodNotAllowed) {
 			// A hub from before the recent list: the app shows its

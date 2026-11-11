@@ -120,6 +120,10 @@ type RecentFilter struct {
 	// AllPairs: ListRecentPairs lists every pair of names that exchanged
 	// messages (one conversation per pair), not only those with Nodes.
 	AllPairs bool
+	// Party (with AllPairs) keeps the pairs it takes part in, or with
+	// WithoutParty those it does not.
+	Party        AgentName
+	WithoutParty bool
 	// Before (unix ms, 0 = now) pages back; Limit caps the result.
 	Before int64
 	Limit  int

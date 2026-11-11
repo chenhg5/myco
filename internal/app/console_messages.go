@@ -184,6 +184,10 @@ type RecentInput struct {
 	// ByPair lists one row per pair of parties (all their messages, every
 	// thread) instead of one per thread.
 	ByPair bool
+	// Me is the reader's own sender name in the app; with ByPair, Side "me"
+	// keeps the pairs it is in, "others" the rest.
+	Me   domain.AgentName
+	Side string
 	// Before (unix ms, 0 = now) pages back.
 	Before int64
 	Limit  int
@@ -272,6 +276,9 @@ func (s *MessageService) Recent(ctx context.Context, agents []*domain.Agent, in 
 func (s *MessageService) recentPairs(ctx context.Context, f domain.RecentFilter, in RecentInput, limit int) ([]RecentItem, bool, error) {
 	f.AllPairs = true
 	f.Skip = append(f.Skip, AdminSender)
+	if in.Me != "" && (in.Side == "me" || in.Side == "others") {
+		f.Party, f.WithoutParty = in.Me, in.Side == "others"
+	}
 	pairs, err := s.messages.ListRecentPairs(ctx, f)
 	if err != nil {
 		return nil, false, err

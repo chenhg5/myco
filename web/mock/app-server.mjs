@@ -1020,6 +1020,11 @@ const server = http.createServer(async (req, res) => {
         }
         items.splice(0, items.length, ...byPair.values());
       }
+      if (sp.get("group") === "pair" && sp.get("side")) {
+        const mineSide = (it) => [it.other, it.node, ...(it.participants || [])].some((n) => (n || "").startsWith("@console:"));
+        const keep = items.filter((it) => (sp.get("side") === "me") === mineSide(it));
+        items.splice(0, items.length, ...keep);
+      }
       const list = items
         .filter((it) => !mine || it.participants.some((p) => p.startsWith("@console:")) || it.kind === "pair")
         .filter((it) => labelOk(it.participants))

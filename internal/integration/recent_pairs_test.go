@@ -49,7 +49,7 @@ func TestRecentByPair(t *testing.T) {
 	if err != nil || len(threads.Items) != 5 {
 		t.Fatalf("threads: %v %d", err, len(threads.Items))
 	}
-	pairs, err := admin.RecentGrouped(c, "pair", "", "", "", "", 0, 0)
+	pairs, err := admin.RecentGrouped(c, "pair", "", "", "", "", "", 0, 0)
 	if err != nil || len(pairs.Items) != 2 {
 		t.Fatalf("pairs: %v %+v", err, pairs)
 	}
@@ -62,6 +62,15 @@ func TestRecentByPair(t *testing.T) {
 	cl := pairs.Items[1]
 	if cl.Node != "lead" || cl.Other[:9] != "@console:" || cl.Messages != 2 {
 		t.Fatalf("console-lead: %+v", cl)
+	}
+	// Split by whether the reader (the app) is a party.
+	mine, err := admin.RecentGrouped(c, "pair", "me", "", "", "", "", 0, 0)
+	if err != nil || len(mine.Items) != 1 || mine.Items[0].Node != "lead" {
+		t.Fatalf("mine: %v %+v", err, mine)
+	}
+	others, err := admin.RecentGrouped(c, "pair", "others", "", "", "", "", 0, 0)
+	if err != nil || len(others.Items) != 1 || others.Items[0].Other != "lead" || others.Items[0].Node != "worker" {
+		t.Fatalf("others: %v %+v", err, others)
 	}
 	// The pair's messages, every thread.
 	ex, err := admin.Exchanges(c, cl.Other, "lead", 0, 0)

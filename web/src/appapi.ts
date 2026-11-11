@@ -124,6 +124,8 @@ export interface RecentQuery {
   scope?: "mine"; label?: string; q?: string; before?: number; project?: string;
   /** "pair": one row per pair of parties (hubs before v0.18.28 list threads) */
   group?: "pair";
+  /** with group "pair": "me" keeps the pairs you are in, "others" the rest */
+  side?: "me" | "others";
 }
 /** fallback: the hub predates the recent list; use its conversations. */
 export interface RecentList { items: RecentItem[]; more: boolean; fallback?: boolean }
@@ -343,6 +345,7 @@ export const appApi = {
     if (query.before) q.set("before", String(query.before));
     if (query.project) q.set("project", query.project);
     if (query.group) q.set("group", query.group);
+    if (query.side) q.set("side", query.side);
     const qs = q.toString();
     return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
   },

@@ -4350,3 +4350,5 @@ body.is-resizing {
 .app-project .app-empty-note { font-size: 12.5px; }
 .app-project .conv-row-title { font-size: 13.5px; }
 .app-project .conv-row-summary { font-size: 12px; }
+.conv-side { margin-bottom: 10px; }
+.conv-list-compact .conv-side { width: auto; margin: 0 12px 8px; }
