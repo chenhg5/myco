@@ -311,6 +311,9 @@ const state = {
   counter: 0,
 };
 
+// A hub that cannot be reached, only with MOCK_OFFLINE_HUB=1: it otherwise
+// shows its red banner in every demo screenshot.
+if (!process.env.MOCK_OFFLINE_HUB) state.hubs = state.hubs.filter((h) => h.id !== "hub_lab");
 if (EMPTY) state.hubs = [];
 // MOCK_SHOWCASE=en|zh: the polished demo data for README screenshots.
 const SHOWCASE = process.env.MOCK_SHOWCASE;
