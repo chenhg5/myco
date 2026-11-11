@@ -83,9 +83,11 @@ type Runner struct {
 	// tasks are the tasks this runner has accepted and not finished; steers
 	// for them are routed here. pendingSteers hold steers for tasks that
 	// were still queued when the steer arrived.
-	tasks         map[string]*activeTask
-	pendingSteers map[string][]api.Message
-	stopEvery     time.Duration // stopCheckEvery; shorter in tests
+	tasks          map[string]*activeTask
+	pendingSteers  map[string][]api.Message
+	stopEvery      time.Duration // stopCheckEvery; shorter in tests
+	finishRetryMin time.Duration // first retry after a post-run Hub failure; shorter in tests
+	finishTimeout  time.Duration // total time to deliver a run's result
 }
 
 // activeTask is a task between ack and completion in this runner.
@@ -144,7 +146,8 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
 		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{},
-		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery}
+		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
+		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute}
 }
 
 func loadState(path string) map[string]time.Time {
@@ -216,15 +219,23 @@ type inUseReleaser interface {
 }
 
 func (r *Runner) release(ctx context.Context, log *slog.Logger, m api.Message, key, reason string) {
+	finishCtx, cancel := r.finishContext(ctx)
+	defer cancel()
+	r.releaseWithContext(finishCtx, log, m, key, reason)
+}
+
+func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api.Message, key, reason string) {
 	delay := r.busyDelay(key)
-	var err error
-	if h, ok := r.hub.(inUseReleaser); ok {
-		_, err = h.ReleaseInUse(ctx, m.ID, delay)
-	} else {
-		_, err = r.hub.Release(ctx, m.ID, delay, false)
-	}
+	err, exhausted := r.retryFinish(ctx, log, "release", func(ctx context.Context) error {
+		if h, ok := r.hub.(inUseReleaser); ok {
+			_, err := h.ReleaseInUse(ctx, m.ID, delay)
+			return err
+		}
+		_, err := r.hub.Release(ctx, m.ID, delay, false)
+		return err
+	})
 	if err != nil {
-		log.Error("releasing busy message failed", "err", err)
+		r.logFinishFailure(log, "release", err, exhausted, "")
 		return
 	}
 	log.Info("session busy; message released for retry", "retry_in", delay, "reason", reason)
@@ -468,9 +479,16 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 
 	// The agent may have replied/held/failed by itself via the CLI; only
 	// auto-finish messages still in "acked".
-	cur, err := r.hub.GetMessage(ctx, m.ID)
+	finishCtx, finishCancel := r.finishContext(ctx)
+	defer finishCancel()
+	var cur *api.Message
+	err, exhausted := r.retryFinish(finishCtx, log, "get message", func(ctx context.Context) error {
+		var getErr error
+		cur, getErr = r.hub.GetMessage(ctx, m.ID)
+		return getErr
+	})
 	if err != nil {
-		log.Error("cannot read message state after run", "err", err)
+		r.logFinishFailure(log, "get message", err, exhausted, res.Output)
 		return
 	}
 	if cur.Status != "acked" {
@@ -486,21 +504,34 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	case errors.Is(runErr, harness.ErrSessionBusy):
 		// Someone is using the session; hand the message back without
 		// counting a failure and try again soon.
-		r.release(ctx, log, m, key, runErr.Error())
+		r.releaseWithContext(finishCtx, log, m, key, runErr.Error())
+		return
 	case m.Type == "task" && runErr != nil:
-		_, err = r.hub.Fail(ctx, m.ID, runErr.Error(), false)
-		log.Warn("harness failed; task marked failed", "err", runErr)
+		err, exhausted = r.retryFinish(finishCtx, log, "fail", func(ctx context.Context) error {
+			_, failErr := r.hub.Fail(ctx, m.ID, runErr.Error(), false)
+			return failErr
+		})
+		if err == nil {
+			log.Warn("harness failed; task marked failed", "err", runErr)
+		}
 	case m.Type == "task":
 		out := strings.TrimSpace(res.Output)
 		if out == "" {
 			out = "(agent produced no output)"
 		}
-		_, err = r.hub.Reply(ctx, m.ID, out, false)
-		log.Info("replied")
+		err, exhausted = r.retryFinish(finishCtx, log, "reply", func(ctx context.Context) error {
+			_, replyErr := r.hub.Reply(ctx, m.ID, out, false)
+			return replyErr
+		})
+		if err == nil {
+			log.Info("replied")
+		}
 	default:
 		// Replies, events and notes never trigger an automatic answer:
 		// that would ping-pong forever between two runners.
-		err = r.hub.Complete(ctx, m.ID)
+		err, exhausted = r.retryFinish(finishCtx, log, "complete", func(ctx context.Context) error {
+			return r.hub.Complete(ctx, m.ID)
+		})
 		if runErr != nil {
 			log.Warn("harness failed on non-task message", "err", runErr)
 		} else {
@@ -508,7 +539,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 	}
 	if err != nil {
-		log.Error("finishing message failed", "err", err)
+		r.logFinishFailure(log, "finish message", err, exhausted, res.Output)
 	}
 }
 
