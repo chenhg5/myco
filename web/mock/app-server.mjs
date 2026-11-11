@@ -479,6 +479,8 @@ function execHistory(agent) {
   const runs = [
     ["uptime", ok("up 3 days, 4:12, 2 users, load averages: 1.92 2.10 2.31\n")],
     ["df -h /", ok("Filesystem   Size  Used Avail Capacity\n/dev/disk3s1 926Gi 412Gi 498Gi  46%\n")],
+    ["cd ~/code/myco && go test ./...", ok(["domain", "app", "infra/sqlite", "infra/notify", "infra/security", "infra/wake", "transport/httpapi", "hubserver", "client", "cli", "runner", "harness/claude", "harness/codex", "integration"]
+      .map((p, i) => `ok  \tgithub.com/chenhg5/myco/internal/${p}\t${(0.2 + i * 0.37).toFixed(3)}s`).join("\n") + "\n", 48200)],
     ["pgrep -fl \"mac-sign|notarytool|make app\" || echo idle", ok("idle\n", 313)],
     [build, ok("", 14)],
     [poll, ok("RUNNING\n", 41)],
@@ -486,9 +488,9 @@ function execHistory(agent) {
     ["myco upgrade", { exit_code: 1, stdout: "", stderr: "download failed: 504 Gateway Timeout\n", duration_ms: 12400, timed_out: false }],
     ["myco --version", { exit_code: 124, stdout: "v0.16.7\n", stderr: "", duration_ms: 60000, timed_out: true, error: "killed after 1m0s (the node's timeout)" }],
   ];
-  // Two sittings: the first four commands, then the rest 40 minutes later.
+  // Two sittings: the first five commands, then the rest 40 minutes later.
   runs.forEach(([c, res], i) => {
-    const t = 6 * 3600 - i * 70 + (i < 4 ? 2400 : 0);
+    const t = 6 * 3600 - i * 70 + (i < 5 ? 2400 : 0);
     const th = `th_exec_${agent}_${i}`;
     const task = makeMessage({ thread_id: th, from: agent, to: "mac-exec", type: "task", status: "done", body: c, created_at: iso(t), updated_at: iso(t) });
     out.push(task);

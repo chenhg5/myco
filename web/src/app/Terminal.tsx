@@ -128,12 +128,28 @@ type ExecResult = NonNullable<ReturnType<typeof parseExecResult>>;
 /** What a command printed, as a terminal prints it: stderr is not coloured
  * and the exit code is not announced (the next prompt turns red; a record of
  * someone else's commands adds a dim line under the output). */
-function ResultLines({ res }: { res: ExecResult }) {
+function ResultLines({ res, tail }: { res: ExecResult; tail?: boolean }) {
+  const text = [res.stdout, res.stderr, typeof res.error === "string" ? res.error : ""]
+    .filter(Boolean).map((t) => t!.replace(/\n$/, "")).join("\n");
+  if (!text) return null;
+  return tail ? <TailOutput text={text} /> : <pre className="term-out">{text}</pre>;
+}
+
+const TAIL_LINES = 6;
+
+/** In a record, a long output shows its last lines (where a command says
+ * how it went); one dim line above them brings back the rest. */
+function TailOutput({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const lines = text.split("\n");
+  const hidden = lines.length - TAIL_LINES;
+  if (open || hidden <= 1) return <pre className="term-out">{text}</pre>;
   return (
     <>
-      {res.stdout ? <pre className="term-out">{res.stdout.replace(/\n$/, "")}</pre> : null}
-      {res.stderr ? <pre className="term-out">{res.stderr.replace(/\n$/, "")}</pre> : null}
-      {typeof res.error === "string" && res.error && <pre className="term-out">{res.error}</pre>}
+      <button type="button" className="term-more" onClick={() => setOpen(true)}>
+        {L(`… 前面还有 ${hidden} 行`, `… ${hidden} more lines above`)}
+      </button>
+      <pre className="term-out">{lines.slice(-TAIL_LINES).join("\n")}</pre>
     </>
   );
 }
@@ -146,7 +162,7 @@ function Output({ head, res, plain }: { head?: React.ReactNode; res: ExecResult;
     <div className="term-cmd">
       {head}
       {!plain && <div className="term-line term-earlier"># {L("命令在更早的消息里", "the command is in earlier messages")}</div>}
-      <ResultLines res={res} />
+      <ResultLines res={res} tail={!plain} />
       {!plain && <ExitLine res={res} />}
     </div>
   );
@@ -160,9 +176,10 @@ function ExitLine({ res }: { res: ExecResult | null }) {
 
 const GROUP_MS = 10 * 60 * 1000;
 
-/** A command line, or a note, that runs past three lines folds to three;
- * a click on it (or on "展开") shows the rest. */
-function Folded({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+/** A command line, or a note, that runs long folds: to one line in a
+ * record (a column of commands to scan), to three in your own session. A
+ * click on it shows the rest, and folds it again. */
+function Folded({ children, className, title, one }: { children: React.ReactNode; className?: string; title?: string; one?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
@@ -180,17 +197,11 @@ function Folded({ children, className, title }: { children: React.ReactNode; cla
     if (window.getSelection()?.isCollapsed === false) return;
     setOpen((v) => !v);
   };
+  const foldable = long || open;
   return (
-    <div className="term-fold">
-      <div ref={ref} title={title} className={cn("term-line", className, !open && "is-folded", (long || open) && "is-foldable")}
-        onClick={long || open ? toggle : undefined}>
-        {children}
-      </div>
-      {(long || open) && (
-        <button type="button" className="term-fold-btn" onClick={() => setOpen((v) => !v)}>
-          {open ? L("收起", "Less") : L("展开", "More")}
-        </button>
-      )}
+    <div ref={ref} title={title} className={cn("term-line", className, !open && (one ? "is-folded-1" : "is-folded"), foldable && "is-foldable")}
+      onClick={foldable ? toggle : undefined} aria-expanded={foldable ? open : undefined}>
+      {children}
     </div>
   );
 }
@@ -229,10 +240,10 @@ function Command({ head, task, answer, hubId, onGrow, plain, cwd, afterFail }: {
   return (
     <div className={cn("term-cmd", !!head && "has-who")}>
       {head}
-      <Folded title={when}>
+      <Folded title={when} one={!plain}>
         <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}<PromptSign bad={afterFail} /></span>{task.body}
       </Folded>
-      {res && <ResultLines res={res} />}
+      {res && <ResultLines res={res} tail={!plain} />}
       {answer && !res && <pre className="term-out">{answer.body}</pre>}
       {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} />}
       {/* Running: a block cursor after what it has printed so far. Stopping

@@ -3855,7 +3855,7 @@ button.app-label:hover { filter: brightness(0.95); }
    command line's tooltip; a record of other nodes' commands says who ran
    each, when and how it ended at the end of its line. */
 .conv-body.is-shell {
-  background: #101115;
+  background: #121317;
 }
 .conv-timeline.is-shell {
   min-height: 100%;
@@ -3873,10 +3873,12 @@ button.app-label:hover { filter: brightness(0.95); }
   min-height: 0;
 }
 .term {
-  --term-bg: #101115;
-  --term-fg: #eceef2;
-  --term-out: #c3c7cf;
-  --term-dim: #6c707b;
+  /* Bright for what was typed, a clear step down for what came back: a
+     wall of near-white on near-black tires the eye. */
+  --term-bg: #121317;
+  --term-fg: #e2e5ea;
+  --term-out: #a2a7b1;
+  --term-dim: #686d77;
   --term-green: #5fd7a7;
   --term-red: #ff7b72;
   background: var(--term-bg);
@@ -3904,6 +3906,9 @@ button.app-label:hover { filter: brightness(0.95); }
   background: rgba(110, 160, 255, 0.35);
 }
 /* A little air above each prompt groups a command with its output. */
+.term:not(.is-live) .term-cmd + .term-cmd {
+  margin-top: 12px;
+}
 .term-cmd + .term-cmd,
 .term-cmd + .term-comment,
 .term-comment + .term-cmd,
@@ -3926,30 +3931,42 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-line.term-earlier {
   font-weight: 400;
 }
-/* One that runs past three lines folds to three; a click shows the rest. */
-.term-line.is-folded {
+/* One that runs long folds (three lines in your session, one in a record)
+   and ends in an ellipsis; a click shows the rest. */
+.term-line.is-folded,
+.term-line.is-folded-1 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
-.term-line.is-foldable {
-  cursor: pointer;
+.term-line.is-folded-1 {
+  -webkit-line-clamp: 1;
 }
-.term-fold-btn {
+.term-line.is-foldable {
+  margin: 0 -4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: default;
+}
+.term-line.is-foldable:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+/* "… N more lines above" a long output's last lines, in a record. */
+.term-more {
   display: block;
-  margin: 1px 0 2px -4px;
+  margin: 0 0 0 -4px;
   padding: 0 4px;
   border: 0;
   border-radius: 4px;
   background: none;
   color: var(--term-dim);
-  font: 11px/16px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font: inherit;
   cursor: default;
 }
-.term-fold-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #c6c9d1;
+.term-more:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--term-out);
 }
 /* In a record: who sent the commands below and when, in small UI type,
    above each run of them, with a little more air before it. */
@@ -3967,9 +3984,9 @@ button.app-label:hover { filter: brightness(0.95); }
   color: #9a9ea8;
   font-weight: 500;
 }
-.term-cmd.has-who:not(:first-child),
-.term-comment:not(:first-child):has(> .term-who) {
-  margin-top: 18px;
+.term .term-cmd.has-who:not(:first-child),
+.term .term-comment:not(:first-child):has(> .term-who) {
+  margin-top: 22px;
 }
 .term-lock {
   width: 10px;
