@@ -1129,6 +1129,33 @@ const server = http.createServer(async (req, res) => {
       }
       return fail(res, 404, "not_found", "no such route");
     }
+    // /app/hubs/{id}/messages/{mid}/trace — a made-up run: all steps for a
+    // finished task, revealed one every two seconds for a running one.
+    if (parts.length === 6 && parts[3] === "messages" && parts[5] === "trace" && method === "GET") {
+      const all = Object.values(hub.threads || {}).flat();
+      const m = all.find((x) => x.id === parts[4]);
+      if (!m) return fail(res, 404, "not_found", "message not found");
+      const steps = [
+        { kind: "thinking", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组。" },
+        { kind: "tool", tool: "Bash", id: "c1", input: "git log --oneline v0.16.7..HEAD" },
+        { kind: "tool_result", id: "c1", output: "a1b2c3d App: 对话页支持 Markdown 表格\n9f8e7d6 Hub: 修复 runner 重连\n5c4b3a2 App: 本机会话一键接入" },
+        { kind: "tool", tool: "Read", id: "c2", input: "CHANGELOG.md" },
+        { kind: "tool_result", id: "c2", output: "## Unreleased\n- ..." },
+        { kind: "text", text: "改动不多，主要是 App 的两项新功能和一个 Hub 修复。我按这个写发布说明。" },
+        { kind: "tool", tool: "Edit", id: "c3", input: "CHANGELOG.md" },
+        { kind: "tool_result", id: "c3", output: "The file CHANGELOG.md has been updated." },
+        { kind: "tool", tool: "Bash", id: "c4", input: "make check" },
+        { kind: "tool_result", id: "c4", output: "FAIL internal/web: dist is stale\nmake: *** [check] Error 1", failed: true },
+        { kind: "tool", tool: "Bash", id: "c5", input: "make web && make check" },
+        { kind: "tool_result", id: "c5", output: "smoke: all steps passed" },
+        { kind: "usage", input_tokens: 18400, output_tokens: 2100, cost_usd: 0.08, duration_ms: 84000 },
+      ];
+      const running = ["queued", "delivered", "acked", "held"].includes(m.status);
+      const shown = running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / 2000))) : steps;
+      const after = Number(url.searchParams.get("after") || 0);
+      const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d })).filter((e) => e.seq > after);
+      return send(res, 200, { message: m.id, status: m.status, events });
+    }
     // /app/hubs/{id}/agents/cleanup — offline nodes (demo: every offline one).
     if (parts.length === 5 && parts[3] === "agents" && parts[4] === "cleanup" && method === "POST") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");

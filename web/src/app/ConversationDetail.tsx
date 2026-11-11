@@ -6,6 +6,7 @@ import type { AgentRow } from "@/app/types";
 import { cliName, isMe, personLabel } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { Terminal } from "@/app/Terminal";
+import { TraceView } from "@/app/TraceView";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
@@ -302,6 +303,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     void send();
   };
 
+  // The view stays at the bottom while something there grows (a live trace).
+  const followBottom = () => {
+    const el = scrollRef.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  };
+
   const renderMessage = (m: Message) => {
       if (m.type === "progress") {
         return (
@@ -348,6 +355,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
           </div>
+          {/* What the agent did for a task you gave it (its runner reports it). */}
+          {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} />}
         </div>
       );
   };

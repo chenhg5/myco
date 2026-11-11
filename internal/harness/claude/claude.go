@@ -192,10 +192,18 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 		defer os.Remove(file)
 		args = append(args, "--settings", file)
 	}
-	out, runErr := harness.Exec(ctx, harness.Process{
+	proc := harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir,
 		Env: req.Env, UnsetEnv: inheritedSessionEnv(os.Environ()),
-	})
+	}
+	if req.OnEvent != nil {
+		proc.OnStdoutLine = func(line []byte) {
+			for _, ev := range lineEvents(line) {
+				req.OnEvent(ev)
+			}
+		}
+	}
+	out, runErr := harness.Exec(ctx, proc)
 	traceEvents("claude", out.Stdout)
 	res, final, ok := parseStream(out.Stdout)
 	if req.Fork && res.SessionID == req.SessionID && runErr == nil {

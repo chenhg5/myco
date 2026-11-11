@@ -48,6 +48,7 @@ type Server struct {
 	members  *app.MemberService
 	audit    *app.AuditService
 	projects *app.ProjectService
+	traces   *app.TraceService
 	namesMu  sync.Mutex
 	names    map[string]string // member id -> name (see ownerName)
 	namesAt  time.Time
@@ -136,6 +137,7 @@ func (s *Server) routes() {
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
+	m.HandleFunc("GET /v1/console/messages/{id}/trace", s.admin(s.consoleTrace))
 	m.HandleFunc("POST /v1/console/messages/{id}/dismiss", s.admin(s.consoleDismiss))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("GET /v1/console/agents/{name}/peers", s.admin(s.consolePeers))
@@ -213,6 +215,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
+	m.HandleFunc("POST /v1/messages/{id}/trace", s.agent(s.postTrace))
+	m.HandleFunc("GET /v1/messages/{id}/trace", s.agent(s.agentTrace))
 	m.HandleFunc("POST /v1/messages/{id}/steer", s.agent(s.followUp("steer")))
 	m.HandleFunc("POST /v1/messages/{id}/fail", s.agent(s.fail))
 	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))

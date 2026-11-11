@@ -53,6 +53,31 @@ type Request struct {
 	// settings.json env beats the process environment). Harnesses without a
 	// stronger channel add them to the process environment.
 	Provider *ProviderSettings
+	// OnEvent, when set, gets the run's steps as they happen (what the
+	// agent says, thinks and does), for the live view in the app. Harnesses
+	// that cannot tell leave it uncalled.
+	OnEvent func(Event)
+}
+
+// Event is one step of a run.
+type Event struct {
+	// Kind: text, thinking, tool, tool_result, usage or error.
+	Kind string `json:"kind"`
+	// Text: what the agent said or thought, or the error.
+	Text string `json:"text,omitempty"`
+	// Tool is the tool's name; ID pairs a call with its result.
+	Tool string `json:"tool,omitempty"`
+	ID   string `json:"id,omitempty"`
+	// Input is a short summary of the call (a command, a path, a pattern).
+	Input string `json:"input,omitempty"`
+	// Output is the result (tool_result), Failed whether it failed.
+	Output string `json:"output,omitempty"`
+	Failed bool   `json:"failed,omitempty"`
+	// Usage (kind usage).
+	InputTokens  int64   `json:"input_tokens,omitempty"`
+	OutputTokens int64   `json:"output_tokens,omitempty"`
+	CostUSD      float64 `json:"cost_usd,omitempty"`
+	DurationMS   int64   `json:"duration_ms,omitempty"`
 }
 
 // ErrForkUnsupported: the harness cannot copy a session.

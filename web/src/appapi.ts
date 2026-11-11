@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -352,6 +352,9 @@ export const appApi = {
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+  /** The steps of a task's run after seq (what the agent says, thinks and does). */
+  trace: (hubId: string, messageId: string, after = 0) =>
+    request<Trace>("GET", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/trace${after ? `?after=${after}` : ""}`),
   /** Corrects an unfinished task the console sent. */
   steer: (hubId: string, messageId: string, body: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),

@@ -20,6 +20,9 @@ import (
 type Options struct {
 	// Self is this agent's name (used in prompts).
 	Self string
+	// Trace says how much of a task's run is sent to the hub for the
+	// sender's live view: TraceFull (default, ""), TraceSummary or TraceOff.
+	Trace string
 	// Concurrency is the max number of messages processed in parallel.
 	Concurrency int
 	// Timeout bounds one harness invocation.
@@ -349,6 +352,17 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
 	prompt := build()
+	// The run's steps, for the sender's live view in the app (tasks only;
+	// never for end-to-end encrypted ones, whose content the hub must not see).
+	var tr *tracer
+	if up, ok := r.hub.(TraceUploader); ok && m.Type == "task" && !m.E2E && r.opts.Trace != TraceOff {
+		mode := r.opts.Trace
+		if mode == "" {
+			mode = TraceFull
+		}
+		tr = newTracer(ctx, up, m.ID, mode, log)
+		defer tr.close() // no-op once closed below
+	}
 	var (
 		res    harness.Result
 		runErr error
@@ -380,6 +394,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
 		}
+		if tr != nil {
+			req.OnEvent = tr.add
+		}
 		if r.opts.Provider != nil && !executor {
 			if p := r.opts.Provider(); p != nil {
 				if _, ok := r.harness.(harness.ProviderAware); ok {
@@ -405,6 +422,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		r.recordOwnRun(sessionID)
 		r.mu.Unlock()
 		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
+	}
+	if tr != nil {
+		tr.close() // the whole trace is on the hub before the task finishes
 	}
 	r.mu.Lock()
 	if !errors.Is(runErr, harness.ErrSessionBusy) {

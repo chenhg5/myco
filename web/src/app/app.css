@@ -4352,3 +4352,38 @@ body.is-resizing {
 .app-project .conv-row-summary { font-size: 12px; }
 .conv-side { margin-bottom: 10px; }
 .conv-list-compact .conv-side { width: auto; margin: 0 12px 8px; }
+
+/* Run trace: what the agent did for a task */
+.trace { align-self: stretch; margin: 8px 0 2px; max-width: 760px; width: 100%; border-radius: 10px; background: color-mix(in srgb, var(--pill) 70%, transparent); font-size: 12.5px; text-align: left; }
+.conv-msg.is-me .trace { margin-left: auto; }
+.trace-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: none; color: var(--fg-2); font: inherit; cursor: pointer; text-align: left; border-radius: 10px; }
+.trace-head:hover { background: var(--nav-hover); }
+.trace-head svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.trace-chev { transition: transform 0.15s ease; }
+.trace.is-open .trace-chev { transform: rotate(90deg); }
+.trace-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-usage { flex: none; color: var(--muted); font-size: 11.5px; }
+.trace-spin { animation: trace-spin 1s linear infinite; }
+@keyframes trace-spin { to { transform: rotate(360deg); } }
+.trace-body { display: flex; flex-direction: column; gap: 1px; padding: 0 6px 8px 6px; max-height: 420px; overflow: auto; }
+.trace-note { padding: 4px 8px; color: var(--muted); }
+.trace-row { border-radius: 7px; }
+.trace-row.is-text { padding: 5px 8px; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.trace-row.is-error { display: flex; gap: 6px; padding: 5px 8px; color: var(--red); }
+.trace-row.is-error svg { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+.trace-line { display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 8px; border: 0; border-radius: 7px; background: none; color: var(--fg-2); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.trace-line:disabled { cursor: default; }
+.trace-line:not(:disabled):hover { background: var(--nav-hover); }
+.trace-line > svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.trace-name { flex: none; color: var(--fg-2); font-weight: 500; }
+.trace-arg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.trace-arg.mono { font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; }
+.trace-state { flex: none; display: inline-flex; margin-left: auto; }
+.trace-state svg { width: 13px; height: 13px; }
+.trace-state .is-ok { color: var(--accent); }
+.trace-state .is-bad { color: var(--red); }
+.trace-row.is-failed .trace-name { color: var(--red); }
+.trace-row.is-thinking .trace-arg { font-style: italic; }
+.trace-detail { margin: 2px 8px 6px 29px; }
+.trace-detail.is-prose { color: var(--muted); font-style: italic; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
+.trace-pre { margin: 0 0 4px; padding: 8px 10px; max-height: 240px; overflow: auto; border-radius: 7px; background: var(--card); font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -60,6 +60,7 @@ type Hub struct {
 	Handler    http.Handler
 	Dispatcher *app.Dispatcher
 	Files      *app.FileService
+	Traces     *app.TraceService
 	Close      func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
 	SetPublicURL func(string)
@@ -171,7 +172,9 @@ func Build(o Options) (*Hub, error) {
 		}
 		return ""
 	})
-	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
+	traces := app.NewTraceService(sqlite.NewTraceRepo(db), msgRepo, agentsRepo, clock, o.Log)
+	srv.SetTraces(traces)
+	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -189,6 +192,7 @@ func Run(ctx context.Context, o Options) error {
 		go o.UpdateCheck.Run(ctx) // background only: never in a request path
 	}
 	go hub.Files.Run(ctx, time.Hour)
+	go hub.Traces.Run(ctx, time.Hour)
 	h := hub.Handler
 	ln, err := net.Listen("tcp", o.Addr)
 	if err != nil {

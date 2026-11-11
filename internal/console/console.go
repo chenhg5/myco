@@ -467,6 +467,16 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusCreated, res.Message)
 	}))
+	// The steps of a task's run (what the agent says, thinks and does).
+	m.HandleFunc("GET /app/hubs/{id}/messages/{mid}/trace", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		after, _ := strconv.Atoi(r.URL.Query().Get("after"))
+		res, err := c.ConsoleTrace(r.Context(), r.PathValue("mid"), after)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/steer", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.SteerRequest
 		if !decode(w, r, &in) {
