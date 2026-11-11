@@ -3865,10 +3865,16 @@ button.app-label:hover { filter: brightness(0.95); }
   border-radius: 10px;
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.09), 0 1px 3px rgba(0, 0, 0, 0.12);
   padding: 4px 0;
-  font: 12px/1.5 ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  font: 12px/1.5 ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Monaco, Consolas, monospace;
   font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   letter-spacing: 0;
-  tab-size: 4;
+  tab-size: 8;
+  /* The rest of the App thins its type (antialiased); light monospace on a
+     dark ground then looks spindly. Terminals keep the system's own
+     smoothing, and so does this. */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   /* Long unbroken output (base64, hashes, URLs) wraps instead of making
      the whole terminal scroll sideways. */
   overflow-wrap: anywhere;
@@ -4016,7 +4022,7 @@ button.app-label:hover { filter: brightness(0.95); }
   outline: none;
   background: transparent;
   color: var(--term-fg);
-  caret-color: var(--term-green);
+  caret-color: #c9ccd4;
   font: inherit;
   resize: none;
   overflow-y: auto;
@@ -4047,12 +4053,32 @@ button.app-label:hover { filter: brightness(0.95); }
   gap: 0;
 }
 .term.is-live {
-  padding: 12px 16px 6px;
+  --term-fg: #eceef2;
+  --term-out: #cdd0d8;
+  --term-green: #5fd7a7;
+  --term-red: #ff7b72;
+  padding: 14px 16px 6px;
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
-  font-size: 12.5px;
-  line-height: 1.5;
+  /* Terminal type: 13px on a tight, fixed 18px line. */
+  font-size: 13px;
+  line-height: 18px;
+}
+/* A little air above each prompt groups a command with its output. */
+.term.is-live .term-cmd + .term-cmd,
+.term.is-live .term-cmd + .term-comment,
+.term.is-live .term-comment + .term-cmd,
+.term.is-live .term-cmd + .term-input-line,
+.term.is-live .term-comment + .term-input-line {
+  margin-top: 8px;
+}
+/* Lines fill to the right edge and break there, mid-word, as a terminal's
+   do. */
+.term.is-live .term-line,
+.term.is-live .term-out {
+  word-break: break-all;
+  line-break: anywhere;
 }
 .term.is-live .term-cmd,
 .term.is-live .term-comment,
@@ -4073,15 +4099,30 @@ button.app-label:hover { filter: brightness(0.95); }
 }
 .term.is-live .term-cwd {
   margin-right: 1ch;
+  color: #7cb7ff;
+}
+/* The prompt's sign: green, red after a command that failed. */
+.term-sign {
+  display: inline-block;
+  flex: none;
+  position: relative;
+  /* sits on the baseline in both prompts, nudged down to the middle of the
+     lowercase letters */
+  vertical-align: baseline;
+  top: 2.5px;
+  width: 1ch;
+  height: 14px;
+  color: var(--term-green);
+}
+.term-sign.is-bad,
+.term.is-after-fail .term-input-line .term-sign {
+  color: var(--term-red);
 }
 .term.is-live .term-out {
   margin: 0;
-  color: #c6c9d1;
+  color: var(--term-out);
 }
-.term.is-live .term-out.is-err {
-  color: var(--term-red);
-}
-/* A failed command says its exit code in plain, dim type. */
+/* "^C" after a command you stopped. */
 .term.is-live .term-exit {
   display: block;
   margin: 0;
@@ -4096,14 +4137,15 @@ button.app-label:hover { filter: brightness(0.95); }
   align-items: center;
   gap: 1ch;
   margin: 0;
-  min-height: 1.5em;
+  min-height: 18px;
   color: var(--term-dim);
 }
 .term-cursor {
   display: inline-block;
-  width: 0.6em;
-  height: 1.15em;
-  background: var(--term-fg);
+  width: 1ch;
+  height: 16px;
+  border-radius: 1px;
+  background: #c9ccd4;
   animation: term-blink 1.1s steps(1) infinite;
 }
 @keyframes term-blink {
@@ -4115,7 +4157,8 @@ button.app-label:hover { filter: brightness(0.95); }
 /* After "clear": one dim line at the top brings back what was there. */
 .term-restore {
   align-self: flex-start;
-  margin: 10px 16px 0;
+  /* its text starts where the terminal's does */
+  margin: 10px 12px 0;
   padding: 0 4px;
   border: 0;
   border-radius: 4px;
@@ -4146,6 +4189,7 @@ button.app-label:hover { filter: brightness(0.95); }
 /* The input line is the next prompt, right under the last output. */
 .term.is-live .term-input-line .term-prompt {
   display: inline-flex;
+  align-items: baseline;
 }
 .conv-body.is-shell .term-foot {
   padding: 4px 16px 8px;

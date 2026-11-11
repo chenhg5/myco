@@ -5,7 +5,7 @@ import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { canManage, cliName, isMe, machineOfRow, personLabel, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
-import { STOPPED, Terminal } from "@/app/Terminal";
+import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
@@ -649,7 +649,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Terminal messages={onScreen || shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live cwd={agent?.binding.workdir}
                   hubId={target.hubId} onGrow={followBottom} onStop={(t) => void stop(t)} canStop={(t) => isMe(t.from, row?.hub)}>
                   <div className="term-input-line">
-                    <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir}</span> : null}$</span>
+                    <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir}</span> : null}<PromptSign /></span>
                     <textarea
                       ref={inputRef}
                       className="term-input"

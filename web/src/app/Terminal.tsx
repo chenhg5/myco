@@ -52,12 +52,16 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, childr
   }
   const used = new Set<string>();
   const items: React.ReactNode[] = [];
+  // In a live session the prompt after a failed command is red, as shell
+  // prompts do it; the last one colours the input line's prompt.
+  let afterFail = false;
   for (const m of messages) {
     if (used.has(m.id)) continue;
     if (m.type === "task" && m.to === execNode) {
       const a = answers.get(m.id);
       if (a) used.add(a.id);
-      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} onStop={onStop && (!canStop || canStop(m)) ? onStop : undefined} plain={live} cwd={cwd} />);
+      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} onStop={onStop && (!canStop || canStop(m)) ? onStop : undefined} plain={live} cwd={cwd} afterFail={afterFail} />);
+      afterFail = didFail(m, a);
       continue;
     }
     if (m.type === "progress" || m.type === "steer") continue;
@@ -81,13 +85,33 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, childr
       </div>,
     );
   }
-  return <div className={cn("term", live && "is-live")}>{items}{children}</div>;
+  return <div className={cn("term", live && "is-live", live && afterFail && "is-after-fail")}>{items}{children}</div>;
+}
+
+/** Whether a command ended badly (a non-zero exit, an error, a failure that
+ * was not you stopping it). */
+function didFail(task: Message, answer?: Message): boolean {
+  const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
+  const stopped = !answer && task.status === "failed" && task.error === STOPPED;
+  return answer?.type === "event" || (!answer && task.status === "failed" && !stopped)
+    || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
 }
 
 type ExecResult = NonNullable<ReturnType<typeof parseExecResult>>;
 
-function ResultLines({ res }: { res: ExecResult }) {
+function ResultLines({ res, plain }: { res: ExecResult; plain?: boolean }) {
   const code = typeof res.exit_code === "number" ? res.exit_code : undefined;
+  // Your own session prints what came back and nothing else: a terminal does
+  // not colour stderr or announce exit codes (the next prompt turns red).
+  if (plain) {
+    return (
+      <>
+        {res.stdout ? <pre className="term-out">{res.stdout.replace(/\n$/, "")}</pre> : null}
+        {res.stderr ? <pre className="term-out">{res.stderr.replace(/\n$/, "")}</pre> : null}
+        {typeof res.error === "string" && res.error && <pre className="term-out">{res.error}</pre>}
+      </>
+    );
+  }
   return (
     <>
       {res.stdout ? <pre className="term-out">{res.stdout.replace(/\n$/, "")}</pre> : null}
@@ -104,7 +128,7 @@ function Output({ answer, res, nameOf, plain }: { answer: Message; res: ExecResu
   const took = execDuration(res.duration_ms);
   // Your own session: what a command printed after its line left the screen
   // (cleared, or not loaded) is just more output, as in a terminal.
-  if (plain) return <div className="term-cmd"><ResultLines res={res} /></div>;
+  if (plain) return <div className="term-cmd"><ResultLines res={res} plain /></div>;
   return (
     <div className="term-cmd">
       <div className="term-meta">
@@ -119,11 +143,24 @@ function Output({ answer, res, nameOf, plain }: { answer: Message; res: ExecResu
 
 export const STOPPED = "stopped by the sender";
 
-function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop, plain, cwd }: {
+/** The prompt's sign in your own session: a chevron, drawn so that it looks
+ * the same in every monospace font (few of them have one), one character
+ * wide. Red after a command that failed. */
+export function PromptSign({ bad }: { bad?: boolean }) {
+  return (
+    <svg className={cn("term-sign", bad && "is-bad")} viewBox="0 0 8 14" aria-hidden="true">
+      <path d="M1.75 3.25 5.75 7l-4 3.75" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop, plain, cwd, afterFail }: {
   task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean;
   hubId?: string; onGrow?: () => void; onStop?: (task: Message) => void;
   /** your own session: as a terminal prints it (prompt, command, output), nothing around it */
   plain?: boolean; cwd?: string;
+  /** the command before this one failed: its prompt is red */
+  afterFail?: boolean;
 }) {
   const res = answer?.type === "reply" ? parseExecResult(answer.body) : null;
   const took = execDuration(res?.duration_ms);
@@ -132,16 +169,19 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop, plain, c
   const failed = answer?.type === "event" || (!answer && task.status === "failed" && !stopped)
     || (typeof res?.exit_code === "number" && res.exit_code !== 0) || (typeof res?.error === "string" && !!res.error);
   if (plain) {
-    // When, and how long it took, are a hover away; a terminal shows neither.
-    const when = [stamp(task.created_at), took].filter(Boolean).join(" · ");
+    // When, how long it took and how it ended are a hover away; a terminal
+    // shows none of them.
+    const code = typeof res?.exit_code === "number" && res.exit_code !== 0
+      ? L(`退出码 ${res.exit_code}`, `exit ${res.exit_code}`) + (res.timed_out ? L("（超时）", " (timed out)") : "") : "";
+    const when = [stamp(task.created_at), took, code].filter(Boolean).join(" · ");
     return (
       <div className="term-cmd">
         <div className="term-line" title={when}>
-          <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}$</span>{task.body}
+          <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}<PromptSign bad={afterFail} /></span>{task.body}
         </div>
-        {res && <ResultLines res={res} />}
+        {res && <ResultLines res={res} plain />}
         {answer && !res && <pre className={cn("term-out", answer.type === "event" && "is-err")}>{answer.body}</pre>}
-        {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} />}
+        {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} plain />}
         {/* Running: a block cursor after what it has printed so far. Stopping
             is Ctrl+C, or the line under the terminal. */}
         {pending && <div className="term-pending"><span className="term-cursor" role="img" aria-label={L("执行中", "running")} /></div>}
@@ -179,7 +219,7 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, onStop, plain, c
 const LIVE_POLL_MS = 1000;
 
 /** A running command's output so far (or a stopped one's), from its run trace. */
-function LiveOutput({ hubId, task, live, onGrow }: { hubId: string; task: Message; live: boolean; onGrow?: () => void }) {
+function LiveOutput({ hubId, task, live, onGrow, plain }: { hubId: string; task: Message; live: boolean; onGrow?: () => void; plain?: boolean }) {
   const [chunks, setChunks] = useState<TraceStep[]>([]);
   const [gone, setGone] = useState(false);
   const last = useRef(0);
@@ -214,5 +254,5 @@ function LiveOutput({ hubId, task, live, onGrow }: { hubId: string; task: Messag
     if (b && b.err === err) b.text += c.text;
     else blocks.push({ err, text: c.text || "" });
   }
-  return <>{blocks.map((b, i) => <pre key={i} className={cn("term-out", b.err && "is-err")}>{b.text.replace(/\n$/, "")}</pre>)}</>;
+  return <>{blocks.map((b, i) => <pre key={i} className={cn("term-out", b.err && !plain && "is-err")}>{b.text.replace(/\n$/, "")}</pre>)}</>;
 }
