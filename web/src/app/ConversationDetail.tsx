@@ -359,6 +359,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+  // Either way (typing at it, or reading what other nodes ran on it) the
+  // pane is a terminal.
+  const termMode = shellMode || !!execNode;
 
   // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
@@ -401,15 +404,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // "clear" in a shell session is the terminal's own business, not a command
   // for the node (which has no screen to clear): everything so far goes off
   // the screen, and comes back with the line that then heads the terminal.
-  // It is remembered for this run of the App, by the time of the last message
-  // cleared (the hub's time, as every message carries it, not this clock's).
+  // It is remembered on this computer, across restarts of the App, by the
+  // time of the last message cleared (the hub's time, as every message
+  // carries it, not this clock's).
   const clearKey = `myco-term-clear:${target.hubId}/${target.agent}`;
   const [clearedAfter, setClearedAfter] = useState<string | null>(() => {
-    try { return sessionStorage.getItem(clearKey); } catch { return null; }
+    try { return localStorage.getItem(clearKey); } catch { return null; }
   });
   const setCleared = (id: string | null) => {
     setClearedAfter(id);
-    try { if (id) sessionStorage.setItem(clearKey, id); else sessionStorage.removeItem(clearKey); } catch { /* storage unavailable */ }
+    try { if (id) localStorage.setItem(clearKey, id); else localStorage.removeItem(clearKey); } catch { /* storage unavailable */ }
   };
   const clearScreen = () => {
     // The latest by time, which is not always the last in the list.
@@ -610,10 +614,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </span>}
       </header>
 
-      <div className={cn("conv-body", hasRail && "has-rail", shellMode && "is-shell")}>
+      <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className={cn("conv-timeline", shellMode && "is-shell", observed && "is-observed")}>
+        <div className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
             loadError && !isTransient(loadError) ? (
               <ErrorText error={loadError} />
@@ -647,7 +651,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   </button>
                 )}
                 <Terminal messages={onScreen || shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live cwd={agent?.binding.workdir}
-                  hubId={target.hubId} onGrow={followBottom} onStop={(t) => void stop(t)} canStop={(t) => isMe(t.from, row?.hub)}>
+                  hubId={target.hubId} onGrow={followBottom}>
                   <div className="term-input-line">
                     <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir}</span> : null}<PromptSign /></span>
                     <textarea
