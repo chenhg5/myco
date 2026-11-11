@@ -439,6 +439,34 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-session-in-use");
     });
 
+    // An inbox node (any agent joined from a session) is named after what it
+    // is, and its details say it receives only in that session: no runner
+    // wake, no copy.
+    await step("节点 · 会话内接收", async () => {
+      await go(page, "节点", narrow);
+      const inbox = page.locator(".app-page .app-row:visible", { hasText: "会话内接收" }).first();
+      await inbox.waitFor({ timeout: 20_000 });
+      const rowText = compactText(await inbox.innerText());
+      if (!rowText.includes("Studio Mac") || !rowText.includes("myco")) {
+        throw new Error(`生成名的 inbox 节点应显示「会话内接收 · 机器 · 目录」，实际是「${rowText}」`);
+      }
+      await inbox.click();
+      const inspector = page.locator(".app-inspector");
+      await inspector.waitFor({ timeout: 20_000 });
+      const receive = inspector.locator(".app-kv", { hasText: "接收方式" });
+      await receive.waitFor({ timeout: 10_000 });
+      const receiveText = compactText(await receive.innerText());
+      if (!receiveText.includes("只能在会话里接收") || !receiveText.includes("不能后台唤醒")) {
+        throw new Error(`inbox 节点的接收方式应说明只能在会话里接收、不能后台唤醒，实际是「${receiveText}」`);
+      }
+      const copies = await inspector.locator(".app-action-row", { hasText: "复制一个" }).count();
+      if (copies > 0) throw new Error("会话内接收的节点不应提供「复制一个」");
+      await settle(page, 300);
+      await shot(page, size, scheme, "node-inbox");
+      await page.keyboard.press("Escape");
+      await inspector.waitFor({ state: "hidden" });
+    });
+
     // A run that only says something leaves no process block; a run that
     // called tools keeps one.
     await step("对话 · 只回一句话", async () => {

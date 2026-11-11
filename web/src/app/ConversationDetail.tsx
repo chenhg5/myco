@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Papercli
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { canManage, cliName, isMe, machineOfRow, personLabel, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
+import { canManage, cliName, isInbox, isMe, machineOfRow, personLabel, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -304,7 +304,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const waitingReason = busy
     ? L("对方的会话正开在别处（终端、编辑器或桌面版），空出来后会处理", "The session is open elsewhere (a terminal, an editor or a desktop app); it starts when that is free")
     : offline
-      ? L("对方离线，上线后会处理", "The node is offline; it starts when the node is back")
+      ? agent && isInbox(agent)
+        ? L("对方只在会话里接收消息，等它的会话再挂上 inbox wait 就会处理", "The node receives only in its session; it starts when its session runs inbox wait again")
+        : L("对方离线，上线后会处理", "The node is offline; it starts when the node is back")
       : row && runnerAway(row.st, row.hub)
         ? L("节点的 runner 没在运行（可能在重启），起来后会处理", "The node's runner is not running (maybe restarting); it starts when the runner is back")
         : undefined;
@@ -312,7 +314,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Busy elsewhere: a copy of the session (a new node on the same machine
   // and folder) can take the work now; the original stays as it is.
   const machine = row ? machineOfRow(row) : undefined;
-  const forkable = !!agent && (agent.binding.harness === "claude" || agent.binding.harness === "codex") &&
+  // An inbox node has no CLI session to copy and no runner to start it.
+  const forkable = !!agent && !isInbox(agent) && (agent.binding.harness === "claude" || agent.binding.harness === "codex") &&
     !!agent.binding.session_id && !!agent.binding.workdir && !!machine?.can_spawn && canManage(row?.hub, machine?.owner_id);
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState<unknown>(null);
@@ -727,7 +730,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {!busy && offline && (
           <div className="conv-busy">
             <span className="dot idle" />
-            <span className="conv-busy-text">{L("对方离线，现在发的消息会在它上线后处理。", "The node is offline; messages sent now are handled when it is back.")}</span>
+            <span className="conv-busy-text">
+              {agent && isInbox(agent)
+                ? L("对方只在会话里接收消息，现在发的消息等它的会话再挂上 inbox wait 后处理。", "The node receives only in its session; messages sent now are handled when its session runs inbox wait again.")
+                : L("对方离线，现在发的消息会在它上线后处理。", "The node is offline; messages sent now are handled when it is back.")}
+            </span>
           </div>
         )}
         {steerOn && (

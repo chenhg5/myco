@@ -22,6 +22,9 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   opencode: { label: "OpenCode", icon: IconTerminal },
   shell: { label: "Shell", icon: IconPrompt },
   exec: { label: "Exec", icon: IconTerminal },
+  // Any agent joined from a session without a runner it can wake: it receives
+  // only through `myco inbox wait` running in that session.
+  inbox: { get label() { return L("会话内接收", "In session"); }, icon: IconBot },
   human: { get label() { return L("人", "Human"); }, icon: IconPerson },
 };
 
@@ -38,6 +41,12 @@ export function agentKind(a: Agent): Kind {
 export function isCloud(a: Agent): boolean {
   const cli = a.runtime?.cli || a.binding.harness || "";
   return !a.machine_id && cli.endsWith("-cloud");
+}
+
+/** A node that receives only while its own session runs `myco inbox wait`:
+ *  no runner can wake it after the session closes. */
+export function isInbox(a: Agent): boolean {
+  return (a.runtime?.cli || a.binding.harness || "") === "inbox";
 }
 
 export function cliName(a: Agent): string {
@@ -248,7 +257,9 @@ export function nodeName(a: Agent, hub?: HubOverview): string {
 function generatedName(name: string, hostname?: string): boolean {
   const slug = (hostname || "").toLowerCase().replace(/\.local$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   if (slug.length >= 4 && name.toLowerCase().startsWith(slug)) return true;
-  return /-(claude|codex|gemini|cursor|opencode|pi|kiro|exec|shell)-[0-9a-f]{3,}$/i.test(name);
+  // `myco join` names an inbox node `<machine>-agent-<id>` (or
+  // `<machine>-inbox-<id>`); both are generated, not chosen.
+  return /-(claude|codex|gemini|cursor|opencode|pi|kiro|exec|shell|agent|inbox)-[0-9a-f]{3,}$/i.test(name);
 }
 
 /**
@@ -257,7 +268,9 @@ function generatedName(name: string, hostname?: string): boolean {
  * nodes receive (it then does for every node that does).
  */
 export function runnerAway(st: AgentStatus, hub: HubOverview): boolean {
-  if (st.state === "offline" || st.receiving || sessionBusy(st)) return false;
+  // An inbox node has no runner to take its messages: it is online exactly
+  // while its session runs `myco inbox wait`.
+  if (isInbox(st.agent) || st.state === "offline" || st.receiving || sessionBusy(st)) return false;
   const mode = st.agent.delivery?.mode || "pull";
   const k = agentKind(st.agent);
   if (mode !== "pull" || (k !== "agent" && k !== "shell") || /cloud/.test(st.agent.binding?.harness || "")) return false;

@@ -270,6 +270,14 @@ const state = {
           labels: ["machine=bench-01"], online: true, status_at: iso(20),
           binding: { harness: "codex", environment: "Linux 6.8", workdir: "~/code/legacy" },
         }),
+        // Joined from a session no runner can wake: it receives only while
+        // `myco inbox wait` runs in that session.
+        makeAgent({
+          name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", description: "在 Grok 会话里用 inbox wait 接收消息。",
+          kind: "agent", machine_id: "m_studio", receiving: "session",
+          labels: ["machine=studio-mac", "group=release"],
+          binding: { harness: "inbox", environment: "macOS 26.1", workdir: "~/code/myco" },
+        }),
         makeAgent({
           name: "studio-mac-machine", display_name: "Studio Mac", kind: "machine", machine_id: "m_studio",
           labels: ["machine=studio-mac"], binding: { harness: "machine" },

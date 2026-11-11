@@ -71,10 +71,12 @@ const isShell = (cli: string) => cli === "exec";
  *  to another computer. */
 // One sentence for the agent on the other computer: install and register
 // the machine (safe to re-run if myco is already there), then join the session.
+// Any agent can do this; only Claude Code and Codex can also be woken by a
+// runner after their session closes.
 function inviteSentence(command: string): string {
   return L(
-    `接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入，并按它输出里 receive 的说明接收消息（会话开着时，在后台一直挂着 myco inbox wait --timeout 55m）。`,
-    `Join the myco network: run ${command} in a terminal, then run myco join to add the current session, and receive messages as its "receive" output says (while the session stays open, keep myco inbox wait --timeout 55m running in the background).`,
+    `接入 myco 网络：在终端运行 ${command} ，然后运行 myco join 把当前会话加入。之后按它输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。Claude Code / Codex 会话关掉后，runner 可以在后台唤醒它继续处理；其他 agent 只能靠这个 inbox wait 接收，会话关了就收不到新消息。`,
+    `Join the myco network: run ${command} in a terminal, then run myco join to add the current session. Receive messages as its "receive" output says: while the session stays open, keep myco inbox wait --timeout 55m running in the background, and read and handle what it reports with myco inbox pull. After a Claude Code or Codex session closes, the runner can wake it in the background; other agents receive only through this inbox wait and stop receiving when the session closes.`,
   );
 }
 
@@ -503,13 +505,16 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
           {link && (
             <>
               <div className="app-field">
-                <span className="app-field-label">{L("把这句话发给那台电脑上的 agent（Claude Code / Codex 会话），它会自己装好 myco 并加入：", "Send this sentence to the agent on that computer (a Claude Code or Codex session). It installs myco and joins by itself:")}</span>
+                <span className="app-field-label">{L("把这句话发给那台电脑上的 agent（Grok、Gemini、自己写的 bot 等任何会话都行），它会自己装好 myco 并加入：", "Send this sentence to the agent on that computer (any session works: Grok, Gemini, your own bot…). It installs myco and joins by itself:")}</span>
                 <div className="app-command">
                   <code>{inviteSentence(link.command)}</code>
                   <CopyButton value={inviteSentence(link.command)} />
                 </div>
               </div>
               <div className="app-small-note" style={{ marginTop: 10 }}>
+                {L("Claude Code / Codex 会话关掉后，那台机器上的 runner 还能在后台唤醒它继续处理。其他 agent 只靠会话里挂着的 myco inbox wait 接收，会话关了就不再收消息。", "After a Claude Code or Codex session closes, the runner on that computer can still wake it in the background. Other agents receive only while myco inbox wait runs in their session; when the session closes, they stop receiving.")}
+              </div>
+              <div className="app-small-note" style={{ marginTop: 6 }}>
                 {L("链接 7 天内有效，可加入 5 台机器。没有 agent 的话，在那台电脑的终端里照着这句话运行两条命令也一样。", "The link is valid for 7 days and can join 5 machines. Without an agent, run the two commands from the sentence in a terminal on that computer instead.")}
               </div>
               <div className="app-modal-actions">

@@ -6,7 +6,7 @@ import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appap
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
-  accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, kindLabel, machineLabel,
+  accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -483,6 +483,27 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
   };
 
   const seen = ag.last_seen_at ? timeAgo(ag.last_seen_at, now) : "";
+  // An inbox node has no runner behind it: it comes back when its session
+  // runs `myco inbox wait` again, not by restarting a runner.
+  if (isInbox(ag)) {
+    return (
+      <section className="app-offline">
+        <div className="app-offline-head">
+          <span className="dot offline" />
+          <b>{L("离线", "Offline")}</b>
+          {seen && <span>{L(`· 最后一次连接 Hub 是 ${seen}`, `· Last connected to the Hub ${seen}`)}</span>}
+        </div>
+        <p>
+          {L("这个节点只在会话里接收消息：它的会话运行时挂着 myco inbox wait。会话关掉后它就离线，发给它的任务会先排队，等它再挂上 inbox wait 才会收到。", "This node receives only inside its session: while that session runs, myco inbox wait is attached to it. When the session closes it goes offline and tasks wait in a queue until inbox wait is attached again.")}
+        </p>
+        <p>{L("回到那个会话，让它在后台运行下面这条命令，它就会重新上线。", "Go back to that session and run this command in the background to bring it back online.")}</p>
+        <div className="app-command">
+          <code>{WAIT_CMD}</code>
+          <CopyButton value={WAIT_CMD} />
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="app-offline">
       <div className="app-offline-head">
@@ -573,6 +594,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const hubId = row.hub.id;
   const state = stateMeta[row.st.state];
   const kind = agentKind(ag);
+  const inbox = isInbox(ag);
   const Icon = nodeIcon(ag);
   const rt = ag.runtime;
   const machine = machineLabel(row);
@@ -580,7 +602,9 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const mayManage = canManage(row.hub, ag.owner_id);
   const me = row.hub.me;
   // Copy: fork the session into a new node on the same machine and folder.
-  const forkable = kind === "agent" && (ag.binding.harness === "claude" || ag.binding.harness === "codex") &&
+  // An inbox node has no CLI session to copy and no runner to start it: it
+  // cannot be forked or spawned.
+  const forkable = kind === "agent" && !inbox && (ag.binding.harness === "claude" || ag.binding.harness === "codex") &&
     !!ag.binding.session_id && !!ag.binding.workdir && !!machineObj?.can_spawn && canManage(row.hub, machineObj?.owner_id);
   const openCopy = () => {
     const names = new Set((row.hub.overview?.agents || []).map((x) => x.agent.name));
@@ -762,10 +786,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
-              {kind !== "human" && row.st.receiving && (
+              {kind !== "human" && (row.st.receiving || inbox) && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("接收方式", "Receives")}</span>
-                  <span className="app-kv-value">{receivingLabel(row.st.receiving)}</span>
+                  <span className="app-kv-value">
+                    {inbox
+                      ? L("只能在会话里接收，不能后台唤醒", "In its session only; no background wake")
+                      : receivingLabel(row.st.receiving)}
+                  </span>
                 </div>
               )}
               <div className="app-kv">
