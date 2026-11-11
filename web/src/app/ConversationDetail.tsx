@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Papercli
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { canManage, cliName, isMe, machineOfRow, personLabel, sessionBusy, nodeName } from "@/app/nodes";
+import { canManage, cliName, isMe, machineOfRow, personLabel, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -303,7 +303,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ? L("对方的会话正开在别处（终端、编辑器或桌面版），空出来后会处理", "The session is open elsewhere (a terminal, an editor or a desktop app); it starts when that is free")
     : offline
       ? L("对方离线，上线后会处理", "The node is offline; it starts when the node is back")
-      : undefined;
+      : row && runnerAway(row.st, row.hub)
+        ? L("节点的 runner 没在运行（可能在重启），起来后会处理", "The node's runner is not running (maybe restarting); it starts when the runner is back")
+        : undefined;
 
   // Busy elsewhere: a copy of the session (a new node on the same machine
   // and folder) can take the work now; the original stays as it is.
