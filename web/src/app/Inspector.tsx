@@ -677,7 +677,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       <div className="app-inspector-backdrop" onClick={onClose} />
       <aside className="app-inspector" role="dialog" aria-label={L(`${ag.display_name || ag.name} 详情`, `${ag.display_name || ag.name} details`)}>
         <div className="app-inspector-head">
-          <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+          <span className="app-row-icon"><Icon /></span>
           <div className="titles">
             <h2>{ag.display_name || ag.name}</h2>
             <div className="sub">

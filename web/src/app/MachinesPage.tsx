@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { AlertTriangle, Monitor, Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
+import { IconMachine } from "@/components/icons";
 import type { Hub, HubOverview } from "@/appapi";
 import { machineSubtitle, osInfo } from "@/app/nodes";
 import { cn } from "@/lib/utils";
@@ -46,7 +47,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
         loading && <RowsSkeleton rows={3} />
       ) : all.length === 0 && !hasUnreachable ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
-          <div className="app-empty-icon"><Monitor /></div>
+          <div className="app-empty-icon"><IconMachine /></div>
           <h2>{L("还没有机器", "No machines yet")}</h2>
           <p>{L("机器是运行节点的地方。添加一台机器后，就能在上面开新会话。", "Machines are where nodes run. Add a machine to start new sessions on it.")}</p>
           <div className="app-empty-actions">
@@ -89,7 +90,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
                       onClick={() => onOpenMachine(g.hub.id, m.id)}
                       title={m.hostname}
                     >
-                      <span className="app-row-icon"><OsIcon strokeWidth={1.75} /></span>
+                      <span className="app-row-icon"><OsIcon /></span>
                       <span className="app-row-main">
                         <span className="app-row-title">{m.name}</span>
                         <span className="app-row-sub">

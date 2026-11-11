@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FolderKanban, LayoutGrid, MessageSquare, Monitor, Plus, RefreshCw, WifiOff,
+  Plus, RefreshCw, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -25,7 +25,7 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { LogoSymbol, LogoWordmark } from "@/components/brand";
-import { IconExpandRight, IconSidebar } from "@/components/icons";
+import { IconChat, IconExpandRight, IconMachine, IconNodes, IconProject, IconSidebar, type IconType } from "@/components/icons";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -56,18 +56,18 @@ const PAGE_META: Record<Page, { group: string; label: string }> = {
   project: { get group() { return L("项目", "Projects"); }, label: "" },
 };
 
-const NAV: { group: string; items: { page: Page; label: string; icon: typeof LayoutGrid }[] }[] = [
+const NAV: { group: string; items: { page: Page; label: string; icon: IconType }[] }[] = [
   {
     get group() { return L("管理", "Manage"); },
     items: [
-      { page: "nodes", get label() { return L("节点", "Nodes"); }, icon: LayoutGrid },
-      { page: "machines", get label() { return L("机器", "Machines"); }, icon: Monitor },
+      { page: "nodes", get label() { return L("节点", "Nodes"); }, icon: IconNodes },
+      { page: "machines", get label() { return L("机器", "Machines"); }, icon: IconMachine },
     ],
   },
   {
     get group() { return L("消息", "Messages"); },
     items: [
-      { page: "conversations", get label() { return L("对话", "Conversations"); }, icon: MessageSquare },
+      { page: "conversations", get label() { return L("对话", "Conversations"); }, icon: IconChat },
     ],
   },
 ];
@@ -434,7 +434,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     aria-current={page === it.page ? "page" : undefined}
                     onClick={() => setPage(it.page)}
                   >
-                    <it.icon strokeWidth={1.75} />
+                    <it.icon />
                     <span>{it.label}</span>
                   </button>
                 ))}
@@ -457,7 +457,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     onClick={() => openProject({ hubId: x.hubId, name: x.p.name })}
                     title={x.p.goal || x.p.title}
                   >
-                    <FolderKanban strokeWidth={1.75} />
+                    <IconProject />
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                   </button>
                 );

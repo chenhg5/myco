@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { ver } from "./nodes";
-import { AlertTriangle, ChevronDown, Lock, Plus, Search, Server } from "lucide-react";
+import { AlertTriangle, ChevronDown, Lock, Plus, Search } from "lucide-react";
+import { IconNodes } from "@/components/icons";
 import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
@@ -59,7 +60,7 @@ export function NodeRowView({ row, highlight, onClick }: {
       onClick={onClick}
       title={a.display_name || a.name}
     >
-      <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+      <span className="app-row-icon"><Icon /></span>
       <span className="app-row-main">
         <span className="app-row-titleline">
           <span className="app-row-title">{a.display_name || a.name}</span>
@@ -289,7 +290,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
         loading && <RowsSkeleton rows={5} />
       ) : !hasUnreachable && hubScoped.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
-          <div className="app-empty-icon"><Server /></div>
+          <div className="app-empty-icon"><IconNodes /></div>
           <h2>{L("还没有节点", "No nodes yet")}</h2>
           <p>{L("在 Hub 上接入一个 agent，或者在一台机器上开一个新会话。", "Connect an agent to a Hub, or start a new session on a machine.")}</p>
           <div className="app-empty-actions">
@@ -300,7 +301,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
         </div>
       ) : filtered.length === 0 && !hasUnreachable ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
-          <div className="app-empty-icon"><Server /></div>
+          <div className="app-empty-icon"><IconNodes /></div>
           <h2>{L("没有匹配的节点", "No matching nodes")}</h2>
           <p>{L("换一个搜索或筛选条件试试。", "Try a different search or filter.")}</p>
         </div>

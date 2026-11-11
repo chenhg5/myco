@@ -77,7 +77,7 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
               disabled={disabled}
             >
               <span className="app-picker-check">{on && <Check />}</span>
-              <Icon strokeWidth={1.75} />
+              <Icon />
               <span className="app-picker-name">{n.display_name || n.name}</span>
               {n.display_name && <span className="app-picker-sub mono">{n.name}</span>}
               <span className="app-picker-kind">{agentKind(n) === "human" ? L("人", "Human") : ""}</span>

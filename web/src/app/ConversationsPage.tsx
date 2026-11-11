@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, MessageSquare, Pin, PinOff, Plus, Search, Terminal } from "lucide-react";
-import { IconCollapseLeft, IconNewChat } from "@/components/icons";
+import { ChevronDown, Pin, PinOff, Plus, Search } from "lucide-react";
+import { IconChat, IconCollapseLeft, IconExchange, IconNewChat, IconPrompt } from "@/components/icons";
 import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
@@ -500,7 +500,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
         <RowsSkeleton rows={6} className="conv-skel-rows" />
       ) : shown.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
-          <div className="app-empty-icon"><MessageSquare /></div>
+          <div className="app-empty-icon"><IconChat /></div>
           <h2>{filtered ? L("没有匹配的对话", "No matching conversations") : L("还没有对话", "No conversations yet")}</h2>
           <p>
             {filtered
@@ -521,7 +521,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
             const it = row.item;
             const tag = stateTag(it.state);
             const shell = shellRow(row);
-            const Icon = shell ? Terminal : it.participants.some((p) => p.startsWith(CONSOLE)) ? MessageSquare : ArrowLeftRight;
+            const Icon = shell ? IconPrompt : it.participants.some((p) => p.startsWith(CONSOLE)) ? IconChat : IconExchange;
             const key = rowKey(row);
             const pinned = pinKeys.has(key);
             return (

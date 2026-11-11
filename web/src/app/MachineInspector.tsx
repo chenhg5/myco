@@ -124,7 +124,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
       <div className="app-inspector-backdrop" onClick={onClose} />
       <aside className="app-inspector" role="dialog" aria-label={L(`${machine.name} 详情`, `${machine.name} details`)}>
         <div className="app-inspector-head">
-          <span className="app-row-icon"><OsIcon strokeWidth={1.75} /></span>
+          <span className="app-row-icon"><OsIcon /></span>
           <div className="titles">
             <h2>{machine.name}</h2>
             <div className="sub">{machine.hostname} · {os.label}</div>
@@ -211,7 +211,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
                       onClick={() => onOpenNode(r)}
                       title={a.display_name || a.name}
                     >
-                      <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                      <span className="app-row-icon"><Icon /></span>
                       <span className="app-row-main">
                         <span className="app-row-title">{a.display_name || a.name}</span>
                         <span className="app-row-sub">

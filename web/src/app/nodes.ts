@@ -1,6 +1,7 @@
 import {
-  Bot, Cloud, Code2, Laptop, Monitor, Server, Sparkles, SquareTerminal, Terminal, UserRound,
-} from "lucide-react";
+  IconAsterisk, IconBot, IconCloud, IconCode, IconLaptop, IconMachine, IconPerson, IconPointer, IconPrompt,
+  IconServer, IconStar, IconTerminal, type IconType,
+} from "@/components/icons";
 import type { Agent, Machine, ModelSource, RuntimeAccess } from "@/api";
 import type { AgentRow, NodeKind } from "@/app/types";
 import type { HubOverview } from "@/appapi";
@@ -9,19 +10,19 @@ import { L } from "@/lib/i18n";
 /** `machine` nodes (`xxx-machine`) are not nodes in the UI. */
 export type Kind = NodeKind | "machine";
 
-const CLI_META: Record<string, { label: string; icon: typeof Bot }> = {
-  claude: { label: "Claude Code", icon: Sparkles },
-  "claude-cloud": { label: "Claude Code", icon: Sparkles },
-  codex: { label: "Codex", icon: Code2 },
-  "codex-cloud": { label: "Codex", icon: Code2 },
-  pi: { label: "Pi", icon: Bot },
-  kiro: { label: "Kiro", icon: Bot },
-  cursor: { label: "Cursor", icon: Code2 },
-  gemini: { label: "Gemini CLI", icon: Sparkles },
-  opencode: { label: "OpenCode", icon: SquareTerminal },
-  shell: { label: "Shell", icon: Terminal },
-  exec: { label: "Exec", icon: SquareTerminal },
-  human: { get label() { return L("人", "Human"); }, icon: UserRound },
+const CLI_META: Record<string, { label: string; icon: IconType }> = {
+  claude: { label: "Claude Code", icon: IconAsterisk },
+  "claude-cloud": { label: "Claude Code", icon: IconAsterisk },
+  codex: { label: "Codex", icon: IconCode },
+  "codex-cloud": { label: "Codex", icon: IconCode },
+  pi: { label: "Pi", icon: IconBot },
+  kiro: { label: "Kiro", icon: IconBot },
+  cursor: { label: "Cursor", icon: IconPointer },
+  gemini: { label: "Gemini CLI", icon: IconStar },
+  opencode: { label: "OpenCode", icon: IconTerminal },
+  shell: { label: "Shell", icon: IconPrompt },
+  exec: { label: "Exec", icon: IconTerminal },
+  human: { get label() { return L("人", "Human"); }, icon: IconPerson },
 };
 
 export function agentKind(a: Agent): Kind {
@@ -50,15 +51,15 @@ export function cliVersion(a: Agent): string | undefined {
 
 export function cliIcon(a: Agent) {
   const cli = a.runtime?.cli || a.binding.harness || "";
-  return CLI_META[cli]?.icon || Bot;
+  return CLI_META[cli]?.icon || IconBot;
 }
 
 /** Icon for a node row / inspector head, by kind. */
 export function nodeIcon(a: Agent) {
   const kind = agentKind(a);
-  if (kind === "human") return UserRound;
-  if (kind === "machine") return Server;
-  if (kind === "shell") return Terminal;
+  if (kind === "human") return IconPerson;
+  if (kind === "machine") return IconServer;
+  if (kind === "shell") return cliIcon(a) === IconTerminal ? IconTerminal : IconPrompt;
   return cliIcon(a);
 }
 
@@ -115,13 +116,13 @@ export function accessLabel(access?: RuntimeAccess): string {
   return "—";
 }
 
-export function osInfo(os: Machine["os"]): { label: string; icon: typeof Monitor } {
-  if (os === "darwin") return { label: "macOS", icon: Laptop };
-  if (os === "linux") return { label: "Linux", icon: Terminal };
-  if (os === "windows") return { label: "Windows", icon: Monitor };
-  if (os === "cloud") return { label: L("云端", "Cloud"), icon: Cloud };
+export function osInfo(os: Machine["os"]): { label: string; icon: IconType } {
+  if (os === "darwin") return { label: "macOS", icon: IconLaptop };
+  if (os === "linux") return { label: "Linux", icon: IconServer };
+  if (os === "windows") return { label: "Windows", icon: IconMachine };
+  if (os === "cloud") return { label: L("云端", "Cloud"), icon: IconCloud };
   // Machines whose runners predate machine reporting: grouped by host name.
-  return { label: L("系统未知", "Unknown OS"), icon: Monitor };
+  return { label: L("系统未知", "Unknown OS"), icon: IconMachine };
 }
 
 /** A version for display: "v0.16.9" whether or not the source has the v. */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MessageSquare, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
-import { IconNewChat } from "@/components/icons";
+import { Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
+import { IconChat, IconExchange, IconNewChat } from "@/components/icons";
 import { appApi, isOldHub, type RecentItem } from "@/appapi";
 import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
@@ -227,7 +227,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
             return (
               <div className="app-project-member" key={m.name}>
                 <button type="button" className="app-project-member-main" onClick={() => row && onOpenNode(row)} disabled={!row}>
-                  <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                  <span className="app-row-icon"><Icon /></span>
                   <span className="app-row-main">
                     <span className="app-row-titleline">
                       <span className="app-row-title">{a?.display_name || m.name}</span>
@@ -272,7 +272,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           <div className="app-list">
             {threads.slice(0, 6).map((it) => {
               const ps = it.participants.length ? it.participants : [it.first.from, it.first.to];
-              const Icon = ps.some((x) => x.startsWith("@console:")) ? MessageSquare : ArrowLeftRight;
+              const Icon = ps.some((x) => x.startsWith("@console:")) ? IconChat : IconExchange;
               return (
                 <button key={it.thread_id} type="button" className="conv-row" onClick={() => onOpenConversation({ hubId: target.hubId, hubName, item: it })}
                   title={it.state ? stateLabel[it.state] : undefined}>

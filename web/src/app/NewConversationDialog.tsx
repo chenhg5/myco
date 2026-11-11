@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Terminal } from "lucide-react";
+import { IconPrompt } from "@/components/icons";
 import { appApi, type Hub } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -180,7 +180,7 @@ export function NewConversationDialog({ target, hubs, rows, projects, onClose, o
 
           {node?.shell && (
             <div className="app-notice">
-              <Terminal />
+              <IconPrompt />
               <span>{L("这是一个 Shell 节点：发送的内容会作为命令执行。", "This is a Shell node: what you send runs as a command.")}</span>
             </div>
           )}

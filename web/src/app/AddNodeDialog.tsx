@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Code2, Link2, RefreshCw, Sparkles,
+  AlertTriangle, Check, Link2, RefreshCw,
 } from "lucide-react";
+import { IconAsterisk, IconCode } from "@/components/icons";
 import {
   appApi, type Hub, type HubOverview, type JoinLink, type LocalJoinResult,
   type LocalSession, type SpawnCli, type SpawnResult,
@@ -60,7 +61,7 @@ function dirName(dir: string): string {
 }
 
 function cliIcon(cli: string) {
-  return cli === "codex" ? Code2 : Sparkles;
+  return cli === "codex" ? IconCode : IconAsterisk;
 }
 
 const isShell = (cli: string) => cli === "exec";
@@ -402,7 +403,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
                         }}
                         disabled={!!s.joined}
                       >
-                        <span className="app-row-icon"><Icon strokeWidth={1.75} /></span>
+                        <span className="app-row-icon"><Icon /></span>
                         <span className="app-row-main">
                           <span className="app-row-title">{s.title || dirName(s.workdir)}</span>
                           <span className="app-row-sub">
