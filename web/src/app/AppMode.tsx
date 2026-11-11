@@ -258,6 +258,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("conversations");
     setConv({ hubId, hubName, threadId, agent, peer: extra?.peer, returnTo });
   };
+  // Your chat with a node: the whole conversation (all threads), or a new
+  // one when there is none yet; the first message is written there.
+  const openChat = (hubId: string, agent: string, project?: string) => {
+    const hub = namedOv?.hubs.find((h) => h.id === hubId);
+    const me = hub?.me?.member?.name;
+    const hubName = namedHubs.find((h) => h.id === hubId)?.name || hub?.name || hubId;
+    setInspect(null);
+    setPage("conversations");
+    setConv({ hubId, hubName, threadId: "", agent, peer: me ? `@console:${me}` : undefined, project });
+  };
+  // A new conversation: straight to the chat when the node is known, else
+  // the picker.
+  const startConv = (t: NewConversationTarget) => {
+    if (t.hubId && t.agent) openChat(t.hubId, t.agent, t.project);
+    else setNewConv(t);
+  };
   const closeConversation = () => {
     const back = conv?.returnTo;
     setConv(null);
@@ -472,7 +488,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     onClick={() => openProject({ hubId: x.hubId, name: x.p.name })}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("打开项目", "Open project"), icon: IconProject, onSelect: () => openProject({ hubId: x.hubId, name: x.p.name }) },
-                      { label: L("发任务", "New task"), icon: IconNewChat, disabled: x.p.archived, onSelect: () => setNewConv({ hubId: x.hubId, project: x.p.name }) },
+                      { label: L("发任务", "New task"), icon: IconNewChat, disabled: x.p.archived, onSelect: () => startConv({ hubId: x.hubId, project: x.p.name }) },
                     ])}
                     title={x.p.goal || x.p.title}
                   >
@@ -577,7 +593,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   now={now}
                   showBack={false}
                   onBack={closeConversation}
-                  onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
+                  onNewConversation={(hubId, agent) => startConv({ hubId, agent })}
                   onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
                 />
               ) : (
@@ -594,7 +610,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             rows={rows}
             now={now}
             onBack={closeConversation}
-            onNewConversation={(hubId, agent) => setNewConv({ hubId, agent })}
+            onNewConversation={(hubId, agent) => startConv({ hubId, agent })}
                   onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
           />
         ) : (
@@ -639,7 +655,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onChanged={() => void loadProjects(hubs.map((h) => h.id))}
                 onOpenConversation={(r) => openConversationRow(r, true)}
                 onAllConversations={() => { setConvProject(project); setPage("conversations"); }}
-                onNewConversation={(agent) => setNewConv({ hubId: project.hubId, agent, project: project.name })}
+                onNewConversation={(agent) => startConv({ hubId: project.hubId, agent, project: project.name })}
                 onDeleted={() => {
                   setProject(null);
                   setConvProject(null);
@@ -661,7 +677,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
                 onAdd={() => setSpawnTarget({})}
                 onCleanup={() => setCleanupOpen(true)}
-                onMessage={(r) => setNewConv({ hubId: r.hub.id, agent: r.st.agent.name })}
+                onMessage={(r) => startConv({ hubId: r.hub.id, agent: r.st.agent.name })}
               />
             )}
 
@@ -726,7 +742,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onPeer={(hubId, agent, peer) => openConversation(hubId, "", agent, { peer, fromNode: true })}
         onMessage={(r) => {
           setInspect(null);
-          setNewConv({ hubId: r.hub.id, agent: r.st.agent.name });
+          startConv({ hubId: r.hub.id, agent: r.st.agent.name });
         }}
         onOpenMachine={(hubId, machineId) => {
           setInspect(null);
@@ -759,7 +775,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onMessage={(hubId, name) => {
           const join = spawnTarget?.project;
           setSpawnTarget(null);
-          setNewConv({ hubId, agent: name, ...(join ? { project: join.name } : {}) });
+          startConv({ hubId, agent: name, ...(join ? { project: join.name } : {}) });
         }}
         onJoined={nodeAdded}
       />
@@ -770,12 +786,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         rows={rows}
         projects={projects}
         onClose={() => setNewConv(null)}
-        onSent={(hubId, threadId, agent, from) => {
-          setNewConv(null);
-          // The whole conversation with that node, this task at the end.
-          openConversation(hubId, threadId, agent, from ? { peer: from } : undefined);
-          void refresh();
-        }}
+        onPick={(hubId, agent, project) => { setNewConv(null); openChat(hubId, agent, project); }}
       />
 
       <NewProjectDialog

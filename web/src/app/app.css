@@ -4698,3 +4698,56 @@ body.is-resizing {
 .conv-busy .conv-steer-btn + .conv-steer-btn {
   margin-left: 0;
 }
+
+/* A task the node has not picked up yet: why, without a spinner. */
+.trace-head.trace-wait {
+  cursor: default;
+}
+.trace-wait-dot {
+  width: 6px;
+  height: 6px;
+  margin: 0 4px 0 2px;
+  border-radius: 999px;
+  background: var(--amber, #d4a24c);
+  flex: none;
+}
+
+/* New conversation: search, then the nodes; a click opens the chat. */
+.app-convpick-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: var(--input, var(--pill));
+}
+.app-convpick-search svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  flex: none;
+}
+.app-convpick-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+.app-convpick-list {
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+.app-convpick-group {
+  margin: 10px 2px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}

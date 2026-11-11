@@ -158,6 +158,18 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
     return () => { off = true; window.clearInterval(t); };
   }, [hubId, task.id, open, running, gone]);
 
+  // Not picked up yet (queued, the node offline or its session busy): a
+  // quiet line saying why, not a spinner.
+  if (running && task.status !== "acked" && (!events || events.length === 0)) {
+    return (
+      <div className="trace is-waiting">
+        <div className="trace-head trace-wait">
+          <span className="trace-wait-dot" />
+          <span className="trace-title">{waiting || L("排队中，轮到它时开始", "Queued: it starts when the node gets to it")}</span>
+        </div>
+      </div>
+    );
+  }
   if (gone) return null;
   const { rows, usage } = rowsOf(events || []);
   // Finished without any recorded step: nothing to show (older runner, or a
@@ -186,7 +198,7 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
       {open && (
         <div className="trace-body" ref={body}>
           {events === null && <div className="trace-note">{L("正在读取…", "Loading…")}</div>}
-          {events !== null && rows.length === 0 && running && <div className="trace-note">{waiting || L("等它开始…", "Waiting for it to start…")}</div>}
+          {events !== null && rows.length === 0 && running && <div className="trace-note">{L("开始了，等第一步…", "Started; waiting for the first step…")}</div>}
           {rows.map((r) => <TraceRow key={r.key} row={r} live={running} />)}
         </div>
       )}

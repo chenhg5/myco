@@ -22,6 +22,8 @@ export interface ConversationTarget {
   // With peer: the whole history between agent and peer (all threads),
   // read-only, instead of one thread.
   peer?: string;
+  /** A new conversation's first message goes into this project. */
+  project?: string;
   // Where Back goes: the node panel it was opened from.
   returnTo?: { page: string; node?: { hubId: string; name: string }; project?: { hubId: string; name: string } };
 }
@@ -159,6 +161,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // Polls ask only for what changed since the newest change they have
     // (hubs from v0.18.35; 2 s back, for changes in the same moment); every
     // FULL_EVERY-th poll, and on older hubs, the whole view again.
+    // A new conversation (no thread, no peer yet): nothing to load until the
+    // first message, which then opens the whole conversation.
+    if (!target.peer && !target.threadId) {
+      setMessages([]);
+      return () => { cancelled = true; };
+    }
     let current: Message[] = hit ? hit.messages : [];
     let more = hit?.more ?? false;
     let since = hit ? changedUntil(hit.messages) : 0;
@@ -271,8 +279,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const stopped = lastTask?.status === "failed" && lastTask.error === STOPPED;
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
   const busy = !!row && sessionBusy(row.st);
+  const offline = row?.st.state === "offline";
   const state = busy
     ? { dot: "pending", label: L("会话被占用", "Session in use") }
+    : openTask && offline
+    ? { dot: "idle", label: L("离线 · 等它上线", "Offline · waiting") }
+    : openTask && openTask.status !== "acked"
+    ? { dot: "pending", label: L("等待中", "Waiting") }
     : openTask
     ? { dot: "working", label: L("处理中", "Working") }
     : stopped
@@ -285,9 +298,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const steerOn = steerMode && !!openTask;
   // The runner found the agent's session open elsewhere (a terminal, an
   // editor, the Codex app): it waits and retries rather than write into it.
-  const waitingReason = openTask && busy
-    ? L("会话正开在别处（终端、编辑器或桌面版），等它空出来…", "The session is open elsewhere (a terminal, an editor or a desktop app); waiting until it is free…")
-    : undefined;
+  // Why a task has not started: said in the chat instead of a spinner.
+  const waitingReason = busy
+    ? L("对方的会话正开在别处（终端、编辑器或桌面版），空出来后会处理", "The session is open elsewhere (a terminal, an editor or a desktop app); it starts when that is free")
+    : offline
+      ? L("对方离线，上线后会处理", "The node is offline; it starts when the node is back")
+      : undefined;
 
   // Busy elsewhere: a copy of the session (a new node on the same machine
   // and folder) can take the work now; the original stays as it is.
@@ -364,14 +380,26 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return undefined;
   };
 
+  const projectStarted = useRef(false);
   const send = async () => {
     const body = draft.trim();
-    if (!body || sending) return;
+    if (!body || sending || busy) return;
     setSending(true);
     setSendError(null);
     try {
-      const threadId = exchange ? continuedThread() : target.threadId;
-      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id });
+      if (!target.peer && !target.threadId) {
+        // The first message of a new conversation: then the whole one.
+        const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, ...(target.project ? { project: target.project } : {}) });
+        setDraft("");
+        if (onOpen) onOpen(target.hubId, target.agent, first.from);
+        else setMessages([first]);
+        return;
+      }
+      // Opened from a project: the first message starts a thread in it.
+      const inProject = !!target.project && !projectStarted.current;
+      const threadId = inProject ? undefined : exchange ? continuedThread() : target.threadId;
+      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id, ...(inProject && !thread_id ? { project: target.project } : {}) });
+      if (inProject) projectStarted.current = true;
       const m = openTask && steerOn
         ? await appApi.steer(target.hubId, openTask.id, body)
         : await sendNew(threadId).catch((e) => {
@@ -380,6 +408,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           if (exchange && threadId && (e as { code?: string }).code === "not_found") return sendNew(undefined);
           throw e;
         });
+      // The hub signs your messages with your name there: when this view
+      // assumed another, follow the one it used.
+      if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
+        setDraft("");
+        onOpen(target.hubId, target.agent, m.from);
+        return;
+      }
       setMessages((prev) => (prev ? [...prev, m] : [m]));
       setDraft("");
       histPos.current = -1;
@@ -492,7 +527,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
         {/* What the agent did for a task you gave it (its runner reports it):
             the start of its turn, on its side of the conversation. */}
-        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={m.id === openTask?.id ? waitingReason : undefined} />}
+        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} />}
         </Fragment>
       );
   };
@@ -625,6 +660,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {busy && <ErrorText error={copyError} />}
+        {!busy && offline && (
+          <div className="conv-busy">
+            <span className="dot idle" />
+            <span className="conv-busy-text">{L("对方离线，现在发的消息会在它上线后处理。", "The node is offline; messages sent now are handled when it is back.")}</span>
+          </div>
+        )}
         {steerOn && (
           <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}
@@ -635,7 +676,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={steerOn ? L("修改刚才的任务…", "Change the last task…") : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
+            disabled={busy}
+            placeholder={busy
+              ? L("会话正开在别处，暂时不能发；可以「复制一份来对话」", "The session is open elsewhere, so you can't send now; you can talk to a copy")
+              : steerOn ? L("修改刚才的任务…", "Change the last task…") : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
             rows={1}
             aria-label={L("消息", "Message")}
           />
