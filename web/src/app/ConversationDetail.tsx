@@ -544,12 +544,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   };
 
-  const renderMessage = (m: Message) => {
+  // showName: the first of a run of messages from one sender (watching two
+  // nodes, names are shown once per run, as a chat groups them).
+  const renderMessage = (m: Message, showName = true) => {
       if (m.type === "progress") {
-        return (
+        const line = (
           <div className="conv-progress" key={m.id} title={clockTime(m.created_at)}>
             <span className="conv-progress-dot" aria-hidden />
             <span>{m.body}</span>
+          </div>
+        );
+        if (!observed) return line;
+        // Watching two nodes: on its sender's side, under its sender's name.
+        return (
+          <div key={m.id} className={cn("conv-msg is-progress", m.from === target.agent ? "is-me" : "is-agent")}>
+            {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
+            {line}
           </div>
         );
       }
@@ -569,7 +579,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       return (
         <Fragment key={m.id}>
         <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-turn={turnIds.has(m.id) ? m.id : undefined}>
-          <div className="conv-msg-name">{nameOf(m.from)}</div>
+          {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
           <div className="conv-bubble">
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
@@ -704,7 +714,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const divider = exchange && i > 0 && shown[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
                 : null;
-              const item = renderMessage(m);
+              const prev = shown[i - 1];
+              const runStart = !prev || !!divider || prev.from !== m.from || prev.type === "event" || m.type === "event";
+              const item = renderMessage(m, runStart);
               return divider ? [divider, item] : item;
             })}
             {working && (

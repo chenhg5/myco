@@ -2842,6 +2842,20 @@ textarea.app-input {
   font-size: 12px;
   line-height: 1.5;
 }
+/* Watching two nodes: progress sits on its sender's side, in its sender's
+   run of messages, lined up with the text in the bubbles. */
+.conv-msg.is-progress .conv-progress {
+  align-self: auto;
+  padding: 0 13px;
+}
+.conv-msg.is-progress.is-me .conv-progress {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+/* The rest of a run follows its first message a little closer. */
+.conv-timeline.is-observed .conv-msg:not(:has(> .conv-msg-name)) {
+  margin-top: -4px;
+}
 .conv-progress-dot {
   flex: none;
   width: 5px;
