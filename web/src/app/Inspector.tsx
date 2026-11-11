@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, MessageSquare, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
@@ -870,7 +871,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <span className="name">{L("和你的对话", "Conversations with you")}</span>
               {(kind === "agent" || kind === "shell") && (
                 <button type="button" className="app-group-action" onClick={() => onMessage(row)}>
-                  <MessageSquare />{L("发消息", "Message")}
+                  <IconChat />{L("发消息", "Message")}
                 </button>
               )}
             </div>

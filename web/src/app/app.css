@@ -3268,23 +3268,31 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-offline-ok { color: var(--accent); }
 
 /* a small action at the right of a section title (e.g. 发消息) */
+/* A section's own actions, at the right of its title: quiet text buttons in
+   the text colour, a band on hover. Not links, so not green. */
 .app-group-action {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   background: none;
-  color: var(--accent);
+  color: var(--fg-2);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
+  white-space: nowrap;
   cursor: default;
 }
-.app-group-action:hover { background: var(--nav-hover); }
-.app-group-action svg { width: 13px; height: 13px; }
+.app-group-action:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
+.app-group-action:active:not(:disabled) { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.app-group-action:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.app-group-action svg { width: 14px; height: 14px; color: var(--muted); }
+.app-group-action:hover:not(:disabled) svg { color: var(--fg-2); }
+.app-group-action .app-chev { color: var(--muted); }
 
 /* NodePicker: chips of picked nodes over a list to tick */
 .app-picker { margin-bottom: 12px; }

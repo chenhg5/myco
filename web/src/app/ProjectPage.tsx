@@ -203,7 +203,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           </>
         )}
         <span className="app-project-progress-actions">
-          <button type="button" className="app-group-action" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => onNewConversation()} disabled={p.archived}><IconNewChat />{L("发任务", "New task")}</button>
         </span>
       </div>
 
