@@ -3,6 +3,7 @@ package integration_test
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -174,6 +175,39 @@ func TestUpdatedSince(t *testing.T) {
 	// The scope still applies.
 	if _, err := h.client("").ExchangesSince(c, "lead", "box", mark); err == nil {
 		t.Fatal("exchanges since need a console credential")
+	}
+}
+
+func TestUpdatedSinceReportsMoreBeyondPage(t *testing.T) {
+	c := ctx(t)
+	db := filepath.Join(t.TempDir(), "hub.db")
+	h := startHub(t, db, app.DefaultMessagePolicy())
+	h.register(api.RegisterRequest{Name: "lead"})
+	h.register(api.RegisterRequest{Name: "box"})
+	raw, err := sql.Open("sqlite", db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	tx, err := raw.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 501; i++ {
+		id := fmt.Sprintf("msg_%04d", i)
+		if _, err := tx.Exec(`INSERT INTO messages
+			(id, from_agent, to_agent, thread_id, type, body, status, created_at, updated_at)
+			VALUES (?, 'lead', 'box', ?, 'note', 'hello', 'done', ?, ?)`, id, id, int64(2000+i), int64(2000+i)); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	ex, err := h.admin().ExchangesSince(c, "lead", "box", 1000)
+	if err != nil || len(ex.Messages) != 500 || !ex.More {
+		t.Fatalf("501 changes must report more: err=%v count=%d more=%v", err, len(ex.Messages), ex.More)
 	}
 }
 

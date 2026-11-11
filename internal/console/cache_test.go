@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chenhg5/myco/internal/console"
@@ -111,6 +112,7 @@ func TestCacheKeepsOnlyHubsInTheAppAndTrims(t *testing.T) {
 	if n, _, _ := c.Stats(); n != 0 {
 		t.Fatalf("after forgetting h1: %d entries", n)
 	}
+	c.AllowHub("h1") // a later successful answer permits fresh cache entries
 
 	// Over the size limit: the least recently used go first.
 	c.Max = 3000
@@ -131,10 +133,16 @@ func TestCacheRoutes(t *testing.T) {
 	dir := t.TempDir()
 	store := console.NewStore(filepath.Join(dir, "hubs.json"))
 	// A hub that no longer takes the app's token.
+	var deny atomic.Bool
+	deny.Store(true)
 	revoked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		io.WriteString(w, `{"error":"unauthorized","message":"invalid token"}`)
+		if deny.Load() {
+			w.WriteHeader(http.StatusUnauthorized)
+			io.WriteString(w, `{"error":"unauthorized","message":"invalid token"}`)
+			return
+		}
+		io.WriteString(w, `{"members":[]}`)
 	}))
 	defer revoked.Close()
 	h1, _ := store.Add("one", revoked.URL)
@@ -174,6 +182,36 @@ func TestCacheRoutes(t *testing.T) {
 	_, body = call("GET", "/app/cache", "")
 	if strings.Contains(body, `"m1"`) || strings.Contains(body, `"local"`) || !strings.Contains(body, `"m2"`) {
 		t.Fatalf("after 401: %s", body)
+	}
+	// A delayed write from the UI cannot put that hub's old data back.
+	call("PUT", "/app/cache", `{"entries":[{"key":"late","hub":"`+h1.ID+`","data":{"old":true}},{"key":"mixed","hub":"","data":1}]}`)
+	_, body = call("GET", "/app/cache", "")
+	if strings.Contains(body, `"late"`) || !strings.Contains(body, `"mixed"`) {
+		t.Fatalf("rejected hub was written back, or mixed entry was blocked: %s", body)
+	}
+	// A successful answer permits new entries for the hub again.
+	deny.Store(false)
+	if code, _ := call("GET", "/app/hubs/"+h1.ID+"/members", ""); code != 200 {
+		t.Fatalf("restored hub answered %d", code)
+	}
+	call("PUT", "/app/cache", `{"entries":[{"key":"fresh","hub":"`+h1.ID+`","data":{"new":true}}]}`)
+	_, body = call("GET", "/app/cache", "")
+	if !strings.Contains(body, `"fresh"`) {
+		t.Fatalf("successful hub still blocked: %s", body)
+	}
+	// The overview's successful hub check also restores writes.
+	deny.Store(true)
+	if code, _ := call("GET", "/app/hubs/"+h1.ID+"/members", ""); code != 401 {
+		t.Fatalf("revoked hub answered %d", code)
+	}
+	deny.Store(false)
+	if code, _ := call("GET", "/app/overview", ""); code != 200 {
+		t.Fatalf("overview answered %d", code)
+	}
+	call("PUT", "/app/cache", `{"entries":[{"key":"after-overview","hub":"`+h1.ID+`","data":2}]}`)
+	_, body = call("GET", "/app/cache", "")
+	if !strings.Contains(body, `"after-overview"`) {
+		t.Fatalf("overview did not restore hub writes: %s", body)
 	}
 
 	// Removing hub two drops its entries.

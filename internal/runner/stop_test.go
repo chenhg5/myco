@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -74,5 +75,31 @@ func TestCopiedNodeForksOnFirstRun(t *testing.T) {
 	}
 	if len(binder.binds) == 0 || binder.binds[0] != "copy-session" {
 		t.Fatalf("the copy was not bound: %v", binder.binds)
+	}
+}
+
+func TestCopiedNodeRetriesForkAfterFirstRunFails(t *testing.T) {
+	marker := harness.ForkMarker("orig-session")
+	hub := newFakeHub(
+		api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1"},
+		api.Message{ID: "t2", Type: "task", From: "alice", ThreadID: "th1"},
+	)
+	binder := &fakeBinder{}
+	var runs []harness.Request
+	h := forkHarness{fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		runs = append(runs, r)
+		if len(runs) == 1 {
+			return harness.Result{}, errors.New("fork failed before session started")
+		}
+		return harness.Result{Output: "ok", SessionID: "copy-session"}, nil
+	}}}
+	r := New(hub, h, NewHubSessions(binder, marker), nil, Options{Once: true, Concurrency: 1}, quiet())
+	r.Run(context.Background())
+	r.Run(context.Background())
+	if len(runs) != 2 || !runs[0].Fork || !runs[1].Fork || runs[1].SessionID != "orig-session" {
+		t.Fatalf("the second task must retry the copy: %+v", runs)
+	}
+	if hub.fails["t1"] == "" || hub.replies["t2"] != "ok" || len(binder.binds) != 1 || binder.binds[0] != "copy-session" {
+		t.Fatalf("first failure and later copy: fails=%v replies=%v binds=%v", hub.fails, hub.replies, binder.binds)
 	}
 }

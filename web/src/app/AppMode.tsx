@@ -840,16 +840,27 @@ function writePref(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch { /* not kept */ }
 }
 
+/** A hub that answered 401: it no longer takes this app's token. The hub says
+ *  so as "admin token missing or invalid" (or "console token missing or
+ *  invalid"), or the proxy answers with the 401 itself. */
+function rejectedApp(error?: string): boolean {
+  if (!error) return false;
+  if (/\b401\b|unauthori[sz]ed|unauthenticated/i.test(error)) return true;
+  return /\btoken\b/i.test(error) && /\b(?:missing|invalid|expired|revoked)\b/i.test(error);
+}
+
 /**
  * A hub that cannot be reached now but answered before keeps what it showed
- * (marked stale, with when), instead of its nodes disappearing.
+ * (marked stale, with when), instead of its nodes disappearing. A hub that
+ * rejected this app (401) keeps nothing: what it showed is no longer this
+ * person's to see, so it is not shown stale or written back to the cache.
  */
 export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): AppOverview {
   if (!prev) return fresh;
   return {
     ...fresh,
     hubs: fresh.hubs.map((h) => {
-      if (h.ok) return h;
+      if (h.ok || rejectedApp(h.error)) return h;
       const before = prev.hubs.find((p) => p.id === h.id);
       if (!before?.ok || !before.overview) return h;
       return { ...before, name: h.name, stale: { at: before.stale?.at ?? prev.generated_at, error: h.error } };
