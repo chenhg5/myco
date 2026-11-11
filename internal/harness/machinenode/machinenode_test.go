@@ -51,7 +51,7 @@ func newRig(t *testing.T) *rig {
 			},
 			Installed: func(string) bool { return true },
 			Enroll: func(_ context.Context, p Plan, _ api.SpawnRequest, sid string) (string, error) {
-				if sid != "sess-1" {
+				if _, copy := harness.ForkSource(sid); sid != "sess-1" && !copy {
 					t.Errorf("enrolled session %q", sid)
 				}
 				r.enrolled = append(r.enrolled, p)
@@ -310,7 +310,8 @@ type forkCLI struct{ *fakeCLI }
 
 func (forkCLI) CanFork() {}
 
-// Copying a session forks it in the first turn; CLIs that cannot fork are refused.
+// Copying a session joins the copy at once, with no turn: its first task
+// makes the copy. CLIs that cannot fork are refused.
 func TestSpawnForksASession(t *testing.T) {
 	r := newRig(t)
 	req := api.SpawnRequest{CLI: "claude", Dir: "~/code/app", Name: "reviewer-2", ForkFrom: "sess-orig"}
@@ -319,15 +320,17 @@ func TestSpawnForksASession(t *testing.T) {
 	}
 	r.node.Deps.NewHarness = func(cli string, opts harness.Options) (harness.Harness, error) { return forkCLI{r.cli}, nil }
 	res := r.run(t, "lead", req)
-	if res.Denied || res.Error != "" || res.SessionID != "sess-1" {
+	src, ok := harness.ForkSource(res.SessionID)
+	if res.Denied || res.Error != "" || !ok || src != "sess-orig" {
 		t.Fatalf("fork: %+v", res)
 	}
-	if !r.cli.got.Fork || r.cli.got.SessionID != "sess-orig" || !strings.Contains(r.cli.got.Prompt, "copy of session sess-orig") {
-		t.Fatalf("first turn: %+v", r.cli.got)
+	if r.cli.got.Prompt != "" {
+		t.Fatalf("no turn should run when copying: %+v", r.cli.got)
 	}
-	// A CLI that resumed the original instead of copying it is a failure.
-	r.cli.out.SessionID = "sess-orig"
-	if res := r.run(t, "lead", req); res.Error == "" {
-		t.Fatalf("no copy made: %+v", res)
+	// Copying a copy that has not run yet copies its source.
+	req.ForkFrom, req.Name = res.SessionID, "reviewer-3"
+	res2 := r.run(t, "lead", req)
+	if src, _ := harness.ForkSource(res2.SessionID); src != "sess-orig" || res2.SessionID == res.SessionID {
+		t.Fatalf("copy of a copy: %+v", res2)
 	}
 }

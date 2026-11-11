@@ -3,6 +3,7 @@ import { Brain, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTe
 import { appApi, isOldHub } from "@/appapi";
 import type { Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
+import { recall, remember } from "@/lib/memo";
 import { L } from "@/lib/i18n";
 
 const POLL_MS = 1500;
@@ -107,10 +108,13 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
   waiting?: string;
 }) {
   const running = isOpen(task.status);
-  const [events, setEvents] = useState<TraceEvent[] | null>(null);
+  // A finished run does not change: kept (and saved with the page data).
+  const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
+  const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
   const [open, setOpen] = useState(running);
   const [gone, setGone] = useState(false);
-  const last = useRef(0);
+  const last = useRef(events?.length ? events[events.length - 1].seq : 0);
+  const finalLoaded = useRef(!running && events !== null);
   const body = useRef<HTMLDivElement>(null);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
@@ -134,18 +138,29 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
     return () => window.clearTimeout(t);
   }, [running]);
 
+  // Loaded while it runs (polled) and once when it has finished, folded or
+  // not: whether there is anything to show depends on it.
   useEffect(() => {
-    if (!open || gone) return;
+    if (gone || (!running && finalLoaded.current)) return;
     let off = false;
     const load = async () => {
       try {
         const r = await appApi.trace(hubId, task.id, last.current);
         if (off) return;
+        if (!running) finalLoaded.current = true;
         if (r.events.length) {
           last.current = r.events[r.events.length - 1].seq;
-          setEvents((prev) => [...(prev || []), ...r.events]);
+          setEvents((prev) => {
+            const next = [...(prev || []), ...r.events];
+            if (!running) remember(memoKey, next);
+            return next;
+          });
         } else {
-          setEvents((prev) => prev || []);
+          setEvents((prev) => {
+            const next = prev || [];
+            if (!running) remember(memoKey, next);
+            return next;
+          });
         }
       } catch (e) {
         // A hub without traces, or a task you may not see the run of.
@@ -156,7 +171,7 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
     if (!running) return () => { off = true; };
     const t = window.setInterval(() => void load(), POLL_MS);
     return () => { off = true; window.clearInterval(t); };
-  }, [hubId, task.id, open, running, gone]);
+  }, [hubId, task.id, running, gone]);
 
   // Not picked up yet (queued, the node offline or its session busy): a
   // quiet line saying why, not a spinner.
@@ -172,9 +187,25 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
   }
   if (gone) return null;
   const { rows, usage } = rowsOf(events || []);
-  // Finished without any recorded step: nothing to show (older runner, or a
-  // node that handles messages in its own session).
-  if (!running && events !== null && rows.length === 0) return null;
+  // The process is thinking, tool calls and errors. What the agent says is
+  // the reply (shown as the message); text between steps stays as context,
+  // text after the last step is the reply itself and is left out.
+  const steps = rows.filter((x) => x.kind !== "text").length;
+  let end = rows.length;
+  while (end > 0 && rows[end - 1].kind === "text") end--;
+  const shown = rows.slice(0, end);
+  // Nothing but a reply (or no record at all): no process to show.
+  if (!running && (events === null || steps === 0)) return null;
+  if (running && steps === 0) {
+    return (
+      <div className="trace is-live">
+        <div className="trace-head trace-wait">
+          <Loader2 className="trace-spin" />
+          <span className="trace-title is-shimmer">{L("正在回复…", "Replying…")}</span>
+        </div>
+      </div>
+    );
+  }
 
   const summary = summaryOf(rows);
   // While it runs, the line says what it is doing right now.
@@ -199,7 +230,7 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
         <div className="trace-body" ref={body}>
           {events === null && <div className="trace-note">{L("正在读取…", "Loading…")}</div>}
           {events !== null && rows.length === 0 && running && <div className="trace-note">{L("开始了，等第一步…", "Started; waiting for the first step…")}</div>}
-          {rows.map((r) => <TraceRow key={r.key} row={r} live={running} />)}
+          {shown.map((r) => <TraceRow key={r.key} row={r} live={running} />)}
         </div>
       )}
     </div>

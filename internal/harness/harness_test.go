@@ -11,3 +11,18 @@ func TestErrorLinesDropsWarnings(t *testing.T) {
 		t.Fatalf("all-warn input must be kept: %q", got)
 	}
 }
+
+func TestForkMarker(t *testing.T) {
+	m := ForkMarker("01a182b8-8682-7251")
+	if src, ok := ForkSource(m); !ok || src != "01a182b8-8682-7251" {
+		t.Fatalf("%q -> %q %v", m, src, ok)
+	}
+	if ForkMarker("s") == ForkMarker("s") {
+		t.Fatal("markers must differ")
+	}
+	for _, s := range []string{"", "sess-1", "fork:", "fork:x"} {
+		if _, ok := ForkSource(s); ok {
+			t.Errorf("%q is not a marker", s)
+		}
+	}
+}

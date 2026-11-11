@@ -333,6 +333,18 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	defer unlock()
 
 	sessionID := r.sessions.Get(key)
+	// A copied node's first run makes the copy: it runs on the source
+	// session with Fork, whatever else uses the source meanwhile.
+	forkFrom := ""
+	if src, ok := harness.ForkSource(sessionID); ok {
+		forkFrom, sessionID = src, ""
+		if _, ok := r.harness.(harness.Forker); !ok {
+			if _, err := r.hub.Fail(ctx, m.ID, harness.ErrForkUnsupported.Error(), false); err != nil {
+				log.Error("failing task failed", "err", err)
+			}
+			return
+		}
+	}
 	if busy, last := r.inUseElsewhere(key, sessionID); busy {
 		r.release(ctx, log, m, key, "session transcript changed "+r.opts.Now().Sub(last).Round(time.Second).String()+" ago by someone else")
 		return
@@ -395,10 +407,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		if m.Type == "task" {
 			go r.watchStop(watchCtx, m.ID, cancelCause)
 		}
+		runSession, fork := sessionID, false
+		if sessionID == "" && forkFrom != "" {
+			runSession, fork = forkFrom, true
+		}
 		req := harness.Request{
 			Prompt:    prompt,
 			ExtraDirs: extraDirs,
-			SessionID: sessionID,
+			SessionID: runSession,
+			Fork:      fork,
 			Workdir:   r.opts.Workdir,
 			Body:      m.Body, From: m.From, Type: m.Type,
 			Env: append(r.env(),
@@ -423,8 +440,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		cancelDeadline()
 		cancelCause(nil)
 		r.setRunCancel(m.ID, nil)
-		if res.SessionID != "" {
+		if res.SessionID != "" && res.SessionID != forkFrom {
 			sessionID = res.SessionID
+			forkFrom = "" // copied: later runs resume the copy
 		}
 		if !steered || !time.Now().Before(deadline) {
 			break

@@ -1246,6 +1246,8 @@ const server = http.createServer(async (req, res) => {
         { kind: "tool_result", id: "c5", output: "smoke: all steps passed" },
         { kind: "usage", input_tokens: 18400, output_tokens: 2100, cost_usd: 0.08, duration_ms: 84000 },
       ];
+      // "Just say 收到": a run with no thinking or tools.
+      if (/收到/.test(m.body || "")) steps.splice(0, steps.length, { kind: "text", text: "收到" }, { kind: "usage", input_tokens: 900, output_tokens: 3, duration_ms: 2100 });
       const running = ["queued", "delivered", "acked", "held"].includes(m.status);
       const shown = running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / 2000))) : steps;
       const after = Number(url.searchParams.get("after") || 0);

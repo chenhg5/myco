@@ -144,6 +144,24 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	if _, ok := h.(harness.Forker); sr.ForkFrom != "" && !ok {
 		return denied("%v", harness.ErrForkUnsupported)
 	}
+	if sr.ForkFrom != "" {
+		// A copy joins at once; its first task makes the copy (one turn on
+		// the copied context instead of two). Copying a copy that has not
+		// run yet copies its source.
+		src := sr.ForkFrom
+		if inner, ok := harness.ForkSource(src); ok {
+			src = inner
+		}
+		marker := harness.ForkMarker(src)
+		name, err := n.Deps.Enroll(ctx, plan, sr, marker)
+		if err != nil {
+			return failed(plan, "joining the copy of session %s failed: %v", src, err)
+		}
+		if n.Deps.Spawned != nil {
+			n.Deps.Spawned()
+		}
+		return api.SpawnResult{Agent: name, SessionID: marker, CLI: plan.CLI, Workdir: plan.Workdir, Access: string(plan.Access)}
+	}
 	timeout := n.FirstTurnTimeout
 	if timeout <= 0 {
 		timeout = 5 * time.Minute

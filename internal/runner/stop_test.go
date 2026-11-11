@@ -42,3 +42,37 @@ func TestRunEndsWhenTaskStopped(t *testing.T) {
 		t.Fatalf("a stopped task gets no answer: reply %q, fail %q", hub.replies["t1"], hub.fails["t1"])
 	}
 }
+
+type forkHarness struct {
+	fakeHarness
+}
+
+func (forkHarness) CanFork() {}
+
+// A copied node (session "fork:<source>:…") makes the copy in its first
+// task's run, then resumes the copy.
+func TestCopiedNodeForksOnFirstRun(t *testing.T) {
+	marker := harness.ForkMarker("orig-session")
+	hub := newFakeHub(
+		api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1"},
+		api.Message{ID: "t2", Type: "task", From: "alice", ThreadID: "th1"},
+	)
+	binder := &fakeBinder{}
+	var runs []harness.Request
+	h := forkHarness{fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		runs = append(runs, r)
+		if r.Fork {
+			return harness.Result{Output: "ok", SessionID: "copy-session"}, nil
+		}
+		return harness.Result{Output: "ok", SessionID: r.SessionID}, nil
+	}}}
+	r := New(hub, h, NewHubSessions(binder, marker), nil, Options{Once: true, Concurrency: 1}, quiet())
+	r.Run(context.Background())
+	r.Run(context.Background())
+	if len(runs) != 2 || !runs[0].Fork || runs[0].SessionID != "orig-session" || runs[1].Fork || runs[1].SessionID != "copy-session" {
+		t.Fatalf("runs: %+v", runs)
+	}
+	if len(binder.binds) == 0 || binder.binds[0] != "copy-session" {
+		t.Fatalf("the copy was not bound: %v", binder.binds)
+	}
+}
