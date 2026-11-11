@@ -680,10 +680,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
         <div className="app-inspector-head">
           <span className="app-row-icon"><Icon /></span>
           <div className="titles">
-            <h2>{ag.display_name || ag.name}</h2>
-            <div className="sub">
-              {ag.display_name ? `${ag.name} · ` : ""}{row.hub.name}{machine ? ` · ${machine}` : ""}
-            </div>
+            <h2 title={ag.display_name || ag.name}>{ag.display_name || ag.name}</h2>
           </div>
           <span className={cn("app-pill", pillClass[row.st.state])}>
             <span className={cn("dot", row.st.state)} />{state.label}
@@ -899,6 +896,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
             <div className="app-list">
+              <div className="app-kv"><span className="app-kv-label">{L("节点名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
+              <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("工作目录", "Working directory")}</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>

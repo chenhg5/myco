@@ -126,8 +126,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
         <div className="app-inspector-head">
           <span className="app-row-icon"><OsIcon /></span>
           <div className="titles">
-            <h2>{machine.name}</h2>
-            <div className="sub">{machine.hostname} · {os.label}</div>
+            <h2 title={machine.name}>{machine.name}</h2>
           </div>
           <span className={cn("app-pill", machine.online ? "green" : "red")}>
             <span className={cn("dot", machine.online ? "working" : "offline")} />

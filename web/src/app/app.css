@@ -927,9 +927,8 @@ textarea.app-input {
   overflow: hidden;
   animation: app-slide-in 0.18s ease-out;
 }
-/* First line: icon tile, name, state, close, all on one centre line. Second
-   line: where it lives, under the name at the sheet's full width, so a long
-   address wraps instead of being cut short by the state pill. */
+/* One line: icon tile, name, state, close, on one centre line. Where the
+   node lives (its address, hub, machine) is in the body's own rows. */
 .app-inspector-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
