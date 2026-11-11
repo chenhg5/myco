@@ -396,7 +396,7 @@ async function runMatrix(browser, size, scheme) {
       ).then(() => true, () => false);
       await input.fill(body);
       await input.press("Enter");
-      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
+      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
       if (!(await waitingOk)) {
         const spin = await page.locator(".conv-detail .trace-spin").count();
         if (spin > 0) throw new Error(`排队中的任务不应转圈，实际有 ${spin} 个 .trace-spin`);
@@ -461,15 +461,29 @@ async function runMatrix(browser, size, scheme) {
       if (!/legacy-codex/.test(headText)) throw new Error(`搜索「legacy」后进入的不是 legacy-codex：「${headText}」`);
 
       const body = "你好，收到请回复 收到";
+      // The mock keeps its state across window combinations, so this
+      // conversation may already hold earlier tasks with process blocks:
+      // only blocks after this message count.
       const input = page.locator(".conv-compose-input");
       await input.fill(body);
       await input.press("Enter");
-      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
-      // The mock replies only in text 6 s after the task, so this waits for
-      // the finished state, then for the final trace to be read (and dropped).
+      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
+      // The header may still say 已完成 from an earlier task: wait for this
+      // one to be picked up, then for it to finish (the mock replies only in
+      // text 6 s after the task) and for its final trace to be read.
+      await page.waitForFunction(
+        () => !(document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("已完成"),
+        null,
+        { timeout: 10_000 },
+      );
       await page.locator(".conv-detail .conv-head-state", { hasText: "已完成" }).waitFor({ timeout: 30_000 });
       await page.waitForTimeout(600);
-      const traces = await page.locator(".conv-detail .trace").count();
+      const traces = await page.evaluate((text) => {
+        const detail = document.querySelector(".conv-detail");
+        const sent = [...(detail?.querySelectorAll(".conv-msg") || [])].filter((el) => (el.textContent || "").includes(text)).pop();
+        if (!sent) return -1;
+        return [...detail.querySelectorAll(".trace")].filter((t) => sent.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING).length;
+      }, body);
       if (traces !== 0) throw new Error(`只回一句话的任务不应出现过程块，实际有 ${traces} 个 .trace`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-text-only");
@@ -480,7 +494,7 @@ async function runMatrix(browser, size, scheme) {
       const input = page.locator(".conv-compose-input");
       await input.fill(body);
       await input.press("Enter");
-      await page.locator(".conv-msg", { hasText: body }).waitFor({ timeout: 20_000 });
+      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
       // The header still says 已完成 from the previous task: wait for this one
       // to be picked up, then for it to finish.
       await page.waitForFunction(
