@@ -3987,6 +3987,23 @@ button.app-label:hover { filter: brightness(0.95); }
   align-items: flex-start;
   padding: 10px 16px 11px;
 }
+/* Here the prompt carries the working directory in front of the $, so it
+   takes the width it needs, on one line. */
+.term-input-line .term-prompt {
+  flex: none;
+  display: inline-flex;
+  width: auto;
+  max-width: 60%;
+  margin-right: 1ch;
+  white-space: nowrap;
+}
+/* A long directory is cut short; the $ after it always shows. */
+.term-input-line .term-cwd {
+  min-width: 0;
+  margin-right: 1ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .term.is-live > .term-cmd + .term-input-line,
 .term.is-live > .term-comment + .term-input-line {
   border-top: 1px solid var(--term-rule);

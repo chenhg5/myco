@@ -16,17 +16,27 @@ const WIDTH = 190;
 const ROW = 29;
 const heightOf = (items: MenuItem[]) => items.reduce((h, it) => h + (it === "sep" ? 9 : "header" in it ? 24 : ROW), 10);
 
-/** How many pointer units one CSS pixel of `left`/`top` covers. The text-size
- * setting zooms the whole page, and then a position given in pixels lands
- * further out than the pointer coordinate it was copied from; measuring
- * a probe gives the factor whatever the engine does with zoom. */
-function styleScale(): number {
+/** The text-size setting zooms the whole page. Engines then disagree on which
+ * numbers are zoomed: a `left` of N pixels, a pointer event's clientX, and a
+ * client rect may be in two different units, and which two differs between
+ * Chromium and WebKit. So nothing is assumed: one probe is placed at a known
+ * `left`, then asked where its rect is, and hit-tested the way a pointer
+ * would hit it. That gives how many units of each kind one pixel of
+ * `left`/`top` covers. */
+let measured: { zoom: number; ev: number; rect: number } | null = null;
+function scales(): { zoom: number; ev: number; rect: number } {
+  const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+  if (measured && measured.zoom === z) return measured;
+  if (Math.abs(z - 1) < 0.001) return (measured = { zoom: z, ev: 1, rect: 1 });
+  const at = 200, size = 4;
   const probe = document.createElement("div");
-  probe.style.cssText = "position:fixed;left:100px;top:0;width:0;height:0;visibility:hidden;pointer-events:none";
+  probe.style.cssText = `position:fixed;left:${at}px;top:${at}px;width:${size}px;height:${size}px;opacity:0;z-index:2147483647`;
   document.body.appendChild(probe);
-  const k = probe.getBoundingClientRect().left / 100;
+  const rect = probe.getBoundingClientRect().left / at || 1;
+  const hit = (k: number) => document.elementFromPoint((at + size / 2) * k, (at + size / 2) * k) === probe;
+  const ev = hit(z) ? z : hit(1) ? 1 : z;
   probe.remove();
-  return k > 0 ? k : 1;
+  return (measured = { zoom: z, ev, rect });
 }
 
 /** A right-click menu for a row: call open(event, items) from onContextMenu
@@ -61,22 +71,26 @@ export function useContextMenu(): {
   const open = useCallback((e: MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
     if (items.length === 0) return;
-    const k = styleScale();
-    const height = Math.min(heightOf(items) * k, window.innerHeight - 16);
+    // Everything below is in pixels of `left`/`top`.
+    const k = scales();
+    const vw = window.innerWidth / k.zoom, vh = window.innerHeight / k.zoom;
+    const height = Math.min(heightOf(items), vh - 16);
     setMenu({
-      x: Math.max(4, Math.min(e.clientX, window.innerWidth - WIDTH * k - 8)) / k,
-      y: Math.max(4, Math.min(e.clientY, window.innerHeight - height - 8)) / k,
+      x: Math.max(4, Math.min(e.clientX / k.ev, vw - WIDTH - 8)),
+      y: Math.max(4, Math.min(e.clientY / k.ev, vh - height - 8)),
       items,
     });
   }, []);
 
   const openUnder = useCallback((el: Element, items: MenuItem[]) => {
-    const r = el.getBoundingClientRect();
-    const k = styleScale();
-    const height = Math.min(heightOf(items) * k, window.innerHeight - 16);
+    const k = scales();
+    const box = el.getBoundingClientRect();
+    const r = { top: box.top / k.rect, right: box.right / k.rect, bottom: box.bottom / k.rect };
+    const vw = window.innerWidth / k.zoom, vh = window.innerHeight / k.zoom;
+    const height = Math.min(heightOf(items), vh - 16);
     setMenu({
-      x: Math.max(4, Math.min(r.right - WIDTH * k, window.innerWidth - WIDTH * k - 8)) / k,
-      y: (r.bottom + 4 + height > window.innerHeight ? Math.max(4, r.top - height - 4) : r.bottom + 4) / k,
+      x: Math.max(4, Math.min(r.right - WIDTH, vw - WIDTH - 8)),
+      y: r.bottom + 4 + height > vh ? Math.max(4, r.top - height - 4) : r.bottom + 4,
       items,
     });
   }, []);
