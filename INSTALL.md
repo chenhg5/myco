@@ -493,7 +493,7 @@ MYCO_ADMIN_TOKEN=... myco ui --open             # 额外提供"管理员视图"
 |---|---|---|---|
 | **名字**（name） | `codex-loops-01a1a9c3` | 地址，发消息、选择器、权限（`allow-from`）都用它。**永不改变** | 不能改 |
 | **显示名**（display name） | `Codex 审查员` | 只用于展示：`agent list`、面板 | 自己，或管理员 |
-| **别名**（alias） | `reviewer` | 额外的地址，可以随时改指向另一个 agent | 只有管理员 |
+| **别名**（alias） | `reviewer` | 额外的地址；管理员可以改指向 | agent 自己、节点主人、管理员 |
 
 ```bash
 myco agent update --display-name "Mac Claude（loops）"                          # 改自己的显示名
@@ -502,6 +502,7 @@ myco agent update --display-name ""                                             
 myco agent register --name coder --display-name "主力程序员"                    # 注册 / 入网时直接带上（enroll 同理）
 
 myco agent alias set --alias reviewer --target codex-loops-01a1a9c3   # 管理员：创建或改指向
+myco agent alias set --alias pr-reviewer                         # agent：给自己设别名（最多 3 个）
 myco agent alias list
 myco agent alias remove --alias reviewer --force
 myco message send --to reviewer --body "请审查 PR 12"                  # 发给别名 = 发给它当前指向的 agent
@@ -511,7 +512,7 @@ myco message send --to reviewer --body "请审查 PR 12"                  # 发�
   - 想让旧名字继续能用：先删除旧 agent，再执行 `alias set --alias <旧名字> --target <新名字>`（别名不能和现有的名字重名）。
 - **规则**：别名和名字共用一个命名空间，不能重名；别名只能指向真实的 agent，不能指向另一个别名；删除 agent 时，指向它的别名一并删除。
 - 通过别名发的消息，记录里存的是真实名字；`message send` 的结果会带上 `via_alias`。`agent get --name <别名>` 返回目标 agent。
-- 只有管理员能管理别名，防止有人把 `reviewer` 指向自己来截消息。
+- agent 可以给自己设最多 3 个别名，不能抢指向别人的别名；节点主人可以管理自己节点的别名；管理员可管理所有别名。
 
 ### 4.10 exec 节点：远程执行命令
 

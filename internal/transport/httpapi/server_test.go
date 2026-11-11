@@ -190,6 +190,7 @@ func TestHealth(t *testing.T) {
 func TestAuth(t *testing.T) {
 	h := newHub(t, app.DefaultMessagePolicy())
 	alice := h.register("alice", nil)
+	h.register("carol", nil)
 	tests := []struct {
 		name, method, path, token string
 		body                      any
@@ -211,7 +212,7 @@ func TestAuth(t *testing.T) {
 		{"delete agent with agent token", "DELETE", "/v1/agents/alice", alice, nil, 403, "permission_denied"},
 		{"create enrollment with agent token", "POST", "/v1/enrollments", alice, map[string]any{"name_prefix": "c-"}, 403, "permission_denied"},
 		{"list enrollments with agent token", "GET", "/v1/enrollments", alice, nil, 403, "permission_denied"},
-		{"set alias with agent token", "PUT", "/v1/aliases/boss", alice, map[string]any{"target": "alice"}, 403, "permission_denied"},
+		{"set another agent's alias", "PUT", "/v1/aliases/boss", alice, map[string]any{"target": "carol"}, 403, "permission_denied"},
 		{"admin labels with agent token", "PUT", "/v1/agents/alice/labels", alice, map[string]any{"add": []string{"x"}}, 403, "permission_denied"},
 	}
 	for _, tc := range tests {
@@ -486,6 +487,16 @@ func TestAliasesAndCascadeOnAgentRemoval(t *testing.T) {
 	h := newHub(t, app.DefaultMessagePolicy())
 	alice := h.register("alice", nil)
 	bob := h.register("bob", nil)
+	h.do("PUT", "/v1/aliases/self-one", alice, map[string]any{"target": "alice"}).want(t, 200)
+	h.do("PUT", "/v1/aliases/self-two", alice, map[string]any{"target": "alice"}).want(t, 200)
+	h.do("PUT", "/v1/aliases/self-three", alice, map[string]any{"target": "alice"}).want(t, 200)
+	h.do("PUT", "/v1/aliases/self-four", alice, map[string]any{"target": "alice"}).wantErr(t, 409, "conflict")
+	h.do("PUT", "/v1/aliases/self-one", bob, map[string]any{"target": "bob"}).wantErr(t, 409, "conflict")
+	h.do("PUT", "/v1/aliases/bob", alice, map[string]any{"target": "alice"}).wantErr(t, 409, "conflict")
+	h.do("DELETE", "/v1/aliases/self-one", bob, nil).wantErr(t, 403, "permission_denied")
+	h.do("DELETE", "/v1/aliases/self-one", alice, nil).want(t, 200)
+	h.do("DELETE", "/v1/aliases/self-two", alice, nil).want(t, 200)
+	h.do("DELETE", "/v1/aliases/self-three", alice, nil).want(t, 200)
 
 	h.do("PUT", "/v1/aliases/reviewer", adminToken, map[string]any{"target": "ghost"}).wantErr(t, 404, "not_found")
 	r := h.do("PUT", "/v1/aliases/reviewer", adminToken, map[string]any{"target": "bob"}).want(t, 200)

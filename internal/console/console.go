@@ -262,6 +262,34 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	m.HandleFunc("GET /app/hubs/{id}/aliases", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		list, err := c.ListAliases(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.AliasList{Aliases: list})
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/aliases/{alias}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.AliasRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		out, err := c.SetAlias(r.Context(), r.PathValue("alias"), in.Target, r.URL.Query().Get("dry_run") == "true")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/aliases/{alias}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.RemoveAlias(r.Context(), r.PathValue("alias"), r.URL.Query().Get("dry_run") == "true")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	// Projects of a hub (proxied as they are).
 	m.HandleFunc("GET /app/hubs/{id}/projects", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListProjects(r.Context(), r.URL.Query().Get("mine") == "true")

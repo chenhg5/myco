@@ -10,53 +10,61 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// agentAliasCommands manages re-pointable role addresses (admin).
+// agentAliasCommands manages re-pointable role addresses.
 func agentAliasCommands() *Command {
 	adminFlag := Flag{Name: "admin-token-file", Kind: String, Help: "File containing the admin token"}
 
 	set := &Command{
 		Name:     "set",
-		Summary:  "Point an alias at an agent, creating or re-pointing it (admin)",
+		Summary:  "Set an alias for yourself, or point it at another agent as admin",
 		Mutating: true,
 		Long: `An alias is an extra address: messages sent to it go to its target and are stored under the
 target's real name. Aliases share the namespace with agent names and cannot point at another alias.
 Re-pointing is how you hand a role (e.g. "reviewer") to a new session, or keep an old name working
 after replacing an agent.`,
 		Examples: []string{
+			"myco agent alias set --alias reviewer",
 			"myco agent alias set --alias reviewer --target mac-claude-loops",
 			"myco agent alias set --alias reviewer --target codex-loops-01a1a9c3 --dry-run",
 		},
 		Flags: []Flag{
 			{Name: "alias", Kind: String, Required: true, Help: "Alias name (same rules as agent names)"},
-			{Name: "target", Kind: String, Required: true, Help: "Agent the alias points at"},
+			{Name: "target", Kind: String, Help: "Target agent (default: yourself; another target needs its owner or an admin)"},
 			adminFlag,
 		},
 		Run: handler(func(e *env) error {
-			if err := e.in.Require("alias", "target"); err != nil {
+			if err := e.in.Require("alias"); err != nil {
 				return err
 			}
-			c, err := e.adminClient()
+			target := e.in.String("target")
+			if target == "" {
+				target = e.cfg.Agent
+			}
+			if target == "" {
+				return errorf("not_configured", ExitUsage, "join as an agent or pass --target with an admin token", "no alias target")
+			}
+			c, err := e.cardClient()
 			if err != nil {
 				return err
 			}
 			dry := e.in.Bool("dry-run")
-			res, err := c.SetAlias(e.in.Ctx, e.in.String("alias"), e.in.String("target"), dry)
+			res, err := c.SetAlias(e.in.Ctx, e.in.String("alias"), target, dry)
 			if err != nil {
-				return err
+				return aliasUpgradeHint(err)
 			}
 			if dry {
 				res["action"] = "alias_set"
 				return e.dryRun(res)
 			}
 			return e.p.Print(res, func(w io.Writer) {
-				fmt.Fprintf(w, "alias %s -> %s\n", e.in.String("alias"), e.in.String("target"))
+				fmt.Fprintf(w, "alias %s -> %s\n", e.in.String("alias"), target)
 			})
 		}),
 	}
 
 	remove := &Command{
 		Name:     "remove",
-		Summary:  "Delete an alias (admin); the target agent is not touched",
+		Summary:  "Delete your own alias (owners and admins can manage their nodes)",
 		Mutating: true,
 		Examples: []string{"myco agent alias remove --alias reviewer --force"},
 		Flags: []Flag{
@@ -73,9 +81,9 @@ after replacing an agent.`,
 				return errorf("confirmation_required", ExitUsage, "re-run with --force (or --dry-run to preview)",
 					"removing alias %s breaks senders that still use it", e.in.String("alias"))
 			}
-			c, err := e.adminClient()
+			c, err := e.cardClient()
 			if err != nil {
-				return err
+				return aliasUpgradeHint(err)
 			}
 			res, err := c.RemoveAlias(e.in.Ctx, e.in.String("alias"), dry)
 			if err != nil {
@@ -117,7 +125,14 @@ after replacing an agent.`,
 		}),
 	}
 
-	return (&Command{Name: "alias", Summary: "Manage role addresses that point at agents (admin)"}).Add(set, remove, list)
+	return (&Command{Name: "alias", Summary: "Manage role addresses that point at agents"}).Add(set, remove, list)
+}
+
+func aliasUpgradeHint(err error) error {
+	if e, ok := client.AsError(err); ok && e.Status == 403 && strings.Contains(e.Message, "admin token required") {
+		return errorf("unsupported", ExitPermission, "upgrade the Hub to let agents manage their own aliases", "this Hub only allows admins to change aliases")
+	}
+	return err
 }
 
 // agentUpdateCommand changes cosmetic profile fields.

@@ -10,7 +10,7 @@ import {
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { CopyButton } from "@/app/copy";
+import { CopyButton, useCopy } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
 import { summarize } from "@/app/summary";
 import { stateMeta } from "@/components/status";
@@ -541,6 +541,118 @@ function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRe
   );
 }
 
+// AliasChip shows one alias. Its name copies the alias (the form a sender
+// types); the × beside it removes the alias for an owner or admin.
+function AliasChip({ alias, busy, onRemove }: {
+  alias: string;
+  busy: boolean;
+  onRemove?: () => void;
+}) {
+  const { copied, copy } = useCopy(alias);
+  const copyLabel = L(`复制别名 ${alias}`, `Copy alias ${alias}`);
+  return (
+    <span className="app-label editable alias">
+      <button type="button" className="copy" onClick={() => void copy()} disabled={busy} title={copyLabel} aria-label={copyLabel}>
+        {copied ? L("已复制", "Copied") : "@" + alias}
+      </button>
+      {onRemove && (
+        <button type="button" aria-label={L(`删除别名 ${alias}`, `Remove alias ${alias}`)} onClick={onRemove} disabled={busy}>×</button>
+      )}
+    </span>
+  );
+}
+
+// AliasRow lists the addresses others can use to message this node. An owner
+// or hub admin adds and removes them inline, without a dialog.
+function AliasRow({ row, mayManage, onRefresh }: {
+  row: AgentRow;
+  mayManage: boolean;
+  onRefresh: () => Promise<void>;
+}) {
+  const ag = row.st.agent;
+  const aliases = (ag.aliases || []).filter(Boolean);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const start = () => {
+    setDraft("");
+    setError(null);
+    setAdding(true);
+  };
+  const add = async () => {
+    const alias = draft.trim().toLowerCase();
+    if (!alias) return;
+    if (!/^[a-z0-9][a-z0-9._-]{0,62}$/.test(alias)) {
+      setError(new Error(L(
+        "别名只能用 1-63 位小写字母、数字、点、下划线或连字符，并以字母或数字开头。",
+        "An alias uses 1-63 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit.",
+      )));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.setAlias(row.hub.id, alias, ag.name);
+      await onRefresh();
+      setAdding(false);
+      setDraft("");
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (alias: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.removeAlias(row.hub.id, alias);
+      await onRefresh();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="app-kv has-help">
+      <span className="app-kv-label">{L("别名", "Aliases")}</span>
+      <span className="app-kv-value app-aliases">
+        {aliases.length === 0 && <span className="app-kv-note">{L("还没有别名", "None yet")}</span>}
+        {aliases.map((alias) => (
+          <AliasChip key={alias} alias={alias} busy={busy}
+            onRemove={mayManage ? () => void remove(alias) : undefined} />
+        ))}
+        {mayManage && !adding && (
+          <button type="button" className="app-kv-link" onClick={start} disabled={busy}>
+            <Plus size={12} aria-hidden />{L("添加", "Add")}
+          </button>
+        )}
+      </span>
+      <span className="app-kv-help">
+        {L("别人可以用别名给它发消息；点别名复制。", "Others can message it by an alias; click one to copy it.")}
+      </span>
+      {adding && (
+        <form className="app-alias-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+          <input className="app-input" value={draft} onChange={(e) => setDraft(e.target.value)}
+            placeholder={L("例如 reviewer", "e.g. reviewer")} aria-label={L("新别名", "New alias")}
+            disabled={busy} autoFocus />
+          <button type="submit" className="app-btn app-btn-small app-btn-primary" disabled={busy || !draft.trim()}>
+            {busy ? L("正在添加…", "Adding…") : L("确认", "Add")}
+          </button>
+          <button type="button" className="app-btn app-btn-small" onClick={() => setAdding(false)} disabled={busy}>
+            {L("取消", "Cancel")}
+          </button>
+        </form>
+      )}
+      {error != null && <div className="app-kv-help"><ErrorText error={error} /></div>}
+    </div>
+  );
+}
+
 export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged }: {
   row: AgentRow | null;
   now: number;
@@ -910,6 +1022,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("节点名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
+              <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>

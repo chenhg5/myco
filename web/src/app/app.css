@@ -748,6 +748,13 @@ textarea.app-input {
 .app-row-sub .mono {
   font-size: 10.5px;
 }
+/* Aliases in a subtitle: at most two, and never long enough to crowd out
+   the CLI and machine that follow. */
+.app-row-sub .alias {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* A node that was just spawned. */
 .app-row.is-new {
   box-shadow: inset 2px 0 0 var(--green);
@@ -3686,6 +3693,36 @@ textarea.app-input {
   cursor: default;
 }
 .app-label.editable button:hover { color: var(--red); }
+/* An alias chip's name copies it; only its × is destructive. */
+.app-label.alias button.copy:hover { color: var(--accent); }
+.app-label.alias {
+  max-width: 100%;
+  min-width: 0;
+}
+.app-label.alias button.copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-aliases {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.app-alias-form {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.app-alias-form .app-input {
+  width: 150px;
+  height: 26px;
+}
 .app-labels-summary {
   display: flex;
   align-items: center;

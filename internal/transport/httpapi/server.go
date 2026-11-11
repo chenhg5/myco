@@ -35,23 +35,24 @@ type Server struct {
 	publicURL  atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
-	lan      atomic.Bool
-	e2e      *app.E2EService
-	version  string        // this hub's myco build
-	latest   func() string // newest known release ("" = unknown)
-	mux      *http.ServeMux
-	ingress  map[string]Ingress
-	files    *app.FileService
-	overview *app.OverviewService
-	console  *app.ConsoleService
-	machines *app.MachineService
-	members  *app.MemberService
-	audit    *app.AuditService
-	projects *app.ProjectService
-	traces   *app.TraceService
-	namesMu  sync.Mutex
-	names    map[string]string // member id -> name (see ownerName)
-	namesAt  time.Time
+	lan       atomic.Bool
+	e2e       *app.E2EService
+	version   string        // this hub's myco build
+	latest    func() string // newest known release ("" = unknown)
+	mux       *http.ServeMux
+	ingress   map[string]Ingress
+	files     *app.FileService
+	overview  *app.OverviewService
+	console   *app.ConsoleService
+	machines  *app.MachineService
+	members   *app.MemberService
+	audit     *app.AuditService
+	projects  *app.ProjectService
+	traces    *app.TraceService
+	aliasesMu sync.Mutex // serialize alias permission checks with writes
+	namesMu   sync.Mutex
+	names     map[string]string // member id -> name (see ownerName)
+	namesAt   time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -192,8 +193,8 @@ func (s *Server) routes() {
 		s.updateProfile(w, r, r.PathValue("name"), by)
 	}))
 	m.HandleFunc("GET /v1/aliases", s.adminOrAgent(s.listAliases))
-	m.HandleFunc("PUT /v1/aliases/{alias}", s.admin(s.setAlias))
-	m.HandleFunc("DELETE /v1/aliases/{alias}", s.admin(s.removeAlias))
+	m.HandleFunc("PUT /v1/aliases/{alias}", s.adminOrAgent(s.setAlias))
+	m.HandleFunc("DELETE /v1/aliases/{alias}", s.adminOrAgent(s.removeAlias))
 
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
@@ -901,11 +902,13 @@ func (s *Server) listAliases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setAlias(w http.ResponseWriter, r *http.Request) {
+	s.aliasesMu.Lock()
+	defer s.aliasesMu.Unlock()
 	var req api.AliasRequest
 	if !decode(w, r, &req) {
 		return
 	}
-	if !s.mayManage(w, r, "change aliases") {
+	if !s.maySetAlias(w, r, r.PathValue("alias"), req.Target) {
 		return
 	}
 	dry := dryRun(r)
@@ -921,7 +924,9 @@ func (s *Server) setAlias(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeAlias(w http.ResponseWriter, r *http.Request) {
-	if !s.mayManage(w, r, "change aliases") {
+	s.aliasesMu.Lock()
+	defer s.aliasesMu.Unlock()
+	if !s.mayRemoveAlias(w, r, r.PathValue("alias")) {
 		return
 	}
 	dry := dryRun(r)

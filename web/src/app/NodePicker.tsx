@@ -25,7 +25,8 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
   const [q, setQ] = useState("");
   const byName = useMemo(() => new Map(nodes.map((n) => [n.name, n])), [nodes]);
   const query = q.trim().toLowerCase();
-  const list = nodes.filter((n) => !query || n.name.includes(query) || (n.display_name || "").toLowerCase().includes(query));
+  const list = nodes.filter((n) => !query || n.name.includes(query) || (n.display_name || "").toLowerCase().includes(query)
+    || (n.aliases || []).some((x) => x.toLowerCase().includes(query)));
   const toggle = (name: string) => onChange(value.includes(name) ? value.filter((x) => x !== name) : [...value, name]);
   const add = () => {
     const first = list.find((n) => !value.includes(n.name));

@@ -182,6 +182,15 @@ func TestBackendManagesHubsAndAgents(t *testing.T) {
 	}
 
 	// Agent operations go to the right hub with the console token.
+	if code, m, _ := r.do("PUT", "/app/hubs/"+id+"/aliases/helper", map[string]string{"target": "worker"}); code != 200 || m["alias"] == nil {
+		t.Fatalf("set alias: %d %v", code, m)
+	}
+	if code, m, _ := r.do("GET", "/app/hubs/"+id+"/aliases", nil); code != 200 || m["aliases"] == nil {
+		t.Fatalf("list aliases: %d %v", code, m)
+	}
+	if code, m, _ := r.do("DELETE", "/app/hubs/"+id+"/aliases/helper", nil); code != 200 || m["removed"] != true {
+		t.Fatalf("remove alias: %d %v", code, m)
+	}
 	if code, m, _ := r.do("PUT", "/app/hubs/"+id+"/agents/worker/profile", map[string]any{"display_name": "Worker", "description": "new"}); code != 200 || m["display_name"] != "Worker" {
 		t.Fatalf("profile: %d %v", code, m)
 	}

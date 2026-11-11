@@ -66,8 +66,9 @@ Errors (any non-2xx):
 | `PUT /v1/me/profile` | agent | `{display_name?, description?}` — omitted fields unchanged, `""` clears |
 | `PUT /v1/agents/{name}/profile` | admin | Same, for any agent, plus `allow_from` (`[]` = anyone, refused for exec nodes); the token is not changed |
 | `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
-| `PUT /v1/aliases/{alias}?dry_run=` | admin | `{target}` → `{alias, dry_run}`; creates or re-points. 409 if `alias` is an agent name; target must be a real agent (no chains) |
-| `DELETE /v1/aliases/{alias}?dry_run=` | admin | → `{alias, removed, dry_run}` |
+| `PUT /v1/aliases/{alias}?dry_run=` | admin/member/agent | `{target}` → `{alias, dry_run}`. Agent 只能指向自己、不能抢已有别名，且最多拥有 3 个；成员只能操作自己节点；管理员可改指向。409 if `alias` is an agent name; target must be a real agent (no chains) |
+| `DELETE /v1/aliases/{alias}?dry_run=` | admin/member/agent | → `{alias, removed, dry_run}`；agent 只能删指向自己的别名，成员只能删自己节点的别名 |
+
 | `POST /v1/broadcasts` | agent | `{selector, body, type?, idempotency_key?, include_self?}` → `{broadcast_id, messages, skipped, duplicate}`; one message/thread per recipient |
 | `GET /v1/broadcasts/{id}?consume=` | sender | `{broadcast_id, total, answered, deliveries:[{message, reply?}]}`; `consume=true` marks returned replies done |
 | `POST /v1/files?name=` | agent | Raw body upload (≤ `--max-file-size`) → file `{id, name, size, sha256, content_type, owner, expires_at}` |
@@ -176,3 +177,7 @@ When the hub's owner turns it on (`PUT /v1/hub/settings {"e2e": true}`), clients
 stores and relays envelopes without reading them; a sealed failure reason becomes the event body as
 it is. Attachments are uploaded encrypted (named `encrypted`); their keys travel inside the
 envelope. See [design/e2e-encryption.md](design/e2e-encryption.md) for the format.
+
+## App alias proxy
+
+The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}/aliases` returns `{aliases:[{alias,target,created_at,updated_at}]}`. `PUT /app/hubs/{id}/aliases/{alias}` accepts `{target}` and returns `{alias:{...},dry_run}`. `DELETE /app/hubs/{id}/aliases/{alias}` returns `{alias:{...},removed,dry_run}`. PUT and DELETE support `?dry_run=true`; errors preserve the Hub's structured code and HTTP status.

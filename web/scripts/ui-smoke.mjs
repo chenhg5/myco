@@ -290,6 +290,8 @@ async function runMatrix(browser, size, scheme) {
   const page = await context.newPage();
   watchPage(page, size, scheme);
   const narrow = size.width < 860;
+  // Unique per matrix: the mock keeps running across all four.
+  const alias = `smoke-${size.width}-${scheme}`;
   const step = async (label, fn) => {
     currentStep = label;
     log(`  · ${label}`);
@@ -447,8 +449,8 @@ async function runMatrix(browser, size, scheme) {
       const inbox = page.locator(".app-page .app-row:visible", { hasText: "会话内接收" }).first();
       await inbox.waitFor({ timeout: 20_000 });
       const rowText = compactText(await inbox.innerText());
-      if (!rowText.includes("Studio Mac") || !rowText.includes("myco")) {
-        throw new Error(`生成名的 inbox 节点应显示「会话内接收 · 机器 · 目录」，实际是「${rowText}」`);
+      if (!rowText.includes("Agent · Studio Mac") || !rowText.includes("myco")) {
+        throw new Error(`生成名的 inbox 节点应显示「Agent · 机器 · 目录」，实际是「${rowText}」`);
       }
       await inbox.click();
       const inspector = page.locator(".app-inspector");
@@ -465,6 +467,68 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "node-inbox");
       await page.keyboard.press("Escape");
       await inspector.waitFor({ state: "hidden" });
+    });
+
+    // Aliases are addresses others can message a node by. A node owner adds
+    // one inline in the details, and the node lists find the node by it.
+    await step("节点 · 别名", async () => {
+      await go(page, "节点", narrow);
+      const pm = page.locator(".app-page .app-row:visible", { hasText: "PM (Codex)" }).first();
+      await pm.waitFor({ timeout: 20_000 });
+      const rowText = compactText(await pm.innerText());
+      if (!rowText.includes("@pm")) throw new Error(`PM (Codex) 的副标题应带上别名 @pm，实际是「${rowText}」`);
+      await pm.click();
+      const inspector = page.locator(".app-inspector");
+      await inspector.waitFor({ timeout: 20_000 });
+      const aliasRow = inspector.locator(".app-kv", { hasText: "别名" });
+      await aliasRow.waitFor({ timeout: 10_000 });
+      const aliasText = compactText(await aliasRow.innerText());
+      if (!aliasText.includes("@pm")) throw new Error(`节点详情应列出别名 @pm，实际是「${aliasText}」`);
+      if (!aliasText.includes("别人可以用别名给它发消息")) {
+        throw new Error(`别名一行应说明别人可以用别名发消息，实际是「${aliasText}」`);
+      }
+      await clickVisible(page, aliasRow.getByRole("button", { name: /添加|^Add$/ }));
+      const input = aliasRow.locator(".app-alias-form input");
+      await input.fill(alias);
+      await input.press("Enter");
+      await page.waitForFunction(
+        (a) => (document.querySelector(".app-inspector")?.textContent || "").includes("@" + a),
+        alias,
+        { timeout: 10_000 },
+      );
+      await settle(page, 300);
+      await shot(page, size, scheme, "node-aliases");
+      await page.keyboard.press("Escape");
+      await inspector.waitFor({ state: "hidden" });
+
+      const search = page.locator(".app-page .app-search input");
+      await search.fill(alias);
+      await page.waitForFunction(
+        () => document.querySelectorAll(".app-page .app-row").length === 1,
+        null,
+        { timeout: 5000 },
+      );
+      const found = compactText(await page.locator(".app-page .app-row").first().innerText());
+      if (!found.includes("PM (Codex)")) throw new Error(`按别名「${alias}」搜索应找到 PM (Codex)，实际是「${found}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "nodes-alias-search");
+      await search.fill("");
+    });
+
+    await step("对话 · 别名搜索", async () => {
+      await openConversationList(page, narrow);
+      const search = page.getByRole("dialog").locator(".app-convpick-input");
+      await search.fill(alias);
+      await page.waitForFunction(
+        () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
+        null,
+        { timeout: 5000 },
+      );
+      const found = compactText(await page.locator(".app-convpick-list .app-row").first().innerText());
+      if (!found.includes("PM (Codex)")) throw new Error(`新对话里按别名「${alias}」搜索应找到 PM (Codex)，实际是「${found}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "dialog-new-conversation-alias");
+      await closeDialog(page);
     });
 
     // A run that only says something leaves no process block; a run that
