@@ -58,6 +58,24 @@ function remember(key: string, messages: Message[], more: boolean) {
   rememberMemo<SeenConversation>(key, { messages, more });
 }
 
+// A full refresh every this many polls, whatever changed.
+const FULL_EVERY = 20;
+
+/** The newest change among messages, less 2 s (unix ms; 0 for none). */
+function changedUntil(ms: Message[]): number {
+  let t = 0;
+  for (const m of ms) t = Math.max(t, new Date(m.updated_at || m.created_at).getTime() || 0);
+  return t > 0 ? t - 2000 : 0;
+}
+
+/** Messages with changed ones put in (by id), in the order they were sent. */
+function mergeById(ms: Message[], changed: Message[]): Message[] {
+  const by = new Map(ms.map((m) => [m.id, m]));
+  for (const m of changed) by.set(m.id, m);
+  const at = (m: Message) => new Date(m.created_at).getTime();
+  return [...by.values()].sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** While a conversation loads for the first time: its shape, not a word. */
 function LoadingSkeleton({ shell }: { shell: boolean }) {
   if (shell) {
@@ -136,26 +154,50 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setOlder([]);
     setMore(hit?.more ?? false);
     atBottom.current = true;
+    // Polls ask only for what changed since the newest change they have
+    // (hubs from v0.18.35; 2 s back, for changes in the same moment); every
+    // FULL_EVERY-th poll, and on older hubs, the whole view again.
+    let current: Message[] = hit ? hit.messages : [];
+    let more = hit?.more ?? false;
+    let since = hit ? changedUntil(hit.messages) : 0;
+    let polls = 0;
+    let incremental = true;
+    const show = (ms: Message[], m: boolean) => {
+      current = ms;
+      more = m;
+      since = changedUntil(ms);
+      setMessages(ms);
+      setLoadError(null);
+      remember(key, ms, m);
+    };
     const run = async (silent: boolean) => {
+      polls++;
+      const delta = silent && incremental && since > 0 && polls % FULL_EVERY !== 0;
       try {
         if (target.peer) {
           // The newest page, polled; older pages stay as loaded.
-          const r = await appApi.exchanges(target.hubId, target.agent, target.peer);
-          if (!cancelled) {
-            const ms = [...r.messages].reverse();
-            setMessages(ms);
-            if (!silent) setMore(r.more);
-            setLoadError(null);
-            remember(key, ms, r.more);
+          const r = await appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined);
+          if (cancelled) return;
+          if (delta && r.since) {
+            // Many changes at once: the whole page next time.
+            if (r.more) polls = FULL_EVERY - 1;
+            if (r.messages.length) show(mergeById(current, r.messages), more);
+            return;
           }
+          if (delta) incremental = false; // an older hub: whole pages
+          const ms = [...r.messages].reverse();
+          show(ms, silent ? more : r.more);
+          if (!silent) setMore(r.more);
           return;
         }
-        const r = await appApi.thread(target.hubId, target.threadId);
-        if (!cancelled) {
-          setMessages(r.messages);
-          setLoadError(null);
-          remember(key, r.messages, false);
+        const r = await appApi.thread(target.hubId, target.threadId, delta ? since : undefined);
+        if (cancelled) return;
+        if (delta && r.since) {
+          if (r.messages.length) show(mergeById(current, r.messages), false);
+          return;
         }
+        if (delta) incremental = false;
+        show(r.messages, false);
       } catch (e) {
         if (!cancelled && !silent) setLoadError(e);
       }

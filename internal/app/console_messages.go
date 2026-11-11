@@ -460,3 +460,18 @@ func (s *MessageService) Between(ctx context.Context, sc Scope, a, b domain.Agen
 	}
 	return s.messages.ListBetween(ctx, a, b, before, limit)
 }
+
+// BetweenSince is Between's messages that changed after since (unix ms):
+// a view that has the rest only asks for what is new or updated.
+func (s *MessageService) BetweenSince(ctx context.Context, sc Scope, a, b domain.AgentName, since int64, limit int) ([]*domain.Message, error) {
+	if a == "" || b == "" {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "name both nodes (a and b)")
+	}
+	if !sc.Allows(a, b) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "you can only read exchanges your own nodes take part in")
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 500
+	}
+	return s.messages.ListBetweenSince(ctx, a, b, since, limit)
+}

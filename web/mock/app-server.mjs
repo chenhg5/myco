@@ -1118,6 +1118,15 @@ const server = http.createServer(async (req, res) => {
       const q = new URL(req.url, "http://x").searchParams;
       const a = q.get("a") === "mac-exec" ? q.get("b") : q.get("a");
       const before = Number(q.get("before") || 0);
+      const since = process.env.MOCK_OLD_HUB ? 0 : Number(q.get("updated_since") || 0);
+      if (since) {
+        const pair = [q.get("a"), q.get("b")];
+        const canned = pair.includes("mac-exec") ? execHistory(pair.find((n) => n !== "mac-exec")) : [];
+        const changed = [...canned, ...Object.values(hub.threads || {}).flat()]
+          .filter((m) => pair.includes(m.from) && pair.includes(m.to) && new Date(m.updated_at).getTime() > since)
+          .sort((x, y) => new Date(x.updated_at) - new Date(y.updated_at));
+        return send(res, 200, { messages: changed, more: false, since });
+      }
       if (q.get("a") !== "mac-exec" && q.get("b") !== "mac-exec") {
         // Two parties: every message between them, all threads, newest first.
         const pair = [q.get("a"), q.get("b")];
@@ -1254,6 +1263,12 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length === 5 && parts[3] === "threads" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const since = Number(url.searchParams.get("updated_since") || 0);
+      if (since && !process.env.MOCK_OLD_HUB) {
+        // Only what changed (a hub from v0.18.35).
+        const changed = (hub.threads[parts[4]] || []).filter((m) => new Date(m.updated_at).getTime() > since);
+        return send(res, 200, { messages: changed, since });
+      }
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 

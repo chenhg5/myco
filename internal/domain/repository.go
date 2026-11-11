@@ -70,6 +70,9 @@ type MessageRepository interface {
 	// ListBetween returns messages between agents a and b in either
 	// direction, newest first; before (unix ms, 0 = now) pages back.
 	ListBetween(ctx context.Context, a, b AgentName, before int64, limit int) ([]*Message, error)
+	// ListBetweenSince returns the messages between a and b that changed
+	// after since (unix ms, updated_at), oldest change first.
+	ListBetweenSince(ctx context.Context, a, b AgentName, since int64, limit int) ([]*Message, error)
 	// CreateMany stores several new messages atomically.
 	CreateMany(ctx context.Context, ms []*Message) error
 	// ListDue returns (without claiming) up to limit messages deliverable to

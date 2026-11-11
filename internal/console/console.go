@@ -224,6 +224,19 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)
 	m.HandleFunc("GET /app/hubs/{id}/threads/{tid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if since, _ := strconv.ParseInt(r.URL.Query().Get("updated_since"), 10, 64); since > 0 {
+			// Only what changed (the hub says since when it could).
+			l, err := c.ThreadSince(r.Context(), r.PathValue("tid"), since)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			if l.Messages == nil {
+				l.Messages = []api.Message{}
+			}
+			writeJSON(w, http.StatusOK, l)
+			return
+		}
 		msgs, err := c.Thread(r.Context(), r.PathValue("tid"))
 		if err != nil {
 			writeErr(w, err)
@@ -630,6 +643,18 @@ func (b *Backend) Handler() http.Handler {
 	}))
 	m.HandleFunc("GET /app/hubs/{id}/exchanges", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		q := r.URL.Query()
+		if since, _ := strconv.ParseInt(q.Get("updated_since"), 10, 64); since > 0 {
+			ex, err := c.ExchangesSince(r.Context(), q.Get("a"), q.Get("b"), since)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			if ex.Messages == nil {
+				ex.Messages = []api.Message{}
+			}
+			writeJSON(w, http.StatusOK, ex)
+			return
+		}
 		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
 		ex, err := c.Exchanges(r.Context(), q.Get("a"), q.Get("b"), before, 0)
 		if err != nil {

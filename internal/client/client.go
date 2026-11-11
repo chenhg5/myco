@@ -554,6 +554,17 @@ func (c *Client) Thread(ctx context.Context, id string) ([]api.Message, error) {
 	return out.Messages, err
 }
 
+// ThreadSince is Thread's messages that changed after since (unix ms).
+// Since in the answer is 0 when the hub does not know updated_since (before
+// v0.18.35): Messages are then the whole thread.
+func (c *Client) ThreadSince(ctx context.Context, id string, since int64) (*api.MessageList, error) {
+	var out api.MessageList
+	q := url.Values{"updated_since": {strconv.FormatInt(since, 10)}}
+	err := c.do(ctx, http.MethodGet, "/v1/threads/"+esc(id), q, nil, &out)
+	c.openAll(ctx, out.Messages)
+	return &out, err
+}
+
 // AsError extracts a *Error from err.
 func AsError(err error) (*Error, bool) {
 	var e *Error
@@ -885,6 +896,17 @@ func (c *Client) Exchanges(ctx context.Context, a, b string, before int64, limit
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))
 	}
+	var out api.Exchange
+	err := c.do(ctx, http.MethodGet, "/v1/console/exchanges", q, nil, &out)
+	c.openAll(ctx, out.Messages)
+	return &out, err
+}
+
+// ExchangesSince is the messages between a and b that changed after since
+// (unix ms), oldest change first. Since in the answer is 0 from a hub that
+// does not know updated_since: it is then the newest page.
+func (c *Client) ExchangesSince(ctx context.Context, a, b string, since int64) (*api.Exchange, error) {
+	q := url.Values{"a": {a}, "b": {b}, "updated_since": {strconv.FormatInt(since, 10)}}
 	var out api.Exchange
 	err := c.do(ctx, http.MethodGet, "/v1/console/exchanges", q, nil, &out)
 	c.openAll(ctx, out.Messages)

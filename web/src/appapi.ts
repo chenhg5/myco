@@ -316,8 +316,11 @@ export const appApi = {
   pendingLink: () => request<PendingLink>("GET", "app/pending-link"),
   removeHub: (id: string) => request<void>("DELETE", `app/hubs/${enc(id)}`),
   overview: () => request<AppOverview>("GET", "app/overview"),
-  thread: (hubId: string, threadId: string) =>
-    request<{ messages: Message[] }>("GET", `app/hubs/${enc(hubId)}/threads/${enc(threadId)}`),
+  /** A thread; with since (unix ms), only what changed after it. since in
+   *  the answer says the hub did that (hubs from v0.18.35); without it the
+   *  messages are the whole thread. */
+  thread: (hubId: string, threadId: string, since?: number) =>
+    request<{ messages: Message[]; since?: number }>("GET", `app/hubs/${enc(hubId)}/threads/${enc(threadId)}${since ? `?updated_since=${since}` : ""}`),
   /** The hub's settings (end-to-end encryption); the owner may change them. */
   hubSettings: (hubId: string) => request<{ e2e: boolean }>("GET", `app/hubs/${enc(hubId)}/settings`),
   setHubSettings: (hubId: string, input: { e2e: boolean }) => request<{ e2e: boolean }>("PUT", `app/hubs/${enc(hubId)}/settings`, input),
@@ -325,8 +328,11 @@ export const appApi = {
   peers: (hubId: string, name: string) =>
     request<{ peers: Peer[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/peers`),
   /** Messages between two nodes, newest first; before (unix ms) pages back. */
-  exchanges: (hubId: string, a: string, b: string, before?: number) =>
-    request<{ messages: Message[]; more: boolean }>("GET", `app/hubs/${enc(hubId)}/exchanges?a=${enc(a)}&b=${enc(b)}${before ? `&before=${before}` : ""}`),
+  /** Messages between a and b, newest first (before pages back); with since
+   *  (unix ms), only what changed after it, oldest change first, when the
+   *  answer's since says so (hubs from v0.18.35). */
+  exchanges: (hubId: string, a: string, b: string, before?: number, since?: number) =>
+    request<{ messages: Message[]; more: boolean; since?: number }>("GET", `app/hubs/${enc(hubId)}/exchanges?a=${enc(a)}&b=${enc(b)}${before ? `&before=${before}` : ""}${since ? `&updated_since=${since}` : ""}`),
   /** Removes (or, with dry_run, lists) nodes offline for offline_days or more that you may manage. */
   cleanup: (hubId: string, offlineDays: number, dryRun: boolean) =>
     request<{ agents: Agent[]; removed: boolean; dry_run?: boolean }>("POST", `app/hubs/${enc(hubId)}/agents/cleanup`, { offline_days: offlineDays, dry_run: dryRun }),

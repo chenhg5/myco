@@ -113,3 +113,66 @@ func TestCleanupOfflineNodes(t *testing.T) {
 		t.Fatalf("audit: %d removals", n)
 	}
 }
+
+// A view that has a conversation asks only for what changed since: new
+// messages, and old ones whose state changed.
+func TestUpdatedSince(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	lead := h.client(h.register(api.RegisterRequest{Name: "lead", Binding: api.Binding{Harness: "claude", SessionID: "s1"}}))
+	box := h.client(h.register(api.RegisterRequest{Name: "box", Binding: api.Binding{Harness: "exec", SessionID: "s2"}}))
+
+	first, err := lead.Send(c, api.SendRequest{To: "box", Type: "task", Body: "uptime"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	mark := time.Now().UnixMilli()
+	time.Sleep(5 * time.Millisecond)
+	second, _ := lead.Send(c, api.SendRequest{To: "box", Type: "task", Body: "df -h", ThreadID: first.Message.ThreadID}, false)
+
+	// Exchanges: only the message sent after the mark.
+	ex, err := h.admin().ExchangesSince(c, "lead", "box", mark)
+	if err != nil || ex.Since != mark || len(ex.Messages) != 1 || ex.Messages[0].ID != second.Message.ID {
+		t.Fatalf("exchanges since: %v %+v", err, ex)
+	}
+	// Thread: the same.
+	th, err := h.admin().ThreadSince(c, first.Message.ThreadID, mark)
+	if err != nil || th.Since != mark || len(th.Messages) != 1 || th.Messages[0].ID != second.Message.ID {
+		t.Fatalf("thread since: %v %+v", err, th)
+	}
+
+	// The first task is answered: it changed, so it comes again, with its
+	// reply; the oldest change first.
+	time.Sleep(5 * time.Millisecond)
+	mark2 := time.Now().UnixMilli()
+	time.Sleep(5 * time.Millisecond)
+	box.Pull(c, 2, 0)
+	if _, err := box.Reply(c, first.Message.ID, `{"exit_code":0}`, false); err != nil {
+		t.Fatal(err)
+	}
+	ex, err = h.admin().ExchangesSince(c, "lead", "box", mark2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
+	for _, m := range ex.Messages {
+		ids[m.ID] = m.Status
+	}
+	if ids[first.Message.ID] != "done" || len(ex.Messages) < 2 {
+		t.Fatalf("an answered task comes again with its new state: %+v", ex.Messages)
+	}
+
+	// Nothing changed: nothing comes.
+	if ex, err := h.admin().ExchangesSince(c, "lead", "box", time.Now().Add(time.Minute).UnixMilli()); err != nil || len(ex.Messages) != 0 {
+		t.Fatalf("no change: %v %+v", err, ex)
+	}
+	// Without it: the whole page, as before (Since 0).
+	if page, err := h.admin().Exchanges(c, "lead", "box", 0, 50); err != nil || page.Since != 0 || len(page.Messages) < 3 {
+		t.Fatalf("full page: %v %+v", err, page)
+	}
+	// The scope still applies.
+	if _, err := h.client("").ExchangesSince(c, "lead", "box", mark); err == nil {
+		t.Fatal("exchanges since need a console credential")
+	}
+}

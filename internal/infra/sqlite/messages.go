@@ -491,6 +491,11 @@ func (r *MessageRepo) ListPeers(ctx context.Context, agent domain.AgentName, lim
 	return out, nil
 }
 
+func (r *MessageRepo) ListBetweenSince(ctx context.Context, a, b domain.AgentName, since int64, limit int) ([]*domain.Message, error) {
+	return r.many(ctx, r.db, `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?)) AND updated_at > ?
+		ORDER BY updated_at ASC, id ASC LIMIT ?`, a, b, b, a, since, limit)
+}
+
 func (r *MessageRepo) ListBetween(ctx context.Context, a, b domain.AgentName, before int64, limit int) ([]*domain.Message, error) {
 	where := `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?))`
 	args := []any{a, b, b, a}

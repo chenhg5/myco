@@ -351,6 +351,10 @@ type PullRequest struct {
 // MessageList wraps a list of messages.
 type MessageList struct {
 	Messages []Message `json:"messages"`
+	// Since echoes updated_since when the hub honoured it (from v0.18.35):
+	// Messages are then only those that changed after it. Absent: the
+	// whole list (also what an older hub answers).
+	Since int64 `json:"since,omitempty"`
 }
 
 // AgentList wraps a list of agents.
@@ -676,6 +680,9 @@ type PeerList struct {
 type Exchange struct {
 	Messages []Message `json:"messages"`
 	More     bool      `json:"more"`
+	// Since: as in MessageList. With it, Messages are the changes after it,
+	// oldest change first, and More means there are more changes.
+	Since int64 `json:"since,omitempty"`
 }
 
 // RecentItem is one row of GET /v1/console/recent: a thread, or the

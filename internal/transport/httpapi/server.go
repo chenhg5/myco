@@ -1321,7 +1321,19 @@ func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
 			writeError(w, domain.Errf(domain.CodeNotFound, "thread %s not found", r.PathValue("id")))
 			return
 		}
-		writeJSON(w, http.StatusOK, messageList(msgs))
+		out := messageList(msgs)
+		if since, _ := strconv.ParseInt(r.URL.Query().Get("updated_since"), 10, 64); since > 0 {
+			// Only what changed after since (the whole thread is still read
+			// here: the hub is local; the App's link may not be).
+			changed := out.Messages[:0]
+			for _, m := range out.Messages {
+				if m.UpdatedAt.UnixMilli() > since {
+					changed = append(changed, m)
+				}
+			}
+			out.Messages, out.Since = changed, since
+		}
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	s.agent(s.thread)(w, r)
@@ -1652,6 +1664,24 @@ func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
 	sc, _, err := s.scopeOf(r)
 	if err != nil {
 		writeError(w, err)
+		return
+	}
+	if since, _ := strconv.ParseInt(q.Get("updated_since"), 10, 64); since > 0 {
+		// Only what changed: oldest change first; more means ask again.
+		const most = 500
+		ms, err := s.messages.BetweenSince(r.Context(), sc, domain.AgentName(q.Get("a")), domain.AgentName(q.Get("b")), since, most+1)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		out := api.Exchange{Messages: make([]api.Message, 0, len(ms)), Since: since}
+		if len(ms) > most {
+			ms, out.More = ms[:most], true
+		}
+		for _, m := range ms {
+			out.Messages = append(out.Messages, messageDTO(m))
+		}
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	ms, err := s.messages.Between(r.Context(), sc, domain.AgentName(q.Get("a")), domain.AgentName(q.Get("b")), before, limit+1)
