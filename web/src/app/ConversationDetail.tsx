@@ -7,6 +7,7 @@ import { canManage, cliName, isInbox, isMe, machineOfRow, personLabel, runnerAwa
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
+import { WorkingLine } from "@/app/Working";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
@@ -393,6 +394,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const turnIds = new Set(turns.map((t) => t.id));
   const hasRail = !shellMode && !execNode && turns.length >= 2;
 
+  // Someone else's task that its node is still on (two nodes working
+  // together): the foot of the conversation shows it at work. Your own
+  // tasks show their run as it goes (TraceView) instead.
+  const working = (() => {
+    if (termMode || !shown) return null;
+    for (let i = shown.length - 1; i >= 0; i--) {
+      const m = shown[i];
+      if (m.type === "progress" || m.type === "steer") continue;
+      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || m.status === "queued") return null;
+      return m;
+    }
+    return null;
+  })();
+
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
   // device, and the hub only lets a thread's participants write into it).
@@ -692,6 +707,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const item = renderMessage(m);
               return divider ? [divider, item] : item;
             })}
+            {working && (
+              <WorkingLine key={working.id} name={nameOf(working.to)} since={working.created_at}
+                status={rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === working.to)?.st.agent.status_text}
+                side={observed && working.to === target.agent ? "right" : "left"} />
+            )}
             </>
           )}
         </div>

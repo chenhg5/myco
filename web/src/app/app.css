@@ -2961,6 +2961,118 @@ textarea.app-input {
     color: var(--muted);
   }
 }
+/* A node at work, at the foot of a conversation between two nodes: a
+   pixel mushroom shuffling on the spot, then who, what, and how long. The
+   sprite moves in whole pixels (steps), as pixel art does. */
+.work-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  align-self: flex-start;
+  margin-top: 2px;
+  --work-cap: var(--green);
+  --work-stem: #d8c6a6;
+  --work-eye: #3a3226;
+}
+.dark .work-line {
+  --work-stem: #e6d9c0;
+  --work-eye: #24201a;
+}
+.work-line.is-right {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+.work-sprite {
+  flex: none;
+  overflow: visible;
+}
+.work-sprite .is-cap { fill: var(--work-cap); }
+.work-sprite .is-spot { fill: rgba(255, 255, 255, 0.85); }
+.work-sprite .is-stem { fill: var(--work-stem); }
+.work-sprite .is-eye {
+  fill: var(--work-eye);
+  animation: work-blink 3.4s steps(1) infinite;
+}
+.work-body {
+  animation: work-bob 0.64s steps(1) infinite;
+}
+.work-feet {
+  animation: work-step 0.64s steps(1) infinite;
+}
+.work-feet.is-b {
+  animation-delay: -0.32s;
+}
+.work-spore {
+  fill: var(--work-cap);
+  opacity: 0;
+  animation: work-spore 2.6s steps(5) infinite;
+}
+.work-spore:nth-child(2) { animation-delay: -0.9s; }
+.work-spore:nth-child(3) { animation-delay: -1.7s; }
+@keyframes work-bob {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes work-step {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes work-blink {
+  0% { fill: var(--work-eye); }
+  93% { fill: var(--work-stem); }
+}
+@keyframes work-spore {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-5px); }
+}
+.work-text {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  padding-bottom: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.work-line.is-right .work-text {
+  justify-content: flex-end;
+}
+.work-name {
+  color: var(--fg-2);
+  font-weight: 500;
+}
+/* What it is doing, fading in when it changes, with a slow sheen. */
+.work-verb {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--fg) 50%, var(--muted) 65%, var(--muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: conv-sheen 2.2s linear infinite, work-in 0.35s ease-out;
+}
+@keyframes work-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+.work-time {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-body,
+  .work-feet,
+  .work-sprite .is-eye,
+  .work-spore {
+    animation: none;
+  }
+  .work-feet.is-b { opacity: 0; }
+  .work-verb {
+    animation: none;
+    background: none;
+    color: var(--muted);
+  }
+}
 .conv-steer-btn {
   height: 22px;
   padding: 0 10px;
