@@ -1,3 +1,4 @@
+import { forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, ScrollText, Server, Terminal, Users,
@@ -198,7 +199,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
   useEffect(() => { langSwitchSection = null; }, []);
-  const [local, setLocal] = useState<LocalState | null>(null);
+  const [local, setLocalState] = useState<LocalState | null>(() => recall<LocalState | null>("local") ?? null);
+  const setLocal = (d: LocalState | null) => { if (d) remember("local", d); setLocalState(d); };
   const [localError, setLocalError] = useState<unknown>(null);
   const [busy, setBusy] = useState<null | "start" | "stop">(null);
   const [actionError, setActionError] = useState<unknown>(null);
@@ -278,6 +280,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     setActionError(null);
     try {
       await appApi.removeHub(removeTarget.id);
+      forgetHub(removeTarget.id);
       setRemoveTarget(null);
       await onRefresh();
     } catch (e) {

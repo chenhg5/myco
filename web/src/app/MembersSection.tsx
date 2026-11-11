@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { recall, remember } from "@/lib/memo";
 import { UserPlus } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
 import type { AuditEntry, Device, Member, MemberRole } from "@/api";
@@ -61,13 +62,13 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
   const load = useCallback(async () => {
     if (!hub) return;
     try {
-      setMembers((await appApi.members(hub.id)).members);
+      setMembers(remember(`members\u0000${hub.id}`, (await appApi.members(hub.id)).members));
       setError(null);
     } catch (e) {
       setError(e);
     }
   }, [hub?.id]);
-  useEffect(() => { setMembers(null); void load(); }, [load]);
+  useEffect(() => { setMembers(hub ? recall<Member[]>(`members\u0000${hub.id}`) ?? null : null); void load(); }, [load]);
 
   if (!hub || !me) return <NoMembers hubsOv={hubsOv} />;
   const manages = me.can_manage;
@@ -262,6 +263,7 @@ export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
     if (!hub) return;
     try {
       const r = await appApi.audit(hub.id, { actor, before, limit: 100 });
+      if (!before) remember(`audit\u0000${hub.id}\u0000${actor || ""}`, r.entries);
       setEntries((prev) => (before && prev ? [...prev, ...r.entries] : r.entries));
       setMore(r.entries.length === 100);
       setError(null);
@@ -269,7 +271,7 @@ export function AuditSection({ hubsOv }: { hubsOv?: HubOverview[] }) {
       setError(e);
     }
   }, [hub?.id, actor]);
-  useEffect(() => { setEntries(null); void load(); }, [load]);
+  useEffect(() => { setEntries(hub ? recall<AuditEntry[]>(`audit\u0000${hub.id}\u0000${actor || ""}`) ?? null : null); void load(); }, [load]);
   useEffect(() => { if (hub) appApi.members(hub.id, true).then((r) => setPeople(r.members)).catch(() => {}); }, [hub?.id]);
 
   if (!hub) {
@@ -323,13 +325,13 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
 
   const load = useCallback(async () => {
     try {
-      setDevices((await appApi.devices(hubId)).devices);
+      setDevices(remember(`devices\u0000${hubId}`, (await appApi.devices(hubId)).devices));
       setError(null);
     } catch (e) {
       setError(e);
     }
   }, [hubId]);
-  useEffect(() => { setDevices(null); void load(); }, [load]);
+  useEffect(() => { setDevices(recall<Device[]>(`devices\u0000${hubId}`) ?? null); void load(); }, [load]);
 
   const makeLink = async () => {
     setLink(null);

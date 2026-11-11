@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { recall, remember } from "@/lib/memo";
 import { Check, ChevronDown, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
 import { IconChat, IconExchange, IconNewChat, IconNodes } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -63,7 +64,9 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
   /** A new conversation in this project (with a member, when given). */
   onNewConversation: (agent?: string) => void;
 }) {
-  const [p, setP] = useState<Project | null>(null);
+  const memoKey = `project\u0000${target.hubId}\u0000${target.name}`;
+  const [p, setPState] = useState<Project | null>(() => recall<Project>(memoKey) ?? null);
+  const setP = (v: Project | null) => { if (v) remember(memoKey, v); setPState(v); };
   const [error, setError] = useState<unknown>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
@@ -89,13 +92,16 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     }
   };
   // The project's conversations (first page): its progress.
-  const [recent, setRecent] = useState<RecentItem[] | null>(null);
+  const [recent, setRecentState] = useState<RecentItem[] | null>(() => recall<RecentItem[]>(memoKey + "\u0000recent") ?? null);
+  const setRecent = (v: RecentItem[] | null) => { if (v) remember(memoKey + "\u0000recent", v); setRecentState(v); };
 
   useEffect(() => {
     let off = false;
-    setP(null);
+    // Another project: its last data at once (or nothing the first time);
+    // the answers below replace it.
+    setPState(recall<Project>(memoKey) ?? null);
     setError(null);
-    setRecent(null);
+    setRecentState(recall<RecentItem[]>(memoKey + "\u0000recent") ?? null);
     const load = (silent: boolean) => {
       appApi.recent(target.hubId, { project: target.name })
         .then((r) => { if (!off) setRecent(r.fallback ? [] : r.items); })

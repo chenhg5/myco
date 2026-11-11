@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useCached } from "@/lib/memo";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
@@ -110,16 +111,10 @@ function historyLines(e: AuditEntry): string[] {
 /** Changes to a node's card and settings, newest first: who and when. */
 function HistoryRows({ row, now, stamp }: { row: AgentRow; now: number; stamp: string }) {
   const ag = row.st.agent;
-  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
   const [all, setAll] = useState(false);
-  useEffect(() => {
-    let off = false;
-    appApi.agentHistory(row.hub.id, ag.name)
-      .then((r) => { if (!off) { setEntries(r.entries); setError(null); } })
-      .catch((e) => { if (!off) setError(e); });
-    return () => { off = true; };
-  }, [row.hub.id, ag.name, stamp]);
+  const { data, error } = useCached(`history\u0000${row.hub.id}\u0000${ag.name}`,
+    () => appApi.agentHistory(row.hub.id, ag.name).then((r) => r.entries), [stamp]);
+  const entries = data ?? null;
   if (error && !entries && isOldHub(error)) {
     return <div className="app-empty-note">{L("升级这个 Hub 后，这里会显示谁在什么时候改了它。", "Once this hub is upgraded, this shows who changed it and when.")}</div>;
   }
@@ -158,17 +153,11 @@ function PeerRows({ row, now, onPeer }: {
 }) {
   const name = row.st.agent.name;
   const hubId = row.hub.id;
-  const [peers, setPeers] = useState<Peer[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
   // Reload when the node's activity changes (the overview refreshes).
   const stamp = (row.hub.overview?.recent || []).find((m) => m.from === name || m.to === name)?.id || "";
-  useEffect(() => {
-    let cancelled = false;
-    appApi.peers(hubId, name)
-      .then((r) => { if (!cancelled) { setPeers(r.peers); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e); });
-    return () => { cancelled = true; };
-  }, [hubId, name, stamp]);
+  const { data, error } = useCached(`peers\u0000${hubId}\u0000${name}`,
+    () => appApi.peers(hubId, name).then((r) => r.peers), [stamp]);
+  const peers: Peer[] | null = data ?? null;
   if (error && !peers) return <ErrorText error={error} />;
   if (!peers) return <RowsSkeleton rows={2} className="is-flat" />;
   if (!peers.length) return <div className="app-empty-note">{L("还没有和其他节点的往来", "No exchanges with other nodes yet")}</div>;
@@ -309,7 +298,9 @@ function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: 
 function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const rt = ag.runtime;
-  const [local, setLocal] = useState<AgentProvider | null>(null);
+  const prov = useCached(`provider\u0000${row.hub.id}\u0000${ag.name}`, () => appApi.agentProvider(ag.name, row.hub.id));
+  const local: AgentProvider | null = prov.data ?? null;
+  const setLocal = prov.set;
   const [list, setList] = useState<ProviderList | null>(null);
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState("");
@@ -318,13 +309,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
 
-  useEffect(() => {
-    let off = false;
-    setLocal(null);
-    setSaved("");
-    appApi.agentProvider(ag.name, row.hub.id).then((p) => { if (!off) setLocal(p); }).catch(() => {});
-    return () => { off = true; };
-  }, [row.hub.id, ag.name]);
+  useEffect(() => { setSaved(""); }, [row.hub.id, ag.name]);
 
   const codex = (rt?.cli || ag.binding.harness) === "codex";
   const editable = !!local?.local && (local.harness === "claude" || local.harness === "codex");

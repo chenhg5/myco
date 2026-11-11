@@ -617,6 +617,10 @@ const server = http.createServer(async (req, res) => {
   console.error(`${method} ${url.pathname}`);
 
   if (method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+  // MOCK_DELAY=ms: answers about a hub take this long (a hub far away).
+  if (process.env.MOCK_DELAY && parts[1] === "hubs" && parts.length > 3) {
+    await new Promise((r) => setTimeout(r, Number(process.env.MOCK_DELAY)));
+  }
 
   // /app/pending-link — a link the App was opened with, read once.
   if (parts[0] === "app" && parts[1] === "pending-link" && parts.length === 2) {

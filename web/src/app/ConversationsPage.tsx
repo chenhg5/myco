@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { recall, remember } from "@/lib/memo";
 import { Copy, Info, ListFilter, Pin, PinOff, Plus, Search, X } from "lucide-react";
 import { IconChat, IconCollapseLeft, IconExchange, IconNewChat, IconPrompt } from "@/components/icons";
 import { copyText } from "@/app/copy";
@@ -58,7 +59,10 @@ function savePins(pins: ConversationRow[]) {
 }
 
 /** What the page had when the person opened a row: shown again on return. */
-let saved: { key: string; items: ConversationRow[]; more: Record<string, boolean>; scrollTop: number; selected: string } | null = null;
+// The list as last seen, per filter (hub, side, label, search, project):
+// back to it, or to a filter used before, shows it at once.
+type SavedList = { items: ConversationRow[]; more: Record<string, boolean>; scrollTop: number; selected: string };
+const savedKey = (listKey: string) => "convlist\u0000" + listKey;
 
 export const rowKey = (r: ConversationRow) =>
   `${r.hubId}\u0000${r.item.kind === "pair" ? pairKey(r.item.other || "", r.item.node || "") : r.item.thread_id}`;
@@ -124,7 +128,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
   // A project's conversations are mostly between nodes: no split there.
   const side: Side | undefined = project ? undefined : filters.side;
   const listKey = JSON.stringify([hub, filters.scope, filters.label, query, projectKey, side]);
-  const restored = saved && saved.key === listKey ? saved : null;
+  const restored = recall<SavedList>(savedKey(listKey)) ?? null;
   const [items, setItems] = useState<ConversationRow[]>(restored?.items ?? []);
   const [selected, setSelected] = useState(restored?.selected ?? "");
   const [loading, setLoading] = useState(true);
@@ -164,10 +168,16 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
     if (el && restoreScroll.current) el.scrollTop = restoreScroll.current;
     restoreScroll.current = 0;
     return () => {
-      saved = { key: listKeyRef.current, items: itemsRef.current, more: moreRef.current, scrollTop: scroller()?.scrollTop ?? 0, selected: selectedRef.current };
+      remember<SavedList>(savedKey(listKeyRef.current), { items: itemsRef.current, more: moreRef.current, scrollTop: scroller()?.scrollTop ?? 0, selected: selectedRef.current });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Keep the rows for this filter as they change (not only when leaving).
+  useEffect(() => {
+    if (items.length === 0 && Object.keys(more).length === 0) return;
+    remember<SavedList>(savedKey(listKey), { items, more, scrollTop: 0, selected: selectedRef.current });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, more]);
   // New rows on top while the person reads further down: keep what they see.
   useLayoutEffect(() => {
     const el = scroller();
@@ -195,8 +205,10 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
     if (!changed && inFlight.current) return;
     keyRef.current = listKey;
     if (changed) {
-      setItems([]);
-      setMore({});
+      // This filter's rows from before, if any, while it loads.
+      const before = recall<SavedList>(savedKey(listKey));
+      setItems(before?.items ?? []);
+      setMore(before?.more ?? {});
       setSelected("");
       scroller()?.scrollTo({ top: 0 });
     }
