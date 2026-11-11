@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import type { Message, TraceStep } from "@/api";
 import { appApi, isOldHub } from "@/appapi";
@@ -16,7 +16,8 @@ function stamp(iso: string): string {
  * Messages with an exec node shown as a terminal session: each command a
  * prompt line with its output below. Your own session (live) shows nothing
  * else and ends with the prompt you type at; a record of other nodes'
- * commands ends each command line with who ran it, when and how it ended.
+ * commands says who ran them and when above each run of them, and how a
+ * failed one ended under its output.
  * Notes and other messages are `#` comment lines.
  */
 export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, children, hubId, onGrow }: {
@@ -54,12 +55,33 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, childr
   // The prompt after a failed command is red, as shell prompts do it; in a
   // live session the last one colours the input line's prompt.
   let afterFail = false;
+  // In a record, who sent what and when heads a run of messages, as a chat
+  // groups them: again only when the sender changes or a while has passed.
+  let lastFrom = "";
+  let lastAt = 0;
+  const header = (m: Message): React.ReactNode => {
+    if (live) return null;
+    const at = new Date(m.created_at).getTime();
+    const show = m.from !== lastFrom || !(at - lastAt < GROUP_MS);
+    lastFrom = m.from;
+    lastAt = at;
+    if (!show) return null;
+    return (
+      <div className="term-who">
+        {m.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
+        <span className="term-who-name">{nameOf(m.from)}</span>
+        <span>{stamp(m.created_at)}</span>
+        {!m.e2e && hubE2E && m.type === "task" && <span className="term-plain">{L("未加密", "unencrypted")}</span>}
+      </div>
+    );
+  };
   for (const m of messages) {
     if (used.has(m.id)) continue;
     if (m.type === "task" && m.to === execNode) {
       const a = answers.get(m.id);
       if (a) used.add(a.id);
-      items.push(<Command key={m.id} task={m} answer={a} nameOf={nameOf} hubE2E={hubE2E} hubId={hubId} onGrow={onGrow} plain={live} cwd={cwd} afterFail={afterFail} />);
+      const head = header(m);
+      items.push(<Command key={m.id} head={head} task={m} answer={a} hubId={hubId} onGrow={onGrow} plain={live} cwd={cwd} afterFail={afterFail} />);
       afterFail = didFail(m, a);
       continue;
     }
@@ -69,23 +91,23 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, childr
     if (m.from === execNode && m.type === "reply" && !m.unreadable) {
       const res = parseExecResult(m.body);
       if (res) {
-        items.push(<Output key={m.id} answer={m} res={res} nameOf={nameOf} plain={live} />);
+        items.push(<Output key={m.id} head={header(m)} res={res} plain={live} />);
         continue;
       }
     }
     if (m.unreadable) {
       items.push(
         <div className="term-comment" key={m.id}>
-          <div className="term-line"><span className="term-text"># {L("已加密，只有双方的主人能看", "encrypted: only the owners of both sides can read it")}</span><span className="term-note">{nameOf(m.from)} · {stamp(m.created_at)}</span></div>
+          {header(m)}
+          <div className="term-line"># {L("已加密，只有双方的主人能看", "encrypted: only the owners of both sides can read it")}</div>
         </div>,
       );
       continue;
     }
     items.push(
       <div className="term-comment" key={m.id}>
-        {m.body.split("\n").map((l, i) => (
-          <div className="term-line" key={i}><span className="term-text"># {l}</span>{i === 0 && <span className="term-note">{nameOf(m.from)} · {stamp(m.created_at)}</span>}</div>
-        ))}
+        {header(m)}
+        <Folded>{m.body.split("\n").map((l) => `# ${l}`).join("\n")}</Folded>
       </div>,
     );
   }
@@ -105,7 +127,7 @@ type ExecResult = NonNullable<ReturnType<typeof parseExecResult>>;
 
 /** What a command printed, as a terminal prints it: stderr is not coloured
  * and the exit code is not announced (the next prompt turns red; a record of
- * someone else's commands says it at the end of the command's line). */
+ * someone else's commands adds a dim line under the output). */
 function ResultLines({ res }: { res: ExecResult }) {
   return (
     <>
@@ -119,17 +141,56 @@ function ResultLines({ res }: { res: ExecResult }) {
 /** A result whose command line is not on screen (cleared, or further back
  * than what is loaded): in your own session it is just more output; in a
  * record, a dim line says where the command is. */
-function Output({ answer, res, nameOf, plain }: { answer: Message; res: ExecResult; nameOf: (n: string) => string; plain?: boolean }) {
-  const took = execDuration(res.duration_ms);
+function Output({ head, res, plain }: { head?: React.ReactNode; res: ExecResult; plain?: boolean }) {
   return (
     <div className="term-cmd">
-      {!plain && (
-        <div className="term-line term-earlier">
-          <span className="term-text"># {L("命令在更早的消息里", "the command is in earlier messages")}</span>
-          <span className="term-note">{[nameOf(answer.from), stamp(answer.created_at), took].filter(Boolean).join(" · ")}</span>
-        </div>
-      )}
+      {head}
+      {!plain && <div className="term-line term-earlier"># {L("命令在更早的消息里", "the command is in earlier messages")}</div>}
       <ResultLines res={res} />
+      {!plain && <ExitLine res={res} />}
+    </div>
+  );
+}
+
+/** In a record, how a command that failed ended, under its output. */
+function ExitLine({ res }: { res: ExecResult | null }) {
+  if (!res || typeof res.exit_code !== "number" || res.exit_code === 0) return null;
+  return <div className="term-exit is-code">{L(`退出码 ${res.exit_code}`, `exit ${res.exit_code}`)}{res.timed_out ? L("（超时）", " (timed out)") : ""}</div>;
+}
+
+const GROUP_MS = 10 * 60 * 1000;
+
+/** A command line, or a note, that runs past three lines folds to three;
+ * a click on it (or on "展开") shows the rest. */
+function Folded({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const check = () => setLong(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, children]);
+  const toggle = () => {
+    // Selecting text is not a click.
+    if (window.getSelection()?.isCollapsed === false) return;
+    setOpen((v) => !v);
+  };
+  return (
+    <div className="term-fold">
+      <div ref={ref} title={title} className={cn("term-line", className, !open && "is-folded", (long || open) && "is-foldable")}
+        onClick={long || open ? toggle : undefined}>
+        {children}
+      </div>
+      {(long || open) && (
+        <button type="button" className="term-fold-btn" onClick={() => setOpen((v) => !v)}>
+          {open ? L("收起", "Less") : L("展开", "More")}
+        </button>
+      )}
     </div>
   );
 }
@@ -147,12 +208,12 @@ export function PromptSign({ bad }: { bad?: boolean }) {
   );
 }
 
-function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, plain, cwd, afterFail }: {
-  task: Message; answer?: Message; nameOf: (n: string) => string; hubE2E?: boolean;
+function Command({ head, task, answer, hubId, onGrow, plain, cwd, afterFail }: {
+  /** in a record: who sent it and when, above the first of a run */
+  head?: React.ReactNode;
+  task: Message; answer?: Message;
   hubId?: string; onGrow?: () => void;
-  /** your own session: nothing but the prompt, the command and its output.
-   * Otherwise it is a record of someone's commands, and each command line
-   * ends with who ran it, when, how long it took and how it ended. */
+  /** your own session: nothing but the prompt, the command and its output */
   plain?: boolean; cwd?: string;
   /** the command before this one failed: its prompt is red */
   afterFail?: boolean;
@@ -163,23 +224,14 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, plain, cwd, afte
   const stopped = !answer && task.status === "failed" && task.error === STOPPED;
   const code = typeof res?.exit_code === "number" && res.exit_code !== 0
     ? L(`退出码 ${res.exit_code}`, `exit ${res.exit_code}`) + (res.timed_out ? L("（超时）", " (timed out)") : "") : "";
-  // In your own session these are a hover away; a terminal shows none of them.
-  const when = [stamp(task.created_at), took, code].filter(Boolean).join(" · ");
+  // When and how long are a hover away; a terminal shows neither.
+  const when = [stamp(task.created_at), took, plain ? code : ""].filter(Boolean).join(" · ");
   return (
-    <div className="term-cmd">
-      <div className="term-line" title={plain ? when : undefined}>
-        <span className="term-text">
-          <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}<PromptSign bad={afterFail} /></span>{task.body}
-        </span>
-        {!plain && (
-          <span className="term-note">
-            {task.e2e && <Lock className="term-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
-            {[nameOf(task.from), stamp(task.created_at), took].filter(Boolean).join(" · ")}
-            {!task.e2e && hubE2E && <span className="term-plain">{L("未加密", "unencrypted")}</span>}
-            {code && <span className="term-code">{code}</span>}
-          </span>
-        )}
-      </div>
+    <div className={cn("term-cmd", !!head && "has-who")}>
+      {head}
+      <Folded title={when}>
+        <span className="term-prompt">{cwd ? <span className="term-cwd">{cwd}</span> : null}<PromptSign bad={afterFail} /></span>{task.body}
+      </Folded>
       {res && <ResultLines res={res} />}
       {answer && !res && <pre className="term-out">{answer.body}</pre>}
       {(pending || stopped) && hubId && !task.e2e && <LiveOutput hubId={hubId} task={task} live={pending} onGrow={onGrow} />}
@@ -188,6 +240,7 @@ function Command({ task, answer, nameOf, hubE2E, hubId, onGrow, plain, cwd, afte
       {pending && <div className="term-pending"><span className="term-cursor" role="img" aria-label={L("执行中", "running")} /></div>}
       {stopped && <div className="term-exit">^C</div>}
       {!answer && !pending && task.status === "failed" && !stopped && <div className="term-exit">{task.error || L("失败", "failed")}</div>}
+      {!plain && <ExitLine res={res} />}
     </div>
   );
 }

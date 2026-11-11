@@ -466,24 +466,34 @@ function totals(agents) {
   return t;
 }
 
-// A node's demo history with the exec node mac-exec: six commands, one thread each.
+// A node's demo history with the exec node mac-exec: one thread per
+// command, a couple of minutes apart, among them a long one-liner and a
+// few polls of what it started (as an agent driving a build does).
 const execHistories = {};
 function execHistory(agent) {
   if (execHistories[agent]) return execHistories[agent];
   const out = [];
-  const cmds = ["uptime", "df -h /", "git -C ~/code/myco pull", "make check", "myco upgrade", "myco --version"];
-  const outs = ["up 3 days, 4:12, 2 users, load averages: 1.92 2.10 2.31\n", "Filesystem   Size  Used Avail Capacity\n/dev/disk3s1 926Gi 412Gi 498Gi  46%\n", "Already up to date.\n", "ok  github.com/chenhg5/myco/internal/app 1.2s\nsmoke: all steps passed\n", "", "v0.16.7\n"];
-  cmds.forEach((c, i) => {
-    const t = 6 * 3600 - i * 3000;
+  const build = "(nohup bash -c 'set -e; cd ~/code/myco-app-build; export GOTOOLCHAIN=auto PATH=$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/local/go/bin:$PATH; git fetch -q --depth 1 origin main && git checkout -q FETCH_HEAD; git log -1 --oneline; make app VERSION=v0.18.15-preview; rm -rf ~/Applications/myco-preview.app && cp -R bin/myco.app ~/Applications/myco-preview.app; open -n ~/Applications/myco-preview.app; echo PREVIEW-OK' > ~/code/.myco-preview.log 2>&1 &)";
+  const poll = "head -1 ~/code/.myco-preview.log; tail -2 ~/code/.myco-preview.log; pgrep -f \"make app\" >/dev/null && echo RUNNING || echo NOT-RUNNING";
+  const ok = (stdout, ms = 820) => ({ exit_code: 0, stdout, stderr: "", duration_ms: ms, timed_out: false, error: "" });
+  const runs = [
+    ["uptime", ok("up 3 days, 4:12, 2 users, load averages: 1.92 2.10 2.31\n")],
+    ["df -h /", ok("Filesystem   Size  Used Avail Capacity\n/dev/disk3s1 926Gi 412Gi 498Gi  46%\n")],
+    ["pgrep -fl \"mac-sign|notarytool|make app\" || echo idle", ok("idle\n", 313)],
+    [build, ok("", 14)],
+    [poll, ok("RUNNING\n", 41)],
+    [poll, ok("640d77c App: menus open at the pointer on macOS\nbuilt bin/myco.app (0.18.15)\nPREVIEW-OK\nNOT-RUNNING\n", 523)],
+    ["myco upgrade", { exit_code: 1, stdout: "", stderr: "download failed: 504 Gateway Timeout\n", duration_ms: 12400, timed_out: false }],
+    ["myco --version", { exit_code: 124, stdout: "v0.16.7\n", stderr: "", duration_ms: 60000, timed_out: true, error: "killed after 1m0s (the node's timeout)" }],
+  ];
+  // Two sittings: the first four commands, then the rest 40 minutes later.
+  runs.forEach(([c, res], i) => {
+    const t = 6 * 3600 - i * 70 + (i < 4 ? 2400 : 0);
     const th = `th_exec_${agent}_${i}`;
-    const timedOut = i === cmds.length - 1;
     const task = makeMessage({ thread_id: th, from: agent, to: "mac-exec", type: "task", status: "done", body: c, created_at: iso(t), updated_at: iso(t) });
     out.push(task);
     out.push(makeMessage({ thread_id: th, reply_to: task.id, from: "mac-exec", to: agent, type: "reply", status: "done",
-      body: JSON.stringify(i === 4
-        ? { exit_code: 1, stdout: "", stderr: "download failed: 504 Gateway Timeout\n", duration_ms: 12400, timed_out: false }
-        : { exit_code: timedOut ? 124 : 0, stdout: outs[i], stderr: "", duration_ms: timedOut ? 60000 : 820, timed_out: timedOut, error: timedOut ? "killed after 1m0s (the node's timeout)" : "" }),
-      created_at: iso(t - 30), updated_at: iso(t - 30) }));
+      body: JSON.stringify(res), created_at: iso(t - 30), updated_at: iso(t - 30) }));
   });
   if (process.env.MOCK_E2E) {
     for (const m of out) m.e2e = true;

@@ -3875,7 +3875,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .term {
   --term-bg: #101115;
   --term-fg: #eceef2;
-  --term-out: #cdd0d8;
+  --term-out: #c3c7cf;
   --term-dim: #6c707b;
   --term-green: #5fd7a7;
   --term-red: #ff7b72;
@@ -3912,39 +3912,64 @@ button.app-label:hover { filter: brightness(0.95); }
 .term-comment + .term-input-line {
   margin-top: 8px;
 }
-/* A command line: the prompt and what was typed and, in a record, a dim
-   note at the right edge (it drops to its own line when there is no room).
-   Lines fill to the right edge and break there, mid-word, as a terminal's
-   do. */
+/* A command line: the prompt and what was typed. Lines fill to the right
+   edge and break there, mid-word, as a terminal's do. */
 .term-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 3ch;
-  color: var(--term-fg);
-}
-.term-text {
-  flex: 1 1 auto;
-  min-width: 0;
   white-space: pre-wrap;
   word-break: break-all;
   line-break: anywhere;
+  color: var(--term-fg);
+  /* a touch heavier than the output, so commands stand out when scanning */
+  font-weight: 500;
 }
-.term-note {
-  flex: none;
-  margin-left: auto;
+.term-comment .term-line,
+.term-line.term-earlier {
+  font-weight: 400;
+}
+/* One that runs past three lines folds to three; a click shows the rest. */
+.term-line.is-folded {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.term-line.is-foldable {
+  cursor: pointer;
+}
+.term-fold-btn {
+  display: block;
+  margin: 1px 0 2px -4px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
   color: var(--term-dim);
-  white-space: nowrap;
+  font: 11px/16px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  cursor: default;
+}
+.term-fold-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c6c9d1;
+}
+/* In a record: who sent the commands below and when, in small UI type,
+   above each run of them, with a little more air before it. */
+.term-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+  color: var(--term-dim);
+  font: 11px/16px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   user-select: none;
 }
-.term-code {
-  margin-left: 1ch;
-  color: var(--term-red);
+.term-who-name {
+  color: #9a9ea8;
+  font-weight: 500;
 }
-.term-code::before {
-  content: "· ";
-  color: var(--term-dim);
+.term-cmd.has-who:not(:first-child),
+.term-comment:not(:first-child):has(> .term-who) {
+  margin-top: 18px;
 }
 .term-lock {
   width: 10px;
@@ -3953,7 +3978,6 @@ button.app-label:hover { filter: brightness(0.95); }
   vertical-align: -1px;
 }
 .term-plain {
-  margin-left: 1ch;
   color: #d9b45c;
 }
 .term-prompt {
@@ -3989,9 +4013,13 @@ button.app-label:hover { filter: brightness(0.95); }
   font: inherit;
   color: var(--term-out);
 }
-/* "^C" after a command that was stopped; why one never ran. */
+/* "^C" after a command that was stopped; why one never ran; in a record,
+   the exit code of one that failed. */
 .term-exit {
   color: var(--term-dim);
+}
+.term-exit.is-code {
+  color: #c86a66;
 }
 /* While a command runs: a block cursor after what it has printed so far. */
 .term-pending {
@@ -4014,12 +4042,11 @@ button.app-label:hover { filter: brightness(0.95); }
   .term-cursor { animation: none; }
 }
 /* Notes and other messages: "#" lines, dim. */
-.term-comment .term-line,
+.term-comment .term-line {
+  color: #8a8e99;
+}
 .term-line.term-earlier {
   color: var(--term-dim);
-}
-.term-comment .term-text {
-  color: #8a8e99;
 }
 
 /* The input line is the next prompt, right under the last output. The
