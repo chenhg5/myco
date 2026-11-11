@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CircleDot, Filter, LayoutGrid, List, Moon, RefreshCw, Search, ShieldCheck, Sun, Users, WifiOff, X,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { probeAppMode, type AppInfo, type Hub } from "@/appapi";
 import AppMode from "@/app/AppMode";
+import { clearAll } from "@/lib/memo";
 
 const POLL_MS = 5000;
 const UNDERLINE = "relative gap-2 rounded-none bg-transparent px-0 pb-2.5 pt-0 text-sm text-muted-foreground shadow-none hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 data-[state=active]:after:opacity-100";
@@ -464,6 +465,24 @@ function HubApp() {
  * hosted by cmd/myco-app and gets the multi-hub UI; anything else keeps the
  * classic single-hub `myco ui` behaviour untouched.
  */
+/**
+ * If the App fails while drawing, it may be saved page data it can no longer
+ * read: clear that and reload, once. A second failure shows the error.
+ */
+class RecoverFromCache extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch() {
+    let tried = false;
+    try { tried = sessionStorage.getItem("myco-cache-reset") === "1"; sessionStorage.setItem("myco-cache-reset", "1"); } catch { /* no storage */ }
+    if (!tried) void clearAll().catch(() => {}).finally(() => window.location.reload());
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <div style={{ padding: 24, fontSize: 13 }}>{String(this.state.error.message || this.state.error)}</div>;
+  }
+}
+
 export default function App() {
   const [mode, setMode] = useState<"probing" | "hub" | "app">("probing");
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -479,6 +498,6 @@ export default function App() {
   }, []);
 
   if (mode === "probing") return null;
-  if (mode === "app") return <AppMode initialHubs={hubs} initialInfo={info} />;
+  if (mode === "app") return <RecoverFromCache><AppMode initialHubs={hubs} initialInfo={info} /></RecoverFromCache>;
   return <HubApp />;
 }

@@ -206,3 +206,32 @@ func TestCacheRoutes(t *testing.T) {
 		t.Fatalf("no cache: %s", b)
 	}
 }
+
+func TestCacheStartsOverAfterAnUpdate(t *testing.T) {
+	c, err := console.OpenCache(filepath.Join(t.TempDir(), "c.db"), key(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.ForVersion("v0.18.34"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Put([]console.CacheEntry{{Key: "k", Hub: "", Data: json.RawMessage(`{"shape":1}`)}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Same version (a restart): kept.
+	if err := c.ForVersion("v0.18.34"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _, _ := c.Stats(); n != 1 {
+		t.Fatalf("restart lost the cache: %d", n)
+	}
+	// Another version (an update, or going back): what the pages saved may
+	// have another shape now, so it starts over.
+	if err := c.ForVersion("v0.18.35"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _, _ := c.Stats(); n != 0 {
+		t.Fatalf("kept %d entries across an update", n)
+	}
+}

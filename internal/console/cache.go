@@ -296,6 +296,27 @@ func (c *Cache) Stats() (n int, bytes int64, err error) {
 	return n, bytes, err
 }
 
+// ForVersion empties the cache when it was written by another version of
+// the App: what the pages saved may have another shape now. A version is
+// kept until the next update; one slow start after it rebuilds the cache.
+func (c *Cache) ForVersion(version string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var v string
+	err := c.db.QueryRow(`SELECT v FROM meta WHERE k = 'app_version'`).Scan(&v)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if v == version {
+		return nil
+	}
+	if _, err := c.db.Exec(`DELETE FROM entries`); err != nil {
+		return err
+	}
+	_, err = c.db.Exec(`INSERT INTO meta (k, v) VALUES ('app_version', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, version)
+	return err
+}
+
 // Close closes the file.
 func (c *Cache) Close() error { return c.db.Close() }
 

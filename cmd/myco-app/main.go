@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/chenhg5/myco/internal/console"
 	"github.com/chenhg5/myco/internal/release"
@@ -49,7 +51,7 @@ func main() {
 		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: windowsExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
 	// Pages open with what they showed last time (MYCO_APP_CACHE=off: no).
 	if os.Getenv("MYCO_APP_CACHE") != "off" {
-		if c, err := openCache(); err != nil {
+		if c, err := openCache(version); err != nil {
 			log.Printf("app cache off: %v", err)
 		} else {
 			b.Cache = c
@@ -201,14 +203,44 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 	})
 }
 
-func openCache() (*console.Cache, error) {
-	path, err := console.DefaultCachePath()
-	if err != nil {
-		return nil, err
+// openCache opens the page cache for this version of the app. The keychain
+// may ask the person first (a locked keychain): the app does not wait for
+// that, it starts without the cache this time.
+func openCache(version string) (*console.Cache, error) {
+	type result struct {
+		c   *console.Cache
+		err error
 	}
-	key, err := console.KeychainCacheKey()
-	if err != nil {
-		return nil, err
+	done := make(chan result, 1)
+	go func() {
+		path, err := console.DefaultCachePath()
+		if err != nil {
+			done <- result{nil, err}
+			return
+		}
+		key, err := console.KeychainCacheKey()
+		if err != nil {
+			done <- result{nil, err}
+			return
+		}
+		c, err := console.OpenCache(path, key)
+		if err == nil {
+			if err = c.ForVersion(version); err != nil {
+				c.Close()
+				c = nil
+			}
+		}
+		done <- result{c, err}
+	}()
+	select {
+	case r := <-done:
+		return r.c, r.err
+	case <-time.After(2 * time.Second):
+		go func() { // answered late: not used this time
+			if r := <-done; r.c != nil {
+				r.c.Close()
+			}
+		}()
+		return nil, errors.New("the keychain did not answer in time")
 	}
-	return console.OpenCache(path, key)
 }
