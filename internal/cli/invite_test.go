@@ -99,6 +99,15 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 	if code, _, _ := me.run("agent", "label", "add", "--name", "glenn-bot", "--label", "x"); code != ExitPermission {
 		t.Fatalf("labelling someone else's node: exit %d", code)
 	}
+	if code, _, e := me.run("agent", "alias", "set", "--alias", "laohu-reviewer", "--target", "laohu-mbp-claude-ef56"); code != 0 {
+		t.Fatalf("owner sets own node alias: %d %s", code, e)
+	}
+	if code, _, _ := me.run("agent", "alias", "set", "--alias", "stolen", "--target", "glenn-bot"); code != ExitPermission {
+		t.Fatalf("non-owner sets alias: exit %d", code)
+	}
+	if code, _, e := me.run("agent", "alias", "remove", "--alias", "laohu-reviewer", "--force"); code != 0 {
+		t.Fatalf("owner removes own node alias: %d %s", code, e)
+	}
 	if code, out, e := me.run("member", "pair", "--format", "text"); code != 0 || !strings.Contains(out, hub+"/c/myco_pair_") {
 		t.Fatalf("pair: %d %s %s", code, out, e)
 	}

@@ -635,16 +635,19 @@ func TestAliasesAndDisplayNames(t *testing.T) {
 		t.Fatalf("registering an alias name must conflict, exit %d", code)
 	}
 
-	// Only the admin manages aliases.
+	// Agents may manage aliases that point to themselves.
 	_, out, _ := boss.run("agent", "register", "--name", "worker-1", "--rotate-token", "--no-save", "--format", "json")
 	var reg struct{ Token string }
 	json.Unmarshal([]byte(out), &reg)
 	ac, _ := client.New(hub, reg.Token)
-	if _, err := ac.SetAlias(context.Background(), "mine", "worker-1", false); err == nil {
-		t.Fatal("agent token must not set aliases")
+	if _, err := ac.SetAlias(context.Background(), "mine", "worker-1", false); err != nil {
+		t.Fatalf("agent token should set its own alias: %v", err)
 	}
 	w1.env["MYCO_CONFIG"] = filepath.Join(home, "w1b.yaml")
 	w1.run("agent", "login", "--token-file", writeFile(t, home, "w1.token", reg.Token))
+	if code, _, e := w1.run("agent", "alias", "set", "--alias", "my-worker"); code != 0 {
+		t.Fatalf("self alias without --target: %d %s", code, e)
+	}
 
 	// Sending to the alias lands on the target and is stored under the real name.
 	code, out, e := boss.run("message", "send", "--to", "reviewer", "--body", "please review", "--format", "json")
