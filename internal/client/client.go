@@ -816,6 +816,17 @@ func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Messag
 	return &out, nil
 }
 
+// ConsoleStop stops a running task sent from the console: the task is
+// closed as failed, and the recipient's runner ends the run.
+func (c *Client) ConsoleStop(ctx context.Context, id string) (*api.Message, error) {
+	var out api.Message
+	if err := c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/stop", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	c.open(ctx, &out)
+	return &out, nil
+}
+
 // ConsoleDismiss closes an open message for its recipient without a reply
 // (the recipient node's owner, or a hub admin).
 func (c *Client) ConsoleDismiss(ctx context.Context, id string) (*api.Message, error) {
@@ -890,14 +901,16 @@ func (c *Client) Recent(ctx context.Context, scope, label, query string, before 
 
 // RecentIn is Recent for one project ("" = all).
 func (c *Client) RecentIn(ctx context.Context, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
-	return c.RecentGrouped(ctx, "", project, scope, label, query, before, limit)
+	return c.RecentGrouped(ctx, "", "", project, scope, label, query, before, limit)
 }
 
 // RecentGrouped is RecentIn with group "pair": one row per pair of parties
 // (hubs before v0.18.28 ignore it and list threads).
-func (c *Client) RecentGrouped(ctx context.Context, group, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
+// side ("me" or "others", with group "pair") keeps the pairs the caller's
+// app sender is in, or the rest (hubs before v0.18.32 ignore it).
+func (c *Client) RecentGrouped(ctx context.Context, group, side, project, scope, label, query string, before int64, limit int) (*api.RecentList, error) {
 	q := url.Values{}
-	for k, v := range map[string]string{"scope": scope, "label": label, "q": query, "project": project, "group": group} {
+	for k, v := range map[string]string{"scope": scope, "label": label, "q": query, "project": project, "group": group, "side": side} {
 		if v != "" {
 			q.Set(k, v)
 		}

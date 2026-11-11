@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -124,5 +126,30 @@ func TestExecTimeoutTruncationAndAudit(t *testing.T) {
 func TestExecAnySenderWhenExplicit(t *testing.T) {
 	if res := run(t, harness.ExecSpec{Senders: []string{"*"}}, "anyone-at-all", "echo ok"); res.Denied || strings.TrimRight(res.Stdout, "\r\n") != "ok" {
 		t.Fatalf("explicit * must admit every sender: %+v", res)
+	}
+}
+
+func TestExecStreamsOutput(t *testing.T) {
+	testutil.NeedsPOSIXShell(t)
+	h, err := New(harness.Options{Exec: &harness.ExecSpec{Senders: []string{"boss"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// stdout and stderr arrive from two goroutines, in no fixed order.
+	var mu sync.Mutex
+	var got []string
+	_, err = h.Run(context.Background(), harness.Request{Body: `echo one; echo two >&2; printf three`, From: "boss", Type: "task", Workdir: t.TempDir(),
+		OnEvent: func(e harness.Event) {
+			mu.Lock()
+			got = append(got, e.Kind+":"+e.Stream+":"+e.Text)
+			mu.Unlock()
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(got)
+	want := "output:stderr:two|output:stdout:one|output:stdout:three"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("got %q", got)
 	}
 }

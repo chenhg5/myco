@@ -58,6 +58,29 @@ func (s *MessageService) SteerFromConsole(ctx context.Context, name string, mana
 	return s.Steer(ctx, &domain.Agent{Name: m.From}, id, body, false)
 }
 
+// StopFromConsole stops a running task sent from the console, for the
+// person who sent it (or someone who manages the hub).
+func (s *MessageService) StopFromConsole(ctx context.Context, name string, manages bool, id string) (*domain.Message, error) {
+	m, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !IsConsoleSender(m.From) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only tasks sent from the console can be stopped here")
+	}
+	if !manages && m.From != ConsoleSender(name) {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only the person who sent this task can stop it")
+	}
+	out, err := s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) {
+		return nil, m.Stop(m.From, s.clock.Now())
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.notifier.Publish(replyTopic(id))
+	return out, nil
+}
+
 // DismissFromConsole closes an open message on its recipient's behalf
 // without replying (a stale answer nobody will pull, a task that no longer
 // matters). allowed decides whether the caller may act for the recipient.
@@ -184,6 +207,10 @@ type RecentInput struct {
 	// ByPair lists one row per pair of parties (all their messages, every
 	// thread) instead of one per thread.
 	ByPair bool
+	// Me is the reader's own sender name in the app; with ByPair, Side "me"
+	// keeps the pairs it is in, "others" the rest.
+	Me   domain.AgentName
+	Side string
 	// Before (unix ms, 0 = now) pages back.
 	Before int64
 	Limit  int
@@ -272,6 +299,9 @@ func (s *MessageService) Recent(ctx context.Context, agents []*domain.Agent, in 
 func (s *MessageService) recentPairs(ctx context.Context, f domain.RecentFilter, in RecentInput, limit int) ([]RecentItem, bool, error) {
 	f.AllPairs = true
 	f.Skip = append(f.Skip, AdminSender)
+	if in.Me != "" && (in.Side == "me" || in.Side == "others") {
+		f.Party, f.WithoutParty = in.Me, in.Side == "others"
+	}
 	pairs, err := s.messages.ListRecentPairs(ctx, f)
 	if err != nil {
 		return nil, false, err

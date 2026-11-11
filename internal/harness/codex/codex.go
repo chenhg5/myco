@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chenhg5/myco/internal/harness"
 )
@@ -102,9 +103,18 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	args = append(args, "-")
 
-	out, runErr := harness.Exec(ctx, harness.Process{
+	proc := harness.Process{
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: env,
-	})
+	}
+	if req.OnEvent != nil {
+		stream := newEventStream(time.Now())
+		proc.OnStdoutLine = func(line []byte) {
+			for _, ev := range stream.line(line) {
+				req.OnEvent(ev)
+			}
+		}
+	}
+	out, runErr := harness.Exec(ctx, proc)
 	res, failure := parseEvents(out.Stdout)
 	if b, err := os.ReadFile(lastMsg); err == nil && strings.TrimSpace(string(b)) != "" {
 		res.Output = strings.TrimSpace(string(b))

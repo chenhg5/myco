@@ -294,6 +294,25 @@ func (m *Message) follow(d *Message, err error) (*Message, error) {
 	return d, err
 }
 
+// StoppedBySender is the error of a task its sender stopped.
+const StoppedBySender = "stopped by the sender"
+
+// Stop closes an open task as failed on its sender's behalf: they no longer
+// want it. The recipient's runner sees the status and ends the run.
+func (m *Message) Stop(by AgentName, now time.Time) error {
+	if m.From != by {
+		return Errf(CodePermissionDenied, "only the sender of %s (%s) can stop it", m.ID, m.From)
+	}
+	if m.Type != TypeTask {
+		return Errf(CodeInvalidArgument, "only tasks can be stopped; %s is a %s", m.ID, m.Type)
+	}
+	if m.Status.Terminal() {
+		return Errf(CodeInvalidState, "task %s is already %s", m.ID, m.Status)
+	}
+	m.Status, m.Error, m.UpdatedAt = StatusFailed, StoppedBySender, now
+	return nil
+}
+
 // Fail closes the message as failed. If the sender expects a reply, an event
 // message notifying the sender is returned.
 func (m *Message) Fail(by AgentName, eventID, reason string, now time.Time) (*Message, error) {

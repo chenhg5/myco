@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS project_members (
   PRIMARY KEY (project, agent)
 );
 CREATE INDEX IF NOT EXISTS idx_project_members_agent ON project_members(agent);
+CREATE TABLE IF NOT EXISTS message_traces (
+  message TEXT NOT NULL,
+  seq     INTEGER NOT NULL,
+  kind    TEXT NOT NULL,
+  data    TEXT NOT NULL,
+  at      INTEGER NOT NULL,
+  PRIMARY KEY (message, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_message_traces_at ON message_traces(at);
 CREATE TABLE IF NOT EXISTS project_docs (
   project    TEXT NOT NULL,
   name       TEXT NOT NULL,

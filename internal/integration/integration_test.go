@@ -1193,4 +1193,16 @@ func TestConsoleConversations(t *testing.T) {
 	if _, err := con.ConsoleSteer(c, task.Message.ID, "z"); err == nil {
 		t.Fatal("the console corrected an agent's task")
 	}
+	if _, err := con.ConsoleStop(c, task.Message.ID); err == nil {
+		t.Fatal("the console stopped an agent's task")
+	}
+
+	// Stop: the task is closed as failed, once.
+	run, _ := con.ConsoleSend(c, api.SendRequest{To: "worker", Body: "跑很久的任务"})
+	if m, err := con.ConsoleStop(c, run.Message.ID); err != nil || m.Status != "failed" || m.Error != "stopped by the sender" {
+		t.Fatalf("stop: %v %+v", err, m)
+	}
+	if _, err := con.ConsoleStop(c, run.Message.ID); err == nil {
+		t.Fatal("stopped a finished task")
+	}
 }

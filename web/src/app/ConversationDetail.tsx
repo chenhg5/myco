@@ -5,7 +5,8 @@ import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { cliName, isMe, personLabel } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
-import { Terminal } from "@/app/Terminal";
+import { STOPPED, Terminal } from "@/app/Terminal";
+import { TraceView } from "@/app/TraceView";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
@@ -224,9 +225,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const afterTask = lastTask
     ? (messages || []).filter((m) => new Date(m.created_at).getTime() >= new Date(lastTask.created_at).getTime())
     : [];
+  const stopped = lastTask?.status === "failed" && lastTask.error === STOPPED;
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
   const state = openTask
     ? { dot: "working", label: L("处理中", "Working") }
+    : stopped
+      ? { dot: "idle", label: L("已停止", "Stopped") }
     : failed
       ? { dot: "failed", label: L("失败", "Failed") }
       : lastTask
@@ -297,9 +301,34 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setDraft(pos === -1 ? histDraft.current : history[pos]);
       return;
     }
+    // Ctrl+C with nothing typed stops the running command, as in a terminal.
+    if (shellMode && e.ctrlKey && e.key === "c" && !draft && openTask) {
+      e.preventDefault();
+      void stop(openTask);
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     void send();
+  };
+
+  // Stop a running task you sent: the hub closes it, its runner ends the run.
+  const [stopError, setStopError] = useState<unknown>(null);
+  const stop = async (task: Message) => {
+    setStopError(null);
+    try {
+      const m = await appApi.stop(target.hubId, task.id);
+      setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
+      setSteerMode(false);
+    } catch (e) {
+      setStopError(e);
+    }
+  };
+
+  // The view stays at the bottom while something there grows (a live trace).
+  const followBottom = () => {
+    const el = scrollRef.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   };
 
   const renderMessage = (m: Message) => {
@@ -343,11 +372,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </div>
             )}
           </div>
-          <div className={cn("conv-msg-meta", m.status === "failed" && "is-failed")}>
+          <div className={cn("conv-msg-meta", m.status === "failed" && m.error !== STOPPED && "is-failed")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
-            {m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
+            {m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
+              : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : clockTime(m.created_at)}
           </div>
+          {/* What the agent did for a task you gave it (its runner reports it). */}
+          {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} />}
         </div>
       );
   };
@@ -410,7 +442,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {shellMode ? (
               <>
               <div onMouseUp={() => { if (window.getSelection()?.isCollapsed !== false) inputRef.current?.focus(); }} className="term-wrap">
-                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live>
+                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live
+                  hubId={target.hubId} onGrow={followBottom} onStop={(t) => void stop(t)} canStop={(t) => isMe(t.from, row?.hub)}>
                   <div className="term-input-line">
                     <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir} </span> : null}$</span>
                     <textarea
@@ -434,9 +467,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <span>{L(`在 ${agentName} 上执行`, `Runs on ${agentName}`)}</span>
                 <span>{L("回车执行 · Shift+Enter 换行 · ↑↓ 历史命令", "Enter to run · Shift+Enter for a new line · ↑↓ history")}</span>
               </div>
-              <ErrorText error={sendError} />
+              <ErrorText error={sendError || stopError} />
               </>
-            ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} /> : shown.map((m, i) => {
+            ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} hubId={target.hubId} onGrow={followBottom} /> : shown.map((m, i) => {
               // Exchange view: a new thread starts with a divider.
               const divider = exchange && i > 0 && shown[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
@@ -471,6 +504,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             >
               {L("修正", "Correct")}
             </button>
+            <button
+              type="button"
+              className="conv-steer-btn"
+              onClick={() => void stop(openTask)}
+              title={L("停止这个任务：agent 不再继续做", "Stop this task: the agent stops working on it")}
+            >
+              {L("停止", "Stop")}
+            </button>
           </div>
         )}
         {steerOn && (
@@ -503,7 +544,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             </button>
           </div>
         </div>
-        <ErrorText error={sendError} />
+        <ErrorText error={sendError || stopError} />
       </div>
       )}
     </div>

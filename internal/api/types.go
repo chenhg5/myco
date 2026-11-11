@@ -3,7 +3,10 @@
 // or removing fields is a breaking change.
 package api
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Version of the wire contract, exposed at GET /v1/health.
 const Version = "v1"
@@ -699,6 +702,31 @@ type RecentItem struct {
 	State string `json:"state,omitempty"`
 	// Project is the project the thread belongs to.
 	Project string `json:"project,omitempty"`
+}
+
+// TraceEvent is one step of the run that handled a task: what the agent
+// said, thought and did. Data is the step (harness.Event): kind, text,
+// tool, id, input, output, failed, and usage figures.
+type TraceEvent struct {
+	Seq  int             `json:"seq"`
+	Kind string          `json:"kind"`
+	Data json.RawMessage `json:"data"`
+	At   time.Time       `json:"at,omitempty"`
+}
+
+// TraceUpload is the body of POST /v1/messages/{id}/trace (the recipient's
+// runner, while it runs the task).
+type TraceUpload struct {
+	Events []TraceEvent `json:"events"`
+}
+
+// Trace is GET /v1/messages/{id}/trace and /v1/console/messages/{id}/trace:
+// the steps after ?after=<seq>, and the task's status (a finished task's
+// trace is complete).
+type Trace struct {
+	Message string       `json:"message"`
+	Status  string       `json:"status"`
+	Events  []TraceEvent `json:"events"`
 }
 
 // RecentList is the body of GET /v1/console/recent; more says older rows

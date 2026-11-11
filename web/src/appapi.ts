@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami } from "@/api";
+import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -124,6 +124,8 @@ export interface RecentQuery {
   scope?: "mine"; label?: string; q?: string; before?: number; project?: string;
   /** "pair": one row per pair of parties (hubs before v0.18.28 list threads) */
   group?: "pair";
+  /** with group "pair": "me" keeps the pairs you are in, "others" the rest */
+  side?: "me" | "others";
 }
 /** fallback: the hub predates the recent list; use its conversations. */
 export interface RecentList { items: RecentItem[]; more: boolean; fallback?: boolean }
@@ -343,12 +345,19 @@ export const appApi = {
     if (query.before) q.set("before", String(query.before));
     if (query.project) q.set("project", query.project);
     if (query.group) q.set("group", query.group);
+    if (query.side) q.set("side", query.side);
     const qs = q.toString();
     return request<RecentList>("GET", `app/hubs/${enc(hubId)}/recent${qs ? `?${qs}` : ""}`);
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+  /** The steps of a task's run after seq (what the agent says, thinks and does). */
+  trace: (hubId: string, messageId: string, after = 0) =>
+    request<Trace>("GET", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/trace${after ? `?after=${after}` : ""}`),
+  /** Stops a running task the console sent (hubs from v0.18.32). */
+  stop: (hubId: string, messageId: string) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/stop`),
   /** Corrects an unfinished task the console sent. */
   steer: (hubId: string, messageId: string, body: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),

@@ -403,6 +403,14 @@ func (r *MessageRepo) listAllPairs(ctx context.Context, f domain.RecentFilter) (
 			args = append(args, append(a, a...)...)
 		}
 	}
+	if f.Party != "" {
+		if f.WithoutParty {
+			q += ` AND from_agent != ? AND to_agent != ?`
+		} else {
+			q += ` AND (from_agent = ? OR to_agent = ?)`
+		}
+		args = append(args, f.Party, f.Party)
+	}
 	if f.Project != "" {
 		q += ` AND project=?`
 		args = append(args, f.Project)

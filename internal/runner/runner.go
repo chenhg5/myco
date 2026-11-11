@@ -20,6 +20,9 @@ import (
 type Options struct {
 	// Self is this agent's name (used in prompts).
 	Self string
+	// Trace says how much of a task's run is sent to the hub for the
+	// sender's live view: TraceFull (default, ""), TraceSummary or TraceOff.
+	Trace string
 	// Concurrency is the max number of messages processed in parallel.
 	Concurrency int
 	// Timeout bounds one harness invocation.
@@ -82,6 +85,7 @@ type Runner struct {
 	// were still queued when the steer arrived.
 	tasks         map[string]*activeTask
 	pendingSteers map[string][]api.Message
+	stopEvery     time.Duration // stopCheckEvery; shorter in tests
 }
 
 // activeTask is a task between ack and completion in this runner.
@@ -93,6 +97,13 @@ type activeTask struct {
 
 // errSteered is the cancel cause of a run interrupted by a steer.
 var errSteered = errors.New("interrupted by a steer from the task's sender")
+
+// errStopped is the cancel cause of a run whose task was closed on the hub
+// while it ran (the sender stopped it).
+var errStopped = errors.New("the task was stopped")
+
+// stopCheckEvery is how often a running task's status is checked.
+const stopCheckEvery = 3 * time.Second
 
 // New builds a runner.
 func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder, opts Options, log *slog.Logger) *Runner {
@@ -133,7 +144,7 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
 		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{},
-		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}}
+		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery}
 }
 
 func loadState(path string) map[string]time.Time {
@@ -349,6 +360,17 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
 	prompt := build()
+	// The run's steps, for the sender's live view in the app (tasks only;
+	// never for end-to-end encrypted ones, whose content the hub must not see).
+	var tr *tracer
+	if up, ok := r.hub.(TraceUploader); ok && m.Type == "task" && !m.E2E && r.opts.Trace != TraceOff {
+		mode := r.opts.Trace
+		if mode == "" {
+			mode = TraceFull
+		}
+		tr = newTracer(ctx, up, m.ID, mode, log)
+		defer tr.close() // no-op once closed below
+	}
 	var (
 		res    harness.Result
 		runErr error
@@ -370,6 +392,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		if m.Type == "task" && !executor {
 			go r.watchSteers(watchCtx, log)
 		}
+		if m.Type == "task" {
+			go r.watchStop(watchCtx, m.ID, cancelCause)
+		}
 		req := harness.Request{
 			Prompt:    prompt,
 			ExtraDirs: extraDirs,
@@ -379,6 +404,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			Env: append(r.env(),
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
+		}
+		if tr != nil {
+			req.OnEvent = tr.add
 		}
 		if r.opts.Provider != nil && !executor {
 			if p := r.opts.Provider(); p != nil {
@@ -406,6 +434,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		r.mu.Unlock()
 		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
 	}
+	if tr != nil {
+		tr.close() // the whole trace is on the hub before the task finishes
+	}
 	r.mu.Lock()
 	if !errors.Is(runErr, harness.ErrSessionBusy) {
 		r.recordOwnRun(sessionID)
@@ -425,6 +456,10 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		return
 	}
 	if cur.Status != "acked" {
+		if cur.Status == "failed" && cur.Error == "stopped by the sender" { // domain.StoppedBySender
+			log.Info("task stopped by its sender")
+			return
+		}
 		log.Info("agent handled the message itself", "status", cur.Status, "harness_error", errString(runErr))
 		return
 	}
@@ -619,6 +654,25 @@ func (r *Runner) routeSteer(ctx context.Context, log *slog.Logger, m api.Message
 		return done("steer for a finished task; dropped")
 	}
 	return false
+}
+
+// watchStop ends the run when its task is closed on the hub meanwhile (the
+// sender stopped it from the app).
+func (r *Runner) watchStop(ctx context.Context, id string, cancel context.CancelCauseFunc) {
+	t := time.NewTicker(r.stopEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		cur, err := r.hub.GetMessage(ctx, id)
+		if err == nil && cur.Status == "failed" {
+			cancel(errStopped)
+			return
+		}
+	}
 }
 
 // watchSteers pulls steers while a task runs (the main loop is blocked on

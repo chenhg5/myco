@@ -48,6 +48,7 @@ type Server struct {
 	members  *app.MemberService
 	audit    *app.AuditService
 	projects *app.ProjectService
+	traces   *app.TraceService
 	namesMu  sync.Mutex
 	names    map[string]string // member id -> name (see ownerName)
 	namesAt  time.Time
@@ -136,6 +137,8 @@ func (s *Server) routes() {
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
+	m.HandleFunc("POST /v1/console/messages/{id}/stop", s.admin(s.consoleStop))
+	m.HandleFunc("GET /v1/console/messages/{id}/trace", s.admin(s.consoleTrace))
 	m.HandleFunc("POST /v1/console/messages/{id}/dismiss", s.admin(s.consoleDismiss))
 	m.HandleFunc("GET /v1/console/conversations", s.admin(s.consoleConversations))
 	m.HandleFunc("GET /v1/console/agents/{name}/peers", s.admin(s.consolePeers))
@@ -213,6 +216,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
+	m.HandleFunc("POST /v1/messages/{id}/trace", s.agent(s.postTrace))
+	m.HandleFunc("GET /v1/messages/{id}/trace", s.agent(s.agentTrace))
 	m.HandleFunc("POST /v1/messages/{id}/steer", s.agent(s.followUp("steer")))
 	m.HandleFunc("POST /v1/messages/{id}/fail", s.agent(s.fail))
 	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))
@@ -1575,6 +1580,17 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, messageDTO(m))
 }
 
+// consoleStop stops a running task sent from the console.
+func (s *Server) consoleStop(w http.ResponseWriter, r *http.Request) {
+	name, _ := s.consoleIdentity(r)
+	m, err := s.messages.StopFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, messageDTO(m))
+}
+
 // consoleDismiss closes an open message for its recipient (owner of the
 // recipient node, or someone who manages the hub), without a reply.
 func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
@@ -1696,8 +1712,10 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	me, _ := s.consoleIdentity(r)
 	items, more, err := s.messages.Recent(r.Context(), agents, app.RecentInput{Scope: sc, Mine: q.Get("scope") == "mine",
-		Label: q.Get("label"), Query: q.Get("q"), Project: q.Get("project"), ByPair: q.Get("group") == "pair", Before: before, Limit: limit})
+		Label: q.Get("label"), Query: q.Get("q"), Project: q.Get("project"), ByPair: q.Get("group") == "pair",
+		Me: app.ConsoleSender(me), Side: q.Get("side"), Before: before, Limit: limit})
 	if err != nil {
 		writeError(w, err)
 		return

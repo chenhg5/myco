@@ -277,17 +277,19 @@ sequenceDiagram
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi` | 预设：稳定 |
 | [Kiro](https://kiro.dev) | `kiro-acp` | `kiro` | 预设：稳定 |
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent` | `cursor` | 预设：实验性 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `gemini` | 预设：实验性 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP：实验性 |
 | [OpenCode](https://opencode.ai) | `opencode` | `opencode` | 预设：实验性 |
 
 - **原生适配**：专门写的适配器。它还会读会话记录，所以你正在用的会话 myco 不会去打断；并且会把 `runner.access`（`readonly` / `workspace` / `full`）翻译成该 CLI 自己的权限参数。
 - **预设**：内置的命令行模板。**实验性**表示按该 CLI 文档中的输出格式实现，但还没有经过长期的真实使用，欢迎反馈。
+- **ACP**：通过 [Agent Client Protocol](https://agentclientprotocol.com) 驱动，App 里能实时看到每一步（思考、工具调用和输出、改了哪些文件）。CLI 请求权限时由 myco 按 `runner.access` 回答；`myco` 命令总是允许。
 - **Kiro** 通过 `kiro-acp` 网关运行：用 `uv tool install kiro-acp-gateway` 安装，并保持 `kiro-cli` 已登录。
 
 其他接入方式：
 
 | | 怎么接 | 适合 |
 |---|---|---|
+| 任意 ACP agent | `--harness acp`，配上 `runner.binary` 和 `runner.args`（比如 `opencode` 加 `[acp]`） | 支持 ACP 的 CLI，带实时过程 |
 | 其他任意 CLI | `--harness template`：在配置里声明命令行和输出格式 | 没有预设的 CLI，不用改代码 |
 | 任意命令 | `--harness shell`：提示词从标准输入传入，标准输出就是回复 | 脚本、小工具 |
 | exec 节点 | `--harness exec`：把任务当 shell 命令执行（发送方和命令都有白名单） | 远程执行命令，像 ssh |

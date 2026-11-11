@@ -27,15 +27,17 @@ const CONSOLE = "@console:";
 
 type Scope = "all" | "mine";
 type StateFilter = "all" | "open" | "failed" | "done";
-interface ListFilters { scope: Scope; state: StateFilter; label: string }
+type Side = "me" | "others";
+interface ListFilters { scope: Scope; state: StateFilter; label: string; side: Side }
 
 const FILTERS_KEY = "myco-recent-filters";
 function loadFilters(): ListFilters {
   try {
     const f = JSON.parse(localStorage.getItem(FILTERS_KEY) || "{}");
-    return { scope: f.scope === "mine" ? "mine" : "all", state: ["open", "failed", "done"].includes(f.state) ? f.state : "all", label: typeof f.label === "string" ? f.label : "all" };
+    return { scope: f.scope === "mine" ? "mine" : "all", state: ["open", "failed", "done"].includes(f.state) ? f.state : "all", label: typeof f.label === "string" ? f.label : "all",
+      side: f.side === "others" ? "others" : "me" };
   } catch {
-    return { scope: "all", state: "all", label: "all" };
+    return { scope: "all", state: "all", label: "all", side: "me" };
   }
 }
 
@@ -119,7 +121,9 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const projectKey = project ? `${project.hubId}/${project.name}` : "";
-  const listKey = JSON.stringify([hub, filters.scope, filters.label, query, projectKey]);
+  // A project's conversations are mostly between nodes: no split there.
+  const side: Side | undefined = project ? undefined : filters.side;
+  const listKey = JSON.stringify([hub, filters.scope, filters.label, query, projectKey, side]);
   const restored = saved && saved.key === listKey ? saved : null;
   const [items, setItems] = useState<ConversationRow[]>(restored?.items ?? []);
   const [selected, setSelected] = useState(restored?.selected ?? "");
@@ -173,7 +177,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
 
   const fetchPage = async (h: Hub, before?: number) => {
     // One row per pair of parties: all their messages, every task, in one place.
-    const r = await appApi.recent(h.id, { scope: filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before, project: project?.name, group: "pair" });
+    const r = await appApi.recent(h.id, { scope: side !== "me" && filters.scope === "mine" ? "mine" : undefined, label: filters.label, q: query || undefined, before, project: project?.name, group: "pair", side });
     if (!r.fallback) return { items: r.items, more: r.more };
     if (project) return { items: [], more: false };
     // A hub from before the recent list: its conversations.
@@ -381,10 +385,18 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
     ];
   };
 
-  const matching = items.filter((r) => matchesState(r.item, filters.state));
+  // Yours: you (any of your devices) are one side. Hubs before v0.18.32
+  // ignore side, so it is checked here too.
+  const isMine = (r: ConversationRow) => {
+    const h = rows.find((x) => x.hub.id === r.hubId)?.hub;
+    const names = r.item.kind === "pair" ? [r.item.other || "", r.item.node || ""] : r.item.participants;
+    return names.some((n) => n.startsWith(CONSOLE) && isMe(n, h));
+  };
+  const onSide = (r: ConversationRow) => !side || (side === "me") === isMine(r);
+  const matching = items.filter((r) => matchesState(r.item, filters.state) && onSide(r));
   const firstLoad = loading && items.length === 0;
   const canLoadMore = Object.values(more).some(Boolean);
-  const filtered = filters.scope !== "all" || filters.state !== "all" || filters.label !== "all" || !!query || !!project;
+  const filtered = (side !== "me" && filters.scope !== "all") || filters.state !== "all" || filters.label !== "all" || !!query || !!project;
   const projectTitle = (hubId: string, name?: string) =>
     name ? projects?.find((x) => x.hubId === hubId && x.p.name === name)?.p.title || name : "";
   const projectOptions = (projects || []).filter((x) => (hub === "all" || x.hubId === hub) && (!x.p.archived || `${x.hubId}/${x.p.name}` === projectKey));
@@ -394,7 +406,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
   const shown = filtered
     ? matching
     : [
-        ...pins.filter(inView).map((p) => items.find((r) => rowKey(r) === rowKey(p)) ?? p).sort(byTime),
+        ...pins.filter(inView).filter(onSide).map((p) => items.find((r) => rowKey(r) === rowKey(p)) ?? p).sort(byTime),
         ...matching.filter((r) => !pinKeys.has(rowKey(r))),
       ];
   const set = (p: Partial<ListFilters>) => setFilters((f) => ({ ...f, ...p }));
@@ -435,6 +447,18 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
         </div>
       )}
 
+      {!project && (
+        <div className="seg seg-fill conv-side" role="tablist" aria-label={L("对话范围", "Which conversations")}>
+          <button type="button" role="tab" aria-selected={filters.side === "me"} className={cn("seg-btn", filters.side === "me" && "active")} onClick={() => set({ side: "me" })}>
+            {L("我的对话", "Mine")}
+          </button>
+          <button type="button" role="tab" aria-selected={filters.side === "others"} className={cn("seg-btn", filters.side === "others" && "active")} onClick={() => set({ side: "others" })}
+            title={L("节点之间、以及其他人和节点的往来", "Between nodes, and other people with nodes")}>
+            {L("其他往来", "Others")}
+          </button>
+        </div>
+      )}
+
       <div className="app-toolbar">
         <div className="app-search">
           <Search />
@@ -445,13 +469,15 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
             aria-label={L("搜索对话", "Search conversations")}
           />
         </div>
-        <span className="app-select-wrap">
-          <select className={cn("app-select", filters.scope !== "all" && "is-set")} value={filters.scope} onChange={(e) => set({ scope: e.target.value as Scope })} aria-label={L("范围", "Scope")}>
-            <option value="all">{L("全部可见", "Everything visible")}</option>
-            <option value="mine">{L("与我相关", "Involving me")}</option>
-          </select>
-          <ChevronDown />
-        </span>
+        {side !== "me" && (
+          <span className="app-select-wrap">
+            <select className={cn("app-select", filters.scope !== "all" && "is-set")} value={filters.scope} onChange={(e) => set({ scope: e.target.value as Scope })} aria-label={L("范围", "Scope")}>
+              <option value="all">{L("全部可见", "Everything visible")}</option>
+              <option value="mine">{L("我的节点", "My nodes")}</option>
+            </select>
+            <ChevronDown />
+          </span>
+        )}
         <span className="app-select-wrap">
           <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as StateFilter })} aria-label={L("按状态筛选", "Filter by status")}>
             <option value="all">{L("全部状态", "All statuses")}</option>
@@ -507,13 +533,15 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
       ) : shown.length === 0 ? (
         <div className="app-empty" style={{ margin: "8vh auto 0" }}>
           <div className="app-empty-icon"><IconChat /></div>
-          <h2>{filtered ? L("没有匹配的对话", "No matching conversations") : L("还没有对话", "No conversations yet")}</h2>
+          <h2>{filtered ? L("没有匹配的对话", "No matching conversations") : side === "others" ? L("还没有其他往来", "Nothing here yet") : L("还没有对话", "No conversations yet")}</h2>
           <p>
             {filtered
               ? L("换个搜索词或筛选条件试试。", "Try a different search or filter.")
-              : L("给节点发一条任务，或者让节点之间互相派活、调用 Shell，往来都会出现在这里。", "Give a node a task, or let nodes hand work to each other and run shell commands: it all shows up here.")}
+              : side === "others"
+                ? L("节点之间互相派活、调用 Shell，以及其他人和节点的往来，会出现在这里。平时不用看，排查问题时来翻。", "Nodes handing each other work, running shell commands, and other people's exchanges with nodes show up here. Look here when tracking something down.")
+                : L("给你的 agent 或 Shell 节点发一条消息，你们的对话会出现在这里，每个节点一段。", "Message one of your agents or shell nodes: each conversation shows up here, one per node.")}
           </p>
-          {!filtered && (
+          {!filtered && side !== "others" && (
             <div className="app-empty-actions">
               <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
                 <Plus />{L("新对话", "New conversation")}

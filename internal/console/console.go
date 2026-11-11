@@ -467,6 +467,16 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusCreated, res.Message)
 	}))
+	// The steps of a task's run (what the agent says, thinks and does).
+	m.HandleFunc("GET /app/hubs/{id}/messages/{mid}/trace", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		after, _ := strconv.Atoi(r.URL.Query().Get("after"))
+		res, err := c.ConsoleTrace(r.Context(), r.PathValue("mid"), after)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/steer", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.SteerRequest
 		if !decode(w, r, &in) {
@@ -478,6 +488,14 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusCreated, res)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/stop", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.ConsoleStop(r.Context(), r.PathValue("mid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages/{mid}/dismiss", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		res, err := c.ConsoleDismiss(r.Context(), r.PathValue("mid"))
@@ -523,7 +541,7 @@ func (b *Backend) Handler() http.Handler {
 			hubQuery = ""
 		}
 		project := q.Get("project")
-		res, err := c.RecentGrouped(r.Context(), q.Get("group"), project, q.Get("scope"), q.Get("label"), hubQuery, before, 0)
+		res, err := c.RecentGrouped(r.Context(), q.Get("group"), q.Get("side"), project, q.Get("scope"), q.Get("label"), hubQuery, before, 0)
 		var ce *client.Error
 		if errors.As(err, &ce) && (ce.Status == http.StatusNotFound || ce.Status == http.StatusMethodNotAllowed) {
 			// A hub from before the recent list: the app shows its

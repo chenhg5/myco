@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/harness"
+	"github.com/chenhg5/myco/internal/harness/acp"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
@@ -57,6 +58,7 @@ notes are never auto-answered. Logs go to stderr.`,
 			{Name: "rebind", Kind: Bool, Help: "Allow taking over an agent bound to another environment or harness"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity"},
 			{Name: "log-file", Kind: String, Help: "Append the log to this file instead of stderr (used by the Windows background runner)"},
+			{Name: "trace", Kind: Enum, Values: []string{"full", "summary", "off"}, Default: "full", Help: "How much of a task's run the sender sees live in the app: full (what the agent says, thinks and does), summary (which tools ran), off"},
 		},
 		Run: handler(func(e *env) error {
 			log := newLogger(e.in.String("log-level"))
@@ -71,6 +73,7 @@ notes are never auto-answered. Logs go to stderr.`,
 			shared := runnerShared{
 				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
+				trace: e.in.String("trace"),
 			}
 			e.watchVersions(log)
 			if !e.in.Bool("all") {
@@ -96,6 +99,7 @@ type runnerShared struct {
 	busyRetry  time.Duration
 	scope      runner.SessionScope
 	rebind     bool
+	trace      string
 	slots      chan struct{}
 	registry   *harness.Registry
 	// rescan, when set (runner --all), asks for an immediate profile scan,
@@ -291,11 +295,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if initial.warn != "" {
 		alog.Warn("provider: "+initial.warn, "provider", initial.name)
 	}
+	acp.ClientVersion = Version
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
-		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots,
+		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace,
 		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.

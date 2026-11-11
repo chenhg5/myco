@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,6 +24,11 @@ type Process struct {
 	CleanEnv bool
 	// MaxOutput caps captured stdout/stderr each (default 8 MiB).
 	MaxOutput int
+	// OnStdoutLine, when set, gets each line of stdout as it is written
+	// (without the newline), for live views; stdout is still captured.
+	OnStdoutLine func(line []byte)
+	// OnStderrLine is the same for stderr; the two may be called concurrently.
+	OnStderrLine func(line []byte)
 }
 
 // ProcessResult holds captured output.
@@ -39,8 +45,10 @@ type ProcessResult struct {
 
 const maxCapture = 8 << 20
 
-// Exec runs p, killing its whole process group when ctx is done.
-func Exec(ctx context.Context, p Process) (ProcessResult, error) {
+// Command prepares p (binary, arguments, directory, environment) in its own
+// process group: when ctx is done the group is interrupted, then killed.
+// Stdin, stdout and stderr are left for the caller.
+func Command(ctx context.Context, p Process) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, p.Binary, p.Args...)
 	cmd.Dir = p.Workdir
 	if p.CleanEnv {
@@ -48,6 +56,14 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 	} else {
 		cmd.Env = append(filterEnv(os.Environ(), p.UnsetEnv), p.Env...)
 	}
+	setProcessGroup(cmd)
+	cmd.WaitDelay = interruptGrace + 2*time.Second
+	return cmd
+}
+
+// Exec runs p, killing its whole process group when ctx is done.
+func Exec(ctx context.Context, p Process) (ProcessResult, error) {
+	cmd := Command(ctx, p)
 	cmd.Stdin = strings.NewReader(p.Stdin)
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxCapture, maxCapture
@@ -55,9 +71,22 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		stdout.max, stderr.max = p.MaxOutput, p.MaxOutput
 	}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	setProcessGroup(cmd)
-	cmd.WaitDelay = interruptGrace + 2*time.Second
+	var lines, errLines *lineTee
+	if p.OnStdoutLine != nil {
+		lines = &lineTee{next: &stdout, fn: p.OnStdoutLine}
+		cmd.Stdout = lines
+	}
+	if p.OnStderrLine != nil {
+		errLines = &lineTee{next: &stderr, fn: p.OnStderrLine}
+		cmd.Stderr = errLines
+	}
 	err := cmd.Run()
+	if lines != nil {
+		lines.flush()
+	}
+	if errLines != nil {
+		errLines.flush()
+	}
 	res := ProcessResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1, Truncated: stdout.cut || stderr.cut}
 	if cmd.ProcessState != nil {
 		res.ExitCode, res.Started = cmd.ProcessState.ExitCode(), true
@@ -69,6 +98,47 @@ func Exec(ctx context.Context, p Process) (ProcessResult, error) {
 		return res, fmt.Errorf("%s exited: %v: %s", p.Binary, err, tail(errorLines(res.Stderr), 2000))
 	}
 	return res, nil
+}
+
+// lineTee passes writes on and calls fn for every complete line.
+type lineTee struct {
+	next    io.Writer
+	fn      func([]byte)
+	partial []byte
+}
+
+// maxLine bounds a line held back while waiting for its newline.
+const maxLine = 4 << 20
+
+func (t *lineTee) Write(p []byte) (int, error) {
+	n, err := t.next.Write(p)
+	rest := p
+	for {
+		i := bytes.IndexByte(rest, '\n')
+		if i < 0 {
+			break
+		}
+		if len(t.partial) > 0 {
+			t.fn(append(t.partial, rest[:i]...))
+			t.partial = t.partial[:0]
+		} else {
+			t.fn(rest[:i])
+		}
+		rest = rest[i+1:]
+	}
+	if len(t.partial)+len(rest) <= maxLine {
+		t.partial = append(t.partial, rest...)
+	} else {
+		t.partial = t.partial[:0] // a runaway line: skip it
+	}
+	return n, err
+}
+
+func (t *lineTee) flush() {
+	if len(t.partial) > 0 {
+		t.fn(t.partial)
+		t.partial = nil
+	}
 }
 
 // limitedBuffer keeps at most max bytes. It deliberately does not embed
@@ -94,6 +164,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *limitedBuffer) String() string { return b.buf.String() }
+
+// Tail is the last n bytes of s, trimmed (for error messages).
+func Tail(s string, n int) string { return tail(s, n) }
 
 func tail(s string, n int) string {
 	s = strings.TrimSpace(s)

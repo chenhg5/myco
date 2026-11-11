@@ -39,6 +39,16 @@ export interface ProjectMember {
   /** its card, when the viewer may see the node */
   agent?: Agent;
 }
+/** One step of a task's run (GET …/messages/{id}/trace). */
+export interface TraceStep {
+  kind: "text" | "thinking" | "tool" | "tool_result" | "usage" | "error" | "output" | string;
+  /** output: stdout or stderr (a shell command's output as it runs) */
+  stream?: string;
+  text?: string; tool?: string; id?: string; input?: string; output?: string; failed?: boolean;
+  input_tokens?: number; output_tokens?: number; cost_usd?: number; duration_ms?: number;
+}
+export interface TraceEvent { seq: number; kind: string; data: TraceStep; at?: string }
+export interface Trace { message: string; status: string; events: TraceEvent[] }
 export interface ProjectDoc {
   name: string; size: number; updated_by?: string; updated_at: string; body?: string;
   /** set for uploaded files (from v0.18.29) */

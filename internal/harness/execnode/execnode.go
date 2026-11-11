@@ -148,10 +148,16 @@ func (n *node) Run(ctx context.Context, req harness.Request) (harness.Result, er
 func (n *node) run(ctx context.Context, cmdline string, req harness.Request) api.ExecResult {
 	runCtx, cancel := context.WithTimeout(ctx, n.timeout)
 	defer cancel()
-	out, err := harness.Exec(runCtx, harness.Process{
+	proc := harness.Process{
 		Binary: n.shell, Args: harness.ShellArgs(n.shell, cmdline), Workdir: req.Workdir,
 		Env: n.env(req.Env), CleanEnv: true, MaxOutput: n.spec.MaxOutput,
-	})
+	}
+	if req.OnEvent != nil {
+		// The output as it comes, for the live terminal in the app.
+		proc.OnStdoutLine = func(b []byte) { req.OnEvent(harness.Event{Kind: "output", Stream: "stdout", Text: string(b)}) }
+		proc.OnStderrLine = func(b []byte) { req.OnEvent(harness.Event{Kind: "output", Stream: "stderr", Text: string(b)}) }
+	}
+	out, err := harness.Exec(runCtx, proc)
 	res := api.ExecResult{ExitCode: out.ExitCode, Stdout: out.Stdout, Stderr: out.Stderr, Truncated: out.Truncated}
 	switch {
 	case runCtx.Err() != nil:
