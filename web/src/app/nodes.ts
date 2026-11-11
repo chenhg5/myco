@@ -248,7 +248,10 @@ export function nodeName(a: Agent, hub?: HubOverview): string {
   // when the node joined (host name, CLI, a random suffix) is replaced.
   if (!generatedName(a.name, machine?.hostname)) return a.name;
   const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
-  const parts = [a.runtime?.cli || a.binding.harness ? cliName(a) : "", machine?.name, folder === "~" ? "" : folder].filter(Boolean);
+  // An inbox node is some agent we cannot name by its CLI: call it Agent
+  // (how it receives is shown separately).
+  const what = isInbox(a) ? "Agent" : a.runtime?.cli || a.binding.harness ? cliName(a) : "";
+  const parts = [what, machine?.name, folder === "~" ? "" : folder].filter(Boolean);
   return parts.length >= 2 ? parts.join(" · ") : a.name;
 }
 

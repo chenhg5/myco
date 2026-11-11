@@ -447,8 +447,8 @@ async function runMatrix(browser, size, scheme) {
       const inbox = page.locator(".app-page .app-row:visible", { hasText: "会话内接收" }).first();
       await inbox.waitFor({ timeout: 20_000 });
       const rowText = compactText(await inbox.innerText());
-      if (!rowText.includes("Studio Mac") || !rowText.includes("myco")) {
-        throw new Error(`生成名的 inbox 节点应显示「会话内接收 · 机器 · 目录」，实际是「${rowText}」`);
+      if (!rowText.includes("Agent · Studio Mac") || !rowText.includes("myco")) {
+        throw new Error(`生成名的 inbox 节点应显示「Agent · 机器 · 目录」，实际是「${rowText}」`);
       }
       await inbox.click();
       const inspector = page.locator(".app-inspector");
