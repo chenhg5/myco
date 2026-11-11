@@ -30,16 +30,23 @@ const protocolVersion = 1
 var ClientVersion = "dev"
 
 // Spec describes how to start an ACP agent. Placeholders: {model} in
-// ModelArgs, {dir} in DirArgs.
+// ModelArgs, {dir} in DirArgs. The command line is Binary, Args, the model,
+// access and directory arguments, then Sub (a subcommand that must come
+// after the options, as in `cursor-agent --model m acp`).
 type Spec struct {
 	Binary string
 	Args   []string
-	// ModelArgs select a model, e.g. ["-m", "{model}"].
-	ModelArgs []string
-	// AccessArgs are extra arguments per access level (the CLI's own
-	// approval mode). Whatever the CLI still asks is answered by myco
-	// from the same access level (see allow).
+	Sub    []string
+	// ModelArgs select a model, e.g. ["-m", "{model}"]. ModelConfig instead
+	// names the session config option that holds the model (set with
+	// session/set_config_option once the session is open).
+	ModelArgs   []string
+	ModelConfig string
+	// AccessArgs and AccessEnv are extra arguments and KEY=VALUE variables
+	// per access level (the CLI's own approval settings). Whatever the CLI
+	// still asks is answered by myco from the same access level (policy).
 	AccessArgs map[harness.Access][]string
+	AccessEnv  map[harness.Access][]string
 	// DirArgs give the agent one more directory to read, per directory.
 	DirArgs []string
 	// VersionArgs print the version (default --version).
@@ -89,7 +96,7 @@ func (a *agent) Check(ctx context.Context) harness.Check {
 
 func (a *agent) args(req harness.Request) []string {
 	args := append([]string{}, a.spec.Args...)
-	if a.opts.Model != "" {
+	if a.opts.Model != "" && a.spec.ModelConfig == "" {
 		for _, s := range a.spec.ModelArgs {
 			args = append(args, strings.ReplaceAll(s, "{model}", a.opts.Model))
 		}
@@ -100,7 +107,7 @@ func (a *agent) args(req harness.Request) []string {
 			args = append(args, strings.ReplaceAll(s, "{dir}", d))
 		}
 	}
-	return args
+	return append(args, a.spec.Sub...)
 }
 
 // How long the agent gets to start, and to wrap up after a cancel.
@@ -126,7 +133,8 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	// over the protocol first, so the agent can save its session.
 	procCtx, kill := context.WithCancel(context.WithoutCancel(ctx))
 	defer kill()
-	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: req.Env})
+	env := append(append([]string{}, a.spec.AccessEnv[a.opts.Access]...), req.Env...)
+	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: env})
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return harness.Result{}, err
@@ -158,7 +166,8 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}()
 
 	st := newStream(req.OnEvent, cwd)
-	pol := policy{access: a.opts.Access, dirs: append([]string{cwd}, req.ExtraDirs...)}
+	var refused []string // read after the turn (the reader is done by then)
+	pol := policy{access: a.opts.Access, dirs: append([]string{cwd}, req.ExtraDirs...), refused: &refused}
 	c.onNotify = func(method string, params json.RawMessage) {
 		if method != "session/update" {
 			return
@@ -172,6 +181,9 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	c.onRequest = func(method string, params json.RawMessage) (any, *rpcError) {
 		if method == "session/request_permission" {
+			var p permissionRequest
+			_ = json.Unmarshal(params, &p)
+			st.asked(p.ToolCall) // shown before it runs, even if refused
 			return pol.answer(params), nil
 		}
 		// No fs/* or terminal/*: myco does not offer them (the agent uses
@@ -245,6 +257,12 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		}
 		sessionID = ns.SessionID
 	}
+	if a.opts.Model != "" && a.spec.ModelConfig != "" {
+		err := c.call(startCtx, "session/set_config_option", map[string]any{"sessionId": sessionID, "configId": a.spec.ModelConfig, "value": a.opts.Model}, nil)
+		if err != nil {
+			return fail(fmt.Errorf("model %s: %w", a.opts.Model, err))
+		}
+	}
 	cancelStart()
 	res := harness.Result{SessionID: sessionID}
 
@@ -282,6 +300,11 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	st.finish(&ans.resp)
 	res.Output = st.output()
+	if res.Output == "" && len(refused) > 0 {
+		// Some agents end the turn when a call is refused: say why.
+		res.Output = fmt.Sprintf("Stopped: myco refused %s. This node's access (%s) does not allow it; give the node more access to let it run.",
+			strings.Join(refused, ", "), accessName(a.opts.Access))
+	}
 	switch ans.resp.StopReason {
 	case "refusal":
 		return res, errors.New("the agent refused to continue")
@@ -368,4 +391,11 @@ func (t *tailBuffer) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return string(t.b)
+}
+
+func accessName(a harness.Access) string {
+	if a == harness.AccessDefault {
+		return "default: read only"
+	}
+	return string(a)
 }

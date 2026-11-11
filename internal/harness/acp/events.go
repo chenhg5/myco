@@ -56,13 +56,51 @@ type toolContent struct {
 type promptResponse struct {
 	StopReason string `json:"stopReason"`
 	Usage      *struct {
-		InputTokens  int64 `json:"inputTokens"`
-		OutputTokens int64 `json:"outputTokens"`
+		InputTokens      int64 `json:"inputTokens"`
+		OutputTokens     int64 `json:"outputTokens"`
+		TotalTokens      int64 `json:"totalTokens"`
+		CachedReadTokens int64 `json:"cachedReadTokens"`
 	} `json:"usage"`
 }
 
+// toolState is what is known of a tool call so far: agents announce a call
+// before they know much (opencode titles it "bash" until it runs) and fill
+// it in with updates.
+func (r *promptResponse) usage() *struct {
+	InputTokens      int64 `json:"inputTokens"`
+	OutputTokens     int64 `json:"outputTokens"`
+	TotalTokens      int64 `json:"totalTokens"`
+	CachedReadTokens int64 `json:"cachedReadTokens"`
+} {
+	if r == nil {
+		return nil
+	}
+	return r.Usage
+}
+
 type toolState struct {
-	done bool
+	call    update
+	emitted bool
+	done    bool
+}
+
+// merge takes the fields an update sets.
+func (t *toolState) merge(u update) {
+	if u.Title != "" {
+		t.call.Title = u.Title
+	}
+	if u.Kind != "" {
+		t.call.Kind = u.Kind
+	}
+	if u.Name != "" {
+		t.call.Name = u.Name
+	}
+	if len(u.Locations) > 0 {
+		t.call.Locations = u.Locations
+	}
+	if len(u.RawInput) > 0 && string(u.RawInput) != "null" && string(u.RawInput) != "{}" {
+		t.call.RawInput = u.RawInput
+	}
 }
 
 // stream turns a prompt turn's updates into the run's steps and its answer.
@@ -157,21 +195,55 @@ func (s *stream) flushThought() {
 	s.thought.Reset()
 }
 
+// tool follows a call: it is shown once it runs, asks for permission or
+// ends (by then the agent has said what it does), then its result.
 func (s *stream) tool(u update) {
 	if u.ToolCallID == "" {
 		return
 	}
-	st := s.tools[u.ToolCallID]
-	if st == nil {
-		st = &toolState{}
-		s.tools[u.ToolCallID] = st
-		s.send(harness.Event{Kind: "tool", Tool: toolName(u), ID: u.ToolCallID, Input: s.toolInput(u)})
+	st := s.state(u.ToolCallID)
+	st.merge(u)
+	if u.Status == "pending" || u.Status == "" && !st.emitted && u.SessionUpdate == "tool_call" {
+		return
 	}
+	s.show(u.ToolCallID, st)
 	if st.done || (u.Status != "completed" && u.Status != "failed") {
 		return
 	}
 	st.done = true
 	s.send(harness.Event{Kind: "tool_result", ID: u.ToolCallID, Output: toolOutput(u), Failed: u.Status == "failed"})
+}
+
+func (s *stream) state(id string) *toolState {
+	st := s.tools[id]
+	if st == nil {
+		st = &toolState{}
+		s.tools[id] = st
+	}
+	return st
+}
+
+func (s *stream) show(id string, st *toolState) {
+	if st.emitted {
+		return
+	}
+	st.emitted = true
+	s.send(harness.Event{Kind: "tool", Tool: toolName(st.call), ID: id, Input: s.toolInput(st.call)})
+}
+
+// asked: the agent asks permission for a call, so it is about to run it
+// (or be refused).
+func (s *stream) asked(u update) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.on || u.ToolCallID == "" {
+		return
+	}
+	s.flushText()
+	s.flushThought()
+	st := s.state(u.ToolCallID)
+	st.merge(u)
+	s.show(u.ToolCallID, st)
 }
 
 // toolName maps ACP's tool kinds to the names the app knows (Claude Code's).
@@ -199,6 +271,11 @@ func toolName(u update) string {
 // toolInput: the command for a shell call, the file for file tools (relative
 // to the working directory), else the agent's own title.
 func (s *stream) toolInput(u update) string {
+	if u.Kind == "execute" {
+		if c := command(u); c != "" {
+			return c
+		}
+	}
 	if u.Kind != "execute" && len(u.Locations) > 0 && u.Locations[0].Path != "" {
 		p := u.Locations[0].Path
 		if s.workdir != "" {
@@ -276,6 +353,9 @@ func (s *stream) finish(resp *promptResponse) {
 	defer s.mu.Unlock()
 	s.flushThought()
 	s.flushText()
+	for id, st := range s.tools {
+		s.show(id, st) // announced but never run (the turn ended first)
+	}
 	if s.plan != nil {
 		var b strings.Builder
 		for _, e := range s.plan {
@@ -294,8 +374,13 @@ func (s *stream) finish(resp *promptResponse) {
 	if !s.start.IsZero() {
 		ev.DurationMS = time.Since(s.start).Milliseconds()
 	}
-	if resp != nil && resp.Usage != nil {
-		ev.InputTokens, ev.OutputTokens = resp.Usage.InputTokens, resp.Usage.OutputTokens
+	if u := resp.usage(); u != nil {
+		// Input counts cached tokens too, as Claude Code's does: the
+		// total less the output where the agent gives a total.
+		ev.InputTokens, ev.OutputTokens = u.InputTokens+u.CachedReadTokens, u.OutputTokens
+		if u.TotalTokens > u.OutputTokens {
+			ev.InputTokens = u.TotalTokens - u.OutputTokens
+		}
 	}
 	s.send(ev)
 }

@@ -32,6 +32,7 @@ func fakeAgent(scenario string) {
 	defer logf.Close()
 	note := func(format string, a ...any) { fmt.Fprintf(logf, format+"\n", a...) }
 	note("args %s", strings.Join(os.Args[1:], " "))
+	note("access-env %s", os.Getenv("FAKE_ACCESS"))
 	out := json.NewEncoder(os.Stdout)
 	next := 1000
 	send := func(v map[string]any) { v["jsonrpc"] = "2.0"; _ = out.Encode(v) }
@@ -110,6 +111,11 @@ func fakeAgent(scenario string) {
 					}
 				}
 				send(map[string]any{"id": id, "result": map[string]any{"stopReason": "cancelled"}})
+			case "refuse":
+				// Ends the turn when refused, without a word (as opencode does).
+				run := map[string]any{"toolCallId": "r1", "title": "rm -rf build", "kind": "execute", "status": "pending", "rawInput": map[string]string{"command": "rm -rf build"}}
+				note("rm %s", ask(sid, run))
+				send(map[string]any{"id": id, "result": map[string]any{"stopReason": "end_turn"}})
 			case "apierror":
 				send(map[string]any{"id": id, "error": map[string]any{"code": 400, "message": `{"error":{"message":"{\n \"error\": {\"code\": 400, \"message\": \"API key not valid.\"}}"}}`}})
 			default:
@@ -118,7 +124,9 @@ func fakeAgent(scenario string) {
 				chunk(sid, "agent_message_chunk", "Let me ")
 				chunk(sid, "agent_message_chunk", "look.")
 				update(sid, map[string]any{"sessionUpdate": "plan", "entries": []map[string]string{{"content": "read", "status": "in_progress"}, {"content": "fix", "status": "pending"}}})
-				update(sid, map[string]any{"sessionUpdate": "tool_call", "toolCallId": "t1", "title": "ls -la", "kind": "execute", "status": "in_progress"})
+				// Announced vaguely, filled in when it runs (as opencode does).
+				update(sid, map[string]any{"sessionUpdate": "tool_call", "toolCallId": "t1", "title": "bash", "kind": "execute", "status": "pending", "rawInput": map[string]any{}})
+				update(sid, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "t1", "title": "list files", "status": "in_progress", "rawInput": map[string]any{"command": "ls -la"}})
 				update(sid, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed", "content": []map[string]any{{"type": "content", "content": map[string]string{"type": "text", "text": "a.go\nb.go"}}}})
 				edit := map[string]any{"toolCallId": "t2", "title": "Edit a.go", "kind": "edit", "status": "pending", "locations": []map[string]string{{"path": os.Getenv("MYCO_FAKE_EDIT")}}}
 				update(sid, map[string]any{"sessionUpdate": "tool_call", "toolCallId": "t2", "title": "Edit a.go", "kind": "edit", "status": "pending", "locations": edit["locations"]})
@@ -133,8 +141,15 @@ func fakeAgent(scenario string) {
 				update(sid, map[string]any{"sessionUpdate": "usage_update", "used": 100, "size": 1000, "cost": map[string]any{"amount": 0.02, "currency": "USD"}})
 				chunk(sid, "agent_message_chunk", "Fixed: x is ")
 				chunk(sid, "agent_message_chunk", "2 now.")
-				send(map[string]any{"id": id, "result": map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 1200, "outputTokens": 80}}})
+				send(map[string]any{"id": id, "result": map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 200, "cachedReadTokens": 1000, "outputTokens": 80, "totalTokens": 1280}}})
 			}
+		case "session/set_config_option":
+			note("config %v=%v", params["configId"], params["value"])
+			if params["value"] == "nope" {
+				send(map[string]any{"id": id, "error": map[string]any{"code": -32602, "message": "unknown model nope"}})
+				continue
+			}
+			send(map[string]any{"id": id, "result": map[string]any{"configOptions": []any{}}})
 		case "session/cancel":
 		default:
 			if id != nil {
@@ -230,6 +245,7 @@ func TestRunMapsStepsAndAnswersPermissions(t *testing.T) {
 		"tool_result||t2||a.go/- x := 1/+ x := 2|false",
 		"tool|Bash|t3|rm -rf build||false",
 		"tool_result||t3||canceled by the user|true",
+		"tool|Bash|t4|myco message progress --body \"half done (1/2)\"||false", // asked: shown though it never ran
 		"text|||Fixed: x is 2 now.||false",
 		"tool_result||acp-plan||[~] read/[ ] fix|false",
 		"usage|||||false",
@@ -240,6 +256,28 @@ func TestRunMapsStepsAndAnswersPermissions(t *testing.T) {
 	last := f.events[len(f.events)-1]
 	if last.InputTokens != 1200 || last.OutputTokens != 80 || last.CostUSD != 0.02 {
 		t.Fatalf("usage: %+v", last)
+	}
+}
+
+func TestRunSubcommandModelConfigAndAccessEnv(t *testing.T) {
+	t.Setenv("MYCO_FAKE_EDIT", "/elsewhere/a.go")
+	spec := Spec{
+		Sub: []string{"acp"}, ModelConfig: "model", DirArgs: []string{"--add-dir", "{dir}"},
+		AccessEnv: map[harness.Access][]string{harness.AccessWorkspace: {"FAKE_ACCESS=ask"}},
+	}
+	f := newFake(t, "ok", harness.Options{Model: "zen/big", Access: harness.AccessWorkspace}, spec)
+	if _, err := f.run(context.Background(), harness.Request{Prompt: "p", ExtraDirs: []string{"/att"}, Workdir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	seen := f.seen(t)
+	for _, want := range []string{"args --add-dir /att acp\n", "access-env ask", "config model=zen/big"} {
+		if !strings.Contains(seen, want) {
+			t.Errorf("want %q in:\n%s", want, seen)
+		}
+	}
+	f = newFake(t, "ok", harness.Options{Model: "nope"}, spec)
+	if _, err := f.run(context.Background(), harness.Request{Prompt: "p"}); err == nil || !strings.Contains(err.Error(), "unknown model nope") {
+		t.Fatalf("a model the agent does not know: %v", err)
 	}
 }
 
@@ -307,6 +345,17 @@ func TestRunExplainsFailures(t *testing.T) {
 		if sc != "exit" && !strings.Contains(f.steps(), "error|") {
 			t.Errorf("%s: no error step: %s", sc, f.steps())
 		}
+	}
+}
+
+func TestRefusedCallWithoutAnswerIsExplained(t *testing.T) {
+	f := newFake(t, "refuse", harness.Options{Access: harness.AccessWorkspace}, Spec{})
+	res, err := f.run(context.Background(), harness.Request{Prompt: "clean up"})
+	if err != nil || !strings.Contains(res.Output, "myco refused `rm -rf build`") || !strings.Contains(res.Output, "(workspace)") {
+		t.Fatalf("%v %q", err, res.Output)
+	}
+	if !strings.Contains(f.steps(), "tool|Bash|r1|rm -rf build") {
+		t.Fatalf("the refused call is a step:\n%s", f.steps())
 	}
 }
 
