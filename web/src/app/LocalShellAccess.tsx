@@ -73,7 +73,7 @@ export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "
             <span>{risk}{" "}{L("这台电脑还没有允许。", "This computer does not allow it yet.")}</span>
             <div style={{ marginTop: 8 }}>
               <button type="button" className="app-btn app-btn-small" onClick={() => setConfirming(true)}>
-                {L("在这台电脑上允许…", "Allow on this computer…")}
+                {L("在这台电脑上允许", "Allow on this computer")}
               </button>
             </div>
           </>

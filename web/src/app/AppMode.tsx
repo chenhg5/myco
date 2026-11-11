@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, RefreshCw, WifiOff,
+  Plus, WifiOff,
 } from "lucide-react";
 import "@/app/app.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
@@ -25,7 +25,8 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { LogoSymbol, LogoWordmark } from "@/components/brand";
-import { IconChat, IconExpandRight, IconMachine, IconNodes, IconProject, IconSidebar, type IconType } from "@/components/icons";
+import { IconChat, IconExpandRight, IconMachine, IconNewChat, IconNodes, IconProject, IconSidebar, type IconType } from "@/components/icons";
+import { useContextMenu } from "@/app/ContextMenu";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -343,12 +344,19 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   // Settings live in the hub menu at the bottom of the sidebar, and on
-  // ⌘, / Ctrl+, as in other apps.
+  // ⌘, / Ctrl+, as in other apps. The pages refresh by themselves; ⌘R /
+  // Ctrl+R fetches right now (and keeps the window from reloading).
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "," && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.key === ",") {
         e.preventDefault();
         setPage("settings");
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        void refreshRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -376,9 +384,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     .filter((x) => !x.p.archived || (project && project.hubId === x.hubId && project.name === x.p.name));
   const currentProject = project && projects?.find((x) => x.hubId === project.hubId && x.p.name === project.name);
   const meta = page === "project"
-    ? { group: PAGE_META.project.group, label: currentProject?.p.title || project?.name || "" }
+    // The project's own name is the page's heading, just below.
+    ? { group: PAGE_META.project.group, label: PAGE_META.project.group }
     : PAGE_META[page];
   const isMac = info?.shell === "mac";
+  const navMenu = useContextMenu();
 
   // macOS: double-clicking the top bar zooms the window (and again restores
   // it), as in a title bar. The window runtime does this itself only when
@@ -455,6 +465,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     className={cn("app-nav-item", active && "active", x.p.archived && "muted")}
                     aria-current={active ? "page" : undefined}
                     onClick={() => openProject({ hubId: x.hubId, name: x.p.name })}
+                    onContextMenu={(e) => navMenu.open(e, [
+                      { label: L("打开项目", "Open project"), icon: IconProject, onSelect: () => openProject({ hubId: x.hubId, name: x.p.name }) },
+                      { label: L("发任务", "New task"), icon: IconNewChat, disabled: x.p.archived, onSelect: () => setNewConv({ hubId: x.hubId, project: x.p.name }) },
+                    ])}
                     title={x.p.goal || x.p.title}
                   >
                     <IconProject />
@@ -507,16 +521,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onSettings={() => setPage("settings")}
             />
           )}
-          <nav className="app-crumbs" aria-label={L("位置", "Location")}>
-            <span>{meta.group}</span>
-            <span className="sep">/</span>
-            <span className="cur">{meta.label}</span>
-          </nav>
-          <div className="app-crumb-actions">
-            <button type="button" className="app-btn app-btn-plain" onClick={() => void refresh()} aria-label={L("刷新", "Refresh")} title={L("刷新", "Refresh")}>
-              <RefreshCw className={cn(loading && "animate-spin")} />
-            </button>
-          </div>
+          <h1 className="app-title">{meta.label}</h1>
         </header>
 
         {page === "conversations" && wide ? (
@@ -541,6 +546,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onCollapse={() => setListCollapsed(true)}
                 selectedKey={conv ? convKey(conv) : ""}
                 onOpen={(r) => openConversationRow(r)}
+                onInspect={(hubId, name) => setInspect({ hubId, name })}
                 onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
                 projects={projects}
                 project={convProject}
@@ -602,6 +608,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 rows={rows}
                 now={now}
                 onOpen={(r) => openConversationRow(r)}
+                onInspect={(hubId, name) => setInspect({ hubId, name })}
                 onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
                 projects={projects}
                 project={convProject}
@@ -647,6 +654,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
                 onAdd={() => setSpawnTarget({})}
                 onCleanup={() => setCleanupOpen(true)}
+                onMessage={(r) => setNewConv({ hubId: r.hub.id, agent: r.st.agent.name })}
               />
             )}
 
@@ -658,6 +666,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 groupByHub={filters.hub === "all"}
                 onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
                 onAdd={() => setAddMachineOpen(true)}
+                onSpawn={(hubId, machineId) => setSpawnTarget({ hubId, machineId })}
               />
             )}
 
@@ -682,6 +691,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         )}
       </div>
 
+      {navMenu.element}
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <CleanupDialog
         open={cleanupOpen}

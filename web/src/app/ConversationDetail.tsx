@@ -8,7 +8,7 @@ import { MessageContent } from "@/app/Markdown";
 import { Terminal } from "@/app/Terminal";
 import { ErrorText } from "@/app/dialogs";
 import { bytes, cn, timeAgo } from "@/lib/utils";
-import { L, lang, locale } from "@/lib/i18n";
+import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
 
 export interface ConversationTarget {
@@ -372,7 +372,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {model && <> · <span className="mono">{model}</span></>}
           </p>
         </div>
-        {!observed && <span className="conv-head-state">
+        {!observed && <span
+          className="conv-head-state"
+          title={messages && messages.length > 0 ? L(`更新于 ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`, `Updated ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`) : undefined}
+        >
           <span className={cn("dot", state.dot)} />
           {messages === null ? L("加载中", "Loading") : state.label}
         </span>}
@@ -464,6 +467,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               className={cn("conv-steer-btn", steerMode && "active")}
               aria-pressed={steerMode}
               onClick={() => setSteerMode((s) => !s)}
+              title={L("打断当前处理，让 agent 按你新的要求继续", "Interrupt the current work so the agent continues with your new instructions")}
             >
               {L("修正", "Correct")}
             </button>
@@ -487,9 +491,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {/* left: room for attachments and voice input later */}
             <div className="conv-compose-tools" />
             <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
-            {messages && messages.length > 0 && (
-              <span className="conv-compose-ago">{lang() === "zh" ? <>更新于 {timeAgo(messages[messages.length - 1]?.updated_at, now)}</> : <>Updated {timeAgo(messages[messages.length - 1]?.updated_at, now)}</>}</span>
-            )}
             <button
               type="button"
               className="conv-send"

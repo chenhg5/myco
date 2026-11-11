@@ -774,7 +774,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                     ))}
                     {mayManage && joinable.length > 0 && (
                       <button type="button" className="app-kv-link" onClick={() => { setJoinChoice(joinable[0].name); openAction("projects"); }}>
-                        {L("加入项目…", "Join…")}
+                        {L("加入项目", "Join")}
                       </button>
                     )}
                   </span>
@@ -917,14 +917,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div className="app-empty-note">{L(`这是 ${ag.owner || L("别人", "someone else")} 的节点，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, `This node belongs to ${ag.owner || "someone else"}; only they or an admin can change it.`)}</div>
               )}
               <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
-                {L("修改显示名和描述…", "Edit display name and description…")}<span className="app-chev">›</span>
+                {L("修改显示名和描述", "Edit display name and description")}<span className="app-chev">›</span>
               </button>
               <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
-                {L("允许谁派任务…", "Who can give tasks…")}<span className="app-chev">›</span>
+                {L("允许谁派任务", "Who can give tasks")}<span className="app-chev">›</span>
               </button>
               {forkable && (
                 <button type="button" className="app-action-row" onClick={openCopy}>
-                  {L("复制一个…", "Make a copy…")}<span className="app-chev">›</span>
+                  {L("复制一个", "Make a copy")}<span className="app-chev">›</span>
                 </button>
               )}
               <button type="button" className="app-action-row danger" onClick={() => openAction("kick")} disabled={!mayManage}>

@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Pin, PinOff, Plus, Search } from "lucide-react";
+import { ChevronDown, Copy, Info, Pin, PinOff, Plus, Search } from "lucide-react";
 import { IconChat, IconCollapseLeft, IconExchange, IconNewChat, IconPrompt } from "@/components/icons";
+import { copyText } from "@/app/copy";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
@@ -91,7 +93,7 @@ function matchesState(it: RecentItem, f: StateFilter): boolean {
   return it.state === f;
 }
 
-export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selectedKey, compact, onCollapse, projects, project, onProject }: {
+export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspect, selectedKey, compact, onCollapse, projects, project, onProject }: {
   hubs: Hub[];
   /** Projects of every hub, for the project filter. */
   projects?: { hubId: string; p: Project }[] | null;
@@ -104,6 +106,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   now: number;
   onOpen: (row: ConversationRow) => void;
   onNew: () => void;
+  /** Opens a node's details (from a row's right-click menu). */
+  onInspect?: (hubId: string, name: string) => void;
   /** Split view: the conversation open on the right (its row key). */
   selectedKey?: string;
   /** Split view: the list is a narrow column. */
@@ -356,24 +360,26 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
   }, [items]);
 
   // Right-click menu on a row.
-  const [menu, setMenu] = useState<{ x: number; y: number; row: ConversationRow } | null>(null);
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("blur", close);
-    window.addEventListener("resize", close);
-    document.addEventListener("scroll", close, true);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", close);
-      window.removeEventListener("resize", close);
-      document.removeEventListener("scroll", close, true);
-    };
-  }, [menu]);
+  const menu = useContextMenu();
+  const rowMenu = (row: ConversationRow): MenuItem[] => {
+    const it = row.item;
+    // The node you talk to in this conversation (as when it is opened).
+    const node = it.kind === "pair"
+      ? (it.other?.startsWith(CONSOLE) ? it.node : it.other) || ""
+      : it.participants.find((p) => !p.startsWith("@")) || "";
+    const pinned = pinKeys.has(rowKey(row));
+    return [
+      { label: L("打开", "Open"), icon: IconChat, onSelect: () => open(row) },
+      pinned
+        ? { label: L("取消置顶", "Unpin"), icon: PinOff, onSelect: () => togglePin(row) }
+        : { label: L("置顶", "Pin to top"), icon: Pin, onSelect: () => togglePin(row) },
+      ...(node ? [
+        "sep" as const,
+        ...(onInspect ? [{ label: L("查看节点详情", "Node details"), icon: Info, onSelect: () => onInspect(row.hubId, node) }] : []),
+        { label: L("复制节点名", "Copy node name"), icon: Copy, onSelect: () => void copyText(node) },
+      ] : []),
+    ];
+  };
 
   const matching = items.filter((r) => matchesState(r.item, filters.state));
   const firstLoad = loading && items.length === 0;
@@ -530,10 +536,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
                 type="button"
                 className={cn("conv-row", pinned && !filtered && "is-pinned", (selectedKey ?? selected) === key && "is-selected")}
                 onClick={() => open(row)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: Math.min(e.clientX, window.innerWidth - 168), y: Math.min(e.clientY, window.innerHeight - 52), row });
-                }}
+                onContextMenu={(e) => menu.open(e, rowMenu(row))}
                 title={tag.label || undefined}
               >
                 <span className={cn("conv-row-icon", shell && "is-shell")}>
@@ -564,19 +567,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
         </div>
       )}
 
-      {menu && (
-        <div
-          className="conv-menu"
-          role="menu"
-          style={{ left: menu.x, top: menu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <button type="button" role="menuitem" className="conv-menu-item" autoFocus onClick={() => { togglePin(menu.row); setMenu(null); }}>
-            {pinKeys.has(rowKey(menu.row)) ? <><PinOff />{L("取消置顶", "Unpin")}</> : <><Pin />{L("置顶", "Pin to top")}</>}
-          </button>
-        </div>
-      )}
+      {menu.element}
     </div>
   );
 }

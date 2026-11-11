@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
-import { IconChat, IconExchange, IconNewChat } from "@/components/icons";
+import { Check, ChevronDown, Download, ExternalLink, File as FileIcon, FileImage, FileText, Lock, MoreHorizontal, Pencil, Plus, Upload, Users } from "lucide-react";
+import { IconChat, IconExchange, IconNewChat, IconNodes } from "@/components/icons";
+import { useContextMenu } from "@/app/ContextMenu";
 import { appApi, isOldHub, type RecentItem } from "@/appapi";
 import type { ConversationRow } from "@/app/ConversationsPage";
 import { summarize } from "@/app/summary";
@@ -125,6 +126,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
     }
   };
   const open = (d: Dialog) => { setActionError(null); setDialog(d); };
+  const addMenu = useContextMenu();
 
   const hubRows = useMemo(() => rows.filter((r) => r.hub.id === target.hubId), [rows, target.hubId]);
   const rowOf = (name: string) => hubRows.find((r) => r.st.agent.name === name);
@@ -211,8 +213,20 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         <div className="app-group-title">
           <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
           <span className="app-group-actions">
-            <button type="button" className="app-group-action" onClick={() => open({ kind: "add" })} disabled={p.archived}><Plus />{L("添加节点", "Add nodes")}</button>
-            <button type="button" className="app-group-action" onClick={onNewNode} disabled={p.archived}>{L("新建节点", "New node")}</button>
+            <button
+              type="button"
+              className="app-group-action"
+              aria-haspopup="menu"
+              disabled={p.archived}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => addMenu.openUnder(e.currentTarget, [
+                { label: L("加入已有的节点", "Add existing nodes"), icon: IconNodes, onSelect: () => open({ kind: "add" }) },
+                { label: L("新建一个节点", "Start a new node"), icon: Plus, onSelect: onNewNode },
+              ])}
+            >
+              <Plus />{L("添加节点", "Add nodes")}<ChevronDown className="app-group-action-caret" />
+            </button>
+            {addMenu.element}
           </span>
         </div>
         <div className="app-list">

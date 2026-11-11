@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Link2, RefreshCw,
+  AlertTriangle, Check, ChevronDown, Link2, RefreshCw,
 } from "lucide-react";
 import { IconAsterisk, IconCode } from "@/components/icons";
 import {
@@ -619,39 +619,7 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               </>
             )}
 
-            <label className="app-field">
-              <span className="app-field-label">{L("名称（可选）", "Name (optional)")}</span>
-              <input
-                className="app-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={L("留空自动命名", "Leave empty to name it automatically")}
-                disabled={busy}
-              />
-            </label>
-
-            <label className="app-field">
-              <span className="app-field-label">{L("描述（可选）", "Description (optional)")}</span>
-              <input
-                className="app-input"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={busy}
-              />
-            </label>
-
             {!isShell(cli) && (<>
-            <label className="app-field">
-              <span className="app-field-label">{L("模型（可选）", "Model (optional)")}</span>
-              <input
-                className="app-input mono"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder={L("留空用 CLI 默认", "Leave empty for the CLI default")}
-                disabled={busy}
-              />
-            </label>
-
             <div className="app-field">
               <span className="app-field-label">{L("权限", "Access")}</span>
               <div className="seg seg-fill" role="tablist" aria-label={L("权限", "Access")}>
@@ -673,6 +641,48 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
             {access === "full" && <LocalShellAccess machine={machine} what="full" />}
             </>)}
 
+            {/* Everything optional lives here, so the form asks only for what it needs. */}
+            <details className="app-advanced">
+              <summary>
+                {isShell(cli) ? L("更多选项：名称、描述", "More options: name, description") : L("更多选项：名称、描述、模型", "More options: name, description, model")}
+                <ChevronDown />
+              </summary>
+              <div className="app-advanced-body">
+                <label className="app-field">
+                  <span className="app-field-label">{L("名称（可选）", "Name (optional)")}</span>
+                  <input
+                    className="app-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={L("留空自动命名", "Leave empty to name it automatically")}
+                    disabled={busy}
+                  />
+                </label>
+
+                <label className="app-field">
+                  <span className="app-field-label">{L("描述（可选）", "Description (optional)")}</span>
+                  <input
+                    className="app-input"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+                {!isShell(cli) && (
+                  <label className="app-field">
+                    <span className="app-field-label">{L("模型（可选）", "Model (optional)")}</span>
+                    <input
+                      className="app-input mono"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder={L("留空用 CLI 默认", "Leave empty for the CLI default")}
+                      disabled={busy}
+                    />
+                  </label>
+                )}
+              </div>
+            </details>
+
             <ErrorText error={error} />
             {busy && (
               <div className="app-progress">
@@ -684,6 +694,11 @@ export function AddNodeDialog({ target, hubs, hubsOv, defaultHubId, onClose, onS
               </div>
             )}
             <div className="app-modal-actions">
+              {!busy && machineId && (!dir.trim() || (isShell(cli) && senders.length === 0)) && (
+                <span className="app-modal-hint">
+                  {!dir.trim() ? L("先填写目录。", "Enter a folder first.") : L("先选谁能发命令。", "Choose who can send commands first.")}
+                </span>
+              )}
               <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
               <button
                 type="submit"

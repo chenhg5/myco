@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { ChevronDown } from "lucide-react";
@@ -87,7 +87,26 @@ function onCopyClick(e: React.MouseEvent<HTMLDivElement>) {
  *  DOMPurify removes scripts, event handlers and unsafe URLs. */
 export function Markdown({ text }: { text: string }) {
   const html = useMemo(() => sanitize(md.parse(text, { async: false }) as string), [text]);
-  return <div className="md" onClick={onCopyClick} dangerouslySetInnerHTML={{ __html: html }} />;
+  const ref = useRef<HTMLDivElement>(null);
+  // An image's error event does not bubble, so it is caught on the way down.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const replace = (img: EventTarget | null) => {
+      if (!(img instanceof HTMLImageElement)) return;
+      const note = document.createElement("span");
+      note.className = "md-img-missing";
+      note.textContent = img.alt ? L(`图片加载不了：${img.alt}`, `Image didn't load: ${img.alt}`) : L("图片加载不了", "Image didn't load");
+      note.title = img.currentSrc || img.src;
+      img.replaceWith(note);
+    };
+    const onError = (e: Event) => replace(e.target);
+    // Ones that had already failed before this ran.
+    el.querySelectorAll("img").forEach((img) => { if (img.complete && img.naturalWidth === 0) replace(img); });
+    el.addEventListener("error", onError, true);
+    return () => el.removeEventListener("error", onError, true);
+  }, [html]);
+  return <div ref={ref} className="md" onClick={onCopyClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export interface ExecResult {

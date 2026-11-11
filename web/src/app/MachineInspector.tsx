@@ -171,7 +171,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
             <div className="app-group-title"><span className="name">{L("操作", "Actions")}</span></div>
             <div className="app-list">
               <button type="button" className="app-action-row" onClick={openRename}>
-                {L("重命名…", "Rename…")}<span className="app-chev">›</span>
+                {L("重命名", "Rename")}<span className="app-chev">›</span>
               </button>
               <button
                 type="button"
@@ -179,7 +179,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
                 onClick={() => onSpawn(target.hubId, target.machineId)}
                 disabled={!machine.can_spawn}
               >
-                {L("在这台机器上开新会话…", "Start a new session on this machine…")}<span className="app-chev">›</span>
+                {L("在这台机器上开新会话", "Start a new session on this machine")}<span className="app-chev">›</span>
               </button>
             </div>
             {!machine.can_spawn && (

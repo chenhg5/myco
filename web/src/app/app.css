@@ -242,6 +242,17 @@
 .app-crumbbar input {
   --wails-draggable: no-drag;
 }
+/* The page's name in the panel's bar. */
+.app-title {
+  margin: 0 0 0 2px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-crumbs {
   display: flex;
   align-items: center;
@@ -916,33 +927,62 @@ textarea.app-input {
   overflow: hidden;
   animation: app-slide-in 0.18s ease-out;
 }
+/* First line: icon tile, name, state, close, all on one centre line. Second
+   line: where it lives, under the name at the sheet's full width, so a long
+   address wraps instead of being cut short by the state pill. */
 .app-inspector-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 16px 16px 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 14px 12px 13px 16px;
   border-bottom: 1px solid var(--line-2);
   flex: none;
 }
+.app-inspector-head > .app-row-icon {
+  grid-column: 1;
+  grid-row: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg-2);
+}
+.app-inspector-head > .app-row-icon svg {
+  width: 16px;
+  height: 16px;
+}
 .app-inspector-head .titles {
-  flex: 1;
-  min-width: 0;
+  display: contents;
 }
 .app-inspector-head h2 {
+  grid-column: 2;
+  grid-row: 1;
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .app-inspector-head .sub {
-  margin-top: 2px;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  padding-right: 4px;
   font-size: 11.5px;
+  line-height: 1.45;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+.app-inspector-head > .app-pill {
+  grid-column: 3;
+  grid-row: 1;
+}
+.app-inspector-head > .app-btn-plain {
+  grid-column: 4;
+  grid-row: 1;
 }
 .app-inspector-body {
   flex: 1;
@@ -2061,6 +2101,40 @@ textarea.app-input {
   background: var(--card);
   box-shadow: 0 0 0 0.5px var(--line);
 }
+/* A card of settings, one per row: what it is on the left, the control on
+   the right at its own width. */
+.app-setting-lines {
+  padding: 4px 14px;
+}
+.app-setting-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 0;
+}
+.app-setting-line + .app-setting-line {
+  border-top: 1px solid var(--line-2);
+}
+.app-setting-line-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app-setting-line-text b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.app-setting-line-text span {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.app-setting-line .seg {
+  flex: none;
+}
 .app-setting-head {
   display: flex;
   align-items: center;
@@ -2175,7 +2249,15 @@ textarea.app-input {
 
 /* ---------- add node: local sessions & link ---------- */
 .app-addnode-tabs {
+  margin-top: 14px;
   margin-bottom: 14px;
+}
+/* Why the main button is not ready yet, at the left of the buttons. */
+.app-modal-hint {
+  margin-right: auto;
+  align-self: center;
+  font-size: 11.5px;
+  color: var(--muted);
 }
 .app-addnode-bar {
   display: flex;
@@ -2410,10 +2492,27 @@ textarea.app-input {
   outline: none;
   background: var(--pill);
 }
-.conv-menu-item svg {
-  width: 13px;
-  height: 13px;
+.conv-menu-item svg,
+.conv-menu-noicon {
+  width: 14px;
+  height: 14px;
+  flex: none;
   color: var(--muted);
+}
+.conv-menu-item:disabled {
+  opacity: 0.45;
+}
+.conv-menu-item:disabled:hover {
+  background: transparent;
+}
+.conv-menu-item.danger,
+.conv-menu-item.danger svg {
+  color: var(--red);
+}
+.conv-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line-2);
 }
 .conv-row-summary.is-mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -2706,13 +2805,18 @@ textarea.app-input {
 .conv-compose-tools:empty {
   display: none;
 }
+/* How to send, shown only while the box has the caret. */
 .conv-compose-hint {
+  visibility: hidden;
   font-size: 11px;
   color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+.conv-compose-box:focus-within .conv-compose-hint {
+  visibility: visible;
 }
 .conv-compose-ago {
   margin-left: auto;
@@ -2871,6 +2975,14 @@ textarea.app-input {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
+}
+.md-img-missing {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 11.5px;
 }
 .md hr {
   margin: 10px 0;
@@ -3338,6 +3450,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-group-action svg { width: 14px; height: 14px; color: var(--muted); }
 .app-group-action:hover:not(:disabled) svg { color: var(--fg-2); }
 .app-group-action .app-chev { color: var(--muted); }
+.app-group-action svg.app-group-action-caret { width: 12px; height: 12px; margin-left: -2px; }
 
 /* NodePicker: chips of picked nodes over a list to tick */
 .app-picker { margin-bottom: 12px; }

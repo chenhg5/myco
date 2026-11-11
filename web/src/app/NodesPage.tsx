@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from "react";
 import { ver } from "./nodes";
-import { AlertTriangle, ChevronDown, Lock, Plus, Search } from "lucide-react";
-import { IconNodes } from "@/components/icons";
+import { AlertTriangle, ChevronDown, Copy, Info, Lock, Plus, Search } from "lucide-react";
+import { IconChat, IconNodes } from "@/components/icons";
+import { copyText } from "@/app/copy";
+import { useContextMenu } from "@/app/ContextMenu";
 import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
@@ -42,10 +44,11 @@ function tasksOf(row: AgentRow): string {
 }
 
 /** One node row: kind icon, name, state · CLI + model · machine. */
-export function NodeRowView({ row, highlight, onClick }: {
+export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
   row: AgentRow;
   highlight?: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const a = row.st.agent;
   const state = stateMeta[row.st.state];
@@ -58,6 +61,7 @@ export function NodeRowView({ row, highlight, onClick }: {
       type="button"
       className={cn("app-row", row.st.state === "offline" && "offline", highlight && "is-new")}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={a.display_name || a.name}
     >
       <span className="app-row-icon"><Icon /></span>
@@ -91,7 +95,7 @@ export function NodeRowView({ row, highlight, onClick }: {
   );
 }
 
-export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd, onCleanup }: {
+export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd, onCleanup, onMessage }: {
   rows: AgentRow[];
   hubs: HubOverview[] | undefined;
   hubMeta: Hub[];
@@ -103,7 +107,10 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
   onAdd: () => void;
   // Opens "clean up offline nodes".
   onCleanup?: () => void;
+  /** Starts a conversation with a node (from its right-click menu). */
+  onMessage?: (row: AgentRow) => void;
 }) {
+  const menu = useContextMenu();
   // Machine nodes (`xxx-machine`) and people are not nodes in this App.
   const nodes = useMemo(() => rows.filter((r) => {
     const kind = agentKind(r.st.agent);
@@ -344,6 +351,12 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
                     row={r}
                     highlight={highlight?.hubId === r.hub.id && highlight.name === r.st.agent.name}
                     onClick={() => onOpen(r)}
+                    onContextMenu={(e) => menu.open(e, [
+                      { label: L("查看详情", "Details"), icon: Info, onSelect: () => onOpen(r) },
+                      ...(onMessage ? [{ label: L("发消息", "Message"), icon: IconChat, onSelect: () => onMessage(r) }] : []),
+                      "sep",
+                      { label: L("复制节点名", "Copy node name"), icon: Copy, onSelect: () => void copyText(r.st.agent.name) },
+                    ])}
                   />
                 ))
               )}
@@ -351,6 +364,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
           </section>
         ))}
       </>)}
+      {menu.element}
     </div>
   );
 }

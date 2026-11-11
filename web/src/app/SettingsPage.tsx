@@ -208,7 +208,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [stopOpen, setStopOpen] = useState(false);
   const [publicOpen, setPublicOpen] = useState(false);
 
-  // "Hub 设置…" in the switcher should land on the Hub list, even when this
+  // "Hub 设置" in the switcher should land on the Hub list, even when this
   // page was last left on another section.
   useEffect(() => {
     if (sectionRequest && sectionRequest !== handledRequest.current) setSection("hubs");
@@ -365,7 +365,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     {localHub ? (
                       <>
                         <button type="button" className="app-btn" onClick={() => setPublicOpen(true)} disabled={busy !== null}>
-                          <Globe />{L("开放到公网…", "Open to the internet…")}
+                          <Globe />{L("开放到公网", "Open to the internet")}
                         </button>
                         {localRunning ? (
                           <button type="button" className="app-btn app-btn-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
@@ -393,7 +393,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
             <div className="app-setting-add">
               <button type="button" className="app-setting-add-row" onClick={onAddHub}>
-                <Plus />{L("添加 Hub…", "Add Hub…")}
+                <Plus />{L("添加 Hub", "Add Hub")}
               </button>
               {!localRunning && (
                 <button
@@ -414,62 +414,67 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
         {section === "appearance" && (
           <>
-            <p className="app-summary">{L("外观会立即生效。", "Appearance changes apply right away.")}</p>
-            <section className="app-setting-card">
-              <div className="seg seg-fill" role="tablist" aria-label={L("外观", "Appearance")}>
-                {THEMES.map((t) => (
-                  <button
-                    key={t.mode}
-                    type="button"
-                    role="tab"
-                    aria-selected={theme === t.mode}
-                    className={cn("seg-btn", theme === t.mode && "active")}
-                    onClick={() => onTheme(t.mode)}
-                  >
-                    {theme === t.mode && <Check />}
-                    {t.label}
-                  </button>
-                ))}
+            <section className="app-setting-card app-setting-lines">
+              <div className="app-setting-line">
+                <div className="app-setting-line-text">
+                  <b>{L("外观", "Appearance")}</b>
+                  <span>{L("跟随系统时，App 会随 macOS 的浅色/深色切换。", "With System, the app follows macOS light and dark mode.")}</span>
+                </div>
+                <div className="seg" role="tablist" aria-label={L("外观", "Appearance")}>
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={theme === t.mode}
+                      className={cn("seg-btn", theme === t.mode && "active")}
+                      onClick={() => onTheme(t.mode)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="app-hint">{L("跟随系统时，App 会随 macOS 的浅色/深色切换。", "With System, the app follows macOS light and dark mode.")}</div>
-            </section>
-            <p className="app-summary">{L("文字大小", "Text size")}</p>
-            <section className="app-setting-card">
-              <div className="seg seg-fill" role="tablist" aria-label={L("文字大小", "Text size")}>
-                {SIZES.map((t) => (
-                  <button
-                    key={t.size}
-                    type="button"
-                    role="tab"
-                    aria-selected={textSize === t.size}
-                    className={cn("seg-btn", textSize === t.size && "active")}
-                    onClick={() => onTextSize(t.size)}
-                  >
-                    {textSize === t.size && <Check />}
-                    {t.label}
-                  </button>
-                ))}
+              <div className="app-setting-line">
+                <div className="app-setting-line-text">
+                  <b>{L("文字大小", "Text size")}</b>
+                  <span>{L("整个窗口一起放大或缩小。", "Scales the whole window up or down.")}</span>
+                </div>
+                <div className="seg" role="tablist" aria-label={L("文字大小", "Text size")}>
+                  {SIZES.map((t) => (
+                    <button
+                      key={t.size}
+                      type="button"
+                      role="tab"
+                      aria-selected={textSize === t.size}
+                      className={cn("seg-btn", textSize === t.size && "active")}
+                      onClick={() => onTextSize(t.size)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="app-hint">{L("整个窗口一起放大或缩小。", "Scales the whole window up or down.")}</div>
-            </section>
-            <p className="app-summary">语言 / Language</p>
-            <section className="app-setting-card">
-              <div className="seg seg-fill" role="tablist" aria-label="语言 / Language">
-                {LANGS.map((t) => (
-                  <button
-                    key={t.choice}
-                    type="button"
-                    role="tab"
-                    aria-selected={langChoice === t.choice}
-                    className={cn("seg-btn", langChoice === t.choice && "active")}
-                    onClick={() => { langSwitchSection = section; onLangChoice(t.choice); }}
-                  >
-                    {langChoice === t.choice && <Check />}
-                    {t.label}
-                  </button>
-                ))}
+              <div className="app-setting-line">
+                <div className="app-setting-line-text">
+                  <b>语言 / Language</b>
+                  <span>{L("跟随系统时，App 使用 macOS 的语言设置。", "With System, the app uses the macOS language.")}</span>
+                </div>
+                <div className="seg" role="tablist" aria-label="语言 / Language">
+                  {LANGS.map((t) => (
+                    <button
+                      key={t.choice}
+                      type="button"
+                      role="tab"
+                      aria-selected={langChoice === t.choice}
+                      className={cn("seg-btn", langChoice === t.choice && "active")}
+                      onClick={() => { langSwitchSection = section; onLangChoice(t.choice); }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="app-hint">{L("跟随系统时，App 使用 macOS 的语言设置。", "With System, the app uses the macOS language.")}</div>
             </section>
           </>
         )}

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Copy, Info, Plus } from "lucide-react";
 import { IconMachine } from "@/components/icons";
+import { copyText } from "@/app/copy";
+import { useContextMenu } from "@/app/ContextMenu";
 import type { Hub, HubOverview } from "@/appapi";
 import { machineSubtitle, osInfo } from "@/app/nodes";
 import { cn } from "@/lib/utils";
@@ -9,7 +11,7 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { hubErrorText } from "@/appapi";
 
 /** Real machines that run nodes, grouped by hub. Cloud sessions are not machines. */
-export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine, onAdd }: {
+export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine, onAdd, onSpawn }: {
   hubs: Hub[];
   hubsOv: HubOverview[] | undefined;
   loading: boolean;
@@ -17,7 +19,10 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
   groupByHub: boolean;
   onOpenMachine: (hubId: string, machineId: string) => void;
   onAdd: () => void;
+  /** Starts a new session on a machine (from its right-click menu). */
+  onSpawn?: (hubId: string, machineId: string) => void;
 }) {
+  const menu = useContextMenu();
   const groups = useMemo(() => hubs.map((h) => {
     const ov = hubsOv?.find((x) => x.id === h.id);
     return { hub: h, ov, machines: ov?.overview?.machines || [] };
@@ -88,6 +93,11 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
                       type="button"
                       className={cn("app-row", !m.online && "offline")}
                       onClick={() => onOpenMachine(g.hub.id, m.id)}
+                      onContextMenu={(e) => menu.open(e, [
+                        { label: L("查看详情", "Details"), icon: Info, onSelect: () => onOpenMachine(g.hub.id, m.id) },
+                        ...(onSpawn ? [{ label: L("在这台机器上开新会话", "New session on this machine"), icon: Plus, disabled: !m.can_spawn, onSelect: () => onSpawn(g.hub.id, m.id) }] : []),
+                        ...(m.hostname ? ["sep" as const, { label: L("复制主机名", "Copy host name"), icon: Copy, onSelect: () => void copyText(m.hostname || "") }] : []),
+                      ])}
                       title={m.hostname}
                     >
                       <span className="app-row-icon"><OsIcon /></span>
@@ -112,6 +122,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
           </section>
         ))
       )}
+      {menu.element}
     </div>
   );
 }
