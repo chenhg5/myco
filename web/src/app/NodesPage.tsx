@@ -219,7 +219,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
             <button type="button" className="app-summary-action" onClick={onCleanup}>{L("清理离线节点", "Clean up offline nodes")}</button>
           )}
         </p>
-        <button type="button" className="app-btn app-btn-primary" onClick={onAdd}>
+        <button type="button" className="app-btn app-btn-quiet" onClick={onAdd}>
           <Plus />{L("添加节点", "Add node")}
         </button>
       </div>

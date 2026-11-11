@@ -38,7 +38,7 @@ export function MachinesPage({ hubs, hubsOv, loading, groupByHub, onOpenMachine,
     <div className="app-page">
       <div className="app-page-head">
         <p className="app-summary">{summary}</p>
-        <button type="button" className="app-btn app-btn-primary" onClick={onAdd} disabled={hubs.length === 0}>
+        <button type="button" className="app-btn app-btn-quiet" onClick={onAdd} disabled={hubs.length === 0}>
           <Plus />{L("添加机器", "Add machine")}
         </button>
       </div>

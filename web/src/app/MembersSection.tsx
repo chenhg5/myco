@@ -102,7 +102,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
           {me.member ? L(`你是 ${me.member.display_name || me.member.name}（${roleLabel(me.member.role)}）`, `You are ${me.member.display_name || me.member.name} (${roleLabel(me.member.role)})`) : L("你用的是 Hub 的管理员令牌", "You are using the Hub’s admin token")}
         </span>
         {manages && (
-          <button type="button" className="app-btn app-btn-primary app-members-invite" onClick={() => { setForm({ name: "", display_name: "", role: "member" }); setLink(null); setFormError(null); setInviteOpen(true); }}>
+          <button type="button" className="app-btn app-btn-quiet app-members-invite" onClick={() => { setForm({ name: "", display_name: "", role: "member" }); setLink(null); setFormError(null); setInviteOpen(true); }}>
             <UserPlus />{L("邀请成员", "Invite a member")}
           </button>
         )}

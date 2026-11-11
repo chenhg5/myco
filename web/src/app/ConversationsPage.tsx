@@ -423,7 +423,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, selecte
           <p className="app-summary">
             {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
           </p>
-          <button type="button" className="app-btn app-btn-primary" onClick={onNew}>
+          <button type="button" className="app-btn app-btn-quiet" onClick={onNew}>
             <Plus />{L("新对话", "New conversation")}
           </button>
         </div>
