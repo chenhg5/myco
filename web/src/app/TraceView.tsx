@@ -101,7 +101,11 @@ function usageLine(u?: TraceStep): string {
  * results, and what it said, as the runner reported them. Live while the task
  * runs; folded into one line afterwards (loaded when opened).
  */
-export function TraceView({ hubId, task, onGrow }: { hubId: string; task: Message; onGrow?: () => void }) {
+export function TraceView({ hubId, task, onGrow, waiting }: {
+  hubId: string; task: Message; onGrow?: () => void;
+  /** why it has not started yet, when known (the session is open elsewhere) */
+  waiting?: string;
+}) {
   const running = isOpen(task.status);
   const [events, setEvents] = useState<TraceEvent[] | null>(null);
   const [open, setOpen] = useState(running);
@@ -182,7 +186,7 @@ export function TraceView({ hubId, task, onGrow }: { hubId: string; task: Messag
       {open && (
         <div className="trace-body" ref={body}>
           {events === null && <div className="trace-note">{L("正在读取…", "Loading…")}</div>}
-          {events !== null && rows.length === 0 && running && <div className="trace-note">{L("等它开始…", "Waiting for it to start…")}</div>}
+          {events !== null && rows.length === 0 && running && <div className="trace-note">{waiting || L("等它开始…", "Waiting for it to start…")}</div>}
           {rows.map((r) => <TraceRow key={r.key} row={r} live={running} />)}
         </div>
       )}

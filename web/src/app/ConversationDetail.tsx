@@ -278,6 +278,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         ? { dot: "idle", label: L("已完成", "Done") }
         : { dot: "idle", label: L("空闲", "Idle") };
   const steerOn = steerMode && !!openTask;
+  // The runner found the agent's session open elsewhere (a terminal, an
+  // editor, the Codex app): it waits and retries rather than write into it.
+  const waitingReason = openTask && row?.st.session_in_use && row.st.receiving !== "session"
+    ? L("这个会话正开在别处（终端、编辑器或 Codex / Claude 桌面版），myco 不会同时写进去，每 2 分钟重试一次。关掉那边的会话，就会开始处理。",
+      "This session is open somewhere else (a terminal, an editor, or the Codex / Claude desktop app). myco won't write into it at the same time and retries every 2 minutes. Close it there and the task starts.")
+    : undefined;
 
   // A thread you take no part in (two nodes working together) is only
   // shown: writing into it would land in their conversation, not yours.
@@ -446,7 +452,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         </div>
         {/* What the agent did for a task you gave it (its runner reports it):
             the start of its turn, on its side of the conversation. */}
-        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} />}
+        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={m.id === openTask?.id ? waitingReason : undefined} />}
         </Fragment>
       );
   };
