@@ -4387,3 +4387,19 @@ body.is-resizing {
 .trace-detail { margin: 2px 8px 6px 29px; }
 .trace-detail.is-prose { color: var(--muted); font-style: italic; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
 .trace-pre { margin: 0 0 4px; padding: 8px 10px; max-height: 240px; overflow: auto; border-radius: 7px; background: var(--card); font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Run trace, quieter: one line of muted text when folded; steps indented
+   under a thin rule when open. */
+.trace { width: auto; max-width: 760px; margin: 2px 0 0; background: none; border-radius: 0; font-size: 12px; }
+.trace.is-open { width: 100%; }
+.conv-msg.is-me .trace:not(.is-open) { align-self: flex-end; }
+.trace-head { display: inline-flex; width: auto; max-width: 100%; gap: 5px; padding: 2px 4px; border-radius: 5px; color: var(--muted); }
+.trace-head:hover { background: none; color: var(--fg-2); }
+.trace-head svg { width: 12px; height: 12px; }
+.trace-title { flex: 0 1 auto; }
+.trace-usage { font-size: 11px; color: var(--faint, var(--muted)); }
+.trace-usage::before { content: "·"; margin-right: 5px; }
+.trace-body { margin: 2px 0 4px 9px; padding: 0 0 0 10px; border-left: 1px solid var(--line); max-height: 420px; }
+.trace-line { padding: 3px 6px; }
+.trace-row.is-text { padding: 4px 6px; }
+.trace-detail { margin-left: 27px; }
