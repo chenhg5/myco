@@ -398,8 +398,33 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
 
   const projectStarted = useRef(false);
+  // "clear" in a shell session is the terminal's own business, not a command
+  // for the node (which has no screen to clear): everything so far goes off
+  // the screen, and comes back with the line that then heads the terminal.
+  // It is remembered for this run of the App, by the time of the last message
+  // cleared (the hub's time, as every message carries it, not this clock's).
+  const clearKey = `myco-term-clear:${target.hubId}/${target.agent}`;
+  const [clearedAfter, setClearedAfter] = useState<string | null>(() => {
+    try { return sessionStorage.getItem(clearKey); } catch { return null; }
+  });
+  const setCleared = (id: string | null) => {
+    setClearedAfter(id);
+    try { if (id) sessionStorage.setItem(clearKey, id); else sessionStorage.removeItem(clearKey); } catch { /* storage unavailable */ }
+  };
+  const clearScreen = () => {
+    // The latest by time, which is not always the last in the list.
+    const latest = (shown || []).reduce<Message | null>((x, m) => (!x || new Date(m.created_at) > new Date(x.created_at) ? m : x), null);
+    if (latest) setCleared(latest.created_at);
+    setDraft("");
+    histPos.current = -1;
+  };
+  const clearedTime = clearedAfter ? new Date(clearedAfter).getTime() : NaN;
+  const onScreen = shown && !Number.isNaN(clearedTime) ? shown.filter((m) => new Date(m.created_at).getTime() > clearedTime) : shown;
+  const cleared = !!shown && !!onScreen && onScreen.length < shown.length;
+
   const send = async () => {
     const body = draft.trim();
+    if (shellMode && (body === "clear" || body === "cls")) { clearScreen(); return; }
     if (!body || sending || busy) return;
     setSending(true);
     setSendError(null);
@@ -457,6 +482,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
       histPos.current = pos;
       setDraft(pos === -1 ? histDraft.current : history[pos]);
+      return;
+    }
+    // Ctrl+L clears the screen, as in a terminal.
+    if (shellMode && e.ctrlKey && e.key === "l") {
+      e.preventDefault();
+      clearScreen();
       return;
     }
     // Ctrl+C with nothing typed stops the running command, as in a terminal.
@@ -600,7 +631,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <div className="app-empty-note">{exchange ? L("还没有消息。", "No messages yet.") : L("还没有消息。发一条任务开始。", "No messages yet. Give a task to get started.")}</div>
           ) : (
             <>
-            {exchange && more && (
+            {exchange && more && !(shellMode && cleared) && (
               <div className="conv-older">
                 <button type="button" className="app-btn app-btn-small" onClick={() => void loadOlder()} disabled={loadingOlder}>
                   <Busy busy={loadingOlder}>{L("加载更早的消息", "Load earlier messages")}</Busy>
@@ -610,7 +641,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {shellMode ? (
               <>
               <div onMouseUp={() => { if (window.getSelection()?.isCollapsed !== false) inputRef.current?.focus(); }} className="term-wrap">
-                <Terminal messages={shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live cwd={agent?.binding.workdir}
+                {cleared && (
+                  <button type="button" className="term-restore" onClick={() => setCleared(null)}>
+                    {L("已清屏 · 显示之前的内容", "Cleared · show what was here")}
+                  </button>
+                )}
+                <Terminal messages={onScreen || shown} execNode={target.agent} nameOf={nameOf} hubE2E={!!row?.hub.e2e} live cwd={agent?.binding.workdir}
                   hubId={target.hubId} onGrow={followBottom} onStop={(t) => void stop(t)} canStop={(t) => isMe(t.from, row?.hub)}>
                   <div className="term-input-line">
                     <span className="term-prompt">{agent?.binding.workdir ? <span className="term-cwd">{agent.binding.workdir}</span> : null}$</span>

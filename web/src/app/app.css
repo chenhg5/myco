@@ -4112,6 +4112,22 @@ button.app-label:hover { filter: brightness(0.95); }
 @media (prefers-reduced-motion: reduce) {
   .term-cursor { animation: none; }
 }
+/* After "clear": one dim line at the top brings back what was there. */
+.term-restore {
+  align-self: flex-start;
+  margin: 10px 16px 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #5d616b;
+  font: 11px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  cursor: default;
+}
+.term-restore:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c6c9d1;
+}
 /* While something runs, the line under the terminal offers to stop it. */
 .term-foot-stop {
   padding: 0 4px;

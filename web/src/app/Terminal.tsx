@@ -66,7 +66,7 @@ export function Terminal({ messages, execNode, nameOf, hubE2E, live, cwd, childr
     if (m.from === execNode && m.type === "reply" && !m.unreadable) {
       const res = parseExecResult(m.body);
       if (res) {
-        items.push(<Output key={m.id} answer={m} res={res} nameOf={nameOf} />);
+        items.push(<Output key={m.id} answer={m} res={res} nameOf={nameOf} plain={live} />);
         continue;
       }
     }
@@ -100,8 +100,11 @@ function ResultLines({ res }: { res: ExecResult }) {
   );
 }
 
-function Output({ answer, res, nameOf }: { answer: Message; res: ExecResult; nameOf: (n: string) => string }) {
+function Output({ answer, res, nameOf, plain }: { answer: Message; res: ExecResult; nameOf: (n: string) => string; plain?: boolean }) {
   const took = execDuration(res.duration_ms);
+  // Your own session: what a command printed after its line left the screen
+  // (cleared, or not loaded) is just more output, as in a terminal.
+  if (plain) return <div className="term-cmd"><ResultLines res={res} /></div>;
   return (
     <div className="term-cmd">
       <div className="term-meta">
