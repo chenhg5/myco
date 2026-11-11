@@ -3,9 +3,11 @@ package codex
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,7 +109,12 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		Binary: c.opts.Binary, Args: args, Stdin: req.Prompt, Workdir: req.Workdir, Env: env,
 	}
 	if req.OnEvent != nil {
-		stream := newEventStream(time.Now())
+		before, known := tokenTotal{}, true
+		if req.SessionID != "" {
+			// A resumed (or copied) session: Codex reports its running total.
+			before, known = sessionTokens(req.SessionID)
+		}
+		stream := newEventStream(time.Now(), before, known)
 		proc.OnStdoutLine = func(line []byte) {
 			for _, ev := range stream.line(line) {
 				req.OnEvent(ev)
@@ -197,4 +204,63 @@ func dedupe(in []string) []string {
 		}
 	}
 	return out
+}
+
+// tailBytes is how much of a session file is read for its token total.
+const tailBytes = 4 << 20
+
+// sessionTokens is a session's token total so far, from the last
+// token_count in its rollout file; false when it cannot be told.
+func sessionTokens(id string) (tokenTotal, bool) {
+	var path string
+	for _, pat := range transcriptPatterns(id) {
+		if m, _ := filepath.Glob(pat); len(m) > 0 {
+			path = m[0]
+			break
+		}
+	}
+	if path == "" {
+		return tokenTotal{}, false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return tokenTotal{}, false
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return tokenTotal{}, false
+	}
+	whole := st.Size() <= tailBytes
+	if !whole {
+		if _, err := f.Seek(-tailBytes, io.SeekEnd); err != nil {
+			return tokenTotal{}, false
+		}
+	}
+	var total tokenTotal
+	found := false
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 32<<20)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(`"token_count"`)) {
+			continue
+		}
+		var ev struct {
+			Payload struct {
+				Info *struct {
+					Total tokenTotal `json:"total_token_usage"`
+				} `json:"info"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(line, &ev) == nil && ev.Payload.Info != nil {
+			total, found = ev.Payload.Info.Total, true
+		}
+	}
+	if found {
+		return total, true
+	}
+	// No count yet: a session without a turn starts from zero (when the
+	// whole file was read).
+	return tokenTotal{}, whole
 }

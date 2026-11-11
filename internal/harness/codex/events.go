@@ -48,10 +48,21 @@ type streamLine struct {
 type eventStream struct {
 	start   time.Time
 	started map[string]bool
+	// before is the session's token total before this run (Codex reports
+	// the session's running total, not the turn's); known says whether it
+	// could be read, else the run's tokens are left out.
+	before tokenTotal
+	known  bool
 }
 
-func newEventStream(start time.Time) *eventStream {
-	return &eventStream{start: start, started: map[string]bool{}}
+// tokenTotal is Codex's total_token_usage (input counts cached tokens).
+type tokenTotal struct {
+	Input  int64 `json:"input_tokens"`
+	Output int64 `json:"output_tokens"`
+}
+
+func newEventStream(start time.Time, before tokenTotal, known bool) *eventStream {
+	return &eventStream{start: start, started: map[string]bool{}, before: before, known: known}
 }
 
 func (s *eventStream) line(b []byte) []harness.Event {
@@ -66,8 +77,13 @@ func (s *eventStream) line(b []byte) []harness.Event {
 		if l.Usage == nil {
 			return nil
 		}
-		return []harness.Event{{Kind: "usage", InputTokens: l.Usage.InputTokens, OutputTokens: l.Usage.OutputTokens,
-			DurationMS: time.Since(s.start).Milliseconds()}}
+		ev := harness.Event{Kind: "usage", DurationMS: time.Since(s.start).Milliseconds()}
+		// The session's total so far: this run is what it added.
+		in, out := l.Usage.InputTokens-s.before.Input, l.Usage.OutputTokens-s.before.Output
+		if s.known && in >= 0 && out >= 0 {
+			ev.InputTokens, ev.OutputTokens = in, out
+		}
+		return []harness.Event{ev}
 	case "turn.failed":
 		if l.Error != nil && l.Error.Message != "" {
 			return []harness.Event{{Kind: "error", Text: unwrapAPIError(l.Error.Message)}}
