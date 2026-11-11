@@ -24,7 +24,7 @@ import type { Project } from "@/api";
 import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
-import { LogoWordmark } from "@/components/brand";
+import { LogoSymbol, LogoWordmark } from "@/components/brand";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -569,7 +569,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 />
               ) : (
                 <div className="conv-split-empty">
-                  <MessageSquare />
+                  <LogoSymbol flat className="conv-split-mark" />
                   <p>{listCollapsed ? L("展开左边的列表，选一个对话", "Show the list on the left and pick a conversation") : L("在左边选一个对话", "Pick a conversation on the left")}</p>
                 </div>
               )}

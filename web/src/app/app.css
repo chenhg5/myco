@@ -1,9 +1,10 @@
 /* App mode styling — scoped to .app-shell so the classic `myco ui` theme is untouched. */
 .app-shell,
 .app-portal {
-  --bg: #f4f4f6;
+  --bg: #f8f8fa;
   --card: #ffffff;
-  --sidebar: #ececf0;
+  --chrome: #ebebef;
+  --panel-shadow: 0 0 0 0.5px rgba(20, 22, 30, 0.12), 0 1px 3px rgba(20, 22, 30, 0.05);
   --nav-hover: rgba(20, 22, 30, 0.045);
   --nav-sel: rgba(255, 255, 255, 0.88);
   --pill: #f1f1f4;
@@ -35,9 +36,10 @@
 
 .dark .app-shell,
 .dark .app-portal {
-  --bg: #1a1a1e;
+  --bg: #1b1b1f;
   --card: #232327;
-  --sidebar: #202024;
+  --chrome: #121215;
+  --panel-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.09);
   --nav-hover: rgba(255, 255, 255, 0.05);
   --nav-sel: rgba(255, 255, 255, 0.09);
   --pill: #2d2d33;
@@ -67,7 +69,7 @@
   height: 100%;
   display: flex;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--chrome);
 }
 
 .app-mono,
@@ -81,12 +83,11 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  background: var(--sidebar);
-  border-right: 1px solid var(--line);
   user-select: none;
 }
+/* Its centre lines up with the panel's top bar (8px gap + 40px bar). */
 .app-sidebar-head {
-  height: 40px;
+  height: 56px;
   flex: none;
   display: flex;
   align-items: center;
@@ -150,8 +151,7 @@
   font-size: 13px;
   text-align: left;
   white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  cursor: default;
 }
 .app-nav-item:hover {
   background: var(--nav-hover);
@@ -178,14 +178,23 @@
 .app-sidebar-foot {
   flex: none;
   padding: 8px 10px 10px;
-  border-top: 1px solid var(--line);
 }
 
+/* The page is a rounded panel lying on the window; the sidebar is the
+   window itself. */
 .app-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  margin: 8px 8px 8px 0;
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+.app-shell.collapsed .app-main {
+  margin-left: 8px;
 }
 .app-crumbbar {
   height: 40px;
@@ -194,15 +203,17 @@
   align-items: center;
   gap: 6px;
   padding: 0 10px;
+  border-bottom: 1px solid var(--line-2);
   user-select: none;
 }
-/* Align with the sidebar head and the traffic lights. */
+/* The panel starts 8px down, so a 36px bar centres on the traffic lights
+   (y=26), like the sidebar head. */
 .app-shell.shell-mac .app-crumbbar {
-  height: 52px;
+  height: 36px;
 }
 /* Collapsed in the macOS shell: keep the traffic lights clear. */
 .app-shell.shell-mac.collapsed .app-crumbbar {
-  padding-left: 80px;
+  padding-left: 72px;
 }
 .app-sidebar-head button,
 .app-sidebar-head a,
@@ -258,9 +269,8 @@
   color: var(--muted);
   font: inherit;
   font-size: 12.5px;
-  cursor: pointer;
+  cursor: default;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .seg-btn svg {
   width: 12px;
@@ -303,8 +313,7 @@
   font: inherit;
   font-size: 12.5px;
   white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, filter 0.12s ease;
+  cursor: default;
 }
 .app-btn:hover {
   background: var(--pill-hover);
@@ -506,7 +515,7 @@ textarea.app-input {
   color: var(--fg-2);
   font: inherit;
   font-size: 12.5px;
-  cursor: pointer;
+  cursor: default;
   outline: none;
   white-space: nowrap;
 }
@@ -576,18 +585,22 @@ textarea.app-input {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 9px 8px;
   border: 0;
-  border-top: 1px solid var(--line-2);
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .app-row:first-child {
-  border-top: 0;
+  margin-top: 4px;
+}
+.app-row:last-child {
+  margin-bottom: 4px;
 }
 .app-row:hover {
   background: var(--pill);
@@ -963,8 +976,7 @@ textarea.app-input {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .app-msg:first-child,
 .app-msg-wrap:first-child .app-msg {
@@ -984,7 +996,7 @@ textarea.app-input {
   color: var(--fg-2);
   font: inherit;
   font-size: 11px;
-  cursor: pointer;
+  cursor: default;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -1042,19 +1054,23 @@ textarea.app-input {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 9px 12px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 8px;
   border: 0;
-  border-top: 1px solid var(--line-2);
+  border-radius: 8px;
   background: transparent;
   color: var(--fg-2);
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
+}
+.app-action-row:last-child {
+  margin-bottom: 4px;
 }
 .app-action-row:first-child {
-  border-top: 0;
+  margin-top: 4px;
 }
 .app-action-row:hover {
   background: var(--pill);
@@ -1187,8 +1203,7 @@ textarea.app-input {
   gap: 10px;
   padding: 10px 12px;
   border-top: 1px solid var(--line-2);
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .app-choice:first-child {
   border-top: 0;
@@ -1479,8 +1494,7 @@ textarea.app-input {
   color: var(--fg);
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .app-hub-trigger:hover,
 .app-hub-trigger.open {
@@ -1592,8 +1606,7 @@ textarea.app-input {
   font: inherit;
   font-size: 12px;
   font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .app-hub-pill:hover,
 .app-hub-pill.open {
@@ -1658,7 +1671,7 @@ textarea.app-input {
   font-size: 12.5px;
   text-align: left;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: default;
 }
 .app-hub-menu-item:hover,
 .app-hub-menu-item.is-active,
@@ -1722,6 +1735,7 @@ textarea.app-input {
 /* ---------- welcome (no hubs yet) ---------- */
 .app-shell.welcome-shell {
   position: relative;
+  background: var(--bg);
   display: block;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1869,7 +1883,7 @@ textarea.app-input {
   color: var(--muted);
   font-size: 12px;
   list-style: none;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 .app-advanced summary::-webkit-details-marker {
@@ -1921,7 +1935,7 @@ textarea.app-input {
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .app-settings-tab:hover {
   background: var(--nav-hover);
@@ -2006,19 +2020,24 @@ textarea.app-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  height: 38px;
-  padding: 0 14px;
+  width: calc(100% - 8px);
+  height: 34px;
+  margin: 0 4px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: var(--fg-2);
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
-.app-setting-add-row + .app-setting-add-row {
-  border-top: 1px solid var(--line-2);
+.app-setting-add-row:first-child {
+  margin-top: 4px;
+}
+.app-setting-add-row:last-child {
+  margin-bottom: 4px;
 }
 .app-setting-add-row:hover {
   background: var(--nav-hover);
@@ -2120,21 +2139,27 @@ textarea.app-input {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  --row-bg: var(--card);
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 10px 8px;
   border: 0;
-  border-top: 1px solid var(--line-2);
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  cursor: default;
 }
 .conv-row:first-child {
-  border-top: 0;
+  margin-top: 4px;
+}
+.conv-row:last-child {
+  margin-bottom: 4px;
 }
 .conv-row:hover {
-  background: var(--pill);
+  --row-bg: var(--pill);
+  background: var(--row-bg);
 }
 .conv-row:focus-visible {
   outline: none;
@@ -2192,14 +2217,16 @@ textarea.app-input {
 /* The row last opened: stays marked on return. */
 /* Pinned rows at the top: a faint tint, a little lighter than hover. */
 .conv-row.is-pinned {
-  background: color-mix(in srgb, var(--pill) 60%, var(--card));
+  --row-bg: color-mix(in srgb, var(--pill) 60%, var(--card));
+  background: var(--row-bg);
 }
 .conv-row.is-pinned:hover {
-  background: var(--pill);
+  --row-bg: var(--pill);
 }
-.conv-row.is-selected {
-  background: var(--pill);
-  box-shadow: inset 2px 0 0 var(--accent);
+.conv-row.is-selected,
+.conv-row.is-selected:hover {
+  --row-bg: var(--pill-hover);
+  background: var(--row-bg);
 }
 .conv-row-icon {
   flex: none;
@@ -2229,15 +2256,8 @@ textarea.app-input {
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid var(--card);
+  border: 2px solid var(--row-bg);
   box-sizing: border-box;
-}
-.conv-row.is-pinned .conv-row-state {
-  border-color: color-mix(in srgb, var(--pill) 60%, var(--card));
-}
-.conv-row:hover .conv-row-state,
-.conv-row.is-selected .conv-row-state {
-  border-color: var(--pill);
 }
 .conv-row-state.is-working {
   background: var(--amber);
@@ -2292,7 +2312,7 @@ textarea.app-input {
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .conv-menu-item:hover,
 .conv-menu-item:focus-visible {
@@ -2323,7 +2343,7 @@ textarea.app-input {
   gap: 10px;
   min-height: 52px;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-2);
 }
 .conv-head-titles {
   flex: 1;
@@ -2529,7 +2549,7 @@ textarea.app-input {
   color: var(--fg-2);
   font: inherit;
   font-size: 11px;
-  cursor: pointer;
+  cursor: default;
 }
 .conv-steer-btn:hover {
   background: var(--pill-hover);
@@ -2625,7 +2645,7 @@ textarea.app-input {
   border-radius: 999px;
   background: var(--fg);
   color: var(--card);
-  cursor: pointer;
+  cursor: default;
   transition: opacity 0.15s, transform 0.1s;
 }
 .conv-send:hover:not(:disabled) {
@@ -2797,7 +2817,7 @@ textarea.app-input {
   box-shadow: 0 0 0 0.5px var(--line);
   font: inherit;
   font-size: 10.5px;
-  cursor: pointer;
+  cursor: default;
   opacity: 0.75;
 }
 .md-code-copy:hover,
@@ -2830,7 +2850,7 @@ textarea.app-input {
   color: var(--accent);
   font: inherit;
   font-size: 11.5px;
-  cursor: pointer;
+  cursor: default;
 }
 .md-fold-btn:hover {
   text-decoration: underline;
@@ -2919,7 +2939,7 @@ textarea.app-input {
   color: var(--muted);
   font-size: 11px;
   list-style: none;
-  cursor: pointer;
+  cursor: default;
 }
 .md-json summary::-webkit-details-marker {
   display: none;
@@ -3080,7 +3100,7 @@ textarea.app-input {
   font: inherit;
   font-size: 12px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
 }
 .app-label.editable button:hover { color: var(--red); }
 .app-labels-summary {
@@ -3097,7 +3117,7 @@ textarea.app-input {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .app-labels-summary:hover { background: var(--nav-hover); }
 .app-labels-chips {
@@ -3126,7 +3146,7 @@ button.app-label {
   border: 0;
   font: inherit;
   font-size: 11px;
-  cursor: pointer;
+  cursor: default;
 }
 button.app-label:hover { filter: brightness(0.95); }
 .app-label.group.picked { box-shadow: 0 0 0 1.5px var(--accent); }
@@ -3206,7 +3226,7 @@ button.app-label:hover { filter: brightness(0.95); }
   font: inherit;
   font-size: 12px;
   font-weight: 500;
-  cursor: pointer;
+  cursor: default;
 }
 .app-group-action:hover { background: var(--nav-hover); }
 .app-group-action svg { width: 13px; height: 13px; }
@@ -3237,7 +3257,7 @@ button.app-label:hover { filter: brightness(0.95); }
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .app-picker-row:hover { background: var(--nav-hover); }
 .app-picker-row > svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
@@ -3264,7 +3284,7 @@ button.app-label:hover { filter: brightness(0.95); }
 
 /* provider picker: one option per row, the picked one highlighted */
 .app-provider-list { display: flex; flex-direction: column; gap: 6px; margin: 0 -2px 10px; padding: 2px; max-height: 320px; overflow-y: auto; }
-.app-provider-opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line); cursor: pointer; font-size: 13px; }
+.app-provider-opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line); cursor: default; font-size: 13px; }
 .app-provider-opt:hover { background: var(--nav-hover); }
 .app-provider-opt.picked { box-shadow: 0 0 0 1.5px var(--accent); }
 .app-provider-opt input { margin-top: 3px; accent-color: var(--accent); }
@@ -3592,7 +3612,7 @@ body.is-resizing {
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
+  cursor: default;
 }
 .conv-head-icon:hover {
   background: var(--pill);
@@ -3631,20 +3651,30 @@ body.is-resizing {
   display: flex;
   flex-direction: column;
 }
+/* Nothing open: the mycelium mark as a faint watermark, fading downwards,
+   with the hint under it. */
 .conv-split-empty {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 4px;
+  padding-bottom: 6%;
   color: var(--muted);
   font-size: 13px;
+  user-select: none;
 }
-.conv-split-empty svg {
-  width: 28px;
-  height: 28px;
-  opacity: 0.5;
+.conv-split-empty .conv-split-mark {
+  width: min(220px, 40%);
+  height: auto;
+  color: var(--fg);
+  opacity: 0.055;
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
+}
+.dark .conv-split-empty .conv-split-mark {
+  opacity: 0.07;
 }
 /* The list as a narrow column: tighter, the search on its own line, rows
    edge to edge so the selection reads as one band. */
@@ -3676,12 +3706,25 @@ body.is-resizing {
 }
 .conv-list-compact .app-list {
   border-radius: 0;
-  border-left: 0;
-  border-right: 0;
+  background: transparent;
   box-shadow: none;
 }
 .conv-list-compact .conv-row {
-  padding: 9px 12px;
+  --row-bg: var(--bg);
+  width: calc(100% - 16px);
+  margin-left: 8px;
+  margin-right: 8px;
+  padding: 9px 8px;
+}
+.conv-list-compact .conv-row.is-pinned {
+  --row-bg: color-mix(in srgb, var(--pill) 55%, var(--bg));
+}
+.conv-list-compact .conv-row:hover {
+  --row-bg: var(--pill);
+}
+.conv-list-compact .conv-row.is-selected,
+.conv-list-compact .conv-row.is-selected:hover {
+  --row-bg: var(--pill-hover);
 }
 .conv-list-compact .app-empty {
   padding: 0 16px;
@@ -3761,9 +3804,6 @@ body.is-resizing {
   gap: 10px;
   padding: 12px 14px;
 }
-.skel-row + .skel-row {
-  border-top: 1px solid var(--line-2);
-}
 .skel-icon {
   flex: none;
   width: 26px;
@@ -3828,7 +3868,7 @@ body.is-resizing {
   border-radius: 6px;
   background: transparent;
   color: var(--faint);
-  cursor: pointer;
+  cursor: default;
 }
 .app-about-edit:hover {
   background: var(--pill);
@@ -3960,7 +4000,7 @@ body.is-resizing {
   font: inherit;
   font-size: 12px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .app-history-more:hover {
   background: var(--pill);
@@ -3981,9 +4021,10 @@ body.is-resizing {
 .app-project-vis svg { width: 12px; height: 12px; }
 .app-project-actions { display: flex; gap: 6px; flex: none; }
 .app-project-actions svg { width: 14px; height: 14px; }
-.app-project-member { display: flex; align-items: center; border-top: 1px solid var(--line-2); }
-.app-project-member:first-child { border-top: 0; }
-.app-project-member-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 10px 12px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.app-project-member { display: flex; align-items: center; margin: 0 4px; border-radius: 8px; }
+.app-project-member:first-child { margin-top: 4px; }
+.app-project-member:last-child { margin-bottom: 4px; }
+.app-project-member-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 10px 8px; border-radius: 8px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default; }
 .app-project-member-main:hover:not(:disabled) { background: var(--pill); }
 .app-project-member-main:disabled { cursor: default; }
 .app-project-member-main .app-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -3997,7 +4038,7 @@ body.is-resizing {
 .app-project-editor { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; resize: vertical; min-height: 240px; }
 .app-project-doc-body { max-height: 60vh; overflow: auto; font-size: 13px; margin-bottom: 10px; }
 .app-nav-title-row { display: flex; align-items: center; justify-content: space-between; padding-right: 2px; }
-.app-nav-add { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
+.app-nav-add { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: default; }
 .app-nav-add:hover { background: var(--nav-hover); color: var(--fg); }
 .app-nav-add svg { width: 13px; height: 13px; }
 .app-nav-item.muted { color: var(--muted); }
@@ -4035,6 +4076,6 @@ body.is-resizing {
 .app-update-actions .app-btn { height: 26px; padding: 0 12px; font-size: 12px; }
 .app-update-link { color: var(--accent); text-decoration: none; font-size: 12px; }
 .app-update-link:hover { text-decoration: underline; }
-.app-update-close { position: absolute; top: 6px; right: 6px; display: inline-flex; padding: 3px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
+.app-update-close { position: absolute; top: 6px; right: 6px; display: inline-flex; padding: 3px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: default; }
 .app-update-close:hover { background: var(--nav-hover); color: var(--fg); }
 .app-update-close svg { width: 13px; height: 13px; }
