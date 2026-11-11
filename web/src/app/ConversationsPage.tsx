@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Copy, Info, Pin, PinOff, Plus, Search } from "lucide-react";
+import { Copy, Info, ListFilter, Pin, PinOff, Plus, Search, X } from "lucide-react";
 import { IconChat, IconCollapseLeft, IconExchange, IconNewChat, IconPrompt } from "@/components/icons";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
@@ -417,6 +417,44 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
       ];
   const set = (p: Partial<ListFilters>) => setFilters((f) => ({ ...f, ...p }));
 
+  // Filters: one menu, and a chip for each one that is on.
+  const stateLabel: Record<StateFilter, string> = {
+    all: L("全部状态", "All statuses"), open: L("进行中", "In progress"), failed: L("失败", "Failed"), done: L("已完成", "Done"),
+  };
+  const labelText = (v: string) => v === "group:" ? L("未分组", "No group") : v.startsWith("group:") ? v.slice(6) : v.startsWith("tag:") ? "#" + v.slice(4) : v;
+  const pickLabel = (v: string) => { onProject?.(null); set({ label: filters.label === v ? "all" : v }); };
+  const filterItems = (): MenuItem[] => [
+    ...(side !== "me" ? [
+      { header: L("范围", "Scope") },
+      { label: L("全部可见", "Everything visible"), checked: filters.scope === "all", onSelect: () => set({ scope: "all" }) },
+      { label: L("我的节点", "My nodes"), checked: filters.scope === "mine", onSelect: () => set({ scope: "mine" }) },
+    ] : []),
+    { header: L("状态", "Status") },
+    ...(["all", "open", "failed", "done"] as const).map((st) => ({ label: stateLabel[st], checked: filters.state === st, onSelect: () => set({ state: st }) })),
+    ...(projectOptions.length > 0 ? [
+      { header: L("项目", "Projects") },
+      ...projectOptions.map((x) => {
+        const on = !!project && project.hubId === x.hubId && project.name === x.p.name;
+        return { label: x.p.title || x.p.name, checked: on, onSelect: () => { set({ label: "all" }); onProject?.(on ? null : { hubId: x.hubId, name: x.p.name }); } };
+      }),
+    ] : []),
+    ...(labelOptions.groups.length > 0 ? [
+      { header: L("分组", "Groups") },
+      ...labelOptions.groups.map((g) => ({ label: g, checked: filters.label === "group:" + g, onSelect: () => pickLabel("group:" + g) })),
+      { label: L("未分组", "No group"), checked: filters.label === "group:", onSelect: () => pickLabel("group:") },
+    ] : []),
+    ...(labelOptions.tags.length > 0 ? [
+      { header: L("标签", "Tags") },
+      ...labelOptions.tags.map((t) => ({ label: "#" + t, checked: filters.label === "tag:" + t, onSelect: () => pickLabel("tag:" + t) })),
+    ] : []),
+  ];
+  const chips: { key: string; label: string; clear: () => void }[] = [
+    ...(side !== "me" && filters.scope === "mine" ? [{ key: "scope", label: L("我的节点", "My nodes"), clear: () => set({ scope: "all" }) }] : []),
+    ...(filters.state !== "all" ? [{ key: "state", label: stateLabel[filters.state], clear: () => set({ state: "all" }) }] : []),
+    ...(project ? [{ key: "project", label: projectOptions.find((x) => x.hubId === project.hubId && x.p.name === project.name)?.p.title || project.name, clear: () => onProject?.(null) }] : []),
+    ...(filters.label !== "all" ? [{ key: "label", label: labelText(filters.label), clear: () => set({ label: "all" }) }] : []),
+  ];
+
   const open = (r: ConversationRow) => {
     setSelected(rowKey(r));
     selectedRef.current = rowKey(r);
@@ -425,47 +463,44 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
 
   return (
     <div className={cn("app-page", compact && "conv-list-compact")} ref={listRef}>
-      {compact ? (
-        // The narrow list: a quiet count and two matching icon buttons.
-        <div className="conv-list-head">
+      {/* One line: which conversations, then what you can do. The filters
+          live behind one button next to the search. */}
+      <div className="conv-list-head">
+        {project ? (
           <span className="conv-list-count">
             {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
           </span>
+        ) : (
+          <div className="seg conv-side" role="tablist" aria-label={L("对话范围", "Which conversations")}>
+            <button type="button" role="tab" aria-selected={filters.side === "me"} className={cn("seg-btn", filters.side === "me" && "active")} onClick={() => set({ side: "me" })}>
+              {L("我的对话", "Mine")}
+            </button>
+            <button type="button" role="tab" aria-selected={filters.side === "others"} className={cn("seg-btn", filters.side === "others" && "active")} onClick={() => set({ side: "others" })}
+              title={L("节点之间、以及其他人和节点的往来", "Between nodes, and other people with nodes")}>
+              {L("其他往来", "Others")}
+            </button>
+          </div>
+        )}
+        <span className="conv-list-head-gap" />
+        {compact ? (
           <button type="button" className="conv-head-icon is-primary" onClick={onNew}
             aria-label={L("新对话", "New conversation")} title={L("新对话", "New conversation")}>
             <IconNewChat />
           </button>
-          {onCollapse && (
-            <button type="button" className="conv-head-icon" onClick={onCollapse}
-              aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
-              <IconCollapseLeft />
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="app-page-head">
-          <p className="app-summary">
-            {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
-          </p>
+        ) : (
           <button type="button" className="app-btn app-btn-quiet" onClick={onNew}>
             <Plus />{L("新对话", "New conversation")}
           </button>
-        </div>
-      )}
-
-      {!project && (
-        <div className="seg seg-fill conv-side" role="tablist" aria-label={L("对话范围", "Which conversations")}>
-          <button type="button" role="tab" aria-selected={filters.side === "me"} className={cn("seg-btn", filters.side === "me" && "active")} onClick={() => set({ side: "me" })}>
-            {L("我的对话", "Mine")}
+        )}
+        {compact && onCollapse && (
+          <button type="button" className="conv-head-icon" onClick={onCollapse}
+            aria-label={L("收起对话列表", "Hide the conversation list")} title={L("收起对话列表", "Hide the conversation list")}>
+            <IconCollapseLeft />
           </button>
-          <button type="button" role="tab" aria-selected={filters.side === "others"} className={cn("seg-btn", filters.side === "others" && "active")} onClick={() => set({ side: "others" })}
-            title={L("节点之间、以及其他人和节点的往来", "Between nodes, and other people with nodes")}>
-            {L("其他往来", "Others")}
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="app-toolbar">
+      <div className="app-toolbar conv-list-search">
         <div className="app-search">
           <Search />
           <input
@@ -475,58 +510,27 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
             aria-label={L("搜索对话", "Search conversations")}
           />
         </div>
-        {side !== "me" && (
-          <span className="app-select-wrap">
-            <select className={cn("app-select", filters.scope !== "all" && "is-set")} value={filters.scope} onChange={(e) => set({ scope: e.target.value as Scope })} aria-label={L("范围", "Scope")}>
-              <option value="all">{L("全部可见", "Everything visible")}</option>
-              <option value="mine">{L("我的节点", "My nodes")}</option>
-            </select>
-            <ChevronDown />
-          </span>
-        )}
-        <span className="app-select-wrap">
-          <select className={cn("app-select", filters.state !== "all" && "is-set")} value={filters.state} onChange={(e) => set({ state: e.target.value as StateFilter })} aria-label={L("按状态筛选", "Filter by status")}>
-            <option value="all">{L("全部状态", "All statuses")}</option>
-            <option value="open">{L("进行中", "In progress")}</option>
-            <option value="failed">{L("失败", "Failed")}</option>
-            <option value="done">{L("已完成", "Done")}</option>
-          </select>
-          <ChevronDown />
-        </span>
-        <span className="app-select-wrap">
-          <select className={cn("app-select", (filters.label !== "all" || project) && "is-set")} value={project ? `project:${projectKey}` : filters.label}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v.startsWith("project:")) {
-                const k = v.slice(8), i = k.indexOf("/");
-                set({ label: "all" });
-                onProject?.({ hubId: k.slice(0, i), name: k.slice(i + 1) });
-                return;
-              }
-              onProject?.(null);
-              set({ label: v });
-            }} aria-label={L("按项目、分组和标签筛选", "Filter by project, group and tag")}>
-            <option value="all">{projectOptions.length ? L("项目和分组", "Projects and groups") : L("分组和标签", "Groups and tags")}</option>
-            {projectOptions.length > 0 && (
-              <optgroup label={L("项目", "Projects")}>
-                {projectOptions.map((x) => <option key={`${x.hubId}/${x.p.name}`} value={`project:${x.hubId}/${x.p.name}`}>{x.p.title || x.p.name}</option>)}
-              </optgroup>
-            )}
-            {labelOptions.groups.length > 0 && (
-              <optgroup label={L("分组", "Groups")}>
-                {labelOptions.groups.map((g) => <option key={g} value={"group:" + g}>{g}</option>)}
-                <option value="group:">{L("未分组", "No group")}</option>
-              </optgroup>
-            )}
-            {labelOptions.tags.length > 0 && (
-              <optgroup label={L("标签", "Tags")}>
-                {labelOptions.tags.map((t) => <option key={t} value={"tag:" + t}>#{t}</option>)}
-              </optgroup>
-            )}
-          </select>
-          <ChevronDown />
-        </span>
+        <button
+          type="button"
+          className={cn("conv-head-icon conv-filter-btn", chips.length > 0 && "is-active")}
+          aria-haspopup="menu"
+          aria-label={L("筛选", "Filter")}
+          title={L("筛选", "Filter")}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => menu.openUnder(e.currentTarget, filterItems())}
+        >
+          <ListFilter />
+        </button>
       </div>
+      {chips.length > 0 && (
+        <div className="conv-filter-chips">
+          {chips.map((c) => (
+            <button key={c.key} type="button" className="conv-filter-chip" onClick={c.clear} title={L("去掉这个筛选", "Remove this filter")}>
+              {c.label}<X />
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* A refresh that failed while rows are on screen says nothing: the
           rows stay and the next refresh tries again. */}

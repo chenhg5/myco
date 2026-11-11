@@ -2473,6 +2473,8 @@ textarea.app-input {
   /* Not app-pop: that one carries the dialog's centring transform and would
      throw the menu half its size up and left while it runs. */
   animation: app-fade 0.12s ease-out;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 .conv-menu-item {
   display: flex;
@@ -2510,6 +2512,18 @@ textarea.app-input {
 .conv-menu-item.danger,
 .conv-menu-item.danger svg {
   color: var(--red);
+}
+.conv-menu-header {
+  padding: 7px 10px 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.conv-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .conv-menu-sep {
   height: 1px;
@@ -3975,12 +3989,71 @@ body.is-resizing {
   user-select: none;
 }
 /* The narrow list's header: count, then new and hide as icon buttons. */
+/* The list's head, two lines in all: which conversations and what you can
+   do; then the search with one filter button. */
 .conv-list-head {
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 26px;
-  margin-bottom: 6px;
+  min-height: 28px;
+  margin-bottom: 8px;
+}
+.conv-list-head-gap {
+  flex: 1;
+}
+.conv-list-head .conv-list-count + .conv-list-head-gap {
+  display: none;
+}
+.conv-list-search {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.conv-list-search .app-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.conv-filter-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.conv-filter-btn.is-active {
+  background: var(--pill);
+  color: var(--fg);
+}
+/* What is being filtered on, one chip each; click a chip to drop it. */
+.conv-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+.conv-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 6px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: default;
+}
+.conv-filter-chip:hover {
+  background: var(--pill-hover);
+  color: var(--fg);
+}
+.conv-filter-chip svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  color: var(--muted);
 }
 .conv-list-count {
   flex: 1;
@@ -4072,19 +4145,20 @@ body.is-resizing {
   padding: 8px 0 24px;
 }
 .conv-list-compact .conv-list-head {
-  padding: 0 8px 0 14px;
+  padding: 0 8px 0 12px;
+}
+.conv-list-compact .conv-list-head .conv-list-count {
+  padding-left: 2px;
 }
 .conv-list-compact .app-toolbar,
 .conv-list-compact .app-error-text,
-.conv-list-compact .app-empty-note {
+.conv-list-compact .app-empty-note,
+.conv-list-compact .conv-filter-chips {
   padding: 0 12px;
 }
 .conv-list-compact .app-toolbar {
   gap: 6px;
   margin-bottom: 10px;
-}
-.conv-list-compact .app-search {
-  flex: 1 1 100%;
 }
 .conv-list-compact .app-select-wrap {
   flex: 1 1 0;
@@ -4487,8 +4561,7 @@ body.is-resizing {
 .app-project .app-empty-note { font-size: 12.5px; }
 .app-project .conv-row-title { font-size: 13.5px; }
 .app-project .conv-row-summary { font-size: 12px; }
-.conv-side { margin-bottom: 10px; }
-.conv-list-compact .conv-side { width: auto; margin: 0 12px 8px; }
+.conv-side { flex: none; margin: 0; }
 
 /* Run trace: what the agent did for a task */
 .trace { align-self: stretch; margin: 8px 0 2px; max-width: 760px; width: 100%; border-radius: 10px; background: color-mix(in srgb, var(--pill) 70%, transparent); font-size: 12.5px; text-align: left; }

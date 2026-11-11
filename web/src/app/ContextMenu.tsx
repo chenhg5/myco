@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Check } from "lucide-react";
 import type { IconType } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
-/** One line of a right-click menu, or "sep" for a divider. */
+/** One line of a menu, "sep" for a divider, or a small heading over a group
+ * of choices. A choice that is currently on carries `checked`. */
 export type MenuItem =
-  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean }
+  | { label: string; icon?: IconType; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean }
+  | { header: string }
   | "sep";
 
 const WIDTH = 190;
 const ROW = 29;
+const heightOf = (items: MenuItem[]) => items.reduce((h, it) => h + (it === "sep" ? 9 : "header" in it ? 24 : ROW), 10);
 
 /** How many pointer units one CSS pixel of `left`/`top` covers. The text-size
  * setting zooms the whole page, and then a position given in pixels lands
@@ -58,7 +62,7 @@ export function useContextMenu(): {
     e.preventDefault();
     if (items.length === 0) return;
     const k = styleScale();
-    const height = items.reduce((h, it) => h + (it === "sep" ? 9 : ROW), 10) * k;
+    const height = Math.min(heightOf(items) * k, window.innerHeight - 16);
     setMenu({
       x: Math.max(4, Math.min(e.clientX, window.innerWidth - WIDTH * k - 8)) / k,
       y: Math.max(4, Math.min(e.clientY, window.innerHeight - height - 8)) / k,
@@ -69,7 +73,7 @@ export function useContextMenu(): {
   const openUnder = useCallback((el: Element, items: MenuItem[]) => {
     const r = el.getBoundingClientRect();
     const k = styleScale();
-    const height = items.reduce((h, it) => h + (it === "sep" ? 9 : ROW), 10) * k;
+    const height = Math.min(heightOf(items) * k, window.innerHeight - 16);
     setMenu({
       x: Math.max(4, Math.min(r.right - WIDTH * k, window.innerWidth - WIDTH * k - 8)) / k,
       y: (r.bottom + 4 + height > window.innerHeight ? Math.max(4, r.top - height - 4) : r.bottom + 4) / k,
@@ -99,18 +103,21 @@ export function useContextMenu(): {
       >
         {menu.items.map((it, i) => it === "sep" ? (
           <div key={i} className="conv-menu-sep" role="separator" />
+        ) : "header" in it ? (
+          <div key={i} className="conv-menu-header">{it.header}</div>
         ) : (
           <button
             key={i}
             type="button"
             role="menuitem"
             className={cn("conv-menu-item", it.danger && "danger")}
-            autoFocus={i === 0}
+            autoFocus={i === menu.items.findIndex((x) => x !== "sep" && !("header" in x))}
             disabled={it.disabled}
             onClick={() => { setMenu(null); it.onSelect(); }}
           >
-            {it.icon ? <it.icon /> : <span className="conv-menu-noicon" />}
-            {it.label}
+            {it.checked !== undefined ? (it.checked ? <Check /> : <span className="conv-menu-noicon" />)
+              : it.icon ? <it.icon /> : <span className="conv-menu-noicon" />}
+            <span className="conv-menu-label">{it.label}</span>
           </button>
         ))}
       </div>,
