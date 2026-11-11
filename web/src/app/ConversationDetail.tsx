@@ -266,15 +266,34 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return r?.st.agent.display_name || from;
   };
 
+  // The thread a message continues in the exchange view: the latest one you
+  // take part in under your current name (older tasks were signed with the
+  // device, and the hub only lets a thread's participants write into it).
+  const continuedThread = (): string | undefined => {
+    const me = row?.hub.me?.member ? CONSOLE_PREFIX + row.hub.me.member.name : null;
+    for (let i = (shown?.length || 0) - 1; i >= 0; i--) {
+      const m = shown![i];
+      if (!me || m.from === me || m.to === me) return m.thread_id;
+    }
+    return undefined;
+  };
+
   const send = async () => {
     const body = draft.trim();
     if (!body || sending) return;
     setSending(true);
     setSendError(null);
     try {
+      const threadId = exchange ? continuedThread() : target.threadId;
+      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id });
       const m = openTask && steerOn
         ? await appApi.steer(target.hubId, openTask.id, body)
-        : await appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id: exchange ? shown?.[shown.length - 1]?.thread_id : target.threadId });
+        : await sendNew(threadId).catch((e) => {
+          // The hub does not count you in that thread (sent under an older
+          // name): start a new one; the exchange view shows every thread.
+          if (exchange && threadId && (e as { code?: string }).code === "not_found") return sendNew(undefined);
+          throw e;
+        });
       setMessages((prev) => (prev ? [...prev, m] : [m]));
       setDraft("");
       histPos.current = -1;
