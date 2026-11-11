@@ -105,6 +105,13 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 	if code, _, _ := me.run("agent", "alias", "set", "--alias", "stolen", "--target", "glenn-bot"); code != ExitPermission {
 		t.Fatalf("non-owner sets alias: exit %d", code)
 	}
+	// A role address that points at someone else's node is not his to take.
+	if code, _, e := root.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "glenn-bot"); code != 0 {
+		t.Fatalf("admin sets alias: %d %s", code, e)
+	}
+	if code, _, _ := me.run("agent", "alias", "set", "--alias", "team-reviewer", "--target", "laohu-mbp-claude-ef56"); code != ExitConflict {
+		t.Fatalf("member re-points someone else's alias to his node: exit %d", code)
+	}
 	if code, _, e := me.run("agent", "alias", "remove", "--alias", "laohu-reviewer", "--force"); code != 0 {
 		t.Fatalf("owner removes own node alias: %d %s", code, e)
 	}

@@ -48,7 +48,32 @@ func (s *Server) maySetAlias(w http.ResponseWriter, r *http.Request, name, targe
 		}
 		return true
 	}
-	return s.mayOwn(w, r, a.Owner, "set aliases for")
+	if !s.mayOwn(w, r, a.Owner, "set aliases for") {
+		return false
+	}
+	// Re-pointing an alias takes it from its current target: only that
+	// target's owner may give it up (a role address like "reviewer" is not
+	// up for grabs).
+	aliases, err := s.agents.ListAliases(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return false
+	}
+	for _, al := range aliases {
+		if string(al.Name) != name || al.Target == a.Name {
+			continue
+		}
+		cur, err := s.agents.Get(r.Context(), string(al.Target))
+		if err != nil {
+			writeError(w, err)
+			return false
+		}
+		if !s.actorOf(r).Owns(cur.Owner) {
+			writeError(w, domain.Errf(domain.CodeConflict, "alias %s already belongs to %s", name, al.Target).WithSuggestion("choose a free alias, or ask the owner of %s", al.Target))
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) mayRemoveAlias(w http.ResponseWriter, r *http.Request, name string) bool {
