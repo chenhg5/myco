@@ -4123,3 +4123,18 @@ body.is-resizing {
 .app-update-close { position: absolute; top: 6px; right: 6px; display: inline-flex; padding: 3px; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: default; }
 .app-update-close:hover { background: var(--nav-hover); color: var(--fg); }
 .app-update-close svg { width: 13px; height: 13px; }
+
+/* Project page: a document-like page, so larger type than the lists. */
+.app-project .app-group-title { margin: 0 2px 8px; font-size: 13px; }
+.app-project .app-group-title .name { font-size: 15px; font-weight: 600; color: var(--fg); }
+.app-project .app-group-note { font-size: 12.5px; }
+.app-project-titles h1 { font-size: 24px; }
+.app-project-goal { font-size: 14.5px; }
+.app-project-meta { font-size: 12.5px; }
+.app-project-progress { font-size: 13.5px; }
+.app-project .app-row-title { font-size: 14px; }
+.app-project .app-row-sub { font-size: 12.5px; }
+.app-project-brief { font-size: 14px; }
+.app-project .app-empty-note { font-size: 13px; }
+.app-project .conv-row-title { font-size: 14px; }
+.app-project .conv-row-summary { font-size: 12.5px; }

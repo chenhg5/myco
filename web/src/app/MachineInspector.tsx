@@ -3,7 +3,8 @@ import { ver } from "./nodes";
 import { X } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import { agentKind, cliName, kindLabel, nodeIcon, osInfo } from "@/app/nodes";
+import { agentKind, canManage, cliName, kindLabel, nodeIcon, osInfo } from "@/app/nodes";
+import { NodePicker } from "@/app/NodePicker";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
@@ -23,12 +24,15 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
   onSpawn: (hubId: string, machineId: string) => void;
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
+  const [allowOpen, setAllowOpen] = useState(false);
+  const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     setRenameOpen(false);
+    setAllowOpen(false);
     setName("");
     setBusy(false);
     setError(null);
@@ -37,10 +41,10 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
   // Escape closes it, like the node inspector (not while renaming).
   useEffect(() => {
     if (!target) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !renameOpen) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !renameOpen && !allowOpen) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [target, renameOpen, onClose]);
+  }, [target, renameOpen, allowOpen, onClose]);
 
   const hub = target ? hubs?.find((h) => h.id === target.hubId) : undefined;
   const machine = target ? hub?.overview?.machines?.find((m) => m.id === target.machineId) : undefined;
@@ -79,6 +83,39 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
 
   if (!hub || !machine) return null;
 
+  // The machine's own node: its allow-list says which agents may start new
+  // sessions here (agent spawn). Empty or "*" means any agent on the hub.
+  const machineNode = (hub.overview?.agents || []).map((x) => x.agent)
+    .find((a) => a.machine_id === machine.id && a.binding.harness === "machine");
+  const spawners = machineNode?.allow_from || [];
+  const anySpawner = spawners.length === 0 || spawners.includes("*");
+  const mayManage = !!machineNode && canManage(hub, machineNode.owner_id);
+  const nameOf = (n: string) => hub.overview?.agents.find((x) => x.agent.name === n)?.agent.display_name || n;
+  const openAllow = () => {
+    setAllowFrom(spawners);
+    setError(null);
+    setAllowOpen(true);
+  };
+  const saveAllow = async () => {
+    if (!machineNode) return;
+    // Still open to any node: nothing to change ("*" is never sent by name).
+    if (allowFrom.includes("*") || (allowFrom.length === 0 && anySpawner)) {
+      setAllowOpen(false);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.updateAllowFrom(target.hubId, machineNode.name, allowFrom);
+      await onRefresh();
+      setAllowOpen(false);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const os = osInfo(machine.os);
   const OsIcon = os.icon;
 
@@ -115,6 +152,18 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
               <div className="app-kv"><span className="app-kv-label">{L("myco 版本", "myco version")}</span><span className="app-kv-value">{ver(machine.myco_version) || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{machine.online ? L("现在", "Now") : timeAgo(machine.last_seen_at, now)}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("节点数", "Nodes")}</span><span className="app-kv-value">{machine.agents.length}</span></div>
+              {machineNode && (
+                <div className="app-kv">
+                  <span className="app-kv-label">{L("谁能开新会话", "Who can start sessions")}</span>
+                  <span className="app-kv-value">
+                    {mayManage ? (
+                      <button type="button" className="app-kv-link" onClick={openAllow}>
+                        {anySpawner ? L("任何节点", "Any node") : spawners.map(nameOf).join("、")}<span className="app-chev">›</span>
+                      </button>
+                    ) : anySpawner ? L("任何节点", "Any node") : spawners.map(nameOf).join("、")}
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -218,6 +267,31 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
           </button>
         </div>
       </Modal>
+
+      {machineNode && (
+        <Modal
+          open={allowOpen}
+          onOpenChange={(o) => { if (!o && !busy) { setAllowOpen(false); setError(null); } }}
+          title={L("谁能在这台机器上开新会话", "Who can start sessions on this machine")}
+          description={L(
+            `只有选中的节点可以在 ${machine.name} 上开新的 Claude Code、Codex 会话或 Shell 节点（myco agent spawn / 在机器上新建）。一个都不选表示 Hub 上任何节点都可以。你在 App 里操作不受这个限制。`,
+            `Only the selected nodes can start new Claude Code or Codex sessions or shell nodes on ${machine.name} (myco agent spawn / New on a machine). Select none to allow any node on the hub. What you do in the app is not limited by this.`,
+          )}
+        >
+          <NodePicker
+            nodes={(hub.overview?.agents || []).map((x) => x.agent).filter((a) => agentKind(a) !== "machine" && agentKind(a) !== "human")}
+            value={allowFrom.filter((n) => n !== "*")}
+            onChange={setAllowFrom}
+            disabled={busy}
+            emptyPlaceholder={allowFrom.includes("*") || allowFrom.length === 0 ? L("现在任何节点都可以；选中节点后只允许它们", "Any node can now; pick nodes to allow only them") : undefined}
+          />
+          <ErrorText error={error} />
+          <div className="app-modal-actions">
+            <button type="button" className="app-btn" onClick={() => { setAllowOpen(false); setError(null); }} disabled={busy}>{L("取消", "Cancel")}</button>
+            <button type="button" className="app-btn app-btn-primary" onClick={() => void saveAllow()} disabled={busy}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

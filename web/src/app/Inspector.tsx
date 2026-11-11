@@ -657,10 +657,18 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     () => appApi.setSkills(hubId, ag.name, skillDrafts.filter((d) => d.name.trim()).map(fromDraft)),
     "close-action",
   );
-  const saveAllowFrom = () => void run(
-    () => appApi.updateAllowFrom(hubId, ag.name, allowFrom),
-    "close-action",
-  );
+  // "*" (any node) is set by join links; picking nodes replaces it. A shell
+  // node always names who may run commands, so clearing keeps "*" there.
+  const anyNode = allowFrom.includes("*");
+  const saveAllowFrom = () => {
+    // Still open to any node: nothing to change ("*" is only set with the
+    // CLI's explicit --allow-anyone, never by name).
+    if (anyNode || (allowFrom.length === 0 && ag.allow_from.includes("*"))) {
+      closeAction();
+      return;
+    }
+    void run(() => appApi.updateAllowFrom(hubId, ag.name, allowFrom), "close-action");
+  };
 
   const current = row.st.current || [];
 
@@ -895,7 +903,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <div className="app-kv"><span className="app-kv-label">{L("工作目录", "Working directory")}</span><span className="app-kv-value mono">{ag.binding.workdir || "—"}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("投递方式", "Delivery")}</span><span className="app-kv-value">{ag.delivery.mode}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("入网令牌", "Join token")}</span><span className="app-kv-value mono">{ag.enrolled_by || L("管理员注册", "Registered by admin")}</span></div>
-              <div className="app-kv"><span className="app-kv-label">{L("允许来源", "Allowed from")}</span><span className="app-kv-value">{ag.allow_from.length ? ag.allow_from.join(", ") : L("任何人", "Anyone")}</span></div>
+              <div className="app-kv"><span className="app-kv-label">{L("允许来源", "Allowed from")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何节点", "Any node")}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("最近在线", "Last online")}</span><span className="app-kv-value">{timeAgo(ag.last_seen_at, now)}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("注册时间", "Registered")}</span><span className="app-kv-value">{new Date(ag.created_at).toLocaleString(locale(), { hour12: false })}</span></div>
             </div>
@@ -1093,8 +1101,9 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
         <NodePicker
           nodes={(row.hub.overview?.agents || []).map((x) => x.agent)
             .filter((x) => x.name !== ag.name && agentKind(x) !== "machine")}
-          value={allowFrom}
+          value={allowFrom.filter((n) => n !== "*")}
           onChange={setAllowFrom}
+          emptyPlaceholder={anyNode ? L("现在任何节点都可以；选中节点后只允许它们", "Any node can now; pick nodes to allow only them") : undefined}
           disabled={busy}
         />
         <ErrorText error={error} />
