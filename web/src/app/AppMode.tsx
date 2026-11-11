@@ -840,9 +840,13 @@ function writePref(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch { /* not kept */ }
 }
 
-/** A hub that answered 401: it no longer takes this app's token. */
+/** A hub that answered 401: it no longer takes this app's token. The hub says
+ *  so as "admin token missing or invalid" (or "console token missing or
+ *  invalid"), or the proxy answers with the 401 itself. */
 function rejectedApp(error?: string): boolean {
-  return !!error && /\b401\b|unauthori[sz]ed|unauthenticated|invalid (?:console )?token|console token (?:missing|invalid|expired|revoked)|token (?:is )?(?:invalid|expired|revoked)|\brevoked\b/i.test(error);
+  if (!error) return false;
+  if (/\b401\b|unauthori[sz]ed|unauthenticated/i.test(error)) return true;
+  return /\btoken\b/i.test(error) && /\b(?:missing|invalid|expired|revoked)\b/i.test(error);
 }
 
 /**
