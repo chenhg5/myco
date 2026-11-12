@@ -310,12 +310,21 @@ func (r *Runner) Run(ctx context.Context) error {
 // Handle processes one pulled message end to end.
 func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	log := r.log.With("message_id", m.ID, "from", m.From, "type", m.Type, "thread_id", m.ThreadID)
-	if err := r.hub.Ack(ctx, m.ID); err != nil {
-		log.Warn("ack failed; skipping (will be redelivered if the lease expires)", "err", err)
-		return
-	}
 	if m.Type == "task" {
+		// Before the ack: an ack can reach the hub while its answer is lost
+		// (network drop, the machine going to sleep). The task is then acked
+		// and never redelivered, so a restart must still close it.
 		r.markPending(m.ID)
+	}
+	ackCtx, cancel := r.finishContext(ctx)
+	ackErr, unreachable := r.retryFinish(ackCtx, log, "ack", func(c context.Context) error { return r.hub.Ack(c, m.ID) })
+	cancel()
+	if ackErr != nil {
+		if !unreachable && m.Type == "task" {
+			r.clearPending(m.ID) // the hub refused it: it was not acked
+		}
+		log.Warn("ack failed; skipping", "err", ackErr, "hub_unreachable", unreachable)
+		return
 	}
 	if m.Unreadable != "" {
 		// End-to-end encrypted, and this agent cannot open it (keys changed,

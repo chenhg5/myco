@@ -39,7 +39,7 @@ func (r *Runner) retryFinish(ctx context.Context, log *slog.Logger, action strin
 		if pause <= 0 {
 			return err, true
 		}
-		log.Warn("hub unavailable while delivering result; retrying", "action", action, "err", err, "retry_in", pause)
+		log.Warn("hub unavailable; retrying", "action", action, "err", err, "retry_in", pause)
 		timer := time.NewTimer(pause)
 		select {
 		case <-timer.C:
