@@ -993,20 +993,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
-        {!observed && (firstStuck ? (
+        {/* No running state here (已完成, 在干活…): the foot of the chat
+            shows that. Only a task that may be stuck is called out, and
+            this takes you to it. */}
+        {!observed && firstStuck && (
           <button type="button" className="conv-head-state is-link" onClick={toStuck} title={L("跳到可能卡住的任务", "Go to the task that may be stuck")}>
             <span className={cn("dot", state.dot)} />
             {state.label}
           </button>
-        ) : (
-          <span
-            className="conv-head-state"
-            title={messages && messages.length > 0 ? L(`更新于 ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`, `Updated ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`) : undefined}
-          >
-            <span className={cn("dot", state.dot)} />
-            {messages === null ? L("加载中", "Loading") : state.label}
-          </span>
-        ))}
+        )}
         {headActions && <span className="conv-head-actions">{headActions}</span>}
       </header>}
 
