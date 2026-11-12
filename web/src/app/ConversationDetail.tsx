@@ -28,6 +28,9 @@ export interface ConversationTarget {
   peer?: string;
   /** A new conversation's first message goes into this project. */
   project?: string;
+  /** Open at this message (older pages load until it is there), lit up,
+   *  instead of at the bottom. */
+  focus?: string;
   // Where Back goes: the node panel it was opened from.
   returnTo?: { page: string; node?: { hubId: string; name: string }; project?: { hubId: string; name: string } };
 }
@@ -160,6 +163,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [draft]);
   const atBottom = useRef(true);
+  const focusDone = useRef(false);
+  const focusTries = useRef(0);
 
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
   const agent = row?.st.agent;
@@ -183,7 +188,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setSteerMode(false);
     setOlder([]);
     setMore(hit?.more ?? false);
-    atBottom.current = true;
+    // Opened at a message: stay there instead of following the bottom.
+    atBottom.current = !target.focus;
+    focusDone.current = false;
+    focusTries.current = 0;
     // Polls ask only for what changed since the newest change they have
     // (hubs from v0.18.35; 2 s back, for changes in the same moment); every
     // FULL_EVERY-th poll, and on older hubs, the whole view again.
@@ -518,15 +526,40 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   })();
 
   // Jump to a message (from a quote of it) and light it up for a moment.
-  const jumpTo = (id: string) => {
+  const jumpTo = (id: string, smooth = true) => {
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
-    if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!el) return false;
+    el.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
     el.classList.remove("is-flash");
     void el.offsetWidth;
     el.classList.add("is-flash");
     window.setTimeout(() => el.classList.remove("is-flash"), 1600);
+    return true;
   };
+
+  // Opened at a message (a task in the project's group): once it is shown,
+  // bring it to the middle; in a long exchange, load older pages until it
+  // turns up (a few at most).
+  useEffect(() => {
+    if (!target.focus || focusDone.current || shown === null) return;
+    const id = target.focus;
+    const t = requestAnimationFrame(() => {
+      if (focusDone.current) return;
+      if (jumpTo(id, false)) { focusDone.current = true; return; }
+      if (exchange && more && !loadingOlder && focusTries.current < 10) {
+        focusTries.current++;
+        void loadOlder();
+      } else if (!more || focusTries.current >= 10) {
+        // Not found: show the newest, as usual.
+        focusDone.current = true;
+        atBottom.current = true;
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown?.length, more, loadingOlder, target.focus]);
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the

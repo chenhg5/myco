@@ -348,6 +348,24 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-msg", { hasText: body }).first().waitFor({ timeout: 20_000 });
       await clickVisible(page, page.locator(".conv-head button").first());
       await page.locator(".sp-group").waitFor({ timeout: 10_000 });
+      // An older task opens the whole conversation of the two, at that task.
+      const older = "整理 v0.16.8 的发布说明";
+      await clickVisible(page, page.locator(".sp-card", { hasText: older }));
+      const msg = page.locator(".conv-msg", { hasText: older }).first();
+      await msg.waitFor({ timeout: 20_000 });
+      await page.waitForFunction((text) => {
+        const box = document.querySelector(".conv-scroll, .conv-body")?.getBoundingClientRect();
+        const el = [...document.querySelectorAll(".conv-msg")].find((m) => (m.textContent || "").includes(text));
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        const top = box ? box.top : 0, bottom = box ? box.bottom : window.innerHeight;
+        return r.bottom > top && r.top < bottom;
+      }, older, { timeout: 10_000 });
+      if (await page.locator(".conv-msg").count() < 3) throw new Error("点任务应打开两人的完整对话，而不只是这一条");
+      await settle(page, 300);
+      await shot(page, size, scheme, "project-open-task");
+      await clickVisible(page, page.locator(".conv-head button").first());
+      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
     });
 
     await step("项目 · 单聊", async () => {

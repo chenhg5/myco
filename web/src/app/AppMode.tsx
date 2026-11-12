@@ -19,7 +19,7 @@ import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm, i
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
-import { Avatar, AvatarStack, isWorkspace, whereOf } from "@/app/persona";
+import { Avatar, AvatarStack, isWorkspace, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, nodeName } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -176,6 +176,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const namedOv = useMemo(() => ov && { ...ov, hubs: ov.hubs.map((h) => ({ ...h, name: nameOf(h) })) }, [ov, nameOf]);
   const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
+    rememberMachines(namedOv.hubs.flatMap((h) => h.overview?.machines || []));
     return namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
   }, [namedOv]);
 

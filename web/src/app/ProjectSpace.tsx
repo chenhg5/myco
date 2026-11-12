@@ -23,9 +23,9 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 
 type View =
   | { kind: "group" }
-  | { kind: "chat"; agent: string; peer?: string }
+  | { kind: "chat"; agent: string; peer?: string; focus?: string }
   | { kind: "thread"; threadId: string; agent: string }
-  | { kind: "pair"; agent: string; peer: string };
+  | { kind: "pair"; agent: string; peer: string; focus?: string };
 
 const POLL_MS = 4000;
 
@@ -125,9 +125,9 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   };
 
   const target = (v: View): ConversationTarget | null => {
-    if (v.kind === "chat") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, project: project?.name };
+    if (v.kind === "chat") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, project: project?.name, focus: v.focus };
     if (v.kind === "thread") return { hubId, hubName, threadId: v.threadId, agent: v.agent };
-    if (v.kind === "pair") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer };
+    if (v.kind === "pair") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, focus: v.focus };
     return null;
   };
   const t = target(view);
@@ -164,6 +164,19 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
                 const p = it.other?.startsWith("@console:") ? it.other : it.node;
                 setView({ kind: "pair", agent: a, peer: p || "" });
                 return;
+              }
+              // A task opens the whole conversation between its two sides,
+              // at that task: yours with the member (where you can go on),
+              // or theirs, to read.
+              const task = it.open || it.task || it.first;
+              const focus = task?.id;
+              if (task && task.from && task.to) {
+                const [agent, peer] = task.to.startsWith("@") ? [task.from, task.to] : [task.to, task.from];
+                if (!agent.startsWith("@")) {
+                  if (isMe(peer, hubRows[0]?.hub)) setView({ kind: "chat", agent, peer, focus });
+                  else setView({ kind: "pair", agent, peer, focus });
+                  return;
+                }
               }
               const agent = it.participants.find((p) => !p.startsWith("@") && memberNames.has(p)) || it.participants.find((p) => !p.startsWith("@")) || "";
               setView({ kind: "thread", threadId: it.thread_id, agent });

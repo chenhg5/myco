@@ -81,10 +81,71 @@ const SCREEN = [
 ];
 const SCREEN_FILL: Record<string, string> = { W: "var(--av-frame)", F: "var(--av-screen)", P: "#5fd7a7", L: "#cdd0d8" };
 
-function WorkspaceFace() {
+// A computer looks like the system it runs: a silver all-in-one for a
+// Mac, a blue screen with a window for Windows, a penguin for Linux (WSL
+// included); a plain screen when the system is not known (or in a cloud).
+const MAC = [
+  "............",
+  ".SSSSSSSSSS.",
+  ".SMMMMMMMMS.",
+  ".SMTMMMMMMS.",
+  ".SNNTNNNNNS.",
+  ".SNTNNNNNNS.",
+  ".SRRRRTTTRS.",
+  ".SSSSSSSSSS.",
+  ".CCCCCCCCCC.",
+  ".....SS.....",
+  "....SSSS....",
+  "............",
+];
+const WINDOWS = [
+  "............",
+  ".WWWWWWWWWW.",
+  ".WBBBBBBBBW.",
+  ".WBTTTTTTBW.",
+  ".WBTbbbbTBW.",
+  ".WBTbbbbTBW.",
+  ".WBTTTTTTBW.",
+  ".WBBBBBBBBW.",
+  ".WWWWWWWWWW.",
+  "....WWWW....",
+  "...WWWWWW...",
+  "............",
+];
+const PENGUIN = [
+  "............",
+  "....KKKK....",
+  "...KKKKKK...",
+  "..KKEKKEKK..",
+  "..KKKOOKKK..",
+  "..KYYYYYYK..",
+  ".KKYYYYYYKK.",
+  ".KKYYYYYYKK.",
+  "..KYYYYYYK..",
+  "..KKYYYYKK..",
+  "...OO..OO...",
+  "............",
+];
+const FACE_FILL: Record<string, string> = {
+  ...SCREEN_FILL,
+  S: "#c9ccd4", C: "#e7e9ee", M: "#6d5ef0", N: "#9a5fe6", R: "#d96aa8",
+  B: "#2f6fe0", T: "#ffffff", b: "#a9c8ff",
+  K: "#2a2d36", E: "#ffffff", O: "#f0a43a", Y: "#f4f1e8",
+};
+const OS_FACE: Record<string, string[]> = { darwin: MAC, windows: WINDOWS, linux: PENGUIN };
+
+/** Each machine's system, by machine id, as the hubs report it: the app
+ *  tells it here once per refresh, and computers' faces follow it. */
+const machineOs = new Map<string, string>();
+export function rememberMachines(ms: { id: string; os?: string }[]) {
+  for (const m of ms) if (m.os) machineOs.set(m.id, m.os);
+}
+
+function WorkspaceFace({ os }: { os?: string }) {
+  const grid = (os && OS_FACE[os]) || SCREEN;
   return (
     <svg className="pa-sprite" viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden="true">
-      {SCREEN.flatMap((row, y) => [...row].map((k, x) => (k === "." ? null : <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={SCREEN_FILL[k]} />)))}
+      {grid.flatMap((row, y) => [...row].map((k, x) => (k === "." ? null : <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={FACE_FILL[k]} />)))}
     </svg>
   );
 }
@@ -126,7 +187,7 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
       style={{ width: size, height: size, ["--av-cap" as string]: l.cap }}
       aria-hidden="true"
     >
-      {ws ? <WorkspaceFace /> : <MushroomFace seed={agent.id || agent.name} />}
+      {ws ? <WorkspaceFace os={agent.machine_id ? machineOs.get(agent.machine_id) : undefined} /> : <MushroomFace seed={agent.id || agent.name} />}
       {badge && !ws && size >= 28 && (
         <span className={cn("pa-badge", cli.startsWith("claude") && "is-claude", cli.startsWith("codex") && "is-codex")}>
           {cli.startsWith("codex") ? <CodexMark /> : <Badge />}
