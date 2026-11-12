@@ -326,6 +326,26 @@ async function runMatrix(browser, size, scheme) {
       const card = compactText(await page.locator(".sp-dispatch").first().innerText());
       if (!card.startsWith("派给")) throw new Error(`派活卡片应写明派给谁，实际是「${card}」`);
       if (!narrow) await page.locator(".sp-side .sp-role", { hasText: "协调者" }).waitFor({ timeout: 10_000 });
+      // The coordinator heads the members; whoever is at work comes next.
+      if (!narrow) {
+        const order = await page.locator(".sp-side .sp-side-group").first().locator(".sp-member").evaluateAll((els) => els.map((e) => ({
+          coord: !!e.querySelector(".sp-role"), working: !!e.querySelector(".is-working"), away: e.classList.contains("is-away"),
+        })));
+        if (!order[0]?.coord) throw new Error("成员列表第一个应是协调者");
+        const rest = order.slice(1);
+        const lastWorking = rest.map((x) => x.working).lastIndexOf(true);
+        const firstIdle = rest.findIndex((x) => !x.working);
+        if (lastWorking >= 0 && firstIdle >= 0 && firstIdle < lastWorking) throw new Error("在干活的成员应排在没在干活的前面");
+        // The box you write in lines up with the messages above it.
+        const edges = await page.evaluate(() => {
+          const tl = document.querySelector(".sp-home .conv-timeline");
+          const box = document.querySelector(".sp-home .conv-compose-box")?.getBoundingClientRect();
+          if (!tl || !box) return null;
+          const cs = getComputedStyle(tl); const t = tl.getBoundingClientRect();
+          return [t.left + parseFloat(cs.paddingLeft) - box.left, t.right - parseFloat(cs.paddingRight) - box.right];
+        });
+        if (edges && (Math.abs(edges[0]) > 6 || Math.abs(edges[1]) > 6)) throw new Error(`输入框应和上面的对话左右对齐，差了 ${edges.map(Math.round).join(" / ")}px`);
+      }
       await settle(page);
       await shot(page, size, scheme, "project-home");
     });

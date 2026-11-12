@@ -290,8 +290,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // array, no re-render, no scroll).
     const sameAs = (a: Message[], b: Message[]) => a.length === b.length
       && a.every((x, i) => x.id === b[i].id && x.status === b[i].status && x.updated_at === b[i].updated_at && x.body === b[i].body);
+    // (Only once something is on screen: the first answer, even an empty
+    // one, always replaces the loading state.)
+    let onScreen = !!hit;
     const show = (ms: Message[], m: boolean) => {
-      const same = sameAs(current, ms) && more === m;
+      const same = onScreen && sameAs(current, ms) && more === m;
+      onScreen = true;
       current = ms;
       more = m;
       since = changedUntil(ms);
@@ -1023,7 +1027,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
 
   return (
-    <div className="conv-detail">
+    <div className={cn("conv-detail", hasRail && "has-rail")}>
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}

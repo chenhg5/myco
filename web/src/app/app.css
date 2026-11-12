@@ -2690,8 +2690,8 @@ textarea.app-input {
    under the pointer (this one motion is the point of the control). */
 /* The rail keeps to its own narrow lane, so it never sits over the text or
    takes clicks meant for it; the timeline gives it a little room. */
-.conv-body.has-rail .conv-timeline {
-  padding-left: 36px;
+.conv-detail.has-rail {
+  --conv-pad-l: 36px;
 }
 .conv-rail {
   position: absolute;
@@ -2797,10 +2797,17 @@ textarea.app-input {
 /* A conversation with an agent, as in the agents' own apps: one column;
    what you say is a small bubble on the right, what the agent says is plain
    text across the column, and its work sits between the two as quiet lines. */
+/* The conversation's column: the messages and the box you write in below
+   share it (width and side padding), so their edges line up. */
+.conv-detail {
+  --conv-col: 760px;
+  --conv-pad: 24px;
+  --conv-pad-l: var(--conv-pad);
+}
 .conv-timeline {
-  max-width: 760px;
+  max-width: var(--conv-col);
   margin: 0 auto;
-  padding: 20px 24px 16px;
+  padding: 20px var(--conv-pad) 16px var(--conv-pad-l);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3120,7 +3127,7 @@ button.conv-quote:hover {
 /* ---------- conversation composer ---------- */
 .conv-compose {
   flex: none;
-  padding: 8px 16px 14px;
+  padding: 8px var(--conv-pad) 14px var(--conv-pad-l);
   background: var(--bg);
 }
 /* Everything in the composer area shares the conversation's column, so a
@@ -3130,7 +3137,7 @@ button.conv-quote:hover {
 .conv-busy,
 .conv-compose > .app-error-text,
 .conv-compose-box {
-  max-width: 760px;
+  max-width: calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l));
   margin-left: auto;
   margin-right: auto;
 }
@@ -3770,14 +3777,18 @@ button.conv-quote:hover {
   .conv-head {
     padding: 8px 10px;
   }
+  .conv-detail {
+    --conv-pad: 12px;
+  }
   .conv-timeline {
-    padding: 14px 12px 10px;
+    padding-top: 14px;
+    padding-bottom: 10px;
   }
   .conv-msg {
     max-width: 88%;
   }
   .conv-compose {
-    padding: 6px 10px 10px;
+    padding: 6px var(--conv-pad) 10px var(--conv-pad-l);
   }
   .conv-compose-hint,
   .term-foot span + span {

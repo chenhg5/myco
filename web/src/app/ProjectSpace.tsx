@@ -988,6 +988,19 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   onPutIn?: (r: AgentRow, p: Project) => void;
 }) {
   const menu = useContextMenu();
+  // Who is in front: the coordinator always first, then whoever is at
+  // work (the latest to start first), then those with work queued, the
+  // idle, and last those not online.
+  const startedAt = (r: AgentRow) => {
+    const t = (r.st.current || []).filter((m) => m.to === r.st.agent.name && m.type === "task" && m.status === "acked")
+      .reduce((x, m) => Math.max(x, new Date(m.updated_at || m.created_at).getTime() || 0), 0);
+    return t || new Date(r.st.agent.status_at || 0).getTime() || 0;
+  };
+  const rank = (r: AgentRow) => r.st.agent.name === coordinator ? 0
+    : r.st.state === "working" ? 1
+    : r.st.queued > 0 ? 2
+    : r.st.state === "offline" ? 4 : 3;
+  const ordered = [...agents].sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? startedAt(b) - startedAt(a) : 0));
   const menuOf = (r: AgentRow) => {
     const a = r.st.agent;
     const ws = isWorkspace(a);
@@ -1029,7 +1042,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开成员", "Show members")} aria-label={L("展开成员", "Show members")}>
           <PanelRightOpen />
         </button>
-        {agents.map(face)}
+        {ordered.map(face)}
         <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
@@ -1079,7 +1092,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
             <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起成员，只留头像", "Fold to faces")} aria-label={L("收起成员", "Fold members")}><PanelRightClose /></button>
           </span>
         </div>
-        {agents.map(row)}
+        {ordered.map(row)}
         {agents.length === 0 && (
           <button type="button" className="sp-member is-add" onClick={onAddAgent}>
             <span className="sp-add-icon"><Plus /></span>
