@@ -4,9 +4,24 @@ package main
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework WebKit
 #import <Cocoa/Cocoa.h>
+#import <WebKit/WebKit.h>
 #import <objc/runtime.h>
+
+// Nothing behind the page is drawn: the web view's own (white) background
+// and the views holding it are made clear, so only the pill shows.
+static void mycoClearBackgrounds(NSView *v) {
+	if ([v isKindOfClass:[WKWebView class]]) {
+		@try { [v setValue:@NO forKey:@"drawsBackground"]; } @catch (NSException *e) {}
+		if (@available(macOS 12.0, *)) {
+			[(WKWebView *)v setUnderPageBackgroundColor:[NSColor clearColor]];
+		}
+	}
+	v.wantsLayer = YES;
+	v.layer.backgroundColor = [NSColor clearColor].CGColor;
+	for (NSView *sub in v.subviews) mycoClearBackgrounds(sub);
+}
 
 // macOS keeps titled windows below the menu bar (constrainFrameRect); the
 // island belongs on top of it, over the notch.
@@ -26,6 +41,7 @@ static void mycoIslandFree(NSWindow *window) {
 	NSWindowStyleMask mask = NSWindowStyleMaskBorderless;
 	if ([window isKindOfClass:[NSPanel class]]) mask |= NSWindowStyleMaskNonactivatingPanel;
 	if (window.styleMask != mask) window.styleMask = mask;
+	if (window.contentView) mycoClearBackgrounds(window.contentView);
 }
 
 // The screen with a notch (a MacBook's built-in display), else the first.
