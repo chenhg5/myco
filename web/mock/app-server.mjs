@@ -731,7 +731,8 @@ const devices = [
 ];
 if (process.env.MOCK_OWNER_UNNAMED) { people[0].name = "owner"; people[0].display_name = ""; }
 function whoami(h) {
-  if (h.id !== "hub_studio") return undefined;
+  // The showcase's own workspace is yours too (so its computers open).
+  if (h.id !== "hub_studio" && !(SHOWCASE && h.id === "hub_home")) return undefined;
   const m = people.find((p) => p.id === "mem_" + meName);
   return { member: m, can_manage: m.role !== "member", device: devices[0] };
 }

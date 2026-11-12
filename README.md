@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/0f6269ac-236f-4b65-b896-68b2a8562ced
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/nodes-dark.webp">
-  <img src="docs/assets/app/en/nodes.webp" alt="The myco app: every agent on every hub, with its status, CLI, model and machine" width="100%">
+  <img src="docs/assets/app/en/nodes.webp" alt="The myco app: a project is your chat with its coordinator; its members and computers are beside it" width="100%">
 </picture>
 
 ## What myco solves
@@ -67,22 +67,23 @@ https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
-**2. Add your agents.** Click **Add node**. Add yours on every machine they run on; teammates add theirs to the same hub once you [invite them](#2-hand-work-to-a-teammates-agent).
+**2. Add your agents.** Make a project (or just chat), then click **Add an agent**. Add yours on every machine they run on; teammates add theirs to the same hub once you [invite them](#2-hand-work-to-a-teammates-agent).
 
 - **On this computer** — the app lists your recent Claude Code and Codex sessions; click one to add it.
 - **On another computer** — copy the one sentence the app gives you and paste it into an agent session over there. It installs myco and joins by itself. Agents without a resumable Claude Code or Codex session receive through `myco inbox wait` while their session stays open.
-- **Start a new session** on a machine that's already connected, in any folder you choose.
+- **Start a new one** on a computer that's already connected, in any folder you choose.
+- **Add a computer**: a folder on one of your computers where the project's agents may run commands; it opens as a terminal.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/add-node-dark.webp">
-  <img src="docs/assets/app/en/add-node.webp" alt="Add a node: the Claude Code and Codex sessions found on this computer" width="100%">
+  <img src="docs/assets/app/en/add-node.webp" alt="Add an agent: the Claude Code and Codex sessions found on this computer" width="100%">
 </picture>
 
-**3. Put them to work.** Give an agent a task from the app (**Message**, or **Conversations**), or ask one agent to involve another — “ask the build server's Codex why CI fails”, “run the tests on my Mac”. A task runs in the agent's own session; you see what it does as it goes (its thinking, the files it reads and edits, the commands it runs), and you can correct or stop a task while it runs.
+**3. Put them to work.** Tell the project's coordinator what you want, or chat with any member directly; or ask one agent to involve another — “ask the build server's Codex why CI fails”, “run the tests on my Mac”. A task runs in the agent's own session; you see what it does as it goes (its thinking, the files it reads and edits, the commands it runs), and you can correct or stop a task while it runs. A computer opens beside the chat as a terminal, its output live.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/conversation-dark.webp">
-  <img src="docs/assets/app/en/conversation.webp" alt="A conversation: the task, what the agent is doing (thinking, files, commands), and its reply with a table" width="100%">
+  <img src="docs/assets/app/en/conversation.webp" alt="A project chat with a computer's terminal open beside it, a command's output coming in" width="100%">
 </picture>
 
 ## 1. Let a cloud agent use your computer
@@ -134,8 +135,8 @@ Once your agents join — Claude Code and Codex on your computers and servers, c
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/app/en/node.webp" alt="Node details"><br><b>Every agent, in detail.</b> Its CLI, model, permissions and machine; its aliases, group and tags; what it's working on; your conversations with it and its exchanges with other agents. Choose who may give it tasks, or disconnect it.</td>
-<td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Machines"><br><b>Machines.</b> Every computer and server running your agents, whether it's online, and which agents run on it. Start a new Claude Code or Codex session on any of them, in the folder you choose.</td>
+<td width="50%"><img src="docs/assets/app/en/node.webp" alt="A member's card"><br><b>Every agent has a card.</b> What it does, where it runs and with which CLI and model, what it did lately, which projects it is in. Chat with it, rename it, put it in a project; who may give it tasks and more details are a click away.</td>
+<td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Members"><br><b>Members and computers.</b> Every agent in the workspace with its face, role and projects, and every computer the agents can run commands on. Those away for days rest at the bottom.</td>
 </tr>
 </table>
 

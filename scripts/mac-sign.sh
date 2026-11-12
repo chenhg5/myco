@@ -17,6 +17,32 @@ PROFILE=${MYCO_NOTARY_PROFILE:-myco}
 cd "$(dirname "$0")/.."
 rm -rf dist && mkdir -p dist
 
+# notarize <file>: submit it, then ask for its status until Apple decides.
+# Each request is retried, so a network drop (a sleeping laptop, a proxy)
+# does not lose a submission Apple is still working on.
+notarize() {
+  id=""
+  for try in 1 2 3 4 5; do
+    id=$(xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --output-format json 2>/dev/null |
+      sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p') && [ -n "$id" ] && break
+    echo "submitting $1 failed (try $try); retrying" >&2; sleep 15
+  done
+  [ -n "$id" ] || { echo "could not submit $1 for notarization" >&2; exit 1; }
+  echo "submitted $1: $id"
+  for i in $(seq 1 240); do
+    st=$(xcrun notarytool info "$id" --keychain-profile "$PROFILE" --output-format json 2>/dev/null |
+      sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p')
+    case "$st" in
+      Accepted) echo "notarized $1"; return 0 ;;
+      Invalid|Rejected)
+        xcrun notarytool log "$id" --keychain-profile "$PROFILE" >&2 || true
+        echo "notarization of $1: $st" >&2; exit 1 ;;
+    esac
+    sleep 15
+  done
+  echo "notarization of $1 still not done after an hour: $id" >&2; exit 1
+}
+
 # One bundle per architecture, then lipo the two executables together.
 for arch in arm64 amd64; do
   GOARCH=$arch MYCO_SIGN_IDENTITY= make app VERSION="$VERSION" >/dev/null
@@ -36,7 +62,7 @@ codesign --verify --strict --deep dist/myco.app
 
 echo "==> notarizing the app"
 ditto -c -k --keepParent dist/myco.app dist/notarize.zip
-xcrun notarytool submit dist/notarize.zip --keychain-profile "$PROFILE" --wait
+notarize dist/notarize.zip
 xcrun stapler staple dist/myco.app
 rm dist/notarize.zip
 ditto -c -k --keepParent dist/myco.app dist/myco-app-darwin-universal.zip
@@ -48,7 +74,7 @@ ln -s /Applications "$stage/Applications"
 hdiutil create -quiet -volname myco -srcfolder "$stage" -ov -format UDZO dist/myco.dmg
 rm -rf "$stage"
 codesign --force --timestamp --sign "$MYCO_SIGN_IDENTITY" dist/myco.dmg
-xcrun notarytool submit dist/myco.dmg --keychain-profile "$PROFILE" --wait
+notarize dist/myco.dmg
 xcrun stapler staple dist/myco.dmg
 
 spctl --assess --type execute -vv dist/myco.app
