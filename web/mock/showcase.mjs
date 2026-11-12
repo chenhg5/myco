@@ -213,6 +213,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       { name: "build-backend", role: "member", note: T("API", "API"), added_by: "glenn", added_at: iso(86400 * 6) },
       { name: "mbp-reviewer", role: "member", note: T("审查 PR", "Reviews PRs"), added_by: "glenn", added_at: iso(86400 * 5) },
       { name: "desk-docs", role: "member", note: T("文档站", "Docs site"), added_by: "glenn", added_at: iso(86400 * 4) },
+      { name: "build-shell", role: "member", note: T("构建服务器上跑命令", "Runs commands on the build server"), added_by: "glenn", added_at: iso(86400 * 3) },
     ],
     docs: [{ name: T("设计约定.md", "design.md"), body: T("# 设计约定\n\n- 主色 #1f8a5b\n- 圆角 12px\n", "# Design rules\n\n- Accent #1f8a5b\n- Radius 12px\n"), content_type: "text/markdown; charset=utf-8", updated_by: "mbp-frontend", updated_at: iso(7200) }],
   }];

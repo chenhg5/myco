@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/0259f755-d077-46ba-a7ba-4f66e4a2f633
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/nodes-dark.webp">
-  <img src="docs/assets/app/zh/nodes.webp" alt="myco App：所有 Hub 上的所有 agent，以及它们的状态、CLI、模型和所在机器" width="100%">
+  <img src="docs/assets/app/zh/nodes.webp" alt="myco App：一个项目就是你和它的协调者的对话，成员和电脑在旁边" width="100%">
 </picture>
 
 ## myco 解决什么问题
@@ -65,22 +65,23 @@ https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
 ```
 
-**2. 加入你的 agent。** 点 **添加节点**，把你各台机器上的 agent 都加进来；同事[收到邀请](#2-把活直接交给同事的-agent)后，把他们自己的 agent 加进同一个 Hub。
+**2. 加入你的 agent。** 建一个项目（或者直接聊天），点 **添加 agent**，把你各台机器上的 agent 都加进来；同事[收到邀请](#2-把活直接交给同事的-agent)后，把他们自己的 agent 加进同一个 Hub。
 
 - **本机的 agent**：App 列出这台电脑上最近的 Claude Code 和 Codex 会话，点一个就加入。
 - **其他电脑上的 agent**：复制 App 给的那句话，发给那台电脑上的 agent，它会自己装好 myco 并加入。没有可续接的 Claude Code 或 Codex 会话时，agent 需要在会话开着期间用 `myco inbox wait` 收消息。
-- **在已加入的机器上开新会话**，目录随你选。
+- **在已连上的电脑上新开一个**，目录随你选。
+- **加一台电脑**：你某台电脑上的一个文件夹，项目里的 agent 可以在里面跑命令；打开就是一个终端。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/add-node-dark.webp">
-  <img src="docs/assets/app/zh/add-node.webp" alt="添加节点：这台电脑上找到的 Claude Code 和 Codex 会话" width="100%">
+  <img src="docs/assets/app/zh/add-node.webp" alt="添加 agent：这台电脑上找到的 Claude Code 和 Codex 会话" width="100%">
 </picture>
 
-**3. 让它们干活。** 在 App 里直接给 agent 派任务（**发消息**，或者从 **对话** 页开始），也可以让一个 agent 去找另一个：「问问构建服务器上的 Codex，CI 为什么挂了」「在我的 Mac 上把测试跑一遍」。任务在 agent 自己的会话里运行，它在做什么（思考、读改了哪些文件、跑了哪些命令）会实时显示，运行中也可以随时修正或停止。
+**3. 让它们干活。** 跟项目的协调者说你要什么，或者直接和任意成员单聊；也可以让一个 agent 去找另一个：「问问构建服务器上的 Codex，CI 为什么挂了」「在我的 Mac 上把测试跑一遍」。任务在 agent 自己的会话里运行，它在做什么（思考、读改了哪些文件、跑了哪些命令）会实时显示，运行中也可以随时修正或停止。电脑在对话旁边打开，就是一个终端，输出实时显示。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/zh/conversation-dark.webp">
-  <img src="docs/assets/app/zh/conversation.webp" alt="一段对话：任务、agent 正在做的事（思考、文件、命令），以及它带表格的回复" width="100%">
+  <img src="docs/assets/app/zh/conversation.webp" alt="项目对话旁边打开一台电脑的终端，命令的输出正在出来" width="100%">
 </picture>
 
 ## 1. 让云端 agent 用你的电脑
@@ -132,8 +133,8 @@ myco message send --to my-mac-claude --wait 15m --body "对本地数据库跑一
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/app/zh/node.webp" alt="节点详情"><br><b>每个 agent 的详情。</b>CLI、模型、权限、所在机器；别名、分组和标签；正在做什么；你和它的对话，以及它和其他节点的往来。还能设置谁可以给它派任务，或者把它踢下线。</td>
-<td width="50%"><img src="docs/assets/app/zh/machines.webp" alt="机器"><br><b>机器。</b>每一台跑着 agent 的电脑和服务器，是否在线、上面有哪些 agent。可以在任意一台上，按你选的目录开一个新的 Claude Code 或 Codex 会话。</td>
+<td width="50%"><img src="docs/assets/app/zh/node.webp" alt="成员名片"><br><b>每个 agent 都有一张名片。</b>它做什么、在哪台电脑、用的什么 CLI 和模型、最近做了什么、在哪些项目里。可以单聊、改名、放进项目；谁能给它派活和更多细节，点一下就有。</td>
+<td width="50%"><img src="docs/assets/app/zh/machines.webp" alt="成员"><br><b>成员和电脑。</b>工作区里的每个 agent，带着它的样子、分工和所在项目；还有 agent 们能跑命令的每台电脑。好几天没上线的排在最后。</td>
 </tr>
 </table>
 
