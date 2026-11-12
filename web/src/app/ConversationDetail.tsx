@@ -719,7 +719,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {failedNote || clockTime(m.created_at)}
-            {!mine && !m.unreadable && <CopyMessage text={m.body} />}
+            {!m.unreadable && <CopyMessage text={m.body} />}
           </div>
         </div>
         {/* What the agent did for a task you gave it (its runner reports it):

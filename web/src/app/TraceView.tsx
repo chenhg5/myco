@@ -5,6 +5,7 @@ import type { Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L } from "@/lib/i18n";
+import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -172,6 +173,9 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
     const t = window.setInterval(() => void load(), POLL_MS);
     return () => { off = true; window.clearInterval(t); };
   }, [hubId, task.id, running, gone]);
+  // While nothing says what it is doing: a playful verb (the pixel mushroom
+  // is at work).
+  const verb = useVerb(running);
 
   // Not picked up yet (queued, the node offline or its session busy): a
   // quiet line saying why, not a spinner.
@@ -179,13 +183,24 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
     return (
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">
-          <span className="trace-wait-dot" />
+          <Mushroom idle />
           <span className="trace-title">{waiting || L("排队中，轮到它时开始", "Queued: it starts when the node gets to it")}</span>
         </div>
       </div>
     );
   }
-  if (gone) return null;
+  // At work with no steps to show yet (none so far, or a hub that does not
+  // keep them): the mushroom at work, a playful verb, and the time.
+  const atWork = (
+    <div className="trace is-live">
+      <div className="trace-head trace-wait">
+        <Mushroom />
+        <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
+        <Elapsed since={task.created_at} className="trace-usage" />
+      </div>
+    </div>
+  );
+  if (gone) return running ? atWork : null;
   const { rows, usage } = rowsOf(events || []);
   // The process is thinking, tool calls and errors. What the agent says is
   // the reply (shown as the message); text between steps stays as context,
@@ -196,16 +211,7 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
   if (!running && (events === null || steps === 0)) return null;
-  if (running && steps === 0) {
-    return (
-      <div className="trace is-live">
-        <div className="trace-head trace-wait">
-          <Loader2 className="trace-spin" />
-          <span className="trace-title is-shimmer">{L("正在回复…", "Replying…")}</span>
-        </div>
-      </div>
-    );
-  }
+  if (running && steps === 0) return atWork;
 
   const summary = summaryOf(rows);
   // While it runs, the line says what it is doing right now.
@@ -222,8 +228,9 @@ export function TraceView({ hubId, task, onGrow, waiting }: {
   return (
     <div className={cn("trace", running && "is-live", open && "is-open")}>
       <button type="button" className="trace-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {running ? <Loader2 className="trace-spin" /> : <ChevronRight className="trace-chev" />}
+        {running ? <Mushroom /> : <ChevronRight className="trace-chev" />}
         <span className={cn("trace-title", running && "is-shimmer")}>{head}</span>
+        {running && <Elapsed since={task.created_at} className="trace-usage" />}
         {!running && usage && <span className="trace-usage">{usageLine(usage)}</span>}
       </button>
       {open && (

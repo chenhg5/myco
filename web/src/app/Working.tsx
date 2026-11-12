@@ -37,7 +37,8 @@ function cells(rows: string[], top = 0) {
 
 const KIND: Record<string, string> = { C: "is-cap", o: "is-spot", S: "is-stem", e: "is-eye" };
 
-function Mushroom({ idle }: { idle?: boolean }) {
+/** The mushroom: standing when idle (still blinking), else shuffling. */
+export function Mushroom({ idle }: { idle?: boolean }) {
   return (
     <svg className={cn("work-sprite", idle && "is-idle")} viewBox="0 -4 12 16" width="30" height="40" shapeRendering="crispEdges" aria-hidden="true">
       {/* spores drifting up off the cap */}
@@ -81,6 +82,32 @@ function elapsed(ms: number): string {
   return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
 }
 
+/** A playful verb for a node that says nothing about what it is doing,
+ * changing every few seconds (off: a fixed one is not needed). */
+export function useVerb(on = true): string {
+  // A random one to start with, so two conversations do not say the same.
+  const [turn, setTurn] = useState(() => Math.floor(Math.random() * VERBS.length));
+  useEffect(() => {
+    if (!on) return;
+    const t = window.setInterval(() => setTurn((v) => (v + 1 + Math.floor(Math.random() * (VERBS.length - 1))) % VERBS.length), TURN_MS);
+    return () => window.clearInterval(t);
+  }, [on]);
+  const [zh, en] = VERBS[turn];
+  return L(zh, en);
+}
+
+/** How long since then, ticking every second. */
+export function Elapsed({ since, className }: { since: string; className?: string }) {
+  const start = new Date(since).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  if (Number.isNaN(start)) return null;
+  return <span className={className}>{elapsed(now - start)}</span>;
+}
+
 export function WorkingLine({ name, since, status, side, queued, behind = 0 }: {
   /** who is working */
   name: string;
@@ -95,21 +122,8 @@ export function WorkingLine({ name, since, status, side, queued, behind = 0 }: {
   /** more tasks for it waiting behind this one */
   behind?: number;
 }) {
-  const start = new Date(since).getTime();
-  // A random verb to start with, so two conversations do not say the same.
-  const [turn, setTurn] = useState(() => Math.floor(Math.random() * VERBS.length));
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (status || queued) return;
-    const t = window.setInterval(() => setTurn((v) => (v + 1 + Math.floor(Math.random() * (VERBS.length - 1))) % VERBS.length), TURN_MS);
-    return () => window.clearInterval(t);
-  }, [status, queued]);
-  const [zh, en] = VERBS[turn];
-  const text = queued ? L("排队中，等它接手", "Queued, waiting to be picked up") : status || L(zh, en);
+  const verb = useVerb(!status && !queued);
+  const text = queued ? L("排队中，等它接手", "Queued, waiting to be picked up") : status || verb;
   return (
     <div className={cn("work-line", side === "right" && "is-right")} role="status" aria-live="off">
       <Mushroom idle={queued} />
@@ -117,7 +131,7 @@ export function WorkingLine({ name, since, status, side, queued, behind = 0 }: {
         <span className="work-name">{name}</span>
         {/* keyed, so a new verb fades in */}
         <span key={text} className={cn("work-verb", queued && "is-still")}>{text}</span>
-        {!Number.isNaN(start) && <span className="work-time">{elapsed(now - start)}</span>}
+        <Elapsed since={since} className="work-time" />
         {behind > 0 && <span className="work-time">{L(`后面还有 ${behind} 个任务`, `${behind} more queued`)}</span>}
       </div>
     </div>

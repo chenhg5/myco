@@ -2800,9 +2800,16 @@ textarea.app-input {
   position: absolute;
   top: 100%;
   right: 4px;
-  margin-top: 1px;
+  z-index: 1;
+  margin-top: 0;
+  padding-top: 1px;
   white-space: nowrap;
   pointer-events: none;
+}
+/* ...and takes the pointer only while it shows (to copy), touching the
+   bubble so moving onto it keeps it shown. */
+.conv-msg.is-me:hover .conv-msg-meta:not(.is-shown) {
+  pointer-events: auto;
 }
 .conv-msg-copy {
   display: inline-grid;
@@ -3077,21 +3084,21 @@ button.conv-quote:hover {
   gap: 10px;
   align-self: flex-start;
   margin-top: 2px;
-  --work-cap: var(--green);
-  --work-stem: #d8c6a6;
-  --work-eye: #3a3226;
-}
-.dark .work-line {
-  --work-stem: #e6d9c0;
-  --work-eye: #24201a;
 }
 .work-line.is-right {
   flex-direction: row-reverse;
   align-self: flex-end;
 }
 .work-sprite {
+  --work-cap: var(--green);
+  --work-stem: #d8c6a6;
+  --work-eye: #3a3226;
   flex: none;
   overflow: visible;
+}
+.dark .work-sprite {
+  --work-stem: #e6d9c0;
+  --work-eye: #24201a;
 }
 .work-sprite .is-cap { fill: var(--work-cap); }
 .work-sprite .is-spot { fill: rgba(255, 255, 255, 0.85); }
@@ -5181,6 +5188,17 @@ body.is-resizing {
 .trace-chev {
   cursor: default;
 }
+/* The pixel mushroom at the front of a live run's line, in place of a
+   spinner: it overhangs the line instead of making it taller. */
+.trace-head svg.work-sprite {
+  width: 24px;
+  height: 32px;
+  margin: -12px 0 -6px -2px;
+  color: inherit;
+}
+.trace-title.is-verb {
+  animation: conv-sheen 2.2s linear infinite, work-in 0.35s ease-out;
+}
 .trace-head {
   max-width: 100%;
 }
@@ -5219,17 +5237,9 @@ body.is-resizing {
   margin-left: 0;
 }
 
-/* A task the node has not picked up yet: why, without a spinner. */
+/* A task the node has not picked up yet: why, the mushroom standing by. */
 .trace-head.trace-wait {
   cursor: default;
-}
-.trace-wait-dot {
-  width: 6px;
-  height: 6px;
-  margin: 0 4px 0 2px;
-  border-radius: 999px;
-  background: var(--amber, #d4a24c);
-  flex: none;
 }
 
 /* New conversation: search, then the nodes; a click opens the chat. */
