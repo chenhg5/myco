@@ -121,12 +121,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, []);
 
   const refreshing = useRef(false);
-  const loadProjects = useCallback(async (hubIds: string[]) => {
-    const lists = await Promise.all(hubIds.map((id) =>
+  // Projects of the workspaces that answer are fetched again; a workspace that
+  // did not answer this time (a network blip) keeps the projects it had, so
+  // they do not vanish and the App does not ask for a first project.
+  const loadProjects = useCallback(async (okIds: string[], allIds: string[] = okIds) => {
+    const lists = await Promise.all(okIds.map((id) =>
       appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
     setProjects((prev) => {
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
-      return remember("projects", hubIds.flatMap((id, i) => lists[i] ?? keep(id)));
+      return remember("projects", allIds.flatMap((id) => { const i = okIds.indexOf(id); return (i >= 0 ? lists[i] : null) ?? keep(id); }));
     });
   }, []);
   const refresh = useCallback(async () => {
@@ -136,7 +139,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       const [h, o, pending] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink()]);
       setHubs(h);
       setOv(remember("overview", keepOffline(o, recall<AppOverview>("overview"))));
-      await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id));
+      await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id), o.hubs.map((x) => x.id));
       setError(null);
       setNow(Date.now());
       setLocalTick((t) => t + 1);
@@ -229,7 +232,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     : looseHubs[0] ? { hubId: looseHubs[0], loose: true }
     : null;
   const shownProject = shown && !isLoose(shown) ? liveProjects.find((x) => x.hubId === shown.hubId && x.p.name === shown.name)?.p : undefined;
-  const firstRun = projects !== null && liveProjects.length === 0 && !skipFirst;
+  // Only a workspace that answers can say it has no project yet.
+  const firstRun = projects !== null && liveProjects.length === 0 && !skipFirst && !!hub?.ok;
 
   const meOn = (hubId: string) => {
     const name = namedOv?.hubs.find((h) => h.id === hubId)?.me?.member?.name;
