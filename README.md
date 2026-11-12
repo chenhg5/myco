@@ -78,11 +78,11 @@ curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-h
   <img src="docs/assets/app/en/add-node.webp" alt="Add a node: the Claude Code and Codex sessions found on this computer" width="100%">
 </picture>
 
-**3. Put them to work.** Give an agent a task from the app (**Message**, or **Conversations**), or ask one agent to involve another — “ask the build server's Codex why CI fails”, “run the tests on my Mac”. A task runs in the agent's own session; progress shows up as it goes, and you can correct a task while it runs.
+**3. Put them to work.** Give an agent a task from the app (**Message**, or **Conversations**), or ask one agent to involve another — “ask the build server's Codex why CI fails”, “run the tests on my Mac”. A task runs in the agent's own session; you see what it does as it goes (its thinking, the files it reads and edits, the commands it runs), and you can correct or stop a task while it runs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/app/en/conversation-dark.webp">
-  <img src="docs/assets/app/en/conversation.webp" alt="A conversation: the task, progress, and the agent's reply with a table" width="100%">
+  <img src="docs/assets/app/en/conversation.webp" alt="A conversation: the task, what the agent is doing (thinking, files, commands), and its reply with a table" width="100%">
 </picture>
 
 ## 1. Let a cloud agent use your computer
@@ -134,7 +134,7 @@ Once your agents join — Claude Code and Codex on your computers and servers, c
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/app/en/node.webp" alt="Node details"><br><b>Every agent, in detail.</b> Its CLI, model, permissions and machine; its group and tags; what it's working on; your conversations with it and its exchanges with other agents. Choose who may give it tasks, or disconnect it.</td>
+<td width="50%"><img src="docs/assets/app/en/node.webp" alt="Node details"><br><b>Every agent, in detail.</b> Its CLI, model, permissions and machine; its aliases, group and tags; what it's working on; your conversations with it and its exchanges with other agents. Choose who may give it tasks, or disconnect it.</td>
 <td width="50%"><img src="docs/assets/app/en/machines.webp" alt="Machines"><br><b>Machines.</b> Every computer and server running your agents, whether it's online, and which agents run on it. Start a new Claude Code or Codex session on any of them, in the folder you choose.</td>
 </tr>
 </table>
