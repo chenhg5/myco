@@ -76,8 +76,9 @@ type Runner struct {
 	threadLocks sync.Map // thread_id -> *sync.Mutex
 
 	mu         sync.Mutex
-	ownRunEnd  map[string]time.Time // session id -> when our last run ended
-	busyStreak map[string]int       // session key -> consecutive busy releases
+	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
+	pending    map[string]pendingRun // acked tasks not yet durably finished
+	busyStreak map[string]int        // session key -> consecutive busy releases
 	// projectSeen: session key + project whose context this run already gave.
 	projectSeen map[string]bool
 	// tasks are the tasks this runner has accepted and not finished; steers
@@ -145,7 +146,7 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		opts.Concurrency = 1
 	}
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
-		ownRunEnd: loadState(opts.StatePath), busyStreak: map[string]int{},
+		ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
 		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
 		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute}
 }
@@ -161,6 +162,14 @@ func loadState(path string) map[string]time.Time {
 			out[k] = time.UnixMilli(v)
 		}
 	}
+	if b, err := os.ReadFile(path); err == nil {
+		var st runnerState
+		if json.Unmarshal(b, &st) == nil {
+			for k, v := range st.Runs {
+				out[k] = time.UnixMilli(v)
+			}
+		}
+	}
 	return out
 }
 
@@ -170,19 +179,7 @@ func (r *Runner) recordOwnRun(sessionID string) {
 		return
 	}
 	r.ownRunEnd[sessionID] = r.opts.Now()
-	if r.opts.StatePath == "" {
-		return
-	}
-	raw := map[string]int64{}
-	for k, v := range r.ownRunEnd {
-		raw[k] = v.UnixMilli()
-	}
-	b, _ := json.Marshal(raw)
-	_ = os.MkdirAll(filepath.Dir(r.opts.StatePath), 0o700)
-	tmp := r.opts.StatePath + ".tmp"
-	if os.WriteFile(tmp, b, 0o600) == nil {
-		_ = os.Rename(tmp, r.opts.StatePath)
-	}
+	r.saveState()
 }
 
 // inUseElsewhere reports whether someone else wrote to the session recently
@@ -239,11 +236,13 @@ func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api
 		return
 	}
 	log.Info("session busy; message released for retry", "retry_in", delay, "reason", reason)
+	r.clearPending(m.ID)
 }
 
 // Run processes messages until ctx is cancelled (or after one batch if Once).
 // In-flight work is allowed to finish before Run returns.
 func (r *Runner) Run(ctx context.Context) error {
+	r.recoverPending(ctx)
 	slots := make(chan struct{}, r.opts.Concurrency)
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -310,6 +309,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Warn("ack failed; skipping (will be redelivered if the lease expires)", "err", err)
 		return
 	}
+	if m.Type == "task" {
+		r.markPending(m.ID)
+	}
 	if m.Unreadable != "" {
 		// End-to-end encrypted, and this agent cannot open it (keys changed,
 		// or not sealed for it): never run it; tell the sender.
@@ -317,6 +319,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		if m.Type == "task" {
 			if _, err := r.hub.Fail(ctx, m.ID, "could not decrypt the message: "+m.Unreadable, false); err != nil {
 				log.Error("failing message failed", "err", err)
+			} else {
+				r.clearPending(m.ID)
 			}
 		} else if err := r.hub.Complete(ctx, m.ID); err != nil {
 			log.Error("finishing message failed", "err", err)
@@ -352,6 +356,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		if _, ok := r.harness.(harness.Forker); !ok {
 			if _, err := r.hub.Fail(ctx, m.ID, harness.ErrForkUnsupported.Error(), false); err != nil {
 				log.Error("failing task failed", "err", err)
+			} else {
+				r.clearPending(m.ID)
 			}
 			return
 		}
@@ -492,6 +498,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		return
 	}
 	if cur.Status != "acked" {
+		r.clearPending(m.ID)
 		if cur.Status == "failed" && cur.Error == "stopped by the sender" { // domain.StoppedBySender
 			log.Info("task stopped by its sender")
 			return
@@ -540,6 +547,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	if err != nil {
 		r.logFinishFailure(log, "finish message", err, exhausted, res.Output)
+	} else {
+		r.clearPending(m.ID)
 	}
 }
 

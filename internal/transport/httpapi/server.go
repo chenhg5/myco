@@ -49,6 +49,7 @@ type Server struct {
 	audit     *app.AuditService
 	projects  *app.ProjectService
 	traces    *app.TraceService
+	activity  sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu sync.Mutex // serialize alias permission checks with writes
 	namesMu   sync.Mutex
 	names     map[string]string // member id -> name (see ownerName)
@@ -220,6 +221,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/trace", s.agent(s.postTrace))
 	m.HandleFunc("GET /v1/messages/{id}/trace", s.agent(s.agentTrace))
 	m.HandleFunc("POST /v1/messages/{id}/steer", s.agent(s.followUp("steer")))
+	m.HandleFunc("POST /v1/messages/{id}/stop", s.agent(s.stopBySender))
 	m.HandleFunc("POST /v1/messages/{id}/fail", s.agent(s.fail))
 	m.HandleFunc("POST /v1/messages/{id}/release", s.agent(s.release))
 	m.HandleFunc("GET /v1/messages/{id}/reply", s.agent(s.waitReply))
@@ -565,7 +567,7 @@ func (s *Server) waitPending(w http.ResponseWriter, r *http.Request, a *domain.A
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, api.PendingResponse{Pending: messageList(msgs).Messages, TimedOut: len(msgs) == 0})
+	writeJSON(w, http.StatusOK, api.PendingResponse{Pending: s.messageList(msgs).Messages, TimedOut: len(msgs) == 0})
 }
 
 func (s *Server) handleIngress(w http.ResponseWriter, r *http.Request) {
@@ -953,7 +955,7 @@ func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Age
 		writeError(w, err)
 		return
 	}
-	resp := api.BroadcastResponse{BroadcastID: out.ID, Messages: messageList(out.Messages).Messages,
+	resp := api.BroadcastResponse{BroadcastID: out.ID, Messages: s.messageList(out.Messages).Messages,
 		Skipped: []api.BroadcastSkip{}, Duplicate: out.Duplicate, DryRun: dry}
 	for _, sk := range out.Skipped {
 		resp.Skipped = append(resp.Skipped, api.BroadcastSkip{Agent: string(sk.Agent), Reason: sk.Reason})
@@ -974,9 +976,9 @@ func (s *Server) broadcastStatus(w http.ResponseWriter, r *http.Request, a *doma
 	}
 	out := api.BroadcastStatus{BroadcastID: r.PathValue("id"), Total: len(ds), Deliveries: make([]api.BroadcastDelivery, 0, len(ds))}
 	for _, d := range ds {
-		bd := api.BroadcastDelivery{Message: messageDTO(d.Message)}
+		bd := api.BroadcastDelivery{Message: s.messageDTO(d.Message)}
 		if d.Reply != nil {
-			rep := messageDTO(d.Reply)
+			rep := s.messageDTO(d.Reply)
 			bd.Reply = &rep
 			out.Answered++
 		}
@@ -1019,7 +1021,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	out.Recent = messageList(readable(sc, ov.Recent)).Messages
+	out.Recent = s.messageList(readable(sc, ov.Recent)).Messages
 	aliasMap, _ := s.agents.AliasMap(r.Context())
 	var where map[domain.AgentName]string
 	if viewer == nil && s.machines != nil { // admin view
@@ -1049,7 +1051,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			st.Agent.MachineID = id
 		}
 		if cur := readable(sc, a.Current); len(cur) > 0 {
-			st.Current = messageList(cur).Messages
+			st.Current = s.messageList(cur).Messages
 		}
 		out.Agents = append(out.Agents, st)
 		out.Totals.Agents++
@@ -1148,7 +1150,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	if out.Duplicate || dry {
 		status = http.StatusOK
 	}
-	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry, ViaAlias: string(out.ViaAlias)})
+	writeJSON(w, status, api.SendResponse{Message: s.messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry, ViaAlias: string(out.ViaAlias)})
 }
 
 func (s *Server) getMessage(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1157,7 +1159,10 @@ func (s *Server) getMessage(w http.ResponseWriter, r *http.Request, a *domain.Ag
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, messageDTO(m))
+	if a.Name == m.To && m.Type == domain.TypeTask && (m.Status == domain.StatusAcked || m.Status == domain.StatusHeld) {
+		s.touchTask(m.ID)
+	}
+	writeJSON(w, http.StatusOK, s.messageDTO(m))
 }
 
 func (s *Server) transition(t app.Transition) func(http.ResponseWriter, *http.Request, *domain.Agent) {
@@ -1168,7 +1173,7 @@ func (s *Server) transition(t app.Transition) func(http.ResponseWriter, *http.Re
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+		writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 	}
 }
 
@@ -1187,7 +1192,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) 
 	if dry {
 		status = http.StatusOK
 	}
-	writeJSON(w, status, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+	writeJSON(w, status, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1201,7 +1206,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) release(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1220,7 +1225,7 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request, a *domain.Agent
 			p.SessionInUse(a.Name)
 		}
 	}
-	writeJSON(w, http.StatusOK, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) waitReply(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -1241,9 +1246,9 @@ func (s *Server) waitReply(w http.ResponseWriter, r *http.Request, a *domain.Age
 			writeError(w, err)
 			return
 		}
-		resp := api.WaitResponse{TimedOut: m == nil && len(progress) == 0, Progress: messageList(progress).Messages}
+		resp := api.WaitResponse{TimedOut: m == nil && len(progress) == 0, Progress: s.messageList(progress).Messages}
 		if m != nil {
-			dto := messageDTO(m)
+			dto := s.messageDTO(m)
 			resp.Reply = &dto
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -1258,7 +1263,7 @@ func (s *Server) waitReply(w http.ResponseWriter, r *http.Request, a *domain.Age
 		writeJSON(w, http.StatusOK, api.WaitResponse{TimedOut: true})
 		return
 	}
-	dto := messageDTO(m)
+	dto := s.messageDTO(m)
 	writeJSON(w, http.StatusOK, api.WaitResponse{Reply: &dto})
 }
 
@@ -1280,11 +1285,14 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 			writeError(w, err)
 			return
 		}
+		if !dry {
+			s.touchTask(r.PathValue("id"))
+		}
 		status := http.StatusCreated
 		if dry {
 			status = http.StatusOK
 		}
-		writeJSON(w, status, api.MessageResult{Message: messageDTO(m), DryRun: dry})
+		writeJSON(w, status, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 	}
 }
 
@@ -1309,7 +1317,7 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		writeError(w, err)
 		return
 	}
-	out := messageList(msgs)
+	out := s.messageList(msgs)
 	// The sender's display name, so the agent can tell the person what the
 	// app calls it.
 	names := map[string]string{}
@@ -1347,7 +1355,7 @@ func (s *Server) threadAny(w http.ResponseWriter, r *http.Request) {
 			writeError(w, domain.Errf(domain.CodeNotFound, "thread %s not found", r.PathValue("id")))
 			return
 		}
-		out := messageList(msgs)
+		out := s.messageList(msgs)
 		if since, _ := strconv.ParseInt(r.URL.Query().Get("updated_since"), 10, 64); since > 0 {
 			// Only what changed after since (the whole thread is still read
 			// here: the hub is local; the App's link may not be).
@@ -1371,7 +1379,7 @@ func (s *Server) thread(w http.ResponseWriter, r *http.Request, a *domain.Agent)
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, messageList(msgs))
+	writeJSON(w, http.StatusOK, s.messageList(msgs))
 }
 
 // ---- helpers ----
@@ -1586,7 +1594,7 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 	if !out.Duplicate {
 		s.record(r, "message."+string(out.Message.Type), string(out.Message.To), out.Message.ID)
 	}
-	writeJSON(w, status, api.SendResponse{Message: messageDTO(out.Message), Duplicate: out.Duplicate, ViaAlias: string(out.ViaAlias)})
+	writeJSON(w, status, api.SendResponse{Message: s.messageDTO(out.Message), Duplicate: out.Duplicate, ViaAlias: string(out.ViaAlias)})
 }
 
 // consoleIdentity is the sender name and member id for what a console
@@ -1615,7 +1623,7 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, messageDTO(m))
+	writeJSON(w, http.StatusCreated, s.messageDTO(m))
 }
 
 // consoleStop stops a running task sent from the console.
@@ -1626,7 +1634,17 @@ func (s *Server) consoleStop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, messageDTO(m))
+	writeJSON(w, http.StatusOK, s.messageDTO(m))
+}
+
+func (s *Server) stopBySender(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	dry := dryRun(r)
+	m, err := s.messages.StopBySender(r.Context(), a, r.PathValue("id"), dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 // consoleDismiss closes an open message for its recipient (owner of the
@@ -1653,7 +1671,7 @@ func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "message.dismiss", string(m.To), id+" from "+string(m.From))
-	writeJSON(w, http.StatusOK, messageDTO(m))
+	writeJSON(w, http.StatusOK, s.messageDTO(m))
 }
 
 func (s *Server) consolePeers(w http.ResponseWriter, r *http.Request) {
@@ -1672,7 +1690,7 @@ func (s *Server) consolePeers(w http.ResponseWriter, r *http.Request) {
 	for _, p := range ps {
 		pe := api.Peer{Agent: string(p.Agent), Messages: p.Messages}
 		if p.Last != nil {
-			m := messageDTO(p.Last)
+			m := s.messageDTO(p.Last)
 			pe.Last = &m
 		}
 		out.Peers = append(out.Peers, pe)
@@ -1705,7 +1723,7 @@ func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
 			ms, out.More = ms[:most], true
 		}
 		for _, m := range ms {
-			out.Messages = append(out.Messages, messageDTO(m))
+			out.Messages = append(out.Messages, s.messageDTO(m))
 		}
 		writeJSON(w, http.StatusOK, out)
 		return
@@ -1720,7 +1738,7 @@ func (s *Server) consoleExchanges(w http.ResponseWriter, r *http.Request) {
 		ms, out.More = ms[:limit], true
 	}
 	for _, m := range ms {
-		out.Messages = append(out.Messages, messageDTO(m))
+		out.Messages = append(out.Messages, s.messageDTO(m))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -1779,17 +1797,17 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 	out := api.RecentList{Items: make([]api.RecentItem, 0, len(items)), More: more}
 	for _, it := range items {
 		ri := api.RecentItem{Kind: it.Kind, ThreadID: it.ThreadID, Other: string(it.Other), Node: string(it.Node), UpdatedAt: it.UpdatedAt,
-			Messages: it.Messages, First: messageDTO(it.First), Last: messageDTO(it.Last), State: it.State, Participants: make([]string, 0, len(it.Participants)),
+			Messages: it.Messages, First: s.messageDTO(it.First), Last: s.messageDTO(it.Last), State: it.State, Participants: make([]string, 0, len(it.Participants)),
 			Project: it.First.Project}
 		for _, p := range it.Participants {
 			ri.Participants = append(ri.Participants, string(p))
 		}
 		if it.Task != nil {
-			m := messageDTO(it.Task)
+			m := s.messageDTO(it.Task)
 			ri.Task = &m
 		}
 		if it.Answer != nil {
-			m := messageDTO(it.Answer)
+			m := s.messageDTO(it.Answer)
 			ri.Answer = &m
 		}
 		out.Items = append(out.Items, ri)
@@ -1814,7 +1832,7 @@ func (s *Server) consoleConversations(w http.ResponseWriter, r *http.Request) {
 	out := api.ConversationList{Conversations: make([]api.Conversation, 0, len(cs))}
 	for _, c := range cs {
 		out.Conversations = append(out.Conversations, api.Conversation{ThreadID: c.ThreadID, Agent: string(c.Agent), UpdatedAt: c.UpdatedAt,
-			First: messageDTO(c.First), Last: messageDTO(c.Last), Messages: c.Messages})
+			First: s.messageDTO(c.First), Last: s.messageDTO(c.Last), Messages: c.Messages})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

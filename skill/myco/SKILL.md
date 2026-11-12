@@ -129,6 +129,9 @@ myco message steer --id <task id> --body "use PostgreSQL, not SQLite"   # correc
 A steer interrupts the recipient's runner and resumes the same session with your note
 (work done so far is kept); the final answer is still the task's reply.
 
+If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
+Only the sender can stop it; the recipient's runner will end its run when it notices.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.

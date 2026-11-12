@@ -97,7 +97,7 @@ export interface Message {
   e2e?: boolean;
   /** why the app could not decrypt it */
   unreadable?: string;
-  created_at: string; updated_at: string;
+  created_at: string; updated_at: string; active_at?: string;
 }
 /** Another node a node exchanged messages with. */
 export interface Peer { agent: string; messages: number; last?: Message }
