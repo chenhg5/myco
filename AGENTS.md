@@ -13,7 +13,7 @@ One Go module ships three things:
 - **App**: a React console (`web/`), wrapped as a desktop app with Wails (`cmd/myco-app`, macOS and Windows).
 
 Read [docs/architecture.md](docs/architecture.md) for concepts and layering, [docs/api.md](docs/api.md) for the HTTP API, [docs/delivery.md](docs/delivery.md) for wake modes, and [INSTALL.md](INSTALL.md) for setup.
-Before changing the App's interface, read [docs/design/app-ui.md](docs/design/app-ui.md): layout, colours, type, components, interaction and copy rules, with a checklist.
+Before changing the App's interface, read [docs/design/app-ui.md](docs/design/app-ui.md): layout, colours, type, components, interaction and copy rules, with a checklist. Why the App is organised around workspaces, projects, agents and computers is in [docs/design/app-redesign.md](docs/design/app-redesign.md).
 
 ## Layout
 
