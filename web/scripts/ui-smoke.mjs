@@ -535,6 +535,22 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // A chat with nothing in it yet: the agent, large, and a question.
+    // What was typed and not sent stays with its chat when you go to
+    // another and come back; an empty box is one line, whatever its hint.
+    await step("单聊 · 没发的字留着", async () => {
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const box = page.locator(".conv-detail .conv-compose-input");
+      const h = await box.evaluate((el) => el.getBoundingClientRect().height);
+      if (h > 60) throw new Error(`空输入框应只有一行高，实际 ${Math.round(h)}px`);
+      await box.fill("还没发出去的一句话");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      if (await page.locator(".conv-detail .conv-compose-input").inputValue()) throw new Error("别的会话的输入框不该带着这句话");
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const back = await page.locator(".conv-detail .conv-compose-input").inputValue();
+      if (back !== "还没发出去的一句话") throw new Error(`切回来时没发的字应还在，实际「${back}」`);
+      await page.locator(".conv-detail .conv-compose-input").fill("");
+    });
+
     await step("单聊 · 空对话", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));

@@ -3355,6 +3355,10 @@ button.conv-quote:hover {
 }
 .conv-compose-input::placeholder {
   color: var(--faint);
+  /* one line, cut short: a long hint must not make the box look tall */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .conv-compose-bar {
   display: flex;

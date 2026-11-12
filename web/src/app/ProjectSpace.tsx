@@ -9,6 +9,7 @@ import { ConversationDetail, type ConversationTarget } from "@/app/ConversationD
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { addToProject } from "@/app/AddToProject";
 import { useAutoGrow } from "@/app/autogrow";
+import { draftOf, groupDraftKey, keepDraft } from "@/app/drafts";
 import { Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
@@ -845,7 +846,12 @@ function Composer({ hubId, project, agents, onSent }: {
   const valid = agents.some((r) => r.st.agent.name === to);
   const recipient = valid ? to : coordinator && agents.some((r) => r.st.agent.name === coordinator) ? coordinator : agents[0]?.st.agent.name || "";
   const rec = agents.find((r) => r.st.agent.name === recipient);
-  const [draft, setDraft] = useState("");
+  // What was typed and not sent stays here when you go elsewhere (drafts.ts).
+  const [draft, setDraftState] = useState(() => draftOf(groupDraftKey(hubId, project?.name)));
+  const setDraft = (v: string) => {
+    setDraftState(v);
+    keepDraft(groupDraftKey(hubId, project?.name), v);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   // Files going with the task (pasted, dropped or picked).

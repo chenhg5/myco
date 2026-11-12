@@ -457,6 +457,12 @@
   resize: none;
   overflow-y: hidden;
 }
+.sp-compose-input::placeholder {
+  /* one line, cut short: a long hint must not make the box look tall */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Below the text: tools on the left (who gets it; later files and
    voice), Send on the right. */
 .sp-compose-bar {
@@ -1907,10 +1913,17 @@ body.is-resizing {
 
 /* A run as a flow: what the agent says, in the open (as its reply reads),
    and each run of steps folded into one muted line that opens below. */
+/* A run: the steps, what it said and reported, the mushroom while it
+   works. Each has room of its own; they were packed 2px apart and read
+   as one block. */
 .trace.is-flow {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  margin-top: 4px;
+}
+.trace.is-flow > .trace-wait {
+  margin-top: 2px;
 }
 .trace-say {
   padding: 4px 4px 4px 2px;
@@ -1921,7 +1934,7 @@ body.is-resizing {
 /* What an agent reported on a task (myco message progress): a small
    timeline, dots on a thin line, softer than the answer, each with when. */
 .trace-reports {
-  margin: 2px 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }

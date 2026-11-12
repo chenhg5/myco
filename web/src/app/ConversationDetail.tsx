@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -19,6 +19,7 @@ import { Busy } from "@/app/Skeleton";
 import { Avatar, whereOf } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
+import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 
 export interface ConversationTarget {
   hubId: string;
@@ -204,10 +205,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   /** Opens your conversation with another node (a copy just made). */
   onOpen?: (hubId: string, agent: string, peer: string) => void;
 }) {
-  const [messages, setMessages] = useState<Message[] | null>(null);
+  // Seen before in this window: shown from the first frame (no empty
+  // flash while the cache is read in an effect).
+  const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
-  const [draft, setDraft] = useState("");
+  // What was typed and not sent stays with the conversation (drafts.ts).
+  const draftKey = chatDraftKey(target.hubId, target.agent);
+  const [draft, setDraft] = useState(() => draftOf(draftKey));
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
+  const writeDraft = (v: string) => {
+    setDraft(v);
+    keepDraft(draftKeyRef.current, v);
+  };
   const [sending, setSending] = useState(false);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId);
@@ -242,7 +253,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const exchange = !!target.peer;
   // Exchange view: older pages loaded so far (oldest first) and whether more exist.
   const [older, setOlder] = useState<Message[]>([]);
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState(() => recall<SeenConversation>(cacheKey(target))?.more ?? false);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   useEffect(() => {
@@ -253,7 +264,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setMessages(hit ? hit.messages : null);
     setLoadError(null);
     setSendError(null);
-    setDraft("");
+    setDraft(draftOf(chatDraftKey(target.hubId, target.agent)));
     setSteerMode(false);
     setOlder([]);
     setMore(hit?.more ?? false);
@@ -275,12 +286,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     let since = hit ? changedUntil(hit.messages) : 0;
     let polls = 0;
     let incremental = true;
+    // A poll that brings nothing new changes nothing on screen (no new
+    // array, no re-render, no scroll).
+    const sameAs = (a: Message[], b: Message[]) => a.length === b.length
+      && a.every((x, i) => x.id === b[i].id && x.status === b[i].status && x.updated_at === b[i].updated_at && x.body === b[i].body);
     const show = (ms: Message[], m: boolean) => {
+      const same = sameAs(current, ms) && more === m;
       current = ms;
       more = m;
       since = changedUntil(ms);
-      setMessages(ms);
       setLoadError(null);
+      if (same) return;
+      setMessages(ms);
       remember(key, ms, m);
     };
     const run = async (silent: boolean) => {
@@ -365,10 +382,36 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
-  useEffect(() => {
+  // Before the frame is drawn: opening a chat never shows its top first
+  // and then jumps to the newest. Later, only something new (another
+  // message, a changed one) brings it down, and only if it was at the
+  // bottom: a refresh with nothing new never moves what you are reading.
+  const lastSeen = useRef("");
+  useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+    const last = messages?.[messages.length - 1];
+    const sig = `${messages?.length ?? -1}\u0000${last?.id ?? ""}\u0000${last?.updated_at ?? ""}`;
+    const changed = sig !== lastSeen.current;
+    lastSeen.current = sig;
+    if (el && changed && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+  // What loads after the messages (a finished task's steps, a picture)
+  // makes the conversation taller above the bottom: at the bottom, it
+  // stays at the bottom instead of the last lines being pushed down.
+  const timelineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = timelineRef.current;
+    const sc = scrollRef.current;
+    if (!el || !sc || typeof ResizeObserver === "undefined") return;
+    let h = el.offsetHeight;
+    const ro = new ResizeObserver(() => {
+      const nh = el.offsetHeight;
+      if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
+      h = nh;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [messages === null]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -689,7 +732,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // The latest by time, which is not always the last in the list.
     const latest = (shown || []).reduce<Message | null>((x, m) => (!x || new Date(m.created_at) > new Date(x.created_at) ? m : x), null);
     if (latest) setCleared(latest.created_at);
-    setDraft("");
+    writeDraft("");
     histPos.current = -1;
   };
   const clearedTime = clearedAfter ? new Date(clearedAfter).getTime() : NaN;
@@ -708,7 +751,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
         const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, attachments, ...(target.project ? { project: target.project } : {}) });
-        setDraft("");
+        writeDraft("");
         att.clear();
         if (onOpen) onOpen(target.hubId, target.agent, first.from);
         else setMessages([first]);
@@ -731,13 +774,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // The hub signs your messages with your name there: when this view
       // assumed another, follow the one it used.
       if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
-        setDraft("");
+        writeDraft("");
         att.clear();
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
       setMessages((prev) => (prev ? [...prev, m] : [m]));
-      setDraft("");
+      writeDraft("");
       att.clear();
       histPos.current = -1;
       setSteerMode(false);
@@ -761,7 +804,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         pos = pos + 1 < history.length ? pos + 1 : -1;
       }
       histPos.current = pos;
-      setDraft(pos === -1 ? histDraft.current : history[pos]);
+      writeDraft(pos === -1 ? histDraft.current : history[pos]);
       return;
     }
     // Ctrl+L clears the screen, as in a terminal.
@@ -1019,7 +1062,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
+        <div ref={timelineRef} className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
             loadError && !isTransient(loadError) ? (
               <ErrorText error={loadError} />
@@ -1062,7 +1105,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                       ref={inputRef}
                       className="term-input"
                       value={draft}
-                      onChange={(e) => { setDraft(e.target.value); histPos.current = -1; }}
+                      onChange={(e) => { writeDraft(e.target.value); histPos.current = -1; }}
                       onKeyDown={onKeyDown}
                       rows={1}
                       autoFocus
@@ -1155,7 +1198,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ref={inputRef}
             className="conv-compose-input"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => writeDraft(e.target.value)}
             onPaste={(e) => {
               const files = pastedFiles(e);
               if (!files.length) return;
