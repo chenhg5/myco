@@ -309,7 +309,7 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	}
 	switch {
 	case cloud:
-		notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command. After `myco inbox pull`, run `myco message ack --id <id>` when starting each task, then reply when finished.")
+		notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command. "+inboxWorkNote)
 	case e.in.Bool("no-service"):
 		notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
 	default:
@@ -521,9 +521,9 @@ Safe to re-run: the same session gets the same agent back.`,
 				out["project_suggestion"] = "ask the project's owner to add " + res.Agent.Name + " (myco project add), or check the name with myco project list --all"
 			}
 			if cloud {
-				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; after `myco inbox pull`, run `myco message ack --id <id>` when starting each task, then reply when finished"
+				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; " + inboxWorkNote
 				if b.Harness == "inbox" {
-					out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; after `myco inbox pull`, run `myco message ack --id <id>` when starting each task, then reply when finished; a runner cannot wake this agent, so it stops receiving when the session closes"
+					out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; " + inboxWorkNote + " A runner cannot wake this agent, so it stops receiving when the session closes."
 				}
 			} else {
 				out["receive"] = openSessionNote
@@ -542,7 +542,7 @@ Safe to re-run: the same session gets the same agent back.`,
 				if cloud {
 					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
 					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
-					fmt.Fprintln(w, "After `myco inbox pull`, run `myco message ack --id <id>` when starting each task, then reply when finished.")
+					fmt.Fprintln(w, inboxWorkNote)
 					if b.Harness == "inbox" {
 						fmt.Fprintln(w, "This agent cannot be woken by a runner; it stops receiving when its session closes.")
 					}
@@ -568,7 +568,9 @@ func joinProject(e *env, hub, token, project, agent string) error {
 // openSessionNote tells a local session how it receives: by itself while it
 // stays open, through the runner once it is closed. Waking an open session
 // from the runner would continue it behind the open window.
-const openSessionNote = "If this session stays open (desktop app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits: the open session then receives its own messages. After `myco inbox pull`, run `myco message ack --id <id>` when starting each task, then reply when finished. Once it is closed, the machine's runner wakes it in the background (about 30 minutes after its last wait)."
+const inboxWorkNote = "After `myco inbox pull`, run `myco message ack --id <id>` when starting each task. For multi-step work, send `myco message progress --id <id> --body \"found the cause; next I will fix it\"` as you learn things or change course; the sender sees it live. Finish with `myco message reply --id <id>`. A one-line answer needs no progress update."
+
+const openSessionNote = "If this session stays open (desktop app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits: the open session then receives its own messages. " + inboxWorkNote + " Once it is closed, the machine's runner wakes it in the background (about 30 minutes after its last wait)."
 
 func machineName(m *config.MachineHub) string {
 	if m == nil {

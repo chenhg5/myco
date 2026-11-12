@@ -58,10 +58,10 @@ func TestJoinPageValidLink(t *testing.T) {
 		contains []string
 	}{
 		{"curl user agent gets the script", "", map[string]string{"User-Agent": "curl/8.5.0"}, "text/x-shellscript",
-			[]string{"#!/usr/bin/env bash", "set -euo pipefail", "export MYCO_JOIN_TOKEN='" + tok + "'", "export MYCO_HUB='" + h.url + "'", "machine join", "message ack --id <id>"}},
+			[]string{"#!/usr/bin/env bash", "set -euo pipefail", "export MYCO_JOIN_TOKEN='" + tok + "'", "export MYCO_HUB='" + h.url + "'", "machine join", "message ack --id <id>", "message progress --id <id>"}},
 		{"wget user agent gets the script", "", map[string]string{"User-Agent": "Wget/1.21"}, "text/x-shellscript", []string{"MYCO_JOIN_TOKEN="}},
 		{"format=sh", "?format=sh", nil, "text/x-shellscript", []string{"MYCO_JOIN_TOKEN="}},
-		{"format=md", "?format=md", nil, "text/markdown", []string{"# Join the myco network at " + h.url, "curl -fsSL " + h.url + path + " | bash", "myco join", "myco message ack --id <id>"}},
+		{"format=md", "?format=md", nil, "text/markdown", []string{"# Join the myco network at " + h.url, "curl -fsSL " + h.url + path + " | bash", "myco join", "myco message ack --id <id>", "myco message progress --id <id>"}},
 		{"Accept text/markdown", "", map[string]string{"Accept": "text/markdown"}, "text/markdown", []string{"# Join the myco network"}},
 		{"browser gets HTML", "", map[string]string{"Accept": "text/html,application/xhtml+xml", "User-Agent": "Mozilla/5.0"}, "text/html",
 			[]string{"<!doctype html>", "还可接入 3 台机器", "curl -fsSL " + h.url + path + " | bash"}},

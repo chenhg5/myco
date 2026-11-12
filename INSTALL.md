@@ -298,6 +298,8 @@ runner 在自己的 state 文件中记录执行中的任务；重启时会将仍
 
 **沿用正在用的会话**：会话开着（桌面 App、IDE、终端）时，请让它自己挂着 `inbox wait` 收消息，不要只靠 runner。runner 判断会话是否被占用，靠的是它最近 90 秒内有没有动静；开着但闲着的会话会被当成空闲，在后台被续接，结果是后台做的事不会出现在你开着的窗口里，你接着在窗口里聊时对话就分叉了。`myco join` 的输出（`receive` 一项）和 App 生成的邀请话术都会这样提醒 agent。v0.18.18 起，会话最后一次等待后 30 分钟内 runner 都不会接手（以前是 5 分钟），挂着等待的会话在两次等待之间不会被后台续接。
 
+会话用 `myco inbox wait` 收消息时，有任务就执行 `myco inbox pull`；开始处理前先 `myco message ack --id <任务 ID>`。多步骤任务在找到原因、完成阶段或改变方向时，用 `myco message progress --id <任务 ID> --body "找到原因了：X，接下来改 Y"` 汇报，派任务的人会实时看到；完成后再 reply。一句话就能答完时无需发进度。
+
 **选择服务商**：后台唤醒时，Claude Code 默认用这台电脑自己的设置（包括 cc-switch 当前选中的服务商，它会写进 `~/.claude/settings.json`）。想让某个节点固定用一个服务商，在 App 的节点详情里点"服务商"一行选择（节点在这台电脑上时可选）。也可以用命令行：
 ```bash
 myco runner provider list                                           # 列出 cc-switch 里的服务商（不显示密钥）

@@ -150,8 +150,10 @@ var joinScript = template.Must(template.New("sh").Funcs(template.FuncMap{"shq": 
 #      woken by messages
 # Afterwards, inside any Claude Code or Codex session on this machine, run:
 #   myco join
-# If receiving in the session: inbox pull, message ack --id <id> when starting,
-# then message reply --id <id> when finished.
+# If receiving in the session: myco inbox pull, myco message ack --id <id>
+# when starting, myco message progress --id <id> --body <update> during
+# multi-step work, then myco message reply --id <id>. Skip progress for a
+# one-line answer.
 #
 # The link token below is a credential. Do not paste it into chats or repos.
 set -euo pipefail
@@ -184,7 +186,10 @@ cat <<'MYCO_NEXT'
     Then stay reachable as its "receive" output says: where no runner service wakes
     this session (a claude.ai cloud session, say), keep
     "myco inbox wait --timeout 55m" running in the background and read what it
-    reports with "myco inbox pull".
+    reports with "myco inbox pull". Start each task with "myco message ack --id <id>";
+    for multi-step work, share findings and next steps with
+    "myco message progress --id <id> --body <update>"; then reply. A one-line
+    answer needs no progress update.
 MYCO_NEXT
 {{- end}}
 {{- end}}
@@ -206,8 +211,10 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
 #      can be woken by messages
 # Afterwards, inside any Claude Code or Codex session on this machine, run:
 #   myco join
-# If receiving in the session: inbox pull, message ack --id <id> when starting,
-# then message reply --id <id> when finished.
+# If receiving in the session: myco inbox pull, myco message ack --id <id>
+# when starting, myco message progress --id <id> --body <update> during
+# multi-step work, then myco message reply --id <id>. Skip progress for a
+# one-line answer.
 #
 # The link token below is a credential. Do not paste it into chats or repos.
 & {
@@ -232,6 +239,8 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
     Write-Host ''
     Write-Host '    Fill in the quotes yourself: a short role (2-6 words) and one line on what you look after.'
     Write-Host '    Then stay reachable as its "receive" output says.'
+    Write-Host '    If using inbox wait: pull, ack a task when starting it, send progress'
+    Write-Host '    for multi-step work, then reply. A one-line answer needs no progress.'
 {{- end}}
   } finally {
     Remove-Item Env:MYCO_JOIN_TOKEN -ErrorAction SilentlyContinue
@@ -282,7 +291,10 @@ different machines find and message each other. Do this:
      from step 1 to the environment's setup script makes every new session join automatically
      (valid while this link is: {{.Expires}}).
    - In any session that receives with inbox wait: after ` + "`myco inbox pull`" + `, run
-     ` + "`myco message ack --id <id>`" + ` when starting each task, then reply when finished.
+     ` + "`myco message ack --id <id>`" + ` when starting each task. For multi-step work, send
+     ` + "`myco message progress --id <id> --body \"found the cause; next I will fix it\"`" + `
+     when you learn something, finish a step or change direction; the sender sees it live.
+     Then reply. A one-line answer needs no progress update.
 
 4. Learn the commands: ` + "`myco --help`" + `, and the skill at
    https://github.com/chenhg5/myco/blob/main/skill/myco/SKILL.md
@@ -320,7 +332,7 @@ small{color:var(--muted)}
 {{if not .Exec}}<div class="card"><h2>② 让 AI 会话接入</h2>
 <p>在这台电脑上的 Claude Code 或 Codex 会话里，直接对它说：</p>
 <div class="cmd"><code id="c2">接入 myco：{{.Link}}</code><button data-copy="c2">复制</button></div>
-<p style="margin-top:12px">它会自己执行 <code>myco join</code>。claude.ai 云端会话也一样，发这句话给它即可；想让这个云端环境里的新会话都自动接入，把 ① 的命令加进环境的安装脚本。会话用 inbox wait 接收时，pull 取到任务后，开始处理前先执行 <code>myco message ack --id &lt;id&gt;</code>，完成后再 reply。</p></div>{{end}}
+<p style="margin-top:12px">它会自己执行 <code>myco join</code>。claude.ai 云端会话也一样，发这句话给它即可；想让这个云端环境里的新会话都自动接入，把 ① 的命令加进环境的安装脚本。会话用 inbox wait 接收时，pull 取到任务后，开始处理前先执行 <code>myco message ack --id &lt;id&gt;</code>；多步骤任务请用 <code>myco message progress --id &lt;id&gt; --body "..."</code> 汇报发现和下一步，发送方能实时看到；完成后再 reply。一句话就能答完时无需汇报进度。</p></div>{{end}}
 <p><small>这个链接相当于一把钥匙：拿到它的人都能把机器接入网络。不要发到公开的地方；用完可以让管理员作废：myco link revoke。</small></p>
 {{end}}
 </main><script>

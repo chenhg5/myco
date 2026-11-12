@@ -490,6 +490,34 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "loose");
     });
 
+    // A task the inbox node pulled but never acknowledged is not work: the
+    // task and the node read as queued, and its chat waits without a spinner.
+    await step("还没进项目的 · 拉走没开始", async () => {
+      await go(page, "还没进项目的", narrow);
+      await page.locator(".sp-group").waitFor({ timeout: 20_000 });
+      const card = page.locator(".sp-card", { hasText: "把 release 分支的 Go 测试跑一遍" }).first();
+      await card.waitFor({ timeout: 10_000 });
+      const state = compactText(await card.locator(".sp-card-state").innerText());
+      if (state !== "排队中") throw new Error(`只被拉走、没开始的任务应显示「排队中」，实际是「${state}」`);
+      if (!narrow) {
+        const member = page.locator(".sp-side .sp-member:visible", { hasText: "Myco (Grok)" }).first();
+        await member.waitFor({ timeout: 10_000 });
+        const sub = compactText(await member.locator(".sp-member-sub").innerText());
+        if (sub !== "1 个活在排队") throw new Error(`只被拉走、没开始的节点应显示「1 个活在排队」，实际是「${sub}」`);
+        if (await member.locator(".is-working").count()) throw new Error("只被拉走、没开始的节点不该显示在干活");
+      }
+      await openMember(page, narrow, "还没进项目的", "Myco (Grok)");
+      const head = compactText(await page.locator(".conv-detail .conv-head").innerText());
+      if (!head.includes("等待中")) throw new Error(`拉走没开始的对话应显示「等待中」，实际是「${head}」`);
+      const wait = page.locator(".conv-detail .trace.is-waiting").first();
+      await wait.waitFor({ timeout: 20_000 });
+      const line = compactText(await wait.innerText());
+      if (!line.includes("排队中")) throw new Error(`拉走没开始的任务应写「排队中」，实际是「${line}」`);
+      if (await page.locator(".conv-detail .trace-spin").count()) throw new Error("拉走没开始的任务不该转圈");
+      await settle(page, 300);
+      await shot(page, size, scheme, "pulled-not-started");
+    });
+
     // A chat with nothing in it yet: the agent, large, and a question.
     await step("单聊 · 空对话", async () => {
       await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");

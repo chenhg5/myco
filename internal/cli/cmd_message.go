@@ -365,7 +365,8 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 			if err != nil {
 				return err
 			}
-			return e.p.Print(api.MessageList{Messages: nonNilMsgs(msgs)}, func(w io.Writer) {
+			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxTaskHint(msgs)}
+			return e.p.Print(out, func(w io.Writer) {
 				if len(msgs) == 0 {
 					fmt.Fprintln(w, "inbox empty")
 					return
@@ -373,6 +374,9 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 				for i := range msgs {
 					printMessage(w, &msgs[i])
 					fmt.Fprintln(w)
+				}
+				if out.Hint != "" {
+					fmt.Fprintln(w, out.Hint)
 				}
 			})
 		}),
@@ -409,12 +413,33 @@ an agent with no wait running cannot be woken.`,
 				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout,
 					Suggestion: "this is expected; start it again right away so you stay reachable: myco inbox wait --timeout " + e.in.String("timeout")}
 			}
-			return e.p.Print(api.MessageList{Messages: msgs}, func(w io.Writer) {
+			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxTaskHint(msgs)}
+			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "%d message(s) waiting; run: myco inbox pull\n", len(msgs))
+				if out.Hint != "" {
+					fmt.Fprintln(w, out.Hint)
+				}
 			})
 		}),
 	}
 	return (&Command{Name: "inbox", Summary: "Read your inbox"}).Add(pull, wait)
+}
+
+// inboxResult adds a CLI-only hint without changing the Hub's message-list API.
+type inboxResult struct {
+	Messages []api.Message `json:"messages"`
+	Hint     string        `json:"hint,omitempty"`
+}
+
+const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); finish with myco message reply --id <id>. Skip progress for a one-line answer.`
+
+func inboxTaskHint(msgs []api.Message) string {
+	for _, m := range msgs {
+		if m.Type == "task" {
+			return taskProgressHint
+		}
+	}
+	return ""
 }
 
 func threadCommands() *Command {

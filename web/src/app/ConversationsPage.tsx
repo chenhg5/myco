@@ -77,7 +77,9 @@ function fromConversation(c: Conversation): RecentItem {
   let state: RecentItem["state"] = "";
   if (c.last.type === "event" || c.last.status === "failed") state = "failed";
   else if (c.last.type === "reply" || (c.last.type === "task" && c.last.status === "done")) state = "done";
-  else if (c.last.type === "task") state = c.last.status === "queued" ? "queued" : "working";
+  // Only a task the node acknowledged is work: queued, pulled-but-not-acked
+  // (delivered) and held all wait.
+  else if (c.last.type === "task") state = c.last.status === "queued" || c.last.status === "delivered" || c.last.status === "held" ? "queued" : "working";
   return { kind: "thread", thread_id: c.thread_id, participants: [c.first.from, c.agent || c.first.to], updated_at: c.updated_at,
     messages: c.messages, first: c.first, last: c.last, task, state };
 }
