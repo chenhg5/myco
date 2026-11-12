@@ -254,7 +254,8 @@ const K0 = 1424 / 1280; // display px per app px
 let shown = '';
 function show(name, extra) {
   const key = name + (extra || '');
-  if (shown === key) return;
+  // the shot stays; what each frame draws over it (masks, highlights, floods) does not
+  if (shown === key) { while (cam.children.length > 1) cam.lastChild.remove(); return; }
   shown = key; cam.innerHTML = ''; cam.appendChild(img(name).cloneNode());
 }
 // camera: focus (app px) and zoom
