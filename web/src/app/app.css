@@ -1,6 +1,7 @@
 /* App mode styling — scoped to .app-shell so the classic `myco ui` theme is untouched. */
 .app-shell,
 .app-portal {
+  --pane-head-h: 60px;
   --bg: #f8f8fa;
   --card: #ffffff;
   --chrome: #ebebef;
@@ -2540,13 +2541,15 @@ textarea.app-input {
   display: flex;
   flex-direction: column;
 }
+/* One height for every pane's header (a chat's, a project's): side by
+   side, their lines meet. */
 .conv-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
-  padding: 8px 16px;
+  height: var(--pane-head-h);
+  padding: 0 16px;
   border-bottom: 1px solid var(--line-2);
 }
 .conv-head-titles {

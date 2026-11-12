@@ -362,6 +362,14 @@ async function runMatrix(browser, size, scheme) {
       if (!/docs-claude/.test(head)) throw new Error(`派活卡片应打开接活的成员，实际是「${head}」`);
       // Wide enough, the coordinator stays on the left.
       if (!narrow && !(await page.locator(".sp-pane-left .sp-home").isVisible())) throw new Error("打开成员时，和协调者的对话应该还在左边");
+      // Side by side, the two headers are one height: their lines meet.
+      if (!narrow) {
+        const hs = await page.evaluate(() => [".sp-pane-left .sp-head", ".sp-pane-right .conv-head"].map((q) => {
+          const r = document.querySelector(q)?.getBoundingClientRect();
+          return r ? Math.round(r.bottom) : -1;
+        }));
+        if (hs.includes(-1) || Math.abs(hs[0] - hs[1]) > 1) throw new Error(`左右两栏的标题栏应一样高，底边在 ${hs.join(" / ")}`);
+      }
       await settle(page, 300);
       await shot(page, size, scheme, "project-member-work");
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
