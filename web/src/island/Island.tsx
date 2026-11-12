@@ -28,6 +28,9 @@ const WING = 64;
 const COMPACT_W = NW ? NW + 2 * WING : 190;
 const OPEN_W = Math.max(COMPACT_W, 380);
 const ROW_H = 46;
+// The shoulders: where the pill's top meets the menu bar it curves into it,
+// as the notch's own edges do. The window is that much wider each side.
+const EAR = 8;
 const MAX_ROWS = 5;
 const POLL_MS = 2500;
 export const ISLAND_KEY = "myco-island";
@@ -74,7 +77,7 @@ export function Island() {
   const live = busy.length > 0;
 
   // Start out of the way (one point, clicks pass through) until someone works.
-  useEffect(() => { void frame(COMPACT_W, NH, false); }, []);
+  useEffect(() => { void frame(COMPACT_W + 2 * EAR, NH, false); }, []);
 
   useEffect(() => {
     let off = false;
@@ -99,27 +102,27 @@ export function Island() {
   useEffect(() => {
     if (live) {
       if (closing.current) { window.clearTimeout(closing.current); closing.current = null; }
-      void frame(COMPACT_W, NH, true).then(() => requestAnimationFrame(() => setShown(true)));
+      void frame(COMPACT_W + 2 * EAR, NH, true).then(() => requestAnimationFrame(() => setShown(true)));
     } else if (shown) {
       setOpen(false);
       setShown(false);
-      closing.current = window.setTimeout(() => { void frame(COMPACT_W, NH, false); closing.current = null; }, 520);
+      closing.current = window.setTimeout(() => { void frame(COMPACT_W + 2 * EAR, NH, false); closing.current = null; }, 520);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
   // While open, the window keeps the open size (it follows how many rows).
   useEffect(() => {
-    if (open && live) void frame(OPEN_W, openH, true);
+    if (open && live) void frame(OPEN_W + 2 * EAR, openH, true);
   }, [open, live, openH]);
 
   const enter = () => {
     if (!live) return;
-    void frame(OPEN_W, openH, true).then(() => setOpen(true));
+    void frame(OPEN_W + 2 * EAR, openH, true).then(() => setOpen(true));
   };
   const leave = () => {
     setOpen(false);
-    window.setTimeout(() => { if (live) void frame(COMPACT_W, NH, true); }, 340);
+    window.setTimeout(() => { if (live) void frame(COMPACT_W + 2 * EAR, NH, true); }, 340);
   };
 
   const pillW = !shown ? Math.max(NW, 40) : open ? OPEN_W : COMPACT_W;
@@ -129,11 +132,12 @@ export function Island() {
   return (
     <div className="isl-root">
       <div
-        className={cn("isl", shown && "is-shown", open && "is-open", !NW && "no-notch")}
-        style={{ width: pillW, height: pillH, ["--nh" as string]: `${NH}px`, ["--nw" as string]: `${NW}px` }}
+        className={cn("isl-shape", shown && "is-shown", !NW && "no-notch")}
+        style={{ width: pillW, height: pillH, ["--nh" as string]: `${NH}px`, ["--nw" as string]: `${NW}px`, ["--ear" as string]: `${EAR}px` }}
         onMouseEnter={enter}
         onMouseLeave={leave}
       >
+      <div className={cn("isl", shown && "is-shown", open && "is-open", !NW && "no-notch")}>
         <div className="isl-bar">
           <span className="isl-wing is-left">
             <Mushroom />
@@ -171,6 +175,7 @@ export function Island() {
             <div className="isl-more">{L(`还有 ${busy.length - MAX_ROWS} 个在干活`, `${busy.length - MAX_ROWS} more at work`)}</div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

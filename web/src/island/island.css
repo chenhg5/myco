@@ -18,17 +18,48 @@ body,
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
+/* The outline: it sizes the pill (springing), never smaller than the
+   notch it grows from, and carries the shoulders. */
+.isl-shape {
+  position: relative;
+  min-width: var(--nw);
+  min-height: var(--nh);
+  transition:
+    width 0.5s cubic-bezier(0.32, 1.45, 0.5, 1),
+    height 0.42s cubic-bezier(0.32, 1.3, 0.5, 1);
+}
+/* Shoulders: a concave curve each side of the top, black where it meets
+   the pill and the screen's edge. */
+.isl-shape::before,
+.isl-shape::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: var(--ear);
+  height: var(--ear);
+}
+.isl-shape::before {
+  left: calc(-1 * var(--ear));
+  background: radial-gradient(circle at 0 100%, transparent calc(var(--ear) - 0.5px), #000 var(--ear));
+}
+.isl-shape::after {
+  right: calc(-1 * var(--ear));
+  background: radial-gradient(circle at 100% 100%, transparent calc(var(--ear) - 0.5px), #000 var(--ear));
+}
+.isl-shape.no-notch::before,
+.isl-shape.no-notch::after {
+  display: none;
+}
 .isl {
   position: relative;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #000;
   color: #f2f2f2;
   /* square at the top (it continues the notch), round below */
   border-radius: 0 0 calc(var(--nh) * 0.42) calc(var(--nh) * 0.42);
-  transition:
-    width 0.5s cubic-bezier(0.32, 1.45, 0.5, 1),
-    height 0.42s cubic-bezier(0.32, 1.3, 0.5, 1),
-    border-radius 0.4s ease;
+  transition: border-radius 0.4s ease;
   cursor: default;
 }
 .isl.is-open {
@@ -159,6 +190,7 @@ body,
   color: rgba(255, 255, 255, 0.5);
 }
 @media (prefers-reduced-motion: reduce) {
+  .isl-shape,
   .isl,
   .isl-wing,
   .isl-list {
