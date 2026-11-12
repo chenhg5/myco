@@ -6,6 +6,27 @@ package main
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
+
+// macOS keeps titled windows below the menu bar (constrainFrameRect); the
+// island belongs on top of it, over the notch.
+static NSRect mycoNoConstrain(id self, SEL _cmd, NSRect r, NSScreen *s) { return r; }
+
+// The island's window: borderless (no frame, corners or edge of its own),
+// non-activating, and free to sit over the menu bar. Only this window's
+// class is changed: the app's main window is a different class.
+static void mycoIslandFree(NSWindow *window) {
+	static BOOL done = NO;
+	SEL sel = @selector(constrainFrameRect:toScreen:);
+	if (!done) {
+		Method m = class_getInstanceMethod([window class], sel);
+		class_replaceMethod([window class], sel, (IMP)mycoNoConstrain, m ? method_getTypeEncoding(m) : "{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@");
+		done = YES;
+	}
+	NSWindowStyleMask mask = NSWindowStyleMaskBorderless;
+	if ([window isKindOfClass:[NSPanel class]]) mask |= NSWindowStyleMaskNonactivatingPanel;
+	if (window.styleMask != mask) window.styleMask = mask;
+}
 
 // The screen with a notch (a MacBook's built-in display), else the first.
 static NSScreen *mycoNotchScreen(int *notched) {
@@ -47,6 +68,7 @@ static void mycoIslandPlace(void *win, double w, double h, int passThrough) {
 		NSScreen *s = mycoNotchScreen(&notched);
 		if (!s || !window) return;
 		NSRect f = s.frame;
+		mycoIslandFree(window);
 		[window setLevel:NSStatusWindowLevel + 1];
 		[window setHasShadow:NO];
 		[window setOpaque:NO];
@@ -104,7 +126,9 @@ func newIsland(app *application.App, open func(hub, agent string)) *island {
 		Mac: application.MacWindow{
 			Backdrop:      application.MacBackdropTransparent,
 			DisableShadow: true,
-			WindowClass:   application.MacWindowClassPanel,
+			// The page draws the rounded bottom; the window stays square.
+			CornerType:  application.MacWindowCornerTypeSquare,
+			WindowClass: application.MacWindowClassPanel,
 			PanelPreferences: application.MacPanelPreferences{
 				NonActivating: true,
 			},
