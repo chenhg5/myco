@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { LocalSession, LocalState, RecentItem } from "@/appapi";
 import { MessageCircle, Plus, Search, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, nodeName } from "@/app/nodes";
+import { agentKind, cliName, cloudLabel, isCloud, isInbox, isMe, machineOfRow, nodeName } from "@/app/nodes";
+import { shortDir } from "@/app/AddToProject";
 import { Avatar, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { shareWorkspaces } from "@/app/AddToProject";
 import { ErrorText } from "@/app/dialogs";
-import { Inspector } from "@/app/Inspector";
+import { Inspector, OfflineCard } from "@/app/Inspector";
 import { useContextMenu } from "@/app/ContextMenu";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -188,6 +190,12 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
           <MessageCircle />{ws ? L("打开终端", "Open terminal") : L("单聊", "Chat")}
         </button>
 
+        {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && (
+          <div className="ms-inuse"><span className="dot pending" />{L("它的会话正开着，新消息先排队，过一会儿再送（详细信息里有办法）。", "Its session is open: new messages wait and are retried (see Details for a fix).")}</div>
+        )}
+        <WhoItIs row={row} now={now} />
+        {!ws && <RecentWork row={row} now={now} />}
+
         <div className="ms-block">
           <div className="ms-block-title">
             <span>{L("所在项目", "Projects")}</span>
@@ -206,6 +214,7 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
             </div>
           ))}
         </div>
+        {row.st.state === "offline" && <div className="ms-alert"><OfflineCard row={row} now={now} onRefresh={onRefresh} /></div>}
         <ErrorText error={error} />
         <Inspector embedded row={row} now={now} projects={projects} onClose={onClose} onRefresh={onRefresh}
           onThread={() => onChat(row)} onPeer={() => undefined} onMessage={onChat}
@@ -214,4 +223,126 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
       </aside>
     </>
   );
+}
+
+// What this computer is and which sessions are on it, asked once a minute
+// at most: opening cards one after another does not rescan.
+const soon = <T,>(get: () => Promise<T>, fallback: T) => {
+  let at = 0;
+  let p: Promise<T> | null = null;
+  return () => {
+    if (!p || Date.now() - at > 60_000) {
+      at = Date.now();
+      p = get().catch(() => fallback);
+    }
+    return p;
+  };
+};
+const localSoon = soon<LocalState | null>(() => appApi.local(), null);
+const sessionsSoon = soon<LocalSession[]>(() => appApi.localSessions().then((r) => r.sessions), []);
+const recentSoon = new Map<string, () => Promise<RecentItem[]>>();
+function recentOf(hubId: string): Promise<RecentItem[]> {
+  let f = recentSoon.get(hubId);
+  if (!f) {
+    f = soon(() => appApi.recent(hubId).then((r) => r.items), [] as RecentItem[]);
+    recentSoon.set(hubId, f);
+  }
+  return f();
+}
+
+/**
+ * Who this is, for when you have forgotten which session it was: where it
+ * runs, which AI, the session it came from (its first request, when it is
+ * on this computer), whose it is and since when.
+ */
+function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
+  const a = row.st.agent;
+  const [local, setLocal] = useState<LocalState | null>(null);
+  const [session, setSession] = useState<LocalSession | null>(null);
+  const machine = machineOfRow(row);
+  useEffect(() => {
+    let off = false;
+    void localSoon().then((l) => { if (!off) setLocal(l); });
+    setSession(null);
+    if (a.binding.session_id && !isCloud(a)) {
+      void sessionsSoon().then((list) => { if (!off) setSession(list.find((x) => x.session_id === a.binding.session_id) || null); });
+    }
+    return () => { off = true; };
+  }, [a.name, a.binding.session_id]);
+  const here = !!machine && !!local && ((local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
+  const ws = isWorkspace(a);
+  const where = isCloud(a) ? cloudLabel(a)
+    : [machine ? (here ? L("这台电脑", "This computer") : machine.name) : "", a.binding.workdir ? shortDir(a.binding.workdir) : ""].filter(Boolean).join(" · ") || "—";
+  const model = a.runtime?.model;
+  const mine = !a.owner || row.hub.me?.member?.id === a.owner_id || isMe(a.owner, row.hub);
+  const rows: [string, string, string?][] = [
+    [L("在哪", "Where"), where, a.binding.workdir || undefined],
+    ...(!ws ? [[L("用的", "Runs"), [cliName(a), model].filter(Boolean).join(" · ")] as [string, string]] : []),
+    ...(session ? [[L("会话", "Session"), L(`「${session.title || folderOfDir(session.workdir)}」· ${timeAgo(session.last_active, now)}用过`, `“${session.title || folderOfDir(session.workdir)}” · used ${timeAgo(session.last_active, now)}`), session.title] as [string, string, string?]]
+      : isInbox(a) ? [[L("会话", "Session"), L("只在它的会话开着时收消息", "Receives only while its session is open")] as [string, string]] : []),
+    ...(!mine ? [[L("主人", "Owner"), a.owner || ""] as [string, string]] : []),
+    [L("加入", "Joined"), L(`${timeAgo(a.created_at, now)}`, timeAgo(a.created_at, now)) + (row.st.state === "offline" && a.last_seen_at ? L(` · 上次在线 ${timeAgo(a.last_seen_at, now)}`, ` · last online ${timeAgo(a.last_seen_at, now)}`) : "")],
+  ];
+  return (
+    <div className="ms-block">
+      <div className="ms-block-title"><span>{ws ? L("这台电脑", "This computer") : L("它是谁", "Who it is")}</span></div>
+      <div className="ms-facts">
+        {rows.map(([k, v, full]) => (
+          <div key={k} className="ms-fact">
+            <span className="ms-fact-k">{k}</span>
+            <span className="ms-fact-v" title={full || v}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/** What it has been doing lately: this week in three numbers, and its
+ *  last few tasks in a line each. */
+function RecentWork({ row, now }: { row: AgentRow; now: number }) {
+  const name = row.st.agent.name;
+  const [items, setItems] = useState<RecentItem[] | null>(null);
+  useEffect(() => {
+    let off = false;
+    setItems(null);
+    void recentOf(row.hub.id).then((list) => { if (!off) setItems(list); });
+    return () => { off = true; };
+  }, [row.hub.id, name]);
+  if (items === null) return null;
+  const mine = items.filter((it) => it.participants.includes(name)).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const week = mine.filter((it) => now - new Date(it.updated_at).getTime() < WEEK_MS);
+  const count = (st: string[]) => week.filter((it) => st.includes(it.state || "")).length;
+  const done = count(["done"]);
+  const failed = count(["failed"]);
+  const open = Math.max(count(["working", "queued"]), row.st.in_progress + row.st.queued);
+  const word = (st?: string) => st === "done" ? L("做完", "Done") : st === "failed" ? L("失败", "Failed") : st === "working" ? L("在做", "Working") : st === "queued" ? L("排队", "Queued") : L("消息", "Note");
+  return (
+    <div className="ms-block">
+      <div className="ms-block-title"><span>{L("最近在做", "Lately")}</span></div>
+      <div className="ms-stats">
+        <span><b>{done}</b>{L("做完", "done")}</span>
+        <span><b>{open}</b>{L("在做", "open")}</span>
+        <span className={cn(failed > 0 && "is-bad")}><b>{failed}</b>{L("失败", "failed")}</span>
+        <span className="ms-stats-note">{L("最近 7 天", "last 7 days")}</span>
+      </div>
+      {mine.slice(0, 3).map((it) => {
+        const text = (it.open || it.task || it.first)?.body || "";
+        return (
+          <div key={it.thread_id} className="ms-task">
+            <span className={cn("ms-task-state", `is-${it.state || "none"}`)}>{word(it.state)}</span>
+            <span className="ms-task-text" title={text}>{text.split("\n")[0]}</span>
+            <span className="ms-task-time">{timeAgo(it.updated_at, now)}</span>
+          </div>
+        );
+      })}
+      {mine.length === 0 && <p className="ms-note">{L("最近没有派给它的活。", "No tasks for it lately.")}</p>}
+    </div>
+  );
+}
+
+function folderOfDir(dir: string): string {
+  return dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || dir;
 }

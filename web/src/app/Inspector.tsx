@@ -427,7 +427,7 @@ function visibilityLabel(v?: string) {
 // InUseCard: the runner found the session open elsewhere (a terminal or the
 // IDE) and handed messages back instead of interrupting. The fix is to let
 // that open session receive by itself.
-function InUseCard() {
+export function InUseCard() {
   const ask = L(
     `请在后台一直运行 \`${WAIT_CMD}\`，结束后马上再启动一次，收到消息时用 myco inbox pull 读取并处理。`,
     `Keep \`${WAIT_CMD}\` running as a background command, start it again whenever it exits, and when it reports messages read them with myco inbox pull and handle them.`,
@@ -450,7 +450,7 @@ function InUseCard() {
 // OfflineCard says why a node is offline and how to bring it back: on this
 // computer, restart the runner; on another one, the command to run there;
 // a cloud session comes back when its session continues.
-function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRefresh: () => Promise<void> }) {
+export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: number; onRefresh: () => Promise<void> }) {
   const ag = row.st.agent;
   const machine = machineOfRow(row);
   const [hostname, setHostname] = useState<string | undefined>();
@@ -1096,18 +1096,16 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           </section>
         </>
       );
-  const hasWork = current.length > 0 || row.st.queued + row.st.in_progress + row.st.held > 0;
   const sections = embedded ? (
     <div className="ms-details">
-      {sec_state}
-      {hasWork && sec_current}
-      {sec_about}
       <button type="button" className={cn("ms-fold", more && "open")} onClick={() => setMore((v) => !v)} aria-expanded={more}>
         <ChevronRight />{L("详细信息", "Details")}
       </button>
       {more && (
         <div className="ms-fold-body">
+          {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <div className="ms-alert-in"><InUseCard /></div>}
           {sec_runtime}
+          {sec_about}
           {sec_labels}
           {sec_peers}
           {sec_history}

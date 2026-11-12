@@ -967,6 +967,11 @@
   overflow-y: auto;
   animation: ms-in 0.18s ease-out;
 }
+/* It scrolls when long: its parts keep their height instead of being
+   squeezed to fit. */
+.ms > * {
+  flex-shrink: 0;
+}
 @keyframes ms-in {
   from { opacity: 0; transform: translateX(16px); }
 }
@@ -998,15 +1003,16 @@
 }
 .ms-desc {
   width: 100%;
+  height: 30px;
   margin-top: 4px;
-  padding: 6px 8px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--fg-2);
   font: inherit;
   font-size: 12.5px;
-  line-height: 1.55;
+  line-height: 30px;
   text-align: center;
   /* one line, however long: the rest shows as … (and in full on hover) */
   white-space: nowrap;
@@ -1026,10 +1032,121 @@
 .ms-save {
   margin-top: 10px;
 }
-.ms-chat {
+.ms .ms-chat {
   width: 100%;
-  margin-top: 18px;
+  height: 34px;
+  margin-top: 16px;
+  border-radius: 9px;
   justify-content: center;
+}
+.ms-alert {
+  align-self: stretch;
+  margin-top: 14px;
+}
+.ms-alert .app-offline {
+  margin: 0;
+}
+.ms-alert-in {
+  margin-bottom: 16px;
+}
+.ms-inuse {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--amber, #d4a017) 10%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.ms-inuse .dot {
+  flex: none;
+  transform: translateY(-1px);
+}
+/* Who it is: label and value, a line each. */
+.ms-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ms-fact {
+  display: flex;
+  gap: 12px;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ms-fact-k {
+  flex: none;
+  width: 36px;
+  color: var(--muted);
+}
+.ms-fact-v {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Lately: three numbers, then the last few tasks. */
+.ms-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 2px 8px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ms-stats b {
+  margin-right: 3px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.ms-stats .is-bad b {
+  color: var(--red);
+}
+.ms-stats-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+}
+.ms-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+}
+.ms-task-state {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 18px;
+}
+.ms-task-state.is-done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.ms-task-state.is-failed { color: var(--red); background: var(--red-soft); }
+.ms-task-state.is-working { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ms-task-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ms-task-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
 }
 .ms-block {
   align-self: stretch;
