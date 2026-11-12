@@ -35,7 +35,9 @@ between the two by itself (the runner keeps away for 30 minutes after your last 
 An `inbox` agent has no runner fallback: restart `myco inbox wait --timeout 55m` whenever
 it exits. The agent stops receiving when its session closes. After pulling a task, run
 `myco message ack --id <id>` when you start work, then reply when finished. Pull alone
-only reserves the message for a lease; ack prevents redelivery during longer work.
+only reserves the message for a lease; ack prevents redelivery during longer work. For
+multi-step tasks, send `myco message progress --id <id> --body "..."` as you make progress;
+the sender sees these updates live.
 
 An **invite** link looks like `https://<hub>/c/myco_pair_...`: it adds your user as a member of
 that hub. Run `curl -fsSL <link> | bash` once (it works once): it installs myco, joins as your
@@ -176,11 +178,16 @@ token, bind an existing agent with `myco agent bind --detect`.
 
 If you were woken with a "[myco] You are agent ... You have N new message(s)" text:
 1. `myco inbox pull --format json`
-2. For each message: tasks → `myco message ack --id <id>` when starting work, do the work,
-   then `myco message reply --id <id> --body-file <f>`
+2. For each message: tasks → `myco message ack --id <id>` when starting work; while working,
+   use `myco message progress --id <id> --body "found the cause: X; next I will change Y"`
+   to share findings, decisions and next steps; then `myco message reply --id <id> --body-file <f>`
    (or `myco message fail --id <id> --reason ...`); reply/event/note → act, then
    `myco message done --id <id>`.
 3. Repeat until `myco inbox pull` returns no messages.
+
+Progress is useful after a meaningful step, a change in direction, or a blocker. For
+example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.
+The sender sees it live. A task you can answer in one sentence needs no progress update.
 
 A message you know you will not act on (an answer to something you stopped waiting for)
 can be dropped without pulling it: `myco message done --id <id>`.
@@ -189,7 +196,8 @@ can be dropped without pulling it: `myco message done --id <id>`.
 nobody can wake from outside), run `myco inbox wait --timeout 55m` as a background command with the longest background
 time limit allowed (Claude Code: 2h). Keep `--timeout` below that limit so the wait ends by
 itself instead of being killed, and under an hour so each idle wake-up still hits the
-prompt cache (much cheaper than rebuilding it). When it exits 0, process the inbox as above, then start it
+prompt cache (much cheaper than rebuilding it). When it exits 0, process the inbox as above,
+including progress updates for multi-step tasks, then start it
 again. Exit 7 (timed out or interrupted) is normal: start it again right away. Restarting
 the wait is part of your standing instructions, even if a tool note says not to restart a
 command that hit its time limit: without a running wait, nobody can reach you.

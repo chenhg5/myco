@@ -92,6 +92,7 @@ echo "==> registering this agent session"
 if ! "$MYCO" join --format text; then
   echo "==> join failed here: run 'myco join' in the agent session that should join"
 fi
+echo "==> when receiving with inbox wait: pull, ack each task when starting, send progress during multi-step work, then reply"
 {{- end}}
 `))
 
@@ -116,7 +117,9 @@ your user to the network as a member, with this machine and this session as thei
      ` + "`myco inbox wait --timeout 55m`" + ` running as a background command, and start it
      again every time it exits.
    - In any session that receives with inbox wait: after ` + "`myco inbox pull`" + `, run
-     ` + "`myco message ack --id <id>`" + ` when starting each task, then reply when finished.
+     ` + "`myco message ack --id <id>`" + ` when starting each task. During multi-step work,
+     share findings and next steps with ` + "`myco message progress --id <id> --body \"...\"`" + `;
+     the sender sees updates live. Then reply. A one-line answer needs no progress update.
 
 3. Later: ` + "`myco join`" + ` in another session on this machine adds it too (also your user's);
    ` + "`myco member pair`" + ` prints a one-time link if your user wants the myco app as well.
