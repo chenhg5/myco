@@ -13,8 +13,8 @@ const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acke
 
 /** A tool call with its result, or another step. */
 type Row =
-  | { kind: "tool"; key: string; call: TraceStep; result?: TraceStep }
-  | { kind: "thinking" | "text" | "error"; key: string; step: TraceStep };
+  | { kind: "tool"; key: string; at?: string; call: TraceStep; result?: TraceStep }
+  | { kind: "thinking" | "text" | "error"; key: string; at?: string; step: TraceStep };
 
 function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
   const rows: Row[] = [];
@@ -23,7 +23,7 @@ function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
   for (const e of events) {
     const s = e.data;
     if (s.kind === "tool") {
-      const r = { kind: "tool" as const, key: `t${e.seq}`, call: s };
+      const r = { kind: "tool" as const, key: `t${e.seq}`, at: e.at, call: s };
       rows.push(r);
       if (s.id) calls.set(s.id, r);
     } else if (s.kind === "tool_result") {
@@ -32,7 +32,7 @@ function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
     } else if (s.kind === "usage") {
       usage = s;
     } else if (s.kind === "thinking" || s.kind === "text" || s.kind === "error") {
-      rows.push({ kind: s.kind, key: `s${e.seq}`, step: s });
+      rows.push({ kind: s.kind, key: `s${e.seq}`, at: e.at, step: s });
     }
   }
   return { rows, usage };
@@ -105,8 +105,11 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
   hubId: string; task: Message; onGrow?: () => void;
+  /** what the agent reported on this task (myco message progress): part of
+   *  the run, in time order, as it says things between its steps */
+  said?: Message[];
   /** why it has not started yet, when known (the session is open elsewhere) */
   waiting?: string;
   /** its answer is in the conversation: done, even if its status lags */
@@ -127,7 +130,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
     if (el) el.scrollTop = el.scrollHeight;
     onGrow?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events?.length, running]);
+  }, [events?.length, said?.length, running]);
 
   // Loaded while it runs (polled) and once when it has finished, folded or
   // not: whether there is anything to show depends on it.
@@ -169,7 +172,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
 
   // Not picked up yet (queued, the node offline or its session busy): a
   // quiet line saying why, not a spinner.
-  if (running && task.status !== "acked" && (!events || events.length === 0)) {
+  const reports = said || [];
+  if (running && task.status !== "acked" && (!events || events.length === 0) && !reports.length) {
     return (
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">
@@ -190,8 +194,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
       </div>
     </div>
   );
-  if (gone) return running ? atWork : null;
-  const { rows, usage } = rowsOf(events || []);
+  const { rows, usage } = gone ? { rows: [] as Row[], usage: undefined } : rowsOf(events || []);
   // The process is thinking, tool calls and errors. What the agent says is
   // the reply (shown as the message); text between steps stays as context,
   // text after the last step is the reply itself and is left out.
@@ -200,31 +203,50 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   while (end > 0 && rows[end - 1].kind === "text") end--;
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
-  if (!running && (events === null || steps === 0)) return null;
-  if (running && steps === 0) return atWork;
+  if (!reports.length) {
+    if (gone) return running ? atWork : null;
+    if (!running && (events === null || steps === 0)) return null;
+    if (running && steps === 0) return atWork;
+  }
 
   // As Claude Code and Codex show a run: what it says between steps is
-  // text, in the open; each run of steps in between folds into one line
-  // ("跑了 3 条命令、改了 1 个文件") that opens to show them. The newest
-  // steps, while it runs, say what it is doing now.
-  type Segment = { kind: "say"; row: Row } | { kind: "steps"; rows: Row[] };
+  // text, in the open (what it reported with myco message progress too, by
+  // time); each run of steps in between folds into one line ("跑了 3 条命令、
+  // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
+  // say what it is doing now; at the very end, while it works, the mushroom.
+  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string }; row?: Row };
+  const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
+  for (const p of reports) {
+    const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at } };
+    // after the last step made before it (steps without a time: at the end)
+    let i = items.length;
+    if (items.every((x) => x.at)) {
+      const t = new Date(p.created_at).getTime();
+      i = items.findIndex((x) => new Date(x.at!).getTime() > t);
+      if (i < 0) i = items.length;
+    }
+    items.splice(i, 0, it);
+  }
+  type Segment = { kind: "say"; key: string; text: string; report?: boolean; when?: string } | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
-  for (const r of shown) {
+  for (const it of items) {
+    if (it.say) { segments.push({ kind: "say", ...it.say }); continue; }
+    const r = it.row!;
     if (r.kind === "text") {
-      if (r.step.text?.trim()) segments.push({ kind: "say", row: r });
+      if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text });
       continue;
     }
     const lastSeg = segments[segments.length - 1];
     if (lastSeg?.kind === "steps") lastSeg.rows.push(r);
     else segments.push({ kind: "steps", rows: [r] });
   }
-  const endsWithSay = segments[segments.length - 1]?.kind === "say";
+  const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
 
   return (
     <div className={cn("trace is-flow", running && "is-live")} ref={body}>
       {segments.map((seg, i) => seg.kind === "say" ? (
-        <div key={(seg.row as { key: string }).key} className="trace-say">
-          <MessageContent body={(seg.row as Extract<Row, { step: TraceStep }>).step.text || ""} />
+        <div key={seg.key} className={cn("trace-say", seg.report && "is-report")} title={seg.when ? clock(seg.when) : undefined}>
+          <MessageContent body={seg.text} />
         </div>
       ) : (
         <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
@@ -239,6 +261,11 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
       {!running && usage && <div className="trace-foot">{usageLine(usage)}</div>}
     </div>
   );
+}
+
+function clock(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 /** A run of steps between two things it said: one line, open to see them.

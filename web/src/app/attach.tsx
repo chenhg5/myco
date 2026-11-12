@@ -130,30 +130,51 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
   );
 }
 
-/** The files about to go, above the text: small tiles, the picture (or a
- *  file icon with its kind) on top and the name under it, cut short when
- *  long; the size and any error on hover. */
+/** A file name short enough for a tile (two short lines), cut in the
+ *  middle so the kind (".md") stays: "2026 年第…说明.md". Wide (CJK)
+ *  letters count double. */
+export function shortName(name: string, room = 16): string {
+  const w = (c: string) => (/[\u2e80-\uffff]/.test(c) ? 2 : 1);
+  const width = (t: string) => [...t].reduce((n, c) => n + w(c), 0);
+  if (width(name) <= room) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : "";
+  const base = [...name.slice(0, name.length - ext.length)];
+  // About two thirds of what is left for the start, the rest for the end.
+  const left = room - 1 - width(ext);
+  let head = "", tail = "";
+  for (const c of base) {
+    if (width(head + c) > Math.ceil(left * 0.62)) break;
+    head += c;
+  }
+  for (let i = base.length - 1; i >= head.length; i--) {
+    if (width(head) + width(base[i] + tail) > left) break;
+    tail = base[i] + tail;
+  }
+  return `${head.trimEnd()}…${tail.trimStart()}${ext}`;
+}
+
+/** The files about to go, above the text: small tiles of one size. A
+ *  picture is its thumbnail alone (it says what it is); another file is an
+ *  icon and its name, cut in the middle. The full name and size on hover. */
 export function AttachList({ items, onRemove }: { items: Pending[]; onRemove: (key: string) => void }) {
   if (!items.length) return null;
   return (
     <div className="att-list" onClick={(e) => e.stopPropagation()}>
-      {items.map((x) => {
-        const ext = x.name.includes(".") ? x.name.split(".").pop()!.slice(0, 5) : "";
-        return (
-          <div key={x.key} className={cn("att-chip", x.state === "error" && "is-error", x.state === "uploading" && "is-busy")}
-            title={x.error ? `${x.name}\n${x.error}` : `${x.name} · ${bytes(x.size)}`}>
-            <span className="att-face">
-              {x.preview ? <img className="att-thumb" src={x.preview} alt="" /> : (
-                <span className="att-icon"><FileText />{ext && <span className="att-ext">{ext}</span>}</span>
-              )}
-              {x.state === "uploading" && <span className="att-cover" aria-label={L("正在上传…", "Uploading…")}><Loader2 className="att-spin" /></span>}
-              {x.state === "error" && <span className="att-cover is-error"><AlertCircle /></span>}
+      {items.map((x) => (
+        <div key={x.key} className={cn("att-chip", x.preview && "is-picture", x.state === "error" && "is-error", x.state === "uploading" && "is-busy")}
+          title={x.error ? `${x.name}\n${x.error}` : `${x.name} · ${bytes(x.size)}`}>
+          {x.preview ? <img className="att-thumb" src={x.preview} alt={x.name} /> : (
+            <span className="att-file">
+              <FileText />
+              <span className="att-name">{shortName(x.name)}</span>
             </span>
-            <span className="att-name">{x.name}</span>
-            <button type="button" className="att-x" onClick={() => onRemove(x.key)} aria-label={L("不发这个", "Remove")} title={L("不发这个", "Remove")}><X /></button>
-          </div>
-        );
-      })}
+          )}
+          {x.state === "uploading" && <span className="att-cover" aria-label={L("正在上传…", "Uploading…")}><Loader2 className="att-spin" /></span>}
+          {x.state === "error" && <span className="att-cover is-error"><AlertCircle /></span>}
+          <button type="button" className="att-x" onClick={() => onRemove(x.key)} aria-label={L("不发这个", "Remove")} title={L("不发这个", "Remove")}><X /></button>
+        </div>
+      ))}
     </div>
   );
 }

@@ -505,15 +505,16 @@ async function runMatrix(browser, size, scheme) {
       });
       await box.locator(".att-chip").nth(1).waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
-      // A tile: the picture on top, the name under it, never stretched by a long name.
-      // (Compared with its own picture: the text-size setting zooms the page.)
-      const wide = await box.locator(".att-chip").evaluateAll((els) => els.map((e) => {
-        const face = e.querySelector(".att-face")?.getBoundingClientRect().width || 0;
-        const name = e.querySelector(".att-name");
-        return { w: e.getBoundingClientRect().width, face, under: !!name && name.getBoundingClientRect().top >= (e.querySelector(".att-face")?.getBoundingClientRect().bottom || 0) - 1 };
+      // Tiles of one size: a picture is its thumbnail alone; a file shows
+      // its name cut in the middle, the kind kept.
+      const tiles = await box.locator(".att-chip").evaluateAll((els) => els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return { w: r.width, h: r.height, picture: e.classList.contains("is-picture"), name: e.querySelector(".att-name")?.textContent || "" };
       }));
-      if (wide.some((x) => x.w > x.face + 1)) throw new Error(`长文件名不该把文件块撑宽：${JSON.stringify(wide)}`);
-      if (!wide.every((x) => x.under)) throw new Error("文件名应在缩略图下面");
+      if (tiles.some((x) => Math.abs(x.w - tiles[0].w) > 1 || Math.abs(x.h - tiles[0].h) > 1)) throw new Error(`文件块应一样大：${JSON.stringify(tiles)}`);
+      if (tiles.some((x) => x.picture && x.name)) throw new Error("图片只显示缩略图，不显示文件名");
+      const file = tiles.find((x) => !x.picture);
+      if (!file || !file.name.endsWith(".txt") || !file.name.includes("…")) throw new Error(`长文件名应从中间省略、保留扩展名，实际「${file?.name}」`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-attach");
       await page.locator(".conv-compose-input").press("Enter");
@@ -521,6 +522,19 @@ async function runMatrix(browser, size, scheme) {
       await sent.waitFor({ timeout: 20_000 });
       if ((await sent.locator(".conv-attach").count()) !== 2) throw new Error("发出去的消息应带上两个文件");
       if (await box.locator(".att-chip").count()) throw new Error("发出去后，输入框里的文件应该清空");
+      // Its progress (the mock reports one after 3s) is part of the run
+      // under the task, not a loose grey line; while it works, the
+      // mushroom stays at the very bottom.
+      const run = page.locator(".conv-detail .trace").last();
+      await run.locator(".trace-say.is-report", { hasText: "正在处理" }).waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-detail .conv-progress", { hasText: "正在处理" }).count()) throw new Error("进展应写在任务的工作过程里，不是单独一行");
+      const wrongOrder = await run.evaluate((el) => {
+        const kids = [...el.children];
+        const say = kids.findIndex((c) => c.classList.contains("is-report"));
+        const wait = kids.findIndex((c) => c.classList.contains("trace-wait"));
+        return wait >= 0 && wait < say;
+      });
+      if (wrongOrder) throw new Error("“捣鼓中”应在进展下面");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 

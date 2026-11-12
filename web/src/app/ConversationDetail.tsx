@@ -815,8 +815,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // the answer it led to, or shown by the node at work; only the last
   // progress of a task that ended without an answer here stands in for
   // all of it.
+  // A task with its run shown under it (yours, or one another member gave
+  // the agent you are looking at): its progress is part of that run.
+  const inRun = (task?: Message) => !!task && task.type === "task" && !task.e2e
+    && ((isMe(task.from, row?.hub) && !isStuck(task)) || (alsoSet.has(task.from) && task.to === target.agent));
+  const byId = new Map((shown || []).map((m) => [m.id, m]));
   const visible = (shown || []).filter((m) => {
-    if (!observed || m.type !== "progress") return true;
+    if (m.type !== "progress") return true;
+    if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
     const task = taskOfProgress.get(m.id) || "";
     if (answerOf.has(task) || task === working?.task.id) return false;
     const all = progressOf.get(task);
@@ -951,10 +957,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} />)}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} />
         )}
         </Fragment>
       );
