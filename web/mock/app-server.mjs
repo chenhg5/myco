@@ -796,6 +796,10 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { link });
   }
 
+  // /app/island/* — the Mac app's notch island sizes its window and opens
+  // the app at a member; the mock just says yes.
+  if (parts[0] === "app" && parts[1] === "island" && method === "POST") return send(res, 200, { ok: true });
+
   // /app/mock/stuck — the smoke test puts the stale demo task back: it stops
   // and resends it, and the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {

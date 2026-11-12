@@ -4,6 +4,8 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -28,11 +30,21 @@ const guiShell = "mac"
 // hides it, and the app keeps running until quit. setRelaunch receives how
 // to quit and reopen the app (after an update put a new bundle in place).
 func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error {
+	// The notch's island (made once the app exists) answers a few requests
+	// of its own page; everything else goes to the app's backend.
+	var isl *island
+	assets := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isl != nil {
+			isl.handler(h).ServeHTTP(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 	app := application.New(application.Options{
 		Name:        "myco",
 		Description: "Manage your myco hubs and agents",
 		// Served in-process to the webview: no network port is opened.
-		Assets: application.AssetOptions{Handler: h},
+		Assets: application.AssetOptions{Handler: assets},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyRegular,
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
@@ -63,6 +75,13 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		window.Focus()
 	}
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { show() })
+	// While agents work, the notch grows to show them; a name in it opens
+	// the app at that member.
+	isl = newIsland(app, func(hub, agent string) {
+		show()
+		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent})
+		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
+	})
 	// myco://add-hub?link=… (an app link's "open in the app" button): the
 	// UI picks it up and offers to add the hub.
 	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {

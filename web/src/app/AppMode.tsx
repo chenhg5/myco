@@ -261,6 +261,28 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setChatWith({ space: s, agent: r.st.agent.name, n: Date.now() });
   };
 
+  // The notch's island opens the app at a member: its workspace first,
+  // then (once its rows are there) its chat.
+  const [toOpen, setToOpen] = useState<{ hubId: string; agent: string } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId: string; agent: string }>).detail;
+      if (!d?.hubId || !d.agent) return;
+      setHubPick(d.hubId);
+      setToOpen(d);
+    };
+    window.addEventListener("myco-open-member", on);
+    return () => window.removeEventListener("myco-open-member", on);
+  }, []);
+  useEffect(() => {
+    if (!toOpen) return;
+    const r = rows.find((x) => x.hub.id === toOpen.hubId && x.st.agent.name === toOpen.agent);
+    if (!r) return;
+    setToOpen(null);
+    chatWithMember(r);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toOpen, rows]);
+
   const closeConnect = (open: boolean) => {
     setConnectOpen(open);
     if (!open) setConnectPrefill("");

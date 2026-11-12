@@ -494,6 +494,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   ))}
                 </div>
               </div>
+              {info?.shell === "mac" && <IslandLine />}
               <div className="app-setting-line">
                 <div className="app-setting-line-text">
                   <b>语言 / Language</b>
@@ -765,5 +766,26 @@ function E2ERow({ hubId, ov, onChanged }: { hubId: string; ov?: HubOverview; onC
         </div>
       </Modal>
     </>
+  );
+}
+
+/** The notch's island (Mac app): on unless turned off here. */
+function IslandLine() {
+  const [on, setOn] = useState(() => { try { return localStorage.getItem("myco-island") !== "off"; } catch { return true; } });
+  const set = (v: boolean) => {
+    setOn(v);
+    try { localStorage.setItem("myco-island", v ? "on" : "off"); } catch { /* not kept */ }
+  };
+  return (
+    <div className="app-setting-line">
+      <div className="app-setting-line-text">
+        <b>{L("刘海动画", "Notch")}</b>
+        <span>{L("有成员在干活时，屏幕顶部的刘海会长出一小截：小蘑菇在走，旁边是几个在干活；指上去看是谁在做什么。", "While members work, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what.")}</span>
+      </div>
+      <div className="seg" role="tablist" aria-label={L("刘海动画", "Notch")}>
+        <button type="button" role="tab" aria-selected={on} className={cn("seg-btn", on && "active")} onClick={() => set(true)}>{L("开", "On")}</button>
+        <button type="button" role="tab" aria-selected={!on} className={cn("seg-btn", !on && "active")} onClick={() => set(false)}>{L("关", "Off")}</button>
+      </div>
+    </div>
   );
 }
