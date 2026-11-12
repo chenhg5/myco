@@ -7,7 +7,7 @@
        0-4    title: the mark settles, "Connect your AI agents."
        4-12   five agents alone in space, each in its own product's window
        12-18  the trap: you carry every message between them
-       18-22  the drop: mycelium threads; each window becomes its logo tile around the hub
+       18-22  the drop: each window becomes its flat app icon, laid out around the hub like a diagram
        22-32  1. a cloud agent uses your computer: a shell on your MacBook runs its
               command, and your MacBook's Claude Code takes its task
        32-40  2. your agent hands a task to a teammate's agent; the answer comes back
@@ -120,6 +120,9 @@ const AG = [
   { k: 'sh', p: V(-5.6, .55, -1.4), ry: 0, pop: 99, name: 'Shell', where: T('你的 MacBook 上', 'on your MacBook'), mark: 'shell', bg: 0x1b1f1d, does: T('跑命令', 'runs commands') },
 ];
 const SH = 5; // index of the shell node: no window in the hook, a tile from 22.6 s
+// In the network the agents sit evenly on one plane around the hub, like a diagram
+// (angle in degrees, 0 = right); in the hook they float where their windows are.
+const LAYOUT = { gm: 85, cx: 30, gr: 325, cu: 262, sh: 175, cc: 130 };
 const SH_IN = 22.6;
 // the machines a scene is about: a soft frame around their tiles
 const PLATES = [
@@ -128,6 +131,9 @@ const PLATES = [
 ];
 const byK = Object.fromEntries(AG.map((a, i) => [a.k, i]));
 const HUB = V(0, 0, -3.6);
+AG.forEach((a) => { const r = LAYOUT[a.k] * Math.PI / 180; a.q = HUB.clone().add(V(4.9 * Math.cos(r), 2.8 * Math.sin(r), 0)); });
+// where an agent is at time t: its window's place in the hook, its place in the diagram after the drop
+const placeAt = (a, t) => (a.k === 'sh' ? a.q.clone() : a.p.clone().lerp(a.q, p2io(seg(t, 18.25, 19.2))));
 const panels = []; const tiles = [];
 const labelsEl = $('labels'); const chipsEl = $('chips');
 
@@ -160,10 +166,12 @@ function tube(curve, r, color, n = 100) {
 function buildNetwork() {
   AG.forEach((a, i) => {
     for (let k = 0; k < 1; k++) {
-      const s = i * 10 + k; const pts = [a.p.clone()];
-      for (let j = 1; j < 4; j++) { const f = j / 4; pts.push(a.p.clone().lerp(HUB, f).add(V((hash(s + j) - .5) * 1.4 * (1 - f), (hash(s + j + 50) - .5) * 1.2 * (1 - f), (hash(s + j + 90) - .5)))); }
-      pts.push(HUB.clone());
-      threads.push({ ...tube(new THREE.CatmullRomCurve3(pts), .02, new THREE.Color(0x58d39e).multiplyScalar(.8), 120), i, k, pts });
+      // a gentle bend, all the same way round: calm, not hairy
+      const d = HUB.clone().sub(a.q); const n = V(-d.y, d.x, 0).normalize();
+      const c = a.q.clone().lerp(HUB, .5).add(n.multiplyScalar(d.length() * .12));
+      const curve = new THREE.QuadraticBezierCurve3(a.q.clone(), c, HUB.clone());
+      const pts = curve.getPoints(10); pts.pop();
+      threads.push({ ...tube(curve, .011, new THREE.Color(0x58d39e).multiplyScalar(.7), 80), i, k, pts: [...pts, HUB.clone()] });
     }
   });
 }
@@ -201,6 +209,18 @@ function fileTexture(name, size) {
 }
 
 // ---------- marks ----------
+// an app icon: the product's mark on a rounded square, flat, with a hairline edge
+function iconTexture(a, mark) {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d');
+  const bg = '#' + a.bg.toString(16).padStart(6, '0');
+  x.fillStyle = bg; x.beginPath(); x.roundRect(8, 8, N - 16, N - 16, 116); x.fill();
+  const g = x.createLinearGradient(0, 0, 0, N); g.addColorStop(0, 'rgba(255,255,255,.07)'); g.addColorStop(1, 'rgba(0,0,0,.12)');
+  x.fillStyle = g; x.fill();
+  x.strokeStyle = 'rgba(255,255,255,.14)'; x.lineWidth = 4; x.stroke();
+  const m = a.mark === 'grok' ? .74 : .5, w = N * m;
+  x.drawImage(mark.image, (N - w) / 2, (N - w) / 2, w, w);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
 let hubMark, titleMark;
 const markMat = (tex, o = {}) => new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, toneMapped: false, depthWrite: false, color: new THREE.Color(.82, .82, .82), ...o });
 
@@ -252,10 +272,8 @@ window.ready = (async () => {
     panels.push({ g, mat, w, h, el });
     // the logo tile: a rounded slab with the mark on its face
     const tg = new THREE.Group(); tg.position.copy(a.p);
-    const slab = new THREE.Mesh(new RoundedBoxGeometry(1.2, 1.2, .2, 4, .19), new THREE.MeshStandardMaterial({ color: a.bg, roughness: .45, metalness: .1, transparent: true, opacity: 0 }));
-    const fs = a.mark === 'grok' ? 1.18 : .74;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(fs, fs), markMat(mt[a.mark]));
-    face.position.z = .102; tg.add(slab); tg.add(face); tg.scale.setScalar(.001); scene.add(tg);
+    const slab = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), markMat(iconTexture(a, mt[a.mark]), { color: new THREE.Color(1, 1, 1) }));
+    const face = slab; tg.add(slab); tg.scale.setScalar(.001); scene.add(tg);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(.92, .012, 8, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6fe0ae), transparent: true, opacity: 0, depthWrite: false }));
     ring.position.copy(a.p); scene.add(ring);
     tiles.push({ tg, slab, face, ring });
@@ -278,7 +296,7 @@ window.ready = (async () => {
     pulses.push({ curve, spokes, s0, s1, obj, el, kind });
   });
   PLATES.forEach((P) => {
-    const pts = P.ks.map((k) => AG[byK[k]].p);
+    const pts = P.ks.map((k) => AG[byK[k]].q);
     const lo = pts.reduce((m, q) => m.clone().min(q)), hi = pts.reduce((m, q) => m.clone().max(q));
     P.c = lo.clone().add(hi).multiplyScalar(.5).add(V(0, -.3, 0));
     P.w = hi.x - lo.x + 2.3; P.h = hi.y - lo.y + 2.15;
@@ -311,15 +329,16 @@ function wordsIn(el, words, t, t0, step = .08) {
 }
 // the network camera orbits the hub, leaning toward each exchange
 function netCamera(t) {
-  const ang = -.18 + Math.sin((t - 18) * .09) * .22;
-  let r = lerp(15.5, 12.8, p4out(seg(t, 18, 20.5)));
+  // nearly face-on, drifting a little: the network reads as a diagram
+  const ang = Math.sin((t - 18) * .07) * .05;
+  let r = lerp(16, 13.4, p4out(seg(t, 18, 20.5)));
   const focus = HUB.clone();
-  const lean = (a, b, s0, s1, k) => { const w = seg(t, s0, s0 + .8) * (1 - seg(t, s1 - .6, s1)); if (w > 0) { const m = AG[byK[a]].p.clone().add(AG[byK[b]].p).multiplyScalar(.5); focus.lerp(m, w * k * .45); r -= w * 2.0; } };
+  const lean = (a, b, s0, s1, k) => { const w = seg(t, s0, s0 + .8) * (1 - seg(t, s1 - .6, s1)); if (w > 0) { const m = AG[byK[a]].q.clone().add(AG[byK[b]].q).multiplyScalar(.5); focus.lerp(m, w * k * .25); r -= w * .8; } };
   lean('gm', 'sh', 23.4, 28.2, .7); lean('gm', 'cc', 28.2, 32.2, .6); lean('cc', 'cu', 32.4, 38.6, .7); lean('cc', 'cx', 40.6, 46.4, .6);
   // leave the lower left free for the terminal card
   const tw = p2io(seg(t, 22.6, 23.3)) * (1 - p2io(seg(t, 46.6, 47.3)));
-  focus.add(V(-1.6 * tw, -.7 * tw, 0));
-  return [focus.clone().add(V(Math.sin(ang) * r, 1.2 + Math.sin(t * .35) * .3, Math.cos(ang) * r)), focus];
+  focus.add(V(-1.5 * tw, -.45 * tw, 0));
+  return [focus.clone().add(V(Math.sin(ang) * r, .35 + Math.sin(t * .3) * .08, Math.cos(ang) * r)), focus];
 }
 
 window.seek = (t) => {
@@ -345,7 +364,7 @@ window.seek = (t) => {
   } else {
     [pos, tgt] = netCamera(t);
     if (t >= 46.4 && t < 48.2) { const d = p3in(seg(t, 46.6, 48.0)); pos.lerp(HUB.clone().add(V(0, 0, .3)), d); tgt = HUB.clone(); }
-    if (t >= 59.9) { const ang = .25 + (t - 60) * .04; const r = lerp(13, 14.5, p2io(seg(t, 60, 63))); pos = HUB.clone().add(V(Math.sin(ang) * r, .7, Math.cos(ang) * r)); tgt = HUB.clone().add(V(0, .45, 0)); }
+    if (t >= 59.9) { const ang = .25 + (t - 60) * .04; const r = lerp(13, 14.5, p2io(seg(t, 60, 63))); pos = HUB.clone().add(V(Math.sin(ang) * r, -.67, Math.cos(ang) * r)); tgt = HUB.clone().add(V(0, -.92, 0)); }
   }
   camera.position.copy(pos); camera.lookAt(tgt);
   camera.fov = 38 + (t < 59.9 ? 8 * p3in(seg(t, 46.6, 48.0)) : 0); camera.updateProjectionMatrix();
@@ -360,9 +379,10 @@ window.seek = (t) => {
   const wm = $('wordmark'), l1 = $('line1');
   const tWord = seg(t, 1.0, 1.35), tOut = seg(t, 3.2, 3.6), eWord = seg(t, 61.2, 61.55);
   if (t < 4) { wm.style.opacity = tWord * (1 - tOut); wm.style.filter = `blur(${(1 - tWord) * 10 + tOut * 8}px)`; wm.style.top = '600px'; l1.style.top = '720px'; wordsIn(l1, T('把你的 AI agent 连起来', 'Connect your AI agents.').split(' '), t, 1.5); l1.style.opacity = 1 - tOut; l1.style.filter = `blur(${tOut * 8}px)`; }
-  else if (t >= 61) { wm.style.opacity = eWord; wm.style.filter = `blur(${(1 - eWord) * 10}px)`; wm.style.top = '600px'; l1.style.top = '715px'; wordsIn(l1, T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), t, 61.8); l1.style.opacity = 1; l1.style.filter = 'none'; }
+  else if (t >= 61) { wm.style.opacity = eWord; wm.style.filter = `blur(${(1 - eWord) * 10}px)`; wm.style.top = '446px'; l1.style.top = '561px'; wordsIn(l1, T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), t, 61.8); l1.style.opacity = 1; l1.style.filter = 'none'; }
   else { wm.style.opacity = 0; l1.innerHTML = ''; }
   $('halo').style.opacity = t < 4 ? seg(t, .8, 1.3) * (1 - tOut) : seg(t, 61, 61.5);
+  $('halo').style.top = t < 4 ? '480px' : '326px';
 
   // ----- hook windows; at the drop each one becomes its logo tile -----
   const collapse = seg(t, 18.1, 18.9);
@@ -379,7 +399,7 @@ window.seek = (t) => {
     // labels: the window's name while it is introduced; in the network, under the tile
     let lp, lv;
     if ((t >= 19.2 && t < 47.6) || (t >= 59.9 && t < 60.4)) {
-      lp = project(a.p.clone().add(V(0, -.84, 0)));
+      lp = project(placeAt(a, t).add(V(0, -.78, 0)));
       // 3. they see each other: who is online and what each one does
       const seen = a.k === 'cc' ? seg(t, 40.4, 40.7) : seg(t, 40.8 + i * .18, 41.1 + i * .18);
       P.el.innerHTML = `${a.name}<small>${seen > 0 ? '<span class="on"></span>' : ''}${a.net || a.where}${seen > .5 ? ' · ' + a.does : ''}</small>`;
@@ -393,17 +413,17 @@ window.seek = (t) => {
     // the tile, turning slowly so its edges catch the light
     const ts = netOn ? spring(t - (i === SH ? SH_IN : 18.55 + i * .05), .7, 12) : 0;
     T0.tg.scale.setScalar(Math.max(.001, t >= 59.9 ? 1 - gather : ts));
-    T0.tg.position.copy(a.p).lerp(HUB, gather);
-    T0.tg.quaternion.copy(camera.quaternion); T0.tg.rotateY(Math.sin(t * .7 + i * 1.3) * .35); T0.tg.rotateX(Math.cos(t * .5 + i) * .12);
+    T0.tg.position.copy(placeAt(a, t)).lerp(HUB, gather);
+    T0.tg.quaternion.copy(camera.quaternion);
     T0.slab.material.opacity = netOn ? (t >= 59.9 ? 1 : clamp(ts * 2)) : 0; T0.face.material.opacity = T0.slab.material.opacity; T0.tg.visible = T0.slab.material.opacity > .001;
     // a ring: working (the shell, your Claude Code, the teammate's agent), seeing (Claude Code,
     // 40.4 s) and waking up in its own session (Codex, 41.8 s)
     let ro = 0, rs = 1;
     const working = (k, a0, a1) => { if (a.k === k && t > a0 && t < a1) { ro = .55 * (1 - seg(t, a1 - .25, a1)); rs = 1 + .05 * Math.sin(t * 8); } };
     working('sh', 25.5, 27.0); working('cc', 29.2, 30.6); working('cu', 34.5, 36.6);
-    if (a.k === 'cc') { const x = seg(t, 40.4, 41.8); if (x > 0 && x < 1) { ro = (1 - x) * .8; rs = 1 + x * 3.5; } }
+    if (a.k === 'cc') { const x = seg(t, 40.4, 41.8); if (x > 0 && x < 1) { ro = (1 - x) * .7; rs = 1 + x * 1.6; } }
     if (a.k === 'cx' && t > 41.8 && t < 43.4) { ro = .7 * (1 - seg(t, 43.1, 43.4)); rs = 1 + .12 * Math.sin(t * 10); }
-    T0.ring.position.copy(a.p); T0.ring.quaternion.copy(camera.quaternion); T0.ring.scale.setScalar(rs); T0.ring.material.opacity = netOn && t < 47.9 ? ro : 0; T0.ring.visible = T0.ring.material.opacity > .001;
+    T0.ring.position.copy(placeAt(a, t)); T0.ring.quaternion.copy(camera.quaternion); T0.ring.scale.setScalar(rs); T0.ring.material.opacity = netOn && t < 47.9 ? ro : 0; T0.ring.visible = T0.ring.material.opacity > .001;
   });
 
   // ----- messages carried by hand (the trap) -----
@@ -456,7 +476,8 @@ window.seek = (t) => {
     hubMark.quaternion.copy(camera.quaternion);
     hubMark.position.copy(HUB).add(V(0, t >= 59.9 ? .75 * end : 0, 0));
   }
-  bloom.strength = .32 + .25 * Math.exp(-Math.pow((t - 18.0) * 3, 2)) + .2 * p3in(seg(t, 47, 48));
+  // softer glow while the network is up: thin lines, not neon
+  bloom.strength = (t > 19.5 && t < 47 ? .16 : .32) + .25 * Math.exp(-Math.pow((t - 18.0) * 3, 2)) + .2 * p3in(seg(t, 47, 48));
 
   composer.render();
 
@@ -483,10 +504,10 @@ window.seek = (t) => {
   const cta = $('cta');
   if (t >= 62.2) {
     const pp = seg(t, 62.4, 62.75), up = seg(t, 63.0, 63.3);
-    cta.innerHTML = `<div class="words" style="top:810px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
+    cta.innerHTML = `<div class="words" style="top:656px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
       <span style="padding:16px 34px;border-radius:999px;background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
       <span style="padding:16px 34px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.4)">${T('Windows 版', 'Windows')}</span></div>
-      <div class="words" style="top:925px;font-size:28px;font-weight:600;color:#9aa49f;opacity:${up};font-family:'JetBrains Mono',monospace">github.com/chenhg5/myco</div>`;
+      <div class="words" style="top:771px;font-size:28px;font-weight:600;color:#9aa49f;opacity:${up};font-family:'JetBrains Mono',monospace">github.com/chenhg5/myco</div>`;
   } else cta.innerHTML = '';
   const L = window.LINES || []; const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
   const sub = $('sub'); sub.firstElementChild.textContent = ln && window.SUBS ? ln.text : '';
