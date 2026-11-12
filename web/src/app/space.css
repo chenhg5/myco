@@ -774,20 +774,20 @@
 .ws-computers {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 .ws-computer {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 7px;
   background: none;
   color: var(--fg-2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   cursor: default;
 }
 .ws-computer:hover:not(:disabled) {
@@ -805,8 +805,8 @@
   color: var(--muted);
 }
 .ws-computer svg {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
   color: var(--muted);
 }
 .ws-computer-sub {
@@ -1361,11 +1361,6 @@
 .add-local-row.is-taken {
   opacity: 0.5;
 }
-.add-start {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
 .add-pane .app-field + .app-field {
   margin-top: 12px;
 }
@@ -1374,4 +1369,15 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+/* Folders used before, one click away: short (home is ~), one line each. */
+.app-modal-add .app-convpick-folder {
+  max-width: 240px;
+  height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+.add-pane .app-modal-actions {
+  margin-top: 16px;
 }

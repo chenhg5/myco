@@ -101,6 +101,7 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
   const [query, setQuery] = useState("");
   const [joining, setJoining] = useState("");
   const [joinError, setJoinError] = useState<unknown>(null);
+  const [newState, setNewState] = useState({ ready: false, busy: false });
   // Who was already there when this opened: anyone new has just joined.
   const before = useRef<Set<string> | null>(null);
   const adding = useRef(new Set<string>());
@@ -257,7 +258,7 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
         </div>
       )}
 
-      {tab === "new" && <NewAgentPane open={open && tab === "new"} hubId={hubId} rows={rows} onStarted={(a) => void arrived(a)} />}
+      {tab === "new" && <NewAgentPane open={open && tab === "new"} hubId={hubId} rows={rows} onStarted={(a) => void arrived(a)} onState={setNewState} />}
 
       {/* Who has joined while this was open, whichever way. */}
       {joined.length > 0 && (
@@ -275,8 +276,18 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
         </div>
       )}
 
+      {/* One row of buttons: starting a new one is the main step on its tab. */}
       <div className="app-modal-actions">
-        <button type="button" className="app-btn app-btn-primary" onClick={onClose} disabled={!!joining}>{L("好了", "Done")}</button>
+        {tab === "new" ? (
+          <>
+            <button type="button" className="app-btn" onClick={onClose} disabled={newState.busy}>{joined.length ? L("好了", "Done") : L("取消", "Cancel")}</button>
+            <button type="submit" form="add-new-agent" className="app-btn app-btn-primary" disabled={!newState.ready || newState.busy}>
+              {newState.busy ? L("正在开…", "Starting…") : L("开一个", "Start it")}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="app-btn app-btn-primary" onClick={onClose} disabled={!!joining}>{L("好了", "Done")}</button>
+        )}
       </div>
     </Modal>
   );
@@ -284,11 +295,14 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
 
 /** Starts a new agent session on one of your computers: which computer,
  *  which AI, which folder. */
-function NewAgentPane({ open, hubId, rows, onStarted }: {
+function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
   open: boolean;
   hubId: string;
   rows: AgentRow[];
   onStarted: (agent: string) => void;
+  /** whether it can start now, and whether it is starting: the dialog's
+   *  footer carries the button */
+  onState: (s: { ready: boolean; busy: boolean }) => void;
 }) {
   const ov = rows.find((r) => r.hub.id === hubId)?.hub;
   const machines = useMemo(() => (ov ? machinesOfHub(ov) : []).filter((m) => m.can_spawn), [ov]);
@@ -311,7 +325,9 @@ function NewAgentPane({ open, hubId, rows, onStarted }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, machines.length, local]);
   const machine = machines.find((m) => m.id === machineId);
-  const folders = [...new Set(rows.filter((r) => r.hub.id === hubId && r.st.agent.machine_id === machineId).map((r) => r.st.agent.binding.workdir).filter((d): d is string => !!d))].slice(0, 6);
+  const folders = usedFolders(rows, hubId, machineId);
+  const ready = !!machine && !!dir.trim();
+  useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,7 +350,7 @@ function NewAgentPane({ open, hubId, rows, onStarted }: {
     return <div className="add-pane"><div className="app-empty-note">{L("还没有能新开会话的电脑。先在「电脑」里连上一台。", "No computer can start sessions yet. Connect one under Computers first.")}</div></div>;
   }
   return (
-    <form className="add-pane" onSubmit={start}>
+    <form id="add-new-agent" className="add-pane" onSubmit={start}>
       <div className="app-field">
         <span className="app-field-label">{L("在哪台电脑上", "On which computer")}</span>
         <div className="ws-computers">
@@ -366,7 +382,7 @@ function NewAgentPane({ open, hubId, rows, onStarted }: {
       </label>
       {folders.length > 0 && (
         <div className="app-convpick-folders">
-          {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy}>{d}</button>)}
+          {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
         </div>
       )}
       <label className="app-field">
@@ -374,13 +390,30 @@ function NewAgentPane({ open, hubId, rows, onStarted }: {
         <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
       </label>
       <ErrorText error={error} />
-      {busy ? (
-        <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>
-      ) : (
-        <div className="add-start"><button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim()}>{L("开一个", "Start it")}</button></div>
-      )}
+      {busy && <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>}
     </form>
   );
+}
+
+/** Folders already used on a computer, one per label as the chips show
+ *  them (/Users/me/code/x and ~/code/x are the same folder). */
+function usedFolders(rows: AgentRow[], hubId: string, machineId: string): string[] {
+  const seen = new Map<string, string>();
+  for (const r of rows) {
+    const d = r.st.agent.binding.workdir;
+    if (r.hub.id !== hubId || r.st.agent.machine_id !== machineId || !d) continue;
+    if (!seen.has(shortDir(d))) seen.set(shortDir(d), d);
+  }
+  return [...seen.values()].slice(0, 6);
+}
+
+/** A folder as a chip shows it: the home directory as ~, and a deep one
+ *  as its last two folders (~/…/tapnow/loops-harness); in full on hover. */
+function shortDir(dir: string): string {
+  const d = dir.replace(/^(\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:\\Users\\[^\\]+)(?=$|[\\/])/, "~");
+  const sep = d.includes("\\") && !d.includes("/") ? "\\" : "/";
+  const parts = d.split(sep);
+  return parts.length > 4 ? [parts[0], "…", ...parts.slice(-2)].join(sep) : d;
 }
 
 function folderOf(dir: string): string {
@@ -432,7 +465,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
   const users = (project ? project.members.map((m) => m.name) : [])
     .filter((n) => rows.some((r) => r.hub.id === hubId && r.st.agent.name === n && agentKind(r.st.agent) === "agent"));
   // Folders already used on that computer, one click away.
-  const folders = [...new Set(rows.filter((r) => r.hub.id === hubId && r.st.agent.machine_id === machineId).map((r) => r.st.agent.binding.workdir).filter((d): d is string => !!d))].slice(0, 6);
+  const folders = usedFolders(rows, hubId, machineId);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -480,7 +513,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
         </label>
         {folders.length > 0 && (
           <div className="app-convpick-folders">
-            {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy}>{d}</button>)}
+            {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
           </div>
         )}
         <div className="ws-who">
