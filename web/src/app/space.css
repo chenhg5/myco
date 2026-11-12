@@ -421,34 +421,64 @@
 }
 .sp-compose-box {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 8px 8px 8px 8px;
-  border-radius: 14px;
+  flex-direction: column;
+  padding: 10px 10px 8px 14px;
+  border-radius: 16px;
   background: var(--card);
   box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(0, 0, 0, 0.04);
+  cursor: text;
 }
 .sp-compose-box:focus-within {
   box-shadow: 0 0 0 1px var(--focus), 0 2px 8px rgba(0, 0, 0, 0.05);
 }
+.sp-compose-input {
+  width: 100%;
+  min-height: 22px;
+  padding: 2px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.55;
+  resize: none;
+  overflow-y: hidden;
+}
+/* Below the text: tools on the left (who gets it; later files and
+   voice), Send on the right. */
+.sp-compose-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  cursor: default;
+}
+.sp-compose-tools {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .sp-to {
-  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 45%;
-  height: 30px;
-  padding: 0 8px 0 10px;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 6px 0 8px;
   border: 0;
-  border-radius: 9px;
-  background: var(--pill);
+  border-radius: 8px;
+  background: transparent;
   color: var(--fg-2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   cursor: default;
 }
 .sp-to:hover {
-  background: var(--pill-hover);
+  background: var(--pill);
 }
 .sp-to-label {
   flex: none;
@@ -463,32 +493,17 @@
   font-weight: 500;
 }
 .sp-to svg {
-  width: 13px;
-  height: 13px;
+  flex: none;
+  width: 12px;
+  height: 12px;
   color: var(--muted);
-}
-.sp-compose-input {
-  flex: 1;
-  min-width: 0;
-  min-height: 30px;
-  max-height: 180px;
-  padding: 6px 2px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-  resize: none;
-  field-sizing: content;
 }
 .sp-send {
   flex: none;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 999px;
   background: var(--btn);
@@ -499,8 +514,8 @@
   opacity: 0.3;
 }
 .sp-send svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 .sp-compose-hint {
   padding: 6px 4px 0;

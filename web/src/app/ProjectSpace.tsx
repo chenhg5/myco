@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, ChevronDown, FileText, Plus, Users } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
@@ -408,6 +408,9 @@ function firstLine(s: string): string {
 const RECIPIENT_KEY = "myco-space-to";
 
 /** The box at the bottom of the group: a task, and who it goes to. */
+// The composer grows to this height, then scrolls.
+const COMPOSE_MAX = 220;
+
 function Composer({ hubId, project, agents, onSent }: {
   hubId: string;
   project?: Project;
@@ -429,6 +432,17 @@ function Composer({ hubId, project, agents, onSent }: {
   const [error, setError] = useState<unknown>(null);
   const [hinted, setHinted] = useState(() => { try { return localStorage.getItem("myco-space-hinted") === "1"; } catch { return true; } });
   const menu = useContextMenu();
+  const input = useRef<HTMLTextAreaElement>(null);
+  // Grows with what is typed, as chat apps do; past COMPOSE_MAX it scrolls.
+  // (field-sizing: content is not in every WebKit the app runs on.)
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const h = el.scrollHeight;
+    el.style.height = `${Math.min(h, COMPOSE_MAX)}px`;
+    el.style.overflowY = h > COMPOSE_MAX ? "auto" : "hidden";
+  }, [draft]);
   const pick = (name: string) => {
     setTo(name);
     try { localStorage.setItem(key, name); } catch { /* not kept */ }
@@ -457,21 +471,11 @@ function Composer({ hubId, project, agents, onSent }: {
   return (
     <div className="sp-compose">
       <ErrorText error={error} />
-      <div className="sp-compose-box">
-        <button type="button" className="sp-to" onClick={(e) => menu.openUnder(e.currentTarget, [
-          { header: L("发给谁", "Send to") },
-          ...agents.map((r) => ({
-            label: nodeName(r.st.agent, r.hub),
-            checked: r.st.agent.name === recipient,
-            onSelect: () => pick(r.st.agent.name),
-          })),
-        ])} title={L("换一个收件人", "Change who gets it")}>
-          <span className="sp-to-label">{L("发给", "To")}</span>
-          {rec && <Avatar agent={rec.st.agent} size={18} badge={false} />}
-          <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
-          <ChevronDown />
-        </button>
+      {/* The text takes the whole width and grows; below it a row of tools:
+          who gets it (and later attachments and voice), then Send. */}
+      <div className="sp-compose-box" onClick={(e) => { if (e.target === e.currentTarget) input.current?.focus(); }}>
         <textarea
+          ref={input}
           className="sp-compose-input"
           value={draft}
           rows={1}
@@ -485,9 +489,26 @@ function Composer({ hubId, project, agents, onSent }: {
           placeholder={rec ? L(`给 ${nodeName(rec.st.agent, rec.hub)} 派个活…`, `A task for ${nodeName(rec.st.agent, rec.hub)}…`) : ""}
           aria-label={L("任务", "Task")}
         />
-        <button type="button" className="sp-send" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
-          <ArrowUp />
-        </button>
+        <div className="sp-compose-bar">
+          <div className="sp-compose-tools">
+            <button type="button" className="sp-to" onClick={(e) => menu.openUnder(e.currentTarget, [
+              { header: L("发给谁", "Send to") },
+              ...agents.map((r) => ({
+                label: nodeName(r.st.agent, r.hub),
+                checked: r.st.agent.name === recipient,
+                onSelect: () => pick(r.st.agent.name),
+              })),
+            ])} title={L("换一个收件人", "Change who gets it")}>
+              <span className="sp-to-label">{L("发给", "To")}</span>
+              {rec && <Avatar agent={rec.st.agent} size={16} badge={false} />}
+              <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
+              <ChevronDown />
+            </button>
+          </div>
+          <button type="button" className="sp-send" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
+            <ArrowUp />
+          </button>
+        </div>
       </div>
       <div className="sp-compose-hint">
         {hinted

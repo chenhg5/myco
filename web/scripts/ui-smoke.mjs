@@ -327,6 +327,13 @@ async function runMatrix(browser, size, scheme) {
     await step("项目 · 派活", async () => {
       const body = `smoke ${size.width} ${scheme}：把首页的标题改短一点。`;
       const input = page.locator(".sp-compose-input");
+      // The box grows with several lines instead of scrolling one.
+      const oneLine = await input.evaluate((el) => el.getBoundingClientRect().height);
+      await input.fill("第一行\n第二行\n第三行\n第四行");
+      const grown = await input.evaluate((el) => ({ h: el.getBoundingClientRect().height, scrolls: el.scrollHeight > el.clientHeight + 1 }));
+      if (grown.h < oneLine * 2.5 || grown.scrolls) throw new Error(`输入框应随内容变高而不出现滚动条：一行 ${oneLine}px，四行 ${grown.h}px，滚动 ${grown.scrolls}`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-compose-lines");
       await input.fill(body);
       await input.press("Enter");
       const card = page.locator(".sp-card", { hasText: body });
