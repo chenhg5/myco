@@ -506,8 +506,14 @@ async function runMatrix(browser, size, scheme) {
       await box.locator(".att-chip").nth(1).waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
       // A tile: the picture on top, the name under it, never stretched by a long name.
-      const wide = await box.locator(".att-chip").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
-      if (wide.some((w) => w > 80)) throw new Error(`文件块应是固定宽度的小方块，实际宽 ${wide.join("/")}`);
+      // (Compared with its own picture: the text-size setting zooms the page.)
+      const wide = await box.locator(".att-chip").evaluateAll((els) => els.map((e) => {
+        const face = e.querySelector(".att-face")?.getBoundingClientRect().width || 0;
+        const name = e.querySelector(".att-name");
+        return { w: e.getBoundingClientRect().width, face, under: !!name && name.getBoundingClientRect().top >= (e.querySelector(".att-face")?.getBoundingClientRect().bottom || 0) - 1 };
+      }));
+      if (wide.some((x) => x.w > x.face + 1)) throw new Error(`长文件名不该把文件块撑宽：${JSON.stringify(wide)}`);
+      if (!wide.every((x) => x.under)) throw new Error("文件名应在缩略图下面");
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-attach");
       await page.locator(".conv-compose-input").press("Enter");
