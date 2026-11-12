@@ -716,3 +716,40 @@ func TestFilesAndBroadcast(t *testing.T) {
 	}
 	h.do("POST", "/v1/broadcasts", alice, map[string]any{"selector": "team=x", "body": " "}).wantErr(t, 400, "invalid_argument")
 }
+
+// The app uploads a file as its sender (@console:…) and attaches it to a
+// task: the recipient may read it, other agents may not attach it.
+func TestConsoleFiles(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	bob := h.register("bob", nil)
+
+	req, _ := http.NewRequest("POST", h.url+"/v1/console/files?name=shot.png", strings.NewReader("png bytes"))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "image/png")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&f)
+	res.Body.Close()
+	owner, _ := f["owner"].(string)
+	if res.StatusCode != 201 || f["name"] != "shot.png" || !strings.HasPrefix(owner, "@console:") {
+		t.Fatalf("console upload: %d %v", res.StatusCode, f)
+	}
+	fid := f["id"].(string)
+
+	// An agent cannot upload as the console, nor attach the console's file.
+	h.doReq("POST", "/v1/console/files?name=x", alice, nil, nil).wantErr(t, 403, "permission_denied")
+	h.do("POST", "/v1/messages", alice, map[string]any{"to": "bob", "body": "look", "attachments": []string{fid}}).wantErr(t, 404, "not_found")
+
+	r := h.do("POST", "/v1/console/messages", adminToken, map[string]any{"to": "bob", "body": "看看这张图", "attachments": []string{fid}}).want(t, 201)
+	if m, _ := r.body["message"].(map[string]any); m == nil || len(m["attachments"].([]any)) != 1 {
+		t.Fatalf("console send with attachment: %s", r.raw)
+	}
+	r = h.doReq("GET", "/v1/files/"+fid, bob, nil, nil).want(t, 200)
+	if string(r.raw) != "png bytes" {
+		t.Fatalf("recipient download: %q", r.raw)
+	}
+}

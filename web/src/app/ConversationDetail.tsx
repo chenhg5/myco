@@ -17,6 +17,7 @@ import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
 import { Avatar, whereOf } from "@/app/persona";
+import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 
 export interface ConversationTarget {
   hubId: string;
@@ -204,6 +205,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [sendError, setSendError] = useState<unknown>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // Files going with the next message (pasted, dropped or picked).
+  const att = useAttachments(target.hubId);
   const [steerMode, setSteerMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -675,16 +678,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const cleared = !!shown && !!onScreen && onScreen.length < shown.length;
 
   const send = async () => {
-    const body = draft.trim();
-    if (shellMode && (body === "clear" || body === "cls")) { clearScreen(); return; }
-    if (!body || sending || busy) return;
+    const typed = draft.trim();
+    if (shellMode && (typed === "clear" || typed === "cls")) { clearScreen(); return; }
+    if ((!typed && !att.any) || att.busy || sending || busy) return;
+    const body = att.body(typed);
+    const attachments = att.ids.length ? att.ids : undefined;
     setSending(true);
     setSendError(null);
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
-        const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, ...(target.project ? { project: target.project } : {}) });
+        const first = await appApi.sendMessage(target.hubId, { to: target.agent, body, attachments, ...(target.project ? { project: target.project } : {}) });
         setDraft("");
+        att.clear();
         if (onOpen) onOpen(target.hubId, target.agent, first.from);
         else setMessages([first]);
         return;
@@ -692,9 +698,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // Opened from a project: the first message starts a thread in it.
       const inProject = !!target.project && !projectStarted.current;
       const threadId = inProject ? undefined : exchange ? continuedThread() : target.threadId;
-      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id, ...(inProject && !thread_id ? { project: target.project } : {}) });
+      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id, attachments, ...(inProject && !thread_id ? { project: target.project } : {}) });
       if (inProject) projectStarted.current = true;
-      const m = openTask && steerOn
+      // (A correction carries no files: with files, it goes as a new message.)
+      const m = openTask && steerOn && !attachments
         ? await appApi.steer(target.hubId, openTask.id, body)
         : await sendNew(threadId).catch((e) => {
           // The hub does not count you in that thread (sent under an older
@@ -706,11 +713,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // assumed another, follow the one it used.
       if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
         setDraft("");
+        att.clear();
         onOpen(target.hubId, target.agent, m.from);
         return;
       }
       setMessages((prev) => (prev ? [...prev, m] : [m]));
       setDraft("");
+      att.clear();
       histPos.current = -1;
       setSteerMode(false);
       atBottom.current = true;
@@ -1114,12 +1123,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {steerOn && (
           <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
         )}
-        <div className={cn("conv-compose-box", steerOn && "is-steer")} onClick={() => inputRef.current?.focus()}>
+        <div className={cn("conv-compose-box", steerOn && "is-steer")} onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
+          <AttachList items={att.items} onRemove={att.remove} />
           <textarea
             ref={inputRef}
             className="conv-compose-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onPaste={(e) => {
+              const files = pastedFiles(e);
+              if (!files.length) return;
+              // A file on the clipboard goes as a file (its text, if any, too).
+              if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+              att.add(files);
+            }}
             onKeyDown={onKeyDown}
             disabled={busy}
             placeholder={busy
@@ -1132,6 +1149,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {/* left: what you can do to the running task; room for attachments
                 and voice input later */}
             <div className="conv-compose-tools">
+              <AttachButton onFiles={att.add} disabled={busy} />
               {openTask && (
                 <button
                   type="button"
@@ -1145,7 +1163,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               )}
             </div>
             <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
-            {openTask && !draft.trim() && !sending ? (
+            {openTask && !draft.trim() && !att.items.length && !sending ? (
               // Nothing to send while it works: the same button stops it.
               <button
                 type="button"
@@ -1161,7 +1179,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 type="button"
                 className="conv-send"
                 onClick={(e) => { e.stopPropagation(); void send(); }}
-                disabled={sending || !draft.trim()}
+                disabled={sending || att.busy || (!draft.trim() && !att.any)}
                 title={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
                 aria-label={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
               >

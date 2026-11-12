@@ -44,6 +44,8 @@ function makeAgent(over) {
 }
 
 let msgSeq = 0;
+// Files the app uploaded to attach (id -> attachment).
+const uploads = new Map();
 function makeMessage(over) {
   msgSeq += 1;
   const base = {
@@ -1172,6 +1174,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     // /app/hubs/{id}/messages — a task from the console.
+    // /app/hubs/{id}/files?name= — a file to attach to the next message.
+    if (parts.length === 4 && parts[3] === "files" && method === "POST") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      let size = 0;
+      for await (const c of req) size += c.length;
+      const name = url.searchParams.get("name") || "file";
+      const id = `f_mock_${state.counter += 1}`;
+      const f = { file_id: id, name, size, sha256: "", content_type: req.headers["content-type"] || "" };
+      uploads.set(id, f);
+      return send(res, 201, { id, name, size, content_type: f.content_type });
+    }
+
     if (parts.length === 4 && parts[3] === "messages" && method === "POST") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const body = await readBody(req);
@@ -1185,10 +1199,13 @@ const server = http.createServer(async (req, res) => {
       const threadId = typeof body.thread_id === "string" && body.thread_id.trim()
         ? body.thread_id.trim()
         : `th_c_${state.counter += 1}`;
+      const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
+      if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
       const msg = makeMessage({
         thread_id: threadId, from: CONSOLE, to, type: "task", status: "queued",
         body: text, created_at: iso(0), updated_at: iso(0),
         ...(body.project && !body.thread_id ? { project: body.project } : {}),
+        ...(atts.length ? { attachments: atts } : {}),
       });
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
@@ -1452,7 +1469,9 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 6 && parts[3] === "messages" && parts[5] === "trace" && method === "GET") {
       const all = Object.values(hub.threads || {}).flat();
       const m = all.find((x) => x.id === parts[4]);
-      if (!m) return fail(res, 404, "not_found", "message not found");
+      // A message the reset between passes took away, still in the app's
+      // saved page data: no steps (a 404 would be a page error in the smoke).
+      if (!m) return send(res, 200, { events: [] });
       const node = (hub.agents || []).find((a) => a.name === m.to);
       if (node?.binding?.harness === "exec") {
         const lines = execLines();

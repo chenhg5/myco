@@ -6,6 +6,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
+import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
@@ -802,6 +803,8 @@ function Composer({ hubId, project, agents, onSent }: {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  // Files going with the task (pasted, dropped or picked).
+  const att = useAttachments(hubId);
   const [hinted, setHinted] = useState(() => { try { return localStorage.getItem("myco-space-hinted") === "1"; } catch { return true; } });
   const menu = useContextMenu();
   const input = useRef<HTMLTextAreaElement>(null);
@@ -821,13 +824,14 @@ function Composer({ hubId, project, agents, onSent }: {
   };
 
   const send = async () => {
-    const body = draft.trim();
-    if (!body || !recipient || busy) return;
+    const typed = draft.trim();
+    if ((!typed && !att.any) || att.busy || !recipient || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await appApi.sendMessage(hubId, { to: recipient, body, ...(project ? { project: project.name } : {}) });
+      await appApi.sendMessage(hubId, { to: recipient, body: att.body(typed), ...(att.ids.length ? { attachments: att.ids } : {}), ...(project ? { project: project.name } : {}) });
       setDraft("");
+      att.clear();
       if (!hinted) {
         setHinted(true);
         try { localStorage.setItem("myco-space-hinted", "1"); } catch { /* not kept */ }
@@ -845,13 +849,20 @@ function Composer({ hubId, project, agents, onSent }: {
       <ErrorText error={error} />
       {/* The text takes the whole width and grows; below it a row of tools:
           who gets it (and later attachments and voice), then Send. */}
-      <div className="sp-compose-box" onClick={(e) => { if (e.target === e.currentTarget) input.current?.focus(); }}>
+      <div className="sp-compose-box" onClick={(e) => { if (e.target === e.currentTarget) input.current?.focus(); }} {...dropFiles(att.add)}>
+        <AttachList items={att.items} onRemove={att.remove} />
         <textarea
           ref={input}
           className="sp-compose-input"
           value={draft}
           rows={1}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={(e) => {
+            const files = pastedFiles(e);
+            if (!files.length) return;
+            if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+            att.add(files);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -863,6 +874,7 @@ function Composer({ hubId, project, agents, onSent }: {
         />
         <div className="sp-compose-bar">
           <div className="sp-compose-tools">
+            <AttachButton onFiles={att.add} />
             <button type="button" className="sp-to" onClick={(e) => menu.openUnder(e.currentTarget, [
               { header: L("发给谁", "Send to") },
               ...agents.map((r) => ({
@@ -877,7 +889,7 @@ function Composer({ hubId, project, agents, onSent }: {
               <ChevronDown />
             </button>
           </div>
-          <button type="button" className="sp-send" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
+          <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
             <ArrowUp />
           </button>
         </div>

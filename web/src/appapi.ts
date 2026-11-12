@@ -156,6 +156,8 @@ export interface SendMessageInput {
   type?: string;
   /** Puts a new conversation in a project. */
   project?: string;
+  /** files uploaded with uploadAttachment, sent with the message */
+  attachments?: string[];
 }
 
 /** How the App window is hosted: native macOS shell or a plain browser. */
@@ -385,6 +387,10 @@ export const appApi = {
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+  /** Uploads a file to attach to the next message (as yours; sealed when the
+   *  workspace encrypts). Older workspaces answer not_found. */
+  uploadAttachment: (hubId: string, file: File, name = file.name) =>
+    request<{ id: string; name: string; size: number; content_type?: string }>("POST", `app/hubs/${enc(hubId)}/files?name=${encodeURIComponent(name)}`, file),
   /** The steps of a task's run after seq (what the agent says, thinks and does). */
   trace: (hubId: string, messageId: string, after = 0) =>
     request<Trace>("GET", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/trace${after ? `?after=${after}` : ""}`),

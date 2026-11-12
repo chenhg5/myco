@@ -100,7 +100,7 @@ func New(agents *app.AgentService, messages *app.MessageService, enroll *app.Enr
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit := int64(domain.MaxBodyBytes + 64*1024)
-	if r.Method == http.MethodPost && r.URL.Path == "/v1/files" && s.files != nil {
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/files" || r.URL.Path == "/v1/console/files") && s.files != nil {
 		limit = s.files.Policy().MaxSize + 1 // FileService reports "too large" itself
 	}
 	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/files/") {
@@ -139,6 +139,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/tokens", s.masterAdmin(s.listConsoleTokens))
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
+	m.HandleFunc("POST /v1/console/files", s.admin(s.consoleUpload))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
 	m.HandleFunc("POST /v1/console/messages/{id}/stop", s.admin(s.consoleStop))
 	m.HandleFunc("GET /v1/console/messages/{id}/trace", s.admin(s.consoleTrace))
@@ -1614,6 +1615,28 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 		s.record(r, "message."+string(out.Message.Type), string(out.Message.To), out.Message.ID)
 	}
 	writeJSON(w, status, api.SendResponse{Message: s.messageDTO(out.Message), Duplicate: out.Duplicate, ViaAlias: string(out.ViaAlias)})
+}
+
+// consoleUpload stores a file the console attaches to what it sends next:
+// owned by its sender (@console:<member>), as an agent owns what it uploads,
+// so only that sender may attach it and the recipient may then read it.
+func (s *Server) consoleUpload(w http.ResponseWriter, r *http.Request) {
+	if !s.filesEnabled(w) {
+		return
+	}
+	name, memberID := s.consoleIdentity(r)
+	sender := &domain.Agent{Name: app.ConsoleSender(name), Owner: memberID}
+	f, err := s.files.Upload(r.Context(), sender, r.URL.Query().Get("name"), r.Header.Get("Content-Type"), r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			err = domain.Errf(domain.CodeInvalidArgument, "file larger than %d bytes", s.files.Policy().MaxSize)
+		}
+		writeError(w, err)
+		return
+	}
+	s.record(r, "file.upload", f.ID, f.Name)
+	writeJSON(w, http.StatusCreated, fileDTO(f))
 }
 
 // consoleIdentity is the sender name and member id for what a console

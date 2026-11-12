@@ -479,3 +479,49 @@ func (c *Client) sealAbout(ctx context.Context, id string, toRecipient bool, typ
 	}
 	return c.seal(ctx, to, typ, body, attachments)
 }
+
+// ConsoleUpload stores data as a file the console (the app) attaches to
+// what it sends next (POST /v1/console/files). With end-to-end encryption
+// on, it is sealed first and its key kept, as UploadFile does, so the next
+// ConsoleSend that attaches it carries the key to the recipient.
+func (c *Client) ConsoleUpload(ctx context.Context, name, contentType string, data []byte) (*api.File, error) {
+	body, fileName, ct := data, name, contentType
+	var key string
+	sealed := c.Sealer != nil && c.Sealer.ID != nil && c.E2EEnabled(ctx)
+	if sealed {
+		var err error
+		if body, key, err = e2e.SealBytes(data); err != nil {
+			return nil, err
+		}
+		fileName, ct = "encrypted", "application/octet-stream"
+	}
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/v1/console/files"
+	u.RawQuery = url.Values{"name": {fileName}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = int64(len(body))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	req.Header.Set("Content-Type", ct)
+	var out api.File
+	if err := c.send(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	if !sealed {
+		return &out, nil
+	}
+	sum := sha256.Sum256(data)
+	fk := fileKey{FileID: out.ID, Key: key, Name: name, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:]), ContentType: contentType}
+	s := c.Sealer
+	s.mu.Lock()
+	if s.files == nil {
+		s.files = map[string]fileKey{}
+	}
+	s.files[out.ID] = fk
+	s.mu.Unlock()
+	return &api.File{ID: out.ID, Name: name, Size: fk.Size, SHA256: fk.SHA256, ContentType: contentType, ExpiresAt: out.ExpiresAt}, nil
+}

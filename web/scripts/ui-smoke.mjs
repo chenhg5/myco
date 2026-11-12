@@ -477,6 +477,29 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // Files: one picked with the paperclip, one pasted; sent alone, the
+    // message says what they are and carries both.
+    await step("单聊 · 发文件", async () => {
+      await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");
+      const box = page.locator(".conv-compose-box");
+      await box.locator("input[type=file]").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
+      await page.locator(".conv-compose-input").evaluate((el) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File(["png"], "image.png", { type: "image/png" }));
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      });
+      await box.locator(".att-chip").nth(1).waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-attach");
+      await page.locator(".conv-compose-input").press("Enter");
+      const sent = page.locator(".conv-msg", { hasText: "发来 2 个文件" }).last();
+      await sent.waitFor({ timeout: 20_000 });
+      if ((await sent.locator(".conv-attach").count()) !== 2) throw new Error("发出去的消息应带上两个文件");
+      if (await box.locator(".att-chip").count()) throw new Error("发出去后，输入框里的文件应该清空");
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // Without a project, the group has a box that says whom a task goes to.
     await step("还没进项目的 · 派活", async () => {
       const to = compactText(await page.locator(".sp-to-name").innerText());

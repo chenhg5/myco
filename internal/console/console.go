@@ -31,6 +31,10 @@ import (
 	"github.com/chenhg5/myco/internal/release"
 )
 
+// maxAttachUpload caps a file the app uploads to attach (read into memory
+// here, to seal it when the hub encrypts): the hub's default limit.
+const maxAttachUpload = 50 << 20
+
 // Hub is one hub the user added. The token is kept in Secrets, not here.
 type Hub struct {
 	ID   string `json:"id"`
@@ -384,6 +388,27 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+	}))
+	// (The hub's own limit, 50 MB by default, applies after this.)
+	// A file to attach to the next task sent from here (the body is the
+	// file; ?name= its name): stored on the hub as this console's, sealed
+	// when the hub has end-to-end encryption on.
+	m.HandleFunc("POST /app/hubs/{id}/files", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		data, err := io.ReadAll(io.LimitReader(r.Body, maxAttachUpload+1))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if len(data) > maxAttachUpload {
+			writeErr(w, &client.Error{Code: "invalid_argument", Message: fmt.Sprintf("file larger than %d MB", maxAttachUpload>>20)})
+			return
+		}
+		f, err := c.ConsoleUpload(r.Context(), r.URL.Query().Get("name"), r.Header.Get("Content-Type"), data)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, f)
 	}))
 	// Project files: upload (the body is the file), download, and save to
 	// this computer's Downloads folder (shown in Finder / Explorer).

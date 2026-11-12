@@ -1836,3 +1836,114 @@ body.is-resizing {
   font-size: 11px;
   color: var(--faint, var(--muted));
 }
+
+/* Files going with a message: chips above the text, the paperclip in the
+   tools below. */
+.att-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+.att-btn:hover:not(:disabled) {
+  background: var(--pill);
+  color: var(--fg-2);
+}
+.att-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.att-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  cursor: default;
+}
+.att-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  height: 40px;
+  padding: 0 6px 0 4px;
+  border-radius: 10px;
+  background: var(--pill);
+}
+.att-chip.is-error {
+  background: var(--red-soft);
+}
+.att-thumb,
+.att-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+.att-icon {
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  color: var(--muted);
+}
+.att-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.att-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.att-name {
+  font-size: 12px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-sub {
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-chip.is-error .att-sub {
+  color: var(--red);
+}
+.att-spin {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--muted);
+  animation: trace-spin 1s linear infinite;
+}
+.att-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+.att-x:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.att-x svg {
+  width: 12px;
+  height: 12px;
+}

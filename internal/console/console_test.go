@@ -66,7 +66,7 @@ type rig struct {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	h, err := hubserver.Build(hubserver.Options{DBPath: filepath.Join(t.TempDir(), "hub.db"), AdminToken: adminToken,
-		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, FilesDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,5 +370,46 @@ func TestRecentThroughTheApp(t *testing.T) {
 	}
 	if it := out.Items[0]; it.Kind != "pair" || it.Other != "lead" || it.Node != "box" || it.State != "failed" {
 		t.Fatalf("row: %+v", it)
+	}
+}
+
+// A file pasted or attached in the app: uploaded through the app, then
+// sent with the task; the agent can download it.
+func TestAttachFromTheApp(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	res, err := r.admin.Register(ctx, api.RegisterRequest{Name: "lead", Binding: api.Binding{Harness: "claude", SessionID: "s-lead"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lead, _ := client.New(r.hubURL, res.Token)
+	code, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("test-mac")})
+	if code != 201 {
+		t.Fatalf("add hub: %d %v", code, h)
+	}
+	id := h["id"].(string)
+
+	req, _ := http.NewRequest("POST", r.app.URL+"/app/hubs/"+id+"/files?name=notes.txt", strings.NewReader("hello from the app"))
+	req.Header.Set("Content-Type", "text/plain")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f api.File
+	_ = json.NewDecoder(resp.Body).Decode(&f)
+	resp.Body.Close()
+	if resp.StatusCode != 201 || f.ID == "" || f.Name != "notes.txt" || f.Size != 18 {
+		t.Fatalf("upload: %d %+v", resp.StatusCode, f)
+	}
+
+	code, m, raw := r.do("POST", "/app/hubs/"+id+"/messages", map[string]any{"to": "lead", "body": "看一下", "attachments": []string{f.ID}})
+	if code != 201 || len(m["attachments"].([]any)) != 1 {
+		t.Fatalf("send with attachment: %d %s", code, raw)
+	}
+	dir := t.TempDir()
+	if _, path, err := lead.DownloadFile(ctx, f.ID, dir); err != nil {
+		t.Fatalf("agent download: %v", err)
+	} else if b, _ := os.ReadFile(path); string(b) != "hello from the app" {
+		t.Fatalf("downloaded %q", b)
 	}
 }
