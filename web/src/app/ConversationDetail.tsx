@@ -175,17 +175,21 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions, projectTitle }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
    *  chat asks about it */
   projectTitle?: string;
   /** buttons at the right end of the header (e.g. full screen, close) */
   headActions?: React.ReactNode;
+  /** no header: the page around it already says who this is (the
+   *  project's home, with its coordinator) */
+  bare?: boolean;
   /** what it is in the project (e.g. coordinator), before its description */
   role?: string;
   /** small things placed in the timeline by time (e.g. a task the agent
-   *  handed out), between the messages */
+   *  handed out), between the messages; only from the first message shown
+   *  on (an empty chat stays empty) */
   inserts?: { id: string; at: string; node: React.ReactNode }[];
   rows: AgentRow[];
   now: number;
@@ -526,8 +530,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const turns: Turn[] = [];
   for (const m of shown || []) {
     if (m.type === "progress" || m.type === "event") continue;
-    const starts = observed ? m.type === "task" : isMe(m.from, row?.hub);
-    if (starts) turns.push({ id: m.id, who: observed ? nameOf(m.from) : undefined, question: summarize(m), answer: "" });
+    // With others' work merged in, a task one of them gave it starts a
+    // turn too (a member's pane is mostly the coordinator's tasks).
+    const fromOther = !observed && alsoSet.has(m.from) && m.type === "task" && m.to === target.agent;
+    const starts = observed ? m.type === "task" : isMe(m.from, row?.hub) || fromOther;
+    if (starts) turns.push({ id: m.id, who: observed || fromOther ? nameOf(m.from) : undefined, question: summarize(m), answer: "" });
     else if (turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = summarize(m);
   }
   const turnIds = new Set(turns.map((t) => t.id));
@@ -819,7 +826,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const placed = new Map<string, React.ReactNode[]>();
   const trailing: React.ReactNode[] = [];
   {
-    const ins = [...(inserts || [])].sort((a, b) => a.at.localeCompare(b.at));
+    // Nothing from before the conversation: what it did before you spoke
+    // to it is in the project's activity, and an empty chat stays empty.
+    const start = visible.length ? new Date(visible[0].created_at).getTime() : Infinity;
+    const ins = [...(inserts || [])]
+      .filter((x) => new Date(x.at).getTime() >= start)
+      .sort((a, b) => a.at.localeCompare(b.at));
     let k = 0;
     for (const m of visible) {
       while (k < ins.length && new Date(ins[k].at).getTime() <= new Date(m.created_at).getTime()) {
@@ -950,7 +962,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   return (
     <div className="conv-detail">
-      <header className="conv-head">
+      {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
             aria-label={backLabel || L("返回", "Back")} title={backLabel || L("返回", "Back")}>
@@ -988,7 +1000,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </span>
         ))}
         {headActions && <span className="conv-head-actions">{headActions}</span>}
-      </header>
+      </header>}
 
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}

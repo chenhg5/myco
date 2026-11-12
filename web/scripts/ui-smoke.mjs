@@ -319,14 +319,29 @@ async function runMatrix(browser, size, scheme) {
     await step("项目 · 和协调者聊", async () => {
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
-      const sub = compactText(await page.locator(".sp-home .conv-head p").innerText());
-      if (!sub.includes("协调者")) throw new Error(`项目首页应是和协调者的对话，标题下写的是「${sub}」`);
+      // The project's head says where you are: the chat has no second header.
+      if (await page.locator(".sp-home .conv-head").count()) throw new Error("项目首页的对话不该再有自己的标题栏（和项目标题重复）");
+      if (!(await page.locator(".sp-home .conv-compose").first().isVisible())) throw new Error("项目首页应能直接和协调者说话");
       await page.locator(".sp-dispatch").first().waitFor({ timeout: 20_000 });
       const card = compactText(await page.locator(".sp-dispatch").first().innerText());
       if (!card.startsWith("派给")) throw new Error(`派活卡片应写明派给谁，实际是「${card}」`);
       if (!narrow) await page.locator(".sp-side .sp-role", { hasText: "协调者" }).waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "project-home");
+    });
+
+    // The members column folds to a strip of faces, and stays so.
+    if (!narrow) await step("项目 · 成员栏收起", async () => {
+      await page.getByRole("button", { name: "收起成员" }).click();
+      await page.locator(".sp-side.is-folded").waitFor({ timeout: 5_000 });
+      const faces = await page.locator(".sp-side.is-folded .sp-face:not(.is-add)").count();
+      if (faces < 2) throw new Error(`收起后应只留头像，实际 ${faces} 个`);
+      if (await page.locator(".sp-side.is-folded .sp-member").count()) throw new Error("收起后不该再有名字和状态");
+      await shot(page, size, scheme, "project-members-folded");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".sp-side.is-folded").waitFor({ timeout: 20_000 });
+      await page.getByRole("button", { name: "展开成员" }).click();
+      await page.locator(".sp-side:not(.is-folded) .sp-member").first().waitFor({ timeout: 5_000 });
     });
 
     // A card opens that member's work beside the coordinator: what the

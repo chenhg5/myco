@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Maximize2, Minimize2, Plus, Users, X } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -31,6 +31,8 @@ const SPLIT_KEY = "myco-space-split";
 const panes = new Map<string, { side: Side | null; only: "" | "left" | "right" }>();
 // The members column, and the least each pane needs.
 const SIDE_W = 248;
+const SIDE_FOLDED_W = 56;
+const FOLD_KEY = "myco-members-folded";
 const PANE_MIN = 320;
 
 type View =
@@ -101,6 +103,12 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     onRefresh();
   };
   const feed = useFeed(hubId, project, memberNames);
+  // The members column can fold to a strip of faces (kept across projects).
+  const [folded, setFoldedState] = useState(() => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } });
+  const setFolded = (v: boolean) => {
+    setFoldedState(v);
+    try { localStorage.setItem(FOLD_KEY, v ? "1" : "0"); } catch { /* not kept */ }
+  };
   // A project always has a coordinator once it has an agent: the agent
   // learns it from its role, so the default is saved, not only shown.
   const saved = useRef(new Set<string>());
@@ -274,7 +282,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     // panes and the members column folds the column into the row of faces.
     // (Only while both panes show: one pane alone has room for the column,
     // and the row of faces would be out of sight with the left pane.)
-    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only === "" && spWidth - SIDE_W < 2 * PANE_MIN && "has-side")}>
+    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only === "" && spWidth - (folded ? SIDE_FOLDED_W : SIDE_W) < 2 * PANE_MIN && "has-side")}>
       <div className="sp-main">
         {t ? (
           <ConversationDetail
@@ -393,6 +401,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         onProfile={onOpenMember}
         onAddAgent={onAddAgent}
         onAddWorkspace={onAddWorkspace}
+        folded={folded}
+        onFold={setFolded}
       />
     </div>
   );
@@ -420,10 +430,25 @@ function useFeed(hubId: string, project: Project | undefined, memberNames: Set<s
   const names = [...memberNames].sort().join(",");
   const load = useCallback(async () => {
     try {
-      const r = await appApi.recent(hubId, project ? { project: project.name } : {});
+      // A project's own threads, and the ones in no project between its
+      // members: an agent that is not woken by a runner (it waits on its
+      // inbox) starts threads without a project, the coordinator's
+      // hand-outs among them.
+      const [r, all] = await Promise.all([
+        appApi.recent(hubId, project ? { project: project.name } : {}),
+        project ? appApi.recent(hubId, {}).catch(() => null) : Promise.resolve(null),
+      ]);
       let list = r.items;
+      const among = (it: RecentItem) => {
+        const who = [...it.participants, it.other || "", it.node || ""].filter((p) => p && !p.startsWith("@"));
+        return who.length > 0 && who.every((p) => memberNames.has(p));
+      };
       // Not in a project: the threads with these agents that are in none.
       if (!project) list = list.filter((it) => !it.project && [...it.participants, it.other || "", it.node || ""].some((p) => memberNames.has(p)));
+      else if (all) {
+        const have = new Set(list.map((it) => it.thread_id));
+        list = [...list, ...all.items.filter((it) => !it.project && !have.has(it.thread_id) && it.kind === "thread" && among(it))];
+      }
       // Oldest first, as a chat reads: by when each task started.
       list = [...list].sort((a, b) => (a.first?.created_at || a.updated_at).localeCompare(b.first?.created_at || b.updated_at));
       setItemsState(remember(itemsKey, list));
@@ -517,6 +542,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
         role={L("协调者", "Coordinator")}
         projectTitle={project.title || project.name}
         inserts={inserts}
+        bare
         onBack={() => undefined}
         onNewConversation={() => undefined}
       />
@@ -922,7 +948,7 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   return { text: a.description || stateWords(r.st.state) };
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace, folded, onFold }: {
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
@@ -935,8 +961,55 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   onProfile: (r: AgentRow) => void;
   onAddAgent: () => void;
   onAddWorkspace: () => void;
+  /** only the faces, in a narrow strip */
+  folded: boolean;
+  onFold: (folded: boolean) => void;
 }) {
   const menu = useContextMenu();
+  const menuOf = (r: AgentRow) => {
+    const a = r.st.agent;
+    const ws = isWorkspace(a);
+    return [
+      { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
+      ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
+      { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
+    ];
+  };
+  // Folded: a face each, the name and what it is doing on hover.
+  const face = (r: AgentRow) => {
+    const a = r.st.agent;
+    const ws = isWorkspace(a);
+    const what = ws ? whereOf(r) : liveLine(r, nameOf, now).text;
+    const name = nodeName(a, r.hub) + (a.name === coordinator ? ` · ${L("协调者", "Coordinator")}` : "");
+    return (
+      <button
+        key={a.name}
+        type="button"
+        className={cn("sp-face", selected === a.name && "active", r.st.state === "offline" && "is-away", a.name === coordinator && "is-coordinator")}
+        onClick={() => onChat(r)}
+        onContextMenu={(e) => menu.open(e, menuOf(r))}
+        title={what ? `${name}\n${what}` : name}
+        aria-label={name}
+      >
+        <Avatar agent={a} size={32} state={r.st.state} />
+      </button>
+    );
+  };
+  if (folded) {
+    return (
+      <aside className="sp-side is-folded" aria-label={L("成员", "Members")}>
+        <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开成员", "Show members")} aria-label={L("展开成员", "Show members")}>
+          <PanelRightOpen />
+        </button>
+        {agents.map(face)}
+        <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+        <span className="sp-face-gap" aria-hidden />
+        {workspaces.map(face)}
+        <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一台电脑", "Add a computer")} aria-label={L("加一台电脑", "Add a computer")}><Plus /></button>
+        {menu.element}
+      </aside>
+    );
+  }
   const row = (r: AgentRow) => {
     const a = r.st.agent;
     const ws = isWorkspace(a);
@@ -946,11 +1019,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         type="button"
         className={cn("sp-member", selected === a.name && "active", r.st.state === "offline" && "is-away")}
         onClick={() => onChat(r)}
-        onContextMenu={(e) => menu.open(e, [
-          { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
-          ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
-          { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
-        ])}
+        onContextMenu={(e) => menu.open(e, menuOf(r))}
         title={a.description || nodeName(a, r.hub)}
       >
         <Avatar agent={a} size={32} state={r.st.state} />
@@ -977,7 +1046,10 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       <div className="sp-side-group">
         <div className="sp-side-title">
           <span><Users />{L(`成员 ${agents.length}`, `Members ${agents.length}`)}</span>
-          <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+          <span className="sp-side-tools">
+            <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+            <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起成员，只留头像", "Fold to faces")} aria-label={L("收起成员", "Fold members")}><PanelRightClose /></button>
+          </span>
         </div>
         {agents.map(row)}
         {agents.length === 0 && (

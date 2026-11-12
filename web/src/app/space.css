@@ -582,6 +582,80 @@
   width: 14px;
   height: 14px;
 }
+/* the title's buttons: add, fold */
+.sp-side-title > span.sp-side-tools {
+  gap: 2px;
+}
+/* Folded: a narrow strip of faces; the name and
+   what each is doing show on hover. */
+.sp-side.is-folded {
+  width: 56px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+}
+.sp-side-fold {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: default;
+}
+.sp-side-fold:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.sp-side-fold svg {
+  width: 15px;
+  height: 15px;
+}
+.sp-face {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  cursor: default;
+}
+.sp-face:hover {
+  background: var(--nav-hover);
+}
+.sp-face.active {
+  background: var(--pill-hover);
+}
+.sp-face.is-away .pa {
+  opacity: 0.55;
+}
+.sp-face.is-add {
+  width: 32px;
+  height: 32px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+}
+.sp-face.is-add:hover {
+  color: var(--fg);
+}
+.sp-face.is-add svg {
+  width: 14px;
+  height: 14px;
+}
+.sp-face-gap {
+  flex: none;
+  width: 24px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line-2);
+}
 .sp-member {
   display: flex;
   align-items: center;
