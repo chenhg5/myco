@@ -20,10 +20,10 @@ import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm } 
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
-import { isWorkspace, looksOf } from "@/app/persona";
-import { agentKind } from "@/app/nodes";
+import { Avatar, AvatarStack, isWorkspace, whereOf } from "@/app/persona";
+import { agentKind, nodeName } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
-import { IconLaptop, IconPerson, IconSidebar } from "@/components/icons";
+import { IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
@@ -88,10 +88,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
   const [page, setPage] = useState<Page>("space");
-  // The workspace chosen at the top of the sidebar ("all": every one).
-  const [hubFilter, setHubFilterState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || "all"; } catch { return "all"; } });
-  const setHubFilter = (v: string) => {
-    setHubFilterState(v);
+  // The workspace on show, chosen at the bottom of the sidebar. Workspaces
+  // are kept apart: everything shown and done is in this one.
+  const [hubPick, setHubPickState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || ""; } catch { return ""; } });
+  const setHubPick = (v: string) => {
+    setHubPickState(v);
     try { localStorage.setItem(HUB_KEY, v); } catch { /* not kept */ }
   };
   const [space, setSpaceState] = useState<SpaceRef | null>(() => {
@@ -174,13 +175,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
     () => ov && { ...ov, hubs: ov.hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)) },
     [ov, hubNames],
   );
-  const rows = useMemo<AgentRow[]>(() => {
+  const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
     return namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
   }, [namedOv]);
 
-  // A workspace removed from the app is not chosen any more.
-  const inScope = (hubId: string) => hubFilter === "all" || !hubs.some((h) => h.id === hubFilter) || hubId === hubFilter;
+  // A workspace removed from the app is not chosen any more: the first one
+  // that answers is shown instead.
+  const hubId = hubs.some((h) => h.id === hubPick) ? hubPick
+    : namedOv?.hubs.find((h) => h.ok && hubs.some((x) => x.id === h.id))?.id || hubs[0]?.id || "";
+  const hub = namedHubs.find((h) => h.id === hubId);
+  const rows = useMemo(() => allRows.filter((r) => r.hub.id === hubId), [allRows, hubId]);
+  const hubProjects = useMemo(() => (projects || []).filter((x) => x.hubId === hubId), [projects, hubId]);
   // A project's computers are for every agent in it: one that joined by
   // itself (myco join --project) is let in here. Each pair is tried once.
   const shared = useRef(new Set<string>());
@@ -188,7 +194,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     for (const x of projects || []) {
       if (x.p.archived) continue;
       const names = new Set(x.p.members.map((m) => m.name));
-      const inIt = rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name));
+      const inIt = allRows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name));
       const agents = inIt.filter((r) => agentKind(r.st.agent) === "agent").map((r) => r.st.agent.name);
       for (const w of inIt.filter((r) => isWorkspace(r.st.agent))) {
         const allow = w.st.agent.allow_from || [];
@@ -199,17 +205,18 @@ export default function AppMode({ initialHubs, initialInfo }: {
         void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow, ...missing]).catch(() => undefined);
       }
     }
-  }, [projects, rows]);
+  }, [projects, allRows]);
 
-  const liveProjects = (projects || []).filter((x) => !x.p.archived && inScope(x.hubId))
+  const liveProjects = hubProjects.filter((x) => !x.p.archived)
     .sort((a, b) => (b.p.updated_at || "").localeCompare(a.p.updated_at || ""));
-  const scopedRows = rows.filter((r) => inScope(r.hub.id));
-  const loose = useMemo(() => looseRowsOf(scopedRows, projects || []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, projects, hubFilter]);
-  const looseHubs = [...new Set(loose.map((r) => r.hub.id))];
-  const multiHub = new Set([...liveProjects.map((x) => x.hubId), ...looseHubs]).size > 1;
+  const loose = useMemo(() => looseRowsOf(rows, hubProjects), [rows, hubProjects]);
+  const looseHubs = loose.length ? [hubId] : [];
   const hubName = (id: string) => namedHubs.find((h) => h.id === id)?.name || namedOv?.hubs.find((h) => h.id === id)?.name || id;
+  // The computers agents use, in the sidebar: one click opens a terminal.
+  const computers = rows.filter((r) => isWorkspace(r.st.agent))
+    .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub)));
+  const people = rows.filter((r) => agentKind(r.st.agent) === "agent")
+    .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline"));
 
   // The space on show: the one chosen (while it exists), else the newest
   // project, else the agents in none.
@@ -356,11 +363,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       { label: L("项目资料", "Project notes"), onSelect: () => { setSpace(ref); setPage("about"); } },
                     ])}
                     title={x.p.goal || x.p.title}>
-                    <ProjectMark name={x.p.title || x.p.name} />
-                    <span className="app-nav-label">
-                      {x.p.title || x.p.name}
-                      {multiHub && <small className="sp-nav-hub">{hubName(x.hubId)}</small>}
-                    </span>
+                    <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {busy && <span className="sp-nav-busy" title={L("有成员在干活", "Someone is at work")} />}
                   </button>
                 );
@@ -371,11 +374,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const n = loose.filter((r) => r.hub.id === id).length;
                 return (
                   <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav is-loose", active && "active")} onClick={() => openSpace(ref)}>
-                    <span className="sp-mark is-loose">·</span>
-                    <span className="app-nav-label">
-                      {L("还没进项目的", "Not in a project")}
-                      {multiHub && <small className="sp-nav-hub">{hubName(id)}</small>}
-                    </span>
+                    <span className="app-nav-label">{L("还没进项目的", "Not in a project")}</span>
                     <span className="sp-nav-count">{n}</span>
                   </button>
                 );
@@ -387,11 +386,35 @@ export default function AppMode({ initialHubs, initialInfo }: {
               )}
             </div>
             <div className="app-nav-group">
-              <button type="button" className={cn("app-nav-item", page === "members" && "active")} onClick={() => setPage("members")}>
-                <IconPerson /><span>{L("成员", "Members")}</span>
-              </button>
-              <button type="button" className={cn("app-nav-item", page === "computers" && "active")} onClick={() => setPage("computers")}>
-                <IconLaptop /><span>{L("电脑", "Computers")}</span>
+              <div className="app-nav-title app-nav-title-row">
+                <button type="button" className={cn("sp-nav-title-link", page === "computers" && "active")} onClick={() => setPage("computers")}
+                  title={L("管理电脑", "Manage computers")}>{L("电脑", "Computers")}</button>
+                <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
+                  onClick={() => (shownProject && shown ? setAddWorkspace(shown) : setPage("computers"))}><Plus /></button>
+              </div>
+              {computers.slice(0, NAV_COMPUTERS).map((r) => (
+                <button key={r.st.agent.name} type="button" className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away")}
+                  onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                  <Avatar agent={r.st.agent} size={20} badge={false} />
+                  <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
+                  {r.st.state === "working" && <span className="sp-nav-busy" title={L("正在跑命令", "Running a command")} />}
+                </button>
+              ))}
+              {computers.length > NAV_COMPUTERS && (
+                <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
+                  <span className="app-nav-label">{L(`全部 ${computers.length} 台`, `All ${computers.length}`)}</span>
+                </button>
+              )}
+              {computers.length === 0 && (
+                <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
+                  <span className="app-nav-label">{L("还没有", "None yet")}</span>
+                </button>
+              )}
+            </div>
+            <div className="app-nav-group">
+              <button type="button" className={cn("app-nav-item sp-nav sp-nav-members", page === "members" && "active")} onClick={() => setPage("members")}>
+                <span className="app-nav-label">{L("成员", "Members")}</span>
+                {people.length > 0 && <AvatarStack agents={people.map((r) => r.st.agent)} size={18} max={3} />}
               </button>
             </div>
           </nav>
@@ -401,8 +424,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
             {/* Which workspace the projects above are in: set once, seldom
                 switched, so it sits at the bottom. */}
             <div className="sp-switch">
-              <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubFilter}
-                onChange={(v) => { setHubFilter(v); setPage("space"); }}
+              <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubId}
+                onChange={(v) => { setHubPick(v); setPage("space"); setChatWith(null); }}
                 onAdd={() => setConnectOpen(true)} onSettings={() => setPage("settings")} />
             </div>
             <button type="button" className={cn("app-nav-item", page === "settings" && "active")} onClick={() => setPage("settings")}>
@@ -442,7 +465,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <div className="sp-first">
               <h2>{L("先建一个项目吧", "Start with a project")}</h2>
               <p>{L("一个项目就是一件你想做成的事。建好以后，把你的 agent 拉进来，它们就能一起干活，你在这里派活、看进展。", "A project is one thing you want done. Once it's there, bring your agents in: they work on it together while you hand out tasks and watch.")}</p>
-              <NewProjectForm big hubs={namedHubs} onCreated={projectCreated} onCancel={() => {
+              <NewProjectForm big hubs={hub ? [hub] : []} onCreated={projectCreated} onCancel={() => {
                 setSkipFirst(true);
                 try { localStorage.setItem("myco-skip-first-project", "1"); } catch { /* not kept */ }
               }} />
@@ -478,13 +501,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "members" && (
           <div className="app-scroll">
-            <MembersPage rows={scopedRows} projects={projects || []} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
+            <MembersPage rows={rows} projects={hubProjects} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
           </div>
         )}
 
         {page === "computers" && (
           <div className="app-scroll">
-            <ComputersPage rows={scopedRows} projects={projects || []}
+            <ComputersPage rows={rows} projects={hubProjects}
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
               onAddComputer={() => setAddMachineOpen(true)}
@@ -536,21 +559,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
-      <NewProjectDialog open={newProjectOpen} hubs={namedHubs.filter((h) => namedOv?.hubs.find((o) => o.id === h.id)?.ok !== false)}
-        defaultHubId={shown?.hubId} onClose={() => setNewProjectOpen(false)} onCreated={projectCreated} />
+      <NewProjectDialog open={newProjectOpen} hubs={hub ? [hub] : []} onClose={() => setNewProjectOpen(false)} onCreated={projectCreated} />
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
-      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={namedHubs} />
+      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} />
 
-      <MemberSheet row={profileRow} projects={projects || []} rows={rows} onClose={() => setProfile(null)}
+      <MemberSheet row={profileRow} projects={hubProjects} rows={rows} onClose={() => setProfile(null)}
         onChat={chatWithMember} onChanged={() => void refresh()}
         onDetails={(r) => { setProfile(null); setInspect({ hubId: r.hub.id, name: r.st.agent.name }); }} />
       <Inspector
         row={inspectRow}
         now={now}
-        projects={projects}
+        projects={hubProjects}
         onOpenProject={(ref) => { setInspect(null); openSpace(ref); }}
         onProjectsChanged={() => void loadProjects(hubs.map((h) => h.id))}
         onClose={() => setInspect(null)}
@@ -564,13 +586,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   );
 }
 
-/** A project's mark in the sidebar: its first letter on its own colour. */
-function ProjectMark({ name }: { name: string }) {
-  const l = looksOf(name);
-  return <span className="sp-mark" style={{ ["--mark" as string]: l.cap }}>{[...name.trim()][0]?.toUpperCase() || "·"}</span>;
-}
-
 const SPACE_KEY = "myco-app-space";
+// Computers listed in the sidebar before "All N".
+const NAV_COMPUTERS = 6;
 const HUB_KEY = "myco-app-hub";
 /** A hub that answered 401: it no longer takes this app's token. The hub says
  *  so as "admin token missing or invalid" (or "console token missing or

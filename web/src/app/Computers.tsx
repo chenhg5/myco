@@ -16,8 +16,8 @@ type Projects = { hubId: string; p: Project }[];
 /**
  * The computers agents may use, one row each as a project shows them
  * ("Studio Mac · myco"): the folder, the projects that have it, and Open
- * for its terminal. Below, in one line, the computers connected, and a way
- * to connect another.
+ * for its terminal. Connecting another is at the top; below, in one line,
+ * the computers connected (each can be removed from there).
  */
 export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer, onChanged }: {
   rows: AgentRow[];
@@ -56,7 +56,10 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
 
   return (
     <div className="pc">
-      <p className="pc-intro">{L("agent 能用的电脑。每一台是你某台电脑上的一个文件夹，agent 在里面跑命令，你点「打开」就能看着它的终端。要给项目加一台，在项目右边「电脑」旁点 +。", "The computers agents can use. Each is a folder on one of your computers where agents run commands; Open shows its terminal. To add one to a project, use + next to Computers in the project.")}</p>
+      <div className="pc-head">
+        <p className="pc-intro">{L("agent 在这些电脑上跑命令，点「打开」就能看着。", "Agents run commands on these; Open lets you watch.")}</p>
+        <button type="button" className="app-btn app-btn-small" onClick={onAddComputer}><Plus />{L("连上另一台电脑", "Connect another computer")}</button>
+      </div>
       <ErrorText error={error} />
       {list.length === 0 ? (
         <div className="app-empty-note">{L("还没有交给 agent 的电脑。", "No computers handed to agents yet.")}</div>
@@ -95,7 +98,6 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
             </button>
           </span>
         ))}
-        <button type="button" className="pc-add" onClick={onAddComputer}><Plus />{L("连上另一台电脑", "Connect another computer")}</button>
       </div>
 
       <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); onChanged(); }} />

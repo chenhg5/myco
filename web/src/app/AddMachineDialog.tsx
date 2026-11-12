@@ -67,8 +67,8 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
         <div className="app-hint">{L("先建一个工作区。", "Add a Hub first, then you can add machines to it.")}</div>
       ) : (
         <>
-          <label className="app-field">
-            <span className="app-field-label">Hub</span>
+          {hubs.length > 1 && <label className="app-field">
+            <span className="app-field-label">{L("工作区", "Workspace")}</span>
             <select
               className="app-select-field"
               value={hubId}
@@ -81,7 +81,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
 
           {!link ? (
             <>

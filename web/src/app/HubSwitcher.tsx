@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, ChevronDown, ChevronUp, Layers, Plus, Settings,
+  Check, ChevronDown, ChevronUp, Plus, Settings,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { L } from "@/lib/i18n";
@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 type Variant = "sidebar" | "pill";
 
 type Entry =
-  | { key: string; kind: "all" }
   | { key: string; kind: "hub"; hub: Hub }
   | { key: string; kind: "add" }
   | { key: string; kind: "settings" };
@@ -28,10 +27,7 @@ function colorIndex(id: string): number {
   return h % 8;
 }
 
-function Avatar({ name, id, all }: { name?: string; id?: string; all?: boolean }) {
-  if (all) {
-    return <span className="app-hub-avatar is-all"><Layers /></span>;
-  }
+function Avatar({ name, id }: { name?: string; id?: string }) {
   return (
     <span className={cn("app-hub-avatar", `c${colorIndex(id || name || "")}`)}>
       {initial(name || "")}
@@ -44,11 +40,12 @@ function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | unde
   return o ? o.agents.length : undefined;
 }
 
-/** Hub picker: all hubs, one hub, add another, or open Hub settings. */
+/** Workspace picker: one at a time (they are kept apart), add another, or
+ *  open their settings. */
 export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, variant = "sidebar", down = false }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
-  /** "all" or a hub id. */
+  /** the workspace on show */
   value: string;
   onChange: (value: string) => void;
   onAdd: () => void;
@@ -67,14 +64,12 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
   const connected = hubs.filter((h) => h.ok).length;
 
   const entries = useMemo<Entry[]>(() => [
-    { key: "all", kind: "all" },
     ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
     { key: "add", kind: "add" },
     { key: "settings", kind: "settings" },
   ], [hubs]);
 
   const selectedIndex = (): number => {
-    if (value === "all") return 0;
     const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);
     return i >= 0 ? i : 0;
   };
@@ -89,8 +84,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
   const run = (i: number) => {
     const e = entries[i];
     if (!e) return;
-    if (e.kind === "all") pick("all");
-    else if (e.kind === "hub") pick(e.hub.id);
+    if (e.kind === "hub") pick(e.hub.id);
     else if (e.kind === "add") { close(); onAdd(); }
     else if (e.kind === "settings") { close(); onSettings(); }
   };
@@ -157,7 +151,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
     ? selected.ok ? "working" : "down"
     : connected === hubs.length ? "working" : connected === 0 ? "down" : "pending";
 
-  const label = selected ? selected.name : L("全部工作区", "All workspaces");
+  const label = selected?.name || "";
 
   return (
     <div className={cn("app-hub-switch", variant === "pill" && "is-pill")} ref={rootRef}>
@@ -171,14 +165,10 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={L(`切换工作区：${label}`, `Switch workspace: ${label}`)}
-        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : L("全部工作区", "All workspaces")}
+        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : undefined}
         onClick={toggle}
       >
-        <Avatar
-          name={selected?.name}
-          id={selected?.id}
-          all={!selected}
-        />
+        <Avatar name={selected?.name} id={selected?.id} />
         {variant === "pill" ? (
           <span className="app-hub-pill-name">{label}</span>
         ) : (
@@ -203,28 +193,6 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
           onKeyDown={onMenuKeyDown}
         >
           {entries.map((e, i) => {
-            if (e.kind === "all") {
-              return (
-                <button
-                  key={e.key}
-                  ref={(el) => { itemRefs.current[i] = el; }}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={value === "all"}
-                  className={cn(
-                    "app-hub-menu-item",
-                    value === "all" && "active",
-                    active === i && "is-active",
-                  )}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => pick("all")}
-                >
-                  <Avatar all />
-                  <span className="app-hub-menu-name">{L("全部工作区", "All workspaces")}</span>
-                  {value === "all" && <Check className="app-hub-menu-check" />}
-                </button>
-              );
-            }
             if (e.kind === "hub") {
               return (
                 <button

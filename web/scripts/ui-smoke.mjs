@@ -253,7 +253,9 @@ async function openMember(page, narrow, space, name) {
 
 async function go(page, label, narrow) {
   await sidebar(page, true);
-  await clickVisible(page, page.locator(".app-nav-item:visible", { hasText: label }));
+  // Computers is a heading over the computers listed in the sidebar.
+  const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible") : page.locator(".app-nav-item:visible", { hasText: label });
+  await clickVisible(page, item);
   // At narrow widths the sidebar covers the window; show the page as a person
   // would after picking it, with the compact Hub pill in the crumb bar.
   if (narrow) await sidebar(page, false);
@@ -568,6 +570,14 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computers");
       // A folder's terminal opens from here.
       await clickVisible(page, page.locator(".pc-row .app-btn-small"));
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+    });
+
+    // The sidebar lists the computers too: one click opens a terminal.
+    await step("电脑 · 边栏直达终端", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-nav-pc").first());
+      if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
     });
 

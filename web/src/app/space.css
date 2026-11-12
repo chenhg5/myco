@@ -114,32 +114,43 @@
   width: 100%;
 }
 .sp-nav {
-  height: 32px;
+  height: 30px;
 }
 .sp-nav .app-nav-label {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
+  flex: 1;
 }
-.sp-nav-hub {
-  font-size: 10.5px;
+/* A computer in the sidebar: its little screen, its name; one click opens
+   the terminal. Away ones are faded. */
+.sp-nav-pc {
+  padding-left: 6px;
+}
+.sp-nav-pc .pa {
+  flex: none;
+}
+.sp-nav-pc.is-away {
   color: var(--faint);
 }
-.sp-mark {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--mark) 22%, transparent);
-  color: color-mix(in srgb, var(--mark) 75%, var(--fg));
-  font-size: 11px;
-  font-weight: 600;
+.sp-nav-pc.is-away .pa {
+  opacity: 0.55;
 }
-.sp-mark.is-loose {
-  background: var(--pill);
-  color: var(--muted);
+.sp-nav-members .pa-stack {
+  flex: none;
+  margin-left: auto;
+}
+/* The Computers heading opens the page where they are managed. */
+.sp-nav-title-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: default;
+}
+.sp-nav-title-link:hover,
+.sp-nav-title-link.active {
+  color: var(--fg);
 }
 .sp-nav-busy {
   flex: none;
@@ -1130,10 +1141,16 @@
   margin: 0 auto;
   padding: 18px 20px 40px;
 }
+.pc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 .pc-intro {
-  margin: 0 0 16px;
-  font-size: 12.5px;
-  line-height: 1.6;
+  margin: 0;
+  font-size: 13px;
   color: var(--muted);
 }
 .pc-list {
@@ -1238,24 +1255,9 @@
   margin: 0 4px;
   color: var(--faint);
 }
-.pc-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 10px;
-  padding: 2px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--fg-2);
-  font: inherit;
-  font-size: 12px;
-  cursor: default;
-}
-.pc-add:hover {
-  background: var(--nav-hover);
-}
-.pc-add svg {
-  width: 13px;
-  height: 13px;
+/* The nav sizes its own icons; a face in it keeps its proportions. */
+.app-nav-item .pa-sprite {
+  width: 74%;
+  height: 74%;
+  color: inherit;
 }
