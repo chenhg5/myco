@@ -2437,6 +2437,9 @@ textarea.app-input {
 .conv-row-state.is-failed {
   background: var(--red);
 }
+.conv-row-state.is-stuck {
+  background: var(--amber);
+}
 @keyframes conv-state-pulse {
   0% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent);
@@ -3830,6 +3833,8 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-msg-status { font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: var(--pill); color: var(--muted); margin-right: 2px; }
 .app-msg-status.delivered, .app-msg-status.acked { color: var(--accent); }
 .app-msg-status.held { color: var(--warn, #c48a1a); }
+.app-msg-status.is-stuck { color: var(--amber); }
+.app-counts .is-stuck, .app-counts .is-stuck b { color: var(--amber); }
 
 /* Exchange view: load earlier, and a divider where a new thread starts. */
 .conv-older {
@@ -4990,6 +4995,34 @@ body.is-resizing {
 }
 .conv-busy .conv-steer-btn + .conv-steer-btn {
   margin-left: 0;
+}
+
+/* A task that was picked up and then went quiet: it may have lost its
+   result. A line says so, with stopping it and sending it again beside it. */
+.conv-stuck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  margin: 2px 0 6px;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.conv-stuck .dot {
+  flex: none;
+}
+.conv-stuck-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.conv-stuck-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
 }
 
 /* A task the node has not picked up yet: why, without a spinner. */

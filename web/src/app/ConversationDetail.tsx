@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Papercli
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { canManage, cliName, isInbox, isMe, machineOfRow, personLabel, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
+import { canManage, cliName, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -282,8 +282,25 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
   const busy = !!row && sessionBusy(row.st);
   const offline = row?.st.state === "offline";
+  // A task picked up long ago and quiet since: its result may never come
+  // back. Said in the chat, with a way out, instead of a spinner.
+  const isStuck = (m: Message): boolean =>
+    possiblyStuck(m, { agent: row?.st.agent, receiving: row?.st.receiving, offline: row?.st.state === "offline" }, now);
+  const stuckLine = (m: Message): string => {
+    const quiet = quietFor(now, lastActivityAt(m));
+    return L(
+      `${quiet}没有动静，可能卡住了（结果可能没送回来）`,
+      `No activity for ${quiet}; it may be stuck (the result may not have made it back)`,
+    );
+  };
+  // Every task of yours still open in this conversation, not only the newest:
+  // an older one that went quiet may be stuck too.
+  const openTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && isOpen(m.status));
+  const allStuck = openTasks.length > 0 && openTasks.every(isStuck);
   const state = busy
     ? { dot: "pending", label: L("会话被占用", "Session in use") }
+    : allStuck
+    ? { dot: "pending", label: L("可能卡住", "May be stuck") }
     : openTask && offline
     ? { dot: "idle", label: L("离线 · 等它上线", "Offline · waiting") }
     : openTask && openTask.status !== "acked"
@@ -523,6 +540,29 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // A task that may have lost its result: stop it, then send the same message
+  // to the same node again in the same conversation, as a fresh task.
+  const [resending, setResending] = useState<string | null>(null);
+  const resend = async (task: Message) => {
+    if (resending) return;
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const stopped = await appApi.stop(target.hubId, task.id);
+      const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
+      setMessages((prev) => {
+        const next = prev ? prev.map((x) => (x.id === stopped.id ? stopped : x)) : [stopped];
+        return [...next, fresh];
+      });
+      setSteerMode(false);
+      atBottom.current = true;
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+
   // The view stays at the bottom while something there grows (a live trace).
   const followBottom = () => {
     const el = scrollRef.current;
@@ -583,8 +623,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         </div>
         {/* What the agent did for a task you gave it (its runner reports it):
-            the start of its turn, on its side of the conversation. */}
-        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} />}
+            the start of its turn, on its side of the conversation. A task that
+            went quiet after it was picked up may have lost its result: say so,
+            and offer to stop it and send it again. */}
+        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (isStuck(m) ? (
+          <div className="conv-stuck">
+            <span className="dot pending" aria-hidden />
+            <span className="conv-stuck-text">{stuckLine(m)}</span>
+            <span className="conv-stuck-actions">
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void stop(m)}>
+                {L("停止", "Stop")}
+              </button>
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void resend(m)}>
+                {resending === m.id ? L("正在重发…", "Resending…") : L("重发", "Resend")}
+              </button>
+            </span>
+          </div>
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} />)}
         </Fragment>
       );
   };

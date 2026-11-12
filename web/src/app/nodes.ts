@@ -233,6 +233,66 @@ export function stateLabel(st: { state: string; session_in_use?: boolean; receiv
   return sessionBusy(st) ? { dot: "pending", label: L("会话被占用", "Session in use") } : { dot: st.state, label };
 }
 
+/** An accepted task quiet for this long may have lost its result: a runner
+ *  touches the message every few seconds while the run goes on. */
+export const STUCK_AFTER_MS = 10 * 60_000;
+/** A session-only node works while its own session runs and may report less
+ *  often; give it longer before saying the task looks stuck. */
+export const STUCK_AFTER_SESSION_MS = 30 * 60_000;
+
+/** When a task last had activity (unix ms): the hub's active_at, or else when
+ *  the message itself last changed. */
+export function lastActivityAt(m: { active_at?: string; updated_at: string }): number {
+  return new Date(m.active_at || m.updated_at).getTime();
+}
+
+/** How long a task has been quiet, said the way people say it: minutes,
+ *  then hours, then days. Not a running timer: it does not count seconds. */
+export function quietFor(now: number, at: number): string {
+  const mins = Math.max(1, Math.floor((now - at) / 60_000));
+  if (mins < 60) return L(`${mins} 分钟`, `${mins} min`);
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return L(`${hours} 小时`, `${hours} h`);
+  return L(`${Math.floor(hours / 24)} 天`, `${Math.floor(hours / 24)} d`);
+}
+
+/** Whether a node handles messages only while one of its sessions runs: an
+ *  inbox node, a cloud session, or a node reporting receiving "session". */
+export function receivesInSession(a?: Agent, receiving?: string): boolean {
+  return receiving === "session" || (!!a && (isInbox(a) || isCloud(a)));
+}
+
+/**
+ * An accepted task whose result may never come back. It was picked up (acked)
+ * or held, and nothing has happened to it for longer than its node can
+ * reasonably take: ten minutes when a runner wakes the node, thirty when only
+ * a session of its own receives. A node that is offline is a signal too: it
+ * cannot finish the task while it is away.
+ */
+export function possiblyStuck(
+  m: { status: string; active_at?: string; updated_at: string },
+  node: { agent?: Agent; receiving?: string; offline?: boolean } | undefined,
+  now: number,
+): boolean {
+  if (m.status !== "acked" && m.status !== "held") return false;
+  if (node?.offline) return true;
+  const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
+  const at = lastActivityAt(m);
+  return Number.isFinite(at) && now - at >= wait;
+}
+
+/** Possibly-stuck tasks among a node's current work, split as its counts are. */
+export function stuckCounts(st: AgentStatus, now: number): { in_progress: number; held: number; total: number } {
+  let in_progress = 0;
+  let held = 0;
+  for (const m of st.current || []) {
+    if (!possiblyStuck(m, { agent: st.agent, receiving: st.receiving, offline: st.state === "offline" }, now)) continue;
+    if (m.status === "held") held += 1;
+    else in_progress += 1;
+  }
+  return { in_progress, held, total: in_progress + held };
+}
+
 /**
  * What a node is called in the App: its display name, or else one made from
  * what it is (CLI · machine · folder, e.g. "Codex · Studio Mac · myco"), so

@@ -70,6 +70,51 @@ const studioThread = process.env.MOCK_E2E
 // only when it has one of these messages.
 const CONSOLE = `@console:${"glenn-mac"}`;
 
+// A task the node picked up and then went quiet on: long enough ago that its
+// result may never come back. Kept in the node's current work and its chat,
+// so the App can say "may be stuck" and offer to send it again.
+const stuckTask = makeMessage({
+  id: "msg_stuck_legacy",
+  thread_id: "th_console_stuck",
+  from: CONSOLE,
+  to: "legacy-codex",
+  type: "task",
+  status: "acked",
+  body: "把旧版 runner 的日志整理到 docs/legacy.md。",
+  created_at: iso(46 * 60),
+  updated_at: iso(45 * 60),
+  active_at: iso(45 * 60),
+});
+const stuckCurrent = new Map([["legacy-codex", stuckTask]]);
+
+// A task picked up and quiet ever since, with a later task the sender stopped:
+// the newest message is closed, but the older one is still stuck, so stopping
+// and sending it again has to work from that older task's own row. It has no
+// active_at, like a hub from before the field: updated_at is the fallback.
+const stuckOlderTask = makeMessage({
+  id: "msg_stuck_older",
+  thread_id: "th_console_stuck_stopped",
+  from: CONSOLE,
+  to: "legacy-codex",
+  type: "task",
+  status: "acked",
+  body: "把旧版 runner 的配置文件检查一遍。",
+  created_at: iso(19 * 60 * 60),
+  updated_at: iso(19 * 60 * 60),
+});
+const stoppedAfterTask = makeMessage({
+  id: "msg_stopped_after",
+  thread_id: "th_console_stuck_stopped",
+  from: CONSOLE,
+  to: "legacy-codex",
+  type: "task",
+  status: "failed",
+  error: "stopped by the sender",
+  body: "顺便把旧版 runner 的配置贴一份给我。",
+  created_at: iso(2 * 60 * 60),
+  updated_at: iso(2 * 60 * 60),
+});
+
 // Earlier turns of the conversation with PM (Codex), so the chat is long
 // enough to scroll and its turn rail has something to show.
 const earlierTurns = [
@@ -156,6 +201,11 @@ const consoleThreads = {
     makeMessage({ thread_id: "th_console_busy", from: CONSOLE, to: "ios-shell", type: "task", status: "delivered", body: "在后台跑性能测试，完成后告诉我。", created_at: iso(180), updated_at: iso(120) }),
     makeMessage({ thread_id: "th_console_busy", from: "ios-shell", to: CONSOLE, type: "progress", status: "done", body: "已经跑完 3/5 个场景…", created_at: iso(60), updated_at: iso(60) }),
   ],
+  // Picked up long ago and quiet since: looks stuck in the chat and the list.
+  th_console_stuck: [stuckTask],
+  // An older task stuck behind a newer one the sender stopped: it still has
+  // its own stop and resend in the chat.
+  th_console_stuck_stopped: [stuckOlderTask, stoppedAfterTask],
 };
 
 // Claude Code / Codex transcripts on this computer, newest first. Two are
@@ -522,7 +572,9 @@ function execHistory(agent) {
 const dismissed = new Set();
 
 function agentStatus(a) {
-  const state = a.online ? (a.status_text ? "working" : "idle") : "offline";
+  // The legacy node has a task it picked up and never reported back on.
+  const stuck = stuckCurrent.get(a.name);
+  const state = a.online ? (a.status_text || stuck ? "working" : "idle") : "offline";
   // Working nodes also have a stale queued answer waiting (dismissable).
   const staleId = "msg_stale_" + a.name;
   const stale = state === "working" && !dismissed.has(staleId)
@@ -538,7 +590,7 @@ function agentStatus(a) {
     receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
     session_in_use: a.session_in_use || undefined,
     current: state === "working"
-      ? [makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" }), ...stale]
+      ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" }), ...stale]
       : [],
   };
 }
@@ -672,6 +724,29 @@ const server = http.createServer(async (req, res) => {
     const link = pendingLink;
     pendingLink = "";
     return send(res, 200, { link });
+  }
+
+  // /app/mock/stuck — the smoke test puts the stale demo task back: it stops
+  // and resends it, and the mock keeps running across widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const hub = state.hubs.find((h) => h.id === "hub_studio") || state.hubs[0];
+    stuckTask.status = "acked";
+    delete stuckTask.error;
+    stuckTask.created_at = iso(46 * 60);
+    stuckTask.updated_at = iso(45 * 60);
+    stuckTask.active_at = iso(45 * 60);
+    hub.threads.th_console_stuck = [stuckTask];
+    stuckOlderTask.status = "acked";
+    delete stuckOlderTask.error;
+    stuckOlderTask.created_at = iso(19 * 60 * 60);
+    stuckOlderTask.updated_at = iso(19 * 60 * 60);
+    stoppedAfterTask.status = "failed";
+    stoppedAfterTask.error = "stopped by the sender";
+    stoppedAfterTask.created_at = iso(2 * 60 * 60);
+    stoppedAfterTask.updated_at = iso(2 * 60 * 60);
+    hub.threads.th_console_stuck_stopped = [stuckOlderTask, stoppedAfterTask];
+    return send(res, 200, { ok: true });
   }
 
   // /app/hubs

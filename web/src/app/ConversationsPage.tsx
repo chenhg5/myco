@@ -9,7 +9,7 @@ import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
 import { ErrorText } from "@/app/dialogs";
 import type { AgentRow } from "@/app/types";
-import { groupsOf, isMe, tagsOf, nodeName } from "@/app/nodes";
+import { groupsOf, isMe, possiblyStuck, tagsOf, nodeName } from "@/app/nodes";
 import { parseExecResult } from "@/app/Markdown";
 import { cn, timeAgo } from "@/lib/utils";
 import { summarize } from "@/app/summary";
@@ -83,7 +83,8 @@ function fromConversation(c: Conversation): RecentItem {
 }
 
 // Shown as a dot on the row's icon (none when done); the label is its tooltip.
-function stateTag(s: RecentItem["state"]): { label: string } {
+function stateTag(s: RecentItem["state"], stuck = false): { label: string } {
+  if (stuck) return { label: L("可能卡住", "May be stuck") };
   switch (s) {
     case "queued": return { label: L("排队中", "Queued") };
     case "working": return { label: L("处理中", "Working") };
@@ -93,8 +94,10 @@ function stateTag(s: RecentItem["state"]): { label: string } {
   return { label: "" };
 }
 
-function matchesState(it: RecentItem, f: StateFilter): boolean {
+function matchesState(it: RecentItem, f: StateFilter, stuck = false): boolean {
   if (f === "all") return true;
+  // A task that may have lost its result is not in progress any more.
+  if (stuck) return false;
   if (f === "open") return it.state === "queued" || it.state === "working";
   return it.state === f;
 }
@@ -411,7 +414,17 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
     return names.some((n) => n.startsWith(CONSOLE) && isMe(n, h));
   };
   const onSide = (r: ConversationRow) => !side || (side === "me") === isMine(r);
-  const matching = items.filter((r) => matchesState(r.item, filters.state) && onSide(r));
+  // The task the row shows was picked up and has been quiet too long: its
+  // result may have been lost, so it is not "in progress" any more.
+  const stuckOf = (r: ConversationRow): boolean => {
+    const task = r.item.task;
+    if (!task) return false;
+    const node = rows.find((x) => x.hub.id === r.hubId && x.st.agent.name === task.to);
+    return possiblyStuck(task, node
+      ? { agent: node.st.agent, receiving: node.st.receiving, offline: node.st.state === "offline" }
+      : undefined, now);
+  };
+  const matching = items.filter((r) => matchesState(r.item, filters.state, stuckOf(r)) && onSide(r));
   const firstLoad = loading && items.length === 0;
   const canLoadMore = Object.values(more).some(Boolean);
   const filtered = (side !== "me" && filters.scope !== "all") || filters.state !== "all" || filters.label !== "all" || !!query || !!project;
@@ -575,7 +588,8 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
         <div className="app-list">
           {shown.map((row) => {
             const it = row.item;
-            const tag = stateTag(it.state);
+            const stuck = stuckOf(row);
+            const tag = stateTag(it.state, stuck);
             const shell = shellRow(row);
             const Icon = shell ? IconPrompt : it.participants.some((p) => p.startsWith(CONSOLE)) ? IconChat : IconExchange;
             const key = rowKey(row);
@@ -594,7 +608,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
               >
                 <span className={cn("conv-row-icon", shell && "is-shell")}>
                   <Icon aria-hidden />
-                  {it.state !== "done" && tag.label && <span className={cn("conv-row-state", `is-${it.state}`)} role="img" aria-label={tag.label} />}
+                  {it.state !== "done" && tag.label && <span className={cn("conv-row-state", stuck ? "is-stuck" : `is-${it.state}`)} role="img" aria-label={tag.label} />}
                 </span>
                 <span className="conv-row-main">
                   <span className="conv-row-top">
