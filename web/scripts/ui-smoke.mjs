@@ -449,7 +449,7 @@ async function runMatrix(browser, size, scheme) {
 
     if (!narrow) {
       await step("项目 · 添加工作空间", async () => {
-        await clickVisible(page, page.locator(".sp-side .sp-side-add").nth(1));
+        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
         const dialog = page.locator(".app-modal-add");
         await dialog.waitFor();
         await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
@@ -497,7 +497,7 @@ async function runMatrix(browser, size, scheme) {
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");
-      await box.locator("input[type=file]").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
+      await box.locator("input[type=file]").setInputFiles({ name: "2026 年第四季度发布计划与官网改版需求说明.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
       await page.locator(".conv-compose-input").evaluate((el) => {
         const dt = new DataTransfer();
         dt.items.add(new File(["png"], "image.png", { type: "image/png" }));
@@ -505,6 +505,9 @@ async function runMatrix(browser, size, scheme) {
       });
       await box.locator(".att-chip").nth(1).waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
+      // A tile: the picture on top, the name under it, never stretched by a long name.
+      const wide = await box.locator(".att-chip").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+      if (wide.some((w) => w > 80)) throw new Error(`文件块应是固定宽度的小方块，实际宽 ${wide.join("/")}`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-attach");
       await page.locator(".conv-compose-input").press("Enter");

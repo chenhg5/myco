@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Loader2, Paperclip, X } from "lucide-react";
+import { AlertCircle, FileText, Loader2, Paperclip, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -130,23 +130,30 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
   );
 }
 
-/** The files about to go, above the text: a thumbnail or an icon, the name
- *  and size, and whether it is up yet. */
+/** The files about to go, above the text: small tiles, the picture (or a
+ *  file icon with its kind) on top and the name under it, cut short when
+ *  long; the size and any error on hover. */
 export function AttachList({ items, onRemove }: { items: Pending[]; onRemove: (key: string) => void }) {
   if (!items.length) return null;
   return (
     <div className="att-list" onClick={(e) => e.stopPropagation()}>
-      {items.map((x) => (
-        <div key={x.key} className={cn("att-chip", x.state === "error" && "is-error")} title={x.error || x.name}>
-          {x.preview ? <img className="att-thumb" src={x.preview} alt="" /> : <span className="att-icon"><FileText /></span>}
-          <span className="att-text">
+      {items.map((x) => {
+        const ext = x.name.includes(".") ? x.name.split(".").pop()!.slice(0, 5) : "";
+        return (
+          <div key={x.key} className={cn("att-chip", x.state === "error" && "is-error", x.state === "uploading" && "is-busy")}
+            title={x.error ? `${x.name}\n${x.error}` : `${x.name} · ${bytes(x.size)}`}>
+            <span className="att-face">
+              {x.preview ? <img className="att-thumb" src={x.preview} alt="" /> : (
+                <span className="att-icon"><FileText />{ext && <span className="att-ext">{ext}</span>}</span>
+              )}
+              {x.state === "uploading" && <span className="att-cover" aria-label={L("正在上传…", "Uploading…")}><Loader2 className="att-spin" /></span>}
+              {x.state === "error" && <span className="att-cover is-error"><AlertCircle /></span>}
+            </span>
             <span className="att-name">{x.name}</span>
-            <span className="att-sub">{x.state === "uploading" ? L("正在上传…", "Uploading…") : x.state === "error" ? x.error : bytes(x.size)}</span>
-          </span>
-          {x.state === "uploading" && <Loader2 className="att-spin" />}
-          <button type="button" className="att-x" onClick={() => onRemove(x.key)} aria-label={L("不发这个", "Remove")} title={L("不发这个", "Remove")}><X /></button>
-        </div>
-      ))}
+            <button type="button" className="att-x" onClick={() => onRemove(x.key)} aria-label={L("不发这个", "Remove")} title={L("不发这个", "Remove")}><X /></button>
+          </div>
+        );
+      })}
     </div>
   );
 }

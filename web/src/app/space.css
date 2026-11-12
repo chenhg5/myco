@@ -1936,88 +1936,110 @@ body.is-resizing {
 .att-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
   cursor: default;
 }
+/* The chat's box has no padding of its own (its text area has). */
+.conv-compose-box .att-list {
+  margin-bottom: 0;
+  padding: 12px 14px 0;
+}
+/* A file about to go: a small tile, the picture on top, the name under
+   it (cut short), so a long name never stretches it. */
 .att-chip {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 260px;
-  height: 40px;
-  padding: 0 6px 0 4px;
+  flex-direction: column;
+  gap: 4px;
+  width: 76px;
+}
+.att-face {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 58px;
+  overflow: hidden;
   border-radius: 10px;
   background: var(--pill);
 }
-.att-chip.is-error {
-  background: var(--red-soft);
-}
-.att-thumb,
-.att-icon {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
+.att-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
 .att-icon {
-  display: grid;
-  place-items: center;
-  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
   color: var(--muted);
 }
 .att-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
-.att-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
+.att-ext {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.att-name {
-  font-size: 12px;
-  color: var(--fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.att-sub {
-  font-size: 10.5px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.att-chip.is-error .att-sub {
-  color: var(--red);
-}
-.att-spin {
-  flex: none;
-  width: 13px;
-  height: 13px;
-  color: var(--muted);
-  animation: trace-spin 1s linear infinite;
-}
-.att-x {
+.att-cover {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  color: var(--fg-2);
+}
+.att-cover.is-error {
+  background: color-mix(in srgb, var(--red-soft) 80%, transparent);
+  color: var(--red);
+}
+.att-cover svg {
+  width: 16px;
+  height: 16px;
+}
+.att-spin {
+  animation: trace-spin 1s linear infinite;
+}
+.att-name {
+  padding: 0 2px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-chip.is-error .att-name {
+  color: var(--red);
+}
+/* Remove: a small round button inside the picture's corner. */
+.att-x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
   cursor: default;
 }
 .att-x:hover {
-  background: var(--nav-hover);
-  color: var(--fg);
+  background: rgba(0, 0, 0, 0.72);
 }
 .att-x svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
 }
