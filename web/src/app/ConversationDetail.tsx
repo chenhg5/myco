@@ -31,6 +31,9 @@ export interface ConversationTarget {
   /** Open at this message (older pages load until it is there), lit up,
    *  instead of at the bottom. */
   focus?: string;
+  /** Your conversation with agent, and also agent's with these (read-only,
+   *  the newest page of each): everything it was asked, by whom. */
+  also?: string[];
   // Where Back goes: the node panel it was opened from.
   returnTo?: { page: string; node?: { hubId: string; name: string }; project?: { hubId: string; name: string } };
 }
@@ -132,8 +135,15 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions }: {
   target: ConversationTarget;
+  /** buttons at the right end of the header (e.g. full screen, close) */
+  headActions?: React.ReactNode;
+  /** what it is in the project (e.g. coordinator), before its description */
+  role?: string;
+  /** small things placed in the timeline by time (e.g. a task the agent
+   *  handed out), between the messages */
+  inserts?: { id: string; at: string; node: React.ReactNode }[];
   rows: AgentRow[];
   now: number;
   onBack: () => void;
@@ -219,17 +229,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const delta = silent && incremental && since > 0 && polls % FULL_EVERY !== 0;
       try {
         if (target.peer) {
-          // The newest page, polled; older pages stay as loaded.
-          const r = await appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined);
+          // The newest page, polled; older pages stay as loaded. With also,
+          // the newest page of each of those is merged in.
+          const [r, extra] = await Promise.all([
+            appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined),
+            Promise.all((target.also || []).map((p) => appApi.exchanges(target.hubId, target.agent, p).then((x) => x.messages).catch(() => [] as Message[]))),
+          ]);
           if (cancelled) return;
+          const others = extra.flat();
           if (delta && r.since) {
             // Many changes at once: the whole page next time.
             if (r.more) polls = FULL_EVERY - 1;
-            if (r.messages.length) show(mergeById(current, r.messages), more);
+            if (r.messages.length || others.length) show(mergeById(current, [...r.messages, ...others]), more);
             return;
           }
           if (delta) incremental = false; // an older hub: whole pages
-          const ms = [...r.messages].reverse();
+          const ms = others.length ? mergeById([...r.messages].reverse(), others) : [...r.messages].reverse();
           show(ms, silent ? more : r.more);
           if (!silent) setMore(r.more);
           return;
@@ -259,7 +274,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       window.clearInterval(poll);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [target.hubId, target.threadId, target.agent, target.peer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.threadId, target.agent, target.peer, (target.also || []).join(",")]);
 
   const loadOlder = async () => {
     const first = older[0] || messages?.[0];
@@ -355,6 +371,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ? { dot: "pending", label: L("等待中", "Waiting") }
     : openTask
     ? { dot: "working", label: L("处理中", "Working") }
+    // At work on something someone else gave it.
+    : row?.st.state === "working" && (!exchange || !!target.peer && (isMe(target.peer, row?.hub) || isMe(target.agent, row?.hub)))
+    ? { dot: "working", label: target.also?.length ? L("在干活", "Working") : L("在忙别的", "Busy with something else") }
     : stopped
       ? { dot: "idle", label: L("已停止", "Stopped") }
     : failed
@@ -438,6 +457,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const histPos = useRef(-1);
   const histDraft = useRef("");
 
+  const alsoSet = new Set(target.also || []);
   const nameOf = (from: string): string => {
     if (isConsole(from)) return personLabel(from, row?.hub);
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
@@ -731,6 +751,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const all = progressOf.get(task);
     return !all || all[all.length - 1] === m;
   });
+  // Inserts by time: each goes before the first message newer than it.
+  const placed = new Map<string, React.ReactNode[]>();
+  const trailing: React.ReactNode[] = [];
+  {
+    const ins = [...(inserts || [])].sort((a, b) => a.at.localeCompare(b.at));
+    let k = 0;
+    for (const m of visible) {
+      while (k < ins.length && new Date(ins[k].at).getTime() <= new Date(m.created_at).getTime()) {
+        placed.set(m.id, [...(placed.get(m.id) || []), <Fragment key={"x" + ins[k].id}>{ins[k].node}</Fragment>]);
+        k++;
+      }
+    }
+    for (; k < ins.length; k++) trailing.push(<Fragment key={"x" + ins[k].id}>{ins[k].node}</Fragment>);
+  }
   // The message just before each one (what an answer may be answering).
   const prevShown = new Map<string, string>();
   visible.forEach((m, i) => { if (i > 0) prevShown.set(m.id, visible[i - 1].id); });
@@ -766,8 +800,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         );
       }
-      // In an observed thread, the node you opened is on the right.
-      const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub);
+      // In an observed thread, the node you opened is on the right. With
+      // others merged in, whoever gives it work (you or another member) is
+      // on the right, named; its answers to them say whom they answer.
+      const fromOther = !observed && alsoSet.has(m.from);
+      const toOther = !observed && m.from === target.agent && alsoSet.has(m.to);
+      const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub) || fromOther;
       // Watching two nodes: an answer that does not come right after what it
       // answers quotes it, as chat apps do; its progress folds under it.
       const answers = observed ? taskOfAnswer.get(m.id) : undefined;
@@ -779,8 +817,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
-          {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
+          {fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
+            : alsoSet.size > 0 && isMe(m.from, row?.hub) ? (showName ? <div className="conv-msg-name">{L("你", "You")}</div> : null)
+            : toOther ? <div className="conv-msg-name">{L(`回复 ${nameOf(m.to)}`, `To ${nameOf(m.to)}`)}</div>
+            : showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
           {steps && steps.length > 0 && <ProgressFold items={steps} />}
           <div className="conv-bubble">
             {quote && (asked ? (
@@ -835,6 +876,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             </span>
           </div>
         ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} />)}
+        {/* What it did for a task someone else gave it, the same way. */}
+        {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} />
+        )}
         </Fragment>
       );
   };
@@ -860,7 +905,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <p>
             {observed
               ? L("它们之间的对话，你只能看", "Their conversation; you can only read it")
-              : shellMode ? (agent ? whereOf({ hub: row!.hub, st: row!.st }) : "") : agent?.description || L("和你的一对一", "Just you and it")}
+              : shellMode ? (agent ? whereOf({ hub: row!.hub, st: row!.st }) : "") : [role, agent?.description].filter(Boolean).join(" · ") || L("和你的一对一", "Just you and it")}
             {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
@@ -878,6 +923,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {messages === null ? L("加载中", "Loading") : state.label}
           </span>
         ))}
+        {headActions && <span className="conv-head-actions">{headActions}</span>}
       </header>
 
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
@@ -946,6 +992,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <ErrorText error={sendError || stopError} />
               </>
             ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} hubId={target.hubId} onGrow={followBottom} /> : visible.map((m, i) => {
+              // Inserts that come before this message (by time).
+              const before = placed.get(m.id);
               // Exchange view: a new thread starts with a divider.
               const divider = exchange && i > 0 && visible[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
@@ -953,8 +1001,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const prev = visible[i - 1];
               const runStart = !prev || !!divider || prev.from !== m.from || prev.type === "event" || m.type === "event";
               const item = renderMessage(m, runStart);
-              return divider ? [divider, item] : item;
+              return [...(before || []), ...(divider ? [divider, item] : [item])];
             })}
+            {!shellMode && !execNode && trailing}
             {working && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
                 status={working.status} queued={working.queued} behind={working.behind}

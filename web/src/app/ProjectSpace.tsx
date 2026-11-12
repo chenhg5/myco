@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ChevronDown, FileText, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Maximize2, Minimize2, Plus, Users, X } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -21,20 +21,29 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
   return "loose" in s;
 }
 
+/** What the right pane shows: a member's work, or a computer's terminal. */
+type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
+
+const SPLIT_KEY = "myco-space-split";
+
 type View =
-  | { kind: "group" }
-  | { kind: "chat"; agent: string; peer?: string; focus?: string }
+  | { kind: "home" }
+  | { kind: "activity" }
+  | { kind: "chat"; agent: string; peer?: string; focus?: string; also?: string[] }
   | { kind: "thread"; threadId: string; agent: string }
   | { kind: "pair"; agent: string; peer: string; focus?: string };
 
 const POLL_MS = 4000;
 
 /**
- * A project as people see it: its members talking (a group view of every
- * task between them), and a box to give one of them a task. Every message
- * has one recipient: the group is where you watch and hand out work, not a
- * room where everyone hears everything. A member opens your one-to-one
- * chat with it; a workspace opens its terminal; a task opens its thread.
+ * A project as people see it. You talk to its coordinator (the home view):
+ * you say what you want, it hands the work out, and each task it hands out
+ * shows up in your chat as a small card that keeps its state. On the side,
+ * what each member is doing now; a member opens everything it was asked
+ * (by the coordinator, by you) in one timeline, and you can talk to it
+ * directly there. Everything between the members is under All activity,
+ * for looking back. The agents in no project yet have the group view: a
+ * feed of their tasks and a box to give one a task.
  */
 export function ProjectSpace({ space, project, looseRows = [], hubName, rows, now, me, openChat, home, onAddAgent, onAddWorkspace, onOpenMember, onAbout, onRefresh }: {
   space: SpaceRef;
@@ -71,7 +80,22 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   const workspaces = members.filter((r) => isWorkspace(r.st.agent));
   const memberNames = new Set(members.map((r) => r.st.agent.name));
 
-  const [view, setView] = useState<View>({ kind: "group" });
+  // The coordinator: the member set as one, else the first agent to join.
+  const coordinatorSet = project?.members.find((m) => m.role === "coordinator" && agents.some((r) => r.st.agent.name === m.name))?.name;
+  const coordinator = coordinatorSet || (project
+    ? [...project.members].filter((m) => agents.some((r) => r.st.agent.name === m.name)).sort((a, b) => a.added_at.localeCompare(b.added_at))[0]?.name
+    : undefined);
+  const setCoordinator = async (name: string) => {
+    if (!project) return;
+    for (const m of project.members.filter((x) => x.role === "coordinator" && x.name !== name)) {
+      await appApi.putProjectMember(hubId, project.name, m.name, { role: "member" }).catch(() => undefined);
+    }
+    await appApi.putProjectMember(hubId, project.name, name, { role: "coordinator" }).catch(() => undefined);
+    onRefresh();
+  };
+  const feed = useFeed(hubId, project, memberNames);
+
+  const [view, setView] = useState<View>({ kind: "home" });
   // Your chat with an agent: the name you have talked to it as (this
   // device's, or your own on the hub), found among your conversations;
   // your own name when there are none yet.
@@ -99,17 +123,60 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       return me;
     }
   };
-  const chatWith = async (agent: string) => {
-    setView({ kind: "chat", agent, peer: await peerFor(agent) });
+  // Everyone a member has worked with here (from the project's tasks):
+  // their conversations with it are shown along with yours.
+  const othersOf = (agent: string): string[] => {
+    const set = new Set<string>();
+    for (const it of feed.items || []) {
+      if (it.kind !== "thread" || !it.participants.includes(agent)) continue;
+      for (const p of it.participants) if (p !== agent && !p.startsWith("@")) set.add(p);
+    }
+    if (coordinator && coordinator !== agent) set.add(coordinator);
+    return [...set].sort();
+  };
+  // With a coordinator the project is split: your chat with it on the
+  // left, and the member you open (its work, or a computer's terminal) on
+  // the right; either can take the whole width.
+  const split = !!project && !!coordinator;
+  const [side, setSide] = useState<Side | null>(null);
+  const [only, setOnly] = useState<"" | "left" | "right">("");
+  const chatWith = async (agent: string, focus?: string) => {
+    // The coordinator is the home view.
+    if (agent === coordinator && !focus) {
+      setView({ kind: "home" });
+      if (only === "right") setOnly("");
+      return;
+    }
+    const next = { agent, peer: await peerFor(agent), focus, also: project ? othersOf(agent) : undefined };
+    if (split) {
+      setView({ kind: "home" });
+      setSide(next);
+      if (only === "left") setOnly("");
+      return;
+    }
+    setView({ kind: "chat", ...next });
   };
   // A workspace opens its terminal: your exchange with it.
   const open = (r: AgentRow) => {
     const name = r.st.agent.name;
     if (!isWorkspace(r.st.agent)) { void chatWith(name); return; }
-    void peerFor(name).then((peer) => { if (peer) setView({ kind: "pair", agent: name, peer }); });
+    void peerFor(name).then((peer) => {
+      if (!peer) return;
+      if (split) { setView({ kind: "home" }); setSide({ agent: name, peer }); if (only === "left") setOnly(""); }
+      else setView({ kind: "pair", agent: name, peer });
+    });
   };
   const spaceKey = loose ? `${hubId}\u0000*` : `${hubId}\u0000${(space as { name: string }).name}`;
-  useEffect(() => { setView({ kind: "group" }); }, [spaceKey, home]);
+  useEffect(() => { setView({ kind: "home" }); setSide(null); setOnly(""); }, [spaceKey, home]);
+  // Who you are to the coordinator (your chat with it is the home view).
+  const [homePeer, setHomePeer] = useState<string | undefined>(() => (coordinator ? peerIn(recall(pairsKey), coordinator) : undefined) || me);
+  useEffect(() => {
+    if (!coordinator) return;
+    let off = false;
+    void peerFor(coordinator).then((p) => { if (!off) setHomePeer(p || me); });
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordinator, hubId]);
   useEffect(() => {
     if (!openChat) return;
     const r = hubRows.find((x) => x.st.agent.name === openChat.agent);
@@ -125,15 +192,29 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   };
 
   const target = (v: View): ConversationTarget | null => {
-    if (v.kind === "chat") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, project: project?.name, focus: v.focus };
+    if (v.kind === "chat") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, project: project?.name, focus: v.focus, also: v.also };
     if (v.kind === "thread") return { hubId, hubName, threadId: v.threadId, agent: v.agent };
     if (v.kind === "pair") return { hubId, hubName, threadId: "", agent: v.agent, peer: v.peer, focus: v.focus };
     return null;
   };
   const t = target(view);
+  // Narrow windows have no members column: the faces in a row.
+  const strip = (
+    <div className="sp-strip">
+      {[...agents, ...workspaces].map((r) => (
+        <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
+          onClick={() => open(r)}>
+          <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
+        </button>
+      ))}
+      <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
+    </div>
+  );
 
   return (
-    <div className="sp">
+    // With a member open beside the coordinator, a medium window folds the
+    // members column into the row of faces, so both panes have room.
+    <div className={cn("sp", split && side && view.kind === "home" && only !== "left" && "has-side")}>
       <div className="sp-main">
         {t ? (
           <ConversationDetail
@@ -143,9 +224,51 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             now={now}
             showBack
             backLabel={loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
-            onBack={() => setView({ kind: "group" })}
+            onBack={() => setView({ kind: "home" })}
+            role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
+          />
+        ) : project && coordinator && view.kind === "home" ? (
+          <SplitPanes
+            side={side}
+            only={only}
+            onOnly={setOnly}
+            onCloseSide={() => { setSide(null); setOnly(""); }}
+            left={(full) => (
+              <HomeView
+                key={`${spaceKey}\u0000${coordinator}\u0000${homePeer || ""}`}
+                hubId={hubId}
+                hubName={hubName}
+                project={project}
+                coordinator={coordinator}
+                peer={homePeer}
+                rows={rows}
+                now={now}
+                items={feed.items || []}
+                rowOf={rowOf}
+                nameOf={nameOf}
+                onOpenTask={(agent, id) => void chatWith(agent, id)}
+                onActivity={() => setView({ kind: "activity" })}
+                onAbout={onAbout}
+                onChat={(agent) => void chatWith(agent)}
+                strip={strip}
+                fullToggle={side ? full : undefined}
+              />
+            )}
+            right={(actions) => side && (
+              <ConversationDetail
+                key={JSON.stringify(side)}
+                target={{ hubId, hubName, threadId: "", agent: side.agent, peer: side.peer, project: project.name, focus: side.focus, also: side.also }}
+                rows={rows}
+                now={now}
+                showBack={false}
+                onBack={() => setSide(null)}
+                headActions={actions}
+                onNewConversation={(_h, agent) => void chatWith(agent)}
+                onOpen={(_h, agent) => void chatWith(agent)}
+              />
+            )}
           />
         ) : (
           <GroupView
@@ -173,7 +296,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
               if (task && task.from && task.to) {
                 const [agent, peer] = task.to.startsWith("@") ? [task.from, task.to] : [task.to, task.from];
                 if (!agent.startsWith("@")) {
-                  if (isMe(peer, hubRows[0]?.hub)) setView({ kind: "chat", agent, peer, focus });
+                  if (isMe(peer, hubRows[0]?.hub)) setView({ kind: "chat", agent, peer, focus, also: project ? othersOf(agent) : undefined });
+                  else if (project && memberNames.has(agent)) void chatWith(agent, focus);
                   else setView({ kind: "pair", agent, peer, focus });
                   return;
                 }
@@ -185,18 +309,12 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             onAddWorkspace={onAddWorkspace}
             onAbout={onAbout}
             onSent={onRefresh}
-            strip={(
-              // Narrow windows have no members column: the faces in a row.
-              <div className="sp-strip">
-                {[...agents, ...workspaces].map((r) => (
-                  <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
-                    onClick={() => open(r)}>
-                    <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
-                  </button>
-                ))}
-                <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
-              </div>
-            )}
+            feed={feed}
+            // In a project with a coordinator this is All activity: a record
+            // to look back at, with no box to write in.
+            activity={!!project && !!coordinator}
+            onBack={() => setView({ kind: "home" })}
+            strip={strip}
           />
         )}
       </div>
@@ -205,7 +323,11 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         agents={agents}
         workspaces={workspaces}
         loose={loose}
-        selected={view.kind === "chat" ? view.agent : view.kind === "pair" ? view.agent : ""}
+        selected={side && view.kind === "home" && only !== "left" ? side.agent : view.kind === "chat" ? view.agent : view.kind === "pair" ? view.agent : view.kind === "home" ? coordinator || "" : ""}
+        coordinator={coordinator}
+        nameOf={nameOf}
+        now={now}
+        onSetCoordinator={project ? (n) => void setCoordinator(n) : undefined}
         onChat={open}
         onProfile={onOpenMember}
         onAddAgent={onAddAgent}
@@ -226,7 +348,200 @@ export function looseRowsOf(rows: AgentRow[], projects: { hubId: string; p: Proj
 
 // ---------------------------------------------------------------------------
 
-function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onAbout, onSent, strip }: {
+type Feed = { items: RecentItem[] | null; error: unknown; load: () => Promise<void> };
+
+/** The space's tasks (a project's, or the loose agents'), oldest first:
+ *  as last seen at once, then refreshed every few seconds. */
+function useFeed(hubId: string, project: Project | undefined, memberNames: Set<string>): Feed {
+  const itemsKey = `space\u0000${hubId}\u0000${project?.name || "*"}`;
+  const [items, setItemsState] = useState<RecentItem[] | null>(() => recall<RecentItem[]>(itemsKey) ?? null);
+  const [error, setError] = useState<unknown>(null);
+  const names = [...memberNames].sort().join(",");
+  const load = useCallback(async () => {
+    try {
+      const r = await appApi.recent(hubId, project ? { project: project.name } : {});
+      let list = r.items;
+      // Not in a project: the threads with these agents that are in none.
+      if (!project) list = list.filter((it) => !it.project && [...it.participants, it.other || "", it.node || ""].some((p) => memberNames.has(p)));
+      // Oldest first, as a chat reads: by when each task started.
+      list = [...list].sort((a, b) => (a.first?.created_at || a.updated_at).localeCompare(b.first?.created_at || b.updated_at));
+      setItemsState(remember(itemsKey, list));
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubId, project?.name, names]);
+  useEffect(() => {
+    setItemsState(recall<RecentItem[]>(itemsKey) ?? null);
+    void load();
+    const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_MS);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+  return { items, error, load };
+}
+
+/**
+ * The project's home: your conversation with its coordinator. The tasks it
+ * hands out to the others appear in it as small cards, at the time they
+ * were given, with how each is going; a card opens that member's work at
+ * that task.
+ */
+function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items, rowOf, nameOf, onOpenTask, onActivity, onAbout, strip, fullToggle }: {
+  hubId: string;
+  hubName: string;
+  project: Project;
+  coordinator: string;
+  peer?: string;
+  rows: AgentRow[];
+  now: number;
+  items: RecentItem[];
+  rowOf: (n: string) => AgentRow | undefined;
+  nameOf: (n: string) => string;
+  onOpenTask: (agent: string, taskId: string) => void;
+  onActivity: () => void;
+  onAbout?: () => void;
+  onChat: (agent: string) => void;
+  strip?: React.ReactNode;
+  /** with a member open beside it: take the whole width, or give it back */
+  fullToggle?: React.ReactNode;
+}) {
+  const inserts = items.flatMap((it) => {
+    const task = it.task || it.first;
+    if (it.kind !== "thread" || !task || task.type !== "task" || task.from !== coordinator || task.to === coordinator || task.to.startsWith("@")) return [];
+    const to = task.to;
+    const r = rowOf(to);
+    const state = it.state || "";
+    return [{
+      id: task.id,
+      at: task.created_at,
+      node: (
+        <button type="button" className="sp-dispatch" onClick={() => onOpenTask(to, task.id)} title={L("看它怎么做的", "See how it goes")}>
+          <span className="sp-dispatch-label">{L("派给", "To")}</span>
+          {r && <Avatar agent={r.st.agent} size={18} badge={false} />}
+          <span className="sp-dispatch-who">{nameOf(to)}</span>
+          <span className="sp-dispatch-text">{task.body.replace(/\s+/g, " ").trim()}</span>
+          <span className={cn("sp-dispatch-state", `is-${state || "none"}`)}>{dispatchWord(state)}</span>
+          <span className="sp-dispatch-time">{timeAgo(it.updated_at, now)}</span>
+        </button>
+      ),
+    }];
+  });
+  return (
+    <div className="sp-home">
+      <header className="sp-head">
+        <div className="sp-head-titles">
+          <h2>{project.title || project.name}</h2>
+          <p>{project.goal || L("跟协调者说你想做什么，它会把活分给大家。", "Tell the coordinator what you want; it hands the work out.")}</p>
+        </div>
+        <button type="button" className="app-btn app-btn-quiet" onClick={onActivity}>
+          <Activity />{L("全部动态", "All activity")}
+        </button>
+        {onAbout && (
+          <button type="button" className="app-btn app-btn-quiet" onClick={onAbout}>
+            <FileText />{L("项目资料", "Project notes")}
+          </button>
+        )}
+        {fullToggle}
+      </header>
+      {strip}
+      <ConversationDetail
+        target={{ hubId, hubName, threadId: "", agent: coordinator, peer, project: project.name }}
+        rows={rows}
+        now={now}
+        showBack={false}
+        role={L("协调者", "Coordinator")}
+        inserts={inserts}
+        onBack={() => undefined}
+        onNewConversation={() => undefined}
+      />
+    </div>
+  );
+}
+
+/**
+ * Your chat with the coordinator and, beside it, the member you opened.
+ * Drag the line between them to share the width; either can take all of
+ * it, and the right one closes. Where two do not fit, the member's pane
+ * takes the place (closing it brings the coordinator back).
+ */
+function SplitPanes({ side, only, onOnly, onCloseSide, left, right }: {
+  side: Side | null;
+  only: "" | "left" | "right";
+  onOnly: (o: "" | "left" | "right") => void;
+  onCloseSide: () => void;
+  left: (fullToggle: React.ReactNode) => React.ReactNode;
+  right: (actions: React.ReactNode) => React.ReactNode;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [ratio, setRatio] = useState(() => {
+    try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v >= 0.25 && v <= 0.75 ? v : 0.5; } catch { return 0.5; }
+  });
+  const latest = useRef(ratio);
+  const [cramped, setCramped] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setCramped(el.clientWidth < 640));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const drag = (e: React.PointerEvent) => {
+    const el = box.current;
+    if (!el) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    document.body.classList.add("is-resizing");
+    const move = (ev: PointerEvent) => {
+      const r = Math.min(0.75, Math.max(0.25, (ev.clientX - rect.left) / rect.width));
+      latest.current = r;
+      setRatio(r);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("is-resizing");
+      try { localStorage.setItem(SPLIT_KEY, String(latest.current)); } catch { /* not kept */ }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const shown = !side ? "left" : cramped ? (only === "left" ? "left" : "right") : only || "both";
+  const toggle = (pane: "left" | "right") => (
+    <button type="button" className="app-btn app-btn-plain sp-pane-btn" onClick={() => onOnly(only === pane ? "" : pane)}
+      title={only === pane ? L("还原成两栏", "Back to two panes") : L("只看这一栏", "Show only this pane")}
+      aria-label={only === pane ? L("还原成两栏", "Back to two panes") : L("只看这一栏", "Show only this pane")}>
+      {only === pane ? <Minimize2 /> : <Maximize2 />}
+    </button>
+  );
+  return (
+    <div ref={box} className={cn("sp-split", `show-${shown}`)} style={{ ["--split" as string]: `${ratio * 100}%` }}>
+      <div className="sp-pane sp-pane-left">{left(side && !cramped ? toggle("left") : null)}</div>
+      {side && (
+        <>
+          <div className="sp-divider" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
+            onPointerDown={drag} onDoubleClick={() => { setRatio(0.5); latest.current = 0.5; try { localStorage.setItem(SPLIT_KEY, "0.5"); } catch { /* not kept */ } }} />
+          <div className="sp-pane sp-pane-right">
+            {right(
+              <>
+                {!cramped && toggle("right")}
+                <button type="button" className="app-btn app-btn-plain sp-pane-btn" onClick={onCloseSide} title={L("关掉这一栏", "Close this pane")} aria-label={L("关掉这一栏", "Close this pane")}><X /></button>
+              </>,
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function dispatchWord(state: string): string {
+  return state === "done" ? L("做完了", "Done") : state === "failed" ? L("没做成", "Didn't work")
+    : state === "working" ? L("在做", "Working") : state === "queued" ? L("排队中", "Queued") : L("已发出", "Sent");
+}
+
+function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onAbout, onSent, strip, feed, activity, onBack }: {
   hubId: string;
   project?: Project;
   loose: boolean;
@@ -242,38 +557,15 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   onAbout?: () => void;
   onSent: () => void;
   strip?: React.ReactNode;
+  feed: Feed;
+  /** All activity: read-only, with a way back */
+  activity?: boolean;
+  onBack?: () => void;
 }) {
-  // The space's tasks as last seen: shown at once, then refreshed.
-  const itemsKey = `space\u0000${hubId}\u0000${project?.name || "*"}`;
-  const [items, setItemsState] = useState<RecentItem[] | null>(() => recall<RecentItem[]>(itemsKey) ?? null);
-  const setItems = (list: RecentItem[]) => setItemsState(remember(itemsKey, list));
-  const [error, setError] = useState<unknown>(null);
+  const { items, error, load } = feed;
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-
-  const load = useCallback(async () => {
-    try {
-      const r = await appApi.recent(hubId, project ? { project: project.name } : {});
-      let list = r.items;
-      // Not in a project: the threads with these agents that are in none.
-      if (!project) list = list.filter((it) => !it.project && [...it.participants, it.other || "", it.node || ""].some((p) => memberNames.has(p)));
-      // Oldest first, as a chat reads: by when each task started.
-      list = [...list].sort((a, b) => (a.first?.created_at || a.updated_at).localeCompare(b.first?.created_at || b.updated_at));
-      setItems(list);
-      setError(null);
-    } catch (e) {
-      setError(e);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hubId, project?.name, [...memberNames].join(",")]);
-
-  useEffect(() => {
-    setItemsState(recall<RecentItem[]>(itemsKey) ?? null);
-    atBottom.current = true;
-    void load();
-    const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_MS);
-    return () => window.clearInterval(t);
-  }, [load]);
+  void memberNames;
 
   // Keep to the newest, unless someone scrolled up to read.
   useEffect(() => {
@@ -290,15 +582,20 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   return (
     <div className="sp-group">
       <header className="sp-head">
+        {activity && onBack && (
+          <button type="button" className="app-btn app-btn-plain" onClick={onBack} aria-label={L("返回", "Back")} title={L("返回", "Back")}><ArrowLeft /></button>
+        )}
         <div className="sp-head-titles">
-          <h2>{title}</h2>
+          <h2>{activity ? L("全部动态", "All activity") : title}</h2>
           <p>
-            {loose
+            {activity
+              ? L(`「${title}」里所有成员之间的任务，留着回头查。`, `Every task between the members of ${title}, to look back at.`)
+              : loose
               ? L("这些 agent 还没放进项目。建个项目把它们放进去，它们就能一起干活。", "These agents are not in a project yet. Put them in one so they can work together.")
               : project?.goal || L("给一个成员派活，看它们一起干。", "Give a member a task and watch them work together.")}
           </p>
         </div>
-        {!loose && onAbout && (
+        {!loose && !activity && onAbout && (
           <button type="button" className="app-btn app-btn-quiet" onClick={onAbout}>
             <FileText />{L("项目资料", "Project notes")}
           </button>
@@ -329,7 +626,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
         </div>
       </div>
 
-      {agents.length > 0 && <Composer hubId={hubId} project={project} agents={agents} onSent={sent} />}
+      {agents.length > 0 && !activity && <Composer hubId={hubId} project={project} agents={agents} onSent={sent} />}
     </div>
   );
 }
@@ -535,11 +832,31 @@ function Composer({ hubId, project, agents, onSent }: {
 
 // ---------------------------------------------------------------------------
 
-function MembersPanel({ agents, workspaces, loose, selected, onChat, onProfile, onAddAgent, onAddWorkspace }: {
+/** What a member is doing now, in a line, and since when and for whom. */
+function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { text: string; meta?: string } {
+  const a = r.st.agent;
+  if (r.st.state === "offline") return { text: L("不在线", "Away"), meta: a.last_seen_at ? timeAgo(a.last_seen_at, now) : undefined };
+  const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
+  const doing = open.find((m) => m.status === "acked" || m.status === "delivered") || (r.st.state === "working" ? open[0] : undefined);
+  if (r.st.state === "working" || doing) {
+    const text = a.status_text || (doing ? doing.body.replace(/\s+/g, " ").trim() : "") || L("在干活", "Working");
+    const meta = doing ? [L(`${nameOf(doing.from)}派的`, `from ${nameOf(doing.from)}`), timeAgo(doing.created_at, now)].join(" · ") : undefined;
+    const queued = r.st.queued > 0 ? L(` · 还有 ${r.st.queued} 个排队`, ` · ${r.st.queued} queued`) : "";
+    return { text, meta: meta ? meta + queued : queued.replace(/^ · /, "") || undefined };
+  }
+  if (r.st.queued > 0) return { text: L(`${r.st.queued} 个活在排队`, `${r.st.queued} queued`) };
+  return { text: a.description || stateWords(r.st.state) };
+}
+
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace }: {
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
   selected: string;
+  coordinator?: string;
+  nameOf: (n: string) => string;
+  now: number;
+  onSetCoordinator?: (name: string) => void;
   onChat: (r: AgentRow) => void;
   onProfile: (r: AgentRow) => void;
   onAddAgent: () => void;
@@ -556,15 +873,27 @@ function MembersPanel({ agents, workspaces, loose, selected, onChat, onProfile, 
         className={cn("sp-member", selected === a.name && "active", r.st.state === "offline" && "is-away")}
         onClick={() => onChat(r)}
         onContextMenu={(e) => menu.open(e, [
-          { label: ws ? L("打开终端", "Open terminal") : L("单聊", "Chat"), onSelect: () => onChat(r) },
+          { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
+          ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
           { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
         ])}
         title={a.description || nodeName(a, r.hub)}
       >
         <Avatar agent={a} size={32} state={r.st.state} />
         <span className="sp-member-text">
-          <span className="sp-member-name">{nodeName(a, r.hub)}</span>
-          <span className="sp-member-sub">{ws ? whereOf(r) : r.st.state === "working" ? stateWords("working", a.status_text) : a.description || stateWords(r.st.state)}</span>
+          <span className="sp-member-name">
+            <span className="sp-member-name-text">{nodeName(a, r.hub)}</span>
+            {a.name === coordinator && <span className="sp-role">{L("协调者", "Coordinator")}</span>}
+          </span>
+          {ws ? <span className="sp-member-sub">{whereOf(r)}</span> : (() => {
+            const line = liveLine(r, nameOf, now);
+            return (
+              <>
+                <span className={cn("sp-member-sub", r.st.state === "working" && "is-working")}>{line.text}</span>
+                {line.meta && <span className="sp-member-meta">{line.meta}</span>}
+              </>
+            );
+          })()}
         </span>
       </button>
     );

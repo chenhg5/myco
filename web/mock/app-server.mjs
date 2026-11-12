@@ -70,6 +70,16 @@ const coordT1 = coordTask("审查 PR 128（节点别名）：接口、权限和�
 const coordT2 = coordTask("再看一下 multihub 分支：hub 拒绝 token 之后，缓存还会不会被写回去。", 1460, "acked");
 const coordT3 = coordTask("最后写一段 v0.18.40 的发布说明草稿，放进项目资料。", 1420, "queued");
 const coordSays = (type, task, body, ago) => makeMessage({ thread_id: "th_coord", from: "review-cloud", to: "release-cloud", type, reply_to: task.id, status: "done", body, created_at: iso(ago), updated_at: iso(ago) });
+// The coordinator handing work out in 官网改版, after it was asked for the
+// release notes: the docs page is done, the deploy check is under way.
+const dispatchDocs = [
+  makeMessage({ thread_id: "th_dispatch_docs", project: "website", from: "pm-codex", to: "docs-claude", type: "task", status: "done", body: "把文档站首页的「升级注意事项」按 v0.16.8 的发布说明更新一下。", created_at: iso(6900), updated_at: iso(6900) }),
+  makeMessage({ thread_id: "th_dispatch_docs", project: "website", from: "docs-claude", to: "pm-codex", type: "reply", status: "done", body: "改好了：`docs/upgrade.md` 加了 v0.16.8 一节，首页的链接也指过去了。", created_at: iso(6500), updated_at: iso(6500) }),
+];
+const dispatchRelease = [
+  makeMessage({ thread_id: "th_dispatch_release", project: "website", from: "pm-codex", to: "release-cloud", type: "task", status: "acked", body: "在预发环境装一遍 v0.16.8，确认下载页的链接都能下到对的文件。", created_at: iso(6600), updated_at: iso(240) }),
+  makeMessage({ thread_id: "th_dispatch_release", project: "website", from: "release-cloud", to: "pm-codex", type: "progress", status: "done", body: "macOS 和 Linux 的包都下好了，正在核对 Windows 的。", created_at: iso(240), updated_at: iso(240) }),
+];
 const coordThread = [
   coordT1, coordT2, coordT3,
   coordSays("progress", coordT1, "已拉下 PR 128，正在看 handler 和权限检查。", 1300),
@@ -296,7 +306,7 @@ const state = {
       ok: true,
       hub_version: "0.16.6",
       update_available: true,
-      threads: { th_release: studioThread, th_coord: coordThread, ...consoleThreads },
+      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",

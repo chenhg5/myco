@@ -311,71 +311,78 @@ async function runMatrix(browser, size, scheme) {
     currentStep = "启动";
     await page.goto(`${BASE}/?lang=zh`, { waitUntil: "domcontentloaded" });
     await page.locator(".app-shell").waitFor();
-    await page.locator(".sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
+    await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
     await settle(page);
 
-    // A project: its members' tasks as a group, a box to give one a task.
-    await step("项目 · 群聊", async () => {
+    // A project opens on your chat with its coordinator; the tasks it hands
+    // out are cards in that chat; the members column says what each does.
+    await step("项目 · 和协调者聊", async () => {
       await go(page, "官网改版", narrow);
-      await page.locator(".sp-card").first().waitFor({ timeout: 20_000 });
-      const to = compactText(await page.locator(".sp-to-name").innerText());
-      if (!to) throw new Error("群聊的输入框应写明发给谁");
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      const sub = compactText(await page.locator(".sp-home .conv-head p").innerText());
+      if (!sub.includes("协调者")) throw new Error(`项目首页应是和协调者的对话，标题下写的是「${sub}」`);
+      await page.locator(".sp-dispatch").first().waitFor({ timeout: 20_000 });
+      const card = compactText(await page.locator(".sp-dispatch").first().innerText());
+      if (!card.startsWith("派给")) throw new Error(`派活卡片应写明派给谁，实际是「${card}」`);
+      if (!narrow) await page.locator(".sp-side .sp-role", { hasText: "协调者" }).waitFor({ timeout: 10_000 });
       await settle(page);
-      await shot(page, size, scheme, "project-group");
+      await shot(page, size, scheme, "project-home");
     });
 
-    await step("项目 · 派活", async () => {
-      const body = `smoke ${size.width} ${scheme}：把首页的标题改短一点。`;
-      const input = page.locator(".sp-compose-input");
-      // The box grows with several lines instead of scrolling one.
-      const oneLine = await input.evaluate((el) => el.getBoundingClientRect().height);
-      await input.fill("第一行\n第二行\n第三行\n第四行");
-      const grown = await input.evaluate((el) => ({ h: el.getBoundingClientRect().height, scrolls: el.scrollHeight > el.clientHeight + 1 }));
-      if (grown.h < oneLine * 2.5 || grown.scrolls) throw new Error(`输入框应随内容变高而不出现滚动条：一行 ${oneLine}px，四行 ${grown.h}px，滚动 ${grown.scrolls}`);
-      await settle(page, 200);
-      await shot(page, size, scheme, "project-compose-lines");
-      await input.fill(body);
-      await input.press("Enter");
-      const card = page.locator(".sp-card", { hasText: body });
-      await card.waitFor({ timeout: 20_000 });
-      const who = compactText(await card.locator(".sp-card-who").innerText());
-      if (!who.startsWith("你")) throw new Error(`派出去的任务应写明是你发的，实际是「${who}」`);
-      await settle(page, 300);
-      await shot(page, size, scheme, "project-sent");
-      // A task opens its conversation; Back returns to the group.
-      await card.click();
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
-      await page.locator(".conv-msg", { hasText: body }).first().waitFor({ timeout: 20_000 });
-      await clickVisible(page, page.locator(".conv-head button").first());
-      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
-      // An older task opens the whole conversation of the two, at that task.
-      const older = "整理 v0.16.8 的发布说明";
-      await clickVisible(page, page.locator(".sp-card", { hasText: older }));
-      const msg = page.locator(".conv-msg", { hasText: older }).first();
-      await msg.waitFor({ timeout: 20_000 });
-      await page.waitForFunction((text) => {
-        const box = document.querySelector(".conv-scroll, .conv-body")?.getBoundingClientRect();
-        const el = [...document.querySelectorAll(".conv-msg")].find((m) => (m.textContent || "").includes(text));
-        if (!el) return false;
+    // A card opens that member's work beside the coordinator: what the
+    // coordinator asked (named) and its answers, with yours, at that task.
+    await step("项目 · 派出的活", async () => {
+      const text = "升级注意事项";
+      await clickVisible(page, page.locator(".sp-dispatch", { hasText: text }));
+      const right = page.locator(".sp-pane-right");
+      await right.locator(".conv-msg.is-other", { hasText: text }).first().waitFor({ timeout: 20_000 });
+      await page.waitForFunction((t) => {
+        const box = document.querySelector(".sp-pane-right .conv-scroll")?.getBoundingClientRect();
+        const el = [...document.querySelectorAll(".sp-pane-right .conv-msg")].find((m) => (m.textContent || "").includes(t));
+        if (!el || !box) return false;
         const r = el.getBoundingClientRect();
-        const top = box ? box.top : 0, bottom = box ? box.bottom : window.innerHeight;
-        return r.bottom > top && r.top < bottom;
-      }, older, { timeout: 10_000 });
-      if (await page.locator(".conv-msg").count() < 3) throw new Error("点任务应打开两人的完整对话，而不只是这一条");
+        return r.bottom > box.top && r.top < box.bottom;
+      }, text, { timeout: 10_000 });
+      const head = compactText(await right.locator(".conv-head h2").innerText());
+      if (!/docs-claude/.test(head)) throw new Error(`派活卡片应打开接活的成员，实际是「${head}」`);
+      // Wide enough, the coordinator stays on the left.
+      if (!narrow && !(await page.locator(".sp-pane-left .sp-home").isVisible())) throw new Error("打开成员时，和协调者的对话应该还在左边");
       await settle(page, 300);
-      await shot(page, size, scheme, "project-open-task");
-      await clickVisible(page, page.locator(".conv-head button").first());
-      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
+      await shot(page, size, scheme, "project-member-work");
+      await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
+      await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // Everything between the members, to look back at: no box to write in.
+    await step("项目 · 全部动态", async () => {
+      await clickVisible(page, page.locator(".sp-head .app-btn", { hasText: "全部动态" }));
+      await page.locator(".sp-group .sp-card").first().waitFor({ timeout: 20_000 });
+      if (await page.locator(".sp-group .sp-compose").count()) throw new Error("全部动态是记录，不该有输入框");
+      await settle(page);
+      await shot(page, size, scheme, "project-activity");
+      await clickVisible(page, page.locator(".sp-head button[aria-label='返回']"));
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // A member opens on the right; either pane can take the whole width.
     await step("项目 · 单聊", async () => {
-      if (narrow) await clickVisible(page, page.locator(".sp-strip-face:not(.is-add)"));
-      else await clickVisible(page, page.locator(".sp-side .sp-member"));
-      await page.locator(".conv-detail .conv-head-faces .pa").first().waitFor({ timeout: 20_000 });
+      if (narrow) await clickVisible(page, page.locator(".sp-strip-face:not(.is-add)").nth(1));
+      else await clickVisible(page, page.locator(".sp-side .sp-member").nth(1));
+      const right = page.locator(".sp-pane-right");
+      await right.locator(".conv-head-faces .pa").first().waitFor({ timeout: 20_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "project-chat");
-      await clickVisible(page, page.locator(".conv-head button").first());
-      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
+      if (!narrow) {
+        await clickVisible(page, right.getByRole("button", { name: "只看这一栏" }));
+        await page.locator(".sp-split.show-right").waitFor({ timeout: 5_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "project-chat-full");
+        await clickVisible(page, right.getByRole("button", { name: "还原成两栏" }));
+        await page.locator(".sp-split.show-both").waitFor({ timeout: 5_000 });
+      }
+      await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
     // Three ways in, as tabs: a session on this computer joins with a click;
@@ -443,7 +450,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page);
       await shot(page, size, scheme, "project-notes");
       await clickVisible(page, page.getByRole("button", { name: "返回项目" }));
-      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
     await step("还没进项目的", async () => {
@@ -453,6 +460,27 @@ async function runMatrix(browser, size, scheme) {
       if (title !== "还没进项目的") throw new Error(`这里应该是还没进项目的 agent，实际标题「${title}」`);
       await settle(page);
       await shot(page, size, scheme, "loose");
+    });
+
+    // Without a project, the group has a box that says whom a task goes to.
+    await step("还没进项目的 · 派活", async () => {
+      const to = compactText(await page.locator(".sp-to-name").innerText());
+      if (!to) throw new Error("输入框应写明发给谁");
+      const body = `smoke ${size.width} ${scheme}：把首页的标题改短一点。`;
+      const input = page.locator(".sp-compose-input");
+      // The box grows with several lines instead of scrolling one.
+      const oneLine = await input.evaluate((el) => el.getBoundingClientRect().height);
+      await input.fill("第一行\n第二行\n第三行\n第四行");
+      const grown = await input.evaluate((el) => ({ h: el.getBoundingClientRect().height, scrolls: el.scrollHeight > el.clientHeight + 1 }));
+      if (grown.h < oneLine * 2.5 || grown.scrolls) throw new Error(`输入框应随内容变高而不出现滚动条：一行 ${oneLine}px，四行 ${grown.h}px，滚动 ${grown.scrolls}`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "compose-lines");
+      await input.fill(body);
+      await input.press("Enter");
+      const card = page.locator(".sp-card", { hasText: body });
+      await card.waitFor({ timeout: 20_000 });
+      const who = compactText(await card.locator(".sp-card-who").innerText());
+      if (!who.startsWith("你")) throw new Error(`派出去的任务应写明是你发的，实际是「${who}」`);
     });
 
     await step("单聊 · 只回一句话", async () => {
