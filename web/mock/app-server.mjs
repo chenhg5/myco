@@ -764,6 +764,13 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
     hub.threads.th_console_stuck_stopped = [stuckOlderTask, stoppedAfterTask];
+    // What the previous pass sent legacy-codex (the resends, the text-only
+    // and tool-call tasks) goes too: each pass starts with the stuck tasks
+    // as the newest in that conversation.
+    for (const [id, msgs] of Object.entries(hub.threads)) {
+      if (id === "th_console_stuck" || id === "th_console_stuck_stopped") continue;
+      if (msgs.some((m) => m.from === "legacy-codex" || m.to === "legacy-codex")) delete hub.threads[id];
+    }
     return send(res, 200, { ok: true });
   }
 

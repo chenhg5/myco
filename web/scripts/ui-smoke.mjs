@@ -470,10 +470,17 @@ async function runMatrix(browser, size, scheme) {
         null,
         { timeout: 10_000 },
       );
-      const note = page.locator(".conv-stuck");
+      // The conversation also holds the older stuck task (the next step's):
+      // every stuck task gets its own line, so take this task's, the one
+      // right under its message.
+      const mine = '.conv-msg[data-msg="msg_stuck_legacy"] + .conv-stuck';
+      if (await page.locator(".conv-stuck").count() < 2) {
+        throw new Error("对话里两处卡住的任务应各有一行说明");
+      }
+      const note = page.locator(mine);
       await note.waitFor({ timeout: 10_000 });
       const noteText = compactText(await note.innerText());
-      if (!noteText.includes("没有动静") || !noteText.includes("可能卡住")) {
+      if (!noteText.includes("45 分钟没有动静") || !noteText.includes("可能卡住")) {
         throw new Error(`卡住的任务应有一行说明，实际是「${noteText}」`);
       }
       const spins = await page.locator(".conv-detail .trace-spin").count();
@@ -482,7 +489,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-stuck");
       const body = "把旧版 runner 的日志整理到 docs/legacy.md。";
       await clickVisible(page, note.getByRole("button", { name: "重发" }));
-      await page.waitForFunction(() => !document.querySelector(".conv-stuck"), null, { timeout: 10_000 });
+      await page.waitForFunction((sel) => !document.querySelector(sel), mine, { timeout: 10_000 });
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail")?.textContent || "").includes("已停止"),
         null,
@@ -504,7 +511,9 @@ async function runMatrix(browser, size, scheme) {
         const back = page.locator(".conv-head button").first();
         if (await back.isVisible().catch(() => false)) await back.click();
       }
-      const row = page.locator(".conv-row:visible", { hasText: "顺便把旧版 runner 的配置贴一份给我" }).first();
+      // Your conversations list one row per node: this task is in the
+      // conversation with legacy-codex, under the one resent just before.
+      const row = page.locator(".conv-row:visible", { hasText: "legacy-codex" }).first();
       await row.waitFor({ timeout: 20_000 });
       await row.click();
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -513,7 +522,8 @@ async function runMatrix(browser, size, scheme) {
         null,
         { timeout: 10_000 },
       );
-      const note = page.locator(".conv-stuck").first();
+      const older = '.conv-msg[data-msg="msg_stuck_older"] + .conv-stuck';
+      const note = page.locator(older);
       await note.waitFor({ timeout: 10_000 });
       const noteText = compactText(await note.innerText());
       // 19 hours ago and no active_at in the mock: updated_at is the fallback.
@@ -526,7 +536,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-stuck-older");
       const body = "把旧版 runner 的配置文件检查一遍。";
       await clickVisible(page, note.getByRole("button", { name: "重发" }));
-      await page.waitForFunction(() => !document.querySelector(".conv-stuck"), null, { timeout: 10_000 });
+      await page.waitForFunction((sel) => !document.querySelector(sel), older, { timeout: 10_000 });
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail")?.textContent || "").includes("已停止"),
         null,

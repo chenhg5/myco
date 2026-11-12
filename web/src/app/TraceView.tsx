@@ -103,12 +103,14 @@ function usageLine(u?: TraceStep): string {
  * results, and what it said, as the runner reported them. Live while the task
  * runs; folded into one line afterwards (loaded when opened).
  */
-export function TraceView({ hubId, task, onGrow, waiting }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** why it has not started yet, when known (the session is open elsewhere) */
   waiting?: string;
+  /** its answer is in the conversation: done, even if its status lags */
+  answered?: boolean;
 }) {
-  const running = isOpen(task.status);
+  const running = isOpen(task.status) && !answered;
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));

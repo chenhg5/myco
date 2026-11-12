@@ -289,10 +289,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub));
   const lastTask = consoleTasks[consoleTasks.length - 1];
+  // An answer names its task (reply_to); one that does not (older runners)
+  // counts when it came after the task in the same thread. Replies to other
+  // tasks still open here (say, one just resent) do not close the newest.
   const answered = !!lastTask && (messages || []).some((m) =>
     (m.type === "reply" || m.type === "event") &&
     m.id !== lastTask.id &&
-    new Date(m.created_at).getTime() >= new Date(lastTask.created_at).getTime(),
+    (m.reply_to
+      ? m.reply_to === lastTask.id
+      : m.thread_id === lastTask.thread_id && new Date(m.created_at).getTime() >= new Date(lastTask.created_at).getTime()),
   );
   const openTask = lastTask && isOpen(lastTask.status) && !answered ? lastTask : null;
 
@@ -784,7 +789,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} />)}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} />)}
         </Fragment>
       );
   };
