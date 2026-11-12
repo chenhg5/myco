@@ -26,6 +26,10 @@ static void mycoClearBackgrounds(NSView *v) {
 // macOS keeps titled windows below the menu bar (constrainFrameRect); the
 // island belongs on top of it, over the notch.
 static NSRect mycoNoConstrain(id self, SEL _cmd, NSRect r, NSScreen *s) { return r; }
+// A borderless window cannot become key by default, and the web view in it
+// then drops clicks (pointing still works). The island may become key; as a
+// non-activating panel that leaves the app you are in active.
+static BOOL mycoCanBecomeKey(id self, SEL _cmd) { return YES; }
 
 // The island's window: borderless (no frame, corners or edge of its own),
 // non-activating, and free to sit over the menu bar. Only this window's
@@ -36,12 +40,18 @@ static void mycoIslandFree(NSWindow *window) {
 	if (!done) {
 		Method m = class_getInstanceMethod([window class], sel);
 		class_replaceMethod([window class], sel, (IMP)mycoNoConstrain, m ? method_getTypeEncoding(m) : "{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@");
+		class_replaceMethod([window class], @selector(canBecomeKeyWindow), (IMP)mycoCanBecomeKey, "c@:");
 		done = YES;
 	}
 	NSWindowStyleMask mask = NSWindowStyleMaskBorderless;
 	if ([window isKindOfClass:[NSPanel class]]) mask |= NSWindowStyleMaskNonactivatingPanel;
 	if (window.styleMask != mask) window.styleMask = mask;
 	if (window.contentView) mycoClearBackgrounds(window.contentView);
+}
+
+// Brings the app to the front (the island itself never activates it).
+static void mycoActivate(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; });
 }
 
 // The screen with a notch (a MacBook's built-in display), else the first.
@@ -118,6 +128,9 @@ type island struct {
 	win  *application.WebviewWindow
 	open func(hub, agent string)
 }
+
+// activateApp brings the app in front, for a member picked in the island.
+func activateApp() { C.mycoActivate() }
 
 // notchSize reports the notch (width 0 without one) in points.
 func notchSize() (w, h float64) {

@@ -125,6 +125,16 @@ export function Island() {
     window.setTimeout(() => { if (live) void frame(COMPACT_W + 2 * EAR, NH, true); }, 340);
   };
 
+  const openMember = (b: Busy) => {
+    setOpen(false);
+    void fetch("app/island/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hub: b.hubId, agent: b.agent.name }),
+    }).catch(() => undefined);
+    window.setTimeout(() => { if (live) void frame(COMPACT_W + 2 * EAR, NH, true); }, 340);
+  };
+
   const pillW = !shown ? Math.max(NW, 40) : open ? OPEN_W : COMPACT_W;
   const pillH = open ? openH : NH;
   const first = busy[0];
@@ -157,11 +167,9 @@ export function Island() {
               key={`${b.hubId}/${b.agent.name}`}
               type="button"
               className="isl-row"
-              onClick={() => void fetch("app/island/open", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ hub: b.hubId, agent: b.agent.name }),
-              }).catch(() => undefined)}
+              // On press (a panel that is not in front may not see a whole
+              // click), once; then the island folds back into the notch.
+              onMouseDown={(e) => { e.preventDefault(); openMember(b); }}
             >
               <Avatar agent={b.agent} size={28} badge={false} />
               <span className="isl-row-text">

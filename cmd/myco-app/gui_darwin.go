@@ -79,6 +79,7 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	// the app at that member.
 	isl = newIsland(app, func(hub, agent string) {
 		show()
+		activateApp()
 		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent})
 		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
 	})
