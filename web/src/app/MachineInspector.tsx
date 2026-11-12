@@ -380,7 +380,7 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
               {machine.online && (
                 <>
                   <div style={{ marginTop: 6 }}>{L("那台电脑上的 runner 会被拒绝并停下。要彻底卸载，在那台电脑上运行：", "Its runner on that computer will be refused and stop. To remove it completely, run this on that computer:")}</div>
-                  <div className="app-command"><code>myco service uninstall</code><CopyButton value="myco service uninstall" /></div>
+                  <div className="app-command"><code>myco runner service uninstall</code><CopyButton value="myco runner service uninstall" /></div>
                 </>
               )}
             </div>

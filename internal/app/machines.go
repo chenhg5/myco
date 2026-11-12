@@ -90,6 +90,19 @@ func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*doma
 			return nil, nil, err
 		}
 	}
+	// An enrollment may have registered a node between the first list and
+	// revocation. Include it now that no further registrations can start.
+	all, err = s.agents.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	names = names[:0]
+	for _, a := range all {
+		if a.MachineID == id || ownedEnrollment[a.EnrolledBy] {
+			names = append(names, string(a.Name))
+		}
+	}
+	sort.Strings(names)
 	for _, name := range names {
 		if _, err := s.agentService.Remove(ctx, name, false); err != nil {
 			return nil, nil, err
