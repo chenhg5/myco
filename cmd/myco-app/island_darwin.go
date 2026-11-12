@@ -10,6 +10,8 @@ package main
 #import <objc/runtime.h>
 #import <math.h>
 
+static NSScreen *mycoNotchScreen(int *notched);
+
 // Nothing behind the page is drawn: the web view's own (white) background
 // and the views holding it are made clear, so only the pill shows.
 static void mycoClearBackgrounds(NSView *v) {
