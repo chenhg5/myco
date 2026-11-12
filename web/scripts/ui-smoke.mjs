@@ -352,7 +352,7 @@ async function runMatrix(browser, size, scheme) {
         { timeout: 10_000 },
       );
       const dialogText = compactText(await dialog.innerText());
-      for (const want of ["2 个节点会一起删除", "对话记录保留", "myco service uninstall"]) {
+      for (const want of ["2 个节点会一起删除", "对话记录保留", "myco runner service uninstall"]) {
         if (!dialogText.includes(want)) {
           throw new Error(`删除机器弹窗里应提到「${want}」，实际是「${dialogText}」`);
         }
@@ -653,6 +653,10 @@ async function runMatrix(browser, size, scheme) {
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
     await step("对话 · 可能卡住", async () => {
+      // Earlier steps of this pass sent legacy-codex tasks of their own: put
+      // the stuck demo tasks back as the newest open ones in that conversation.
+      const again = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/stuck`, { method: "POST" });
+      if (!again.ok) throw new Error(`重置「可能卡住」的演示任务失败：HTTP ${again.status}`);
       await go(page, "对话", narrow);
       if (narrow) {
         const back = page.locator(".conv-head button").first();
