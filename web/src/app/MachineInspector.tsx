@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ver } from "./nodes";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { appApi, type HubOverview } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, canManage, cliName, kindLabel, nodeIcon, osInfo, nodeName } from "@/app/nodes";
 import { NodePicker } from "@/app/NodePicker";
+import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
@@ -25,26 +26,48 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [allowOpen, setAllowOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  // What a dry run says would go with the machine: null while it is loading.
+  const [removed, setRemoved] = useState<string[] | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState<unknown>(null);
 
   useEffect(() => {
     setRenameOpen(false);
     setAllowOpen(false);
+    setRemoveOpen(false);
+    setRemoved(null);
     setName("");
     setBusy(false);
     setError(null);
+    setRemoveBusy(false);
+    setRemoveError(null);
   }, [target?.hubId, target?.machineId]);
 
-  // Escape closes it, like the node inspector (not while renaming).
+  // Escape closes it, like the node inspector (not while a dialog is open).
   useEffect(() => {
     if (!target) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !renameOpen && !allowOpen) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !renameOpen && !allowOpen && !removeOpen) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [target, renameOpen, allowOpen, onClose]);
+  }, [target, renameOpen, allowOpen, removeOpen, onClose]);
+
+  // Deleting is a dry run first: show exactly which nodes go with the
+  // machine before anything is removed.
+  useEffect(() => {
+    if (!removeOpen || !target) return;
+    let off = false;
+    setRemoved(null);
+    setRemoveError(null);
+    appApi.removeMachine(target.hubId, target.machineId, true)
+      .then((r) => { if (!off) setRemoved(r.removed); })
+      .catch((e) => { if (!off) setRemoveError(e); });
+    return () => { off = true; };
+  }, [removeOpen, target]);
 
   const hub = target ? hubs?.find((h) => h.id === target.hubId) : undefined;
   const machine = target ? hub?.overview?.machines?.find((m) => m.id === target.machineId) : undefined;
@@ -90,6 +113,9 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
   const spawners = machineNode?.allow_from || [];
   const anySpawner = spawners.length === 0 || spawners.includes("*");
   const mayManage = !!machineNode && canManage(hub, machineNode.owner_id);
+  // A machine's owner and the hub's owner/admin may delete it; members may
+  // not delete machines that are not theirs.
+  const mayDelete = canManage(hub, machine.owner_id);
   const nameOf = (n: string) => { const x = hub.overview?.agents.find((y) => y.agent.name === n); return x ? nodeName(x.agent, hub) : n; };
   const openAllow = () => {
     setAllowFrom(spawners);
@@ -116,8 +142,33 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
     }
   };
 
+  const openRemove = () => {
+    setRemoved(null);
+    setRemoveError(null);
+    setRemoveOpen(true);
+  };
+  const remove = async () => {
+    if (removeBusy) return;
+    setRemoveBusy(true);
+    setRemoveError(null);
+    try {
+      await appApi.removeMachine(target.hubId, target.machineId);
+      setRemoveOpen(false);
+      onClose();
+      await onRefresh();
+    } catch (e) {
+      setRemoveError(e);
+    } finally {
+      setRemoveBusy(false);
+    }
+  };
+
   const os = osInfo(machine.os);
   const OsIcon = os.icon;
+  const removedCount = removed?.length ?? 0;
+  const removeLabel = removedCount > 0
+    ? L(`删除机器和 ${removedCount} 个节点`, `Delete machine and ${removedCount} node${removedCount === 1 ? "" : "s"}`)
+    : L("删除机器", "Delete machine");
 
   return (
     <>
@@ -180,6 +231,11 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
               >
                 {L("在这台机器上开新会话", "Start a new session on this machine")}<span className="app-chev">›</span>
               </button>
+              {mayDelete && (
+                <button type="button" className="app-action-row danger" onClick={openRemove}>
+                  {L("删除这台机器", "Delete this machine")}<span className="app-chev">›</span>
+                </button>
+              )}
             </div>
             {!machine.can_spawn && (
               <div className="app-small-note" style={{ marginTop: 8 }}>
@@ -291,6 +347,53 @@ export function MachineInspector({ target, hubs, rows, now, onClose, onRefresh, 
           </div>
         </Modal>
       )}
+
+      <Modal
+        open={removeOpen}
+        onOpenChange={(o) => { if (!o && !removeBusy) { setRemoveOpen(false); setRemoveError(null); } }}
+        title={L(`删除机器 ${machine.name}？`, `Delete machine ${machine.name}?`)}
+        description={L("这台机器会从 Hub 上永久删除，不能撤销。", "This machine is permanently deleted from the Hub and can’t be undone.")}
+      >
+        {removed === null && !removeError && (
+          <div className="app-empty-note">{L("正在查看会一起删除的节点…", "Looking at the nodes that go with it…")}</div>
+        )}
+        {removed !== null && removed.length > 0 && (
+          <div className="app-list">
+            {removed.map((n) => {
+              const label = nameOf(n);
+              return (
+                <div className="app-kv" key={n}>
+                  <span className="app-kv-label">{label}</span>
+                  {label !== n && <span className="app-kv-value mono">{n}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {removed !== null && (
+          <div className="app-warn">
+            <AlertTriangle />
+            <div>
+              <div>{removedCount > 0
+                ? L(`这台机器上的 ${removedCount} 个节点会一起删除；对话记录保留。`, `The ${removedCount} node${removedCount === 1 ? "" : "s"} on this machine ${removedCount === 1 ? "is" : "are"} deleted too; conversations are kept.`)
+                : L("这台机器上没有节点；对话记录保留。", "There are no nodes on this machine; conversations are kept.")}</div>
+              {machine.online && (
+                <>
+                  <div style={{ marginTop: 6 }}>{L("那台电脑上的 runner 会被拒绝并停下。要彻底卸载，在那台电脑上运行：", "Its runner on that computer will be refused and stop. To remove it completely, run this on that computer:")}</div>
+                  <div className="app-command"><code>myco service uninstall</code><CopyButton value="myco service uninstall" /></div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        <ErrorText error={removeError} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => { setRemoveOpen(false); setRemoveError(null); }} disabled={removeBusy}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-danger" onClick={() => void remove()} disabled={removeBusy || removed === null}>
+            {removeBusy ? L("正在删除…", "Deleting…") : removeLabel}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }

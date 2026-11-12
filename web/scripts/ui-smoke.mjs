@@ -278,6 +278,9 @@ async function runMatrix(browser, size, scheme) {
   // running, so put it back before each width and theme.
   const reset = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/stuck`, { method: "POST" });
   if (!reset.ok) throw new Error(`重置「可能卡住」的演示任务失败：HTTP ${reset.status}`);
+  // The machine-delete step removes the demo machine and its nodes.
+  const resetMachine = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/machine`, { method: "POST" });
+  if (!resetMachine.ok) throw new Error(`重置演示机器失败：HTTP ${resetMachine.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -327,6 +330,49 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-page .app-row:visible, .app-page .app-empty:visible").first().waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "machines");
+    });
+
+    // Delete a machine: dry run first, the nodes are listed, the online
+    // machine shows the uninstall command, and both the machine and its
+    // nodes are gone from the lists afterwards.
+    await step("机器 · 删除", async () => {
+      await go(page, "机器", narrow);
+      await clickVisible(page, page.locator(".app-row:visible", { hasText: "临时 Mac" }));
+      const inspector = page.locator(".app-inspector");
+      await inspector.waitFor({ timeout: 10_000 });
+      await clickVisible(page, inspector.getByRole("button", { name: "删除这台机器" }));
+      const dialog = page.locator(".app-modal");
+      await dialog.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(
+        () => {
+          const text = document.querySelector(".app-modal")?.textContent || "";
+          return text.includes("临时 Codex") && text.includes("临时 Shell");
+        },
+        null,
+        { timeout: 10_000 },
+      );
+      const dialogText = compactText(await dialog.innerText());
+      for (const want of ["2 个节点会一起删除", "对话记录保留", "myco service uninstall"]) {
+        if (!dialogText.includes(want)) {
+          throw new Error(`删除机器弹窗里应提到「${want}」，实际是「${dialogText}」`);
+        }
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "dialog-delete-machine");
+      await clickVisible(page, dialog.getByRole("button", { name: "删除机器和 2 个节点" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+      await inspector.waitFor({ state: "detached", timeout: 10_000 });
+      await page.waitForFunction(
+        () => ![...document.querySelectorAll(".app-page .app-row")].some((r) => (r.textContent || "").includes("临时 Mac")),
+        null,
+        { timeout: 10_000 },
+      );
+      await go(page, "节点", narrow);
+      await page.waitForFunction(
+        () => ![...document.querySelectorAll(".app-page .app-row")].some((r) => /临时 (Codex|Shell)/.test(r.textContent || "")),
+        null,
+        { timeout: 10_000 },
+      );
     });
 
     await step("对话", async () => {

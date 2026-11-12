@@ -36,6 +36,13 @@ export interface NewHub { name: string; url: string; token: string }
 /** A console link (`https://host/c/myco_console_…`) added to the App. */
 export interface NewHubLink { name?: string; link: string }
 export interface PendingLink { link: string }
+/** What deleting a machine removes: the machine and the nodes on it. */
+export interface MachineRemoval {
+  machine: Machine;
+  /** node names (display names are resolved by the App) */
+  removed: string[];
+  dry_run: boolean;
+}
 export interface ProfileInput { display_name?: string; description?: string }
 
 /** CLIs that a machine can be asked to start a new session with. */
@@ -439,6 +446,9 @@ export const appApi = {
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
   renameMachine: (hubId: string, machineId: string, name: string) =>
     request<Machine>("PATCH", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}`, { name }),
+  /** Removes a machine and every node on it. dryRun lists them first. */
+  removeMachine: (hubId: string, machineId: string, dryRun = false) =>
+    request<MachineRemoval>("DELETE", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}${dryRun ? "?dry_run=true" : ""}`),
   /** Creates a one-off enrollment link for adding another machine to this hub. */
   createJoinLink: (hubId: string, input: JoinLinkInput = {}) =>
     request<JoinLink>("POST", `app/hubs/${enc(hubId)}/links`, input),

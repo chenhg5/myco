@@ -133,6 +133,35 @@ const stoppedAfterTask = makeMessage({
   updated_at: iso(2 * 60 * 60),
 });
 
+// A machine the smoke test deletes, with two nodes and its own machine node.
+// POST /app/mock/machine puts them back between widths and themes.
+const deletableMachine = () => ({
+  id: "m_delete", name: "临时 Mac", hostname: "temp-mac.local", os: "darwin", arch: "arm64",
+  myco_version: "0.18.39", online: true, last_seen_at: iso(5), can_spawn: true,
+  owner: "glenn", owner_id: "mem_glenn",
+});
+const deletableAgents = () => [
+  makeAgent({
+    name: "temp-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Codex",
+    description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
+    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace" },
+    binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
+    labels: ["machine=temp-mac"],
+  }),
+  makeAgent({
+    name: "temp-shell", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Shell",
+    description: "临时机器上的 shell 节点。", kind: "shell", machine_id: "m_delete",
+    runtime: { cli: "shell", access: "workspace" },
+    binding: { harness: "shell", environment: "macOS 26.1", workdir: "~/code/temp" },
+    labels: ["machine=temp-mac"],
+  }),
+  makeAgent({
+    name: "temp-mac-machine", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Mac",
+    kind: "machine", machine_id: "m_delete",
+    labels: ["machine=temp-mac"], binding: { harness: "machine" },
+  }),
+];
+
 // Earlier turns of the conversation with PM (Codex), so the chat is long
 // enough to scroll and its turn rail has something to show.
 const earlierTurns = [
@@ -278,6 +307,7 @@ const state = {
           id: "m_office", name: "Office PC", hostname: "office-pc", os: "windows", arch: "amd64",
           myco_version: "0.16.6", online: true, last_seen_at: iso(90), can_spawn: true,
         },
+        deletableMachine(),
       ],
       agents: [
         makeAgent({
@@ -354,6 +384,7 @@ const state = {
           name: "bench-01-machine", display_name: "Bench Linux", kind: "machine", machine_id: "m_bench",
           labels: ["machine=bench-01"], binding: { harness: "machine" },
         }),
+        ...deletableAgents(),
       ],
       recent: [
         makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
@@ -777,6 +808,20 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
     hub.threads.th_console_stuck_stopped = keep("th_console_stuck_stopped", [stuckOlderTask, stoppedAfterTask]);
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/machine — the smoke test deletes the demo machine; put it and its
+  // nodes back, because the mock keeps running across widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "machine" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    if (hub) {
+      const machine = deletableMachine();
+      hub.machines = [...(hub.machines || []).filter((m) => m.id !== machine.id), machine];
+      hub.agents = hub.agents.filter((a) => a.machine_id !== machine.id);
+      hub.agents.push(...deletableAgents());
+    }
     return send(res, 200, { ok: true });
   }
 
@@ -1457,6 +1502,20 @@ const server = http.createServer(async (req, res) => {
         machine.name = name;
         const agents = hub.agents.filter((a) => a.kind !== "machine" && a.machine_id === machine.id).length;
         return send(res, 200, { ...machine, agents });
+      }
+      if (method === "DELETE") {
+        const dry = url.searchParams.get("dry_run") === "true" || url.searchParams.get("dry_run") === "1";
+        // The nodes shown to the user; the machine's own node goes too, but it
+        // is not a node anyone can see in the list.
+        const removed = hub.agents
+          .filter((a) => a.machine_id === machine.id && a.kind !== "machine")
+          .map((a) => a.name);
+        if (!dry) {
+          await sleep(400);
+          hub.agents = hub.agents.filter((a) => a.machine_id !== machine.id);
+          hub.machines = (hub.machines || []).filter((m) => m.id !== machine.id);
+        }
+        return send(res, 200, { machine, removed, dry_run: dry });
       }
     }
 
