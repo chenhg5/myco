@@ -110,8 +110,16 @@ function mergeById(ms: Message[], changed: Message[]): Message[] {
   return [...by.values()].sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** While a conversation loads for the first time: its shape, not a word. */
+/** While a conversation loads for the first time: its shape, not a word.
+ *  Only after a moment: a load that is quick shows nothing in between,
+ *  instead of a blink of placeholders. */
 function LoadingSkeleton({ shell }: { shell: boolean }) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setLate(true), 220);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!late) return <div className="conv-skel-list" aria-busy="true" aria-label={L("正在加载", "Loading")} />;
   if (shell) {
     return (
       <div className="term conv-skel-term" aria-busy="true" aria-label={L("正在加载", "Loading")}>

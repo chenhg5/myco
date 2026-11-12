@@ -25,6 +25,9 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
 
 const SPLIT_KEY = "myco-space-split";
+// The members column, and the least each pane needs.
+const SIDE_W = 248;
+const PANE_MIN = 320;
 
 type View =
   | { kind: "home" }
@@ -217,6 +220,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     return null;
   };
   const t = target(view);
+  const spRef = useRef<HTMLDivElement>(null);
+  const [spWidth, setSpWidth] = useState(0);
+  useEffect(() => {
+    const el = spRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSpWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // Narrow windows have no members column: the faces in a row.
   const strip = (
     <div className="sp-strip">
@@ -231,9 +243,9 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   );
 
   return (
-    // With a member open beside the coordinator, a medium window folds the
-    // members column into the row of faces, so both panes have room.
-    <div className={cn("sp", split && side && view.kind === "home" && only !== "left" && "has-side")}>
+    // With a member open beside the coordinator, a window too small for two
+    // panes and the members column folds the column into the row of faces.
+    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only !== "left" && spWidth - SIDE_W < 2 * PANE_MIN && "has-side")}>
       <div className="sp-main">
         {t ? (
           <ConversationDetail
@@ -504,29 +516,34 @@ function SplitPanes({ side, only, onOnly, onCloseSide, left, right }: {
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setCramped(el.clientWidth < 640));
+    const ro = new ResizeObserver(() => setCramped(el.clientWidth < 2 * PANE_MIN));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const drag = (e: React.PointerEvent) => {
+  // Dragging the line: from where it is, by how far the pointer moves
+  // (grabbing it a few pixels to one side must not make it jump there).
+  const dragFrom = useRef<{ x: number; ratio: number; width: number } | null>(null);
+  const dragStart = (e: React.PointerEvent<HTMLDivElement>) => {
     const el = box.current;
     if (!el) return;
     e.preventDefault();
-    const rect = el.getBoundingClientRect();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragFrom.current = { x: e.clientX, ratio: latest.current, width: el.getBoundingClientRect().width };
     document.body.classList.add("is-resizing");
-    const move = (ev: PointerEvent) => {
-      const r = Math.min(0.75, Math.max(0.25, (ev.clientX - rect.left) / rect.width));
-      latest.current = r;
-      setRatio(r);
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      document.body.classList.remove("is-resizing");
-      try { localStorage.setItem(SPLIT_KEY, String(latest.current)); } catch { /* not kept */ }
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+  };
+  const dragMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragFrom.current;
+    if (!d) return;
+    const r = Math.min(0.75, Math.max(0.25, d.ratio + (e.clientX - d.x) / d.width));
+    latest.current = r;
+    setRatio(r);
+  };
+  const dragEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragFrom.current) return;
+    dragFrom.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    document.body.classList.remove("is-resizing");
+    try { localStorage.setItem(SPLIT_KEY, String(latest.current)); } catch { /* not kept */ }
   };
   const shown = !side ? "left" : cramped ? (only === "left" ? "left" : "right") : only || "both";
   const toggle = (pane: "left" | "right") => (
@@ -542,7 +559,7 @@ function SplitPanes({ side, only, onOnly, onCloseSide, left, right }: {
       {side && (
         <>
           <div className="sp-divider" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
-            onPointerDown={drag} onDoubleClick={() => { setRatio(0.5); latest.current = 0.5; try { localStorage.setItem(SPLIT_KEY, "0.5"); } catch { /* not kept */ } }} />
+            onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd} onDoubleClick={() => { setRatio(0.5); latest.current = 0.5; try { localStorage.setItem(SPLIT_KEY, "0.5"); } catch { /* not kept */ } }} />
           <div className="sp-pane sp-pane-right">
             {right(
               <>

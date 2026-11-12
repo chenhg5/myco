@@ -1685,6 +1685,13 @@
 }
 .sp-pane-right {
   flex: 1 1 0;
+  animation: sp-pane-in 0.16s ease-out;
+}
+@keyframes sp-pane-in {
+  from { opacity: 0; transform: translateX(10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-pane-right { animation: none; }
 }
 .sp-pane > .sp-home,
 .sp-pane > .conv-detail {
@@ -1700,6 +1707,9 @@
 .sp-divider {
   flex: none;
   position: relative;
+  /* its grip reaches over both panes */
+  z-index: 2;
+  touch-action: none;
   width: 1px;
   background: var(--line);
   cursor: col-resize;
@@ -1729,7 +1739,7 @@ body.is-resizing {
   margin-left: 4px;
 }
 
-@media (min-width: 901px) and (max-width: 1399px) {
+@media (min-width: 901px) {
   .sp.has-side .sp-side {
     display: none;
   }
