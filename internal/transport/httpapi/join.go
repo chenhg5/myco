@@ -18,21 +18,33 @@ type joinView struct {
 	PSCommand        string // irm ... | iex (Windows PowerShell)
 	Expires, Uses    string
 	Exec             bool
-	AllowFrom        string
-	Error            string
+	// Project is the project the agent then joins (myco join --project),
+	// from a link of the form /j/{token}/{project}; empty without one.
+	Project   string
+	AllowFrom string
+	Error     string
 	// ErrorEN is Error in English, for the PowerShell script: Windows
 	// PowerShell 5.1 can misread non-ASCII text, so that script is ASCII.
 	ErrorEN string
 }
 
-// joinPage serves GET /j/{token}: a shell script for curl/wget, a Markdown
-// guide for agents (?format=md or Accept: text/markdown) and an HTML page
-// for browsers. The link is only validated here; machines use it through
-// POST /v1/join (run by the script).
+// joinPage serves GET /j/{token} and /j/{token}/{project}: a shell script
+// for curl/wget, a Markdown guide for agents (?format=md or Accept:
+// text/markdown) and an HTML page for browsers. The link is only validated
+// here; machines use it through POST /v1/join (run by the script). The
+// script and the guide end with the agent's last step (myco join, with the
+// project when the link names one), so one short sentence is all an agent
+// needs to be given.
 func (s *Server) joinPage(w http.ResponseWriter, r *http.Request) {
 	tok := r.PathValue("token")
 	base := s.publicBase(r)
 	v := joinView{Hub: base, Link: base + "/j/" + tok, Token: tok}
+	// A project name is a plain slug (safe in the script); anything else is
+	// ignored rather than echoed.
+	if p, err := domain.ParseProjectName(r.PathValue("project")); err == nil && p != "" {
+		v.Project = p
+		v.Link += "/" + p
+	}
 	v.Command = "curl -fsSL " + v.Link + " | bash"
 	v.PSCommand = "irm '" + v.Link + "?format=ps1' | iex"
 	link, err := s.enroll.PeekLink(r.Context(), tok)
@@ -157,6 +169,22 @@ if [ -z "$MYCO" ]; then
 fi
 "$MYCO" machine join --format text
 unset MYCO_JOIN_TOKEN
+{{- if not .Exec}}
+cat <<'MYCO_NEXT'
+
+==> This machine is on myco. One step left, in the agent session that ran this:
+
+    myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
+
+    Fill in the quotes yourself: a short role (2-6 words, e.g. Backend engineer,
+    Reviewer, Ops) and one line on what you look after.{{if .Project}} It joins you to the
+    project "{{.Project}}" too.{{end}}
+    Then stay reachable as its "receive" output says: where no runner service wakes
+    this session (a claude.ai cloud session, say), keep
+    "myco inbox wait --timeout 55m" running in the background and read what it
+    reports with "myco inbox pull".
+MYCO_NEXT
+{{- end}}
 {{- end}}
 `))
 
@@ -192,6 +220,15 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
     $myco = (Get-Command myco.exe -ErrorAction SilentlyContinue).Source
     if (-not $myco) { $myco = Join-Path $env:LOCALAPPDATA 'Programs\myco\myco.exe' }
     & $myco machine join --format text
+{{- if not .Exec}}
+    Write-Host ''
+    Write-Host '==> This machine is on myco. One step left, in the agent session that ran this:'
+    Write-Host ''
+    Write-Host '    myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"'
+    Write-Host ''
+    Write-Host '    Fill in the quotes yourself: a short role (2-6 words) and one line on what you look after.'
+    Write-Host '    Then stay reachable as its "receive" output says.'
+{{- end}}
   } finally {
     Remove-Item Env:MYCO_JOIN_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:MYCO_NO_DOCTOR -ErrorAction SilentlyContinue
@@ -223,10 +260,12 @@ different machines find and message each other. Do this:
    commands. Make sure your user really wants that before running it.
 {{- else}}
 
-2. Register this session as an agent:
+2. Register this session as an agent, saying who you are:
 
-       myco join
+       myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
 
+   Fill in the quotes yourself: a short role (2-6 words, e.g. Backend engineer, Reviewer, Ops)
+   and one line on what you look after.{{if .Project}} --project puts you in the project "{{.Project}}".{{end}}
    It detects Claude Code (local and claude.ai cloud) and Codex sessions. If it cannot find the
    session, it says so: then pass --session-id with your session's id. Do not invent one.
 

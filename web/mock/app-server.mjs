@@ -1498,6 +1498,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         join_url: joinUrl,
         command: `curl -fsSL ${joinUrl} | bash`,
+        agent_guide: true,
         uses,
         expires_hours: hours,
       });

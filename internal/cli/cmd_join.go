@@ -224,6 +224,8 @@ node right away.`,
 					return errorf("invalid_argument", ExitUsage, "pass the whole link, e.g. https://hub.example.com/j/myco_enroll_...", "not a join link: %q", l)
 				}
 				hub, tok = l[:i], strings.Trim(l[i+3:], "/ ")
+				// A link may name a project after the token (/j/<token>/<project>).
+				tok, _, _ = strings.Cut(tok, "/")
 			}
 			if hub == "" || tok == "" {
 				return errorf("not_configured", ExitUsage, "pass --link <join link>, or run the link's script: curl -fsSL <link> | bash",

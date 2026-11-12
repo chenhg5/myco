@@ -169,6 +169,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
               setView({ kind: "thread", threadId: it.thread_id, agent });
             }}
             onAddAgent={onAddAgent}
+            onAddWorkspace={onAddWorkspace}
             onAbout={onAbout}
             onSent={onRefresh}
             strip={(
@@ -212,7 +213,7 @@ export function looseRowsOf(rows: AgentRow[], projects: { hubId: string; p: Proj
 
 // ---------------------------------------------------------------------------
 
-function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAbout, onSent, strip }: {
+function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onAbout, onSent, strip }: {
   hubId: string;
   project?: Project;
   loose: boolean;
@@ -224,6 +225,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   now: number;
   onOpenThread: (it: RecentItem) => void;
   onAddAgent: () => void;
+  onAddWorkspace?: () => void;
   onAbout?: () => void;
   onSent: () => void;
   strip?: React.ReactNode;
@@ -300,7 +302,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           <ErrorText error={error} />
           {items && items.length === 0 && (
             agents.length === 0 ? (
-              <EmptyProject loose={loose} onAddAgent={onAddAgent} />
+              <EmptyProject loose={loose} onAddAgent={onAddAgent} onAddWorkspace={onAddWorkspace} />
             ) : (
               <div className="sp-feed-empty">
                 <AvatarStack agents={agents.map((r) => r.st.agent)} size={40} max={5} />
@@ -319,13 +321,16 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   );
 }
 
-function EmptyProject({ loose, onAddAgent }: { loose: boolean; onAddAgent: () => void }) {
+function EmptyProject({ loose, onAddAgent, onAddWorkspace }: { loose: boolean; onAddAgent: () => void; onAddWorkspace?: () => void }) {
   return (
     <div className="sp-empty">
       <div className="sp-empty-art"><Mushroom idle /></div>
       <h3>{loose ? L("还没有 agent", "No agents yet") : L("项目建好了，拉几个 agent 进来吧", "Your project is ready. Bring in a few agents")}</h3>
-      <p>{L("复制一句话发给你的 Claude Code、Codex 或任何 AI，它就会自己加入。可以一口气加好几个。", "Copy one sentence to your Claude Code, Codex or any AI, and it joins by itself. Add as many as you like.")}</p>
-      <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
+      <p>{L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
+      <div className="sp-empty-actions">
+        <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
+        {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一台电脑", "Add a computer")}</button>}
+      </div>
     </div>
   );
 }

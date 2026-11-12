@@ -843,7 +843,7 @@ func (b *Backend) Handler() http.Handler {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"join_url": res.JoinURL, "command": "curl -fsSL " + res.JoinURL + " | bash"})
+		writeJSON(w, http.StatusOK, map[string]any{"join_url": res.JoinURL, "command": "curl -fsSL " + res.JoinURL + " | bash", "agent_guide": res.AgentGuide})
 	}))
 	return m
 }

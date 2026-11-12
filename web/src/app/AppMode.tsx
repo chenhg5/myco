@@ -16,7 +16,7 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
-import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm } from "@/app/AddToProject";
+import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
@@ -202,7 +202,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
         const missing = agents.filter((a) => !allow.includes(a) && !shared.current.has(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
         if (!missing.length) continue;
         missing.forEach((a) => shared.current.add(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
-        void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow, ...missing]).catch(() => undefined);
+        // A computer added before any agent was locked to nobody: they take its place.
+        void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow.filter((n) => !isNobody(n)), ...missing]).catch(() => undefined);
       }
     }
   }, [projects, allRows]);

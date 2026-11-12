@@ -73,7 +73,13 @@ export interface SpawnResult {
   reply: string;
 }
 export interface JoinLinkInput { uses?: number; expires_hours?: number }
-export interface JoinLink { join_url: string; command: string }
+export interface JoinLink {
+  join_url: string;
+  command: string;
+  /** the hub's join script ends with the agent's last step, and
+   *  join_url + "/" + project joins that project too (older hubs: absent) */
+  agent_guide?: boolean;
+}
 
 /** A Claude Code or Codex session on this computer, found from its transcript. */
 export interface LocalSession {

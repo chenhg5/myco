@@ -346,25 +346,35 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-group").waitFor({ timeout: 10_000 });
     });
 
-    // One sentence to copy; a session on this computer joins with a click,
-    // shows up at once and goes into the project.
+    // Three ways in, as tabs: a session on this computer joins with a click;
+    // the sentence is short (the link carries the project and the steps);
+    // a new session starts on a computer. Each shows up at once.
     await step("项目 · 添加 agent", async () => {
       if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
       else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
       const dialog = page.locator(".app-modal-add");
       await dialog.waitFor();
-      // The sentence carries the project, and asks the agent to say who it is.
-      await page.waitForFunction(() => {
-        const t = document.querySelector(".add-sentence-text")?.textContent || "";
-        return t.includes("myco join --project ") && t.includes("--display-name");
-      }, null, { timeout: 10_000 });
       await dialog.locator(".add-local-row button").first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
       await dialog.locator(".add-local-row button").first().click();
       await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
+
+      await clickVisible(page, dialog.getByRole("tab", { name: "发一句话" }));
+      await page.waitForFunction(() => {
+        const t = document.querySelector(".add-sentence-text")?.textContent || "";
+        return /\/j\/\S+\/\S+ \| bash/.test(t) && t.includes("最后的输出") && !t.includes("inbox wait");
+      }, null, { timeout: 10_000 });
       await settle(page, 300);
-      await shot(page, size, scheme, "add-agent-joined");
+      await shot(page, size, scheme, "add-agent-link");
+
+      await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
+      await dialog.locator(".ws-computer.active").first().waitFor({ timeout: 10_000 });
+      await dialog.locator("input.app-input.mono").fill("~/code/website");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-new");
+      await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
+      await dialog.locator(".add-arrived").nth(1).waitFor({ timeout: 20_000 });
       await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
       await page.locator(".app-modal").waitFor({ state: "hidden" });
     });

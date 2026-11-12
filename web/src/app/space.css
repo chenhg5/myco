@@ -1261,3 +1261,62 @@
   height: 74%;
   color: inherit;
 }
+
+/* Adding an agent: three ways, as tabs. */
+.add-tabs {
+  margin-top: 14px;
+}
+.add-pane {
+  margin-top: 14px;
+}
+.add-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.add-pane > .add-note:first-child {
+  margin-bottom: 10px;
+}
+.add-sessions + .add-note {
+  margin-top: 8px;
+}
+.add-search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.add-sessions {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0 -4px;
+}
+.add-local-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--muted);
+}
+.add-local-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.add-local-row.is-taken {
+  opacity: 0.5;
+}
+.add-start {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.add-pane .app-field + .app-field {
+  margin-top: 12px;
+}
+.sp-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}

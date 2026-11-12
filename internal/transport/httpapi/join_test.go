@@ -111,6 +111,40 @@ func TestJoinPageValidLink(t *testing.T) {
 	}
 }
 
+// A link with a project after the token ends its script and guide with
+// the agent's last step, project included; the response says so.
+func TestJoinPageProject(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	tok, _, _ := h.createLink(nil)
+	r := h.do("POST", "/v1/enrollments", adminToken, map[string]any{"kind": "link"}).want(t, 201)
+	if r.body["agent_guide"] != true {
+		t.Fatalf("link response lacks agent_guide: %s", r.raw)
+	}
+	curl := map[string]string{"User-Agent": "curl/8.5.0"}
+	body := string(h.doReq("GET", "/j/"+tok+"/web-redo", "", nil, curl).want(t, 200).raw)
+	for _, want := range []string{"export MYCO_JOIN_TOKEN='" + tok + "'", `myco join --project web-redo --display-name "<your role>"`, "myco inbox wait --timeout 55m"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("script lacks %q:\n%s", want, body)
+		}
+	}
+	md := string(h.do("GET", "/j/"+tok+"/web-redo?format=md", "", nil).want(t, 200).raw)
+	for _, want := range []string{"curl -fsSL " + h.url + "/j/" + tok + "/web-redo | bash", "myco join --project web-redo --display-name"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("guide lacks %q:\n%s", want, md)
+		}
+	}
+	// Without a project the last step is still there; a name that is not a
+	// project name is not echoed.
+	plain := string(h.doReq("GET", "/j/"+tok, "", nil, curl).want(t, 200).raw)
+	if !strings.Contains(plain, `myco join --display-name "<your role>"`) || strings.Contains(plain, "--project") {
+		t.Errorf("plain script:\n%s", plain)
+	}
+	odd := string(h.doReq("GET", "/j/"+tok+"/Bad$Name", "", nil, curl).want(t, 200).raw)
+	if strings.Contains(odd, "Bad") || strings.Contains(odd, "--project") {
+		t.Errorf("odd project echoed:\n%s", odd)
+	}
+}
+
 func TestJoinPageUnusableLinks(t *testing.T) {
 	h := newHub(t, app.DefaultMessagePolicy())
 	revokedTok, revokedID, _ := h.createLink(nil)

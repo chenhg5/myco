@@ -476,6 +476,10 @@ type CreateEnrollmentResponse struct {
 	DryRun     bool       `json:"dry_run,omitempty"`
 	// JoinURL is set for links: the page/script a machine opens to join.
 	JoinURL string `json:"join_url,omitempty"`
+	// AgentGuide: the join script and guide end with the agent's last step
+	// (myco join), and JoinURL + "/" + a project name joins that project
+	// too. Older hubs leave it out; give their agents the steps yourself.
+	AgentGuide bool `json:"agent_guide,omitempty"`
 }
 
 // JoinRequest is the body of POST /v1/join (authenticated with a link).

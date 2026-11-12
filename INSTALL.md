@@ -645,7 +645,7 @@ spawn:
 - `~/.myco/machine.yaml` 里第一个加入的 Hub 是默认的，之后加入的列在 `others` 下；`spawn` 规则对所有 Hub 都生效。
 - 每个 Hub 上各有一个机器节点，同一个后台 runner 一起服务。
 - 会话加入时默认进第一个 Hub，要进别的 Hub：`myco join --hub <Hub 地址>`。App 里"本机的 agent"会按你选的 Hub 加入。
-- 加入时顺便进一个项目：`myco join --project <项目>`（能看到的项目才行，比如主人和你是同一个人的项目）；进不去时 join 照样成功，输出里说明原因。App 在项目里「添加 agent」给出的那句话已经带上了 `--project`。
+- 加入时顺便进一个项目：`myco join --project <项目>`（能看到的项目才行，比如主人和你是同一个人的项目）；进不去时 join 照样成功，输出里说明原因。App 在项目里「添加 agent」给出的那句话只有一条命令：`curl -fsSL <入网链接>/<项目> | bash`。链接后面加上项目名，脚本装好 myco 以后会在最后告诉 agent 该运行的 `myco join --project <项目> --display-name … --description …`（旧版 Hub 不支持这种链接，App 会改给完整的步骤）。
 - 同名的节点在不同 Hub 上，配置文件会以 `<名字>@<Hub 主机>.yaml` 区分。
 
 ### 4.14 几个人共用一个 Hub（团队）

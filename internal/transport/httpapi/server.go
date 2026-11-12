@@ -173,6 +173,7 @@ func (s *Server) routes() {
 	// A machine joins with a link; /j/{token} serves the link's script/page.
 	m.HandleFunc("POST /v1/join", s.join)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
+	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)
 	// An app link opened in a browser: say how to use it (never echoes
 	// whether the token is valid).
 	m.HandleFunc("GET /c/{token}", s.appLinkPage)
@@ -627,6 +628,7 @@ func (s *Server) createEnrollment(w http.ResponseWriter, r *http.Request) {
 	resp := api.CreateEnrollmentResponse{Enrollment: enrollmentDTO(e, s.agents.Now()), Token: tok, DryRun: dry}
 	if e.Kind == domain.EnrollmentLink && tok != "" {
 		resp.JoinURL = s.publicBase(r) + "/j/" + tok
+		resp.AgentGuide = true
 	}
 	writeJSON(w, status, resp)
 }

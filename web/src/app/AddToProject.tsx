@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Monitor } from "lucide-react";
-import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState } from "@/appapi";
+import { Check } from "lucide-react";
+import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type SpawnCli } from "@/appapi";
+import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
@@ -20,10 +21,24 @@ export async function shareWorkspaces(hubId: string, project: Project, rows: Age
   const members = new Set(project.members.map((m) => m.name));
   const spaces = rows.filter((r) => r.hub.id === hubId && members.has(r.st.agent.name) && isWorkspace(r.st.agent));
   await Promise.all(spaces.map((r) => {
-    const now = (r.st.agent.allow_from || []).filter((x) => x !== "*");
+    const now = (r.st.agent.allow_from || []).filter((x) => x !== "*" && !isNobody(x));
     if (now.includes(agent)) return null;
     return appApi.updateAllowFrom(hubId, r.st.agent.name, [...now, agent]).catch(() => null);
   }));
+}
+
+/**
+ * A computer added to a project before any agent is in it is locked to a
+ * name no agent has (an empty list would let every agent in); the first
+ * agents to join take its place.
+ */
+export function nobody(): string {
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  return `nobody-${[...a].map((b) => (b % 36).toString(36)).join("")}`;
+}
+export function isNobody(name: string): boolean {
+  return /^nobody-[a-z0-9]{8}$/.test(name);
 }
 
 /** Puts an agent in a project, and lets it use the project's workspaces. */
@@ -33,22 +48,39 @@ async function addToProject(hubId: string, project: Project | undefined, rows: A
   await shareWorkspaces(hubId, p, rows, agent);
 }
 
-// The one sentence an agent needs: get myco onto its computer, join this
-// network from inside its own session, and say who it is.
-function joinSentence(command: string, project?: string): string {
-  // The project travels with the sentence: myco join --project puts the
-  // agent in it as soon as it has joined (it can see its owner's projects).
+// What to tell an agent so it joins. A hub that guides agents itself
+// (agent_guide) takes the project in the link, and its script ends with
+// the last step: the sentence is just the command. Older hubs need the
+// steps spelled out.
+function joinSentence(link: JoinLink, project?: string): string {
+  if (link.agent_guide) {
+    const command = project ? `curl -fsSL ${link.join_url}/${project} | bash` : link.command;
+    return L(`加入 myco：在终端运行 ${command} ，再照它最后的输出做完。`, `Join myco: run ${command} in a terminal, then do what its last lines say.`);
+  }
   const into = project ? ` --project ${project}` : "";
   return L(
-    `加入 myco：在终端运行 ${command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。`,
-    `Join myco: run ${command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait --timeout 55m running in the background, and read what it reports with myco inbox pull.`,
+    `加入 myco：在终端运行 ${link.command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。`,
+    `Join myco: run ${link.command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait --timeout 55m running in the background, and read what it reports with myco inbox pull.`,
   );
 }
 
+type AddTab = "local" | "link" | "new";
+
+const NEW_CLIS: { value: SpawnCli; label: string }[] = [
+  { value: "claude", label: "Claude Code" },
+  { value: "codex", label: "Codex" },
+  { value: "gemini", label: "Gemini CLI" },
+  { value: "cursor", label: "Cursor" },
+  { value: "opencode", label: "OpenCode" },
+  { value: "kiro", label: "Kiro" },
+  { value: "pi", label: "Pi" },
+];
+
 /**
- * Adding agents: one sentence to copy into any AI session, which then joins
- * by itself; or a session on this computer, picked from a list. Whoever
- * joins while this is open shows up here at once, and goes into the project.
+ * Adding agents, three ways (tabs): a session already on this computer,
+ * one sentence for any AI session anywhere, or a new one started on one of
+ * your computers. Whoever joins while this is open shows up at the bottom,
+ * and goes into the project.
  */
 export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
   open: boolean;
@@ -59,11 +91,14 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
   onAdded: () => void;
 }) {
   const hubId = hub?.id || "";
+  const [tab, setTab] = useState<AddTab>("local");
+  const touched = useRef(false);
   const [link, setLink] = useState<JoinLink | null>(null);
   const [linkError, setLinkError] = useState<unknown>(null);
   const [joined, setJoined] = useState<string[]>([]);
   const [sessions, setSessions] = useState<LocalSession[] | null>(null);
   const [sessionsError, setSessionsError] = useState<unknown>(null);
+  const [query, setQuery] = useState("");
   const [joining, setJoining] = useState("");
   const [joinError, setJoinError] = useState<unknown>(null);
   // Who was already there when this opened: anyone new has just joined.
@@ -74,15 +109,25 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
     if (!open) return;
     before.current = new Set(rows.filter((r) => r.hub.id === hubId).map((r) => r.st.agent.name));
     adding.current = new Set();
+    touched.current = false;
+    setTab("local");
     setJoined([]);
     setLink(null);
     setLinkError(null);
     setJoinError(null);
     setSessions(null);
     setSessionsError(null);
+    setQuery("");
     if (!hubId) return;
     appApi.createJoinLink(hubId, { uses: 10, expires_hours: 168 }).then(setLink).catch(setLinkError);
-    appApi.localSessions().then((r) => setSessions(r.sessions)).catch(setSessionsError);
+    appApi.localSessions().then((r) => {
+      setSessions(r.sessions);
+      // Nothing on this computer to add: the sentence is the way.
+      if (!touched.current && !r.sessions.some((s) => !s.joined)) setTab("link");
+    }).catch((e) => {
+      setSessionsError(e);
+      if (!touched.current) setTab("link");
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, hubId]);
 
@@ -102,15 +147,19 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, open]);
 
+  const arrived = async (agent: string) => {
+    adding.current.add(agent);
+    await addToProject(hubId, project, rows, agent).catch(() => undefined);
+    setJoined((j) => (j.includes(agent) ? j : [...j, agent]));
+    onAdded();
+  };
+
   const joinLocal = async (s: LocalSession) => {
     setJoining(s.session_id);
     setJoinError(null);
     try {
       const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true });
-      adding.current.add(r.agent);
-      await addToProject(hubId, project, rows, r.agent).catch(() => undefined);
-      setJoined((j) => (j.includes(r.agent) ? j : [...j, r.agent]));
-      onAdded();
+      await arrived(r.agent);
     } catch (e) {
       setJoinError(e);
     } finally {
@@ -118,63 +167,219 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
     }
   };
 
+  const pick = (t: AddTab) => { touched.current = true; setTab(t); };
   const rowOf = (n: string) => rows.find((r) => r.hub.id === hubId && r.st.agent.name === n);
-  const where = project ? L(`「${project.title || project.name}」`, `“${project.title || project.name}”`) : L("这里", "here");
-  const free = (sessions || []).filter((s) => !s.joined).slice(0, 6);
+  const where = project ? L(`「${project.title || project.name}」`, `“${project.title || project.name}”`) : L("这个工作区", "this workspace");
+  const q = query.trim().toLowerCase();
+  const list = (sessions || []).filter((s) => !q || [s.title, s.workdir, s.cli].some((x) => (x || "").toLowerCase().includes(q)));
+  const free = list.filter((s) => !s.joined);
+  const taken = list.filter((s) => s.joined);
+  const sentence = link ? joinSentence(link, project?.name) : "";
 
   return (
-    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("添加 agent", "Add an agent")}
-      description={L(`把下面这句话发给你的 agent，它会自己加入${where}。Claude Code、Codex 或任何 AI 会话都可以，可以一口气发给好几个。`, `Send this sentence to your agent and it joins ${where} by itself. Claude Code, Codex or any AI session works; send it to as many as you like.`)}
+    <Modal open={open} onOpenChange={(o) => !o && !joining && onClose()} title={L("添加 agent", "Add an agent")}
+      description={L(`给${where}加一个 AI 同事。`, `Bring an AI teammate into ${where}.`)}
       className="app-modal-add">
-      <div className="add-sentence">
-        {link ? (
-          <>
-            <p className="add-sentence-text">{joinSentence(link.command, project?.name)}</p>
-            <div className="add-sentence-actions"><CopyButton value={joinSentence(link.command, project?.name)} /></div>
-          </>
-        ) : linkError ? <ErrorText error={linkError} /> : <p className="add-sentence-text is-loading">{L("正在准备…", "Getting it ready…")}</p>}
+      <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么加", "How")}>
+        {([
+          ["local", L("这台电脑上的", "On this computer")],
+          ["link", L("发一句话", "Send a sentence")],
+          ["new", L("新开一个", "Start a new one")],
+        ] as const).map(([v, label]) => (
+          <button key={v} type="button" role="tab" aria-selected={tab === v} className={cn("seg-btn", tab === v && "active")} onClick={() => pick(v)}>{label}</button>
+        ))}
       </div>
 
-      {/* Who has joined while this was open: they show up as they arrive. */}
-      <div className="add-joined" aria-live="polite">
-        {joined.length === 0 ? (
-          <div className="add-waiting"><Mushroom idle /><span>{L("发出去以后，加入的 agent 会出现在这里。", "Once you've sent it, the agents that join show up here.")}</span></div>
-        ) : joined.map((n) => {
-          const r = rowOf(n);
-          return (
-            <div key={n} className="add-arrived">
-              {r && <Avatar agent={r.st.agent} size={32} />}
-              <span><b>{r ? nodeName(r.st.agent, r.hub) : n}</b>{L(" 加入了", " joined")}</span>
-              <Check className="add-ok" />
-            </div>
-          );
-        })}
-      </div>
+      {tab === "local" && (
+        <div className="add-pane">
+          {sessions === null && !sessionsError ? (
+            <div className="add-waiting"><Mushroom /><span>{L("正在找这台电脑上的会话…", "Looking for sessions on this computer…")}</span></div>
+          ) : sessionsError ? (
+            <ErrorText error={sessionsError} />
+          ) : (sessions || []).length === 0 ? (
+            <div className="app-empty-note">{L("这台电脑上最近没有 Claude Code 或 Codex 会话。可以「发一句话」给别处的 agent，或者「新开一个」。", "No recent Claude Code or Codex sessions here. Send a sentence to an agent elsewhere, or start a new one.")}</div>
+          ) : (
+            <>
+              {(sessions || []).length > 6 && (
+                <input className="app-input add-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个会话：标题、文件夹", "Find a session: title, folder")} aria-label={L("搜索会话", "Search sessions")} />
+              )}
+              <div className="add-sessions">
+                {free.map((s) => {
+                  const Icon = s.cli === "codex" ? IconCode : IconAsterisk;
+                  return (
+                    <div key={`${s.cli}:${s.session_id}`} className="add-local-row">
+                      <span className="add-local-icon"><Icon /></span>
+                      <span className="add-local-main">
+                        <span className="add-local-name">{s.title || folderOf(s.workdir)}</span>
+                        <span className="add-local-sub" title={s.workdir}>{s.cli === "codex" ? "Codex" : "Claude Code"} · {folderOf(s.workdir)} · {timeAgo(s.last_active)}</span>
+                      </span>
+                      <button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void joinLocal(s)}>
+                        {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
+                      </button>
+                    </div>
+                  );
+                })}
+                {taken.map((s) => {
+                  const Icon = s.cli === "codex" ? IconCode : IconAsterisk;
+                  return (
+                    <div key={`${s.cli}:${s.session_id}`} className="add-local-row is-taken">
+                      <span className="add-local-icon"><Icon /></span>
+                      <span className="add-local-main">
+                        <span className="add-local-name">{s.title || folderOf(s.workdir)}</span>
+                        <span className="add-local-sub">{L("已经加入了", "Already joined")}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+                {list.length === 0 && <div className="app-empty-note">{L("没找到。", "Nothing matches.")}</div>}
+              </div>
+              <div className="add-note">{L("会复制一份会话加入，你原来的会话照常用。", "A copy of the session joins; yours carries on as before.")}</div>
+              <ErrorText error={joinError} />
+            </>
+          )}
+        </div>
+      )}
 
-      {(free.length > 0 || !!sessionsError) && (
-        <div className="add-local">
-          <div className="add-local-title">
-            <Monitor />{L("或者，直接用这台电脑上最近的会话", "Or use a recent session on this computer")}
+      {tab === "link" && (
+        <div className="add-pane">
+          <div className="add-note">{L("把这句话发给你的 agent，它会自己装好 myco 加入。Claude Code、Codex、claude.ai 或任何会跑命令的 AI 都行，可以发给好几个。", "Send this to your agent; it installs myco and joins by itself. Claude Code, Codex, claude.ai or any AI that runs commands; send it to as many as you like.")}</div>
+          <div className="add-sentence">
+            {link ? (
+              <>
+                <p className="add-sentence-text">{sentence}</p>
+                <div className="add-sentence-actions"><CopyButton value={sentence} /></div>
+              </>
+            ) : linkError ? <ErrorText error={linkError} /> : <p className="add-sentence-text is-loading">{L("正在准备…", "Getting it ready…")}</p>}
           </div>
-          {free.map((s) => (
-            <div key={`${s.cli}:${s.session_id}`} className="add-local-row">
-              <span className="add-local-main">
-                <span className="add-local-name">{s.title || folderOf(s.workdir)}</span>
-                <span className="add-local-sub">{s.cli === "codex" ? "Codex" : "Claude Code"} · {s.workdir} · {timeAgo(s.last_active)}</span>
-              </span>
-              <button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void joinLocal(s)}>
-                {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
-              </button>
-            </div>
-          ))}
-          <ErrorText error={joinError} />
+          {joined.length === 0 && (
+            <div className="add-waiting"><Mushroom idle /><span>{L("发出去以后，加入的 agent 会出现在下面。", "Once sent, the agents that join show up below.")}</span></div>
+          )}
+        </div>
+      )}
+
+      {tab === "new" && <NewAgentPane open={open && tab === "new"} hubId={hubId} rows={rows} onStarted={(a) => void arrived(a)} />}
+
+      {/* Who has joined while this was open, whichever way. */}
+      {joined.length > 0 && (
+        <div className="add-joined" aria-live="polite">
+          {joined.map((n) => {
+            const r = rowOf(n);
+            return (
+              <div key={n} className="add-arrived">
+                {r && <Avatar agent={r.st.agent} size={28} />}
+                <span><b>{r ? nodeName(r.st.agent, r.hub) : n}</b>{L(" 加入了", " joined")}</span>
+                <Check className="add-ok" />
+              </div>
+            );
+          })}
         </div>
       )}
 
       <div className="app-modal-actions">
-        <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("好了", "Done")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={onClose} disabled={!!joining}>{L("好了", "Done")}</button>
       </div>
     </Modal>
+  );
+}
+
+/** Starts a new agent session on one of your computers: which computer,
+ *  which AI, which folder. */
+function NewAgentPane({ open, hubId, rows, onStarted }: {
+  open: boolean;
+  hubId: string;
+  rows: AgentRow[];
+  onStarted: (agent: string) => void;
+}) {
+  const ov = rows.find((r) => r.hub.id === hubId)?.hub;
+  const machines = useMemo(() => (ov ? machinesOfHub(ov) : []).filter((m) => m.can_spawn), [ov]);
+  const [local, setLocal] = useState<LocalState | null>(null);
+  const [machineId, setMachineId] = useState("");
+  const [picked, setPicked] = useState(false);
+  const [cli, setCli] = useState<SpawnCli>("claude");
+  const [dir, setDir] = useState("");
+  const [role, setRole] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => {
+    if (!open) return;
+    appApi.local().then(setLocal).catch(() => setLocal(null));
+  }, [open]);
+  const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
+  const ordered = [...machines].sort((a, b) => Number(isHere(b)) - Number(isHere(a)) || Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  useEffect(() => {
+    if (open && (!picked || !machines.some((m) => m.id === machineId))) setMachineId(ordered[0]?.id || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, machines.length, local]);
+  const machine = machines.find((m) => m.id === machineId);
+  const folders = [...new Set(rows.filter((r) => r.hub.id === hubId && r.st.agent.machine_id === machineId).map((r) => r.st.agent.binding.workdir).filter((d): d is string => !!d))].slice(0, 6);
+
+  const start = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!machine || !dir.trim() || busy) return;
+    setBusy(new Date().toISOString());
+    setError(null);
+    try {
+      const r = await appApi.spawn(hubId, machine.id, { cli, dir: dir.trim(), access: "workspace", ...(role.trim() ? { display_name: role.trim() } : {}) });
+      setDir("");
+      setRole("");
+      onStarted(r.agent);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (machines.length === 0) {
+    return <div className="add-pane"><div className="app-empty-note">{L("还没有能新开会话的电脑。先在「电脑」里连上一台。", "No computer can start sessions yet. Connect one under Computers first.")}</div></div>;
+  }
+  return (
+    <form className="add-pane" onSubmit={start}>
+      <div className="app-field">
+        <span className="app-field-label">{L("在哪台电脑上", "On which computer")}</span>
+        <div className="ws-computers">
+          {ordered.map((m) => {
+            const Icon = osInfo(m.os).icon;
+            return (
+              <button key={m.id} type="button" className={cn("ws-computer", m.id === machineId && "active", !m.online && "is-away")} onClick={() => { setMachineId(m.id); setPicked(true); }} disabled={!!busy}>
+                <Icon />
+                <span className="ws-computer-name">{isHere(m) ? L("这台电脑", "This computer") : m.name}</span>
+                {!m.online && <span className="ws-computer-sub">{L("不在线", "Away")}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="app-field">
+        <span className="app-field-label">{L("用哪个 AI", "Which AI")}</span>
+        <div className="ws-computers">
+          {NEW_CLIS.map((c) => (
+            <button key={c.value} type="button" className={cn("ws-computer", cli === c.value && "active")} onClick={() => setCli(c.value)} disabled={!!busy}>
+              <span className="ws-computer-name">{c.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="app-field">
+        <span className="app-field-label">{L("在哪个文件夹干活", "Which folder it works in")}</span>
+        <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} placeholder={L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} disabled={!!busy} required />
+      </label>
+      {folders.length > 0 && (
+        <div className="app-convpick-folders">
+          {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy}>{d}</button>)}
+        </div>
+      )}
+      <label className="app-field">
+        <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
+        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
+      </label>
+      <ErrorText error={error} />
+      {busy ? (
+        <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>
+      ) : (
+        <div className="add-start"><button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim()}>{L("开一个", "Start it")}</button></div>
+      )}
+    </form>
   );
 }
 
@@ -231,11 +436,11 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!machine || !dir.trim() || busy || users.length === 0) return;
+    if (!machine || !dir.trim() || busy) return;
     setBusy(new Date().toISOString());
     setError(null);
     try {
-      const r = await appApi.spawn(hubId, machine.id, { cli: "exec", dir: dir.trim(), allow_from: users });
+      const r = await appApi.spawn(hubId, machine.id, { cli: "exec", dir: dir.trim(), allow_from: users.length ? users : [nobody()] });
       if (project) await appApi.putProjectMember(hubId, project.name, r.agent).catch(() => undefined);
       onAdded();
       onClose();
@@ -281,7 +486,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
         <div className="ws-who">
           {users.length > 0
             ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
-            : L("先给项目加一个 agent，它才能用这台电脑。", "Add an agent to the project first, so it has someone to use it.")}
+            : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
         {machine && <LocalShellAccess machine={machine} what="shell" />}
         <ErrorText error={error} />
@@ -290,7 +495,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
         ) : (
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={onClose}>{L("取消", "Cancel")}</button>
-            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim() || users.length === 0}>{L("添加", "Add")}</button>
+            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim()}>{L("添加", "Add")}</button>
           </div>
         )}
       </form>
