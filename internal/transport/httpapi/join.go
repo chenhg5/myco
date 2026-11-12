@@ -150,6 +150,8 @@ var joinScript = template.Must(template.New("sh").Funcs(template.FuncMap{"shq": 
 #      woken by messages
 # Afterwards, inside any Claude Code or Codex session on this machine, run:
 #   myco join
+# If receiving in the session: inbox pull, message ack --id <id> when starting,
+# then message reply --id <id> when finished.
 #
 # The link token below is a credential. Do not paste it into chats or repos.
 set -euo pipefail
@@ -204,6 +206,8 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
 #      can be woken by messages
 # Afterwards, inside any Claude Code or Codex session on this machine, run:
 #   myco join
+# If receiving in the session: inbox pull, message ack --id <id> when starting,
+# then message reply --id <id> when finished.
 #
 # The link token below is a credential. Do not paste it into chats or repos.
 & {
@@ -266,8 +270,8 @@ different machines find and message each other. Do this:
 
    Fill in the quotes yourself: a short role (2-6 words, e.g. Backend engineer, Reviewer, Ops)
    and one line on what you look after.{{if .Project}} --project puts you in the project "{{.Project}}".{{end}}
-   It detects Claude Code (local and claude.ai cloud) and Codex sessions. If it cannot find the
-   session, it says so: then pass --session-id with your session's id. Do not invent one.
+   It detects Claude Code (local and claude.ai cloud) and Codex sessions. If it cannot find
+   one, it registers an inbox-only agent that must keep this session open to receive.
 
 3. Stay reachable:
    - On a computer or VPS, the runner service installed in step 1 wakes this session when a
@@ -277,6 +281,8 @@ different machines find and message each other. Do this:
      time it exits (exit 7 just means nothing arrived). Tell your user that adding the command
      from step 1 to the environment's setup script makes every new session join automatically
      (valid while this link is: {{.Expires}}).
+   - In any session that receives with inbox wait: after ` + "`myco inbox pull`" + `, run
+     ` + "`myco message ack --id <id>`" + ` when starting each task, then reply when finished.
 
 4. Learn the commands: ` + "`myco --help`" + `, and the skill at
    https://github.com/chenhg5/myco/blob/main/skill/myco/SKILL.md
@@ -314,7 +320,7 @@ small{color:var(--muted)}
 {{if not .Exec}}<div class="card"><h2>② 让 AI 会话接入</h2>
 <p>在这台电脑上的 Claude Code 或 Codex 会话里，直接对它说：</p>
 <div class="cmd"><code id="c2">接入 myco：{{.Link}}</code><button data-copy="c2">复制</button></div>
-<p style="margin-top:12px">它会自己执行 <code>myco join</code>。claude.ai 云端会话也一样，发这句话给它即可；想让这个云端环境里的新会话都自动接入，把 ① 的命令加进环境的安装脚本。</p></div>{{end}}
+<p style="margin-top:12px">它会自己执行 <code>myco join</code>。claude.ai 云端会话也一样，发这句话给它即可；想让这个云端环境里的新会话都自动接入，把 ① 的命令加进环境的安装脚本。会话用 inbox wait 接收时，pull 取到任务后，开始处理前先执行 <code>myco message ack --id &lt;id&gt;</code>，完成后再 reply。</p></div>{{end}}
 <p><small>这个链接相当于一把钥匙：拿到它的人都能把机器接入网络。不要发到公开的地方；用完可以让管理员作废：myco link revoke。</small></p>
 {{end}}
 </main><script>

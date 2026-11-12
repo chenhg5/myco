@@ -59,6 +59,8 @@ myco agent register --name codex --harness codex-cloud --environment github:me/a
 | 后台唤醒 | runner 拉取消息，对每条消息续接这个会话（`claude -p --resume` 等）处理 | 你不在会话里，或者会话没开着 |
 | 会话里在线接收 | 会话自己在后台挂着 `myco inbox wait --timeout 55m`，有消息时被唤醒，再 `inbox pull` 处理 | claude.ai 云端会话（只能这样）；你正开着、想让它在窗口里直接收消息的本地会话 |
 
+会话用 `myco inbox pull` 取到任务后，**开始处理时**先执行 `myco message ack --id <任务 ID>`，完成后再 `myco message reply --id <任务 ID>`。pull 只给消息一个临时租约，尚未表示开工；ack 后 Hub 才把节点算作「在干活」，且长任务不会因租约到期而重复投递。overview 的 `queued` 包含未拉取和已拉取但未 ack 的任务，`in_progress` 只包含 acked；held 单独计入 `held`，不算在干活。runner 会在启动任务前自行 ack。
+
 - **自动切换**：只要有 `inbox wait` 在等，Hub 就认为这个会话在线接收，runner 的拉取（`PullRequest.via = "runner"`）什么也拿不到；最后一次等待结束约 30 分钟后，runner 自动接手（v0.18.18 起；之前是 5 分钟）。两者不会抢同一条消息。会话还开着（桌面 App、IDE、终端）时应该让它自己挂着 `inbox wait`：runner 只能从会话最近 90 秒有没有动静判断它是否被占用，开着但闲着的会话会被当成空闲、在后台被续接，开着的窗口看不到这段工作，接着聊就分叉了。30 分钟的间隔是给开着的会话留的：它在两次等待之间不会被后台续接。
 - **仅 inbox 的节点**：无法检测可续接会话时，`myco join` 会注册 `harness: inbox`；也可以显式传 `--harness inbox`。这类节点只靠会话内的 `myco inbox wait --timeout 55m` 接收，退出后要重新启动。runner 始终跳过它；会话关掉后不会自动唤醒。
 - **会话正在被使用**：runner 发现会话正被别人用（记录最近被别人写过，或 CLI 报会话被占用）时，不会打断，而是把消息交回、按退避稍后重试，并告诉 Hub 原因（`release` 的 `reason: "in_use"`）。App 里节点显示「会话被占用」；节点详情给出一句可以复制给那个会话的话，让它改成在线接收；对话页可以「复制一份接着做」（复制成新节点，等着的任务移过去）。

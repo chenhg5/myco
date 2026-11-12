@@ -638,6 +638,40 @@ func TestProfileLabelsStatusAndListing(t *testing.T) {
 	h.do("GET", "/v1/overview", "", nil).wantErr(t, 401, "unauthenticated")
 }
 
+func TestPulledTaskIsPendingUntilAck(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	bob := h.register("bob", nil)
+	id := h.send(alice, "bob", "work")
+	h.do("POST", "/v1/inbox/pull", bob, nil).want(t, 200)
+	check := func(wantState string, wantQueued, wantProgress float64) {
+		t.Helper()
+		r := h.do("GET", "/v1/overview", adminToken, nil).want(t, 200)
+		var found bool
+		for _, raw := range r.body["agents"].([]any) {
+			st := raw.(map[string]any)
+			if str(st, "agent", "name") != "bob" {
+				continue
+			}
+			found = true
+			if st["state"] != wantState || st["queued"] != wantQueued || st["in_progress"] != wantProgress {
+				t.Fatalf("overview: %s", r.raw)
+			}
+		}
+		if !found {
+			t.Fatalf("bob absent from overview: %s", r.raw)
+		}
+		r = h.do("GET", "/v1/console/recent", adminToken, nil).want(t, 200)
+		items := r.body["items"].([]any)
+		if len(items) != 1 || str(items[0], "state") != map[string]string{"pending": "queued", "working": "working"}[wantState] {
+			t.Fatalf("console recent: %s", r.raw)
+		}
+	}
+	check("pending", 1, 0)
+	h.do("POST", "/v1/messages/"+id+"/ack", bob, nil).want(t, 200)
+	check("working", 0, 1)
+}
+
 func TestFilesAndBroadcast(t *testing.T) {
 	h := newHub(t, app.DefaultMessagePolicy())
 	alice := h.register("alice", nil)

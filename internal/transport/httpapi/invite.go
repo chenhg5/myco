@@ -90,7 +90,7 @@ unset MYCO_INVITE_CODE
 
 echo "==> registering this agent session"
 if ! "$MYCO" join --format text; then
-  echo "==> no agent session found here: run 'myco join' inside each Claude Code or Codex session that should join"
+  echo "==> join failed here: run 'myco join' in the agent session that should join"
 fi
 {{- end}}
 `))
@@ -115,6 +115,8 @@ your user to the network as a member, with this machine and this session as thei
    - In a claude.ai cloud session there is no service: keep
      ` + "`myco inbox wait --timeout 55m`" + ` running as a background command, and start it
      again every time it exits.
+   - In any session that receives with inbox wait: after ` + "`myco inbox pull`" + `, run
+     ` + "`myco message ack --id <id>`" + ` when starting each task, then reply when finished.
 
 3. Later: ` + "`myco join`" + ` in another session on this machine adds it too (also your user's);
    ` + "`myco member pair`" + ` prints a one-time link if your user wants the myco app as well.
