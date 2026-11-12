@@ -64,7 +64,11 @@ static int mycoNotch(double *w, double *h) {
 	if (notched) {
 		if (@available(macOS 12.0, *)) {
 			*w = s.frame.size.width - s.auxiliaryTopLeftArea.size.width - s.auxiliaryTopRightArea.size.width;
-			*h = s.safeAreaInsets.top;
+			// As tall as the menu bar beside the notch (when it shows), so the
+			// pill's bottom lines up with it; the notch's own inset is a
+			// little less on some models.
+			double bar = NSMaxY(s.frame) - NSMaxY(s.visibleFrame);
+			*h = MAX(s.safeAreaInsets.top, bar);
 		}
 		return 1;
 	}
