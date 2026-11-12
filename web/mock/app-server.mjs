@@ -831,8 +831,11 @@ const server = http.createServer(async (req, res) => {
     for (const [id, msgs] of Object.entries(hub.threads || {})) {
       if (id === "th_console_stuck" || id === "th_console_stuck_stopped") continue;
       if (msgs.some((m) => m.from === "legacy-codex" || m.to === "legacy-codex")) delete hub.threads[id];
+      // Your chats with review-cloud: the empty-chat step needs it empty.
+      else if (msgs.some((m) => (m.from === "review-cloud" && m.to.startsWith("@console:")) || (m.to === "review-cloud" && m.from.startsWith("@console:")))) delete hub.threads[id];
     }
-    hub.recent = (hub.recent || []).filter((m) => m.from !== "legacy-codex" && m.to !== "legacy-codex");
+    const consoleWithReview = (m) => (m.from === "review-cloud" && m.to.startsWith("@console:")) || (m.to === "review-cloud" && m.from.startsWith("@console:"));
+    hub.recent = (hub.recent || []).filter((m) => m.from !== "legacy-codex" && m.to !== "legacy-codex" && !consoleWithReview(m));
     return send(res, 200, { ok: true });
   }
 

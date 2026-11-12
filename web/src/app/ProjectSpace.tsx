@@ -485,6 +485,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
         now={now}
         showBack={false}
         role={L("协调者", "Coordinator")}
+        projectTitle={project.title || project.name}
         inserts={inserts}
         onBack={() => undefined}
         onNewConversation={() => undefined}

@@ -462,6 +462,16 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "loose");
     });
 
+    // A chat with nothing in it yet: the agent, large, and a question.
+    await step("单聊 · 空对话", async () => {
+      await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");
+      const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));
+      if (!ask.includes("Review (Codex 云端)") || ask.includes("还没有消息")) throw new Error(`空对话应该问一句和它有关的话，实际是「${ask}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-empty");
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // Without a project, the group has a box that says whom a task goes to.
     await step("还没进项目的 · 派活", async () => {
       const to = compactText(await page.locator(".sp-to-name").innerText());

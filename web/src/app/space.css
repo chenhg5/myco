@@ -1784,3 +1784,27 @@ body.is-resizing {
   width: 15px;
   height: 15px;
 }
+
+/* An empty chat: the agent, and a question to start with. */
+.conv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 72px 24px 24px;
+  text-align: center;
+  animation: app-fade 0.25s ease-out;
+}
+.conv-empty h3 {
+  margin: 0;
+  max-width: 520px;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--fg);
+}
+.conv-empty p {
+  margin: -4px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}

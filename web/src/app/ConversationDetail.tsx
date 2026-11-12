@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
-import type { Message } from "@/api";
+import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
@@ -110,6 +110,37 @@ function mergeById(ms: Message[], changed: Message[]): Message[] {
   return [...by.values()].sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+// What an empty chat asks, one picked at random each time: about the
+// project when this is its coordinator, else about the agent.
+const ASK_PROJECT: [string, string][] = [
+  ["你想在「{p}」里做成什么？", "What do you want done in {p}?"],
+  ["「{p}」的下一步是什么？", "What's next for {p}?"],
+  ["说说「{p}」接下来要做什么，{n} 会分给大家。", "Say what {p} needs next; {n} will hand it out."],
+  ["今天想让「{p}」往前走哪一步？", "Which step should {p} take today?"],
+];
+const ASK_AGENT: [string, string][] = [
+  ["想让 {n} 帮你做点什么？", "What should {n} do for you?"],
+  ["有什么活，交给 {n} 吧。", "Got something? Hand it to {n}."],
+  ["{n} 准备好了，交代第一件事吧。", "{n} is ready. What's the first thing?"],
+  ["说说你想做成什么，{n} 来想办法。", "Say what you want done; {n} will work it out."],
+  ["今天想和 {n} 一起做点什么？", "What shall you and {n} do today?"],
+];
+
+/** An empty chat: the agent's face, large, and a question to start with. */
+function EmptyChat({ agent, name, project }: { agent?: Agent; name: string; project?: string }) {
+  const [pick] = useState(() => Math.random());
+  const list = project ? ASK_PROJECT : ASK_AGENT;
+  const [zh, en] = list[Math.floor(pick * list.length) % list.length];
+  const fill = (t: string) => t.replace("{n}", name).replace("{p}", project || "");
+  return (
+    <div className="conv-empty">
+      {agent && <Avatar agent={agent} size={64} badge={false} />}
+      <h3>{fill(L(zh, en))}</h3>
+      <p>{L("一句话就行，它会自己想办法；在下面打字，回车发出去。", "A sentence is enough; it works out the rest. Type below and press Enter.")}</p>
+    </div>
+  );
+}
+
 /** While a conversation loads for the first time: its shape, not a word.
  *  Only after a moment: a load that is quick shows nothing in between,
  *  instead of a blink of placeholders. */
@@ -143,8 +174,11 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions, projectTitle }: {
   target: ConversationTarget;
+  /** the project this chat is the home of (its coordinator's): the empty
+   *  chat asks about it */
+  projectTitle?: string;
   /** buttons at the right end of the header (e.g. full screen, close) */
   headActions?: React.ReactNode;
   /** what it is in the project (e.g. coordinator), before its description */
@@ -962,7 +996,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
             )
           ) : shown.length === 0 && !shellMode ? (
-            <div className="app-empty-note">{exchange ? L("还没有消息。", "No messages yet.") : L("还没有消息。发一条任务开始。", "No messages yet. Give a task to get started.")}</div>
+            observed
+              ? <div className="app-empty-note">{L("它们还没说过话。", "They haven't talked yet.")}</div>
+              : <EmptyChat key={target.agent} agent={agent} name={agentName} project={projectTitle} />
           ) : (
             <>
             {exchange && more && !(shellMode && cleared) && (
