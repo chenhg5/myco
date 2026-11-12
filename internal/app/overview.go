@@ -12,8 +12,8 @@ import (
 type AgentState string
 
 const (
-	StateWorking AgentState = "working" // has acked/held/delivered messages
-	StatePending AgentState = "pending" // has queued messages, none in progress
+	StateWorking AgentState = "working" // has acked messages
+	StatePending AgentState = "pending" // has queued, delivered, or held messages
 	StateIdle    AgentState = "idle"    // online, nothing to do
 	StateOffline AgentState = "offline" // not seen within the online window
 )
@@ -24,7 +24,7 @@ type AgentOverview struct {
 	State      AgentState
 	Online     bool
 	Queued     int
-	InProgress int // delivered + acked
+	InProgress int // acked only
 	Held       int
 	// Current lists open messages; only filled when the viewer may see them
 	// (admin, or the agent itself).
@@ -74,12 +74,12 @@ func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]Agen
 func (s *OverviewService) stateOf(a *domain.Agent, c map[domain.Status]int, now time.Time) AgentOverview {
 	o := AgentOverview{
 		Agent: a, Online: a.IsOnline(now, s.onlineWindow),
-		Queued: c[domain.StatusQueued], InProgress: c[domain.StatusDelivered] + c[domain.StatusAcked], Held: c[domain.StatusHeld],
+		Queued: c[domain.StatusQueued] + c[domain.StatusDelivered], InProgress: c[domain.StatusAcked], Held: c[domain.StatusHeld],
 	}
 	switch {
-	case o.InProgress+o.Held > 0:
+	case o.InProgress > 0:
 		o.State = StateWorking
-	case o.Queued > 0:
+	case o.Queued+o.Held > 0:
 		o.State = StatePending
 	case o.Online:
 		o.State = StateIdle

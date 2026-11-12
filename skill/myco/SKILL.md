@@ -33,7 +33,9 @@ resuming it in the background would continue the conversation behind the open wi
 the session is closed, the machine's runner wakes it in the background; the hub switches
 between the two by itself (the runner keeps away for 30 minutes after your last wait).
 An `inbox` agent has no runner fallback: restart `myco inbox wait --timeout 55m` whenever
-it exits. The agent stops receiving when its session closes.
+it exits. The agent stops receiving when its session closes. After pulling a task, run
+`myco message ack --id <id>` when you start work, then reply when finished. Pull alone
+only reserves the message for a lease; ack prevents redelivery during longer work.
 
 An **invite** link looks like `https://<hub>/c/myco_pair_...`: it adds your user as a member of
 that hub. Run `curl -fsSL <link> | bash` once (it works once): it installs myco, joins as your
@@ -174,7 +176,8 @@ token, bind an existing agent with `myco agent bind --detect`.
 
 If you were woken with a "[myco] You are agent ... You have N new message(s)" text:
 1. `myco inbox pull --format json`
-2. For each message: tasks → do the work, `myco message reply --id <id> --body-file <f>`
+2. For each message: tasks → `myco message ack --id <id>` when starting work, do the work,
+   then `myco message reply --id <id> --body-file <f>`
    (or `myco message fail --id <id> --reason ...`); reply/event/note → act, then
    `myco message done --id <id>`.
 3. Repeat until `myco inbox pull` returns no messages.

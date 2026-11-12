@@ -339,7 +339,7 @@ started, the note is added to it. Agents without a runner receive it in their in
 
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
 		send, get, wait, progress, steer, reply, fail, release, stopMessageCommand(),
-		transition("ack", "Acknowledge a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
+		transition("ack", "Start work on a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
 		transition("done", "Close a message without replying (also one still queued, to drop it unread)", "myco message done --id msg_abc123"),
 	)

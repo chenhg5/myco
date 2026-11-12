@@ -985,7 +985,7 @@ func TestJoinLinks(t *testing.T) {
 	}
 	// A local session is told to keep inbox wait running while it stays open
 	// (the runner would continue it behind the open window).
-	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "stays open") {
+	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "stays open") {
 		t.Fatalf("join does not say how to receive while open: %s", out)
 	}
 	// Joining with --project also puts it in the project (one it can see);
@@ -1023,7 +1023,7 @@ func TestJoinLinks(t *testing.T) {
 	// No resumable session: register a stable inbox-only agent.
 	os.RemoveAll(filepath.Join(home, ".codex"))
 	code, out, e = cx.run("join", "--format", "json")
-	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "runner cannot wake this agent") {
+	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "runner cannot wake this agent") {
 		t.Fatalf("inbox join: %d %s %s", code, out, e)
 	}
 	var inboxJoin struct{ Agent struct{ Name string } }
