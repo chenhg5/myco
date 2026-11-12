@@ -507,8 +507,9 @@ async function runMatrix(browser, size, scheme) {
         if (await member.locator(".is-working").count()) throw new Error("只被拉走、没开始的节点不该显示在干活");
       }
       await openMember(page, narrow, "还没进项目的", "Myco (Grok)");
+      // The header has no running state any more; it must not say it is at it.
       const head = compactText(await page.locator(".conv-detail .conv-head").innerText());
-      if (!head.includes("等待中")) throw new Error(`拉走没开始的对话应显示「等待中」，实际是「${head}」`);
+      if (/在干活|处理中/.test(head)) throw new Error(`拉走没开始的对话不该说在干活，标题栏是「${head}」`);
       const wait = page.locator(".conv-detail .trace.is-waiting").first();
       await wait.waitFor({ timeout: 20_000 });
       const line = compactText(await wait.innerText());
