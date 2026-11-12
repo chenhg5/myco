@@ -15,7 +15,7 @@ import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
-import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm, isNobody } from "@/app/AddToProject";
+import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
@@ -111,8 +111,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number } | null>(null);
   const [projectReload, setProjectReload] = useState(0);
-  // The first project was put off: show the agents not in one instead.
-  const [skipFirst, setSkipFirst] = useState(() => { try { return localStorage.getItem("myco-skip-first-project") === "1"; } catch { return false; } });
 
   useEffect(() => {
     let cancelled = false;
@@ -214,7 +212,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const liveProjects = hubProjects.filter((x) => !x.p.archived)
     .sort((a, b) => (b.p.updated_at || "").localeCompare(a.p.updated_at || ""));
   const loose = useMemo(() => looseRowsOf(rows, hubProjects), [rows, hubProjects]);
-  const looseHubs = loose.length ? [hubId] : [];
+  // Chat (the agents in no project) is always there: you can start by
+  // talking to an agent and make a project later, or never.
+  const looseHubs = hubId ? [hubId] : [];
+  const looseAgents = loose.filter((r) => agentKind(r.st.agent) === "agent");
   const hubName = (id: string) => namedHubs.find((h) => h.id === id)?.name || namedOv?.hubs.find((h) => h.id === id)?.name || id;
   // The computers agents use, in the sidebar: one click opens a terminal.
   const computers = rows.filter((r) => isWorkspace(r.st.agent))
@@ -223,7 +224,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline"));
 
   // The space on show: the one chosen (while it exists), else the newest
-  // project, else the agents in none.
+  // project, else chat.
   const spaceExists = (s: SpaceRef) => isLoose(s)
     ? looseHubs.includes(s.hubId)
     : liveProjects.some((x) => x.hubId === s.hubId && x.p.name === s.name);
@@ -232,8 +233,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
     : looseHubs[0] ? { hubId: looseHubs[0], loose: true }
     : null;
   const shownProject = shown && !isLoose(shown) ? liveProjects.find((x) => x.hubId === shown.hubId && x.p.name === shown.name)?.p : undefined;
-  // Only a workspace that answers can say it has no project yet.
-  const firstRun = projects !== null && liveProjects.length === 0 && !skipFirst && !!hub?.ok;
 
   const meOn = (hubId: string) => {
     const name = namedOv?.hubs.find((h) => h.id === hubId)?.me?.member?.name;
@@ -370,6 +369,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
 
           <nav className="app-nav">
+            {/* Chat first: talk to your agents straight away; a project is
+                for when several should work on one thing. */}
+            <div className="app-nav-group">
+              {looseHubs.map((id) => {
+                const ref: SpaceRef = { hubId: id, loose: true };
+                const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
+                return (
+                  <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => openSpace(ref)}
+                    title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
+                    <span className="app-nav-label">{L("聊天", "Chat")}</span>
+                    {looseAgents.length > 0 && <AvatarStack agents={looseAgents.map((r) => r.st.agent)} size={18} max={3} />}
+                    {working(loose.map((r) => r.st.agent.name), id) && <span className="sp-nav-busy" title={L("有 agent 在干活", "Someone is at work")} />}
+                  </button>
+                );
+              })}
+            </div>
             <div className="app-nav-group">
               <div className="app-nav-title app-nav-title-row">
                 <span>{L("项目", "Projects")}</span>
@@ -391,17 +406,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {busy && <span className="sp-nav-busy" title={L("有成员在干活", "Someone is at work")} />}
-                  </button>
-                );
-              })}
-              {looseHubs.map((id) => {
-                const ref: SpaceRef = { hubId: id, loose: true };
-                const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
-                const n = loose.filter((r) => r.hub.id === id).length;
-                return (
-                  <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav is-loose", active && "active")} onClick={() => openSpace(ref)}>
-                    <span className="app-nav-label">{L("还没进项目的", "Not in a project")}</span>
-                    <span className="sp-nav-count">{n}</span>
                   </button>
                 );
               })}
@@ -482,19 +486,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </div>
         )}
 
-        {page === "space" && (firstRun ? (
-          // No project yet: start one (or put it off and see the agents).
-          <div className="app-scroll">
-            <div className="sp-first">
-              <h2>{L("先建一个项目吧", "Start with a project")}</h2>
-              <p>{L("一个项目就是一件你想做成的事。建好以后，把你的 agent 拉进来，它们就能一起干活，你在这里派活、看进展。", "A project is one thing you want done. Once it's there, bring your agents in: they work on it together while you hand out tasks and watch.")}</p>
-              <NewProjectForm big hubs={hub ? [hub] : []} onCreated={projectCreated} onCancel={() => {
-                setSkipFirst(true);
-                try { localStorage.setItem("myco-skip-first-project", "1"); } catch { /* not kept */ }
-              }} />
-            </div>
-          </div>
-        ) : shown ? (
+        {page === "space" && (shown ? (
           <ProjectSpace
             key={spaceKey(shown)}
             space={shown}
@@ -511,6 +503,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
             onOpenMember={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
             onAbout={shownProject ? () => setPage("about") : undefined}
             onRefresh={() => void refresh()}
+            projects={liveProjects.filter((x) => x.hubId === shown.hubId).map((x) => x.p)}
+            onNewProject={() => setNewProjectOpen(true)}
           />
         ) : (
           <div className="app-scroll">

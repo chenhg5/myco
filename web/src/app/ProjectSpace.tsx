@@ -7,6 +7,7 @@ import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
+import { addToProject } from "@/app/AddToProject";
 import { Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
@@ -54,7 +55,7 @@ const POLL_MS = 4000;
  * for looking back. The agents in no project yet have the group view: a
  * feed of their tasks and a box to give one a task.
  */
-export function ProjectSpace({ space, project, looseRows = [], hubName, rows, now, me, openChat, home, onAddAgent, onAddWorkspace, onOpenMember, onAbout, onRefresh }: {
+export function ProjectSpace({ space, project, looseRows = [], hubName, rows, now, me, openChat, home, onAddAgent, onAddWorkspace, onOpenMember, onAbout, onRefresh, projects = [], onNewProject }: {
   space: SpaceRef;
   /** the project (none for the agents not in a project) */
   project?: Project;
@@ -74,6 +75,10 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   onOpenMember: (row: AgentRow) => void;
   onAbout?: () => void;
   onRefresh: () => void;
+  /** the workspace's projects: chat can put an agent in one */
+  projects?: Project[];
+  /** start a project (from chat) */
+  onNewProject?: () => void;
 }) {
   const hubId = space.hubId;
   const loose = isLoose(space);
@@ -344,7 +349,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             hubId={hubId}
             project={project}
             loose={loose}
-            title={loose ? L("还没进项目的", "Not in a project yet") : project?.title || project?.name || ""}
+            title={loose ? L("聊天", "Chat") : project?.title || project?.name || ""}
             agents={agents}
             memberNames={memberNames}
             rowOf={rowOf}
@@ -376,6 +381,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             }}
             onAddAgent={onAddAgent}
             onAddWorkspace={onAddWorkspace}
+            onNewProject={onNewProject}
             onAbout={onAbout}
             onSent={onRefresh}
             feed={feed}
@@ -403,6 +409,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         onAddWorkspace={onAddWorkspace}
         folded={folded}
         onFold={setFolded}
+        projects={loose ? projects : []}
+        onPutIn={(r, p) => void addToProject(hubId, p, rows, r.st.agent.name).then(onRefresh).catch(() => undefined)}
       />
     </div>
   );
@@ -630,7 +638,7 @@ function dispatchWord(state: string): string {
     : state === "working" ? L("在做", "Working") : state === "queued" ? L("排队中", "Queued") : L("已发出", "Sent");
 }
 
-function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onAbout, onSent, strip, feed, activity, onBack }: {
+function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onNewProject, onAbout, onSent, strip, feed, activity, onBack }: {
   hubId: string;
   project?: Project;
   loose: boolean;
@@ -643,6 +651,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   onOpenThread: (it: RecentItem) => void;
   onAddAgent: () => void;
   onAddWorkspace?: () => void;
+  onNewProject?: () => void;
   onAbout?: () => void;
   onSent: () => void;
   strip?: React.ReactNode;
@@ -680,7 +689,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
             {activity
               ? L(`「${title}」里所有成员之间的任务，留着回头查。`, `Every task between the members of ${title}, to look back at.`)
               : loose
-              ? L("这些 agent 还没放进项目。建个项目把它们放进去，它们就能一起干活。", "These agents are not in a project yet. Put them in one so they can work together.")
+              ? L("直接找你的 agent 聊，不用先建项目。想让几个一起做成一件事时，再建个项目把它们放进去。", "Talk to your agents directly, no project needed. When several should work on one thing, start a project and put them in it.")
               : project?.goal || L("给一个成员派活，看它们一起干。", "Give a member a task and watch them work together.")}
           </p>
         </div>
@@ -701,7 +710,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           <ErrorText error={error} />
           {items && items.length === 0 && (
             agents.length === 0 ? (
-              <EmptyProject loose={loose} onAddAgent={onAddAgent} onAddWorkspace={onAddWorkspace} />
+              <EmptyProject loose={loose} onAddAgent={onAddAgent} onAddWorkspace={onAddWorkspace} onNewProject={onNewProject} />
             ) : (
               <div className="sp-feed-empty">
                 <AvatarStack agents={agents.map((r) => r.st.agent)} size={40} max={5} />
@@ -720,16 +729,25 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   );
 }
 
-function EmptyProject({ loose, onAddAgent, onAddWorkspace }: { loose: boolean; onAddAgent: () => void; onAddWorkspace?: () => void }) {
+function EmptyProject({ loose, onAddAgent, onAddWorkspace, onNewProject }: { loose: boolean; onAddAgent: () => void; onAddWorkspace?: () => void; onNewProject?: () => void }) {
   return (
     <div className="sp-empty">
       <div className="sp-empty-art"><Mushroom idle /></div>
-      <h3>{loose ? L("还没有 agent", "No agents yet") : L("项目建好了，拉几个 agent 进来吧", "Your project is ready. Bring in a few agents")}</h3>
-      <p>{L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
+      {/* Chat is where you start: add an agent and talk to it. A project
+          is for later, when several should work on one thing. */}
+      <h3>{loose ? L("加一个 agent，直接聊", "Add an agent and start talking") : L("项目建好了，拉几个 agent 进来吧", "Your project is ready. Bring in a few agents")}</h3>
+      <p>{loose
+        ? L("用这台电脑上的 Claude Code、Codex 会话，或者发一句话给任何 AI，它就会自己加入。不用先建项目。", "Use a Claude Code or Codex session on this computer, or send one sentence to any AI and it joins by itself. No project needed.")
+        : L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
       <div className="sp-empty-actions">
         <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
         {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一台电脑", "Add a computer")}</button>}
       </div>
+      {loose && onNewProject && (
+        <button type="button" className="sp-empty-alt" onClick={onNewProject}>
+          {L("要几个 agent 一起做成一件事？建一个项目", "Several agents on one thing? Start a project")}
+        </button>
+      )}
     </div>
   );
 }
@@ -950,7 +968,7 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   return { text: a.description || stateWords(r.st.state) };
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace, folded, onFold }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn }: {
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
@@ -966,6 +984,9 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   /** only the faces, in a narrow strip */
   folded: boolean;
   onFold: (folded: boolean) => void;
+  /** chat: the projects an agent can be put in */
+  projects?: Project[];
+  onPutIn?: (r: AgentRow, p: Project) => void;
 }) {
   const menu = useContextMenu();
   const menuOf = (r: AgentRow) => {
@@ -975,6 +996,12 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
       ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
+      // Chat: an agent that should work with others goes into a project.
+      ...(!ws && onPutIn && projects.length ? [
+        "sep" as const,
+        { header: L("放进项目", "Put in a project") },
+        ...projects.map((p) => ({ label: p.title || p.name, onSelect: () => onPutIn(r, p) })),
+      ] : []),
     ];
   };
   // Folded: a face each, the name and what it is doing on hover.

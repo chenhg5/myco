@@ -150,9 +150,13 @@
 .sp-nav-pc.is-away .pa {
   opacity: 0.55;
 }
-.sp-nav-members .pa-stack {
+.sp-nav-members .pa-stack,
+.sp-nav-chat .pa-stack {
   flex: none;
   margin-left: auto;
+}
+.sp-nav-chat .pa-stack + .sp-nav-busy {
+  margin-left: 6px;
 }
 /* The Computers heading opens the page where they are managed. */
 .sp-nav-title-link {
@@ -1619,6 +1623,23 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+/* Chat's quiet way to a project: a line under the button, not a second
+   button competing with it. */
+.sp-empty-alt {
+  margin-top: 14px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: default;
+}
+.sp-empty-alt:hover {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* Folders used before, one click away: short (home is ~), one line each. */

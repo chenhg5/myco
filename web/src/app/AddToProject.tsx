@@ -42,7 +42,7 @@ export function isNobody(name: string): boolean {
 }
 
 /** Puts an agent in a project, and lets it use the project's workspaces. */
-async function addToProject(hubId: string, project: Project | undefined, rows: AgentRow[], agent: string) {
+export async function addToProject(hubId: string, project: Project | undefined, rows: AgentRow[], agent: string) {
   if (!project) return;
   let p = await appApi.putProjectMember(hubId, project.name, agent);
   // The first agent in a project is its coordinator (there is always one).

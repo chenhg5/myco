@@ -481,19 +481,34 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
-    await step("还没进项目的", async () => {
-      await go(page, "还没进项目的", narrow);
+    await step("聊天", async () => {
+      await go(page, "聊天", narrow);
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
       const title = compactText(await page.locator(".sp-head h2").innerText());
-      if (title !== "还没进项目的") throw new Error(`这里应该是还没进项目的 agent，实际标题「${title}」`);
+      if (title !== "聊天") throw new Error(`这里应该是聊天（不在项目里的 agent），实际标题「${title}」`);
+      // Chat comes first in the sidebar, above the projects: you can start
+      // talking without making a project.
+      await sidebar(page, true);
+      const first = compactText(await page.locator(".app-nav .app-nav-item:visible").first().innerText());
+      if (!first.startsWith("聊天")) throw new Error(`边栏第一项应是「聊天」，实际是「${first}」`);
+      if (narrow) await sidebar(page, false);
       await settle(page);
       await shot(page, size, scheme, "loose");
+      // An agent here can be put in a project from its menu.
+      if (!narrow) {
+        await page.locator(".sp-side .sp-member:visible").first().click({ button: "right" });
+        const menu = page.locator(".conv-menu");
+        await menu.waitFor({ timeout: 5_000 });
+        if (!(await menu.locator(".conv-menu-header", { hasText: "放进项目" }).count())) throw new Error("聊天里的 agent 右键应能「放进项目」");
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "hidden", timeout: 5_000 });
+      }
     });
 
     // A task the inbox node pulled but never acknowledged is not work: the
     // task and the node read as queued, and its chat waits without a spinner.
-    await step("还没进项目的 · 拉走没开始", async () => {
-      await go(page, "还没进项目的", narrow);
+    await step("聊天 · 拉走没开始", async () => {
+      await go(page, "聊天", narrow);
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
       const card = page.locator(".sp-card", { hasText: "把 release 分支的 Go 测试跑一遍" }).first();
       await card.waitFor({ timeout: 10_000 });
@@ -506,7 +521,7 @@ async function runMatrix(browser, size, scheme) {
         if (sub !== "1 个活在排队") throw new Error(`只被拉走、没开始的节点应显示「1 个活在排队」，实际是「${sub}」`);
         if (await member.locator(".is-working").count()) throw new Error("只被拉走、没开始的节点不该显示在干活");
       }
-      await openMember(page, narrow, "还没进项目的", "Myco (Grok)");
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
       // The header has no running state any more; it must not say it is at it.
       const head = compactText(await page.locator(".conv-detail .conv-head").innerText());
       if (/在干活|处理中/.test(head)) throw new Error(`拉走没开始的对话不该说在干活，标题栏是「${head}」`);
@@ -521,7 +536,7 @@ async function runMatrix(browser, size, scheme) {
 
     // A chat with nothing in it yet: the agent, large, and a question.
     await step("单聊 · 空对话", async () => {
-      await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));
       if (!ask.includes("Review (Codex 云端)") || ask.includes("还没有消息")) throw new Error(`空对话应该问一句和它有关的话，实际是「${ask}」`);
       await settle(page, 300);
@@ -532,7 +547,7 @@ async function runMatrix(browser, size, scheme) {
     // Files: one picked with the paperclip, one pasted; sent alone, the
     // message says what they are and carries both.
     await step("单聊 · 发文件", async () => {
-      await openMember(page, narrow, "还没进项目的", "Review (Codex 云端)");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");
       await box.locator("input[type=file]").setInputFiles({ name: "2026 年第四季度发布计划与官网改版需求说明.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
       await page.locator(".conv-compose-input").evaluate((el) => {
@@ -576,7 +591,7 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // Without a project, the group has a box that says whom a task goes to.
-    await step("还没进项目的 · 派活", async () => {
+    await step("聊天 · 派活", async () => {
       const to = compactText(await page.locator(".sp-to-name").innerText());
       if (!to) throw new Error("输入框应写明发给谁");
       const body = `smoke ${size.width} ${scheme}：把首页的标题改短一点。`;
@@ -597,7 +612,7 @@ async function runMatrix(browser, size, scheme) {
     });
 
     await step("单聊 · 只回一句话", async () => {
-      await openMember(page, narrow, "还没进项目的", "legacy-codex");
+      await openMember(page, narrow, "聊天", "legacy-codex");
       const head = page.locator(".conv-detail .conv-head h2");
       const headText = compactText(await head.innerText());
       if (!/legacy-codex/.test(headText)) throw new Error(`点成员 legacy-codex 进入的不是它的对话：「${headText}」`);
@@ -664,7 +679,7 @@ async function runMatrix(browser, size, scheme) {
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
     await step("单聊 · 可能卡住", async () => {
-      await openMember(page, narrow, "还没进项目的", "legacy-codex");
+      await openMember(page, narrow, "聊天", "legacy-codex");
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
         null,
@@ -702,7 +717,7 @@ async function runMatrix(browser, size, scheme) {
     // the stop and resend. It also has no active_at, so updated_at decides.
     await step("单聊 · 更早的卡住任务", async () => {
       // The same chat as the previous step.
-      await openMember(page, narrow, "还没进项目的", "legacy-codex");
+      await openMember(page, narrow, "聊天", "legacy-codex");
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
         null,
