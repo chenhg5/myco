@@ -54,6 +54,7 @@ type MachineRepository interface {
 	Get(ctx context.Context, id string) (*Machine, error)
 	GetByFingerprint(ctx context.Context, hash string) (*Machine, error)
 	List(ctx context.Context) ([]*Machine, error)
+	Delete(ctx context.Context, id string) error
 }
 
 // Runtime is what an agent runs on: its CLI, the CLI's version and model,

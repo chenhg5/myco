@@ -604,6 +604,8 @@ myco agent spawn --on wsl --dir ~/code/app --prompt "先读 README.md，总结�
 
 **机器节点**：每台用入网链接接入的机器会自动多一个 `<机器>-machine` 节点（`myco machine join` 时创建；之前已经接入的机器执行 `myco upgrade` 即可，它会顺便重启 runner）。它不跑 AI，只处理"开会话"的请求，由本机 runner 执行。
 
+**移除机器**：机器主人或 Hub 管理员可先运行 `myco machine remove --id <机器 ID> --dry-run` 查看会删除的节点，再运行不带 `--dry-run` 的命令。Hub 会吊销这台机器的入网凭据，删除机器记录及其全部节点（包括机器节点、别名和项目成员关系），保留消息历史。机器上的 runner 遇到凭据被拒会停止重试；要重新接入，使用新的加入链接，或在旧机器上运行 `myco runner service uninstall` 停掉服务。
+
 **三条规则都在那台机器上检查**，Hub 说了不算：
 | | 默认 | 怎么改 |
 |---|---|---|

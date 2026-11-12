@@ -87,6 +87,7 @@ export interface Machine {
   /** whose machine it is (member name) */
   owner?: string; owner_id?: string;
 }
+export interface MachineRemoveResult { machine: Machine; removed: string[]; dry_run: boolean }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
   id: string; from: string; to: string; thread_id: string; reply_to?: string; type: string; body: string;

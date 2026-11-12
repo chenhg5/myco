@@ -788,6 +788,14 @@ func (c *Client) RenameMachine(ctx context.Context, id, name string) error {
 	return c.do(ctx, http.MethodPatch, "/v1/machines/"+esc(id), nil, api.RenameMachineRequest{Name: name}, nil)
 }
 
+func (c *Client) RemoveMachine(ctx context.Context, id string, dry bool) (*api.MachineRemoveResult, error) {
+	var out api.MachineRemoveResult
+	if err := c.do(ctx, http.MethodDelete, "/v1/machines/"+esc(id), dryQuery(dry), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // SpawnOnMachine starts a session on machine id (admin) and waits for it.
 func (c *Client) SpawnOnMachine(ctx context.Context, id string, req api.SpawnRequest, wait time.Duration) (*api.SpawnResult, error) {
 	var out api.SpawnResult

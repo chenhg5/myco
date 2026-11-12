@@ -133,7 +133,9 @@ func Build(o Options) (*Hub, error) {
 	}
 	srv.SetVersion(o.Version, latest)
 	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
-	srv.SetMachines(app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow))
+	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
+	machineSvc.SetRemovalDeps(agents, enroll)
+	srv.SetMachines(machineSvc)
 	consoleSvc := app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock)
 	consoleSvc.SetPairings(sqlite.NewConsolePairingRepo(db))
 	srv.SetConsole(consoleSvc)

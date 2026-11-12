@@ -117,6 +117,12 @@ type MachineList struct {
 	Machines []Machine `json:"machines"`
 }
 
+type MachineRemoveResult struct {
+	Machine Machine  `json:"machine"`
+	Removed []string `json:"removed"`
+	DryRun  bool     `json:"dry_run"`
+}
+
 // MachineReport is the body of PUT /v1/me/machine (sent by runners).
 type MachineReport struct {
 	// Fingerprint is a hash of the machine's own stable ID (never the ID).

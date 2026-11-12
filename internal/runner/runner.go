@@ -19,7 +19,8 @@ import (
 // Options tunes the runner.
 type Options struct {
 	// Self is this agent's name (used in prompts).
-	Self string
+	Self   string
+	HubURL string // used in permanent credential rejection diagnostics
 	// Trace says how much of a task's run is sent to the hub for the
 	// sender's live view: TraceFull (default, ""), TraceSummary or TraceOff.
 	Trace string
@@ -276,6 +277,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
+			}
+			if rejectedHubCredential(err) {
+				r.log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", r.opts.HubURL, "err", err)
+				return err
 			}
 			r.log.Warn("pull failed", "err", err, "retry_in", backoff)
 			select {

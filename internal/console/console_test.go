@@ -312,6 +312,12 @@ func TestBackendMachinesAndLinks(t *testing.T) {
 	if code != 200 || !strings.Contains(m["join_url"].(string), "/j/") || !strings.HasPrefix(m["command"].(string), "curl -fsSL ") {
 		t.Fatalf("links: %d %v", code, m)
 	}
+	if code, m, _ := r.do("DELETE", "/app/hubs/"+id+"/machines/"+ms[0].ID+"?dry_run=true", nil); code != 200 || m["dry_run"] != true {
+		t.Fatalf("remove machine preview: %d %v", code, m)
+	}
+	if code, m, _ := r.do("DELETE", "/app/hubs/"+id+"/machines/"+ms[0].ID, nil); code != 200 || m["dry_run"] != false || m["removed"] == nil {
+		t.Fatalf("remove machine: %d %v", code, m)
+	}
 }
 
 // A hub from before the recent list answers 404: the app falls back to the

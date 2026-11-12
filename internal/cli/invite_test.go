@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chenhg5/myco/internal/api"
+	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/testutil"
 )
 
@@ -117,6 +121,50 @@ func TestInviteOnTheCommandLine(t *testing.T) {
 	}
 	if code, out, e := me.run("member", "pair", "--format", "text"); code != 0 || !strings.Contains(out, hub+"/c/myco_pair_") {
 		t.Fatalf("pair: %d %s %s", code, out, e)
+	}
+	// The member can remove their machine, but not the owner's machine.
+	ownedProfile, err := config.Load(filepath.Join(home, ".myco", "agents", "laohu-mbp-claude-ef56.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownedClient, _ := client.New(hub, ownedProfile.Token)
+	if err := ownedClient.ReportMachine(context.Background(), api.MachineReport{Fingerprint: strings.Repeat("a", 32), Name: "laohu-mbp", Hostname: "laohu-mbp"}); err != nil {
+		t.Fatal(err)
+	}
+	adminClient, _ := client.New(hub, "admin-token-123456")
+	machines, err := adminClient.Machines(context.Background())
+	if err != nil || len(machines) != 1 {
+		t.Fatalf("member machine: %v %v", machines, err)
+	}
+	ownedMachineID := machines[0].ID
+	if code, _, e := me.run("machine", "remove", "--id", ownedMachineID, "--dry-run"); code != ExitDryRun {
+		t.Fatalf("owner dry run remove: %d %s", code, e)
+	}
+	code, out, e = root.run("agent", "register", "--name", "owner-node", "--no-save", "--format", "json")
+	if code != 0 {
+		t.Fatalf("owner node: %s", e)
+	}
+	var ownerNode struct{ Token string }
+	if err := json.Unmarshal([]byte(out), &ownerNode); err != nil {
+		t.Fatal(err)
+	}
+	ownerClient, _ := client.New(hub, ownerNode.Token)
+	if err := ownerClient.ReportMachine(context.Background(), api.MachineReport{Fingerprint: strings.Repeat("b", 32), Name: "owner-box", Hostname: "owner-box"}); err != nil {
+		t.Fatal(err)
+	}
+	machines, err = adminClient.Machines(context.Background())
+	if err != nil || len(machines) != 2 {
+		t.Fatalf("machines: %v %v", machines, err)
+	}
+	for _, machine := range machines {
+		if machine.Name == "owner-box" {
+			if code, _, _ := me.run("machine", "remove", "--id", machine.ID, "--dry-run"); code != ExitPermission {
+				t.Fatalf("non-owner remove exit %d", code)
+			}
+		}
+	}
+	if code, _, e := me.run("machine", "remove", "--id", ownedMachineID); code != 0 {
+		t.Fatalf("owner remove: %d %s", code, e)
 	}
 
 	// A spent or bogus invite: a clear error.

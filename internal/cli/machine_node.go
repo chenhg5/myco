@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/harness/machinenode"
 	"github.com/chenhg5/myco/internal/osutil"
+	"github.com/chenhg5/myco/internal/runner"
 )
 
 // spawnBinary is the executable each spawnable CLI needs on PATH.
@@ -92,6 +93,11 @@ func (e *env) ensureMachineNodesLogged(log *slog.Logger, done map[string]bool) b
 		}
 		a, err := e.ensureMachineNode(h)
 		if err != nil {
+			if runner.IsCredentialRejected(err) {
+				log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", h.Hub, "err", err)
+				done[h.Hub] = true
+				continue
+			}
 			var ce *client.Error
 			if errors.As(err, &ce) && (ce.Code == "permission_denied" || ce.Code == "invalid_argument") {
 				// An older hub, or credentials that may not create one: don't retry.

@@ -64,6 +64,17 @@ func (r *MachineRepo) List(ctx context.Context) ([]*domain.Machine, error) {
 	return out, internal(rows.Err())
 }
 
+func (r *MachineRepo) Delete(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM machines WHERE id=?`, id)
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeNotFound, "machine %s not found", id)
+	}
+	return nil
+}
+
 func (r *MachineRepo) one(ctx context.Context, where string, args ...any) (*domain.Machine, error) {
 	m, err := scanMachine(r.db.QueryRowContext(ctx, `SELECT `+machineCols+` FROM machines `+where, args...))
 	if errors.Is(err, sql.ErrNoRows) {

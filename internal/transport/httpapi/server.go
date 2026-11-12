@@ -129,6 +129,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/agents/{name}/kick", s.admin(s.kickAgent))
 	m.HandleFunc("GET /v1/machines", s.admin(s.listMachines))
 	m.HandleFunc("PATCH /v1/machines/{id}", s.admin(s.renameMachine))
+	m.HandleFunc("DELETE /v1/machines/{id}", s.admin(s.removeMachine))
 	m.HandleFunc("POST /v1/machines/{id}/spawn", s.admin(s.spawnOnMachine))
 	m.HandleFunc("PUT /v1/me/machine", s.agent(s.reportMachine))
 	m.HandleFunc("PUT /v1/me/runtime", s.agent(s.reportRuntime))
@@ -1446,6 +1447,22 @@ func (s *Server) renameMachine(w http.ResponseWriter, r *http.Request) {
 	}
 	s.record(r, "machine.rename", m.ID, "→ "+m.Name)
 	writeJSON(w, http.StatusOK, map[string]string{"id": m.ID, "name": m.Name})
+}
+
+func (s *Server) removeMachine(w http.ResponseWriter, r *http.Request) {
+	if !s.machinesEnabled(w) || !s.mayOwnMachine(w, r, r.PathValue("id"), "remove") {
+		return
+	}
+	dry := dryRun(r)
+	m, names, err := s.machines.Remove(r.Context(), r.PathValue("id"), dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !dry {
+		s.record(r, "machine.remove", m.ID, strings.Join(names, ", "))
+	}
+	writeJSON(w, http.StatusOK, api.MachineRemoveResult{Machine: api.Machine{ID: m.ID, Name: m.Name, Hostname: m.Hostname, OS: m.OS, Arch: m.Arch, MycoVersion: m.MycoVersion, LastSeenAt: timePtr(m.LastSeenAt), OwnerID: m.Owner, Owner: s.ownerName(m.Owner), Agents: names}, Removed: names, DryRun: dry})
 }
 
 // spawnOnMachine starts a session on a machine for an administrator and

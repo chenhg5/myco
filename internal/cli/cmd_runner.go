@@ -302,6 +302,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace,
 		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
+		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),
 		// Lets the agent call `myco` as itself from inside the harness.
 		Env: env, EnvFunc: envFunc,
@@ -353,6 +354,11 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			}
 			r, err := e.buildRunner(p.Path, p.Config, sh, runnerOverrides{}, log)
 			if err != nil {
+				if runner.IsCredentialRejected(err) {
+					started[p.Path] = true
+					log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", p.Config.Hub, "profile", p.Path, "err", err)
+					continue
+				}
 				// Retried on every scan (the hub may be restarting); log
 				// only when the reason changes.
 				msg := toError(err, "").Message

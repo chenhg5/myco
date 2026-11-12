@@ -50,6 +50,7 @@ Errors (any non-2xx):
 | `PATCH /v1/members/{member}` | owner/admin (self: name only) | `{name?, display_name?, role?}`; role `owner` hands over the hub (owner only; the old owner becomes admin) |
 | `DELETE /v1/members/{member}` | owner/admin | Removes a person and revokes all their console tokens; what they own stays |
 | `PUT /v1/agents/{name}/owner`, `PUT /v1/machines/{id}/owner` | owner/admin | `{owner}` (member name or id) |
+| `DELETE /v1/machines/{id}?dry_run=` | machine owner or owner/admin | `{machine, removed:[agent names], dry_run}`; revokes the machine enrollment, removes its nodes (including the machine node), aliases and project memberships, then the machine record. Message history stays. Dry-run only previews |
 | `GET /v1/audit?actor=&target=&before=&limit=` | owner/admin | `{entries: [{id, at, actor, actor_kind, action, target, detail}]}`, newest first; append-only; never message bodies |
 | `POST /v1/enrollments` | admin (any member; exec links owner/admin) | `{name_prefix, harness?, allow_from?, capabilities?, max_uses?, ttl_seconds?, note?}` → `{enrollment, token}` (token `myco_enroll_…`, returned once) |
 | `GET /v1/enrollments` | admin | `{enrollments}` |
@@ -182,3 +183,5 @@ envelope. See [design/e2e-encryption.md](design/e2e-encryption.md) for the forma
 ## App alias proxy
 
 The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}/aliases` returns `{aliases:[{alias,target,created_at,updated_at}]}`. `PUT /app/hubs/{id}/aliases/{alias}` accepts `{target}` and returns `{alias:{...},dry_run}`. `DELETE /app/hubs/{id}/aliases/{alias}` returns `{alias:{...},removed,dry_run}`. PUT and DELETE support `?dry_run=true`; errors preserve the Hub's structured code and HTTP status.
+
+`DELETE /app/hubs/{id}/machines/{mid}?dry_run=true` proxies machine removal and returns `{machine, removed, dry_run}` with the Hub's status and structured errors.

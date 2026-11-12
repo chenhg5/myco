@@ -18,12 +18,87 @@ const AdminSender domain.AgentName = "@admin"
 // MachineService tracks the machines agents run on, from what their
 // runners report, and starts sessions on them for administrators.
 type MachineService struct {
-	machines domain.MachineRepository
-	agents   domain.AgentRepository
-	messages *MessageService
-	ids      IDGenerator
-	clock    Clock
-	window   time.Duration
+	machines     domain.MachineRepository
+	agents       domain.AgentRepository
+	agentService *AgentService
+	enroll       *EnrollmentService
+	messages     *MessageService
+	ids          IDGenerator
+	clock        Clock
+	window       time.Duration
+}
+
+// SetRemovalDeps wires the existing agent cleanup and enrollment revocation paths.
+func (s *MachineService) SetRemovalDeps(agents *AgentService, enroll *EnrollmentService) {
+	s.agentService, s.enroll = agents, enroll
+}
+
+// Remove revokes the machine enrollment before deleting its nodes, then the
+// machine record. Retrying after a partial failure is safe.
+func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*domain.Machine, []string, error) {
+	m, err := s.machines.Get(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	all, err := s.agents.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	enrollments, err := s.enroll.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := map[string]*domain.Enrollment{}
+	for _, e := range enrollments {
+		byID[e.ID] = e
+	}
+	ownedEnrollment := map[string]bool{}
+	for _, a := range all {
+		if a.MachineID == id {
+			if e := byID[a.EnrolledBy]; e != nil && e.Kind == domain.EnrollmentMachine {
+				ownedEnrollment[e.ID] = true
+			}
+		}
+	}
+	// A machine whose node was already removed can still have its enrollment.
+	if len(ownedEnrollment) == 0 {
+		linkedElsewhere := map[string]bool{}
+		for _, a := range all {
+			if a.MachineID != "" && a.MachineID != id {
+				linkedElsewhere[a.EnrolledBy] = true
+			}
+		}
+		for _, e := range enrollments {
+			if e.Kind == domain.EnrollmentMachine && e.Owner == m.Owner && !linkedElsewhere[e.ID] &&
+				(e.Machine == m.Name || e.Machine == hostKey(m.Hostname)) {
+				ownedEnrollment[e.ID] = true
+			}
+		}
+	}
+	names := make([]string, 0)
+	for _, a := range all {
+		if a.MachineID == id || ownedEnrollment[a.EnrolledBy] {
+			names = append(names, string(a.Name))
+		}
+	}
+	sort.Strings(names)
+	if dry {
+		return m, names, nil
+	}
+	for eid := range ownedEnrollment {
+		if _, err := s.enroll.Revoke(ctx, eid, false); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, name := range names {
+		if _, err := s.agentService.Remove(ctx, name, false); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := s.machines.Delete(ctx, id); err != nil {
+		return nil, nil, err
+	}
+	return m, names, nil
 }
 
 // NewMachineService wires the machine use cases.

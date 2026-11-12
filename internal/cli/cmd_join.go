@@ -232,7 +232,7 @@ node right away.`,
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join)
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's

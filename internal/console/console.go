@@ -704,6 +704,14 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"id": r.PathValue("mid"), "name": strings.TrimSpace(in.Name)})
 	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/machines/{mid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		out, err := c.RemoveMachine(r.Context(), r.PathValue("mid"), r.URL.Query().Get("dry_run") == "true")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
 	// This person's devices on a hub, and one-time links to add another.
 	m.HandleFunc("GET /app/hubs/{id}/devices", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.Devices(r.Context())
