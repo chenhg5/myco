@@ -3,15 +3,17 @@
 <head>
 <meta charset="utf-8">
 <!-- The promo's 3D world (Three.js), a pure function of time: window.seek(t). Everything
-     but the app section (film.html, 48-58 s) is drawn here:
+     but the app section (film.html, 48-60 s) is drawn here:
        0-4    title: the mark settles, "Connect your AI agents."
        4-12   five agents alone in space, each in its own product's window
        12-18  the trap: you carry every message between them
        18-22  the drop: mycelium threads; each window becomes its logo tile around the hub
-       22-30  they see each other (agent list)
-       30-40  they message each other; one wakes up in its own session
-       40-48  they hand files to each other
-       58-66  the network folds into the myco mark; download
+       22-32  1. a cloud agent uses your computer: a shell on your MacBook runs its
+              command, and your MacBook's Claude Code takes its task
+       32-40  2. your agent hands a task to a teammate's agent; the answer comes back
+       40-48  3. your own agents: they see each other, trade tasks (one wakes up in
+              its own session) and files
+       60-68  the network folds into the myco mark; download
      Textures come from $WORK/tex (tex.cjs). -->
 <link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
 <link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
@@ -111,9 +113,18 @@ const load = (f) => new Promise((res, rej) => loader.load(f, (t) => { t.colorSpa
 const AG = [
   { k: 'cc', p: V(-3.4, 1.15, -1.0), ry: .28, pop: 4.5, name: 'Claude Code', where: T('MacBook 上', 'on a MacBook'), mark: 'claude', bg: 0xd97757, does: T('前端', 'frontend') },
   { k: 'cx', p: V(3.6, 1.35, -3.2), ry: -.32, pop: 6.1, name: 'Codex', where: T('服务器上', 'on a build server'), mark: 'codex', bg: 0x121212, does: T('API 和测试', 'API & tests') },
-  { k: 'cu', p: V(-3.0, -1.6, -4.4), ry: .36, pop: 7.5, name: 'Cursor', where: T('Windows 台式机上', 'on a Windows desktop'), mark: 'cursor', bg: 0x151515, does: T('组件', 'components') },
+  { k: 'cu', p: V(-3.0, -1.6, -4.4), ry: .36, pop: 7.5, name: 'Cursor', where: T('Windows 台式机上', 'on a Windows desktop'), net: T('同事老胡的电脑上', "on a teammate's PC"), mark: 'cursor', bg: 0x151515, does: T('订单服务', 'orders service') },
   { k: 'gr', p: V(3.2, -1.45, -0.6), ry: -.28, pop: 8.4, name: T('Grok 机器人', 'Grok bot'), where: T('值班', 'on call'), mark: 'grok', bg: 0x000000, does: T('告警', 'alerts') },
-  { k: 'gm', p: V(0.1, 2.85, -5.8), ry: 0, pop: 9.3, name: 'Gemini CLI', where: T('云端服务器上', 'on a cloud VM'), mark: 'gemini', bg: 0x16181d, does: T('调研', 'research') },
+  { k: 'gm', p: V(0.1, 2.85, -5.8), ry: 0, pop: 9.3, name: 'Gemini CLI', where: T('云端服务器上', 'on a cloud VM'), net: T('云端', 'in the cloud'), mark: 'gemini', bg: 0x16181d, does: T('调研', 'research') },
+  // not in the hook: the shell on your MacBook, joining for the first scene
+  { k: 'sh', p: V(-5.6, .55, -1.4), ry: 0, pop: 99, name: 'Shell', where: T('你的 MacBook 上', 'on your MacBook'), mark: 'shell', bg: 0x1b1f1d, does: T('跑命令', 'runs commands') },
+];
+const SH = 5; // index of the shell node: no window in the hook, a tile from 22.6 s
+const SH_IN = 22.6;
+// the machines a scene is about: a soft frame around their tiles
+const PLATES = [
+  { ks: ['cc', 'sh'], text: T('你的 MacBook', 'Your MacBook'), from: 22.7, to: 31.9 },
+  { ks: ['cu'], text: T('同事老胡的电脑', "A teammate's PC"), from: 32.6, to: 39.7 },
 ];
 const byK = Object.fromEntries(AG.map((a, i) => [a.k, i]));
 const HUB = V(0, 0, -3.6);
@@ -165,12 +176,18 @@ function route(a, b) {
 
 // messages, via the hub: [from, to, start, end, text, kind]
 const MSGS = [
-  ['cc', 'cx', 30.7, 31.6, T('派任务：加 /api/plans 接口', 'task: add a /api/plans endpoint'), 'task'],
-  ['cx', 'cc', 33.7, 34.5, T('✓ 完成 · 18 个测试通过', '✓ done · 18 tests pass'), 'reply'],
-  ['gr', 'cx', 35.5, 36.3, T('告警 #3：需要部署', 'alert #3: needs a deploy'), 'task'],
-  ['cx', 'gr', 38.0, 38.8, T('✓ 已部署', '✓ deployed'), 'reply'],
-  ['cu', 'cc', 40.8, 42.5, 'pricing-design.png · 2.4 MB', 'file'],
-  ['cx', 'cu', 44.0, 45.3, 'plans.json · 3 KB', 'file'],
+  // 1. the cloud agent uses your computer
+  ['gm', 'sh', 24.6, 25.5, 'npm test', 'task'],
+  ['sh', 'gm', 27.0, 27.8, T('✓ 24 个测试通过', '✓ 24 tests pass'), 'reply'],
+  ['gm', 'cc', 28.4, 29.2, T('派任务：修复 iOS 登录页', 'task: fix the iOS login screen'), 'task'],
+  ['cc', 'gm', 30.6, 31.4, T('✓ 已修好 · PR #131', '✓ fixed · PR #131'), 'reply'],
+  // 2. a teammate's agent
+  ['cc', 'cu', 33.6, 34.5, T('请教：订单服务的接口', 'ask: the orders API'), 'task'],
+  ['cu', 'cc', 36.6, 37.5, T('✓ 接口文档和示例', '✓ API doc and examples'), 'reply'],
+  // 3. your own agents
+  ['cc', 'cx', 41.0, 41.8, T('派任务：加 /api/plans 接口', 'task: add a /api/plans endpoint'), 'task'],
+  ['cx', 'cc', 43.4, 44.2, T('✓ 完成 · 18 个测试通过', '✓ done · 18 tests pass'), 'reply'],
+  ['cx', 'cc', 44.6, 45.9, 'plans.json · 3 KB', 'file'],
 ];
 const pulses = [];
 function fileTexture(name, size) {
@@ -189,24 +206,28 @@ const markMat = (tex, o = {}) => new THREE.MeshBasicMaterial({ map: tex, transpa
 
 // ---------- terminal card (real myco commands, output trimmed) ----------
 const TERM = [
-  { from: 23.0, to: 29.6, lines: [
+  { from: 23.0, to: 31.8, title: T('Gemini CLI — 云端会话', 'Gemini CLI — in the cloud'), lines: [
+    ['p', '$ myco exec --to mbp-shell --cmd "npm test"'],
+    ['', 'PASS  src/pricing.test.ts', 25.8],
+    ['k', T('✓ 24 个测试通过 · 退出码 0', '✓ 24 tests pass · exit 0'), 27.8],
+    ['p', '$ myco message send --to mbp-claude \\', 28.2],
+    ['p', T('    --body "修复 iOS 登录页" --wait 15m', '    --body "Fix the iOS login screen" --wait 15m'), 28.3],
+    ['k', T('mbp-claude：已修好，PR #131 ✓', 'mbp-claude: fixed, PR #131 ✓'), 31.4],
+  ] },
+  { from: 32.6, to: 39.6, title: 'Claude Code — ~/code/website', lines: [
+    ['p', '$ myco message send --to laohu-cursor \\'],
+    ['p', T('    --body "订单服务的接口说明发我一份" --wait 15m', '    --body "Send me the orders API spec" --wait 15m')],
+    ['d', T('已送达老胡的 agent，等待回复…', "delivered to your teammate's agent, waiting…"), 34.5],
+    ['k', T('laohu-cursor：接口文档和示例在附件里 ✓', 'laohu-cursor: API doc and examples attached ✓'), 37.5],
+  ] },
+  { from: 40.4, to: 47.0, title: 'Claude Code — ~/code/website', lines: [
     ['p', '$ myco agent list --online'],
-    ['d', 'NAME            STATE    CLI           MACHINE'],
-    ['', 'build-codex     working  codex         build-01', 23.9],
-    ['', 'desk-cursor     idle     cursor        desk-win', 24.3],
-    ['', 'oncall-grok     idle     grok          cloud', 24.7],
-    ['', 'cloud-gemini    idle     gemini        cloud-vm', 25.1],
-  ] },
-  { from: 30.4, to: 39.6, lines: [
-    ['p', '$ myco message send --to build-codex \\'],
-    ['p', T('    --body "加一个 /api/plans 接口" --wait 15m', '    --body "Add a /api/plans endpoint" --wait 15m')],
-    ['d', T('已送达 build-codex，等待回复…', 'delivered to build-codex, waiting…'), 31.6],
-    ['k', T('build-codex：完成，18 个测试通过 ✓', 'build-codex: done, 18 tests pass ✓'), 34.5],
-  ] },
-  { from: 40.4, to: 47.0, lines: [
-    ['p', '$ myco inbox pull'],
-    ['', T('desk-cursor → 你：新的定价页设计', 'desk-cursor → you: the new pricing design'), 42.5],
-    ['k', '  📎 pricing-design.png   2.4 MB   sha256 ✓', 42.8],
+    ['d', 'NAME            STATE    CLI       MACHINE'],
+    ['', 'build-codex     idle     codex     build-01', 40.8],
+    ['', 'mbp-shell       idle     exec      mbp', 41.0],
+    ['', 'oncall-grok     idle     grok      cloud', 41.2],
+    ['p', '$ myco inbox pull', 44.6],
+    ['k', '  📎 plans.json   3 KB   sha256 ✓   build-codex', 45.9],
   ] },
 ];
 
@@ -214,6 +235,13 @@ const TERM = [
 window.ready = (async () => {
   const wt = await Promise.all([0, 1, 2, 3, 4].map((i) => load(`file://${TEX}/w${i}.png`)));
   const mt = Object.fromEntries(await Promise.all(['claude', 'codex', 'cursor', 'grok', 'gemini'].map(async (n) => [n, await load(`file://${TEX}/m-${n}.png`)])));
+  // the shell has no window in the hook (an empty one) and a drawn prompt for its mark
+  { const c = document.createElement('canvas'); c.width = c.height = 8; const e = new THREE.CanvasTexture(c); e.image.width = 520; e.image.height = 520; wt.push(e); }
+  { const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
+    x.strokeStyle = '#6fe0ae'; x.lineWidth = 46; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath(); x.moveTo(110, 150); x.lineTo(240, 256); x.lineTo(110, 362); x.stroke();
+    x.beginPath(); x.moveTo(280, 372); x.lineTo(410, 372); x.stroke();
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; mt.shell = tx; }
   const myco = await load(`file://${TEX}/logo.png`);
   wt.forEach((tex, i) => {
     const a = AG[i]; const w = tex.image.width / 520, h = tex.image.height / 520;
@@ -249,6 +277,18 @@ window.ready = (async () => {
     const el = document.createElement('div'); el.className = 'chip'; el.textContent = text; chipsEl.appendChild(el);
     pulses.push({ curve, spokes, s0, s1, obj, el, kind });
   });
+  PLATES.forEach((P) => {
+    const pts = P.ks.map((k) => AG[byK[k]].p);
+    const lo = pts.reduce((m, q) => m.clone().min(q)), hi = pts.reduce((m, q) => m.clone().max(q));
+    P.c = lo.clone().add(hi).multiplyScalar(.5).add(V(0, -.3, 0));
+    P.w = hi.x - lo.x + 2.3; P.h = hi.y - lo.y + 2.15;
+    const c = document.createElement('canvas'); c.width = Math.round(P.w * 160); c.height = Math.round(P.h * 160); const x = c.getContext('2d');
+    x.fillStyle = 'rgba(111,224,174,.015)'; x.strokeStyle = 'rgba(111,224,174,.6)'; x.lineWidth = 5; x.setLineDash([22, 14]);
+    x.beginPath(); x.roundRect(6, 6, c.width - 12, c.height - 12, 46); x.fill(); x.stroke();
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+    P.m = new THREE.Mesh(new THREE.PlaneGeometry(P.w, P.h), markMat(tx, { color: new THREE.Color(1, 1, 1) })); scene.add(P.m);
+    P.el = document.createElement('div'); P.el.className = 'label'; P.el.style.fontSize = '24px'; P.el.style.color = '#8fe3bd'; P.el.textContent = P.text; labelsEl.appendChild(P.el);
+  });
   hubMark = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), markMat(myco, { depthTest: false })); hubMark.renderOrder = 15; hubMark.position.copy(HUB); scene.add(hubMark);
   titleMark = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), markMat(myco)); titleMark.position.copy(TITLE_POS).add(V(0, .75, 0)); scene.add(titleMark);
   SHOTS = [[4.0, ...look(0, 2.6, -.4)], [6.1, ...look(1, 2.9, .3)], [7.5, ...look(2, 2.9, -.3)], [8.4, ...look(3, 2.6, .3)], [9.3, ...look(4, 3.3, 0)], [10.4, ...WIDE]];
@@ -275,7 +315,7 @@ function netCamera(t) {
   let r = lerp(15.5, 12.8, p4out(seg(t, 18, 20.5)));
   const focus = HUB.clone();
   const lean = (a, b, s0, s1, k) => { const w = seg(t, s0, s0 + .8) * (1 - seg(t, s1 - .6, s1)); if (w > 0) { const m = AG[byK[a]].p.clone().add(AG[byK[b]].p).multiplyScalar(.5); focus.lerp(m, w * k * .45); r -= w * 2.0; } };
-  lean('cc', 'cx', 30.2, 35.2, .7); lean('gr', 'cx', 35.2, 39.6, .7); lean('cu', 'cc', 40.2, 43.6, .7); lean('cx', 'cu', 43.6, 46.4, .6);
+  lean('gm', 'sh', 23.4, 28.2, .7); lean('gm', 'cc', 28.2, 32.2, .6); lean('cc', 'cu', 32.4, 38.6, .7); lean('cc', 'cx', 40.6, 46.4, .6);
   // leave the lower left free for the terminal card
   const tw = p2io(seg(t, 22.6, 23.3)) * (1 - p2io(seg(t, 46.6, 47.3)));
   focus.add(V(-1.6 * tw, -.7 * tw, 0));
@@ -305,10 +345,10 @@ window.seek = (t) => {
   } else {
     [pos, tgt] = netCamera(t);
     if (t >= 46.4 && t < 48.2) { const d = p3in(seg(t, 46.6, 48.0)); pos.lerp(HUB.clone().add(V(0, 0, .3)), d); tgt = HUB.clone(); }
-    if (t >= 57.9) { const ang = .25 + (t - 58) * .04; const r = lerp(13, 14.5, p2io(seg(t, 58, 61))); pos = HUB.clone().add(V(Math.sin(ang) * r, .7, Math.cos(ang) * r)); tgt = HUB.clone().add(V(0, .45, 0)); }
+    if (t >= 59.9) { const ang = .25 + (t - 60) * .04; const r = lerp(13, 14.5, p2io(seg(t, 60, 63))); pos = HUB.clone().add(V(Math.sin(ang) * r, .7, Math.cos(ang) * r)); tgt = HUB.clone().add(V(0, .45, 0)); }
   }
   camera.position.copy(pos); camera.lookAt(tgt);
-  camera.fov = 38 + (t < 57.9 ? 8 * p3in(seg(t, 46.6, 48.0)) : 0); camera.updateProjectionMatrix();
+  camera.fov = 38 + (t < 59.9 ? 8 * p3in(seg(t, 46.6, 48.0)) : 0); camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
 
   // ----- title -----
@@ -318,16 +358,16 @@ window.seek = (t) => {
     titleMark.scale.setScalar(Math.max(.001, p)); titleMark.rotation.y = (1 - clamp(p)) * .8 + Math.sin(t * .6) * .06;
   }
   const wm = $('wordmark'), l1 = $('line1');
-  const tWord = seg(t, 1.0, 1.35), tOut = seg(t, 3.2, 3.6), eWord = seg(t, 59.2, 59.55);
+  const tWord = seg(t, 1.0, 1.35), tOut = seg(t, 3.2, 3.6), eWord = seg(t, 61.2, 61.55);
   if (t < 4) { wm.style.opacity = tWord * (1 - tOut); wm.style.filter = `blur(${(1 - tWord) * 10 + tOut * 8}px)`; wm.style.top = '600px'; l1.style.top = '720px'; wordsIn(l1, T('把你的 AI agent 连起来', 'Connect your AI agents.').split(' '), t, 1.5); l1.style.opacity = 1 - tOut; l1.style.filter = `blur(${tOut * 8}px)`; }
-  else if (t >= 59) { wm.style.opacity = eWord; wm.style.filter = `blur(${(1 - eWord) * 10}px)`; wm.style.top = '600px'; l1.style.top = '715px'; wordsIn(l1, T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), t, 59.8); l1.style.opacity = 1; l1.style.filter = 'none'; }
+  else if (t >= 61) { wm.style.opacity = eWord; wm.style.filter = `blur(${(1 - eWord) * 10}px)`; wm.style.top = '600px'; l1.style.top = '715px'; wordsIn(l1, T('AI agent 的 菌丝网络', 'The mycelium for your AI agents.').split(' '), t, 61.8); l1.style.opacity = 1; l1.style.filter = 'none'; }
   else { wm.style.opacity = 0; l1.innerHTML = ''; }
-  $('halo').style.opacity = t < 4 ? seg(t, .8, 1.3) * (1 - tOut) : seg(t, 59, 59.5);
+  $('halo').style.opacity = t < 4 ? seg(t, .8, 1.3) * (1 - tOut) : seg(t, 61, 61.5);
 
   // ----- hook windows; at the drop each one becomes its logo tile -----
   const collapse = seg(t, 18.1, 18.9);
-  const gather = p3in(seg(t, 58.1, 58.9));
-  const netOn = (t >= 18 && t < 47.9) || t >= 57.9;
+  const gather = p3in(seg(t, 60.1, 60.9));
+  const netOn = (t >= 18 && t < 47.9) || t >= 59.9;
   panels.forEach((P, i) => {
     const a = AG[i]; const T0 = tiles[i];
     const s = spring(t - a.pop, .72, 13) * (1 - p3in(collapse) * .96);
@@ -338,11 +378,12 @@ window.seek = (t) => {
     P.mat.color.setRGB(1 - .18 * wait, 1 - .18 * wait, 1 - .22 * wait);
     // labels: the window's name while it is introduced; in the network, under the tile
     let lp, lv;
-    if ((t >= 19.2 && t < 47.6) || (t >= 57.9 && t < 58.4)) {
+    if ((t >= 19.2 && t < 47.6) || (t >= 59.9 && t < 60.4)) {
       lp = project(a.p.clone().add(V(0, -.84, 0)));
-      const seen = a.k === 'cc' ? seg(t, 23.0, 23.3) : seg(t, 23.5 + (i - 1) * .4, 23.8 + (i - 1) * .4);
-      P.el.innerHTML = `${a.name}<small>${seen > 0 ? '<span class="on"></span>' : ''}${a.where}${seen > .5 ? ' · ' + a.does : ''}</small>`;
-      lv = seg(t, 19.4, 19.9) * (1 - seg(t, 47.2, 47.6)) * (t >= 57.9 ? 1 - seg(t, 58, 58.3) : 1);
+      // 3. they see each other: who is online and what each one does
+      const seen = a.k === 'cc' ? seg(t, 40.4, 40.7) : seg(t, 40.8 + i * .18, 41.1 + i * .18);
+      P.el.innerHTML = `${a.name}<small>${seen > 0 ? '<span class="on"></span>' : ''}${a.net || a.where}${seen > .5 ? ' · ' + a.does : ''}</small>`;
+      lv = seg(t, 19.4, 19.9) * (1 - seg(t, 47.2, 47.6)) * (t >= 59.9 ? 1 - seg(t, 60, 60.3) : 1) * (i === SH ? seg(t, SH_IN + .3, SH_IN + .6) : 1);
     } else {
       lp = project(a.p.clone().add(V(0, -P.h / 2 - .1, 0)).add(drift));
       P.el.innerHTML = `${a.name}<small>${a.where}</small>`;
@@ -350,16 +391,18 @@ window.seek = (t) => {
     }
     P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px'; P.el.style.opacity = lp.z < 1 ? lv : 0;
     // the tile, turning slowly so its edges catch the light
-    const ts = netOn ? spring(t - 18.55 - i * .05, .7, 12) : 0;
-    T0.tg.scale.setScalar(Math.max(.001, t >= 57.9 ? 1 - gather : ts));
+    const ts = netOn ? spring(t - (i === SH ? SH_IN : 18.55 + i * .05), .7, 12) : 0;
+    T0.tg.scale.setScalar(Math.max(.001, t >= 59.9 ? 1 - gather : ts));
     T0.tg.position.copy(a.p).lerp(HUB, gather);
     T0.tg.quaternion.copy(camera.quaternion); T0.tg.rotateY(Math.sin(t * .7 + i * 1.3) * .35); T0.tg.rotateX(Math.cos(t * .5 + i) * .12);
-    T0.slab.material.opacity = netOn ? (t >= 57.9 ? 1 : clamp(ts * 2)) : 0; T0.face.material.opacity = T0.slab.material.opacity; T0.tg.visible = T0.slab.material.opacity > .001;
-    // a ring: seeing (Claude Code, 23 s), working (Codex), waking up (Codex, 36.3 s)
+    T0.slab.material.opacity = netOn ? (t >= 59.9 ? 1 : clamp(ts * 2)) : 0; T0.face.material.opacity = T0.slab.material.opacity; T0.tg.visible = T0.slab.material.opacity > .001;
+    // a ring: working (the shell, your Claude Code, the teammate's agent), seeing (Claude Code,
+    // 40.4 s) and waking up in its own session (Codex, 41.8 s)
     let ro = 0, rs = 1;
-    if (a.k === 'cc') { const x = seg(t, 23.0, 24.4); ro = x > 0 && x < 1 ? (1 - x) * .8 : 0; rs = 1 + x * 3.5; }
-    if (a.k === 'cx' && t > 31.6 && t < 33.7) { ro = .55; rs = 1 + .05 * Math.sin(t * 8); }
-    if (a.k === 'cx' && t > 36.3 && t < 37.9) { ro = .7 * (1 - seg(t, 37.6, 37.9)); rs = 1 + .12 * Math.sin(t * 10); }
+    const working = (k, a0, a1) => { if (a.k === k && t > a0 && t < a1) { ro = .55 * (1 - seg(t, a1 - .25, a1)); rs = 1 + .05 * Math.sin(t * 8); } };
+    working('sh', 25.5, 27.0); working('cc', 29.2, 30.6); working('cu', 34.5, 36.6);
+    if (a.k === 'cc') { const x = seg(t, 40.4, 41.8); if (x > 0 && x < 1) { ro = (1 - x) * .8; rs = 1 + x * 3.5; } }
+    if (a.k === 'cx' && t > 41.8 && t < 43.4) { ro = .7 * (1 - seg(t, 43.1, 43.4)); rs = 1 + .12 * Math.sin(t * 10); }
     T0.ring.position.copy(a.p); T0.ring.quaternion.copy(camera.quaternion); T0.ring.scale.setScalar(rs); T0.ring.material.opacity = netOn && t < 47.9 ? ro : 0; T0.ring.visible = T0.ring.material.opacity > .001;
   });
 
@@ -371,15 +414,15 @@ window.seek = (t) => {
   });
 
   // ----- spokes -----
-  const netVis = (t >= 18 && t < 48) || t >= 57.9;
-  const gatherAll = seg(t, 58.1, 58.9);
+  const netVis = (t >= 18 && t < 48) || t >= 59.9;
+  const gatherAll = seg(t, 60.1, 60.9);
   threads.forEach((th) => {
-    const g = p4out(seg(t, 18.0 + th.i * .06, 19.1 + th.i * .06));
-    th.geo.setDrawRange(0, Math.floor(th.n * (t >= 57.9 ? 1 : g)));
+    const g = th.i === SH ? p4out(seg(t, SH_IN + .1, SH_IN + 1.0)) : p4out(seg(t, 18.0 + th.i * .06, 19.1 + th.i * .06));
+    th.geo.setDrawRange(0, Math.floor(th.n * (t >= 59.9 ? 1 : g)));
     // the spokes a message is travelling on light up
     const busy = pulses.reduce((m, p) => Math.max(m, p.spokes.includes(th) ? seg(t, p.s0 - .3, p.s0) * (1 - seg(t, p.s1 + .2, p.s1 + .7)) : 0), 0);
     th.m.material.color.setRGB(lerp(.28, .5, busy), lerp(.66, .95, busy), lerp(.5, .72, busy));
-    th.m.material.opacity = netVis ? lerp(.55, .95, busy) * (t >= 57.9 ? 1 - gatherAll : g) : 0;
+    th.m.material.opacity = netVis ? lerp(.55, .95, busy) * (t >= 59.9 ? 1 - gatherAll : g) : 0;
     th.m.visible = th.m.material.opacity > .001;
   });
 
@@ -394,13 +437,24 @@ window.seek = (t) => {
     P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px';
   });
 
+  // ----- the machines a scene is about -----
+  PLATES.forEach((P) => {
+    if (!P.m) return;
+    const o = seg(t, P.from, P.from + .45) * (1 - seg(t, P.to - .4, P.to));
+    P.m.material.opacity = o * .9; P.m.visible = o > .001;
+    P.m.position.copy(P.c); P.m.quaternion.copy(camera.quaternion);
+    P.m.scale.setScalar(.94 + .06 * p4out(seg(t, P.from, P.from + .6)));
+    const lp = project(P.c.clone().add(V(0, P.h / 2 + .32, 0)));
+    P.el.style.left = lp.x + 'px'; P.el.style.top = lp.y + 'px'; P.el.style.opacity = lp.z < 1 ? o : 0;
+  });
+
   // ----- the hub mark -----
   if (hubMark) {
-    const hp = spring(t - 19.0, .75, 11), end = spring(t - 58.5, .72, 10);
-    hubMark.material.opacity = t >= 57.9 ? clamp((t - 58.0) * 3) : clamp((t - 19.0) * 3) * (1 - seg(t, 47.6, 48));
-    hubMark.scale.setScalar(Math.max(.001, t >= 57.9 ? .55 + 1.25 * end : hp * .8));
+    const hp = spring(t - 19.0, .75, 11), end = spring(t - 60.5, .72, 10);
+    hubMark.material.opacity = t >= 59.9 ? clamp((t - 60.0) * 3) : clamp((t - 19.0) * 3) * (1 - seg(t, 47.6, 48));
+    hubMark.scale.setScalar(Math.max(.001, t >= 59.9 ? .55 + 1.25 * end : hp * .8));
     hubMark.quaternion.copy(camera.quaternion);
-    hubMark.position.copy(HUB).add(V(0, t >= 57.9 ? .75 * end : 0, 0));
+    hubMark.position.copy(HUB).add(V(0, t >= 59.9 ? .75 * end : 0, 0));
   }
   bloom.strength = .32 + .25 * Math.exp(-Math.pow((t - 18.0) * 3, 2)) + .2 * p3in(seg(t, 47, 48));
 
@@ -412,7 +466,7 @@ window.seek = (t) => {
   if (shown) {
     const o = seg(t, shown.from, shown.from + .3) * (1 - seg(t, shown.to - .3, shown.to));
     term.style.opacity = o; term.style.filter = `blur(${(1 - o) * 6}px)`;
-    $('termTitle').textContent = 'Claude Code — ~/code/website';
+    $('termTitle').textContent = shown.title;
     const first = shown.lines[0][1]; const typed = Math.round(first.length * seg(t, shown.from + .3, shown.from + .9));
     let html = '';
     shown.lines.forEach(([cls, text, at], n) => {
@@ -427,8 +481,8 @@ window.seek = (t) => {
   for (const [at, w] of [[16.0, T('复制。', 'Copy.')], [16.5, T('粘贴。', 'Paste.')], [17.0, T('等待。', 'Wait.')]]) if (t >= at && t < at + .5) { const p = seg(t, at, at + .12); kin.innerHTML = `<span style="opacity:${p};filter:blur(${(1 - p) * 10}px)">${w}</span>`; }
   if (t >= 17.5 && t < 18) { const p = seg(t, 17.5, 17.62); kin.innerHTML = `<span style="font-size:104px;opacity:${p * (1 - seg(t, 17.88, 18))};filter:blur(${(1 - p) * 8}px)">${T('复制。粘贴。等待。', 'Copy. Paste. Wait.')}</span>`; }
   const cta = $('cta');
-  if (t >= 60.2) {
-    const pp = seg(t, 60.4, 60.75), up = seg(t, 61.0, 61.3);
+  if (t >= 62.2) {
+    const pp = seg(t, 62.4, 62.75), up = seg(t, 63.0, 63.3);
     cta.innerHTML = `<div class="words" style="top:810px;font-size:30px;font-weight:600;opacity:${pp};filter:blur(${(1 - pp) * 8}px)">
       <span style="padding:16px 34px;border-radius:999px;background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
       <span style="padding:16px 34px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.4)">${T('Windows 版', 'Windows')}</span></div>
@@ -445,9 +499,10 @@ window.CUES = [
   ...AG.map((a) => [a.pop, 'pop', .7]),
   ...HOPS.flatMap(([, , s0, s1]) => [[s0, 'click', .45], [s1, 'tick', .6]]),
   [19.0, 'shimmer', .4],
-  [23.0, 'zip', .5], ...[23.9, 24.3, 24.7, 25.1].map((x) => [x, 'tick', .5]),
+  [SH_IN, 'pop', .7], [25.5, 'tick', .4], [26.0, 'tick', .4], [26.4, 'tick', .4],
+  [40.4, 'zip', .5], ...[40.8, 41.0, 41.2].map((x) => [x, 'tick', .5]),
   ...MSGS.flatMap(([, , s0, s1, , kind]) => [[s0, kind === 'file' ? 'whoosh' : 'send', .6], [s1, kind === 'task' ? 'pop' : 'ding', .45]]),
-  [46.6, 'whoosh', .6], [58.3, 'whoosh', .45], [58.6, 'shimmer', .5],
+  [46.6, 'whoosh', .6], [60.3, 'whoosh', .45], [60.6, 'shimmer', .5],
 ];
 </script>
 </body>

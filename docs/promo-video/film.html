@@ -288,14 +288,14 @@ function clickAt(t, at, ax, ay) { const s = toScreen(ax, ay); ripple(s.x, s.y, s
 
 function frameMotion(t) {
   const f = $('frame');
-  const on = t >= 47.95 && t < 58.0;
+  const on = t >= 47.95 && t < 60.0;
   f.style.display = on ? '' : 'none';
   if (!on) return false;
   let sc = 1, op = 1, blur = 0, clip = 'none';
   // out of the dive into the hub: an iris opens from the centre; the app lands slightly large
   if (t < 48.8) { const p = seg(t, 48.0, 48.4); clip = `circle(${lerp(2, 75, p4out(p))}% at 50% 50%)`; sc = lerp(1.08, 1, expoOut(seg(t, 48.0, 48.8))); }
   // back into the network
-  if (t >= 57.6) { const p = seg(t, 57.6, 57.95); op = 1 - p; sc = 1 - .06 * p3in(p); blur = 8 * p; }
+  if (t >= 59.6) { const p = seg(t, 59.6, 59.95); op = 1 - p; sc = 1 - .06 * p3in(p); blur = 8 * p; }
   f.style.opacity = op; f.style.clipPath = clip;
   f.style.transform = `scale(${sc})`;
   f.style.filter = blur > .1 ? `blur(${blur}px)` : 'none';
@@ -348,72 +348,81 @@ function cursorPath(t, pts) { // [[t, appX, appY, click?], ...] in app px -> scr
   for (let i = 1; i < pts.length; i++) if (t >= pts[i - 1][0]) { const q = p4out(seg(t, pts[i - 1][0], pts[i][0] - .1)); const A = toScreen(pts[i - 1][1], pts[i - 1][2]), B = toScreen(pts[i][1], pts[i][2]); p = [0, lerp(A.x, B.x, q), lerp(A.y, B.y, q)]; }
   return p;
 }
+// where the film aims, in app px, measured on the captures (capture.cjs writes boxes.json)
+const BOX = {
+  zh: { frontend: [312, 186, 899, 60], trace: [701, 459, 545, 179], shell: [672, 118, 600, 140], session: [405, 327, 503, 41], join: [870, 666, 53, 28], added: [312, 547, 899, 60] },
+  en: { frontend: [312, 186, 899, 60], trace: [701, 458, 545, 179], shell: [672, 118, 600, 140], session: [405, 316, 503, 41], join: [870, 676, 53, 28], added: [312, 547, 899, 60] },
+}[ZH ? 'zh' : 'en'];
+const mid = (b) => [b[0] + b[2] / 2, b[1] + b[3] / 2];
+// the rows a running task reveals one at a time (the steps; the terminal's output), app px
+const STEP_TOP = [496, 525, 553, 582, 610, 640];
+const OUT_TOP = [142, 160, 178, 196, 214, 284];
+function reveal(tops, n, x, w, bottom, color) {
+  const top = tops[Math.min(n, tops.length - 1)];
+  if (top < bottom) overlay(`<div style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${bottom - top}px;background:${color}"></div>`);
+}
+function slideIn(t, at) { const w = 1 - seg(t, at, at + .2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform = `translateX(${p3in(w) * 300}px) ` + cam.style.transform; } }
+function slideOut(t, at) { const w = seg(t, at, at + .2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform += ` translateX(${-p3in(w) * 300}px)`; } }
+
 function appShots(t) {
   cam.style.filter = 'none'; cam.style.opacity = 1;
   $('word2').style.opacity = 0;
   if (!frameMotion(t)) return;
   let ks, after = null;
-  if (t < 50.6) { // every agent, in one list; open Frontend
+  if (t < 50.4) { // every agent, in one list; open Frontend's conversation
     show('nodes-dark');
-    ks = [[48.0, 640, 400, 1], [49.0, 640, 400, 1], [49.7, 680, 300, 1.35]];
+    ks = [[48.0, 640, 400, 1], [48.9, 640, 400, 1], [49.6, 700, 280, 1.3]];
     CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    hlRect(312, 193, 906, 58, seg(t, 49.9, 50.1));
-    const a = toScreen(720, 222), from = toScreen(1100, 640);
-    const q = p4out(seg(t, 49.5, 50.15));
-    setCursor(lerp(from.x, a.x, q), lerp(from.y, a.y, q), seg(t, 49.4, 49.55), Math.abs(t - 50.3) < .07);
-    clickAt(t, 50.3, 720, 222); after = 'cursor';
-  } else if (t < 52.45) { // its exchanges with other agents
-    show('node-dark');
-    ks = [[50.6, 900, 420, 1.12], [51.3, 1050, 690, 1.7]];
-    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    hlRect(845, 683, 417, 54, seg(t, 51.5, 51.75));
-    const b = toScreen(1040, 712);
-    setCursor(lerp(b.x + 260, b.x, p4out(seg(t, 51.5, 52.0))), lerp(b.y + 120, b.y, p4out(seg(t, 51.5, 52.0))), seg(t, 51.45, 51.6), Math.abs(t - 52.2) < .07);
-    clickAt(t, 52.2, 1040, 712);
-    flood('observed', seg(t, 52.2, 52.45), 1040, 712);
+    hlRect(...BOX.frontend, seg(t, 49.6, 49.8));
+    const [fx, fy] = mid(BOX.frontend);
+    const a = toScreen(fx - 200, fy), from = toScreen(1100, 640);
+    const q = p4out(seg(t, 49.3, 49.9));
+    setCursor(lerp(from.x, a.x, q), lerp(from.y, a.y, q), seg(t, 49.2, 49.35), Math.abs(t - 50.05) < .07);
+    clickAt(t, 50.05, fx - 200, fy);
+    flood('conversation-dark', seg(t, 50.1, 50.4), fx - 200, fy);
     after = 'cursor';
-  } else if (t < 53.9) { // the thread between two agents, read-only
-    show('observed');
-    ks = [[52.45, 1040, 420, 1.2], [53.0, 760, 210, 1.35]];
+  } else if (t < 53.6) { // what it is doing: the steps of its task, as they happen
+    show('conversation-dark');
+    ks = [[50.4, 900, 420, 1.1], [51.2, 960, 545, 1.6]];
     CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    hlRect(300, 62, 340, 40, seg(t, 53.0, 53.25));
-    const bs = seg(t, 53.7, 53.9); if (bs > 0) { cam.style.filter = `blur(${bs * 8}px)`; cam.style.opacity = 1 - bs; }
-  } else if (t < 55.3) { // add one: a session on this computer, one click
-    show('add-node-dark');
-    ks = [[53.9, 640, 380, 1.4], [54.3, 640, 400, 1.25]];
-    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    const bi = 1 - seg(t, 53.9, 54.05); if (bi > 0) cam.style.filter = `blur(${bi * 8}px)`;
-    hlRect(356, 346, 566, 58, seg(t, 54.45, 54.6));
-    const p = cursorPath(t, [[54.0, 1000, 650], [54.45, 560, 380], [55.0, 876, 604]]);
-    setCursor(p[1], p[2], seg(t, 54.0, 54.15), Math.abs(t - 54.45) < .07 || Math.abs(t - 55.0) < .07);
-    clickAt(t, 54.45, 560, 380); clickAt(t, 55.0, 876, 604);
-    flood('added', seg(t, 55.0, 55.3), 876, 604);
-    after = 'cursor';
-  } else if (t < 56.2) { // joined
-    show('added');
-    ks = [[55.3, 700, 520, 1.25], [55.8, 700, 588, 1.6]];
-    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    const p = seg(t, 55.35, 55.7);
-    hlRect(312, 558, 906, 60, p);
-    overlay(`<div class="badge" style="left:1010px;top:574px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${p}">${T('已加入', 'Joined')}</div>`);
-    const w = seg(t, 56.0, 56.2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform += ` translateX(${-p3in(w) * 300}px)`; }
-  } else { // or one sentence to an agent anywhere else
-    show('invite');
-    ks = [[56.2, 640, 438, 1.55], [57.6, 640, 438, 1.6]];
+    reveal(STEP_TOP, Math.floor(seg(t, 50.8, 52.9) * 5.99), BOX.trace[0], BOX.trace[2] + 20, 640, '#1b1b1f');
+    hlRect(...BOX.trace, seg(t, 51.3, 51.55));
+    slideOut(t, 53.4);
+  } else if (t < 56.8) { // even a shell on your computer, its output as it runs
+    show('shell-dark');
+    ks = [[53.6, 960, 300, 1.25], [54.4, 940, 200, 1.75]];
     CAM = camera(...keyframes(t, ks));
-    const w = 1 - seg(t, 56.2, 56.4); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform = `translateX(${p3in(w) * 300}px) ` + cam.style.transform; }
-    hlRect(356, 402, 566, 72, seg(t, 56.4, 56.6));
-    const b = toScreen(880, 438);
-    setCursor(lerp(b.x + 300, b.x, p4out(seg(t, 56.4, 56.85))), lerp(b.y + 200, b.y, p4out(seg(t, 56.4, 56.85))), seg(t, 56.35, 56.5) * (1 - seg(t, 57.5, 57.6)), Math.abs(t - 56.95) < .07);
-    clickAt(t, 56.95, 880, 438);
-    overlay(`<div class="badge" style="left:800px;top:478px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${seg(t, 57.0, 57.15)}">✓ ${T('已复制，发给那边的 agent', 'Copied — paste it to that agent')}</div>`);
+    slideIn(t, 53.6);
+    reveal(OUT_TOP, Math.floor(seg(t, 54.0, 56.0) * 5.99), 672, 600, 284, '#121317');
+    hlRect(...BOX.shell, seg(t, 54.2, 54.45));
+    slideOut(t, 56.6);
+  } else if (t < 58.2) { // add one: a session on this computer, one click
+    show('add-node-dark');
+    ks = [[56.8, 640, 380, 1.4], [57.2, 640, 420, 1.25]];
+    CAM = camera(...keyframes(t, ks));
+    slideIn(t, 56.8);
+    const [sx, sy] = mid(BOX.session), [jx, jy] = mid(BOX.join);
+    hlRect(...BOX.session, seg(t, 57.35, 57.5));
+    const p = cursorPath(t, [[56.9, 1000, 650], [57.35, sx - 120, sy], [57.85, jx, jy]]);
+    setCursor(p[1], p[2], seg(t, 56.9, 57.05), Math.abs(t - 57.35) < .07 || Math.abs(t - 57.85) < .07);
+    clickAt(t, 57.35, sx - 120, sy); clickAt(t, 57.85, jx, jy);
+    flood('added', seg(t, 57.9, 58.2), jx, jy);
     after = 'cursor';
+  } else { // joined
+    show('added');
+    const [, ay] = mid(BOX.added);
+    ks = [[58.2, 700, ay - 30, 1.25], [58.7, 700, ay, 1.6]];
+    CAM = camera(...keyframes(t, ks));
+    const p = seg(t, 58.25, 58.6);
+    hlRect(...BOX.added, p);
+    overlay(`<div class="badge" style="left:1010px;top:${BOX.added[1] + 16}px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${p}">${T('已加入', 'Joined')}</div>`);
   }
   if (after !== 'cursor') { setCursor(0, 0, 0); ripple(0, 0, 0); }
 }
 
 // the app section's sound cues (the 3D world's are in film3d.html)
-window.APP_CUES = [[50.3, 'click', .8], [52.2, 'click', .8], [52.25, 'pop', .5], [53.75, 'whoosh', .35], [54.45, 'click', .8], [55.0, 'click', .8], [55.05, 'pop', .6], [56.0, 'whoosh', .45], [56.95, 'click', .8]];
+window.APP_CUES = [[50.05, 'click', .8], [50.1, 'pop', .5], ...[0, 1, 2, 3, 4].map((i) => [50.8 + i * .42, 'tick', .35]), [53.4, 'whoosh', .35],
+  ...[0, 1, 2, 3, 4].map((i) => [54.0 + i * .4, 'tick', .4]), [56.6, 'whoosh', .35], [57.35, 'click', .8], [57.85, 'click', .8], [57.9, 'pop', .6]];
 
 // ---------- together: the network ----------
 const NODES = [
@@ -508,7 +517,7 @@ window.seek = (t) => {
   appShots(t); subtitles(t); flash(t);
 };
 window.ready = Promise.all([...document.images].map((i) => i.decode().catch(() => {}))).then(async () => {
-  const names = ['nodes-dark', 'node-dark', 'observed', 'add-node-dark', 'added', 'invite'];
+  const names = ['nodes-dark', 'conversation-dark', 'shell-dark', 'add-node-dark', 'added'];
   await Promise.all(names.map((n) => img(n).decode().catch(() => console.error('missing ' + n))));
   await document.fonts.ready;
 });

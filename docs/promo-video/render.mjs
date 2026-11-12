@@ -15,7 +15,7 @@ const WORK = process.env.WORK || join(DIR, 'work');
 const LANG = process.env.LANG_FILM === 'zh' ? 'zh' : 'en';
 const OTHER = LANG === 'zh' ? 'en' : 'zh';
 const FPS = Number(process.env.FPS || 30);
-const TOTAL = 66;
+const TOTAL = 68;
 const OUT = join(WORK, `out-${LANG}`);
 mkdirSync(OUT, { recursive: true });
 
@@ -46,7 +46,7 @@ async function page(film = process.env.FILM || 'film.html') {
 }
 
 // the 3D worlds (film3d.html) and the app (film.html) share the clock; each frame comes from one of them
-const is3d = (t) => t < 48.0 || t >= 57.95;
+const is3d = (t) => t < 48.0 || t >= 59.95;
 async function pages() {
   const a = await page('film3d.html'); const b = await page('film.html');
   return { pick: (t) => (is3d(t) ? a.p : b.p), close: async () => { await a.b.close(); await b.b.close(); } };

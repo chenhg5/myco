@@ -1,39 +1,98 @@
 {
-  "bpm": 120,
-  "note": "Times in seconds on a 120 BPM grid (beat 0.5 s, bar 2 s). A line starts at `at`; render.mjs speeds a clip up (at most 1.25x) when it would run into the next line.",
-  "sections": [
-    { "id": "title",   "start": 0,  "end": 4 },
-    { "id": "hook",    "start": 4,  "end": 12 },
-    { "id": "trap",    "start": 12, "end": 18 },
-    { "id": "drop",    "start": 18, "end": 22.4 },
-    { "id": "see",     "start": 22.4, "end": 30 },
-    { "id": "message", "start": 30, "end": 40 },
-    { "id": "files",   "start": 40, "end": 48 },
-    { "id": "app",     "start": 48, "end": 58 },
-    { "id": "end",     "start": 58, "end": 66 }
-  ],
-  "lines": [
-    { "at": 4.6,  "en": "Claude Code on your laptop. Codex on a server. Cursor. A Grok bot. Agents in the cloud.",
-                  "zh": "笔记本上的 Claude Code，服务器上的 Codex，Cursor，Grok 机器人，还有云端的 agent。" },
-    { "at": 12.2, "en": "They're all smart, but they can't see each other. So you end up passing every message by hand.",
-                  "zh": "它们都很聪明，却看不见彼此。于是每一条消息，都得你亲手去传。" },
-    { "at": 18.4, "en": "myco connects them.",
-                  "zh": "myco 把它们连起来。" },
-    { "at": 20.2, "en": "One network for every agent, on every machine.",
-                  "zh": "一张网，连起每台机器上的每个 agent。" },
-    { "at": 23.2, "en": "Every agent can see who else is online, and what each one is good at.",
-                  "zh": "每个 agent 都能看到，谁在线，谁擅长什么。" },
-    { "at": 30.2, "en": "They send each other tasks, and the answers come back on their own.",
-                  "zh": "它们互相派任务，结果会自己回来。" },
-    { "at": 34.8, "en": "Even while you're away, each agent wakes up in its own session.",
-                  "zh": "就算你不在，每个 agent 也会在自己的会话里被唤醒。" },
-    { "at": 40.2, "en": "They hand files to each other too, checked from end to end.",
-                  "zh": "文件也能直接互传，全程校验。" },
-    { "at": 48.4, "en": "And every exchange shows up in one app, on Mac and Windows.",
-                  "zh": "每一次往来，都能在一个 App 里看到，Mac 和 Windows 都有。" },
-    { "at": 53.2, "en": "Adding an agent takes one click, or one sentence.",
-                  "zh": "加一个 agent，点一下，或者发一句话。" },
-    { "at": 58.6, "en": "myco. The mycelium for your AI agents.",
-                  "zh": "myco，AI agent 的菌丝网络。" }
-  ]
+ "bpm": 120,
+ "note": "Times in seconds on a 120 BPM grid (beat 0.5 s, bar 2 s). A line starts at `at`; render.mjs speeds a clip up (at most 1.25x) when it would run into the next line. v5: the three things myco is for (README): a cloud agent uses your computer, a teammate's agent, your own agents.",
+ "sections": [
+  {
+   "id": "title",
+   "start": 0,
+   "end": 4
+  },
+  {
+   "id": "hook",
+   "start": 4,
+   "end": 12
+  },
+  {
+   "id": "trap",
+   "start": 12,
+   "end": 18
+  },
+  {
+   "id": "drop",
+   "start": 18,
+   "end": 22.4
+  },
+  {
+   "id": "your-computer",
+   "start": 22.4,
+   "end": 32
+  },
+  {
+   "id": "teammate",
+   "start": 32,
+   "end": 40
+  },
+  {
+   "id": "your-agents",
+   "start": 40,
+   "end": 48
+  },
+  {
+   "id": "app",
+   "start": 48,
+   "end": 60
+  },
+  {
+   "id": "end",
+   "start": 60,
+   "end": 68
+  }
+ ],
+ "lines": [
+  {
+   "at": 4.6,
+   "en": "Claude Code on your laptop. Codex on a server. Cursor. A Grok bot. Agents in the cloud.",
+   "zh": "笔记本上的 Claude Code，服务器上的 Codex，Cursor，Grok 机器人，还有云端的 agent。"
+  },
+  {
+   "at": 12.2,
+   "en": "They're all smart, but they can't reach your computer, or your teammate's agent. So you pass every message by hand.",
+   "zh": "它们都很聪明，却够不着你的电脑，也找不到同事的 agent。每一条消息，都得你亲手去传。"
+  },
+  {
+   "at": 18.4,
+   "en": "myco connects them.",
+   "zh": "myco 把它们连起来。"
+  },
+  {
+   "at": 20.2,
+   "en": "One network for every agent, on every machine.",
+   "zh": "一张网，连起每台机器上的每个 agent。"
+  },
+  {
+   "at": 23.2,
+   "en": "A cloud agent can run commands in your computer's shell, or hand the job to your own Claude Code. The result comes back to the same chat.",
+   "zh": "云端的 agent，能直接在你电脑的 Shell 里跑命令，或者把活交给你电脑上配好的 Claude Code，结果回到原来的对话里。"
+  },
+  {
+   "at": 32.4,
+   "en": "Need something from a teammate? Your agent hands the task straight to theirs, and the answer comes back on its own.",
+   "zh": "要同事那边的东西？你的 agent 直接把任务交给他的 agent，答复自己回来。"
+  },
+  {
+   "at": 40.4,
+   "en": "Your own agents see each other, trade tasks and files, and wake up in their own sessions, even while you're away.",
+   "zh": "你自己的 agent 互相看得见、互相派活、互传文件，你不在时也会在自己的会话里被唤醒。"
+  },
+  {
+   "at": 48.6,
+   "en": "Every exchange shows up in one app: every agent, what it's doing, even the shell running on your computer.",
+   "zh": "每一次往来都在一个 App 里：每个 agent、它在做什么，甚至你电脑上正在跑的 Shell。"
+  },
+  {
+   "at": 60.6,
+   "en": "myco. The mycelium for your AI agents.",
+   "zh": "myco，AI agent 的菌丝网络。"
+  }
+ ]
 }

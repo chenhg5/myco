@@ -1,10 +1,10 @@
 """Synthesize the promo's music and sound effects (numpy only, no samples).
 
-    python3 music.py <out dir>   -> bgm.wav (68 s, 120 BPM) and sfx/<name>.wav
+    python3 music.py <out dir>   -> bgm.wav (70 s, 120 BPM) and sfx/<name>.wav
 
 The track follows script.json's sections: a quiet title (0-4 s), a sparse intro
 (4-12 s), a build with a riser and snare roll (12-18 s), the drop at 18 s, a full
-groove, a lift into the app at 48 s, and a final hit at 58 s. A minor:
+groove, a lift into the app at 48 s, and a final hit at 60 s. A minor:
 Am - F - C - G, one chord a bar.
 """
 import os, sys, wave
@@ -14,8 +14,8 @@ SR = 48000
 BPM = 120
 BEAT = 60 / BPM
 BAR = 4 * BEAT
-TOTAL = 68.0
-TITLE, BUILD, DROP, LIFT, HIT = 4.0, 12.0, 18.0, 48.0, 58.0
+TOTAL = 70.0
+TITLE, BUILD, DROP, LIFT, HIT = 4.0, 12.0, 18.0, 48.0, 60.0
 rng = np.random.default_rng(7)
 
 

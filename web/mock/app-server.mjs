@@ -483,6 +483,11 @@ const EXEC_LINE_MS = 700;
 
 function scheduleExec(hub, threadId, agent, taskId) {
   const lines = execLines();
+  // The node picks the command up at once (as a runner would): it is running, not waiting.
+  setTimeout(() => {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    if (task && ["queued", "delivered"].includes(task.status)) Object.assign(task, { status: "acked", updated_at: iso(0) });
+  }, 300);
   const t = setTimeout(() => {
     const msgs = hub.threads[threadId];
     const task = msgs?.find((m) => m.id === taskId);
