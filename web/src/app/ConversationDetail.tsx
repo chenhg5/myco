@@ -325,6 +325,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // an older one that went quiet may be stuck too.
   const openTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && isOpen(m.status));
   const allStuck = openTasks.length > 0 && openTasks.every(isStuck);
+  // The header's 可能卡住 takes you to the (first) stuck task: in a long
+  // conversation it can be far above the bottom you are looking at.
+  const firstStuck = openTasks.find(isStuck);
+  const toStuck = () => {
+    const el = firstStuck && scrollRef.current?.querySelector<HTMLElement>(`[data-stuck="${firstStuck.id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("is-flash");
+    void el.offsetWidth; // restart the highlight
+    el.classList.add("is-flash");
+  };
   const state = busy
     ? { dot: "pending", label: L("会话被占用", "Session in use") }
     : allStuck
@@ -777,7 +788,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             went quiet after it was picked up may have lost its result: say so,
             and offer to stop it and send it again. */}
         {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (isStuck(m) ? (
-          <div className="conv-stuck">
+          <div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
             <span className="conv-stuck-actions">
@@ -815,13 +826,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`离线 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的数据`, `Offline · showing data from ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
-        {!observed && <span
-          className="conv-head-state"
-          title={messages && messages.length > 0 ? L(`更新于 ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`, `Updated ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`) : undefined}
-        >
-          <span className={cn("dot", state.dot)} />
-          {messages === null ? L("加载中", "Loading") : state.label}
-        </span>}
+        {!observed && (firstStuck ? (
+          <button type="button" className="conv-head-state is-link" onClick={toStuck} title={L("跳到可能卡住的任务", "Go to the task that may be stuck")}>
+            <span className={cn("dot", state.dot)} />
+            {state.label}
+          </button>
+        ) : (
+          <span
+            className="conv-head-state"
+            title={messages && messages.length > 0 ? L(`更新于 ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`, `Updated ${timeAgo(messages[messages.length - 1]?.updated_at, now)}`) : undefined}
+          >
+            <span className={cn("dot", state.dot)} />
+            {messages === null ? L("加载中", "Loading") : state.label}
+          </span>
+        ))}
       </header>
 
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>

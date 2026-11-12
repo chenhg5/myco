@@ -677,6 +677,14 @@ async function runMatrix(browser, size, scheme) {
       );
       const note = page.locator(".conv-stuck", { hasText: "19 小时没有动静" });
       await note.waitFor({ timeout: 10_000 });
+      // 可能卡住 in the header takes you to the stuck task.
+      await page.locator(".conv-detail .conv-head-state.is-link").click();
+      await page.waitForFunction(() => {
+        const el = document.querySelector(".conv-stuck.is-flash");
+        const box = document.querySelector(".conv-scroll")?.getBoundingClientRect();
+        const r = el?.getBoundingClientRect();
+        return !!el && !!box && !!r && r.top >= box.top && r.bottom <= box.bottom;
+      }, null, { timeout: 5_000 });
       const noteText = compactText(await note.innerText());
       // 19 hours ago and no active_at in the mock: updated_at is the fallback.
       if (!noteText.includes("19 小时没有动静") || !noteText.includes("可能卡住")) {

@@ -2577,6 +2577,28 @@ textarea.app-input {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* 可能卡住: a link to the stuck task, which flashes when you get there. */
+.conv-head-state.is-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.conv-head-state.is-link:hover {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.conv-stuck.is-flash {
+  animation: conv-stuck-flash 1.4s ease-out;
+}
+@keyframes conv-stuck-flash {
+  0%, 30% { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  100% { background: transparent; }
+}
 .dot.failed {
   background: var(--red);
 }
