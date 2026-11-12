@@ -469,7 +469,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  /* room under the text before the tools */
+  margin-top: 12px;
   cursor: default;
 }
 .sp-compose-tools {

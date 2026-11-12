@@ -3348,7 +3348,9 @@ button.conv-quote:hover {
   width: 100%;
   min-height: 24px;
   max-height: 200px;
-  padding: 11px 14px 2px;
+  /* room under the text before the row of tools (it was 6px; it read as
+     one cramped block) */
+  padding: 11px 14px 6px;
   border: 0;
   outline: none;
   background: transparent;
@@ -3371,7 +3373,7 @@ button.conv-quote:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 6px 6px 14px;
+  padding: 6px 6px 6px 14px;
   min-height: 38px;
 }
 .conv-compose-tools {
