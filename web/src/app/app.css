@@ -4087,7 +4087,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-devices-head { margin-top: 18px; }
 .app-devices-head .app-group-title { margin: 0; }
 .app-msg-status { font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: var(--pill); color: var(--muted); margin-right: 2px; }
-.app-msg-status.delivered, .app-msg-status.acked { color: var(--accent); }
+.app-msg-status.acked { color: var(--accent); }
 .app-msg-status.held { color: var(--warn, #c48a1a); }
 .app-msg-status.is-stuck { color: var(--amber); }
 .app-counts .is-stuck, .app-counts .is-stuck b { color: var(--amber); }

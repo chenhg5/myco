@@ -167,9 +167,10 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   // is at work).
   const verb = useVerb(running);
 
-  // Not picked up yet (queued, the node offline or its session busy): a
-  // quiet line saying why, not a spinner.
-  if (running && task.status !== "acked" && (!events || events.length === 0)) {
+  // Not started yet (queued or delivered but not acknowledged: the node is
+  // offline, its session is busy, or it has only pulled the task): a quiet
+  // line saying why, not a spinner.
+  if (running && task.status !== "acked") {
     return (
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">

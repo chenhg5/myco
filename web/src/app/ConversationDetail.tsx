@@ -589,11 +589,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         && !possiblyStuck(m, { agent: w?.st.agent, receiving: w?.st.receiving, offline: false }, now);
     });
     if (!open.length) return null;
-    const task = open.find((m) => m.status !== "queued") || open[0];
+    // Only an acknowledged task is at work: queued, pulled-but-not-acked
+    // (delivered) and held all wait.
+    const task = open.find((m) => m.status === "acked") || open[0];
     const said = progressOf.get(task.id);
     return {
       task,
-      queued: task.status === "queued",
+      queued: task.status !== "acked",
       behind: open.filter((m) => m !== task && m.to === task.to).length,
       // what it last said about this task, else what it says it is doing
       status: said?.length ? said[said.length - 1].body.split("\n")[0] : rowOf(task.to)?.st.agent.status_text,

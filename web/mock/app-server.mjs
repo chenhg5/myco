@@ -143,6 +143,20 @@ const stoppedAfterTask = makeMessage({
   updated_at: iso(2 * 60 * 60),
 });
 
+// Pulled by the inbox node but not acknowledged: it has the task, it has not
+// started it. Working means acknowledged only.
+const grokPulledTask = makeMessage({
+  id: "msg_grok_pulled",
+  thread_id: "th_grok_pull",
+  from: CONSOLE,
+  to: "grok-agent-7c2e",
+  type: "task",
+  status: "delivered",
+  body: "把 release 分支的 Go 测试跑一遍，结果贴在这个会话里。",
+  created_at: iso(3 * 60 * 60),
+  updated_at: iso(3 * 60 * 60 - 60),
+});
+
 // A machine the smoke test deletes, with two nodes and its own machine node.
 // POST /app/mock/machine puts them back between widths and themes.
 const deletableMachine = () => ({
@@ -263,6 +277,8 @@ const consoleThreads = {
   // An older task stuck behind a newer one the sender stopped: it still has
   // its own stop and resend in the chat.
   th_console_stuck_stopped: [stuckOlderTask, stoppedAfterTask],
+  // An inbox node pulled this task but never acknowledged it: still queued.
+  th_grok_pull: [grokPulledTask],
 };
 
 // Claude Code / Codex transcripts on this computer, newest first. Two are
@@ -384,8 +400,10 @@ const state = {
         // Joined from a session no runner can wake: it receives only while
         // `myco inbox wait` runs in that session.
         makeAgent({
-          name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", description: "在 Grok 会话里用 inbox wait 接收消息。",
+          name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", display_name: "Myco (Grok)", description: "在 Grok 会话里用 inbox wait 接收消息。",
           kind: "agent", machine_id: "m_studio", receiving: "session",
+          // Pulled from the inbox but not acked: queued, so not working.
+          delivered: [grokPulledTask],
           labels: ["machine=studio-mac", "group=release"],
           binding: { harness: "inbox", environment: "macOS 26.1", workdir: "~/code/myco" },
         }),
@@ -585,12 +603,15 @@ if (SHOWCASE) {
   if (local.myco) local.myco.version = "0.17.2";
 }
 
+// A node is working only when it acknowledged an open task. `status_text` is
+// this mock's stand-in for an acknowledged task; a task it only pulled
+// (`delivered`) is still waiting.
+const isWorking = (a) => !!(a.status_text || stuckCurrent.get(a.name) || (a.in_progress ?? 0) > 0);
+const nodeState = (a) => (a.online ? (isWorking(a) ? "working" : "idle") : "offline");
+
 function totals(agents) {
   const t = { agents: agents.length, working: 0, pending: 0, idle: 0, offline: 0 };
-  for (const a of agents) {
-    const s = a.online ? (a.status_text ? "working" : "idle") : "offline";
-    t[s] += 1;
-  }
+  for (const a of agents) t[nodeState(a)] += 1;
   return t;
 }
 
@@ -641,24 +662,28 @@ const dismissed = new Set();
 function agentStatus(a) {
   // The legacy node has a task it picked up and never reported back on.
   const stuck = stuckCurrent.get(a.name);
-  const state = a.online ? (a.status_text || stuck ? "working" : "idle") : "offline";
+  // Pulled but not acknowledged: waiting, not at work.
+  const delivered = a.delivered || [];
+  const working = isWorking(a);
+  const state = nodeState(a);
   // Working nodes also have a stale queued answer waiting (dismissable).
   const staleId = "msg_stale_" + a.name;
-  const stale = state === "working" && !dismissed.has(staleId)
+  const stale = working && !dismissed.has(staleId)
     ? [makeMessage({ id: staleId, thread_id: "th_stale_" + a.name, from: "mac-exec", to: a.name, type: "reply", status: "queued",
         body: '{"exit_code":124,"stdout":"v0.16.7\\n","stderr":"","duration_ms":60028,"timed_out":true,"error":"killed after 1m0s"}',
         created_at: iso(12 * 3600), updated_at: iso(12 * 3600) })]
     : [];
+  const atWork = working
+    ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
+    : [];
   return {
     agent: a, state,
-    queued: a.queued ?? (state === "working" ? 1 + stale.length : 0),
-    in_progress: state === "working" ? 1 : 0,
+    queued: (a.queued ?? (working ? 1 + stale.length : 0)) + delivered.length,
+    in_progress: working ? 1 : 0,
     held: 0,
     receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
     session_in_use: a.session_in_use || undefined,
-    current: state === "working"
-      ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, body: a.status_text || "处理中…" }), ...stale]
-      : [],
+    current: atWork.length || delivered.length ? [...atWork, ...delivered, ...stale] : [],
   };
 }
 
@@ -1283,7 +1308,8 @@ const server = http.createServer(async (req, res) => {
         const answer = msgs.find((m) => m.reply_to === task.id && (m.type === "reply" || m.type === "event"));
         const open = tasks.find((m) => !["done", "failed"].includes(m.status));
         let state = "done";
-        if (open) state = open.status === "queued" ? "queued" : "working";
+        // delivered: pulled but not acknowledged, so still queued.
+        if (open) state = open.status === "queued" || open.status === "delivered" ? "queued" : "working";
         else if (task.status === "failed" || answer?.type === "event") state = "failed";
         else if (node && answer) { try { if (JSON.parse(answer.body).exit_code) state = "failed"; } catch { /* not json */ } }
         return { state, task, answer, ...(open ? { open } : {}) };

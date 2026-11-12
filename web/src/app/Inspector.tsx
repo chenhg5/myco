@@ -406,7 +406,8 @@ const hostKey = (h?: string) => (h || "").toLowerCase().replace(/\.local$/, "");
 
 function openStatusLabel(status: string, stuck = false): string {
   if (stuck) return L("可能卡住", "May be stuck");
-  if (status === "queued") return L("待处理", "Queued");
+  // delivered: the node pulled it but has not acknowledged it yet.
+  if (status === "queued" || status === "delivered") return L("待处理", "Queued");
   if (status === "held") return L("已挂起", "Held");
   return L("处理中", "In progress");
 }

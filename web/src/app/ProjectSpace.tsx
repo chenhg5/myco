@@ -876,7 +876,9 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   const a = r.st.agent;
   if (r.st.state === "offline") return { text: L("不在线", "Away"), meta: a.last_seen_at ? timeAgo(a.last_seen_at, now) : undefined };
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
-  const doing = open.find((m) => m.status === "acked" || m.status === "delivered") || (r.st.state === "working" ? open[0] : undefined);
+  // Working means the node acknowledged a task. A task it only pulled
+  // (`delivered`) has not started: it is still queued.
+  const doing = open.find((m) => m.status === "acked") || (r.st.state === "working" ? open[0] : undefined);
   if (r.st.state === "working" || doing) {
     const text = a.status_text || (doing ? doing.body.replace(/\s+/g, " ").trim() : "") || L("在干活", "Working");
     const meta = doing ? [L(`${nameOf(doing.from)}派的`, `from ${nameOf(doing.from)}`), timeAgo(doing.created_at, now)].join(" · ") : undefined;
