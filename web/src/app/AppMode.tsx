@@ -20,7 +20,8 @@ import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm } 
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
-import { looksOf } from "@/app/persona";
+import { isWorkspace, looksOf } from "@/app/persona";
+import { agentKind } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconLaptop, IconPerson, IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -180,6 +181,26 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   // A workspace removed from the app is not chosen any more.
   const inScope = (hubId: string) => hubFilter === "all" || !hubs.some((h) => h.id === hubFilter) || hubId === hubFilter;
+  // A project's computers are for every agent in it: one that joined by
+  // itself (myco join --project) is let in here. Each pair is tried once.
+  const shared = useRef(new Set<string>());
+  useEffect(() => {
+    for (const x of projects || []) {
+      if (x.p.archived) continue;
+      const names = new Set(x.p.members.map((m) => m.name));
+      const inIt = rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name));
+      const agents = inIt.filter((r) => agentKind(r.st.agent) === "agent").map((r) => r.st.agent.name);
+      for (const w of inIt.filter((r) => isWorkspace(r.st.agent))) {
+        const allow = w.st.agent.allow_from || [];
+        if (allow.includes("*")) continue;
+        const missing = agents.filter((a) => !allow.includes(a) && !shared.current.has(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
+        if (!missing.length) continue;
+        missing.forEach((a) => shared.current.add(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
+        void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow, ...missing]).catch(() => undefined);
+      }
+    }
+  }, [projects, rows]);
+
   const liveProjects = (projects || []).filter((x) => !x.p.archived && inScope(x.hubId))
     .sort((a, b) => (b.p.updated_at || "").localeCompare(a.p.updated_at || ""));
   const scopedRows = rows.filter((r) => inScope(r.hub.id));

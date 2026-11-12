@@ -12,6 +12,7 @@ import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
+import { recall, remember } from "@/lib/memo";
 
 /** A project, or the agents not in any project yet (one per hub). */
 export type SpaceRef = { hubId: string; name: string } | { hubId: string; loose: true };
@@ -74,14 +75,29 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // Your chat with an agent: the name you have talked to it as (this
   // device's, or your own on the hub), found among your conversations;
   // your own name when there are none yet.
+  // Who you are to each agent (kept, so a chat opens at once).
+  const pairsKey = `pairs\u0000${hubId}`;
+  const loadPairs = async () => {
+    const r = await appApi.recent(hubId, { group: "pair", side: "me" });
+    return remember(pairsKey, r.items.filter((x) => x.kind === "pair").map((x) => ({ node: x.node || "", other: x.other || "" })));
+  };
+  useEffect(() => { void loadPairs().catch(() => undefined); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [hubId]);
+  const peerIn = (pairs: { node: string; other: string }[] | undefined, agent: string) => {
+    const it = (pairs || []).find((x) => x.node === agent && x.other.startsWith("@console:"))
+      || (pairs || []).find((x) => x.other === agent && x.node.startsWith("@console:"));
+    return it ? (it.node === agent ? it.other : it.node) : undefined;
+  };
   const peerFor = async (agent: string): Promise<string | undefined> => {
+    const known = peerIn(recall(pairsKey), agent);
+    if (known) {
+      void loadPairs().catch(() => undefined);
+      return known;
+    }
     try {
-      const r = await appApi.recent(hubId, { group: "pair", side: "me" });
-      const it = r.items.find((x) => x.kind === "pair" && x.node === agent && x.other?.startsWith("@console:"))
-        || r.items.find((x) => x.kind === "pair" && x.other === agent && x.node?.startsWith("@console:"));
-      if (it) return it.node === agent ? it.other : it.node;
-    } catch { /* your own name, then */ }
-    return me;
+      return peerIn(await loadPairs(), agent) || me;
+    } catch {
+      return me;
+    }
   };
   const chatWith = async (agent: string) => {
     setView({ kind: "chat", agent, peer: await peerFor(agent) });
@@ -212,7 +228,10 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   onSent: () => void;
   strip?: React.ReactNode;
 }) {
-  const [items, setItems] = useState<RecentItem[] | null>(null);
+  // The space's tasks as last seen: shown at once, then refreshed.
+  const itemsKey = `space\u0000${hubId}\u0000${project?.name || "*"}`;
+  const [items, setItemsState] = useState<RecentItem[] | null>(() => recall<RecentItem[]>(itemsKey) ?? null);
+  const setItems = (list: RecentItem[]) => setItemsState(remember(itemsKey, list));
   const [error, setError] = useState<unknown>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -234,7 +253,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   }, [hubId, project?.name, [...memberNames].join(",")]);
 
   useEffect(() => {
-    setItems(null);
+    setItemsState(recall<RecentItem[]>(itemsKey) ?? null);
     atBottom.current = true;
     void load();
     const t = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_MS);

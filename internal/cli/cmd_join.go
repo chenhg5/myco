@@ -403,6 +403,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			"myco join --harness codex --session-id 0199a1b2-...   # specify a resumable session",
 			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
 			"myco join --fork                                      # join a copy; keep using this session yourself",
+			`myco join --project website --display-name "Frontend" # and join a project at once`,
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Agent name (default: <machine>-<cli>-<short id>; inbox uses <machine>-agent-<short id>)"},
@@ -413,6 +414,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
+			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 		},
 		Run: handler(func(e *env) error {
 			mf, err := config.LoadMachine(e.defaultPath)
@@ -492,11 +494,30 @@ Safe to re-run: the same session gets the same agent back.`,
 			if err != nil {
 				return err
 			}
+			project := strings.TrimSpace(e.in.String("project"))
 			if dry {
-				return e.dryRun(map[string]any{"action": "join", "agent": res.Agent, "detected": how})
+				d := map[string]any{"action": "join", "agent": res.Agent, "detected": how}
+				if project != "" {
+					d["project"] = project
+				}
+				return e.dryRun(d)
+			}
+			// Into the project as well: the joining is done either way, so a
+			// project it may not join is said, not failed.
+			projectErr := ""
+			if project != "" {
+				if err := joinProject(e, hub, res.Token, project, res.Agent.Name); err != nil {
+					projectErr = err.Error()
+				}
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			if project != "" && projectErr == "" {
+				out["project"] = project
+			} else if projectErr != "" {
+				out["project_error"] = projectErr
+				out["project_suggestion"] = "ask the project's owner to add " + res.Agent.Name + " (myco project add), or check the name with myco project list --all"
+			}
 			if cloud {
 				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits"
 				if b.Harness == "inbox" {
@@ -511,6 +532,11 @@ Safe to re-run: the same session gets the same agent back.`,
 					verb = "already joined as"
 				}
 				fmt.Fprintf(w, "%s %s (%s)\n", verb, res.Agent.Name, how)
+				if project != "" && projectErr == "" {
+					fmt.Fprintf(w, "joined project %s\n", project)
+				} else if projectErr != "" {
+					fmt.Fprintf(w, "could not join project %s: %s\n  ask its owner to add %s (myco project add), or check the name with myco project list --all\n", project, projectErr, res.Agent.Name)
+				}
 				if cloud {
 					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
 					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
@@ -524,6 +550,16 @@ Safe to re-run: the same session gets the same agent back.`,
 			})
 		}),
 	}
+}
+
+// joinProject puts a just-joined agent into a project, as itself.
+func joinProject(e *env, hub, token, project, agent string) error {
+	c, err := client.New(hub, token)
+	if err != nil {
+		return err
+	}
+	_, err = c.PutProjectMember(e.in.Ctx, project, agent, api.ProjectMemberRequest{})
+	return err
 }
 
 // openSessionNote tells a local session how it receives: by itself while it

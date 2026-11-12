@@ -988,6 +988,23 @@ func TestJoinLinks(t *testing.T) {
 	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "stays open") {
 		t.Fatalf("join does not say how to receive while open: %s", out)
 	}
+	// Joining with --project also puts it in the project (one it can see);
+	// a project it may not join is said, and the joining still holds.
+	if code, out, e := admin.run("project", "create", "--name", "web", "--visibility", "team", "--format", "json"); code != 0 {
+		t.Fatalf("project create: %d %s %s", code, out, e)
+	}
+	code, out, e = sess.run("join", "--project", "web", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"project": "web"`) || strings.Contains(out, "project_error") {
+		t.Fatalf("join --project: %d %s %s", code, out, e)
+	}
+	if _, out, _ := admin.run("project", "show", "--name", "web", "--format", "json"); !strings.Contains(out, "test-box-claude-ef56") {
+		t.Fatalf("the agent is not in the project: %s", out)
+	}
+	code, out, e = sess.run("join", "--project", "nope", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"project_error"`) || !strings.Contains(out, "myco project add") {
+		t.Fatalf("join --project with a missing project: %d %s %s", code, out, e)
+	}
+
 	// ...and Codex, found from its active rollout in this directory.
 	wd, _ := os.Getwd()
 	day := filepath.Join(home, ".codex", "sessions", "2026", "11", "05")

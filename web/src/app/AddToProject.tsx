@@ -35,10 +35,13 @@ async function addToProject(hubId: string, project: Project | undefined, rows: A
 
 // The one sentence an agent needs: get myco onto its computer, join this
 // network from inside its own session, and say who it is.
-function joinSentence(command: string): string {
+function joinSentence(command: string, project?: string): string {
+  // The project travels with the sentence: myco join --project puts the
+  // agent in it as soon as it has joined (it can see its owner's projects).
+  const into = project ? ` --project ${project}` : "";
   return L(
-    `加入 myco：在终端运行 ${command} ，然后在你这个会话里运行 myco join --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。`,
-    `Join myco: run ${command} in a terminal, then in this session run myco join --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait --timeout 55m running in the background, and read what it reports with myco inbox pull.`,
+    `加入 myco：在终端运行 ${command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。`,
+    `Join myco: run ${command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait --timeout 55m running in the background, and read what it reports with myco inbox pull.`,
   );
 }
 
@@ -126,8 +129,8 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
       <div className="add-sentence">
         {link ? (
           <>
-            <p className="add-sentence-text">{joinSentence(link.command)}</p>
-            <div className="add-sentence-actions"><CopyButton value={joinSentence(link.command)} /></div>
+            <p className="add-sentence-text">{joinSentence(link.command, project?.name)}</p>
+            <div className="add-sentence-actions"><CopyButton value={joinSentence(link.command, project?.name)} /></div>
           </>
         ) : linkError ? <ErrorText error={linkError} /> : <p className="add-sentence-text is-loading">{L("正在准备…", "Getting it ready…")}</p>}
       </div>

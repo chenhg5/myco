@@ -351,7 +351,11 @@ async function runMatrix(browser, size, scheme) {
       else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
       const dialog = page.locator(".app-modal-add");
       await dialog.waitFor();
-      await page.waitForFunction(() => (document.querySelector(".add-sentence-text")?.textContent || "").includes("myco join --display-name"), null, { timeout: 10_000 });
+      // The sentence carries the project, and asks the agent to say who it is.
+      await page.waitForFunction(() => {
+        const t = document.querySelector(".add-sentence-text")?.textContent || "";
+        return t.includes("myco join --project ") && t.includes("--display-name");
+      }, null, { timeout: 10_000 });
       await dialog.locator(".add-local-row button").first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
