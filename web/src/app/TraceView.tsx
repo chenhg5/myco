@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
+import { MessageContent } from "@/app/Markdown";
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -99,9 +100,10 @@ function usageLine(u?: TraceStep): string {
 }
 
 /**
- * What the agent did for a task you gave it: thinking, tool calls with their
- * results, and what it said, as the runner reported them. Live while the task
- * runs; folded into one line afterwards (loaded when opened).
+ * What the agent did for a task: what it said along the way, in the open,
+ * and between, each run of steps (thinking, tool calls with their results)
+ * as one line that opens, as the runner reported them. Live while the task
+ * runs: the newest steps say what it is doing now.
  */
 export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   hubId: string; task: Message; onGrow?: () => void;
@@ -114,7 +116,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
-  const [open, setOpen] = useState(running);
   const [gone, setGone] = useState(false);
   const last = useRef(events?.length ? events[events.length - 1].seq : 0);
   const finalLoaded = useRef(!running && events !== null);
@@ -127,19 +128,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
     onGrow?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events?.length, running]);
-
-  // Open while it runs; when it finishes, fold to the one-line summary.
-  // A beat later, so the last steps and the usage line (fetched once more
-  // when it stops) are in before the block folds.
-  const wasRunning = useRef(running);
-  useEffect(() => {
-    const was = wasRunning.current;
-    wasRunning.current = running;
-    if (running) { setOpen(true); return; }
-    if (!was) return;
-    const t = window.setTimeout(() => setOpen(false), 1200);
-    return () => window.clearTimeout(t);
-  }, [running]);
 
   // Loaded while it runs (polled) and once when it has finished, folded or
   // not: whether there is anything to show depends on it.
@@ -215,31 +203,64 @@ export function TraceView({ hubId, task, onGrow, waiting, answered }: {
   if (!running && (events === null || steps === 0)) return null;
   if (running && steps === 0) return atWork;
 
-  const summary = summaryOf(rows);
-  // While it runs, the line says what it is doing right now.
-  const lastRow = rows[rows.length - 1];
-  const doing = !lastRow ? L("正在处理", "Working")
-    : lastRow.kind === "tool" ? `${toolLabel(lastRow.call.tool)} ${(lastRow.call.input || "").split("\n")[0]}`.trim()
-    : lastRow.kind === "thinking" ? L("正在思考", "Thinking")
-    : L("正在处理", "Working");
-  const head = running
-    ? doing
-    : events === null ? L("查看过程", "Show what it did")
-    : summary || L("过程", "What it did");
+  // As Claude Code and Codex show a run: what it says between steps is
+  // text, in the open; each run of steps in between folds into one line
+  // ("跑了 3 条命令、改了 1 个文件") that opens to show them. The newest
+  // steps, while it runs, say what it is doing now.
+  type Segment = { kind: "say"; row: Row } | { kind: "steps"; rows: Row[] };
+  const segments: Segment[] = [];
+  for (const r of shown) {
+    if (r.kind === "text") {
+      if (r.step.text?.trim()) segments.push({ kind: "say", row: r });
+      continue;
+    }
+    const lastSeg = segments[segments.length - 1];
+    if (lastSeg?.kind === "steps") lastSeg.rows.push(r);
+    else segments.push({ kind: "steps", rows: [r] });
+  }
+  const endsWithSay = segments[segments.length - 1]?.kind === "say";
 
   return (
-    <div className={cn("trace", running && "is-live", open && "is-open")}>
+    <div className={cn("trace is-flow", running && "is-live")} ref={body}>
+      {segments.map((seg, i) => seg.kind === "say" ? (
+        <div key={(seg.row as { key: string }).key} className="trace-say">
+          <MessageContent body={(seg.row as Extract<Row, { step: TraceStep }>).step.text || ""} />
+        </div>
+      ) : (
+        <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
+      ))}
+      {running && endsWithSay && (
+        <div className="trace-head trace-wait">
+          <Mushroom />
+          <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
+          <Elapsed since={task.created_at} className="trace-usage" />
+        </div>
+      )}
+      {!running && usage && <div className="trace-foot">{usageLine(usage)}</div>}
+    </div>
+  );
+}
+
+/** A run of steps between two things it said: one line, open to see them.
+ *  The newest, while it runs, says what it is doing now. */
+function StepGroup({ rows, live, since }: { rows: Row[]; live: boolean; since: string }) {
+  const [open, setOpen] = useState(false);
+  const last = rows[rows.length - 1];
+  const doing = !last ? L("正在处理", "Working")
+    : last.kind === "tool" ? `${toolLabel(last.call.tool)} ${(last.call.input || "").split("\n")[0]}`.trim()
+    : last.kind === "thinking" ? L("正在思考", "Thinking")
+    : L("正在处理", "Working");
+  const head = live ? doing : summaryOf(rows) || (last?.kind === "thinking" ? L("思考了一下", "Thought it over") : L("过程", "Steps"));
+  return (
+    <div className={cn("trace-group", open && "is-open", live && "is-live")}>
       <button type="button" className="trace-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {running ? <Mushroom /> : <ChevronRight className="trace-chev" />}
-        <span className={cn("trace-title", running && "is-shimmer")}>{head}</span>
-        {running && <Elapsed since={task.created_at} className="trace-usage" />}
-        {!running && usage && <span className="trace-usage">{usageLine(usage)}</span>}
+        {live ? <Mushroom /> : <ChevronRight className="trace-chev" />}
+        <span className={cn("trace-title", live && "is-shimmer")}>{head}</span>
+        {live && <Elapsed since={since} className="trace-usage" />}
       </button>
       {open && (
-        <div className="trace-body" ref={body}>
-          {events === null && <div className="trace-note">{L("正在读取…", "Loading…")}</div>}
-          {events !== null && rows.length === 0 && running && <div className="trace-note">{L("开始了，等第一步…", "Started; waiting for the first step…")}</div>}
-          {shown.map((r) => <TraceRow key={r.key} row={r} live={running} />)}
+        <div className="trace-body">
+          {rows.map((r) => <TraceRow key={r.key} row={r} live={live} />)}
         </div>
       )}
     </div>

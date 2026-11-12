@@ -1808,3 +1808,31 @@ body.is-resizing {
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* A run as a flow: what the agent says, in the open (as its reply reads),
+   and each run of steps folded into one muted line that opens below. */
+.trace.is-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.trace-say {
+  padding: 4px 4px 4px 2px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.trace-say > :first-child {
+  margin-top: 0;
+}
+.trace-say > :last-child {
+  margin-bottom: 0;
+}
+.trace-group.is-open .trace-chev {
+  transform: rotate(90deg);
+}
+.trace-foot {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--faint, var(--muted));
+}

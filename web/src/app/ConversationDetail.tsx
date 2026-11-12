@@ -581,6 +581,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // (one that has gone quiet may be stuck: the lists say so; no mushroom)
     const open = shown.filter((m) => {
       if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id)) return false;
+      // A task someone else gave the member shown here has its own line of
+      // work under it (with the mushroom): not a second one at the bottom.
+      if (!observed && alsoSet.has(m.from) && m.to === target.agent) return false;
       const w = rowOf(m.to);
       return Date.now() - new Date(m.created_at).getTime() < OPEN_FOR_MS && w?.st.state !== "offline"
         && !possiblyStuck(m, { agent: w?.st.agent, receiving: w?.st.receiving, offline: false }, now);
