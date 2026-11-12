@@ -569,6 +569,16 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "member-card");
+      // One card: the description stays on one line, and the details
+      // unfold inside it instead of opening another panel.
+      const descLines = await page.locator(".ms .ms-desc").evaluate((el) => el.tagName === "INPUT" && getComputedStyle(el).whiteSpace === "nowrap");
+      if (!descLines) throw new Error("成员卡片的描述应该只有一行");
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      await page.locator(".ms .ms-fold-body .app-kv").first().waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-inspector").count()) throw new Error("详细信息不该再弹出另一个面板");
+      await page.locator(".ms .ms-fold-body").scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "member-card-details");
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });

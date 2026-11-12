@@ -7,6 +7,7 @@ import { agentKind, nodeName } from "@/app/nodes";
 import { Avatar, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { shareWorkspaces } from "@/app/AddToProject";
 import { ErrorText } from "@/app/dialogs";
+import { Inspector } from "@/app/Inspector";
 import { useContextMenu } from "@/app/ContextMenu";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -110,18 +111,21 @@ function Section({ title, rows, projects, now, onOpen }: { title?: string; rows:
 }
 
 /**
- * One member's card: rename it, say what it does, put it in projects, chat
- * with it. Its technical details are one step further (More details).
+ * One member's card, everything in one place: rename it, say what it
+ * does, chat with it, put it in projects; below, what it is working on,
+ * its skills, the technical details (folded) and managing it.
  */
-export function MemberSheet({ row, projects, rows, onClose, onChat, onChanged, onDetails }: {
+export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChanged, onRefresh, onOpenProject, onOpenMachine }: {
   row: AgentRow | null;
   projects: Projects;
   rows: AgentRow[];
+  now: number;
   onClose: () => void;
   onChat: (r: AgentRow) => void;
   onChanged: () => void;
-  /** the full technical view */
-  onDetails: (r: AgentRow) => void;
+  onRefresh: () => Promise<void>;
+  onOpenProject: (ref: { hubId: string; name: string }) => void;
+  onOpenMachine: () => void;
 }) {
   const a = row?.st.agent;
   const [name, setName] = useState("");
@@ -138,7 +142,8 @@ export function MemberSheet({ row, projects, rows, onClose, onChat, onChanged, o
   }, [row?.hub.id, a?.name]);
   useEffect(() => {
     if (!row) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // A dialog opened from the card closes first.
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector(".app-modal")) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [row, onClose]);
@@ -174,7 +179,7 @@ export function MemberSheet({ row, projects, rows, onClose, onChat, onChanged, o
         <button type="button" className="ms-close app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}><X /></button>
         <div className="ms-face"><Avatar agent={a} size={72} state={row.st.state} /></div>
         <input className="ms-name" value={name} onChange={(e) => setName(e.target.value)} aria-label={L("名字", "Name")} />
-        <textarea className="ms-desc" value={desc} rows={2} onChange={(e) => setDesc(e.target.value)}
+        <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />
         <div className="ms-state">{ws ? whereOf(row) : stateWords(row.st.state, a.status_text)}</div>
         {dirty && <div className="ms-save"><button type="button" className="app-btn app-btn-primary app-btn-small" disabled={busy || !name.trim()} onClick={() => void save()}>{L("保存", "Save")}</button></div>}
@@ -196,13 +201,15 @@ export function MemberSheet({ row, projects, rows, onClose, onChat, onChanged, o
           {mine.length === 0 && <p className="ms-note">{L("还没进项目。点右上角的 + 放进一个。", "Not in a project yet. Use + to put it in one.")}</p>}
           {mine.map((p) => (
             <div key={p.name} className="ms-project">
-              <span>{p.title || p.name}</span>
+              <button type="button" className="ms-project-name" onClick={() => onOpenProject({ hubId: row.hub.id, name: p.name })}>{p.title || p.name}</button>
               <button type="button" className="ms-leave" disabled={busy} onClick={() => void leave(p)}>{L("移出", "Remove")}</button>
             </div>
           ))}
         </div>
         <ErrorText error={error} />
-        <button type="button" className="ms-more" onClick={() => onDetails(row)}>{L("更多信息", "More details")}</button>
+        <Inspector embedded row={row} now={now} projects={projects} onClose={onClose} onRefresh={onRefresh}
+          onThread={() => onChat(row)} onPeer={() => undefined} onMessage={onChat}
+          onOpenMachine={onOpenMachine} onOpenProject={onOpenProject} onProjectsChanged={onChanged} />
         {menu.element}
       </aside>
     </>

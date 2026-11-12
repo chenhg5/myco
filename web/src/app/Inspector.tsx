@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -654,8 +654,12 @@ function AliasRow({ row, mayManage, onRefresh }: {
   );
 }
 
-export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged }: {
+export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged, embedded = false }: {
   row: AgentRow | null;
+  /** inside a member's card: no panel of its own; what the card already
+   *  shows (name, description, projects, chat) is left out, and the
+   *  technical details fold away */
+  embedded?: boolean;
   now: number;
   onClose: () => void;
   onRefresh: () => Promise<void>;
@@ -697,10 +701,12 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
   useEffect(() => {
     if (!row) return;
+    if (embedded) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !action) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [row, action, onClose]);
+  }, [row, action, onClose, embedded]);
+  const [more, setMore] = useState(false);
 
   if (!row || !ag) return null;
 
@@ -800,32 +806,19 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const isStuck = (m: { status: string; active_at?: string; updated_at: string }) =>
     possiblyStuck(m, { agent: row.st.agent, receiving: row.st.receiving, offline: row.st.state === "offline" }, now);
 
-  return (
-    <>
-      <div className="app-inspector-backdrop" onClick={onClose} />
-      <aside className="app-inspector" role="dialog" aria-label={L(`${nodeName(ag, row.hub)} 详情`, `${nodeName(ag, row.hub)} details`)}>
-        <div className="app-inspector-head">
-          <span className="app-row-icon"><Icon /></span>
-          <div className="titles">
-            <h2 title={ag.name}>{nodeName(ag, row.hub)}</h2>
-          </div>
-          <span className={cn("app-pill", sessionBusy(row.st) ? pillClass.pending : pillClass[row.st.state])}>
-            <span className={cn("dot", stateLabel(row.st, state.label).dot)} />{stateLabel(row.st, state.label).label}
-          </span>
-          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>
-            <X />
-          </button>
-        </div>
-
-        <div className="app-inspector-body">
-
+  const sec_state = (
+        <>
           {row.st.state === "offline" && <OfflineCard row={row} now={now} onRefresh={onRefresh} />}
           {row.st.state !== "offline" && row.st.session_in_use && row.st.receiving !== "session" && <InUseCard />}
 
+        </>
+      );
+  const sec_about = (
+        <>
           {kind !== "human" && (
             <section className="app-group">
               <div className="app-group-title">
-                <span className="name">{L("介绍与技能", "About and skills")}</span>
+                <span className="name">{embedded ? L("技能", "Skills") : L("介绍与技能", "About and skills")}</span>
                 {mayManage && (
                   <button type="button" className="app-group-action" onClick={openSkills}>
                     <Pencil />{L("编辑技能", "Edit skills")}
@@ -833,14 +826,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 )}
               </div>
               <div className="app-list">
-                <div className={cn("app-about", !ag.description && "is-empty")}>
+                {!embedded && <div className={cn("app-about", !ag.description && "is-empty")}>
                   {ag.description || L("还没有介绍。", "No description yet.")}
                   {mayManage && (
                     <button type="button" className="app-about-edit" onClick={() => openAction("profile")} aria-label={L("修改介绍", "Edit description")} title={L("修改介绍", "Edit description")}>
                       <Pencil />
                     </button>
                   )}
-                </div>
+                </div>}
                 {skillsOf(ag).length === 0 ? (
                   <div className="app-skill-empty">
                     {L("还没有技能。技能告诉别的 agent 可以把什么活派给它；它自己也能用 myco agent skills add 添加。", "No skills yet. Skills tell other agents what work to hand it; it can add them itself with myco agent skills add.")}
@@ -856,6 +849,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </section>
           )}
 
+        </>
+      );
+  const sec_runtime = (
+        <>
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("运行", "Runtime")}</span></div>
             <div className="app-list">
@@ -887,7 +884,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   </span>
                 </div>
               )}
-              {kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
+              {!embedded && kind !== "human" && ag.binding.harness !== "machine" && (inProjects.length > 0 || (mayManage && joinable.length > 0)) && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("项目", "Projects")}</span>
                   <span className="app-kv-value app-kv-projects">
@@ -955,11 +952,19 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </div>
           </section>
 
+        </>
+      );
+  const sec_labels = (
+        <>
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("分组和标签", "Group and tags")}</span></div>
             <LabelsEditor row={row} onRefresh={onRefresh} readOnly={!mayManage} />
           </section>
 
+        </>
+      );
+  const sec_current = (
+        <>
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("当前工作", "Current work")}</span></div>
             <div className="app-list">
@@ -995,6 +1000,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             {!action && error != null && <ErrorText error={error} />}
           </section>
 
+        </>
+      );
+  const sec_convo = (
+        <>
           <section className="app-group">
             <div className="app-group-title">
               <span className="name">{L("和你的对话", "Conversations with you")}</span>
@@ -1007,6 +1016,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-list"><MessageRows row={row} now={now} onThread={onThread} /></div>
           </section>
 
+        </>
+      );
+  const sec_peers = (
+        <>
           <section className="app-group">
             <div className="app-group-title">
               <span className="name">{L("与其他 agent 的往来", "Exchanges with other nodes")}</span>
@@ -1015,6 +1028,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-list"><PeerRows row={row} now={now} onPeer={onPeer} /></div>
           </section>
 
+        </>
+      );
+  const sec_history = (
+        <>
           {mayManage && row.hub.me?.member && (
             <section className="app-group">
               <div className="app-group-title"><span className="name">{L("修改记录", "Changes")}</span></div>
@@ -1025,6 +1042,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </section>
           )}
 
+        </>
+      );
+  const sec_identity = (
+        <>
           <section className="app-group">
             <div className="app-group-title"><span className="name">{L("身份与绑定", "Identity and binding")}</span></div>
             <div className="app-list">
@@ -1042,15 +1063,21 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             </div>
           </section>
 
+        </>
+      );
+  const sec_actions = (
+        <>
           <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("操作", "Actions")}</span></div>
+            <div className="app-group-title"><span className="name">{embedded ? L("管理", "Manage") : L("操作", "Actions")}</span></div>
             <div className="app-list">
               {!mayManage && (
                 <div className="app-empty-note">{L(`这是 ${ag.owner || L("别人", "someone else")} 的 agent，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, `This node belongs to ${ag.owner || "someone else"}; only they or an admin can change it.`)}</div>
               )}
-              <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
-                {L("修改显示名和描述", "Edit display name and description")}<span className="app-chev">›</span>
-              </button>
+              {!embedded && (
+                <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
+                  {L("修改显示名和描述", "Edit display name and description")}<span className="app-chev">›</span>
+                </button>
+              )}
               <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
                 {L("允许谁派任务", "Who can give tasks")}<span className="app-chev">›</span>
               </button>
@@ -1067,8 +1094,63 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               </button>
             </div>
           </section>
+        </>
+      );
+  const hasWork = current.length > 0 || row.st.queued + row.st.in_progress + row.st.held > 0;
+  const sections = embedded ? (
+    <div className="ms-details">
+      {sec_state}
+      {hasWork && sec_current}
+      {sec_about}
+      <button type="button" className={cn("ms-fold", more && "open")} onClick={() => setMore((v) => !v)} aria-expanded={more}>
+        <ChevronRight />{L("详细信息", "Details")}
+      </button>
+      {more && (
+        <div className="ms-fold-body">
+          {sec_runtime}
+          {sec_labels}
+          {sec_peers}
+          {sec_history}
+          {sec_identity}
+        </div>
+      )}
+      {sec_actions}
+    </div>
+  ) : null;
+
+  return (
+    <>
+      {embedded ? sections : (<>
+      <div className="app-inspector-backdrop" onClick={onClose} />
+      <aside className="app-inspector" role="dialog" aria-label={L(`${nodeName(ag, row.hub)} 详情`, `${nodeName(ag, row.hub)} details`)}>
+        <div className="app-inspector-head">
+          <span className="app-row-icon"><Icon /></span>
+          <div className="titles">
+            <h2 title={ag.name}>{nodeName(ag, row.hub)}</h2>
+          </div>
+          <span className={cn("app-pill", sessionBusy(row.st) ? pillClass.pending : pillClass[row.st.state])}>
+            <span className={cn("dot", stateLabel(row.st, state.label).dot)} />{stateLabel(row.st, state.label).label}
+          </span>
+          <button type="button" className="app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}>
+            <X />
+          </button>
+        </div>
+
+        <div className="app-inspector-body">
+
+          {sec_state}
+          {sec_about}
+          {sec_runtime}
+          {sec_labels}
+          {sec_current}
+          {sec_convo}
+          {sec_peers}
+          {sec_history}
+          {sec_identity}
+          {sec_actions}
         </div>
       </aside>
+      </>)}
 
       <Modal
         open={action === "copy"}

@@ -10,7 +10,6 @@ import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
 import { useHubNames } from "@/app/hubNames";
-import { Inspector } from "@/app/Inspector";
 import { ProjectPage } from "@/app/ProjectPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
@@ -110,7 +109,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
-  const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number } | null>(null);
   const [projectReload, setProjectReload] = useState(0);
@@ -325,7 +323,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }
 
   const profileRow = profile ? rows.find((r) => r.hub.id === profile.hubId && r.st.agent.name === profile.name) || null : null;
-  const inspectRow = inspect ? rows.find((r) => r.hub.id === inspect.hubId && r.st.agent.name === inspect.name) || null : null;
   const addAgentProject = addAgent && !isLoose(addAgent) ? liveProjects.find((x) => x.hubId === addAgent.hubId && x.p.name === addAgent.name)?.p : undefined;
   const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
   const title = page === "members" ? L("成员", "Members")
@@ -567,22 +564,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
       <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} />
 
-      <MemberSheet row={profileRow} projects={hubProjects} rows={rows} onClose={() => setProfile(null)}
-        onChat={chatWithMember} onChanged={() => void refresh()}
-        onDetails={(r) => { setProfile(null); setInspect({ hubId: r.hub.id, name: r.st.agent.name }); }} />
-      <Inspector
-        row={inspectRow}
-        now={now}
-        projects={hubProjects}
-        onOpenProject={(ref) => { setInspect(null); openSpace(ref); }}
-        onProjectsChanged={() => void loadProjects(hubs.map((h) => h.id))}
-        onClose={() => setInspect(null)}
-        onRefresh={refresh}
-        onThread={() => setInspect(null)}
-        onPeer={() => setInspect(null)}
-        onMessage={(r) => { setInspect(null); chatWithMember(r); }}
-        onOpenMachine={() => { setInspect(null); setPage("settings"); }}
-      />
+      <MemberSheet row={profileRow} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
+        onChat={chatWithMember} onChanged={() => void refresh()} onRefresh={refresh}
+        onOpenProject={(ref) => { setProfile(null); openSpace(ref); }}
+        onOpenMachine={() => { setProfile(null); setPage("computers"); }} />
     </div>
   );
 }

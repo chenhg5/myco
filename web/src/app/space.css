@@ -956,7 +956,7 @@
   right: 16px;
   bottom: 16px;
   z-index: 41;
-  width: min(340px, calc(100% - 32px));
+  width: min(380px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1008,7 +1008,10 @@
   font-size: 12.5px;
   line-height: 1.55;
   text-align: center;
-  resize: none;
+  /* one line, however long: the rest shows as … (and in full on hover) */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ms-desc:hover,
 .ms-desc:focus {
@@ -1075,20 +1078,72 @@
   font-size: 12px;
   color: var(--faint);
 }
-.ms-more {
-  margin-top: auto;
-  padding: 6px 8px;
+
+.ms-project-name {
+  min-width: 0;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
   background: none;
-  color: var(--faint);
+  color: inherit;
   font: inherit;
-  font-size: 11.5px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: default;
 }
-.ms-more:hover {
+.ms-project-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* What used to be a second panel, inside the card: open work, skills,
+   the technical details folded away, and managing it. */
+.ms-details {
+  align-self: stretch;
+  margin-top: 18px;
+}
+.ms-details .app-group {
+  margin-bottom: 16px;
+}
+.ms-details .app-group-title {
+  text-transform: none;
+}
+.ms-details .app-group-title .name {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.ms-details .app-offline,
+.ms-details .app-inuse {
+  margin-bottom: 16px;
+}
+.ms-fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: default;
+}
+.ms-fold:hover {
   color: var(--fg-2);
-  background: var(--nav-hover);
+}
+.ms-fold svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.15s ease;
+}
+.ms-fold.open svg {
+  transform: rotate(90deg);
 }
 
 /* ---------- narrow windows ---------- */
