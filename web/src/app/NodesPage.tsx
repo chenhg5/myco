@@ -8,7 +8,7 @@ import type { Hub, HubOverview } from "@/appapi";
 import type { State } from "@/api";
 import type { AgentRow, Filters, NodeKind } from "@/app/types";
 import {
-  CLOUD_FILTER, agentKind, aliasSummary, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, tagsOf,
+  CLOUD_FILTER, agentKind, aliasSummary, cliName, groupsOf, isCloud, machineFilterValue, machineLabel, matchesLabelFilter, nodeIcon, stuckCounts, tagsOf,
   parseMachineFilter,
   stateLabel, nodeName } from "@/app/nodes";
 import { stateMeta } from "@/components/status";
@@ -35,17 +35,24 @@ const KIND_OPTIONS: { value: NodeKind | "all"; label: string }[] = [
   { value: "shell", label: "shell" },
 ];
 
-function tasksOf(row: AgentRow): string {
+function tasksOf(row: AgentRow, now: number): string {
+  // Tasks that went quiet after being picked up are not "in progress": they
+  // may have lost their result, and say so on their own.
+  const stuck = stuckCounts(row.st, now);
+  const inProgress = Math.max(0, row.st.in_progress - stuck.in_progress);
+  const held = Math.max(0, row.st.held - stuck.held);
   return [
-    row.st.in_progress > 0 ? L(`处理中 ${row.st.in_progress}`, `${row.st.in_progress} in progress`) : "",
+    stuck.total > 0 ? L(`可能卡住 ${stuck.total}`, `${stuck.total} may be stuck`) : "",
+    inProgress > 0 ? L(`处理中 ${inProgress}`, `${inProgress} in progress`) : "",
     row.st.queued > 0 ? L(`待处理 ${row.st.queued}`, `${row.st.queued} queued`) : "",
-    row.st.held > 0 ? L(`已挂起 ${row.st.held}`, `${row.st.held} held`) : "",
+    held > 0 ? L(`已挂起 ${held}`, `${held} held`) : "",
   ].filter(Boolean).join(" · ");
 }
 
 /** One node row: kind icon, name, state · CLI + model · machine. */
-export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
+export function NodeRowView({ row, now, highlight, onClick, onContextMenu }: {
   row: AgentRow;
+  now: number;
   highlight?: boolean;
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -56,7 +63,7 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
   const machine = machineLabel(row);
   const model = a.runtime?.model;
   const aliases = aliasSummary(a);
-  const tasks = tasksOf(row);
+  const tasks = tasksOf(row, now);
   return (
     <button
       type="button"
@@ -102,11 +109,12 @@ export function NodeRowView({ row, highlight, onClick, onContextMenu }: {
   );
 }
 
-export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, onOpen, onAdd, onCleanup, onMessage }: {
+export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, highlight, now, onOpen, onAdd, onCleanup, onMessage }: {
   rows: AgentRow[];
   hubs: HubOverview[] | undefined;
   hubMeta: Hub[];
   loading: boolean;
+  now: number;
   filters: Filters;
   onFilters: (f: Filters) => void;
   highlight: { hubId: string; name: string } | null;
@@ -357,6 +365,7 @@ export function NodesPage({ rows, hubs, hubMeta, loading, filters, onFilters, hi
                   <NodeRowView
                     key={r.st.agent.id}
                     row={r}
+                    now={now}
                     highlight={highlight?.hubId === r.hub.id && highlight.name === r.st.agent.name}
                     onClick={() => onOpen(r)}
                     onContextMenu={(e) => menu.open(e, [

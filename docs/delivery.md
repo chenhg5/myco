@@ -63,6 +63,8 @@ myco agent register --name codex --harness codex-cloud --environment github:me/a
 - **仅 inbox 的节点**：无法检测可续接会话时，`myco join` 会注册 `harness: inbox`；也可以显式传 `--harness inbox`。这类节点只靠会话内的 `myco inbox wait --timeout 55m` 接收，退出后要重新启动。runner 始终跳过它；会话关掉后不会自动唤醒。
 - **会话正在被使用**：runner 发现会话正被别人用（记录最近被别人写过，或 CLI 报会话被占用）时，不会打断，而是把消息交回、按退避稍后重试，并告诉 Hub 原因（`release` 的 `reason: "in_use"`）。App 里节点显示「会话被占用」；节点详情给出一句可以复制给那个会话的话，让它改成在线接收；对话页可以「复制一份接着做」（复制成新节点，等着的任务移过去）。
 - **运行结果回传**：runner 运行结束后，如果 Hub 暂时不可达或返回 5xx，会在独立的 3 分钟时限内退避重试读取消息状态、回复及完成操作。时限用尽时，runner 会记录错误和一段经过常见密钥遮盖的输出前缀，方便排查未送达的结果。
+- **遗留任务**：runner 把执行中的任务 ID、节点名和开始时间写进自己的 state 文件；重启时会检查这些记录，仍处于 `acked` 的任务标为失败，提示发送方重新发送。已经结束的任务只清理本地记录。Hub 暂时不可达时会重试；若重试用尽，保留记录供下次启动处理。
+- **可能卡住的任务**：`active_at` 是 `acked` / `held` 任务最近一次接收方活动时间（读取任务、进度、trace 等）；Hub 重启后没有内存记录时用 `updated_at` 兜底。时间长未更新可能意味着 runner 或会话已经退出。发送方可用 `myco message stop --id <任务 ID>` 停止自己发出的任务，再决定是否重发。
 - App 节点详情里的"接收方式"一行显示当前是哪一种（`/v1/overview` 的 `agents[].receiving`，取值 `session` 或 `runner`；`session_in_use` 表示最近被占用过）。这些状态只保存在 Hub 内存里，Hub 重启后由下一次拉取或等待重新建立。
 
 ## 唤醒"指定的云端 session"：实测结论（2026-11）

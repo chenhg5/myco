@@ -274,6 +274,10 @@ async function closeDialog(page) {
 async function runMatrix(browser, size, scheme) {
   currentMatrix = `${size.width}×${size.height} ${scheme}`;
   log(`\n▶ ${currentMatrix}`);
+  // The stuck-task step stops and resends the demo task; the mock keeps
+  // running, so put it back before each width and theme.
+  const reset = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/stuck`, { method: "POST" });
+  if (!reset.ok) throw new Error(`重置「可能卡住」的演示任务失败：HTTP ${reset.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -439,6 +443,100 @@ async function runMatrix(browser, size, scheme) {
       }
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-session-in-use");
+    });
+
+    // A task the node accepted long ago and went quiet on may have lost its
+    // result: the chat says so instead of spinning, and one click stops it
+    // and sends the same message again.
+    await step("对话 · 可能卡住", async () => {
+      await go(page, "对话", narrow);
+      if (narrow) {
+        const back = page.locator(".conv-head button").first();
+        if (await back.isVisible().catch(() => false)) await back.click();
+      }
+      const row = page.locator(".conv-row:visible", { hasText: "legacy-codex" }).first();
+      await row.waitFor({ timeout: 20_000 });
+      const title = await row.getAttribute("title");
+      if (!(title || "").includes("可能卡住")) {
+        throw new Error(`可能卡住的任务应在列表里标出来，实际提示是「${title}」`);
+      }
+      if (await row.locator(".conv-row-state.is-stuck").count() === 0) {
+        throw new Error("可能卡住的任务在列表里应有单独的标记");
+      }
+      await row.click();
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.waitForFunction(
+        () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
+        null,
+        { timeout: 10_000 },
+      );
+      const note = page.locator(".conv-stuck");
+      await note.waitFor({ timeout: 10_000 });
+      const noteText = compactText(await note.innerText());
+      if (!noteText.includes("没有动静") || !noteText.includes("可能卡住")) {
+        throw new Error(`卡住的任务应有一行说明，实际是「${noteText}」`);
+      }
+      const spins = await page.locator(".conv-detail .trace-spin").count();
+      if (spins > 0) throw new Error(`卡住的任务不应转圈，实际有 ${spins} 个 .trace-spin`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-stuck");
+      const body = "把旧版 runner 的日志整理到 docs/legacy.md。";
+      await clickVisible(page, note.getByRole("button", { name: "重发" }));
+      await page.waitForFunction(() => !document.querySelector(".conv-stuck"), null, { timeout: 10_000 });
+      await page.waitForFunction(
+        () => (document.querySelector(".conv-detail")?.textContent || "").includes("已停止"),
+        null,
+        { timeout: 10_000 },
+      );
+      const sent = page.locator(".conv-msg", { hasText: body });
+      const count = await sent.count();
+      if (count < 2) throw new Error(`重发后应有旧任务和新任务两条，实际 ${count} 条`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-stuck-resend");
+    });
+
+    // An older task can be the stuck one after a newer task was stopped:
+    // the newest message being closed must not hide it, and its own row has
+    // the stop and resend. It also has no active_at, so updated_at decides.
+    await step("对话 · 更早的卡住任务", async () => {
+      await go(page, "对话", narrow);
+      if (narrow) {
+        const back = page.locator(".conv-head button").first();
+        if (await back.isVisible().catch(() => false)) await back.click();
+      }
+      const row = page.locator(".conv-row:visible", { hasText: "顺便把旧版 runner 的配置贴一份给我" }).first();
+      await row.waitFor({ timeout: 20_000 });
+      await row.click();
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.waitForFunction(
+        () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
+        null,
+        { timeout: 10_000 },
+      );
+      const note = page.locator(".conv-stuck").first();
+      await note.waitFor({ timeout: 10_000 });
+      const noteText = compactText(await note.innerText());
+      // 19 hours ago and no active_at in the mock: updated_at is the fallback.
+      if (!noteText.includes("19 小时没有动静") || !noteText.includes("可能卡住")) {
+        throw new Error(`更早的卡住任务应说明它 19 小时没有动静，实际是「${noteText}」`);
+      }
+      await note.getByRole("button", { name: "停止" }).waitFor({ timeout: 10_000 });
+      await note.getByRole("button", { name: "重发" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-stuck-older");
+      const body = "把旧版 runner 的配置文件检查一遍。";
+      await clickVisible(page, note.getByRole("button", { name: "重发" }));
+      await page.waitForFunction(() => !document.querySelector(".conv-stuck"), null, { timeout: 10_000 });
+      await page.waitForFunction(
+        () => (document.querySelector(".conv-detail")?.textContent || "").includes("已停止"),
+        null,
+        { timeout: 10_000 },
+      );
+      const sent = page.locator(".conv-msg", { hasText: body });
+      const count = await sent.count();
+      if (count < 2) throw new Error(`更早的任务重发后应有旧任务和新任务两条，实际 ${count} 条`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-stuck-older-resend");
     });
 
     // An inbox node (any agent joined from a session) is named after what it

@@ -838,6 +838,15 @@ func (c *Client) ConsoleStop(ctx context.Context, id string) (*api.Message, erro
 	return &out, nil
 }
 
+// StopTask stops a task sent by this agent.
+func (c *Client) StopTask(ctx context.Context, id string, dry bool) (*api.MessageResult, error) {
+	var out api.MessageResult
+	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/stop", dryQuery(dry), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ConsoleDismiss closes an open message for its recipient without a reply
 // (the recipient node's owner, or a hub admin).
 func (c *Client) ConsoleDismiss(ctx context.Context, id string) (*api.Message, error) {

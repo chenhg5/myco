@@ -81,6 +81,25 @@ func (s *MessageService) StopFromConsole(ctx context.Context, name string, manag
 	return out, nil
 }
 
+// StopBySender gives an agent the same stop semantics as the console.
+func (s *MessageService) StopBySender(ctx context.Context, agent *domain.Agent, id string, dry bool) (*domain.Message, error) {
+	if dry {
+		m, err := s.messages.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		copy := *m
+		return &copy, copy.Stop(agent.Name, s.clock.Now())
+	}
+	m, err := s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) {
+		return nil, m.Stop(agent.Name, s.clock.Now())
+	})
+	if err == nil {
+		s.notifier.Publish(replyTopic(id))
+	}
+	return m, err
+}
+
 // DismissFromConsole closes an open message on its recipient's behalf
 // without replying (a stale answer nobody will pull, a task that no longer
 // matters). allowed decides whether the caller may act for the recipient.

@@ -8,7 +8,7 @@ import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
-  sessionBusy, stateLabel, nodeName } from "@/app/nodes";
+  sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton, useCopy } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
@@ -404,7 +404,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
 const hostKey = (h?: string) => (h || "").toLowerCase().replace(/\.local$/, "");
 
-function openStatusLabel(status: string): string {
+function openStatusLabel(status: string, stuck = false): string {
+  if (stuck) return L("可能卡住", "May be stuck");
   if (status === "queued") return L("待处理", "Queued");
   if (status === "held") return L("已挂起", "Held");
   return L("处理中", "In progress");
@@ -793,6 +794,11 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   };
 
   const current = row.st.current || [];
+  // Tasks picked up and quiet since: their results may never come back, so
+  // they are counted apart from the ones still moving.
+  const stuck = stuckCounts(row.st, now);
+  const isStuck = (m: { status: string; active_at?: string; updated_at: string }) =>
+    possiblyStuck(m, { agent: row.st.agent, receiving: row.st.receiving, offline: row.st.state === "offline" }, now);
 
   return (
     <>
@@ -958,9 +964,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-group-title"><span className="name">{L("当前工作", "Current work")}</span></div>
             <div className="app-list">
               <div className="app-counts">
-                <span>{L("处理中", "In progress")}<b>{row.st.in_progress}</b></span>
+                <span>{L("处理中", "In progress")}<b>{Math.max(0, row.st.in_progress - stuck.in_progress)}</b></span>
                 <span>{L("待处理", "Queued")}<b>{row.st.queued}</b></span>
-                <span>{L("已挂起", "Held")}<b>{row.st.held}</b></span>
+                <span>{L("已挂起", "Held")}<b>{Math.max(0, row.st.held - stuck.held)}</b></span>
+                {stuck.total > 0 && <span className="is-stuck">{L("可能卡住", "May be stuck")}<b>{stuck.total}</b></span>}
               </div>
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
                 ? L("这些消息不在你能看到的范围里。", "These messages are not visible to you.")
@@ -969,9 +976,9 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div key={m.id} className="app-msg-wrap">
                   <button type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                     <span className="meta">
-                      <span className={cn("app-msg-status", m.status)}>{openStatusLabel(m.status)}</span>
+                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{openStatusLabel(m.status, isStuck(m))}</span>
                       <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
-                      <span className="time">{timeAgo(m.updated_at, now)}</span>
+                      <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>
                     </span>
                     <span className="body">{m.body}</span>
                   </button>

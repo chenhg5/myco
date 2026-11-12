@@ -37,6 +37,7 @@ func (s *Server) postTrace(w http.ResponseWriter, r *http.Request, a *domain.Age
 		writeError(w, err)
 		return
 	}
+	s.touchTask(r.PathValue("id"))
 	writeJSON(w, http.StatusOK, map[string]int{"stored": len(in)})
 }
 

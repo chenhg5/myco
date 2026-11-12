@@ -165,6 +165,7 @@ type Message struct {
 	LeaseUntil *time.Time `json:"lease_until,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
+	ActiveAt   *time.Time `json:"active_at,omitempty"`
 }
 
 // RegisterRequest is the body of POST /v1/agents.

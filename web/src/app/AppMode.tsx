@@ -674,6 +674,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 filters={filters}
                 onFilters={setFilters}
                 highlight={highlight}
+                now={now}
                 onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
                 onAdd={() => setSpawnTarget({})}
                 onCleanup={() => setCleanupOpen(true)}

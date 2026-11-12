@@ -97,6 +97,9 @@ export interface Message {
   e2e?: boolean;
   /** why the app could not decrypt it */
   unreadable?: string;
+  /** when an accepted task last had activity: its runner touches it while the
+   *  run goes on. Absent on hubs and messages without a runner. */
+  active_at?: string;
   created_at: string; updated_at: string;
 }
 /** Another node a node exchanged messages with. */
