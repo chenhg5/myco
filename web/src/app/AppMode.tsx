@@ -27,7 +27,6 @@ import { useContextMenu } from "@/app/ContextMenu";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { Settings as SettingsIcon } from "lucide-react";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -165,14 +164,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
   }, [refresh]);
 
-  const namedHubs = useMemo(
-    () => hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)),
-    [hubs, hubNames],
-  );
-  const namedOv = useMemo(
-    () => ov && { ...ov, hubs: ov.hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)) },
-    [ov, hubNames],
-  );
+  // A name given in the app wins; the local hub's old default name ("本机
+  // Hub") reads as the workspace it now is.
+  const nameOf = useCallback((h: { id: string; name: string }) => {
+    if (hubNames[h.id]) return hubNames[h.id];
+    const m = /^(.*?)\s*(本机 Hub|Local Hub)$/.exec(h.name);
+    if (!m) return h.name;
+    return m[1] ? L(`${m[1]} 的工作区`, `${m[1]}'s workspace`) : L("我的工作区", "My workspace");
+  }, [hubNames]);
+  const namedHubs = useMemo(() => hubs.map((h) => ({ ...h, name: nameOf(h) })), [hubs, nameOf]);
+  const namedOv = useMemo(() => ov && { ...ov, hubs: ov.hubs.map((h) => ({ ...h, name: nameOf(h) })) }, [ov, nameOf]);
   const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
     return namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
@@ -426,9 +427,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onChange={(v) => { setHubPick(v); setPage("space"); setChatWith(null); }}
                 onAdd={() => setConnectOpen(true)} onSettings={() => setPage("settings")} />
             </div>
-            <button type="button" className={cn("app-nav-item", page === "settings" && "active")} onClick={() => setPage("settings")}>
-              <SettingsIcon strokeWidth={1.75} /><span>{L("设置", "Settings")}</span>
-            </button>
           </div>
         </aside>
       )}
@@ -558,7 +556,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
       <NewProjectDialog open={newProjectOpen} hubs={hub ? [hub] : []} onClose={() => setNewProjectOpen(false)} onCreated={projectCreated} />
-      <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} rows={rows}
+      <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />

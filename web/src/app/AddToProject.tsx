@@ -64,7 +64,7 @@ function joinSentence(link: JoinLink, project?: string): string {
   );
 }
 
-type AddTab = "local" | "link" | "new";
+type AddTab = "members" | "local" | "link" | "new";
 
 const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "claude", label: "Claude Code" },
@@ -77,15 +77,18 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
 ];
 
 /**
- * Adding agents, three ways (tabs): a session already on this computer,
+ * Adding agents, four ways (tabs): a member already in this workspace (in
+ * other projects, or in none), a session already on this computer,
  * one sentence for any AI session anywhere, or a new one started on one of
  * your computers. Whoever joins while this is open shows up at the bottom,
  * and goes into the project.
  */
-export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
+export function AddAgentDialog({ open, hub, project, projects = [], rows, onClose, onAdded }: {
   open: boolean;
   hub?: Hub;
   project?: Project;
+  /** the workspace's projects: where the members already are */
+  projects?: Project[];
   rows: AgentRow[];
   onClose: () => void;
   onAdded: () => void;
@@ -102,6 +105,13 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
   const [joining, setJoining] = useState("");
   const [joinError, setJoinError] = useState<unknown>(null);
   const [newState, setNewState] = useState({ ready: false, busy: false });
+  // Agents of this workspace not in the project yet (in others, or none):
+  // online first.
+  function others(): AgentRow[] {
+    const inIt = new Set((project?.members || []).map((m) => m.name));
+    return rows.filter((r) => r.hub.id === hubId && agentKind(r.st.agent) === "agent" && !inIt.has(r.st.agent.name))
+      .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub)));
+  }
   // Who was already there when this opened: anyone new has just joined.
   const before = useRef<Set<string> | null>(null);
   const adding = useRef(new Set<string>());
@@ -111,7 +121,8 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
     before.current = new Set(rows.filter((r) => r.hub.id === hubId).map((r) => r.st.agent.name));
     adding.current = new Set();
     touched.current = false;
-    setTab("local");
+    // Someone already here who is not in the project: that is the easy way.
+    setTab(project && others().length > 0 ? "members" : "local");
     setJoined([]);
     setLink(null);
     setLinkError(null);
@@ -124,10 +135,10 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
     appApi.localSessions().then((r) => {
       setSessions(r.sessions);
       // Nothing on this computer to add: the sentence is the way.
-      if (!touched.current && !r.sessions.some((s) => !s.joined)) setTab("link");
+      if (!touched.current && !r.sessions.some((s) => !s.joined)) setTab((t) => (t === "local" ? "link" : t));
     }).catch((e) => {
       setSessionsError(e);
-      if (!touched.current) setTab("link");
+      if (!touched.current) setTab((t) => (t === "local" ? "link" : t));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, hubId]);
@@ -169,6 +180,17 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
   };
 
   const pick = (t: AddTab) => { touched.current = true; setTab(t); };
+  const addMember = async (name: string) => {
+    setJoining(name);
+    setJoinError(null);
+    try {
+      await arrived(name);
+    } catch (e) {
+      setJoinError(e);
+    } finally {
+      setJoining("");
+    }
+  };
   const rowOf = (n: string) => rows.find((r) => r.hub.id === hubId && r.st.agent.name === n);
   const where = project ? L(`「${project.title || project.name}」`, `“${project.title || project.name}”`) : L("这个工作区", "this workspace");
   const q = query.trim().toLowerCase();
@@ -183,6 +205,7 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
       className="app-modal-add">
       <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么加", "How")}>
         {([
+          ...(project ? [["members", L("已有的", "Already here")] as const] : []),
           ["local", L("这台电脑上的", "On this computer")],
           ["link", L("发一句话", "Send a sentence")],
           ["new", L("新开一个", "Start a new one")],
@@ -190,6 +213,34 @@ export function AddAgentDialog({ open, hub, project, rows, onClose, onAdded }: {
           <button key={v} type="button" role="tab" aria-selected={tab === v} className={cn("seg-btn", tab === v && "active")} onClick={() => pick(v)}>{label}</button>
         ))}
       </div>
+
+      {tab === "members" && (
+        <div className="add-pane">
+          {others().length === 0 && joined.length === 0 ? (
+            <div className="app-empty-note">{L("这个工作区里的 agent 都在这个项目里了。", "Every agent in this workspace is in this project already.")}</div>
+          ) : (
+            <div className="add-sessions">
+              {others().map((r) => {
+                const a = r.st.agent;
+                const where = projects.filter((p) => !p.archived && p.members.some((m) => m.name === a.name)).map((p) => p.title || p.name);
+                return (
+                  <div key={a.name} className={cn("add-local-row", r.st.state === "offline" && "is-away")}>
+                    <Avatar agent={a} size={30} state={r.st.state} />
+                    <span className="add-local-main">
+                      <span className="add-local-name">{nodeName(a, r.hub)}</span>
+                      <span className="add-local-sub">{where.length ? L(`在「${where.join("」「")}」`, `In ${where.join(", ")}`) : L("还没进项目", "Not in a project")}{a.description ? ` · ${a.description}` : ""}</span>
+                    </span>
+                    <button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void addMember(a.name)}>
+                      {joining === a.name ? L("正在加…", "Adding…") : L("加进来", "Add")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <ErrorText error={joinError} />
+        </div>
+      )}
 
       {tab === "local" && (
         <div className="add-pane">

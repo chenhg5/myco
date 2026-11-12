@@ -128,7 +128,9 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
     >
       {ws ? <WorkspaceFace /> : <MushroomFace seed={agent.id || agent.name} />}
       {badge && !ws && size >= 28 && (
-        <span className={cn("pa-badge", cli.startsWith("claude") && "is-claude", cli.startsWith("codex") && "is-codex")}><Badge /></span>
+        <span className={cn("pa-badge", cli.startsWith("claude") && "is-claude", cli.startsWith("codex") && "is-codex")}>
+          {cli.startsWith("codex") ? <CodexMark /> : <Badge />}
+        </span>
       )}
       {state && state !== "idle" && <span className={cn("pa-state", `is-${state}`)} />}
     </span>
@@ -160,4 +162,14 @@ export function whereOf(r: Pick<AgentRow, "hub" | "st">): string {
   const m = (r.hub.overview?.machines || []).find((x) => x.id === a.machine_id);
   const dir = a.binding.workdir || "";
   return [m?.name, dir].filter(Boolean).join(" · ") || L("一个文件夹", "A folder");
+}
+
+/** Codex's small mark: a blue-violet disc with a white prompt (>_), as
+ *  Claude has its orange asterisk. */
+function CodexMark() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="pa-codex">
+      <path d="M3.4 5.5 6.6 8 3.4 10.5M8.2 10.6h4.2" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }

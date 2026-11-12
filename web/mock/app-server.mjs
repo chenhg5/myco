@@ -733,6 +733,9 @@ const projects = [
     members: [{ name: "ios-shell", role: "member", note: "", added_by: "matthew", added_at: iso(86400) }], docs: [],
   },
 ];
+// Each project's members as they start: the smoke test puts them back
+// between widths and themes (it adds members to a project).
+const projectMembersAtStart = projects.map((p) => JSON.stringify(p.members));
 function projectView(hub, p, bodies) {
   return {
     ...p,
@@ -788,6 +791,7 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     localSessions.forEach((x, k) => { if (localJoinedAtStart[k]) x.joined = localJoinedAtStart[k]; else delete x.joined; });
+    projects.forEach((p, k) => { if (projectMembersAtStart[k]) p.members = JSON.parse(projectMembersAtStart[k]); });
     const hub = state.hubs.find((h) => h.id === "hub_studio") || state.hubs[0];
     stuckTask.status = "acked";
     delete stuckTask.error;

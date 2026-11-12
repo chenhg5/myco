@@ -151,7 +151,7 @@ function CacheRow() {
 }
 
 const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
-  { key: "hubs", label: "Hub", icon: Server },
+  { key: "hubs", get label() { return L("工作区", "Workspaces"); }, icon: Server },
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
@@ -378,7 +378,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     <div className="app-kv">
                       <span className="app-kv-label">{L("状态", "Status")}</span>
                       <span className="app-kv-value">
-                        <span className={cn("app-pill", h.ok ? "green" : "red")}>
+                        <span className={cn("app-status-text", !h.ok && "is-bad")}>
                           <span className={cn("dot", h.ok ? "working" : "offline")} />
                           {h.ok ? L("已连接", "Connected") : L("连不上", "Unreachable")}
                         </span>
@@ -407,7 +407,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                           <Globe />{L("开放到公网", "Open to the internet")}
                         </button>
                         {localRunning ? (
-                          <button type="button" className="app-btn app-btn-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
+                          <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
                             {L("停止这台电脑上的工作区", "Stop local Hub")}
                           </button>
                         ) : (
@@ -417,7 +417,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                         )}
                       </>
                     ) : (
-                      <button type="button" className="app-btn app-btn-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>
+                      <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>
                         {L("移除", "Remove")}
                       </button>
                     )}
@@ -739,9 +739,9 @@ function E2ERow({ hubId, ov, onChanged }: { hubId: string; ov?: HubOverview; onC
       <div className="app-kv">
         <span className="app-kv-label">{L("端到端加密", "End-to-end encryption")}</span>
         <span className="app-kv-value">
-          <span className={cn("app-pill", on && "green")}>{on ? L("已开启", "On") : L("未开启", "Off")}</span>
+          <span className="app-status-text">{on ? L("已开启", "On") : L("未开启", "Off")}</span>
           {owner && (
-            <button type="button" className="app-btn app-btn-small" style={{ marginLeft: 8 }} disabled={busy} onClick={() => setConfirm(!on)}>
+            <button type="button" className="app-link-btn" disabled={busy} onClick={() => setConfirm(!on)}>
               {on ? L("关闭", "Turn off") : L("开启", "Turn on")}
             </button>
           )}

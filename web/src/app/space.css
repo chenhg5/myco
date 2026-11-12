@@ -65,6 +65,16 @@
 .pa-badge.is-claude {
   color: #d97757;
 }
+.pa-badge.is-codex {
+  background: linear-gradient(140deg, #8fa4ff 0%, #6a6cf6 55%, #5a3fd8 100%);
+}
+.pa-badge .pa-codex {
+  width: 11px;
+  height: 11px;
+}
+.add-local-row.is-away .add-local-name {
+  color: var(--muted);
+}
 .pa-state {
   position: absolute;
   left: -2px;
@@ -1497,4 +1507,39 @@
 }
 .add-pane .app-modal-actions {
   margin-top: 16px;
+}
+
+/* Settings: status as plain words with a dot, actions that stay quiet
+   until you point at them (a red fill is kept for the confirm step). */
+.app-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+}
+.app-status-text.is-bad {
+  color: var(--red);
+}
+.app-btn.app-btn-quiet-danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2);
+}
+.app-btn.app-btn-quiet-danger:hover:not(:disabled) {
+  background: var(--red-soft);
+  box-shadow: none;
+  color: var(--red);
+}
+.app-link-btn {
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: default;
+}
+.app-link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

@@ -253,6 +253,13 @@ async function openMember(page, narrow, space, name) {
 
 async function go(page, label, narrow) {
   await sidebar(page, true);
+  if (label === "设置") {
+    // Settings sit in the workspace menu at the bottom of the sidebar.
+    await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+    await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "设置" }));
+    if (narrow) await sidebar(page, false);
+    return;
+  }
   // Computers is a heading over the computers listed in the sidebar.
   const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible") : page.locator(".app-nav-item:visible", { hasText: label });
   await clickVisible(page, item);
@@ -354,11 +361,20 @@ async function runMatrix(browser, size, scheme) {
       else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
       const dialog = page.locator(".app-modal-add");
       await dialog.waitFor();
-      await dialog.locator(".add-local-row button").first().waitFor({ timeout: 10_000 });
+      // Members of the workspace not in the project come first.
+      await dialog.getByRole("tab", { name: "已有的", selected: true }).waitFor({ timeout: 10_000 });
+      await dialog.locator(".add-local-row button", { hasText: "加进来" }).first().waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-members");
+      await dialog.locator(".add-local-row button", { hasText: "加进来" }).first().click();
+      await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
+
+      await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑上的" }));
+      await dialog.locator(".add-local-row button", { hasText: "加入" }).first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
-      await dialog.locator(".add-local-row button").first().click();
-      await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
+      await dialog.locator(".add-local-row button", { hasText: "加入" }).first().click();
+      await dialog.locator(".add-arrived").nth(1).waitFor({ timeout: 20_000 });
 
       await clickVisible(page, dialog.getByRole("tab", { name: "发一句话" }));
       await page.waitForFunction(() => {
@@ -374,7 +390,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
-      await dialog.locator(".add-arrived").nth(1).waitFor({ timeout: 20_000 });
+      await dialog.locator(".add-arrived").nth(2).waitFor({ timeout: 20_000 });
       await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
       await page.locator(".app-modal").waitFor({ state: "hidden" });
     });

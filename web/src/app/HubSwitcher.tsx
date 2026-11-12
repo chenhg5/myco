@@ -231,7 +231,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
-                    {e.kind === "add" ? L("加入或新建工作区", "Join or start a workspace") : L("工作区设置", "Workspace settings")}
+                    {e.kind === "add" ? L("加入或新建工作区", "Join or start a workspace") : L("设置", "Settings")}
                   </span>
                 </button>
               </Fragment>
