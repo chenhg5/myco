@@ -1762,3 +1762,15 @@ body.is-resizing {
     height: 14px;
   }
 }
+
+/* A project's header tools: icons, named on hover. */
+.sp-head-tools {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sp-head-tools .app-btn svg {
+  width: 15px;
+  height: 15px;
+}

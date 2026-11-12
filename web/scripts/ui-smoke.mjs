@@ -356,7 +356,7 @@ async function runMatrix(browser, size, scheme) {
 
     // Everything between the members, to look back at: no box to write in.
     await step("项目 · 全部动态", async () => {
-      await clickVisible(page, page.locator(".sp-head .app-btn", { hasText: "全部动态" }));
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "全部动态" }));
       await page.locator(".sp-group .sp-card").first().waitFor({ timeout: 20_000 });
       if (await page.locator(".sp-group .sp-compose").count()) throw new Error("全部动态是记录，不该有输入框");
       await settle(page);
@@ -445,7 +445,7 @@ async function runMatrix(browser, size, scheme) {
     }
 
     await step("项目资料", async () => {
-      await clickVisible(page, page.locator(".sp-head .app-btn", { hasText: "项目资料" }));
+      await clickVisible(page, page.locator(".sp-head").getByRole("button", { name: "项目资料" }));
       await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");

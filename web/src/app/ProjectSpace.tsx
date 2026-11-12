@@ -94,6 +94,17 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     onRefresh();
   };
   const feed = useFeed(hubId, project, memberNames);
+  // A project always has a coordinator once it has an agent: the agent
+  // learns it from its role, so the default is saved, not only shown.
+  const saved = useRef(new Set<string>());
+  useEffect(() => {
+    if (!project || coordinatorSet || !coordinator) return;
+    const k = `${hubId}\u0000${project.name}\u0000${coordinator}`;
+    if (saved.current.has(k)) return;
+    saved.current.add(k);
+    void appApi.putProjectMember(hubId, project.name, coordinator, { role: "coordinator" }).then(onRefresh).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubId, project?.name, coordinatorSet, coordinator]);
 
   const [view, setView] = useState<View>({ kind: "home" });
   // Your chat with an agent: the name you have talked to it as (this
@@ -147,14 +158,22 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       if (only === "right") setOnly("");
       return;
     }
-    const next = { agent, peer: await peerFor(agent), focus, also: project ? othersOf(agent) : undefined };
     if (split) {
+      // At once, as whoever you were to it last time (or yourself); if the
+      // hub says otherwise, the pane follows.
+      const known = peerIn(recall(pairsKey), agent);
+      const next = { agent, peer: known || me, focus, also: project ? othersOf(agent) : undefined };
       setView({ kind: "home" });
       setSide(next);
       if (only === "left") setOnly("");
+      if (!known) {
+        void peerFor(agent).then((p) => {
+          if (p && p !== next.peer) setSide((s) => (s && s.agent === agent ? { ...s, peer: p } : s));
+        });
+      }
       return;
     }
-    setView({ kind: "chat", ...next });
+    setView({ kind: "chat", agent, peer: await peerFor(agent), focus, also: project ? othersOf(agent) : undefined });
   };
   // A workspace opens its terminal: your exchange with it.
   const open = (r: AgentRow) => {
@@ -435,15 +454,17 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
           <h2>{project.title || project.name}</h2>
           <p>{project.goal || L("跟协调者说你想做什么，它会把活分给大家。", "Tell the coordinator what you want; it hands the work out.")}</p>
         </div>
-        <button type="button" className="app-btn app-btn-quiet" onClick={onActivity}>
-          <Activity />{L("全部动态", "All activity")}
-        </button>
-        {onAbout && (
-          <button type="button" className="app-btn app-btn-quiet" onClick={onAbout}>
-            <FileText />{L("项目资料", "Project notes")}
+        <span className="sp-head-tools">
+          <button type="button" className="app-btn app-btn-plain" onClick={onActivity} title={L("全部动态：成员之间的所有任务", "All activity: every task between the members")} aria-label={L("全部动态", "All activity")}>
+            <Activity />
           </button>
-        )}
-        {fullToggle}
+          {onAbout && (
+            <button type="button" className="app-btn app-btn-plain" onClick={onAbout} title={L("项目资料：目标、说明、文档", "Project notes: goal, brief, documents")} aria-label={L("项目资料", "Project notes")}>
+              <FileText />
+            </button>
+          )}
+          {fullToggle}
+        </span>
       </header>
       {strip}
       <ConversationDetail

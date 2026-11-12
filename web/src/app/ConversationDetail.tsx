@@ -230,22 +230,32 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       try {
         if (target.peer) {
           // The newest page, polled; older pages stay as loaded. With also,
-          // the newest page of each of those is merged in.
-          const [r, extra] = await Promise.all([
-            appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined),
-            Promise.all((target.also || []).map((p) => appApi.exchanges(target.hubId, target.agent, p).then((x) => x.messages).catch(() => [] as Message[]))),
-          ]);
+          // the newest page of each of those is merged in once it comes:
+          // yours shows first, the others do not hold it up.
+          const extra = target.also?.length
+            ? Promise.all(target.also.map((p) => appApi.exchanges(target.hubId, target.agent, p, undefined, delta ? since : undefined)
+              .then((x) => x.messages).catch(() => [] as Message[])))
+            : null;
+          const mergeExtra = () => extra?.then((lists) => {
+            const others = lists.flat();
+            if (!cancelled && others.length) show(mergeById(current, others), more);
+          });
+          const r = await appApi.exchanges(target.hubId, target.agent, target.peer, undefined, delta ? since : undefined);
           if (cancelled) return;
-          const others = extra.flat();
           if (delta && r.since) {
             // Many changes at once: the whole page next time.
             if (r.more) polls = FULL_EVERY - 1;
-            if (r.messages.length || others.length) show(mergeById(current, [...r.messages, ...others]), more);
+            if (r.messages.length) show(mergeById(current, r.messages), more);
+            void mergeExtra();
             return;
           }
           if (delta) incremental = false; // an older hub: whole pages
-          const ms = others.length ? mergeById([...r.messages].reverse(), others) : [...r.messages].reverse();
-          show(ms, silent ? more : r.more);
+          // A whole page replaces what was shown, keeping what the others
+          // said (merged in again just after).
+          const mine = [...r.messages].reverse();
+          const keep = target.also?.length ? current.filter((m) => target.also!.includes(m.from) || target.also!.includes(m.to)) : [];
+          show(keep.length ? mergeById(mine, keep) : mine, silent ? more : r.more);
+          void mergeExtra();
           if (!silent) setMore(r.more);
           return;
         }

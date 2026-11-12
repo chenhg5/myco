@@ -44,7 +44,12 @@ export function isNobody(name: string): boolean {
 /** Puts an agent in a project, and lets it use the project's workspaces. */
 async function addToProject(hubId: string, project: Project | undefined, rows: AgentRow[], agent: string) {
   if (!project) return;
-  const p = await appApi.putProjectMember(hubId, project.name, agent);
+  let p = await appApi.putProjectMember(hubId, project.name, agent);
+  // The first agent in a project is its coordinator (there is always one).
+  const isAgent = (n: string) => rows.some((r) => r.hub.id === hubId && r.st.agent.name === n && agentKind(r.st.agent) === "agent");
+  if (isAgent(agent) && !p.members.some((m) => m.role === "coordinator" && isAgent(m.name))) {
+    p = await appApi.putProjectMember(hubId, project.name, agent, { role: "coordinator" }).catch(() => p);
+  }
   await shareWorkspaces(hubId, p, rows, agent);
 }
 
