@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertTriangle } from "lucide-react";
 import { L } from "@/lib/i18n";
 import { isOldHub, isTransient } from "@/appapi";
 import { cn } from "@/lib/utils";
@@ -36,10 +35,15 @@ export function Modal({ open, onOpenChange, title, description, wide, className,
   );
 }
 
-export function ConfirmDialog({ open, onOpenChange, title, description, consequences, confirmLabel, onConfirm, busy, error }: {
+/** Asks before something that cannot be undone. Calm: a short question,
+ *  what it is about (subject), what happens in plain words, and the
+ *  answer; no red block (the button says it). */
+export function ConfirmDialog({ open, onOpenChange, title, subject, description, consequences, confirmLabel, onConfirm, busy, error }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** who or what it is about (an avatar and a name), under the title */
+  subject?: React.ReactNode;
   description?: React.ReactNode;
   consequences?: React.ReactNode;
   confirmLabel: string;
@@ -48,13 +52,10 @@ export function ConfirmDialog({ open, onOpenChange, title, description, conseque
   error?: React.ReactNode;
 }) {
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} description={description}>
-      {consequences && (
-        <div className="app-warn">
-          <AlertTriangle />
-          <div>{consequences}</div>
-        </div>
-      )}
+    <Modal open={open} onOpenChange={onOpenChange} title={title} description={subject ? undefined : description} className="app-confirm">
+      {subject && <div className="app-confirm-subject">{subject}</div>}
+      {subject && description && <p className="app-confirm-text">{description}</p>}
+      {consequences && <div className="app-confirm-note">{consequences}</div>}
       {error && <div className="app-error-text">{error}</div>}
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => onOpenChange(false)} disabled={busy}>{L("取消", "Cancel")}</button>

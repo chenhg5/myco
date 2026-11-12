@@ -762,6 +762,20 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms .ms-fold-body").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "member-card-details");
+      // Delete asks calmly: who it is about, plain words, no red block.
+      const del = page.locator(".ms .app-action-row.danger", { hasText: "删除这个 agent" });
+      if (await del.count() && await del.isEnabled()) {
+        await del.scrollIntoViewIfNeeded();
+        await del.click();
+        const dlg = page.locator(".app-modal.app-confirm");
+        await dlg.waitFor({ timeout: 5_000 });
+        await dlg.locator(".app-confirm-subject .pa").waitFor({ timeout: 5_000 });
+        if (await dlg.locator(".app-warn").count()) throw new Error("删除确认不该再有红色警告块");
+        await settle(page, 300);
+        await shot(page, size, scheme, "member-delete-confirm");
+        await dlg.getByRole("button", { name: "取消" }).click();
+        await dlg.waitFor({ state: "hidden" });
+      }
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });

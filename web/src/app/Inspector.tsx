@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
-import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -17,6 +17,7 @@ import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
+import { Avatar } from "@/app/persona";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
 
@@ -720,6 +721,16 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const machine = machineLabel(row);
   const machineObj = machineOfRow(row);
   const mayManage = canManage(row.hub, ag.owner_id);
+  // Who a confirmation is about: the face, the name people know, the id.
+  const who = (
+    <>
+      <Avatar agent={ag} size={32} badge={false} />
+      <span className="app-confirm-who">
+        <span className="app-confirm-name">{nodeName(ag, row.hub)}</span>
+        {nodeName(ag, row.hub) !== ag.name && <span className="app-confirm-id">{ag.name}</span>}
+      </span>
+    </>
+  );
   const me = row.hub.me;
   // Copy: fork the session into a new node on the same machine and folder.
   // An inbox node has no CLI session to copy and no runner to start it: it
@@ -1076,22 +1087,25 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               )}
               {!embedded && (
                 <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
-                  {L("修改显示名和描述", "Edit display name and description")}<span className="app-chev">›</span>
+                  <Pencil />{L("修改显示名和描述", "Edit display name and description")}<span className="app-chev">›</span>
                 </button>
               )}
               <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
-                {L("允许谁派任务", "Who can give tasks")}<span className="app-chev">›</span>
+                <UserCheck />{L("允许谁派任务", "Who can give tasks")}
+                <span className="app-action-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? L(`${ag.allow_from.length} 个`, `${ag.allow_from.length}`) : L("任何 agent", "Anyone")}</span>
+                <span className="app-chev">›</span>
               </button>
               {forkable && (
                 <button type="button" className="app-action-row" onClick={openCopy}>
-                  {L("复制一个", "Make a copy")}<span className="app-chev">›</span>
+                  <Copy />{L("复制一个", "Make a copy")}<span className="app-chev">›</span>
                 </button>
               )}
+              {/* Quiet until pointed at: they ask first anyway. */}
               <button type="button" className="app-action-row danger" onClick={() => openAction("kick")} disabled={!mayManage}>
-                {L("踢下线", "Disconnect")}<span className="app-chev">›</span>
+                <Power />{L("让它下线", "Disconnect")}
               </button>
               <button type="button" className="app-action-row danger" onClick={() => openAction("delete")} disabled={!mayManage}>
-                {L("删除", "Delete")}<span className="app-chev">›</span>
+                <Trash2 />{L("删除这个 agent", "Delete this agent")}
               </button>
             </div>
           </section>
@@ -1330,10 +1344,11 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       <ConfirmDialog
         open={action === "kick"}
         onOpenChange={(o) => !o && closeAction()}
-        title={L(`将 ${ag.name} 踢下线？`, `Disconnect ${ag.name}?`)}
-        description={L(`它会立即从 ${row.hub.name} 下线，并收不到新消息。`, `It goes offline from ${row.hub.name} right away and stops receiving new messages.`)}
-        consequences={<p>{L("令牌立即作废，正在进行的任务会被中断。 agent 记录、消息和资料仍保留在工作区上，重新接入即可回来。", "Its token is revoked immediately and tasks in progress are interrupted. The node record, messages and profile stay on the Hub; join again to come back.")}</p>}
-        confirmLabel={L("踢下线", "Disconnect")}
+        title={L("让它下线？", "Disconnect it?")}
+        subject={who}
+        description={L("它会马上断开，收不到新消息，正在做的活会中断。", "It disconnects right away, stops getting messages, and what it is doing stops.")}
+        consequences={L("资料和聊天记录都还在，重新接入就回来了。", "Its profile and chats stay; joining again brings it back.")}
+        confirmLabel={L("下线", "Disconnect")}
         busy={busy}
         error={error ? <ErrorText error={error} /> : undefined}
         onConfirm={() => void run(() => appApi.kick(hubId, ag.name), "close-action")}
@@ -1341,9 +1356,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       <ConfirmDialog
         open={action === "delete"}
         onOpenChange={(o) => !o && closeAction()}
-        title={L(`从 ${row.hub.name} 删除 ${ag.name}？`, `Delete ${ag.name} from ${row.hub.name}?`)}
-        description={L("这个 agent 会从工作区上永久删除。", "This node will be permanently deleted from the Hub.")}
-        consequences={<p>{L("agent 记录和令牌都会删除，必须重新接入才能回来。已有线程里的消息仍会保留。", "The node record and token are deleted; it must join again to come back. Messages in existing threads are kept.")}</p>}
+        title={L("删除这个 agent？", "Delete this agent?")}
+        subject={who}
+        description={L(`它会从「${row.hub.name}」里删掉，令牌随之作废，要回来得重新接入。`, `It is removed from ${row.hub.name} and its token stops working; it has to join again to come back.`)}
+        consequences={L("和它的聊天记录会留着。", "Your chats with it are kept.")}
         confirmLabel={L("删除", "Delete")}
         busy={busy}
         error={error ? <ErrorText error={error} /> : undefined}
