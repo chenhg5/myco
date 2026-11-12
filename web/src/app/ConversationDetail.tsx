@@ -18,6 +18,7 @@ import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
 import { Avatar, whereOf } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
+import { useAutoGrow } from "@/app/autogrow";
 
 export interface ConversationTarget {
   hubId: string;
@@ -214,13 +215,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // grow with the text, up to about eight lines, then scroll
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [draft]);
+  useAutoGrow(inputRef, draft, 200);
   const atBottom = useRef(true);
+  // When the box below grows (a line, files), the conversation gets
+  // shorter: if it was at the bottom, it stays there instead of the last
+  // lines sliding under the box.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let last = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight;
+      if (h !== last && atBottom.current) el.scrollTop = el.scrollHeight;
+      last = h;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const focusDone = useRef(false);
   const focusTries = useRef(0);
 

@@ -52,13 +52,16 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "main",
-		Title:     "myco",
-		Width:     1200,
-		Height:    800,
-		MinWidth:  720,
-		MinHeight: 480,
-		URL:       "/",
+		Name:  "main",
+		Title: "myco",
+		// Opens filling the screen, as Codex and Claude do; 1200×800 is the
+		// size it takes when un-maximised.
+		Width:      1200,
+		Height:     800,
+		MinWidth:   720,
+		MinHeight:  480,
+		StartState: application.WindowStateMaximised,
+		URL:        "/",
 		// No title bar: the traffic lights float over the sidebar, and the
 		// page marks its top row as the drag area (--wails-draggable).
 		Mac: application.MacWindow{

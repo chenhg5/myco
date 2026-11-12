@@ -779,10 +779,10 @@ function IslandLine() {
   return (
     <div className="app-setting-line">
       <div className="app-setting-line-text">
-        <b>{L("刘海动画", "Notch")}</b>
-        <span>{L("有成员在干活时，屏幕顶部的刘海会长出一小截：小蘑菇在走，旁边是几个在干活；指上去看是谁在做什么。", "While members work, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what.")}</span>
+        <b>{L("灵动岛", "Notch island")}</b>
+        <span>{L("有成员在干活时，屏幕顶部的刘海会长出一小截：小蘑菇在走，旁边是几个在干活；指上去看是谁在做什么。不喜欢可以关掉。", "While members work, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what. Turn it off if you'd rather not.")}</span>
       </div>
-      <div className="seg" role="tablist" aria-label={L("刘海动画", "Notch")}>
+      <div className="seg" role="tablist" aria-label={L("灵动岛", "Notch island")}>
         <button type="button" role="tab" aria-selected={on} className={cn("seg-btn", on && "active")} onClick={() => set(true)}>{L("开", "On")}</button>
         <button type="button" role="tab" aria-selected={!on} className={cn("seg-btn", !on && "active")} onClick={() => set(false)}>{L("关", "Off")}</button>
       </div>

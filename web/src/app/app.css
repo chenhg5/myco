@@ -3350,7 +3350,8 @@ button.conv-quote:hover {
   font-size: 13.5px;
   line-height: 1.5;
   resize: none;
-  overflow-y: auto;
+  /* a scroll bar only past the height limit (set in JS, autogrow.ts) */
+  overflow-y: hidden;
 }
 .conv-compose-input::placeholder {
   color: var(--faint);

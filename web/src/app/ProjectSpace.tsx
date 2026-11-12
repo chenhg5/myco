@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
@@ -8,6 +8,7 @@ import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/per
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { addToProject } from "@/app/AddToProject";
+import { useAutoGrow } from "@/app/autogrow";
 import { Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
@@ -853,15 +854,7 @@ function Composer({ hubId, project, agents, onSent }: {
   const menu = useContextMenu();
   const input = useRef<HTMLTextAreaElement>(null);
   // Grows with what is typed, as chat apps do; past COMPOSE_MAX it scrolls.
-  // (field-sizing: content is not in every WebKit the app runs on.)
-  useLayoutEffect(() => {
-    const el = input.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const h = el.scrollHeight;
-    el.style.height = `${Math.min(h, COMPOSE_MAX)}px`;
-    el.style.overflowY = h > COMPOSE_MAX ? "auto" : "hidden";
-  }, [draft]);
+  useAutoGrow(input, draft, COMPOSE_MAX);
   const pick = (name: string) => {
     setTo(name);
     try { localStorage.setItem(key, name); } catch { /* not kept */ }

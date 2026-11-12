@@ -38,14 +38,17 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "main",
-		Title:     "myco",
-		Width:     1200,
-		Height:    800,
-		MinWidth:  720,
-		MinHeight: 480,
-		URL:       "/",
-		Windows:   application.WindowsWindow{Theme: application.SystemDefault},
+		Name:  "main",
+		Title: "myco",
+		// Opens filling the screen, as Codex and Claude do; 1200×800 is the
+		// size it takes when un-maximised.
+		Width:      1200,
+		Height:     800,
+		MinWidth:   720,
+		MinHeight:  480,
+		StartState: application.WindowStateMaximised,
+		URL:        "/",
+		Windows:    application.WindowsWindow{Theme: application.SystemDefault},
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		window.Hide()
