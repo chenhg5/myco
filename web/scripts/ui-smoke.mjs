@@ -571,6 +571,29 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
     });
 
+    // Removing a whole computer: a dry run lists the agent and folder on it,
+    // the online one shows the uninstall command, and both are gone after.
+    await step("电脑 · 移除", async () => {
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.locator(".pc-machine", { hasText: "临时 Mac" }));
+      const dialog = page.locator(".app-modal");
+      await dialog.waitFor({ timeout: 10_000 });
+      await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
+      const dialogText = compactText(await dialog.innerText());
+      for (const want of ["2 个 agent 和电脑会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
+        if (!dialogText.includes(want)) throw new Error(`移除电脑弹窗里应提到「${want}」，实际是「${dialogText}」`);
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "dialog-remove-computer");
+      await clickVisible(page, dialog.getByRole("button", { name: "移除这台电脑和上面的 2 个" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+      await page.waitForFunction(
+        () => ![...document.querySelectorAll(".pc-machine, .pc-row")].some((r) => /临时/.test(r.textContent || "")),
+        null,
+        { timeout: 10_000 },
+      );
+    });
+
     await step("工作区切换", async () => {
       await sidebar(page, true);
       await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));

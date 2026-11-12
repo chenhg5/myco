@@ -1206,8 +1206,33 @@
   font-size: 12px;
   color: var(--muted);
 }
+.pc-machine {
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  cursor: default;
+}
+.pc-machine:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
 .pc-machine.is-away {
   color: var(--faint);
+}
+.pc-gone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.pc-gone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
 .pc-sep {
   margin: 0 4px;
