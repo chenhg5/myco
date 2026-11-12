@@ -707,6 +707,10 @@ type RecentItem struct {
 	// Task is the newest task, Answer its reply or failure event.
 	Task   *Message `json:"task,omitempty"`
 	Answer *Message `json:"answer,omitempty"`
+	// Open is the newest task not finished yet; it can be older than Task
+	// (a task stuck behind a newer one that finished). Hubs before v0.18.40
+	// leave it out.
+	Open *Message `json:"open,omitempty"`
 	// State: "queued", "working", "done", "failed" or "" (no task). A shell
 	// command that exited non-zero is "done" here; its exit code is in
 	// Answer's body.

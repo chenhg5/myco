@@ -250,6 +250,9 @@ type RecentItem struct {
 	First, Last  *domain.Message
 	// Task is the newest task, Answer its reply or failure event (if any).
 	Task, Answer *domain.Message
+	// Open is the newest task not finished yet (nil when all are): it can be
+	// older than Task, e.g. a task stuck behind a newer one that finished.
+	Open *domain.Message
 	// State: "queued", "working", "done", "failed", or "" when there is no
 	// task. A shell command that exited non-zero is "done" here: its exit
 	// code is in Answer's body (possibly encrypted).
@@ -349,7 +352,7 @@ func (s *MessageService) recentPairs(ctx context.Context, f domain.RecentFilter,
 // anyDirection sets the row's task and state from the newest task either
 // way (two agents give each other tasks; pairItem only looks at Node's).
 func (it *RecentItem) anyDirection(msgs []*domain.Message) {
-	it.Task, it.Answer = nil, nil
+	it.Task, it.Answer, it.Open = nil, nil, nil
 	var open *domain.Message
 	for _, m := range msgs { // newest first
 		if m.Type != domain.TypeTask {
@@ -370,6 +373,7 @@ func (it *RecentItem) anyDirection(msgs []*domain.Message) {
 			}
 		}
 	}
+	it.Open = open
 	it.State = taskState(it.Task, it.Answer, open)
 }
 
@@ -400,6 +404,7 @@ func threadItem(t domain.ThreadRef, msgs []*domain.Message) RecentItem {
 			}
 		}
 	}
+	it.Open = open
 	it.State = taskState(it.Task, it.Answer, open)
 	return it
 }
@@ -427,6 +432,7 @@ func pairItem(p domain.PairRef, msgs []*domain.Message) RecentItem {
 			}
 		}
 	}
+	it.Open = open
 	it.State = taskState(it.Task, it.Answer, open)
 	return it
 }

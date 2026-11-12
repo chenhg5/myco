@@ -754,7 +754,15 @@ const server = http.createServer(async (req, res) => {
     stuckTask.created_at = iso(46 * 60);
     stuckTask.updated_at = iso(45 * 60);
     stuckTask.active_at = iso(45 * 60);
-    hub.threads.th_console_stuck = [stuckTask];
+    // Keep what was sent there since (a real hub never drops messages, and
+    // the app may still show them): only the demo tasks go back.
+    // Tasks sent there since count as finished, so the demo tasks are the
+    // open ones again.
+    const keep = (id, fixed) => [...fixed, ...(hub.threads[id] || []).filter((m) => !fixed.includes(m)).map((m) => {
+      if (m.type === "task" && !["done", "failed"].includes(m.status)) Object.assign(m, { status: "done", updated_at: iso(60) });
+      return m;
+    })];
+    hub.threads.th_console_stuck = keep("th_console_stuck", [stuckTask]);
     stuckOlderTask.status = "acked";
     delete stuckOlderTask.error;
     stuckOlderTask.created_at = iso(19 * 60 * 60);
@@ -763,14 +771,7 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.error = "stopped by the sender";
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
-    hub.threads.th_console_stuck_stopped = [stuckOlderTask, stoppedAfterTask];
-    // What the previous pass sent legacy-codex (the resends, the text-only
-    // and tool-call tasks) goes too: each pass starts with the stuck tasks
-    // as the newest in that conversation.
-    for (const [id, msgs] of Object.entries(hub.threads)) {
-      if (id === "th_console_stuck" || id === "th_console_stuck_stopped") continue;
-      if (msgs.some((m) => m.from === "legacy-codex" || m.to === "legacy-codex")) delete hub.threads[id];
-    }
+    hub.threads.th_console_stuck_stopped = keep("th_console_stuck_stopped", [stuckOlderTask, stoppedAfterTask]);
     return send(res, 200, { ok: true });
   }
 
@@ -1201,7 +1202,7 @@ const server = http.createServer(async (req, res) => {
         if (open) state = open.status === "queued" ? "queued" : "working";
         else if (task.status === "failed" || answer?.type === "event") state = "failed";
         else if (node && answer) { try { if (JSON.parse(answer.body).exit_code) state = "failed"; } catch { /* not json */ } }
-        return { state, task, answer };
+        return { state, task, answer, ...(open ? { open } : {}) };
       };
       const items = [];
       for (const [threadId, msgs] of Object.entries(hub.threads || {})) {
@@ -1228,8 +1229,14 @@ const server = http.createServer(async (req, res) => {
           const key = [other, node].sort().join("|");
           const prev = byPair.get(key);
           if (!prev || new Date(it.updated_at) > new Date(prev.updated_at)) {
-            byPair.set(key, { ...it, kind: "pair", other, node, participants: [other, node], messages: (prev?.messages || 0) + it.messages, first: prev?.first || it.first });
-          } else prev.messages += it.messages;
+            // An open task in either thread keeps the pair open (newest first).
+            const open = it.open || prev?.open;
+            const state = it.open ? it.state : prev?.open ? prev.state : it.state;
+            byPair.set(key, { ...it, kind: "pair", other, node, participants: [other, node], messages: (prev?.messages || 0) + it.messages, first: prev?.first || it.first, state, ...(open ? { open } : {}) });
+          } else {
+            prev.messages += it.messages;
+            if (!prev.open && it.open) Object.assign(prev, { open: it.open, state: it.state });
+          }
         }
         items.splice(0, items.length, ...byPair.values());
       }

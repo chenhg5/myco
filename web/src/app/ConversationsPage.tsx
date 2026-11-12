@@ -417,7 +417,9 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
   // The task the row shows was picked up and has been quiet too long: its
   // result may have been lost, so it is not "in progress" any more.
   const stuckOf = (r: ConversationRow): boolean => {
-    const task = r.item.task;
+    // The open task can be older than the newest one (a stuck task behind a
+    // newer one that finished). Older hubs send only the newest task.
+    const task = r.item.open || (r.item.state === "working" || r.item.state === "queued" ? r.item.task : undefined);
     if (!task) return false;
     const node = rows.find((x) => x.hub.id === r.hubId && x.st.agent.name === task.to);
     return possiblyStuck(task, node
