@@ -87,3 +87,50 @@ func TestRetryableFinishErrorDoesNotRetryClientErrors(t *testing.T) {
 		t.Fatal("5xx errors should be retried even without a retryable flag")
 	}
 }
+
+// lostAckHub applies the first acks but answers them as if the hub were
+// unreachable: the machine dozed off between sending and hearing back.
+type lostAckHub struct {
+	*fakeHub
+	lost, calls int
+}
+
+func (h *lostAckHub) Ack(ctx context.Context, id string) error {
+	h.calls++
+	err := h.fakeHub.Ack(ctx, id)
+	if h.calls <= h.lost {
+		return &client.Error{Code: client.CodeUnavailable, Retryable: true}
+	}
+	return err
+}
+
+func TestLostAckIsRetriedAndTheTaskRuns(t *testing.T) {
+	m := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
+	hub := &lostAckHub{fakeHub: newFakeHub(m), lost: 2}
+	ran := 0
+	h := fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		ran++
+		return harness.Result{Output: "done"}, nil
+	}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{}, quiet())
+	r.finishRetryMin, r.finishTimeout = time.Millisecond, time.Second
+	r.Handle(context.Background(), m)
+	if hub.calls != 3 || ran != 1 || hub.replies[m.ID] != "done" {
+		t.Fatalf("acks=%d ran=%d reply=%q", hub.calls, ran, hub.replies[m.ID])
+	}
+}
+
+func TestUnreachableAckStaysPendingForRecovery(t *testing.T) {
+	m := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
+	hub := &lostAckHub{fakeHub: newFakeHub(m), lost: 1 << 30}
+	h := fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		t.Fatal("must not run a task it could not ack")
+		return harness.Result{}, nil
+	}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{}, quiet())
+	r.finishRetryMin, r.finishTimeout = time.Millisecond, 20*time.Millisecond
+	r.Handle(context.Background(), m)
+	if _, ok := r.pending[m.ID]; !ok {
+		t.Fatal("an ack that may have reached the hub must stay pending, so a restart closes the task")
+	}
+}
