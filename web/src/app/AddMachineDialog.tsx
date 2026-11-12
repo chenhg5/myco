@@ -59,12 +59,12 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
     <Modal
       open={open}
       onOpenChange={(o) => !o && close()}
-      title={L("添加机器", "Add machine")}
-      description={L("在另一台电脑上接入这个 Hub。", "Connect another computer to this Hub.")}
+      title={L("连上另一台电脑", "Connect another computer")}
+      description={L("连上以后，就能把这台电脑交给项目里的 agent 用。", "Once connected, you can let your projects' agents use it.")}
       wide
     >
       {hubs.length === 0 ? (
-        <div className="app-hint">{L("先添加一个 Hub，才能给 Hub 添加机器。", "Add a Hub first, then you can add machines to it.")}</div>
+        <div className="app-hint">{L("先建一个工作区。", "Add a Hub first, then you can add machines to it.")}</div>
       ) : (
         <>
           <label className="app-field">
@@ -107,7 +107,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
                 <CopyButton value={link.command} />
               </div>
               <div className="app-hint">
-                {L("在要添加的电脑或服务器的终端里运行这条命令。它会装好 myco 并把这台机器加入 Hub，之后会出现在机器页。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}
+                {L("在那台电脑的终端里运行这一行。装好以后，给项目加电脑时就能选它了。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}
               </div>
               <ErrorText error={error} />
               <div className="app-modal-actions">

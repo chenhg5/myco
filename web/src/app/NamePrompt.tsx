@@ -70,7 +70,7 @@ export function NamePrompt({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRe
 
   return (
     <Modal open onOpenChange={(o) => !o && !busy && skip()} title={L(`你在「${hub.name}」上叫什么？`, `What should you be called on “${hub.name}”?`)}
-      description={L("这个名字只在这个 Hub 上用：你从 App 发的消息会署这个名字，你加进来的节点显示为「名字 的」。在不同的 Hub 上可以叫不同的名字，之后也能在「设置 → 成员」里改。", "This name is used on this Hub only: what you send from the app is signed with it, and nodes you add show as yours. You can use a different name on each Hub, and change it later under Settings → People.")}>
+      description={L("你发的消息会署这个名字，你的 agent 会显示为「名字 的」。之后也能在设置里改。", "This name is used on this Hub only: what you send from the app is signed with it, and nodes you add show as yours. You can use a different name on each Hub, and change it later under Settings → People.")}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <label className="app-field">
           <span className="app-field-label">{L("用户名", "Handle")}</span>

@@ -1,36 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Plus, WifiOff,
-} from "lucide-react";
+import { ArrowLeft, Plus, WifiOff } from "lucide-react";
 import "@/app/app.css";
+import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
-import type { AgentRow, Filters } from "@/app/types";
+import type { AgentRow } from "@/app/types";
+import type { Project } from "@/api";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
-import { AddNodeDialog, type SpawnTarget } from "@/app/AddNodeDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
-import { CleanupDialog } from "@/app/CleanupDialog";
-import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { recall, remember } from "@/lib/memo";
-import { ConversationsPage, pairKey, type ConversationRow } from "@/app/ConversationsPage";
-import { HubSwitcher } from "@/app/HubSwitcher";
 import { useHubNames } from "@/app/hubNames";
 import { Inspector } from "@/app/Inspector";
-import { MachineInspector, type MachineRef } from "@/app/MachineInspector";
-import { MachinesPage } from "@/app/MachinesPage";
-import { NewConversationDialog, type NewConversationTarget } from "@/app/NewConversationDialog";
-import { NodesPage } from "@/app/NodesPage";
-import { NewProjectDialog, ProjectPage, type ProjectRef } from "@/app/ProjectPage";
-import type { Project } from "@/api";
+import { ProjectPage } from "@/app/ProjectPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
-import { LogoSymbol, LogoWordmark } from "@/components/brand";
-import { IconChat, IconExpandRight, IconMachine, IconNewChat, IconNodes, IconProject, IconSidebar, type IconType } from "@/components/icons";
+import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
+import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, NewProjectForm } from "@/app/AddToProject";
+import { MemberSheet, MembersPage } from "@/app/Members";
+import { HubSwitcher } from "@/app/HubSwitcher";
+import { ComputersPage } from "@/app/Computers";
+import { looksOf } from "@/app/persona";
+import { LogoWordmark } from "@/components/brand";
+import { IconLaptop, IconPerson, IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Settings as SettingsIcon } from "lucide-react";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -48,31 +45,13 @@ function readPendingLink(): Promise<string> {
   return p;
 }
 
-type Page = "conversations" | "nodes" | "machines" | "settings" | "project";
-
-const PAGE_META: Record<Page, { group: string; label: string }> = {
-  conversations: { get group() { return L("消息", "Messages"); }, get label() { return L("对话", "Conversations"); } },
-  nodes: { get group() { return L("管理", "Manage"); }, get label() { return L("节点", "Nodes"); } },
-  machines: { get group() { return L("管理", "Manage"); }, get label() { return L("机器", "Machines"); } },
-  settings: { group: "App", get label() { return L("设置", "Settings"); } },
-  project: { get group() { return L("项目", "Projects"); }, label: "" },
-};
-
-const NAV: { group: string; items: { page: Page; label: string; icon: IconType }[] }[] = [
-  {
-    get group() { return L("管理", "Manage"); },
-    items: [
-      { page: "nodes", get label() { return L("节点", "Nodes"); }, icon: IconNodes },
-      { page: "machines", get label() { return L("机器", "Machines"); }, icon: IconMachine },
-    ],
-  },
-  {
-    get group() { return L("消息", "Messages"); },
-    items: [
-      { page: "conversations", get label() { return L("对话", "Conversations"); }, icon: IconChat },
-    ],
-  },
-];
+/*
+ * The App, as people think of it: projects, the agents in them, and the
+ * workspaces they run commands in. A project is where you watch your
+ * agents work together and hand out tasks; Members is everyone you work
+ * with; Settings holds the rest (team spaces, computers, the app itself).
+ */
+type Page = "space" | "members" | "computers" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -80,7 +59,11 @@ function initialCollapsed() {
     if (v === "open") return false;
     if (v === "closed") return true;
   } catch { /* storage unavailable */ }
-  return window.innerWidth < 860;
+  return window.innerWidth < 760;
+}
+
+function spaceKey(s: SpaceRef): string {
+  return isLoose(s) ? `${s.hubId}\u0000*` : `${s.hubId}\u0000${s.name}`;
 }
 
 export default function AppMode({ initialHubs, initialInfo }: {
@@ -90,8 +73,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [theme, setTheme] = useThemeMode();
   const [textSize, setTextSize] = useTextSize();
   const [langChoice, setLangChoiceState] = useState<LangChoice>(storedLangChoice());
-  // Labels come from L() at render time; the shells below key on lang() so
-  // the whole tree re-renders in the new language while this state stays.
   const chooseLang = (choice: LangChoice) => {
     setLangChoice(choice);
     setLangChoiceState(choice);
@@ -100,54 +81,51 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
-  // The nodes as last seen (also from before a restart) until the hubs answer.
+  // What the hubs showed last (also from before a restart) until they answer.
   const [ov, setOv] = useState<AppOverview | null>(() => recall<AppOverview>("overview") ?? null);
   const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
-  const [page, setPage] = useState<Page>("nodes");
-  // The hub picked last time is picked again (until it is removed).
-  const [filters, setFilters] = useState<Filters>(() => ({ query: "", hub: readPref(HUB_KEY) || "all", machine: "all", state: "all", kind: "all", label: "all" }));
-  useEffect(() => { writePref(HUB_KEY, filters.hub); }, [filters.hub]);
-  const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
-  const [machineInspect, setMachineInspect] = useState<MachineRef | null>(null);
-  const [spawnTarget, setSpawnTarget] = useState<SpawnTarget | null>(null);
-  const [addMachineOpen, setAddMachineOpen] = useState(false);
+  const [page, setPage] = useState<Page>("space");
+  // The workspace chosen at the top of the sidebar ("all": every one).
+  const [hubFilter, setHubFilterState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || "all"; } catch { return "all"; } });
+  const setHubFilter = (v: string) => {
+    setHubFilterState(v);
+    try { localStorage.setItem(HUB_KEY, v); } catch { /* not kept */ }
+  };
+  const [space, setSpaceState] = useState<SpaceRef | null>(() => {
+    try { const v = localStorage.getItem(SPACE_KEY); return v ? JSON.parse(v) as SpaceRef : null; } catch { return null; }
+  });
+  const setSpace = (s: SpaceRef | null) => {
+    setSpaceState(s);
+    try { if (s) localStorage.setItem(SPACE_KEY, JSON.stringify(s)); } catch { /* not kept */ }
+  };
+  const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectPrefill, setConnectPrefill] = useState("");
-  const [highlight, setHighlight] = useState<{ hubId: string; name: string } | null>(null);
-  const [conv, setConv] = useState<ConversationTarget | null>(null);
-  const [newConv, setNewConv] = useState<NewConversationTarget | null>(null);
-  const [cleanupOpen, setCleanupOpen] = useState(false);
-  const [project, setProject] = useState<ProjectRef | null>(null);
-  // The conversations page's project filter.
-  const [convProject, setConvProject] = useState<ProjectRef | null>(null);
-  // Bumped when a node joins a project from here: the page reloads it.
-  const [projectReload, setProjectReload] = useState(0);
-  const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
+  const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  // A node created from a project page joins that project.
-  const joinProject = useRef<ProjectRef | null>(null);
-  /** Bumped to make the settings page show its Hub section. */
-  const [hubSettingsRequest] = useState(0);
+  const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
+  const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
+  const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
+  const [inspect, setInspect] = useState<{ hubId: string; name: string } | null>(null);
+  // Members open a chat: the space to show it in, and with whom.
+  const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number } | null>(null);
+  const [projectReload, setProjectReload] = useState(0);
+  // The first project was put off: show the agents not in one instead.
+  const [skipFirst, setSkipFirst] = useState(() => { try { return localStorage.getItem("myco-skip-first-project") === "1"; } catch { return false; } });
 
-  // The boot probe already carries app/info; retry once in case it failed.
   useEffect(() => {
     let cancelled = false;
     appApi.info().then((i) => { if (!cancelled) setInfo(i); }).catch(() => { /* keep the probe's answer */ });
     return () => { cancelled = true; };
   }, []);
 
-  // One refresh at a time: with a slow hub a refresh can take longer than
-  // the poll interval, and piling them up only makes it slower.
   const refreshing = useRef(false);
-  // Projects of every reachable hub; a hub too old to have them has none.
   const loadProjects = useCallback(async (hubIds: string[]) => {
     const lists = await Promise.all(hubIds.map((id) =>
       appApi.projects(id).then((r) => r.projects.map((p) => ({ hubId: id, p }))).catch(() => null)));
     setProjects((prev) => {
-      // Keep what a hub showed last time when it fails just now.
       const keep = (id: string) => (prev || []).filter((x) => x.hubId === id);
       return remember("projects", hubIds.flatMap((id, i) => lists[i] ?? keep(id)));
     });
@@ -155,17 +133,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
     refreshing.current = true;
-    setLoading(true);
     try {
-      const [h, o, pending] = await Promise.all([
-        appApi.hubs(),
-        appApi.overview(),
-        // The backend may not know this endpoint yet; never break polling.
-        readPendingLink(),
-      ]);
+      const [h, o, pending] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink()]);
       setHubs(h);
       setOv(remember("overview", keepOffline(o, recall<AppOverview>("overview"))));
-      void loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id));
+      await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id));
       setError(null);
       setNow(Date.now());
       setLocalTick((t) => t + 1);
@@ -177,7 +149,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
       setError(e);
     } finally {
       refreshing.current = false;
-      setLoading(false);
     }
   }, [loadProjects]);
 
@@ -194,179 +165,79 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
   }, [refresh]);
 
-  // A removed hub must not stay selected (once the list has loaded: the
-  // remembered hub is not in the empty list the App starts with).
-  useEffect(() => {
-    if (ov && filters.hub !== "all" && !hubs.some((h) => h.id === filters.hub)) {
-      setFilters((f) => ({ ...f, hub: "all" }));
-    }
-  }, [hubs, filters.hub, ov]);
-
-  useEffect(() => {
-    if (page !== "machines") setMachineInspect(null);
-  }, [page]);
-
-  // Leaving the conversations page returns to the list next time.
-  useEffect(() => {
-    if (page !== "conversations") setConv(null);
-  }, [page]);
-
-  useEffect(() => {
-    if (!highlight) return;
-    const t = window.setTimeout(() => setHighlight(null), 15_000);
-    return () => window.clearTimeout(t);
-  }, [highlight]);
-
-  // Renames live only in this App; fold them in before anything renders a name.
   const namedHubs = useMemo(
     () => hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)),
     [hubs, hubNames],
   );
   const namedOv = useMemo(
-    () => ov && {
-      ...ov,
-      hubs: ov.hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)),
-    },
+    () => ov && { ...ov, hubs: ov.hubs.map((h) => (hubNames[h.id] ? { ...h, name: hubNames[h.id] } : h)) },
     [ov, hubNames],
   );
-
   const rows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
-    return namedOv.hubs
-      .filter((h) => h.ok && h.overview)
-      .flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
+    return namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
   }, [namedOv]);
 
-  const current = useMemo(() => {
-    if (!inspect) return null;
-    return rows.find((r) => r.hub.id === inspect.hubId && r.st.agent.name === inspect.name) || null;
-  }, [rows, inspect]);
+  // A workspace removed from the app is not chosen any more.
+  const inScope = (hubId: string) => hubFilter === "all" || !hubs.some((h) => h.id === hubFilter) || hubId === hubFilter;
+  const liveProjects = (projects || []).filter((x) => !x.p.archived && inScope(x.hubId))
+    .sort((a, b) => (b.p.updated_at || "").localeCompare(a.p.updated_at || ""));
+  const scopedRows = rows.filter((r) => inScope(r.hub.id));
+  const loose = useMemo(() => looseRowsOf(scopedRows, projects || []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, projects, hubFilter]);
+  const looseHubs = [...new Set(loose.map((r) => r.hub.id))];
+  const multiHub = new Set([...liveProjects.map((x) => x.hubId), ...looseHubs]).size > 1;
+  const hubName = (id: string) => namedHubs.find((h) => h.id === id)?.name || namedOv?.hubs.find((h) => h.id === id)?.name || id;
 
-  const visibleHubs = useMemo(
-    () => filters.hub === "all" ? namedHubs : namedHubs.filter((h) => h.id === filters.hub),
-    [namedHubs, filters.hub],
-  );
+  // The space on show: the one chosen (while it exists), else the newest
+  // project, else the agents in none.
+  const spaceExists = (s: SpaceRef) => isLoose(s)
+    ? looseHubs.includes(s.hubId)
+    : liveProjects.some((x) => x.hubId === s.hubId && x.p.name === s.name);
+  const shown: SpaceRef | null = space && spaceExists(space) ? space
+    : liveProjects[0] ? { hubId: liveProjects[0].hubId, name: liveProjects[0].p.name }
+    : looseHubs[0] ? { hubId: looseHubs[0], loose: true }
+    : null;
+  const shownProject = shown && !isLoose(shown) ? liveProjects.find((x) => x.hubId === shown.hubId && x.p.name === shown.name)?.p : undefined;
+  const firstRun = projects !== null && liveProjects.length === 0 && !skipFirst;
 
-  // From a node's panel, Back returns to that node (on the page it was on).
-  const openConversation = (hubId: string, threadId: string, agent: string, extra?: { peer?: string; fromNode?: boolean; fromProject?: boolean }) => {
-    const hubName = namedHubs.find((h) => h.id === hubId)?.name
-      || namedOv?.hubs.find((h) => h.id === hubId)?.name
-      || hubId;
-    const returnTo = extra?.fromNode && inspect ? { page, node: inspect }
-      : extra?.fromProject && project ? { page: "project", project } : undefined;
-    setInspect(null);
-    setPage("conversations");
-    setConv({ hubId, hubName, threadId, agent, peer: extra?.peer, returnTo });
-  };
-  // Your chat with a node: the whole conversation (all threads), or a new
-  // one when there is none yet; the first message is written there.
-  const openChat = (hubId: string, agent: string, project?: string) => {
-    const hub = namedOv?.hubs.find((h) => h.id === hubId);
-    const me = hub?.me?.member?.name;
-    const hubName = namedHubs.find((h) => h.id === hubId)?.name || hub?.name || hubId;
-    setInspect(null);
-    setPage("conversations");
-    setConv({ hubId, hubName, threadId: "", agent, peer: me ? `@console:${me}` : undefined, project });
-  };
-  // A new conversation: straight to the chat when the node is known, else
-  // the picker.
-  const startConv = (t: NewConversationTarget) => {
-    if (t.hubId && t.agent) openChat(t.hubId, t.agent, t.project);
-    else setNewConv(t);
-  };
-  const closeConversation = () => {
-    const back = conv?.returnTo;
-    setConv(null);
-    if (back) {
-      setPage(back.page as Page);
-      if (back.node) setInspect(back.node);
-      if (back.project) setProject(back.project);
-    }
+  const meOn = (hubId: string) => {
+    const name = namedOv?.hubs.find((h) => h.id === hubId)?.me?.member?.name;
+    return name ? `@console:${name}` : undefined;
   };
 
-  // The split view needs room for both columns.
-  const wide = useWideWindow(1100);
-  // Its list: as wide as the person dragged it, or hidden.
-  const [listWidth, setListWidthState] = useState(() => clampWidth(Number(readPref("myco-conv-list-width")) || LIST_WIDTH));
-  const [listCollapsed, setListCollapsedState] = useState(() => readPref("myco-conv-list-collapsed") === "1");
-  const setListWidth = (w: number) => {
-    const v = clampWidth(w);
-    setListWidthState(v);
-    writePref("myco-conv-list-width", String(v));
+  // Picking a space (again) shows its group, as a chat app's list does.
+  const [spaceTap, setSpaceTap] = useState(0);
+  const openSpace = (s: SpaceRef) => {
+    setSpace(s);
+    setPage("space");
+    setSpaceTap((n) => n + 1);
   };
-  const setListCollapsed = (v: boolean) => {
-    setListCollapsedState(v);
-    writePref("myco-conv-list-collapsed", v ? "1" : "0");
+  const projectCreated = (ref: { hubId: string; name: string }) => {
+    setNewProjectOpen(false);
+    void loadProjects(hubs.map((h) => h.id)).then(() => {
+      openSpace(ref);
+      // A new project's first step: bring agents in.
+      setAddAgent(ref);
+    });
   };
-  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = listWidth;
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
-    document.body.classList.add("is-resizing");
-    const move = (ev: PointerEvent) => setListWidthState(clampWidth(startW + ev.clientX - startX));
-    const up = (ev: PointerEvent) => {
-      el.releasePointerCapture(ev.pointerId);
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      document.body.classList.remove("is-resizing");
-      setListWidth(startW + ev.clientX - startX);
-    };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-  };
-
-  const openConversationRow = (row: ConversationRow, fromProject?: boolean) => {
-    const it = row.item;
-    // A shell node's exchange opens in the existing terminal view.
-    if (it.kind === "pair") {
-      // With you on one side, the node is the one you talk to.
-      if (it.other?.startsWith("@console:")) openConversation(row.hubId, "", it.node || "", { peer: it.other, fromProject });
-      else openConversation(row.hubId, "", it.other || "", { peer: it.node, fromProject });
-      return;
-    }
-    const agent = it.participants.find((p) => !p.startsWith("@")) || "";
-    openConversation(row.hubId, it.thread_id, agent, { fromProject });
-  };
-
-  const openProject = (ref: ProjectRef) => {
-    setInspect(null);
-    setProject(ref);
-    setPage("project");
-  };
-  const nodeAdded = (hubId: string, name: string) => {
-    const join = joinProject.current;
-    joinProject.current = null;
-    if (join && join.hubId === hubId) {
-      void appApi.putProjectMember(hubId, join.name, name).catch(() => undefined).finally(() => {
-        openProject(join);
-        setProjectReload((n) => n + 1);
-        void loadProjects(hubs.map((h) => h.id));
-        void refresh();
-      });
-      return;
-    }
-    setHighlight({ hubId, name });
-    setMachineInspect(null);
-    setPage("nodes");
-    void refresh();
+  // A member's chat opens in a project it is in (else among the loose).
+  const chatWithMember = (r: AgentRow) => {
+    const p = liveProjects.find((x) => x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
+    const s: SpaceRef = p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true };
+    setProfile(null);
+    setSpace(s);
+    setPage("space");
+    setChatWith({ space: s, agent: r.st.agent.name, n: Date.now() });
   };
 
   const closeConnect = (open: boolean) => {
     setConnectOpen(open);
     if (!open) setConnectPrefill("");
   };
+  const hubAdded = async () => { await refresh(); };
 
-  const hubAdded = async (hub: Hub) => {
-    await refresh();
-    setFilters((f) => ({ ...f, hub: hub.id }));
-    setPage("nodes");
-  };
-
-  // Settings live in the hub menu at the bottom of the sidebar, and on
-  // ⌘, / Ctrl+, as in other apps. The pages refresh by themselves; ⌘R /
-  // Ctrl+R fetches right now (and keeps the window from reloading).
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   useEffect(() => {
@@ -385,13 +256,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, []);
 
   const startLocal = async () => {
-    const r = await appApi.startLocalHub({ tunnel: "none" });
+    await appApi.startLocalHub({ tunnel: "none" });
     await refresh();
-    setFilters((f) => ({ ...f, hub: r.hub.id }));
-    setPage("nodes");
   };
 
-  // Keep explicit sidebar toggles; an untouched window uses the 860px default.
   const toggleSidebar = () => {
     setCollapsed((c) => {
       const next = !c;
@@ -400,20 +268,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
     });
   };
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
-  const sideProjects = (projects || [])
-    .filter((x) => filters.hub === "all" || x.hubId === filters.hub)
-    .filter((x) => !x.p.archived || (project && project.hubId === x.hubId && project.name === x.p.name));
-  const currentProject = project && projects?.find((x) => x.hubId === project.hubId && x.p.name === project.name);
-  const meta = page === "project"
-    // The project's own name is the page's heading, just below.
-    ? { group: PAGE_META.project.group, label: PAGE_META.project.group }
-    : PAGE_META[page];
   const isMac = info?.shell === "mac";
   const navMenu = useContextMenu();
 
-  // macOS: double-clicking the top bar zooms the window (and again restores
-  // it), as in a title bar. The window runtime does this itself only when
-  // the double-click lands on the bar's own box, not on its text.
   useEffect(() => {
     if (!isMac) return;
     const onDbl = (e: MouseEvent) => {
@@ -433,416 +290,267 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
         <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} />
-        <ConnectHubDialog
-          open={connectOpen}
-          onOpenChange={closeConnect}
-          prefill={connectPrefill}
-          onAdded={(hub) => void hubAdded(hub)}
-        />
+        <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
       </div>
     );
   }
+
+  const profileRow = profile ? rows.find((r) => r.hub.id === profile.hubId && r.st.agent.name === profile.name) || null : null;
+  const inspectRow = inspect ? rows.find((r) => r.hub.id === inspect.hubId && r.st.agent.name === inspect.name) || null : null;
+  const addAgentProject = addAgent && !isLoose(addAgent) ? liveProjects.find((x) => x.hubId === addAgent.hubId && x.p.name === addAgent.name)?.p : undefined;
+  const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
+  const title = page === "members" ? L("成员", "Members")
+    : page === "computers" ? L("电脑", "Computers")
+    : page === "settings" ? L("设置", "Settings")
+    : page === "about" ? L("项目资料", "Project notes")
+    // A project says its own name, larger, just below.
+    : "";
+  const working = (names: string[], hubId: string) => rows.some((r) => r.hub.id === hubId && names.includes(r.st.agent.name) && r.st.state === "working");
 
   return (
     <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
       {!collapsed && (
         <aside className="app-sidebar">
           <div className="app-sidebar-head" style={dragStyle}>
-            <div className="brand">
-              <LogoWordmark className="app-brand-wordmark" />
-            </div>
+            <div className="brand"><LogoWordmark className="app-brand-wordmark" /></div>
           </div>
 
           <nav className="app-nav">
-            {NAV.map((g) => (
-              <div className="app-nav-group" key={g.group}>
-                <div className="app-nav-title">{g.group}</div>
-                {g.items.map((it) => (
-                  <button
-                    key={it.page}
-                    type="button"
-                    className={cn("app-nav-item", page === it.page && "active")}
-                    aria-current={page === it.page ? "page" : undefined}
-                    onClick={() => setPage(it.page)}
-                  >
-                    <it.icon />
-                    <span>{it.label}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
             <div className="app-nav-group">
               <div className="app-nav-title app-nav-title-row">
                 <span>{L("项目", "Projects")}</span>
                 <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
                   onClick={() => setNewProjectOpen(true)}><Plus /></button>
               </div>
-              {sideProjects.map((x) => {
-                const active = page === "project" && project?.hubId === x.hubId && project.name === x.p.name;
+              {liveProjects.map((x) => {
+                const ref = { hubId: x.hubId, name: x.p.name };
+                const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
+                const busy = working(x.p.members.map((m) => m.name), x.hubId);
                 return (
-                  <button
-                    key={`${x.hubId}/${x.p.name}`}
-                    type="button"
-                    className={cn("app-nav-item", active && "active", x.p.archived && "muted")}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => openProject({ hubId: x.hubId, name: x.p.name })}
+                  <button key={`${x.hubId}/${x.p.name}`} type="button" className={cn("app-nav-item sp-nav", active && "active")}
+                    aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
                     onContextMenu={(e) => navMenu.open(e, [
-                      { label: L("打开项目", "Open project"), icon: IconProject, onSelect: () => openProject({ hubId: x.hubId, name: x.p.name }) },
-                      { label: L("发任务", "New task"), icon: IconNewChat, disabled: x.p.archived, onSelect: () => startConv({ hubId: x.hubId, project: x.p.name }) },
+                      { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
+                      { label: L("加一台电脑", "Add a computer"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
+                      { label: L("项目资料", "Project notes"), onSelect: () => { setSpace(ref); setPage("about"); } },
                     ])}
-                    title={x.p.goal || x.p.title}
-                  >
-                    <IconProject />
-                    <span className="app-nav-label">{x.p.title || x.p.name}</span>
+                    title={x.p.goal || x.p.title}>
+                    <ProjectMark name={x.p.title || x.p.name} />
+                    <span className="app-nav-label">
+                      {x.p.title || x.p.name}
+                      {multiHub && <small className="sp-nav-hub">{hubName(x.hubId)}</small>}
+                    </span>
+                    {busy && <span className="sp-nav-busy" title={L("有成员在干活", "Someone is at work")} />}
                   </button>
                 );
               })}
-              {projects !== null && sideProjects.length === 0 && (
+              {looseHubs.map((id) => {
+                const ref: SpaceRef = { hubId: id, loose: true };
+                const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
+                const n = loose.filter((r) => r.hub.id === id).length;
+                return (
+                  <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav is-loose", active && "active")} onClick={() => openSpace(ref)}>
+                    <span className="sp-mark is-loose">·</span>
+                    <span className="app-nav-label">
+                      {L("还没进项目的", "Not in a project")}
+                      {multiHub && <small className="sp-nav-hub">{hubName(id)}</small>}
+                    </span>
+                    <span className="sp-nav-count">{n}</span>
+                  </button>
+                );
+              })}
+              {projects !== null && liveProjects.length === 0 && (
                 <button type="button" className="app-nav-item muted" onClick={() => setNewProjectOpen(true)}>
-                  <Plus strokeWidth={1.75} />
-                  <span>{L("新建项目", "New project")}</span>
+                  <Plus strokeWidth={1.75} /><span>{L("新建项目", "New project")}</span>
                 </button>
               )}
+            </div>
+            <div className="app-nav-group">
+              <button type="button" className={cn("app-nav-item", page === "members" && "active")} onClick={() => setPage("members")}>
+                <IconPerson /><span>{L("成员", "Members")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item", page === "computers" && "active")} onClick={() => setPage("computers")}>
+                <IconLaptop /><span>{L("电脑", "Computers")}</span>
+              </button>
             </div>
           </nav>
 
           <div className="app-sidebar-foot">
             <UpdateNotice onOpenSettings={() => setPage("settings")} />
-            <HubSwitcher
-              hubs={namedHubs}
-              hubsOv={namedOv?.hubs}
-              value={filters.hub}
-              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
-              onAdd={() => setConnectOpen(true)}
-              onSettings={() => setPage("settings")}
-            />
+            {/* Which workspace the projects above are in: set once, seldom
+                switched, so it sits at the bottom. */}
+            <div className="sp-switch">
+              <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubFilter}
+                onChange={(v) => { setHubFilter(v); setPage("space"); }}
+                onAdd={() => setConnectOpen(true)} onSettings={() => setPage("settings")} />
+            </div>
+            <button type="button" className={cn("app-nav-item", page === "settings" && "active")} onClick={() => setPage("settings")}>
+              <SettingsIcon strokeWidth={1.75} /><span>{L("设置", "Settings")}</span>
+            </button>
           </div>
         </aside>
       )}
 
       <div className="app-main">
         <header className="app-crumbbar" style={dragStyle}>
-          <button
-            type="button"
-            className="app-btn app-btn-plain"
-            onClick={toggleSidebar}
+          <button type="button" className="app-btn app-btn-plain" onClick={toggleSidebar}
             aria-label={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
-            title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}
-          >
+            title={collapsed ? L("显示边栏", "Show sidebar") : L("隐藏边栏", "Hide sidebar")}>
             <IconSidebar />
           </button>
-          {collapsed && (
-            <HubSwitcher
-              variant="pill"
-              hubs={namedHubs}
-              hubsOv={namedOv?.hubs}
-              value={filters.hub}
-              onChange={(hub) => setFilters((f) => ({ ...f, hub }))}
-              onAdd={() => setConnectOpen(true)}
-              onSettings={() => setPage("settings")}
-            />
+          {page === "about" && (
+            <button type="button" className="app-btn app-btn-plain" onClick={() => setPage("space")} aria-label={L("返回项目", "Back to the project")} title={L("返回项目", "Back to the project")}>
+              <ArrowLeft />
+            </button>
           )}
-          <h1 className="app-title">{meta.label}</h1>
+          <h1 className="app-title">{title}</h1>
         </header>
 
-        {page === "conversations" && wide ? (
-          // Wide windows: the list on the left, the open conversation on the
-          // right; another row switches it, like any messaging app.
-          <div className={cn("conv-split", listCollapsed && "is-collapsed")}>
-            {listCollapsed ? (
-              <div className="conv-split-rail">
-                <button type="button" className="app-btn app-btn-plain" onClick={() => setListCollapsed(false)}
-                  aria-label={L("展开对话列表", "Show the conversation list")} title={L("展开对话列表", "Show the conversation list")}>
-                  <IconExpandRight />
-                </button>
-              </div>
-            ) : (<>
-            <div className="conv-split-list app-scroll" style={{ width: listWidth }}>
-              <ConversationsPage
-                hubs={namedHubs}
-                hub={filters.hub}
-                rows={rows}
-                now={now}
-                compact
-                onCollapse={() => setListCollapsed(true)}
-                selectedKey={conv ? convKey(conv) : ""}
-                onOpen={(r) => openConversationRow(r)}
-                onInspect={(hubId, name) => setInspect({ hubId, name })}
-                onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
-                projects={projects}
-                project={convProject}
-                onProject={setConvProject}
-              />
-            </div>
-            <div
-              className="conv-split-handle"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={L("拖动调整列表宽度，双击恢复", "Drag to resize the list; double-click to reset")}
-              title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")}
-              onPointerDown={startResize}
-              onDoubleClick={() => setListWidth(LIST_WIDTH)}
-            />
-            </>)}
-            <div className="conv-split-detail">
-              {conv ? (
-                <ConversationDetail
-                  key={convKey(conv)}
-                  target={conv}
-                  rows={rows}
-                  now={now}
-                  showBack={false}
-                  onBack={closeConversation}
-                  onNewConversation={(hubId, agent) => startConv({ hubId, agent })}
-                  onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
-                />
-              ) : (
-                <div className="conv-split-empty">
-                  <LogoSymbol flat className="conv-split-mark" />
-                  <p>{listCollapsed ? L("展开左边的列表，选一个对话", "Show the list on the left and pick a conversation") : L("在左边选一个对话", "Pick a conversation on the left")}</p>
-                </div>
-              )}
+        {error !== null && (
+          <div className="app-banner-wrap">
+            <div className="app-error-row">
+              <WifiOff />
+              <span className="err" title={errorMessage(error)}>{L("暂时拿不到最新的内容，正在重试…", "Can't get the latest right now; retrying…")}</span>
             </div>
           </div>
-        ) : page === "conversations" && conv ? (
-          <ConversationDetail
-            target={conv}
+        )}
+
+        {page === "space" && (firstRun ? (
+          // No project yet: start one (or put it off and see the agents).
+          <div className="app-scroll">
+            <div className="sp-first">
+              <h2>{L("先建一个项目吧", "Start with a project")}</h2>
+              <p>{L("一个项目就是一件你想做成的事。建好以后，把你的 agent 拉进来，它们就能一起干活，你在这里派活、看进展。", "A project is one thing you want done. Once it's there, bring your agents in: they work on it together while you hand out tasks and watch.")}</p>
+              <NewProjectForm big hubs={namedHubs} onCreated={projectCreated} onCancel={() => {
+                setSkipFirst(true);
+                try { localStorage.setItem("myco-skip-first-project", "1"); } catch { /* not kept */ }
+              }} />
+            </div>
+          </div>
+        ) : shown ? (
+          <ProjectSpace
+            key={spaceKey(shown)}
+            space={shown}
+            project={shownProject}
+            looseRows={loose}
+            hubName={hubName(shown.hubId)}
             rows={rows}
             now={now}
-            onBack={closeConversation}
-            onNewConversation={(hubId, agent) => startConv({ hubId, agent })}
-                  onOpen={(hubId, agent, peer) => { void refresh(); openConversation(hubId, "", agent, { peer }); }}
+            me={meOn(shown.hubId)}
+            openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n } : undefined}
+            home={spaceTap}
+            onAddAgent={() => setAddAgent(shown)}
+            onAddWorkspace={() => setAddWorkspace(shown)}
+            onOpenMember={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
+            onAbout={shownProject ? () => setPage("about") : undefined}
+            onRefresh={() => void refresh()}
           />
         ) : (
           <div className="app-scroll">
-            {error !== null && (
-              <div className="app-banner-wrap">
-                <div className="app-error-row">
-                  <WifiOff />
-                  <span className="err" title={errorMessage(error)}>{L("App 暂时拿不到最新数据，正在重试…", "The app can't get fresh data right now; retrying…")}</span>
-                </div>
-              </div>
-            )}
+            <div className="sp-first">
+              <h2>{L("这里还空着", "Nothing here yet")}</h2>
+              <p>{L("建一个项目，把你的 agent 拉进来。", "Start a project and bring your agents in.")}</p>
+              <button type="button" className="app-btn app-btn-primary" onClick={() => setNewProjectOpen(true)}><Plus />{L("新建项目", "New project")}</button>
+            </div>
+          </div>
+        ))}
 
-            {page === "conversations" && (
-              <ConversationsPage
-                hubs={namedHubs}
-                hub={filters.hub}
-                rows={rows}
-                now={now}
-                onOpen={(r) => openConversationRow(r)}
-                onInspect={(hubId, name) => setInspect({ hubId, name })}
-                onNew={() => setNewConv(convProject ? { hubId: convProject.hubId, project: convProject.name } : { hubId: filters.hub === "all" ? undefined : filters.hub })}
-                projects={projects}
-                project={convProject}
-                onProject={setConvProject}
-              />
-            )}
+        {page === "members" && (
+          <div className="app-scroll">
+            <MembersPage rows={scopedRows} projects={projects || []} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
+          </div>
+        )}
 
-            {page === "project" && project && (
-              <ProjectPage
-                key={`${project.hubId}/${project.name}`}
-                target={project}
-                reloadKey={projectReload}
-                hubName={namedHubs.find((h) => h.id === project.hubId)?.name || project.hubId}
-                rows={rows}
-                now={now}
-                onOpenNode={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
-                onNewNode={() => {
-                  joinProject.current = project;
-                  setSpawnTarget({ hubId: project.hubId, project: { name: project.name, title: currentProject?.p.title || project.name } });
-                }}
-                onChanged={() => void loadProjects(hubs.map((h) => h.id))}
-                onOpenConversation={(r) => openConversationRow(r, true)}
-                onAllConversations={() => { setConvProject(project); setPage("conversations"); }}
-                onNewConversation={(agent) => startConv({ hubId: project.hubId, agent, project: project.name })}
-                onDeleted={() => {
-                  setProject(null);
-                  setConvProject(null);
-                  setPage("nodes");
-                  void loadProjects(hubs.map((h) => h.id));
-                }}
-              />
-            )}
+        {page === "computers" && (
+          <div className="app-scroll">
+            <ComputersPage rows={scopedRows} projects={projects || []}
+              onOpen={chatWithMember}
+              onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
+              onAddComputer={() => setAddMachineOpen(true)}
+              onChanged={() => void refresh()} />
+          </div>
+        )}
 
-            {page === "nodes" && (
-              <NodesPage
-                rows={rows}
-                hubs={namedOv?.hubs}
-                hubMeta={hubs}
-                loading={loading}
-                filters={filters}
-                onFilters={setFilters}
-                highlight={highlight}
-                now={now}
-                onOpen={(r) => setInspect({ hubId: r.hub.id, name: r.st.agent.name })}
-                onAdd={() => setSpawnTarget({})}
-                onCleanup={() => setCleanupOpen(true)}
-                onMessage={(r) => startConv({ hubId: r.hub.id, agent: r.st.agent.name })}
-              />
-            )}
+        {page === "about" && shownProject && shown && (
+          <div className="app-scroll">
+            <ProjectPage
+              key={spaceKey(shown)}
+              target={{ hubId: shown.hubId, name: shownProject.name }}
+              reloadKey={projectReload}
+              hubName={hubName(shown.hubId)}
+              rows={rows}
+              now={now}
+              onOpenNode={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
+              onNewNode={() => { setPage("space"); setAddAgent(shown); }}
+              onChanged={() => void loadProjects(hubs.map((h) => h.id))}
+              onOpenConversation={() => setPage("space")}
+              onAllConversations={() => setPage("space")}
+              onNewConversation={(agent) => { setPage("space"); if (agent) setChatWith({ space: shown, agent, n: Date.now() }); }}
+              onDeleted={() => { setSpace(null); setPage("space"); void loadProjects(hubs.map((h) => h.id)); }}
+            />
+          </div>
+        )}
 
-            {page === "machines" && (
-              <MachinesPage
-                hubs={visibleHubs}
-                hubsOv={namedOv?.hubs}
-                loading={loading}
-                groupByHub={filters.hub === "all"}
-                onOpenMachine={(hubId, machineId) => setMachineInspect({ hubId, machineId })}
-                onAdd={() => setAddMachineOpen(true)}
-                onSpawn={(hubId, machineId) => setSpawnTarget({ hubId, machineId })}
-              />
-            )}
-
-            {page === "settings" && (
-              <SettingsPage
-                hubs={namedHubs}
-                hubsOv={namedOv?.hubs}
-                info={info}
-                theme={theme}
-                onTheme={setTheme}
-                textSize={textSize}
-                onTextSize={setTextSize}
-                langChoice={langChoice}
-                onLangChoice={chooseLang}
-                refreshKey={localTick}
-                sectionRequest={hubSettingsRequest}
-                onRefresh={refresh}
-                onAddHub={() => setConnectOpen(true)}
-              />
-            )}
+        {page === "settings" && (
+          <div className="app-scroll">
+            <SettingsPage
+              hubs={namedHubs}
+              hubsOv={namedOv?.hubs}
+              info={info}
+              theme={theme}
+              onTheme={setTheme}
+              textSize={textSize}
+              onTextSize={setTextSize}
+              langChoice={langChoice}
+              onLangChoice={chooseLang}
+              refreshKey={localTick}
+              onRefresh={refresh}
+              onAddHub={() => setConnectOpen(true)}
+            />
           </div>
         )}
       </div>
 
       {navMenu.element}
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
-      <CleanupDialog
-        open={cleanupOpen}
-        onOpenChange={setCleanupOpen}
-        hubs={namedOv?.hubs || []}
-        defaultHub={filters.hub === "all" ? undefined : filters.hub}
-        onDone={() => void refresh()}
-      />
-      <ConnectHubDialog
-        open={connectOpen}
-        onOpenChange={closeConnect}
-        prefill={connectPrefill}
-        onAdded={(hub) => void hubAdded(hub)}
-      />
+      <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
+      <NewProjectDialog open={newProjectOpen} hubs={namedHubs.filter((h) => namedOv?.hubs.find((o) => o.id === h.id)?.ok !== false)}
+        defaultHubId={shown?.hubId} onClose={() => setNewProjectOpen(false)} onCreated={projectCreated} />
+      <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} rows={rows}
+        onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
+      <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
+        onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
+      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={namedHubs} />
+
+      <MemberSheet row={profileRow} projects={projects || []} rows={rows} onClose={() => setProfile(null)}
+        onChat={chatWithMember} onChanged={() => void refresh()}
+        onDetails={(r) => { setProfile(null); setInspect({ hubId: r.hub.id, name: r.st.agent.name }); }} />
       <Inspector
-        row={current}
+        row={inspectRow}
         now={now}
         projects={projects}
-        onOpenProject={openProject}
+        onOpenProject={(ref) => { setInspect(null); openSpace(ref); }}
         onProjectsChanged={() => void loadProjects(hubs.map((h) => h.id))}
         onClose={() => setInspect(null)}
         onRefresh={refresh}
-        onThread={(hubId, threadId, agent) => openConversation(hubId, threadId, agent, { fromNode: true })}
-        onPeer={(hubId, agent, peer) => openConversation(hubId, "", agent, { peer, fromNode: true })}
-        onMessage={(r) => {
-          setInspect(null);
-          startConv({ hubId: r.hub.id, agent: r.st.agent.name });
-        }}
-        onOpenMachine={(hubId, machineId) => {
-          setInspect(null);
-          setPage("machines");
-          setMachineInspect({ hubId, machineId });
-        }}
-      />
-
-      <MachineInspector
-        target={machineInspect}
-        hubs={namedOv?.hubs}
-        rows={rows}
-        now={now}
-        onClose={() => setMachineInspect(null)}
-        onRefresh={refresh}
-        onOpenNode={(r) => {
-          setMachineInspect(null);
-          setInspect({ hubId: r.hub.id, name: r.st.agent.name });
-        }}
-        onSpawn={(hubId, machineId) => setSpawnTarget({ hubId, machineId })}
-      />
-
-      <AddNodeDialog
-        target={spawnTarget}
-        hubs={namedHubs}
-        hubsOv={namedOv?.hubs}
-        defaultHubId={filters.hub === "all" ? undefined : filters.hub}
-        onClose={() => { setSpawnTarget(null); joinProject.current = null; }}
-        onSpawned={nodeAdded}
-        onMessage={(hubId, name) => {
-          const join = spawnTarget?.project;
-          setSpawnTarget(null);
-          startConv({ hubId, agent: name, ...(join ? { project: join.name } : {}) });
-        }}
-        onJoined={nodeAdded}
-      />
-
-      <NewConversationDialog
-        target={newConv}
-        hubs={namedHubs}
-        rows={rows}
-        projects={projects}
-        scopeHubId={filters.hub === "all" ? undefined : filters.hub}
-        onClose={() => setNewConv(null)}
-        onPick={(hubId, agent, project) => { setNewConv(null); openChat(hubId, agent, project); }}
-        onSpawned={() => void refresh()}
-      />
-
-      <NewProjectDialog
-        open={newProjectOpen}
-        hubs={namedHubs.filter((h) => namedOv?.hubs.find((o) => o.id === h.id)?.ok !== false)}
-        defaultHubId={filters.hub === "all" ? undefined : filters.hub}
-        onClose={() => setNewProjectOpen(false)}
-        onCreated={(ref) => {
-          setNewProjectOpen(false);
-          openProject(ref);
-          void loadProjects(hubs.map((h) => h.id));
-        }}
-      />
-
-      <AddMachineDialog
-        open={addMachineOpen}
-        onOpenChange={setAddMachineOpen}
-        hubs={namedHubs}
+        onThread={() => setInspect(null)}
+        onPeer={() => setInspect(null)}
+        onMessage={(r) => { setInspect(null); chatWithMember(r); }}
+        onOpenMachine={() => { setInspect(null); setPage("settings"); }}
       />
     </div>
   );
 }
 
-/** The list row key of an open conversation (see rowKey). */
-function convKey(c: { hubId: string; threadId: string; agent: string; peer?: string }): string {
-  return c.peer ? `${c.hubId}\u0000${pairKey(c.agent, c.peer)}` : `${c.hubId}\u0000${c.threadId}`;
+/** A project's mark in the sidebar: its first letter on its own colour. */
+function ProjectMark({ name }: { name: string }) {
+  const l = looksOf(name);
+  return <span className="sp-mark" style={{ ["--mark" as string]: l.cap }}>{[...name.trim()][0]?.toUpperCase() || "·"}</span>;
 }
 
-/** Whether the window is at least min pixels wide (follows resizing). */
-function useWideWindow(min: number): boolean {
-  const query = `(min-width: ${min}px)`;
-  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setWide(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, [query]);
-  return wide;
-}
-
+const SPACE_KEY = "myco-app-space";
 const HUB_KEY = "myco-app-hub";
-const LIST_WIDTH = 380;
-function clampWidth(w: number): number {
-  return Math.min(600, Math.max(280, Math.round(w)));
-}
-function readPref(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-function writePref(key: string, value: string) {
-  try { localStorage.setItem(key, value); } catch { /* not kept */ }
-}
-
 /** A hub that answered 401: it no longer takes this app's token. The hub says
  *  so as "admin token missing or invalid" (or "console token missing or
  *  invalid"), or the proxy answers with the 401 itself. */

@@ -480,7 +480,7 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 	// This computer is the hub's first machine: sessions can be started on
 	// it right away (添加节点 → 在机器上新建).
 	if err := l.joinLocalHub(ctx); err != nil {
-		res.Warnings = append(res.Warnings, "这台电脑没能加入本机 Hub："+err.Error())
+		res.Warnings = append(res.Warnings, "这台电脑没能加入本机工作区："+err.Error())
 	}
 	// Already in the app: nothing more to add.
 	if hubs, err := b.Store.List(); err == nil {
@@ -504,7 +504,7 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errors.New("myco console token create did not return a token"))
 		return
 	}
-	h, err := b.Store.Add("本机 Hub", localURL)
+	h, err := b.Store.Add("我的工作区", localURL)
 	if err != nil {
 		writeErr(w, err)
 		return

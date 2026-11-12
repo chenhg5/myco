@@ -45,7 +45,7 @@ function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | unde
 }
 
 /** Hub picker: all hubs, one hub, add another, or open Hub settings. */
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, variant = "sidebar" }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, variant = "sidebar", down = false }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   /** "all" or a hub id. */
@@ -54,6 +54,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
   onAdd: () => void;
   onSettings: () => void;
   variant?: Variant;
+  /** at the top of the sidebar: the menu opens downwards */
+  down?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -145,17 +147,17 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
   const sub = selected
     ? selected.ok
       ? L(
-        `已连接${count === undefined ? "" : ` · ${count} 个节点`}`,
+        `已连上${count === undefined ? "" : ` · ${count} 个成员`}`,
         `Connected${count === undefined ? "" : ` · ${count} node${count === 1 ? "" : "s"}`}`,
       )
       : L("连不上", "Unreachable")
-    : L(`${hubs.length} 个 Hub · ${connected} 个已连接`, `${hubs.length} Hub${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
+    : L(`${hubs.length} 个工作区 · ${connected} 个已连上`, `${hubs.length} workspace${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
 
   const dotClass = selected
     ? selected.ok ? "working" : "down"
     : connected === hubs.length ? "working" : connected === 0 ? "down" : "pending";
 
-  const label = selected ? selected.name : L("全部 Hub", "All Hubs");
+  const label = selected ? selected.name : L("全部工作区", "All workspaces");
 
   return (
     <div className={cn("app-hub-switch", variant === "pill" && "is-pill")} ref={rootRef}>
@@ -168,8 +170,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
         )}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={L(`切换 Hub：${label}`, `Switch Hub: ${label}`)}
-        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : L("所有 Hub", "All Hubs")}
+        aria-label={L(`切换工作区：${label}`, `Switch workspace: ${label}`)}
+        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : L("全部工作区", "All workspaces")}
         onClick={toggle}
       >
         <Avatar
@@ -183,7 +185,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
           <span className="app-hub-info">
             <span className="app-hub-name-row">
               <span className="app-hub-name">{label}</span>
-              {open ? <ChevronDown className="app-hub-chevron" /> : <ChevronUp className="app-hub-chevron" />}
+              {open !== down ? <ChevronDown className="app-hub-chevron" /> : <ChevronUp className="app-hub-chevron" />}
             </span>
             <span className="app-hub-sub">
               <span className={cn("dot", dotClass)} />
@@ -195,9 +197,9 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
 
       {open && (
         <div
-          className={cn("app-hub-menu", variant === "pill" ? "down" : "up")}
+          className={cn("app-hub-menu", variant === "pill" || down ? "down" : "up")}
           role="menu"
-          aria-label={L("选择 Hub", "Choose Hub")}
+          aria-label={L("切换工作区", "Switch workspace")}
           onKeyDown={onMenuKeyDown}
         >
           {entries.map((e, i) => {
@@ -218,7 +220,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                   onClick={() => pick("all")}
                 >
                   <Avatar all />
-                  <span className="app-hub-menu-name">{L("全部 Hub", "All Hubs")}</span>
+                  <span className="app-hub-menu-name">{L("全部工作区", "All workspaces")}</span>
                   {value === "all" && <Check className="app-hub-menu-check" />}
                 </button>
               );
@@ -261,7 +263,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
-                    {e.kind === "add" ? L("添加 Hub", "Add Hub") : L("设置", "Settings")}
+                    {e.kind === "add" ? L("加入或新建工作区", "Join or start a workspace") : L("工作区设置", "Workspace settings")}
                   </span>
                 </button>
               </Fragment>

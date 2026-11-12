@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, 
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { canManage, cliName, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
+import { canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
@@ -16,6 +16,7 @@ import { useCopy } from "@/app/copy";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
+import { Avatar, whereOf } from "@/app/persona";
 
 export interface ConversationTarget {
   hubId: string;
@@ -128,7 +129,7 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel }: {
   target: ConversationTarget;
   rows: AgentRow[];
   now: number;
@@ -136,6 +137,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   /** Next to the list (split view) there is nothing to go back to, unless
    *  the conversation was opened from a node. */
   showBack?: boolean;
+  /** what the back button says (where it goes) */
+  backLabel?: string;
   // Starts a new conversation of yours with the agent (from a read-only thread).
   onNewConversation: (hubId: string, agent: string) => void;
   /** Opens your conversation with another node (a copy just made). */
@@ -161,8 +164,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
   const agent = row?.st.agent;
   const agentName = agent && row ? nodeName(agent, row.hub) : target.agent;
-  const cli = agent ? cliName(agent) : "";
-  const model = agent?.runtime?.model;
 
   const exchange = !!target.peer;
   // Exchange view: older pages loaded so far (oldest first) and whether more exist.
@@ -364,7 +365,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         ? L("对方只在会话里接收消息，等它的会话再挂上 inbox wait 就会处理", "The node receives only in its session; it starts when its session runs inbox wait again")
         : L("对方离线，上线后会处理", "The node is offline; it starts when the node is back")
       : row && runnerAway(row.st, row.hub)
-        ? L("节点的 runner 没在运行（可能在重启），起来后会处理", "The node's runner is not running (maybe restarting); it starts when the runner is back")
+        ? L("它那台电脑上的 myco 没在运行（可能在重启），恢复后会接着做", "The node's runner is not running (maybe restarting); it starts when the runner is back")
         : undefined;
 
   // Busy elsewhere: a copy of the session (a new node on the same machine
@@ -810,20 +811,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
-            aria-label={target.returnTo?.project ? L("返回项目", "Back to the project") : target.returnTo ? L("返回节点", "Back to the node") : L("返回对话列表", "Back to conversations")} title={L("返回", "Back")}>
+            aria-label={backLabel || L("返回", "Back")} title={backLabel || L("返回", "Back")}>
             <ArrowLeft />
           </button>
         )}
+        {/* Who this is with: their faces, their names, and what they do. */}
+        <span className="conv-head-faces">
+          {(observed ? parties : [target.agent]).map((n) => {
+            const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === n);
+            return r ? <Avatar key={n} agent={r.st.agent} size={30} badge={false} /> : null;
+          })}
+        </span>
         <div className="conv-head-titles">
-          <h2>{observed ? parties.map(nameOf).join(" ↔ ") : agentName}</h2>
+          <h2>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>
           <p>
-            {exchange && observed
-              ? <>{L("两个节点之间的全部消息", "All messages between the two nodes")} · </>
-              : observed && <>{L("其他节点之间的消息", "Messages between other nodes")} · </>}
-            {target.hubName}
-            {cli && <> · {cli}</>}
-            {model && <> · <span className="mono">{model}</span></>}
-            {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`离线 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的数据`, `Offline · showing data from ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
+            {observed
+              ? L("它们之间的对话，你只能看", "Their conversation; you can only read it")
+              : shellMode ? (agent ? whereOf({ hub: row!.hub, st: row!.st }) : "") : agent?.description || L("和你的一对一", "Just you and it")}
+            {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
         {!observed && (firstStuck ? (
@@ -854,7 +859,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               // quietly; polling retries and the note goes once it answers.
               <>
                 <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
-                <div className="conv-retry-note">{L("暂时连不上这个 Hub，正在重试…", "Can't reach this hub right now; retrying…")}</div>
+                <div className="conv-retry-note">{L("暂时连不上，正在重试…", "Can't reach this hub right now; retrying…")}</div>
               </>
             ) : (
               <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
@@ -930,7 +935,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
       {shellMode ? null : observed ? (
         <div className="conv-observe">
-          <span>{L("这是节点之间的协作记录，你只能查看。", "This is a record of nodes working together. You can only view it.")}</span>
+          <span>{L("这是它们之间的对话，你只能看。", "This is a record of nodes working together. You can only view it.")}</span>
           <button type="button" className="app-btn" onClick={() => onNewConversation(target.hubId, target.agent)}>
             {L(`给 ${agentName} 发任务`, `Give ${agentName} a task`)}
           </button>
@@ -947,7 +952,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             </span>
             {forkable && onOpen && (
               <button type="button" className="conv-steer-btn" disabled={copying} onClick={() => void copyAndContinue()}
-                title={L("复制这个会话成一个新节点（同一台机器、同一个目录），在副本里接着做；原来的会话不动", "Copy this session into a new node (same machine and folder) and carry on there; the original session is left alone")}>
+                title={L("复制一个一模一样的它（同一台电脑、同一个文件夹），在副本里接着做；原来的不动", "Copy this session into a new node (same machine and folder) and carry on there; the original session is left alone")}>
                 {copying ? L("正在复制…", "Copying…") : openTask ? L("复制一份接着做", "Continue in a copy") : L("复制一份来对话", "Talk to a copy")}
               </button>
             )}

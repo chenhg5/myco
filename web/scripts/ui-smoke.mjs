@@ -241,13 +241,14 @@ function compactText(s) {
   return (s || "").replace(/\s+/g, " ").trim();
 }
 
-/** Opens the picker's list on the conversations page (leaving an open
- *  conversation, which the page remembers until you leave it). */
-async function openConversationList(page, narrow) {
-  await go(page, "节点", narrow);
-  await go(page, "对话", narrow);
-  await clickVisible(page, page.getByRole("button", { name: /新对话|New conversation/ }));
-  await page.getByRole("dialog").waitFor();
+/** Opens your chat with a member of a space (a project, or the agents in
+ *  none): from the members column, or the row of faces in a narrow window. */
+async function openMember(page, narrow, space, name) {
+  await go(page, space, narrow);
+  await page.locator(".sp-group").waitFor({ timeout: 20_000 });
+  if (narrow) await clickVisible(page, page.locator(`.sp-strip-face[title="${name}"]`));
+  else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: name }));
+  await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
 }
 
 async function go(page, label, narrow) {
@@ -256,13 +257,6 @@ async function go(page, label, narrow) {
   // At narrow widths the sidebar covers the window; show the page as a person
   // would after picking it, with the compact Hub pill in the crumb bar.
   if (narrow) await sidebar(page, false);
-}
-
-async function openHubSettings(page, narrow) {
-  await sidebar(page, !narrow);
-  const trigger = page.locator(narrow ? ".app-hub-pill:visible" : ".app-hub-trigger:visible");
-  await clickVisible(page, trigger);
-  await clickVisible(page, page.locator(".app-hub-menu-item:visible", { hasText: "设置" }));
 }
 
 async function closeDialog(page) {
@@ -297,8 +291,6 @@ async function runMatrix(browser, size, scheme) {
   const page = await context.newPage();
   watchPage(page, size, scheme);
   const narrow = size.width < 860;
-  // Unique per matrix: the mock keeps running across all four.
-  const alias = `smoke-${size.width}-${scheme}`;
   const step = async (label, fn) => {
     currentStep = label;
     log(`  · ${label}`);
@@ -310,297 +302,107 @@ async function runMatrix(browser, size, scheme) {
     currentStep = "启动";
     await page.goto(`${BASE}/?lang=zh`, { waitUntil: "domcontentloaded" });
     await page.locator(".app-shell").waitFor();
-    await page.locator(".app-row:visible").first().waitFor({ timeout: 20_000 });
+    await page.locator(".sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
     await settle(page);
 
-    await step("节点", async () => {
-      await shot(page, size, scheme, "nodes");
-    });
-
-    await step("节点 · 添加节点弹窗", async () => {
-      await clickVisible(page, page.getByRole("button", { name: /添加节点|Add node/ }));
-      await page.getByRole("dialog").waitFor();
-      await settle(page, 500);
-      await shot(page, size, scheme, "dialog-add-node");
-      await closeDialog(page);
-    });
-
-    await step("机器", async () => {
-      await go(page, "机器", narrow);
-      await page.locator(".app-page .app-row:visible, .app-page .app-empty:visible").first().waitFor({ timeout: 20_000 });
+    // A project: its members' tasks as a group, a box to give one a task.
+    await step("项目 · 群聊", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-card").first().waitFor({ timeout: 20_000 });
+      const to = compactText(await page.locator(".sp-to-name").innerText());
+      if (!to) throw new Error("群聊的输入框应写明发给谁");
       await settle(page);
-      await shot(page, size, scheme, "machines");
+      await shot(page, size, scheme, "project-group");
     });
 
-    // Delete a machine: dry run first, the nodes are listed, the online
-    // machine shows the uninstall command, and both the machine and its
-    // nodes are gone from the lists afterwards.
-    await step("机器 · 删除", async () => {
-      await go(page, "机器", narrow);
-      await clickVisible(page, page.locator(".app-row:visible", { hasText: "临时 Mac" }));
-      const inspector = page.locator(".app-inspector");
-      await inspector.waitFor({ timeout: 10_000 });
-      await clickVisible(page, inspector.getByRole("button", { name: "删除这台机器" }));
-      const dialog = page.locator(".app-modal");
-      await dialog.waitFor({ timeout: 10_000 });
-      await page.waitForFunction(
-        () => {
-          const text = document.querySelector(".app-modal")?.textContent || "";
-          return text.includes("临时 Codex") && text.includes("临时 Shell");
-        },
-        null,
-        { timeout: 10_000 },
-      );
-      const dialogText = compactText(await dialog.innerText());
-      for (const want of ["2 个节点会一起删除", "对话记录保留", "myco service uninstall"]) {
-        if (!dialogText.includes(want)) {
-          throw new Error(`删除机器弹窗里应提到「${want}」，实际是「${dialogText}」`);
-        }
-      }
-      await settle(page, 300);
-      await shot(page, size, scheme, "dialog-delete-machine");
-      await clickVisible(page, dialog.getByRole("button", { name: "删除机器和 2 个节点" }));
-      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
-      await inspector.waitFor({ state: "detached", timeout: 10_000 });
-      await page.waitForFunction(
-        () => ![...document.querySelectorAll(".app-page .app-row")].some((r) => (r.textContent || "").includes("临时 Mac")),
-        null,
-        { timeout: 10_000 },
-      );
-      await go(page, "节点", narrow);
-      await page.waitForFunction(
-        () => ![...document.querySelectorAll(".app-page .app-row")].some((r) => /临时 (Codex|Shell)/.test(r.textContent || "")),
-        null,
-        { timeout: 10_000 },
-      );
-    });
-
-    await step("对话", async () => {
-      await go(page, "对话", narrow);
-      await page.locator(".conv-row:visible").first().waitFor({ timeout: 20_000 });
-      await settle(page);
-      await shot(page, size, scheme, "conversations");
-    });
-
-    await step("对话 · 新对话弹窗", async () => {
-      await clickVisible(page, page.getByRole("button", { name: /新对话|New conversation/ }));
-      await page.getByRole("dialog").waitFor();
-      await settle(page, 500);
-      await shot(page, size, scheme, "dialog-new-conversation");
-      await closeDialog(page);
-    });
-
-    await step("对话详情", async () => {
-      await clickVisible(page, page.locator(".conv-row:visible"));
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
-      await settle(page);
-      await shot(page, size, scheme, "conversation-detail");
-    });
-
-    // A new conversation: search narrows the node list, picking one opens its
-    // chat, and the first message lands there. A task nobody picked up yet
-    // says so in a line, with no spinner.
-    await step("对话 · 新对话搜索", async () => {
-      await openConversationList(page, narrow);
-      const search = page.getByRole("dialog").locator(".app-convpick-input");
-      await search.fill("Review");
-      let onlyOne = true;
-      try {
-        await page.waitForFunction(
-          () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
-          null,
-          { timeout: 5000 },
-        );
-      } catch {
-        onlyOne = false;
-      }
-      const picks = page.locator(".app-convpick-list .app-row");
-      const count = await picks.count();
-      if (!onlyOne) throw new Error(`搜索「Review」后列表应只剩 1 个节点，实际 ${count} 个`);
-      const title = compactText(await picks.first().innerText());
-      if (!/Review/.test(title)) throw new Error(`搜索「Review」找到的不是 Review 节点：「${title}」`);
-      await settle(page, 400);
-      await shot(page, size, scheme, "dialog-new-conversation-review");
-      await picks.first().click();
-      await page.getByRole("dialog").waitFor({ state: "hidden" });
-      const head = page.locator(".conv-detail .conv-head h2");
-      await head.waitFor({ timeout: 20_000 });
-      const headText = compactText(await head.innerText());
-      if (!/Review/.test(headText)) throw new Error(`点选节点后应直接进入它的对话，标题是「${headText}」`);
-    });
-
-    await step("对话 · 新对话第一条消息", async () => {
-      const body = "帮我看一下这个分支的改动。";
-      const input = page.locator(".conv-compose-input");
-      await input.waitFor({ timeout: 20_000 });
-      // Start watching before sending: the queue line is replaced by the first
-      // step a few seconds in, so check for it (and no spinner) as it appears.
-      const waitingOk = page.waitForFunction(
-        () => {
-          const detail = document.querySelector(".conv-detail");
-          const line = detail?.querySelector(".trace.is-waiting");
-          return !!line
-            && (line.textContent || "").includes("排队中")
-            && detail.querySelectorAll(".trace-spin").length === 0;
-        },
-        null,
-        { timeout: 20_000 },
-      ).then(() => true, () => false);
+    await step("项目 · 派活", async () => {
+      const body = `smoke ${size.width} ${scheme}：把首页的标题改短一点。`;
+      const input = page.locator(".sp-compose-input");
       await input.fill(body);
       await input.press("Enter");
-      await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
-      if (!(await waitingOk)) {
-        const spin = await page.locator(".conv-detail .trace-spin").count();
-        if (spin > 0) throw new Error(`排队中的任务不应转圈，实际有 ${spin} 个 .trace-spin`);
-        throw new Error("还没开始的任务应显示一行「排队中…」的说明，没有找到 .trace.is-waiting");
-      }
+      const card = page.locator(".sp-card", { hasText: body });
+      await card.waitFor({ timeout: 20_000 });
+      const who = compactText(await card.locator(".sp-card-who").innerText());
+      if (!who.startsWith("你")) throw new Error(`派出去的任务应写明是你发的，实际是「${who}」`);
       await settle(page, 300);
-      await shot(page, size, scheme, "conversation-first-message");
-    });
-
-    // PM (Codex) has session_in_use in the mock: its node row and chat say
-    // the session is busy, the input is disabled, and a copy can talk.
-    await step("节点 · 会话被占用", async () => {
-      await go(page, "节点", narrow);
-      const pm = page.locator(".app-page .app-row:visible", { hasText: "PM (Codex)" }).first();
-      await pm.waitFor({ timeout: 20_000 });
-      const text = compactText(await pm.innerText());
-      if (!text.includes("会话被占用")) throw new Error(`PM (Codex) 节点应显示「会话被占用」，实际是「${text}」`);
-      await pm.click();
-      await page.locator(".app-inspector").waitFor({ timeout: 20_000 });
-      await settle(page, 300);
-      await shot(page, size, scheme, "node-session-in-use");
-    });
-
-    await step("对话 · 会话被占用", async () => {
-      const inspector = page.locator(".app-inspector");
-      await clickVisible(page, inspector.getByRole("button", { name: /发消息|Message/ }));
+      await shot(page, size, scheme, "project-sent");
+      // A task opens its conversation; Back returns to the group.
+      await card.click();
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
-      await page.waitForFunction(
-        () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("会话被占用"),
-        null,
-        { timeout: 10_000 },
-      );
-      const input = page.locator(".conv-compose-input");
-      if (!(await input.isDisabled())) throw new Error("会话被占用时输入框应禁用，实际可以输入");
-      const fork = page.locator(".conv-busy button", { hasText: "复制一份来对话" });
-      if (!(await fork.first().isVisible().catch(() => false))) {
-        throw new Error("会话被占用时，输入框上方应有「复制一份来对话」按钮");
-      }
-      await settle(page, 300);
-      await shot(page, size, scheme, "conversation-session-in-use");
+      await page.locator(".conv-msg", { hasText: body }).first().waitFor({ timeout: 20_000 });
+      await clickVisible(page, page.locator(".conv-head button").first());
+      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
     });
 
-    // An inbox node (any agent joined from a session) is named after what it
-    // is, and its details say it receives only in that session: no runner
-    // wake, no copy.
-    await step("节点 · 会话内接收", async () => {
-      await go(page, "节点", narrow);
-      const inbox = page.locator(".app-page .app-row:visible", { hasText: "会话内接收" }).first();
-      await inbox.waitFor({ timeout: 20_000 });
-      const rowText = compactText(await inbox.innerText());
-      if (!rowText.includes("Agent · Studio Mac") || !rowText.includes("myco")) {
-        throw new Error(`生成名的 inbox 节点应显示「Agent · 机器 · 目录」，实际是「${rowText}」`);
-      }
-      await inbox.click();
-      const inspector = page.locator(".app-inspector");
-      await inspector.waitFor({ timeout: 20_000 });
-      const receive = inspector.locator(".app-kv", { hasText: "接收方式" });
-      await receive.waitFor({ timeout: 10_000 });
-      const receiveText = compactText(await receive.innerText());
-      if (!receiveText.includes("只能在会话里接收") || !receiveText.includes("不能后台唤醒")) {
-        throw new Error(`inbox 节点的接收方式应说明只能在会话里接收、不能后台唤醒，实际是「${receiveText}」`);
-      }
-      const copies = await inspector.locator(".app-action-row", { hasText: "复制一个" }).count();
-      if (copies > 0) throw new Error("会话内接收的节点不应提供「复制一个」");
+    await step("项目 · 单聊", async () => {
+      if (narrow) await clickVisible(page, page.locator(".sp-strip-face:not(.is-add)"));
+      else await clickVisible(page, page.locator(".sp-side .sp-member"));
+      await page.locator(".conv-detail .conv-head-faces .pa").first().waitFor({ timeout: 20_000 });
       await settle(page, 300);
-      await shot(page, size, scheme, "node-inbox");
-      await page.keyboard.press("Escape");
-      await inspector.waitFor({ state: "hidden" });
+      await shot(page, size, scheme, "project-chat");
+      await clickVisible(page, page.locator(".conv-head button").first());
+      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
     });
 
-    // Aliases are addresses others can message a node by. A node owner adds
-    // one inline in the details, and the node lists find the node by it.
-    await step("节点 · 别名", async () => {
-      await go(page, "节点", narrow);
-      const pm = page.locator(".app-page .app-row:visible", { hasText: "PM (Codex)" }).first();
-      await pm.waitFor({ timeout: 20_000 });
-      const rowText = compactText(await pm.innerText());
-      if (!rowText.includes("@pm")) throw new Error(`PM (Codex) 的副标题应带上别名 @pm，实际是「${rowText}」`);
-      await pm.click();
-      const inspector = page.locator(".app-inspector");
-      await inspector.waitFor({ timeout: 20_000 });
-      const aliasRow = inspector.locator(".app-kv", { hasText: "别名" });
-      await aliasRow.waitFor({ timeout: 10_000 });
-      const aliasText = compactText(await aliasRow.innerText());
-      if (!aliasText.includes("@pm")) throw new Error(`节点详情应列出别名 @pm，实际是「${aliasText}」`);
-      if (!aliasText.includes("别人可以用别名给它发消息")) {
-        throw new Error(`别名一行应说明别人可以用别名发消息，实际是「${aliasText}」`);
-      }
-      await clickVisible(page, aliasRow.getByRole("button", { name: /添加|^Add$/ }));
-      const input = aliasRow.locator(".app-alias-form input");
-      await input.fill(alias);
-      await input.press("Enter");
-      await page.waitForFunction(
-        (a) => (document.querySelector(".app-inspector")?.textContent || "").includes("@" + a),
-        alias,
-        { timeout: 10_000 },
-      );
+    // One sentence to copy; a session on this computer joins with a click,
+    // shows up at once and goes into the project.
+    await step("项目 · 添加 agent", async () => {
+      if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
+      else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
+      const dialog = page.locator(".app-modal-add");
+      await dialog.waitFor();
+      await page.waitForFunction(() => (document.querySelector(".add-sentence-text")?.textContent || "").includes("myco join --display-name"), null, { timeout: 10_000 });
+      await dialog.locator(".add-local-row button").first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
-      await shot(page, size, scheme, "node-aliases");
-      await page.keyboard.press("Escape");
-      await inspector.waitFor({ state: "hidden" });
-
-      const search = page.locator(".app-page .app-search input");
-      await search.fill(alias);
-      await page.waitForFunction(
-        () => document.querySelectorAll(".app-page .app-row").length === 1,
-        null,
-        { timeout: 5000 },
-      );
-      const found = compactText(await page.locator(".app-page .app-row").first().innerText());
-      if (!found.includes("PM (Codex)")) throw new Error(`按别名「${alias}」搜索应找到 PM (Codex)，实际是「${found}」`);
+      await shot(page, size, scheme, "add-agent");
+      await dialog.locator(".add-local-row button").first().click();
+      await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
       await settle(page, 300);
-      await shot(page, size, scheme, "nodes-alias-search");
-      await search.fill("");
+      await shot(page, size, scheme, "add-agent-joined");
+      await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden" });
     });
 
-    await step("对话 · 别名搜索", async () => {
-      await openConversationList(page, narrow);
-      const search = page.getByRole("dialog").locator(".app-convpick-input");
-      await search.fill(alias);
-      await page.waitForFunction(
-        () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
-        null,
-        { timeout: 5000 },
-      );
-      const found = compactText(await page.locator(".app-convpick-list .app-row").first().innerText());
-      if (!found.includes("PM (Codex)")) throw new Error(`新对话里按别名「${alias}」搜索应找到 PM (Codex)，实际是「${found}」`);
-      await settle(page, 300);
-      await shot(page, size, scheme, "dialog-new-conversation-alias");
-      await closeDialog(page);
+    if (!narrow) {
+      await step("项目 · 添加工作空间", async () => {
+        await clickVisible(page, page.locator(".sp-side .sp-side-add").nth(1));
+        const dialog = page.locator(".app-modal-add");
+        await dialog.waitFor();
+        await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
+        const folder = `~/code/smoke-${size.width}-${scheme}`;
+        await dialog.locator("input.app-input").fill(folder);
+        await settle(page, 300);
+        await shot(page, size, scheme, "add-workspace");
+        await dialog.locator("button[type=submit]").click();
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 20_000 });
+        const shell = `smoke-${size.width}-${scheme}-shell`;
+        await page.locator(".sp-side .sp-member", { hasText: shell }).waitFor({ timeout: 20_000 });
+      });
+    }
+
+    await step("项目资料", async () => {
+      await clickVisible(page, page.locator(".sp-head .app-btn", { hasText: "项目资料" }));
+      await page.locator(".app-page").first().waitFor({ timeout: 20_000 });
+      await settle(page);
+      await shot(page, size, scheme, "project-notes");
+      await clickVisible(page, page.getByRole("button", { name: "返回项目" }));
+      await page.locator(".sp-group").waitFor({ timeout: 10_000 });
     });
 
-    // A run that only says something leaves no process block; a run that
-    // called tools keeps one.
-    await step("对话 · 只回一句话", async () => {
-      await openConversationList(page, narrow);
-      const search = page.getByRole("dialog").locator(".app-convpick-input");
-      await search.fill("legacy");
-      await page.waitForFunction(
-        () => document.querySelectorAll(".app-convpick-list .app-row").length === 1,
-        null,
-        { timeout: 5000 },
-      ).catch(() => undefined);
-      const picks = page.locator(".app-convpick-list .app-row");
-      const count = await picks.count();
-      if (count !== 1) throw new Error(`搜索「legacy」后列表应只剩 1 个节点，实际 ${count} 个`);
-      await picks.first().click();
-      await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await step("还没进项目的", async () => {
+      await go(page, "还没进项目的", narrow);
+      await page.locator(".sp-group").waitFor({ timeout: 20_000 });
+      const title = compactText(await page.locator(".sp-head h2").innerText());
+      if (title !== "还没进项目的") throw new Error(`这里应该是还没进项目的 agent，实际标题「${title}」`);
+      await settle(page);
+      await shot(page, size, scheme, "loose");
+    });
+
+    await step("单聊 · 只回一句话", async () => {
+      await openMember(page, narrow, "还没进项目的", "legacy-codex");
       const head = page.locator(".conv-detail .conv-head h2");
-      await head.waitFor({ timeout: 20_000 });
       const headText = compactText(await head.innerText());
-      if (!/legacy-codex/.test(headText)) throw new Error(`搜索「legacy」后进入的不是 legacy-codex：「${headText}」`);
+      if (!/legacy-codex/.test(headText)) throw new Error(`点成员 legacy-codex 进入的不是它的对话：「${headText}」`);
 
       const body = "你好，收到请回复 收到";
       // The mock keeps its state across window combinations, so this
@@ -611,10 +413,20 @@ async function runMatrix(browser, size, scheme) {
       await input.press("Enter");
       await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
       // The header speaks for the whole conversation (it can say 可能卡住 for
-      // an older task here), so wait for this task instead: the mock replies
-      // 6 s after it, then its final trace is read.
-      await page.waitForTimeout(7_500);
-      await page.waitForTimeout(600);
+      // an older task here), so wait for this task's own answer instead (the
+      // mock replies 6 s after it), then for its final trace to be read.
+      await page.waitForFunction((text) => {
+        const msgs = [...document.querySelectorAll(".conv-detail .conv-msg")];
+        const i = msgs.map((el) => (el.textContent || "").includes(text)).lastIndexOf(true);
+        return i >= 0 && msgs.slice(i + 1).some((el) => el.classList.contains("is-agent"));
+      }, body, { timeout: 30_000 });
+      // Its run line goes once its answer is in.
+      await page.waitForFunction((text) => {
+        const d = document.querySelector(".conv-detail");
+        const sent = [...(d?.querySelectorAll(".conv-msg") || [])].filter((el) => (el.textContent || "").includes(text)).pop();
+        return !!sent && ![...d.querySelectorAll(".trace.is-live")].some((t) => sent.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }, body, { timeout: 15_000 }).catch(() => undefined);
+      await page.waitForTimeout(800);
       const traces = await page.evaluate((text) => {
         const detail = document.querySelector(".conv-detail");
         const sent = [...(detail?.querySelectorAll(".conv-msg") || [])].filter((el) => (el.textContent || "").includes(text)).pop();
@@ -626,7 +438,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "conversation-text-only");
     });
 
-    await step("对话 · 有工具调用", async () => {
+    await step("单聊 · 有工具调用", async () => {
       const body = "整理一下这次发布的主要变化，列成要点。";
       const input = page.locator(".conv-compose-input");
       await input.fill(body);
@@ -652,23 +464,8 @@ async function runMatrix(browser, size, scheme) {
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
-    await step("对话 · 可能卡住", async () => {
-      await go(page, "对话", narrow);
-      if (narrow) {
-        const back = page.locator(".conv-head button").first();
-        if (await back.isVisible().catch(() => false)) await back.click();
-      }
-      const row = page.locator(".conv-row:visible", { hasText: "legacy-codex" }).first();
-      await row.waitFor({ timeout: 20_000 });
-      const title = await row.getAttribute("title");
-      if (!(title || "").includes("可能卡住")) {
-        throw new Error(`可能卡住的任务应在列表里标出来，实际提示是「${title}」`);
-      }
-      if (await row.locator(".conv-row-state.is-stuck").count() === 0) {
-        throw new Error("可能卡住的任务在列表里应有单独的标记");
-      }
-      await row.click();
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+    await step("单聊 · 可能卡住", async () => {
+      await openMember(page, narrow, "还没进项目的", "legacy-codex");
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
         null,
@@ -704,18 +501,9 @@ async function runMatrix(browser, size, scheme) {
     // An older task can be the stuck one after a newer task was stopped:
     // the newest message being closed must not hide it, and its own row has
     // the stop and resend. It also has no active_at, so updated_at decides.
-    await step("对话 · 更早的卡住任务", async () => {
-      await go(page, "对话", narrow);
-      if (narrow) {
-        const back = page.locator(".conv-head button").first();
-        if (await back.isVisible().catch(() => false)) await back.click();
-      }
-      // The same conversation as the previous step (one per node); its
-      // preview now shows the task sent again there.
-      const row = page.locator(".conv-row:visible", { hasText: "legacy-codex" }).first();
-      await row.waitFor({ timeout: 20_000 });
-      await row.click();
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+    await step("单聊 · 更早的卡住任务", async () => {
+      // The same chat as the previous step.
+      await openMember(page, narrow, "还没进项目的", "legacy-codex");
       await page.waitForFunction(
         () => (document.querySelector(".conv-detail .conv-head-state")?.textContent || "").includes("可能卡住"),
         null,
@@ -756,28 +544,53 @@ async function runMatrix(browser, size, scheme) {
     });
 
 
-    await step("项目页", async () => {
-      await sidebar(page, true);
-      const project = page.locator(".app-nav-item:visible", { hasText: "官网改版" });
-      await project.waitFor({ timeout: 20_000 });
-      await project.first().click();
-      if (narrow) await sidebar(page, false);
-      await page.locator(".app-project").waitFor({ timeout: 20_000 });
+    await step("成员", async () => {
+      await go(page, "成员", narrow);
+      await page.locator(".mb-card").first().waitFor({ timeout: 20_000 });
       await settle(page);
-      await shot(page, size, scheme, "project");
+      await shot(page, size, scheme, "members");
+      await page.locator(".mb-card").first().click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "member-card");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
-    await step("项目页 · 新建项目弹窗", async () => {
+    await step("电脑", async () => {
+      await go(page, "电脑", narrow);
+      await page.locator(".pc-row").first().waitFor({ timeout: 20_000 });
+      await settle(page);
+      await shot(page, size, scheme, "computers");
+      // A folder's terminal opens from here.
+      await clickVisible(page, page.locator(".pc-row .app-btn-small"));
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+    });
+
+    await step("工作区切换", async () => {
       await sidebar(page, true);
-      await clickVisible(page, page.locator(".app-nav-add:visible"));
-      await page.getByRole("dialog").waitFor();
-      await settle(page, 400);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      await settle(page, 300);
+      await shot(page, size, scheme, "workspace-switch");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
+      if (await page.locator(".app-hub-menu").isVisible().catch(() => false)) await page.locator(".sp-switch .app-hub-trigger").click();
+      if (narrow) await sidebar(page, false);
+    });
+
+    await step("新建项目弹窗", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".app-nav-add"));
+      await page.locator(".app-modal .np-input").waitFor();
+      await settle(page, 300);
       await shot(page, size, scheme, "dialog-new-project");
       await closeDialog(page);
+      if (narrow) await sidebar(page, false);
     });
 
     await step("设置", async () => {
-      await openHubSettings(page, narrow);
+      await go(page, "设置", narrow);
       await page.locator(".app-settings").waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "settings");

@@ -80,8 +80,8 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
     <Modal
       open={open}
       onOpenChange={(o) => { if (!o) close(); }}
-      title={L("连接 Hub", "Connect Hub")}
-      description={screen === "link" ? L("粘贴 App 连接链接，就能看到这个 Hub 上的节点。", "Paste an app link to see the nodes on this Hub.") : undefined}
+      title={L("加入工作区", "Join a workspace")}
+      description={screen === "link" ? L("粘贴别人给你的链接，就能看到那里的项目和 agent。", "Paste an app link to see the nodes on this Hub.") : undefined}
       wide
     >
       {screen === "link" ? (
@@ -102,7 +102,7 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
             <button type="button" className="app-linklike" onClick={() => { setScreen("command"); setError(null); }}>
               {L("还没有链接？", "No link yet?")}
             </button>
-            <span>{L("先在一台服务器上安装 Hub", "Install a Hub on a server first")}</span>
+            <span>{L("自己在服务器上搭一个", "Install a Hub on a server first")}</span>
           </div>
 
           <details className="app-advanced">

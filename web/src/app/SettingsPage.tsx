@@ -85,7 +85,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
 
   return (
     <>
-      <p className="app-summary">{L("myco App 把多个 Hub 上的节点放进一个窗口。", "The myco app brings the nodes of several Hubs into one window.")}</p>
+      <p className="app-summary">{L("myco App 把多个工作区上的 agent 放进一个窗口。", "The myco app brings the nodes of several Hubs into one window.")}</p>
       <div className="app-list">
         <div className="app-kv"><span className="app-kv-label">{L("App 版本", "App version")}</span><span className="app-kv-value mono">{info?.version || "—"}</span></div>
         <div className="app-kv">
@@ -110,7 +110,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
             ? <>更新会下载 GitHub 上最新发布的 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
             : <>Updating downloads the latest app release from GitHub, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
       </p>
-      <p className="app-about-note">{L("节点、任务和对话都由 Hub 提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
+      <p className="app-about-note">{L("agent、任务和对话都由工作区提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>
   );
 }
@@ -347,7 +347,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <div className="app-settings-body">
         {section === "hubs" && (
           <>
-            <p className="app-summary">{L("Hub 是节点所在的服务器。连接后，所有页面只显示选中的 Hub。", "A Hub is the server your nodes live on. Once connected, every page shows only the selected Hub.")}</p>
+            <p className="app-summary">{L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A Hub is the server your nodes live on. Once connected, every page shows only the selected Hub.")}</p>
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
             {hubs.map((h) => {
@@ -397,7 +397,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     )}
                   </div>
                   {localHub && !h.ok && !localRunning && (
-                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("本机 Hub 已停止，点「启动本机 Hub」重新启动。", "The local Hub has stopped. Start it again with “Start local Hub”.")}</div>
+                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("这台电脑上的工作区已停止，点「启动这台电脑上的工作区」重新启动。", "The local Hub has stopped. Start it again with “Start local Hub”.")}</div>
                   )}
 
                   <div className="app-setting-actions">
@@ -408,11 +408,11 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                         </button>
                         {localRunning ? (
                           <button type="button" className="app-btn app-btn-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
-                            {L("停止本机 Hub", "Stop local Hub")}
+                            {L("停止这台电脑上的工作区", "Stop local Hub")}
                           </button>
                         ) : (
                           <button type="button" className="app-btn app-btn-primary" onClick={() => void startLocal()} disabled={busy !== null}>
-                            {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : L("启动本机 Hub", "Start local Hub")}
+                            {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : L("启动这台电脑上的工作区", "Start local Hub")}
                           </button>
                         )}
                       </>
@@ -427,12 +427,12 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             })}
 
             {hubs.length === 0 && (
-              <div className="app-empty-note" style={{ marginTop: 8 }}>{L("还没有 Hub。先连接一个，或者在这台电脑上启动一个。", "No Hubs yet. Connect one, or start one on this computer.")}</div>
+              <div className="app-empty-note" style={{ marginTop: 8 }}>{L("还没有工作区。先连接一个，或者在这台电脑上启动一个。", "No Hubs yet. Connect one, or start one on this computer.")}</div>
             )}
 
             <div className="app-setting-add">
               <button type="button" className="app-setting-add-row" onClick={onAddHub}>
-                <Plus />{L("添加 Hub", "Add Hub")}
+                <Plus />{L("添加工作区", "Add Hub")}
               </button>
               {!localRunning && (
                 <button
@@ -441,12 +441,12 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   onClick={() => void startLocal()}
                   disabled={busy !== null}
                 >
-                  {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : <><Terminal />{L("在这台电脑上启动 Hub", "Start a Hub on this computer")}</>}
+                  {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : <><Terminal />{L("在这台电脑上启动工作区", "Start a Hub on this computer")}</>}
                 </button>
               )}
             </div>
             <div className="app-hint">
-              {L("名称只在这个 App 里显示，不会改到 Hub 上。地址和令牌保存在这台电脑上。", "Names show only in this app and don’t change the Hub. Addresses and tokens are saved on this computer.")}
+              {L("名称只在这个 App 里显示，不会改到工作区上。地址和令牌保存在这台电脑上。", "Names show only in this app and don’t change the Hub. Addresses and tokens are saved on this computer.")}
             </div>
           </>
         )}
@@ -526,8 +526,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <Modal
         open={!!renameTarget}
         onOpenChange={(o) => { if (!o) setRenameTarget(null); }}
-        title={L("重命名 Hub", "Rename Hub")}
-        description={L("只在这个 App 里显示，不会改到 Hub 上。", "Shows only in this app and doesn’t change the Hub.")}
+        title={L("重命名工作区", "Rename Hub")}
+        description={L("只在这个 App 里显示，不会改到工作区上。", "Shows only in this app and doesn’t change the Hub.")}
       >
         <label className="app-field">
           <span className="app-field-label">{L("名称", "Name")}</span>
@@ -555,9 +555,9 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <ConfirmDialog
         open={stopOpen}
         onOpenChange={(o) => !o && setStopOpen(false)}
-        title={L("停止本机 Hub？", "Stop the local Hub?")}
-        description={L("Hub 会在这台电脑上停止运行。", "The Hub will stop running on this computer.")}
-        consequences={<p>{L("其他机器会连不上它。数据和令牌都保留，重新开启即可恢复。", "Other machines won’t be able to reach it. Data and tokens are kept; start it again to bring it back.")}</p>}
+        title={L("停止这台电脑上的工作区？", "Stop the local Hub?")}
+        description={L("工作区会在这台电脑上停止运行。", "The Hub will stop running on this computer.")}
+        consequences={<p>{L("其他电脑会连不上它。数据和令牌都保留，重新开启即可恢复。", "Other machines won’t be able to reach it. Data and tokens are kept; start it again to bring it back.")}</p>}
         confirmLabel={L("停止", "Stop")}
         busy={busy === "stop"}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
@@ -567,10 +567,10 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <ConfirmDialog
         open={!!removeTarget}
         onOpenChange={(o) => !o && setRemoveTarget(null)}
-        title={removeTarget ? L(`移除 ${removeTarget.name}？`, `Remove ${removeTarget.name}?`) : L("移除 Hub", "Remove Hub")}
-        description={L("只会从这个 App 里移除。Hub 本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
-        consequences={<p>{L("你将看不到这个 Hub 的节点，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
-        confirmLabel={L("移除 Hub", "Remove Hub")}
+        title={removeTarget ? L(`移除 ${removeTarget.name}？`, `Remove ${removeTarget.name}?`) : L("移除工作区", "Remove Hub")}
+        description={L("只会从这个 App 里移除。工作区本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
+        consequences={<p>{L("你将看不到这个工作区的 agent，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
+        confirmLabel={L("移除工作区", "Remove Hub")}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
         onConfirm={() => void removeHub()}
       />
@@ -631,7 +631,7 @@ function PublicAccessDialog({ open, onOpenChange, local, onDone }: {
       open={open}
       onOpenChange={(o) => { if (!o) close(); }}
       title={L("开放到公网", "Open to the internet")}
-      description={L("让不在同一局域网的机器也能连上这台电脑上的 Hub。", "Let machines outside your local network reach the Hub on this computer.")}
+      description={L("让不在同一局域网的电脑也能连上这台电脑上的工作区。", "Let machines outside your local network reach the Hub on this computer.")}
     >
       {result ? (
         <>
@@ -751,9 +751,9 @@ function E2ERow({ hubId, ov, onChanged }: { hubId: string; ov?: HubOverview; onC
         title={confirm ? L("开启端到端加密", "Turn on end-to-end encryption") : L("关闭端到端加密", "Turn off end-to-end encryption")}>
         <p className="app-modal-note">
           {confirm
-            ? L("开启后，新消息和附件只有收发双方、以及双方节点的主人能读；Hub、管理员和其他成员都读不到。适合几个人共用的 Hub。还没升级的节点会继续收发明文，并标为「未加密」。开启前的消息不会被加密。",
+            ? L("开启后，新消息和附件只有收发双方、以及双方 agent 的主人能读；工作区、管理员和其他成员都读不到。适合几个人共用的工作区。还没升级的 agent 会继续收发明文，并标为「未加密」。开启前的消息不会被加密。",
               "New messages and attachments can then be read only by the two sides and the people who own them; the Hub, its admins and other members cannot. Meant for Hubs shared by several people. Nodes that are not upgraded yet keep sending plain messages, marked “Unencrypted”. Earlier messages stay as they are.")
-            : L("关闭后，新消息以明文保存在 Hub 上；已经加密的消息仍然只有当事人能读。",
+            : L("关闭后，新消息以明文保存在工作区上；已经加密的消息仍然只有当事人能读。",
               "New messages are then stored in plain text on the Hub; messages already encrypted stay readable only by the people involved.")}
         </p>
         <ErrorText error={error} />

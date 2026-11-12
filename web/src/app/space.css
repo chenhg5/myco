@@ -1,0 +1,1236 @@
+/* ==========================================================================
+   People first: projects, the agents in them, and workspaces.
+   Faces (.pa), the project space (.sp), adding to a project (.add, .ws),
+   new projects (.np), members (.mb) and a member's card (.ms).
+   ========================================================================== */
+
+/* ---------- faces ---------- */
+.pa {
+  --av-stem: #efe3cc;
+  --av-eye: #2f2a22;
+  --av-frame: #3a3d46;
+  --av-screen: #15171c;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 32%;
+  background: color-mix(in srgb, var(--av-cap) 16%, var(--card));
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--av-cap) 30%, transparent);
+}
+.dark .pa {
+  background: color-mix(in srgb, var(--av-cap) 22%, var(--card));
+}
+.pa.is-workspace {
+  --av-cap: #8a8f9a;
+  background: color-mix(in srgb, #8a8f9a 14%, var(--card));
+}
+.dark .pa.is-workspace {
+  --av-frame: #5a5f6b;
+  --av-screen: #0e0f12;
+}
+.pa.is-person {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--av-cap) 70%, #000 0%);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: none;
+}
+.pa.is-away .pa-sprite {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+.pa-sprite {
+  width: 74%;
+  height: 74%;
+  overflow: visible;
+}
+.pa-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 0 0 1.5px var(--bg);
+  color: var(--fg-2);
+}
+.pa-badge svg {
+  width: 10px;
+  height: 10px;
+}
+.pa-badge.is-claude {
+  color: #d97757;
+}
+.pa-state {
+  position: absolute;
+  left: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--bg);
+  background: var(--faint);
+}
+.pa-state.is-working {
+  background: var(--green);
+}
+.pa-state.is-pending {
+  background: var(--amber);
+}
+.pa-state.is-offline {
+  background: var(--faint);
+}
+.pa-stack {
+  display: inline-flex;
+  align-items: center;
+}
+.pa-stack .pa + .pa,
+.pa-stack .pa-more {
+  margin-left: -6px;
+}
+.pa-stack .pa {
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.pa-more {
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* ---------- sidebar: the workspace, then its projects ---------- */
+.sp-switch {
+  padding: 0 0 4px;
+}
+.sp-switch .app-hub-switch {
+  width: 100%;
+}
+.sp-nav {
+  height: 32px;
+}
+.sp-nav .app-nav-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.sp-nav-hub {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.sp-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--mark) 22%, transparent);
+  color: color-mix(in srgb, var(--mark) 75%, var(--fg));
+  font-size: 11px;
+  font-weight: 600;
+}
+.sp-mark.is-loose {
+  background: var(--pill);
+  color: var(--muted);
+}
+.sp-nav-busy {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--green);
+}
+.sp-nav-count {
+  flex: none;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* ---------- the project space ---------- */
+.sp {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.sp-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sp-group {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sp-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line-2);
+}
+.sp-head-titles {
+  flex: 1;
+  min-width: 0;
+}
+.sp-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sp-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sp-feed-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px 20px 12px;
+}
+.sp-feed-note {
+  padding: 30px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sp-feed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* A brand-new project: what to do first, and the button to do it. */
+.sp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 420px;
+  margin: 40px auto 0;
+  text-align: center;
+}
+.sp-empty-art svg.work-sprite {
+  width: 48px;
+  height: 64px;
+}
+.sp-empty h3 {
+  margin: 14px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sp-empty p {
+  margin: 8px 0 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* One task: who asked whom, what, how it is going. */
+.sp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: box-shadow 0.12s ease;
+}
+.sp-card:hover {
+  box-shadow: 0 0 0 0.5px var(--line), 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+.dark .sp-card:hover {
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--fg) 22%, transparent);
+}
+.sp-card-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+.sp-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sp-who-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.sp-who-me {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-fg, #fff);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.sp-card-arrow {
+  color: var(--faint);
+}
+.sp-card-when {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+}
+.sp-card-body {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.sp-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sp-clamp .md > :first-child { margin-top: 0; }
+.sp-clamp .md > :last-child { margin-bottom: 0; }
+.sp-card-cmd {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: #121317;
+  color: #e2e5ea;
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-card-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--pill);
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.sp-card-reply-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 18px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.sp-card-foot:empty {
+  display: none;
+}
+.sp-card-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-card-state svg.work-sprite {
+  width: 15px;
+  height: 20px;
+  margin: -4px 0 -2px;
+}
+.sp-card-state.is-working {
+  color: var(--green);
+}
+.sp-card-state.is-failed {
+  color: var(--red);
+}
+.sp-card-state.is-done {
+  color: var(--muted);
+}
+.sp-card-count {
+  margin-left: auto;
+  color: var(--faint);
+}
+
+/* The box at the bottom: who it goes to, and the task. */
+.sp-compose {
+  flex: none;
+  padding: 8px 20px 14px;
+}
+.sp-compose > * {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.sp-compose-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 8px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.sp-compose-box:focus-within {
+  box-shadow: 0 0 0 1px var(--focus), 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+.sp-to {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 45%;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.sp-to:hover {
+  background: var(--pill-hover);
+}
+.sp-to-label {
+  flex: none;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sp-to-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.sp-to svg {
+  width: 13px;
+  height: 13px;
+  color: var(--muted);
+}
+.sp-compose-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  max-height: 180px;
+  padding: 6px 2px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  field-sizing: content;
+}
+.sp-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-fg, #fff);
+  cursor: default;
+}
+.sp-send:disabled {
+  opacity: 0.3;
+}
+.sp-send svg {
+  width: 16px;
+  height: 16px;
+}
+.sp-compose-hint {
+  padding: 6px 4px 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* The members and workspaces on the right. */
+.sp-side {
+  flex: none;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px 10px;
+  border-left: 1px solid var(--line-2);
+  overflow-y: auto;
+}
+.sp-side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sp-side-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.sp-side-title > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-side-title svg {
+  width: 13px;
+  height: 13px;
+}
+.sp-side-add {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: default;
+}
+.sp-side-add:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.sp-side-add svg {
+  width: 14px;
+  height: 14px;
+}
+.sp-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.sp-member:hover {
+  background: var(--nav-hover);
+}
+.sp-member.active {
+  background: var(--pill-hover);
+}
+.sp-member.is-away .sp-member-name {
+  color: var(--muted);
+}
+.sp-member-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sp-member-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-member-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-add-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 32%;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+.sp-add-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.sp-side-note {
+  margin: 0;
+  padding: 0 6px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+/* Your chat inside a project: faces in its header. */
+.conv-head-faces {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.conv-head-faces .pa + .pa {
+  margin-left: -8px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.conv-head-faces:empty {
+  display: none;
+}
+
+/* The first project, on its own page. */
+.sp-first {
+  max-width: 440px;
+  margin: 12vh auto 40px;
+  padding: 0 20px;
+}
+.sp-first h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.sp-first p {
+  margin: 10px 0 22px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.np-input {
+  width: 100%;
+}
+.np.is-big .np-input {
+  height: 42px;
+  font-size: 15px;
+}
+.np .app-modal-actions {
+  margin-top: 16px;
+}
+.app-modal .np {
+  margin-top: 12px;
+}
+
+/* ---------- adding agents and workspaces ---------- */
+.app-modal.app-modal-add {
+  max-width: 520px;
+}
+.add-sentence {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--pill);
+}
+.add-sentence-text {
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.65 !important;
+  color: var(--fg) !important;
+  max-height: 120px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+.add-sentence-text.is-loading {
+  color: var(--muted) !important;
+}
+.add-sentence-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.add-joined {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.add-waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.add-waiting svg.work-sprite {
+  width: 18px;
+  height: 24px;
+}
+.add-arrived {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  font-size: 13px;
+  animation: add-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.add-arrived b {
+  font-weight: 600;
+}
+.add-ok {
+  width: 15px;
+  height: 15px;
+  margin-left: auto;
+  color: var(--green);
+}
+@keyframes add-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-arrived { animation: none; }
+}
+.add-local {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+}
+.add-local-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.add-local-title svg {
+  width: 14px;
+  height: 14px;
+}
+.add-local-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+}
+.add-local-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.add-local-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.add-local-sub {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Picking a computer for a workspace. */
+.ws-computers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ws-computer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.ws-computer:hover:not(:disabled) {
+  background: var(--nav-hover);
+}
+.ws-computer.active {
+  border-color: color-mix(in srgb, var(--fg) 55%, transparent);
+  color: var(--fg);
+}
+.ws-computer.is-away {
+  color: var(--muted);
+}
+.ws-computer.is-new {
+  border-style: dashed;
+  color: var(--muted);
+}
+.ws-computer svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.ws-computer-sub {
+  font-size: 11px;
+  color: var(--faint);
+}
+.ws-who {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- members ---------- */
+.mb {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 18px 20px 40px;
+}
+.mb-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--pill);
+}
+.mb-search svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.mb-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+.mb-section {
+  margin-top: 22px;
+}
+.mb-section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.mb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.mb-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.mb-card:hover {
+  box-shadow: 0 0 0 0.5px var(--line), 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+.mb-card.is-away .mb-card-name {
+  color: var(--muted);
+}
+.mb-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mb-card-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mb-card-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.mb-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+.mb-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 11px;
+}
+.mb-chip.is-none {
+  color: var(--faint);
+}
+.mb-seen {
+  font-size: 11px;
+  color: var(--faint);
+}
+.mb-rest-toggle {
+  margin-top: 24px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+.mb-rest-toggle:hover {
+  background: var(--nav-hover);
+  color: var(--fg-2);
+}
+
+/* A member's card: a sheet from the right. */
+.ms-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.12);
+  animation: app-fade 0.12s ease-out;
+}
+.ms {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 41;
+  width: min(340px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 20px 18px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  overflow-y: auto;
+  animation: ms-in 0.18s ease-out;
+}
+@keyframes ms-in {
+  from { opacity: 0; transform: translateX(16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ms, .ms-scrim { animation: none; }
+}
+.ms-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.ms-name {
+  width: 100%;
+  margin-top: 14px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+}
+.ms-name:hover,
+.ms-name:focus {
+  background: var(--pill);
+  outline: none;
+}
+.ms-desc {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-align: center;
+  resize: none;
+}
+.ms-desc:hover,
+.ms-desc:focus {
+  background: var(--pill);
+  outline: none;
+}
+.ms-state {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ms-save {
+  margin-top: 10px;
+}
+.ms-chat {
+  width: 100%;
+  margin-top: 18px;
+  justify-content: center;
+}
+.ms-block {
+  align-self: stretch;
+  margin-top: 22px;
+}
+.ms-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ms-project {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.ms-project:hover {
+  background: var(--nav-hover);
+}
+.ms-leave {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  opacity: 0;
+  cursor: default;
+}
+.ms-project:hover .ms-leave {
+  opacity: 1;
+}
+.ms-leave:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.ms-note {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.ms-more {
+  margin-top: auto;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: default;
+}
+.ms-more:hover {
+  color: var(--fg-2);
+  background: var(--nav-hover);
+}
+
+/* ---------- narrow windows ---------- */
+.sp-strip {
+  display: none;
+}
+@media (max-width: 900px) {
+  .sp-side {
+    display: none;
+  }
+  .sp-strip {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line-2);
+    overflow-x: auto;
+  }
+  .sp-strip-face {
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 32%;
+    background: none;
+    cursor: default;
+  }
+  .sp-strip-face.is-add {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px dashed var(--line);
+    color: var(--muted);
+  }
+  .sp-strip-face.is-add svg {
+    width: 14px;
+    height: 14px;
+  }
+  .sp-head,
+  .sp-feed-col,
+  .sp-compose {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+/* ---------- computers ---------- */
+.pc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px 20px 40px;
+}
+.pc-intro {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.pc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.pc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 9px;
+}
+.pc-row:hover {
+  background: var(--nav-hover);
+}
+.pc-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.pc-row-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-row.is-away .pc-row-name {
+  color: var(--muted);
+}
+.pc-row-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.pc-row-sub .mono {
+  font-size: 11px;
+}
+.pc-remove {
+  opacity: 0;
+}
+.pc-row:hover .pc-remove,
+.pc-remove:focus-visible {
+  opacity: 1;
+}
+.pc-connected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pc-machine.is-away {
+  color: var(--faint);
+}
+.pc-sep {
+  margin: 0 4px;
+  color: var(--faint);
+}
+.pc-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+.pc-add:hover {
+  background: var(--nav-hover);
+}
+.pc-add svg {
+  width: 13px;
+  height: 13px;
+}

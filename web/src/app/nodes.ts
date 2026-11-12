@@ -301,18 +301,36 @@ export function stuckCounts(st: AgentStatus, now: number): { in_progress: number
  */
 export function nodeName(a: Agent, hub?: HubOverview): string {
   if (a.display_name) return a.display_name;
-  const dir = a.binding?.workdir;
-  if (!a.machine_id || !dir || (a.kind && a.kind !== "agent" && a.kind !== "shell")) return a.name;
-  const machine = hub ? machinesOfHub(hub).find((m) => m.id === a.machine_id) : undefined;
+  const kind = agentKind(a);
+  if (kind !== "agent" && kind !== "shell") return a.name;
+  const machine = hub && a.machine_id ? machinesOfHub(hub).find((m) => m.id === a.machine_id) : undefined;
   // A name someone chose ("mac-exec", "docs-claude") stays; one made up
-  // when the node joined (host name, CLI, a random suffix) is replaced.
+  // when the node joined (host name, CLI, a random suffix) is replaced by
+  // what it is in plain words: an agent by the folder it works in ("myco
+  // 助手"), a computer by which one and the folder ("Studio Mac · myco").
   if (!generatedName(a.name, machine?.hostname)) return a.name;
+  const base = friendlyName(a, machine?.name);
+  // Several of the same: the second is 二号, the third 三号 (in the order
+  // they joined), so each still has a name of its own.
+  const same = (hub?.overview?.agents || []).map((x) => x.agent)
+    .filter((x) => !x.display_name && agentKind(x) === kind && friendlyName(x, machinesOfHub(hub!).find((m) => m.id === x.machine_id)?.name) === base)
+    .sort((x, y) => (x.created_at || "").localeCompare(y.created_at || "") || x.name.localeCompare(y.name));
+  const i = same.findIndex((x) => x.name === a.name);
+  return i > 0 ? `${base} ${ordinal(i + 1)}` : base;
+}
+
+/** "myco 助手" / "Studio Mac · myco": the folder, and what it is. */
+function friendlyName(a: Agent, machine?: string): string {
+  const dir = a.binding?.workdir || "";
   const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
-  // An inbox node is some agent we cannot name by its CLI: call it Agent
-  // (how it receives is shown separately).
-  const what = isInbox(a) ? "Agent" : a.runtime?.cli || a.binding.harness ? cliName(a) : "";
-  const parts = [what, machine?.name, folder === "~" ? "" : folder].filter(Boolean);
-  return parts.length >= 2 ? parts.join(" · ") : a.name;
+  const where = folder && folder !== "~" ? folder : "";
+  if (agentKind(a) === "shell") return [machine || L("电脑", "Computer"), where].filter(Boolean).join(" · ");
+  return where ? L(`${where} 助手`, `${where} assistant`) : L("助手", "Assistant");
+}
+
+function ordinal(n: number): string {
+  const zh = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  return L(n <= 10 ? `${zh[n]}号` : `${n}号`, `#${n}`);
 }
 
 /** A node's aliases as one short line for a row subtitle: "@a, @b +1".

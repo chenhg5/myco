@@ -39,7 +39,7 @@ export function Welcome({ onStartLocal, onConnect }: {
           <section className="app-welcome-card">
             <div className="app-welcome-icon"><Laptop strokeWidth={1.75} /></div>
             <h2>{L("在这台电脑上开始", "Start on this computer")}</h2>
-            <p>{L("在本机启动一个 Hub，不需要服务器和账号。之后可以随时开放到公网。", "Start a Hub on this computer. No server or account needed, and you can open it to the internet any time.")}</p>
+            <p>{L("不需要服务器和账号，点一下就能用。以后想让别的电脑或同事加入，随时可以打开。", "Start a Hub on this computer. No server or account needed, and you can open it to the internet any time.")}</p>
             <button
               type="button"
               className="app-btn app-btn-primary app-btn-lg"
@@ -52,10 +52,10 @@ export function Welcome({ onStartLocal, onConnect }: {
 
           <section className="app-welcome-card">
             <div className="app-welcome-icon"><Link2 strokeWidth={1.75} /></div>
-            <h2>{L("连接已有的 Hub", "Connect an existing Hub")}</h2>
-            <p>{L("粘贴 App 连接链接。还没有 Hub？可以先在一台服务器上装一个。", "Paste an app link. No Hub yet? Install one on a server first.")}</p>
+            <h2>{L("加入已有的工作区", "Join an existing workspace")}</h2>
+            <p>{L("别人给了你一个链接？粘贴进来就能加入。", "Paste an app link. No Hub yet? Install one on a server first.")}</p>
             <button type="button" className="app-btn app-btn-lg" onClick={onConnect}>
-              {L("连接已有的 Hub", "Connect an existing Hub")}
+              {L("粘贴链接加入", "Join with a link")}
             </button>
           </section>
         </div>

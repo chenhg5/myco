@@ -126,7 +126,7 @@ func TestLocalHub(t *testing.T) {
 
 	var res console.StartLocalResult
 	code, _, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "cloudflare"})
-	if err := json.Unmarshal(raw, &res); err != nil || code != 201 || res.Hub.URL != r.hubURL || res.Hub.Name != "本机 Hub" ||
+	if err := json.Unmarshal(raw, &res); err != nil || code != 201 || res.Hub.URL != r.hubURL || res.Hub.Name != "我的工作区" ||
 		res.PublicURL != "https://abc.trycloudflare.com" || res.JoinURL == "" || len(res.Warnings) != 2 {
 		t.Fatalf("start: %d %v %s", code, err, raw)
 	}

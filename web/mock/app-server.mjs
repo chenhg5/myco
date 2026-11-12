@@ -280,6 +280,9 @@ const localSessions = [
     joined: { agent: "glenn-mac-codex-ab12", hub: "https://other-hub.example.com" },
   },
 ];
+// What was joined at the start: the smoke test's reset puts it back, so each
+// window size can join a session on this computer again.
+const localJoinedAtStart = localSessions.map((s) => s.joined);
 
 
 const state = {
@@ -784,6 +787,7 @@ const server = http.createServer(async (req, res) => {
   // and resends it, and the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    localSessions.forEach((x, k) => { if (localJoinedAtStart[k]) x.joined = localJoinedAtStart[k]; else delete x.joined; });
     const hub = state.hubs.find((h) => h.id === "hub_studio") || state.hubs[0];
     stuckTask.status = "acked";
     delete stuckTask.error;
@@ -808,6 +812,13 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
     hub.threads.th_console_stuck_stopped = keep("th_console_stuck_stopped", [stuckOlderTask, stoppedAfterTask]);
+    // What the previous pass sent legacy-codex (resends, the text-only and
+    // tool-call tasks) goes too, so each window size starts the same.
+    for (const [id, msgs] of Object.entries(hub.threads || {})) {
+      if (id === "th_console_stuck" || id === "th_console_stuck_stopped") continue;
+      if (msgs.some((m) => m.from === "legacy-codex" || m.to === "legacy-codex")) delete hub.threads[id];
+    }
+    hub.recent = (hub.recent || []).filter((m) => m.from !== "legacy-codex" && m.to !== "legacy-codex");
     return send(res, 200, { ok: true });
   }
 
@@ -1101,7 +1112,9 @@ const server = http.createServer(async (req, res) => {
         binding: { harness: s.cli, workdir: s.workdir, session_id: s.session_id },
         created_at: iso(0), last_seen_at: iso(0),
       });
-      hub.agents.push(agent);
+      // Joining the same session again (the smoke test does, at each window
+      // size) gets the same agent back, as myco join does.
+      if (!hub.agents.some((x) => x.name === name)) hub.agents.push(agent);
       s.joined = { agent: name, hub: hub.url };
       const runner = joinCount % 2 === 1
         ? "running"
