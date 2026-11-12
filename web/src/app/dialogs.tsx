@@ -6,12 +6,14 @@ import { isOldHub, isTransient } from "@/appapi";
 import { cn } from "@/lib/utils";
 
 /** macOS-style centered sheet. Portals carry .app-portal so the scoped tokens apply. */
-export function Modal({ open, onOpenChange, title, description, wide, children }: {
+export function Modal({ open, onOpenChange, title, description, wide, className, children }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: React.ReactNode;
   wide?: boolean;
+  /** a size or layout of its own (e.g. the new-conversation picker) */
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -19,7 +21,7 @@ export function Modal({ open, onOpenChange, title, description, wide, children }
       <Dialog.Portal>
         <Dialog.Overlay className="app-portal app-overlay" />
         <Dialog.Content
-          className={cn("app-portal app-modal", wide && "app-modal-wide")}
+          className={cn("app-portal app-modal", wide && "app-modal-wide", className)}
         >
           <Dialog.Title asChild><h3>{title}</h3></Dialog.Title>
           {description ? (

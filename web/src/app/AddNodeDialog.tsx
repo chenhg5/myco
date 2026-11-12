@@ -32,7 +32,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "new", get label() { return L("在机器上新建", "New on a machine"); } },
 ];
 
-const CLIS: { value: SpawnCli; label: string }[] = [
+export const CLIS: { value: SpawnCli; label: string }[] = [
   { value: "claude", label: "Claude Code" },
   { value: "codex", label: "Codex" },
   { value: "pi", label: "Pi" },
@@ -43,7 +43,7 @@ const CLIS: { value: SpawnCli; label: string }[] = [
   { value: "exec", get label() { return L("Shell 节点（远程执行命令）", "Shell node (runs commands)"); } },
 ];
 
-const ACCESS: { value: RuntimeAccess; label: string }[] = [
+export const ACCESS: { value: RuntimeAccess; label: string }[] = [
   { value: "readonly", get label() { return L("只读", "Read-only"); } },
   { value: "workspace", get label() { return L("工作区", "Workspace"); } },
   { value: "full", get label() { return L("完全", "Full"); } },

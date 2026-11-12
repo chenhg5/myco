@@ -785,8 +785,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
         hubs={namedHubs}
         rows={rows}
         projects={projects}
+        scopeHubId={filters.hub === "all" ? undefined : filters.hub}
         onClose={() => setNewConv(null)}
         onPick={(hubId, agent, project) => { setNewConv(null); openChat(hubId, agent, project); }}
+        onSpawned={() => void refresh()}
       />
 
       <NewProjectDialog
