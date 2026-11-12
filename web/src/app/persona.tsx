@@ -81,35 +81,35 @@ const SCREEN = [
 ];
 const SCREEN_FILL: Record<string, string> = { W: "var(--av-frame)", F: "var(--av-screen)", P: "#5fd7a7", L: "#cdd0d8" };
 
-// A computer looks like the system it runs: a silver all-in-one for a
-// Mac, a blue screen with a window for Windows, a penguin for Linux (WSL
+// A computer looks like the system it runs: an apple (graphite, or silver
+// in the dark) for a Mac, the four window panes for Windows, a penguin for Linux (WSL
 // included); a plain screen when the system is not known (or in a cloud).
 const MAC = [
-  "............",
-  ".SSSSSSSSSS.",
-  ".SMMMMMMMMS.",
-  ".SMTMMMMMMS.",
-  ".SNNTNNNNNS.",
-  ".SNTNNNNNNS.",
-  ".SRRRRTTTRS.",
-  ".SSSSSSSSSS.",
-  ".CCCCCCCCCC.",
-  ".....SS.....",
-  "....SSSS....",
+  "......aa....",
+  ".....aa.....",
+  "..aaa..aaa..",
+  ".aaaaaaaaaa.",
+  ".aaaaaaaaa..",
+  ".aaaaaaaa...",
+  ".aaaaaaaa...",
+  ".aaaaaaaaa..",
+  ".aaaaaaaaaa.",
+  "..aaaaaaaa..",
+  "...aa..aa...",
   "............",
 ];
 const WINDOWS = [
   "............",
-  ".WWWWWWWWWW.",
-  ".WBBBBBBBBW.",
-  ".WBTTTTTTBW.",
-  ".WBTbbbbTBW.",
-  ".WBTbbbbTBW.",
-  ".WBTTTTTTBW.",
-  ".WBBBBBBBBW.",
-  ".WWWWWWWWWW.",
-  "....WWWW....",
-  "...WWWWWW...",
+  "............",
+  "..1111.2222.",
+  "..1111.2222.",
+  "..1111.2222.",
+  "..1111.2222.",
+  "............",
+  "..3333.4444.",
+  "..3333.4444.",
+  "..3333.4444.",
+  "..3333.4444.",
   "............",
 ];
 const PENGUIN = [
@@ -130,7 +130,11 @@ const FACE_FILL: Record<string, string> = {
   ...SCREEN_FILL,
   S: "#c9ccd4", C: "#e7e9ee", M: "#6d5ef0", N: "#9a5fe6", R: "#d96aa8",
   B: "#2f6fe0", T: "#ffffff", b: "#a9c8ff",
-  K: "#2a2d36", E: "#ffffff", O: "#f0a43a", Y: "#f4f1e8",
+  K: "var(--av-penguin)", E: "#ffffff", O: "#f0a43a", Y: "#f4f1e8",
+  // the apple: graphite on light, silver on dark
+  a: "var(--av-apple)",
+  // the four window panes
+  "1": "#f25022", "2": "#7fba00", "3": "#00a4ef", "4": "#ffb900",
 };
 const OS_FACE: Record<string, string[]> = { darwin: MAC, windows: WINDOWS, linux: PENGUIN };
 

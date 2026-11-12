@@ -25,9 +25,16 @@
   --av-cap: #8a8f9a;
   background: color-mix(in srgb, #8a8f9a 14%, var(--card));
 }
+.pa.is-workspace {
+  --av-penguin: #2a2d36;
+  --av-apple: #4a4e58;
+}
 .dark .pa.is-workspace {
   --av-frame: #5a5f6b;
   --av-screen: #0e0f12;
+  /* black on a dark tile would vanish */
+  --av-penguin: #5d6270;
+  --av-apple: #c9ccd4;
 }
 .pa.is-person {
   border-radius: 999px;
