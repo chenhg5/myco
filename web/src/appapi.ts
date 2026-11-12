@@ -118,6 +118,9 @@ export interface RecentItem {
   last: Message;
   task?: Message;
   answer?: Message;
+  /** the newest task not finished yet: can be older than task (one stuck
+   *  behind a newer task that finished). Hubs before v0.18.40 leave it out. */
+  open?: Message;
   /** queued | working | done | failed, or "" without a task */
   state?: "queued" | "working" | "done" | "failed" | "";
   /** the project the thread belongs to */

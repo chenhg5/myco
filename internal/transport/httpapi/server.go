@@ -1810,6 +1810,10 @@ func (s *Server) consoleRecent(w http.ResponseWriter, r *http.Request) {
 			m := s.messageDTO(it.Answer)
 			ri.Answer = &m
 		}
+		if it.Open != nil {
+			m := s.messageDTO(it.Open)
+			ri.Open = &m
+		}
 		out.Items = append(out.Items, ri)
 	}
 	writeJSON(w, http.StatusOK, out)
