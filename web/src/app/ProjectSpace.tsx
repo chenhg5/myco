@@ -25,6 +25,9 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
 
 const SPLIT_KEY = "myco-space-split";
+// Per project: the pane open beside the coordinator and full width, for
+// this run of the app (see ProjectSpace).
+const panes = new Map<string, { side: Side | null; only: "" | "left" | "right" }>();
 // The members column, and the least each pane needs.
 const SIDE_W = 248;
 const PANE_MIN = 320;
@@ -152,13 +155,29 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // left, and the member you open (its work, or a computer's terminal) on
   // the right; either can take the whole width.
   const split = !!project && !!coordinator;
-  const [side, setSide] = useState<Side | null>(null);
-  const [only, setOnly] = useState<"" | "left" | "right">("");
+  // What is open beside the coordinator, and whether one pane has the whole
+  // width, outlive this view being rebuilt (say, a workspace that did not
+  // answer for a moment): kept per space for this run of the app.
+  const paneKey = project ? `${hubId}\u0000${project.name}` : "";
+  const [side, setSideState] = useState<Side | null>(() => panes.get(paneKey)?.side ?? null);
+  const [only, setOnlyState] = useState<"" | "left" | "right">(() => panes.get(paneKey)?.only ?? "");
+  const setSide = (v: Side | null | ((s: Side | null) => Side | null)) => setSideState((prev) => {
+    const next = typeof v === "function" ? v(prev) : v;
+    panes.set(paneKey, { side: next, only: panes.get(paneKey)?.only ?? "" });
+    return next;
+  });
+  const setOnly = (v: "" | "left" | "right") => {
+    panes.set(paneKey, { side: panes.get(paneKey)?.side ?? null, only: v });
+    setOnlyState(v);
+  };
   const chatWith = async (agent: string, focus?: string) => {
     // The coordinator is the home view.
+    // One pane taking the whole width stays so: whoever you pick next
+    // takes it (the coordinator on the left, a member on the right) until
+    // you go back to two panes.
     if (agent === coordinator && !focus) {
       setView({ kind: "home" });
-      if (only === "right") setOnly("");
+      if (only === "right") setOnly("left");
       return;
     }
     if (split) {
@@ -168,7 +187,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       const next = { agent, peer: known || me, focus, also: project ? othersOf(agent) : undefined };
       setView({ kind: "home" });
       setSide(next);
-      if (only === "left") setOnly("");
+      if (only === "left") setOnly("right");
       if (!known) {
         void peerFor(agent).then((p) => {
           if (p && p !== next.peer) setSide((s) => (s && s.agent === agent ? { ...s, peer: p } : s));
@@ -184,12 +203,19 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     if (!isWorkspace(r.st.agent)) { void chatWith(name); return; }
     void peerFor(name).then((peer) => {
       if (!peer) return;
-      if (split) { setView({ kind: "home" }); setSide({ agent: name, peer }); if (only === "left") setOnly(""); }
+      if (split) { setView({ kind: "home" }); setSide({ agent: name, peer }); if (only === "left") setOnly("right"); }
       else setView({ kind: "pair", agent: name, peer });
     });
   };
   const spaceKey = loose ? `${hubId}\u0000*` : `${hubId}\u0000${(space as { name: string }).name}`;
-  useEffect(() => { setView({ kind: "home" }); setSide(null); setOnly(""); }, [spaceKey, home]);
+  // Picking the space again in the sidebar brings it back to its home (not
+  // on the first render: what was open stays across a rebuild).
+  const firstHome = useRef(true);
+  useEffect(() => {
+    if (firstHome.current) { firstHome.current = false; return; }
+    setView({ kind: "home" }); setSide(null); setOnly("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceKey, home]);
   // Who you are to the coordinator (your chat with it is the home view).
   const [homePeer, setHomePeer] = useState<string | undefined>(() => (coordinator ? peerIn(recall(pairsKey), coordinator) : undefined) || me);
   useEffect(() => {
@@ -245,7 +271,9 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   return (
     // With a member open beside the coordinator, a window too small for two
     // panes and the members column folds the column into the row of faces.
-    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only !== "left" && spWidth - SIDE_W < 2 * PANE_MIN && "has-side")}>
+    // (Only while both panes show: one pane alone has room for the column,
+    // and the row of faces would be out of sight with the left pane.)
+    <div ref={spRef} className={cn("sp", split && side && view.kind === "home" && only === "" && spWidth - SIDE_W < 2 * PANE_MIN && "has-side")}>
       <div className="sp-main">
         {t ? (
           <ConversationDetail
@@ -264,6 +292,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
           <SplitPanes
             side={side}
             only={only}
+            cramped={spWidth > 0 && spWidth < 2 * PANE_MIN}
             onOnly={setOnly}
             onCloseSide={() => { setSide(null); setOnly(""); }}
             left={(full) => (
@@ -500,8 +529,10 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
  * it, and the right one closes. Where two do not fit, the member's pane
  * takes the place (closing it brings the coordinator back).
  */
-function SplitPanes({ side, only, onOnly, onCloseSide, left, right }: {
+function SplitPanes({ side, only, cramped, onOnly, onCloseSide, left, right }: {
   side: Side | null;
+  /** two panes do not fit even with the members column folded away */
+  cramped: boolean;
   only: "" | "left" | "right";
   onOnly: (o: "" | "left" | "right") => void;
   onCloseSide: () => void;
@@ -513,14 +544,6 @@ function SplitPanes({ side, only, onOnly, onCloseSide, left, right }: {
     try { const v = Number(localStorage.getItem(SPLIT_KEY)); return v >= 0.25 && v <= 0.75 ? v : 0.5; } catch { return 0.5; }
   });
   const latest = useRef(ratio);
-  const [cramped, setCramped] = useState(false);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setCramped(el.clientWidth < 2 * PANE_MIN));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
   // Dragging the line: from where it is, by how far the pointer moves
   // (grabbing it a few pixels to one side must not make it jump there).
   const dragFrom = useRef<{ x: number; ratio: number; width: number } | null>(null);

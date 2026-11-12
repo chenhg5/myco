@@ -378,6 +378,11 @@ async function runMatrix(browser, size, scheme) {
         await page.locator(".sp-split.show-right").waitFor({ timeout: 5_000 });
         await settle(page, 200);
         await shot(page, size, scheme, "project-chat-full");
+        // Full width stays while you switch: the coordinator takes it too.
+        await clickVisible(page, page.locator(".sp-side .sp-member").first());
+        await page.locator(".sp-split.show-left").waitFor({ timeout: 5_000 });
+        await clickVisible(page, page.locator(".sp-side .sp-member").nth(1));
+        await page.locator(".sp-split.show-right").waitFor({ timeout: 5_000 });
         await clickVisible(page, right.getByRole("button", { name: "还原成两栏" }));
         await page.locator(".sp-split.show-both").waitFor({ timeout: 5_000 });
       }
