@@ -592,9 +592,10 @@ async function runMatrix(browser, size, scheme) {
         const detail = document.querySelector(".conv-detail");
         const sent = [...(detail?.querySelectorAll(".conv-msg") || [])].filter((el) => (el.textContent || "").includes(text)).pop();
         if (!sent) return -1;
-        return [...detail.querySelectorAll(".trace")].filter((t) => sent.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING).length;
+        // (what it reported along the way may be there, as text: no steps)
+        return [...detail.querySelectorAll(".trace-group, .trace-head:not(.trace-wait)")].filter((t) => sent.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING).length;
       }, body);
-      if (traces !== 0) throw new Error(`只回一句话的任务不应出现过程块，实际有 ${traces} 个 .trace`);
+      if (traces !== 0) throw new Error(`只回一句话的任务不应出现过程（步骤）块，实际有 ${traces} 个`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-text-only");
     });
