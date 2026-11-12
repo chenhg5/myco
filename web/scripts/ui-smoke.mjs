@@ -562,11 +562,11 @@ async function runMatrix(browser, size, scheme) {
       // under the task, not a loose grey line; while it works, the
       // mushroom stays at the very bottom.
       const run = page.locator(".conv-detail .trace").last();
-      await run.locator(".trace-say.is-report", { hasText: "正在处理" }).waitFor({ timeout: 10_000 });
+      await run.locator(".trace-reports .trace-report", { hasText: "正在处理" }).waitFor({ timeout: 10_000 });
       if (await page.locator(".conv-detail .conv-progress", { hasText: "正在处理" }).count()) throw new Error("进展应写在任务的工作过程里，不是单独一行");
       const wrongOrder = await run.evaluate((el) => {
         const kids = [...el.children];
-        const say = kids.findIndex((c) => c.classList.contains("is-report"));
+        const say = kids.findIndex((c) => c.classList.contains("trace-reports"));
         const wait = kids.findIndex((c) => c.classList.contains("trace-wait"));
         return wait >= 0 && wait < say;
       });

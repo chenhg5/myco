@@ -188,8 +188,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   /** what it is in the project (e.g. coordinator), before its description */
   role?: string;
   /** small things placed in the timeline by time (e.g. a task the agent
-   *  handed out), between the messages; only from the first message shown
-   *  on (an empty chat stays empty) */
+   *  handed out), between the messages; shown even before the first */
   inserts?: { id: string; at: string; node: React.ReactNode }[];
   rows: AgentRow[];
   now: number;
@@ -834,9 +833,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const placed = new Map<string, React.ReactNode[]>();
   const trailing: React.ReactNode[] = [];
   {
-    // Nothing from before the conversation: what it did before you spoke
-    // to it is in the project's activity, and an empty chat stays empty.
-    const start = visible.length ? new Date(visible[0].created_at).getTime() : Infinity;
+    // All of them, from the start (an empty chat shows them too, so none
+    // appear all at once when you write); only while older messages are
+    // still to load, the ones from before what is loaded wait for them.
+    const start = exchange && more && visible.length ? new Date(visible[0].created_at).getTime() : -Infinity;
     const ins = [...(inserts || [])]
       .filter((x) => new Date(x.at).getTime() >= start)
       .sort((a, b) => a.at.localeCompare(b.at));
@@ -1027,7 +1027,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : (
               <LoadingSkeleton shell={isExecNode(target.agent) || isExecNode(target.peer)} />
             )
-          ) : shown.length === 0 && !shellMode ? (
+          ) : shown.length === 0 && !shellMode && trailing.length === 0 ? (
             observed
               ? <div className="app-empty-note">{L("它们还没说过话。", "They haven't talked yet.")}</div>
               : <EmptyChat key={target.agent} agent={agent} name={agentName} project={projectTitle} />

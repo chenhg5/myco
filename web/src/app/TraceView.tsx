@@ -4,7 +4,7 @@ import { appApi, isOldHub } from "@/appapi";
 import type { Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
-import { L } from "@/lib/i18n";
+import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 
@@ -228,10 +228,20 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
     }
     items.splice(i, 0, it);
   }
-  type Segment = { kind: "say"; key: string; text: string; report?: boolean; when?: string } | { kind: "steps"; rows: Row[] };
+  type Report = { key: string; text: string; when: string };
+  type Segment = { kind: "say"; key: string; text: string }
+    | { kind: "reports"; items: Report[] }
+    | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
   for (const it of items) {
-    if (it.say) { segments.push({ kind: "say", ...it.say }); continue; }
+    if (it.say?.report) {
+      const lastSeg = segments[segments.length - 1];
+      const r = { key: it.say.key, text: it.say.text, when: it.say.when || "" };
+      if (lastSeg?.kind === "reports") lastSeg.items.push(r);
+      else segments.push({ kind: "reports", items: [r] });
+      continue;
+    }
+    if (it.say) { segments.push({ kind: "say", key: it.say.key, text: it.say.text }); continue; }
     const r = it.row!;
     if (r.kind === "text") {
       if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text });
@@ -246,9 +256,21 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
   return (
     <div className={cn("trace is-flow", running && "is-live")} ref={body}>
       {segments.map((seg, i) => seg.kind === "say" ? (
-        <div key={seg.key} className={cn("trace-say", seg.report && "is-report")} title={seg.when ? clock(seg.when) : undefined}>
+        <div key={seg.key} className="trace-say">
           <MessageContent body={seg.text} />
         </div>
+      ) : seg.kind === "reports" ? (
+        // What it reported (myco message progress): a small timeline of its
+        // own, quieter than the answer, each with when.
+        <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
+          {seg.items.map((r, j) => (
+            <li key={r.key} className={cn("trace-report", running && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
+              <span className="trace-report-dot" aria-hidden />
+              <div className="trace-report-text"><MessageContent body={r.text} /></div>
+              {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
+            </li>
+          ))}
+        </ol>
       ) : (
         <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
       ))}
@@ -266,7 +288,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
 
 function clock(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 /** A run of steps between two things it said: one line, open to see them.
