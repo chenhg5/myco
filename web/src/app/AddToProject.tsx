@@ -119,11 +119,15 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
   }
   // Who was already there when this opened: anyone new has just joined.
   const before = useRef<Set<string> | null>(null);
+  // And who was in the project: an agent already in the workspace that
+  // joins the project by itself (the sentence's link names it) shows up too.
+  const inProject = useRef<Set<string> | null>(null);
   const adding = useRef(new Set<string>());
 
   useEffect(() => {
     if (!open) return;
     before.current = new Set(rows.filter((r) => r.hub.id === hubId).map((r) => r.st.agent.name));
+    inProject.current = new Set((project?.members || []).map((m) => m.name));
     adding.current = new Set();
     touched.current = false;
     // Someone already here who is not in the project: that is the easy way.
@@ -163,6 +167,18 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, open]);
+  useEffect(() => {
+    if (!open || !project || !inProject.current) return;
+    for (const m of project.members) {
+      if (inProject.current.has(m.name)) continue;
+      inProject.current.add(m.name);
+      const r = rows.find((x) => x.hub.id === hubId && x.st.agent.name === m.name);
+      if (!r || agentKind(r.st.agent) !== "agent") continue;
+      adding.current.add(m.name);
+      setJoined((j) => (j.includes(m.name) ? j : [...j, m.name]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, rows, open]);
 
   const arrived = async (agent: string) => {
     adding.current.add(agent);

@@ -59,11 +59,18 @@ function busyOf(ov: AppOverview): Busy[] {
   return out;
 }
 
-function frame(w: number, h: number, visible: boolean) {
+// While shown the window keeps one size, as big as the open island can
+// get: resizing it while the pill springs made the page blink. The app
+// lets clicks through it except on the pill (pw×ph), and says when the
+// pointer is on it ("island-hover").
+const WIN_W = OPEN_W + 2 * EAR;
+const WIN_H = NH + 10 + MAX_ROWS * ROW_H + 10 + 26;
+
+function frame(visible: boolean, pw = 0, ph = 0) {
   return fetch("app/island/frame", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ w, h, visible }),
+    body: JSON.stringify({ w: WIN_W, h: WIN_H, pw: pw + 2 * EAR, ph, visible }),
   }).catch(() => undefined);
 }
 
@@ -77,7 +84,7 @@ export function Island() {
   const live = busy.length > 0;
 
   // Start out of the way (one point, clicks pass through) until someone works.
-  useEffect(() => { void frame(COMPACT_W + 2 * EAR, NH, false); }, []);
+  useEffect(() => { void frame(false); }, []);
 
   useEffect(() => {
     let off = false;
@@ -102,28 +109,37 @@ export function Island() {
   useEffect(() => {
     if (live) {
       if (closing.current) { window.clearTimeout(closing.current); closing.current = null; }
-      void frame(COMPACT_W + 2 * EAR, NH, true).then(() => requestAnimationFrame(() => setShown(true)));
+      void frame(true, COMPACT_W, NH).then(() => requestAnimationFrame(() => setShown(true)));
     } else if (shown) {
       setOpen(false);
       setShown(false);
-      closing.current = window.setTimeout(() => { void frame(COMPACT_W + 2 * EAR, NH, false); closing.current = null; }, 520);
+      closing.current = window.setTimeout(() => { void frame(false); closing.current = null; }, 520);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
-  // While open, the window keeps the open size (it follows how many rows).
+  // Where clicks may land follows the pill: open, or just the bar.
   useEffect(() => {
-    if (open && live) void frame(OPEN_W + 2 * EAR, openH, true);
-  }, [open, live, openH]);
+    if (!live || !shown) return;
+    void frame(true, open ? OPEN_W : COMPACT_W, open ? openH : NH);
+  }, [open, live, shown, openH]);
 
+  // Pointing at it opens it; leaving closes it (after a moment, so
+  // brushing past does not flap it).
+  const leaving = useRef<number | null>(null);
   const enter = () => {
-    if (!live) return;
-    void frame(OPEN_W + 2 * EAR, openH, true).then(() => setOpen(true));
+    if (leaving.current) { window.clearTimeout(leaving.current); leaving.current = null; }
+    if (live) setOpen(true);
   };
   const leave = () => {
-    setOpen(false);
-    window.setTimeout(() => { if (live) void frame(COMPACT_W + 2 * EAR, NH, true); }, 340);
+    if (leaving.current) window.clearTimeout(leaving.current);
+    leaving.current = window.setTimeout(() => { setOpen(false); leaving.current = null; }, 140);
   };
+  useEffect(() => {
+    const on = (e: Event) => ((e as CustomEvent<boolean>).detail ? enter() : leave());
+    window.addEventListener("island-hover", on);
+    return () => window.removeEventListener("island-hover", on);
+  });
 
   const openMember = (b: Busy) => {
     setOpen(false);
@@ -132,7 +148,6 @@ export function Island() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hub: b.hubId, agent: b.agent.name }),
     }).catch(() => undefined);
-    window.setTimeout(() => { if (live) void frame(COMPACT_W + 2 * EAR, NH, true); }, 340);
   };
 
   const pillW = !shown ? Math.max(NW, 40) : open ? OPEN_W : COMPACT_W;

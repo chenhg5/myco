@@ -8,6 +8,7 @@ package main
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
 #import <objc/runtime.h>
+#import <math.h>
 
 // Nothing behind the page is drawn: the web view's own (white) background
 // and the views holding it are made clear, so only the pill shows.
@@ -47,6 +48,19 @@ static void mycoIslandFree(NSWindow *window) {
 	if ([window isKindOfClass:[NSPanel class]]) mask |= NSWindowStyleMaskNonactivatingPanel;
 	if (window.styleMask != mask) window.styleMask = mask;
 	if (window.contentView) mycoClearBackgrounds(window.contentView);
+}
+
+// Whether the pointer is on the pill: pw×ph points, at the top centre of
+// the notch screen.
+static int mycoMouseOver(double pw, double ph) {
+	@autoreleasepool {
+		int notched = 0;
+		NSScreen *s = mycoNotchScreen(&notched);
+		if (!s) return 0;
+		NSRect f = s.frame;
+		NSPoint m = [NSEvent mouseLocation];
+		return fabs(m.x - NSMidX(f)) <= pw / 2 + 1 && m.y >= NSMaxY(f) - ph - 1 && m.y <= NSMaxY(f) + 1;
+	}
 }
 
 // Brings the app to the front (the island itself never activates it).
@@ -116,6 +130,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -127,6 +142,14 @@ type island struct {
 	mu   sync.Mutex
 	win  *application.WebviewWindow
 	open func(hub, agent string)
+	// While shown the window keeps one size (as big as the open island):
+	// resizing it as the pill springs made the page blink. Clicks pass
+	// through it except on the pill (pw×ph), which the page reports; the
+	// pointer is watched here, and the page told when it is on the pill.
+	shown      bool
+	winW, winH float64
+	pw, ph     float64
+	hovered    bool
 }
 
 // activateApp brings the app in front, for a member picked in the island.
@@ -172,7 +195,31 @@ func newIsland(app *application.App, open func(hub, agent string)) *island {
 				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
 		},
 	})
-	return &island{win: win, open: open}
+	is := &island{win: win, open: open}
+	go is.watchPointer()
+	return is
+}
+
+// watchPointer lets clicks through except on the pill, and tells the page
+// when the pointer comes onto it or leaves (it opens and closes on that).
+func (is *island) watchPointer() {
+	t := time.NewTicker(60 * time.Millisecond)
+	defer t.Stop()
+	for range t.C {
+		is.mu.Lock()
+		if !is.shown {
+			is.mu.Unlock()
+			continue
+		}
+		in := C.mycoMouseOver(C.double(is.pw), C.double(is.ph)) != 0
+		changed := in != is.hovered
+		is.hovered = in
+		is.mu.Unlock()
+		if changed {
+			is.win.SetIgnoreMouseEvents(!in)
+			is.win.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("island-hover",{detail:%t}))`, in))
+		}
+	}
 }
 
 // handler serves the island page's two requests, everything else as before:
@@ -189,13 +236,14 @@ func (is *island) handler(next http.Handler) http.Handler {
 		case "frame":
 			var in struct {
 				W, H    float64
+				PW, PH  float64
 				Visible bool
 			}
 			if json.NewDecoder(r.Body).Decode(&in) != nil {
 				http.Error(w, "bad frame", http.StatusBadRequest)
 				return
 			}
-			is.frame(in.W, in.H, in.Visible)
+			is.frame(in.W, in.H, in.PW, in.PH, in.Visible)
 		case "open":
 			var in struct{ Hub, Agent string }
 			if json.NewDecoder(r.Body).Decode(&in) != nil {
@@ -214,7 +262,9 @@ func (is *island) handler(next http.Handler) http.Handler {
 	})
 }
 
-func (is *island) frame(w, h float64, visible bool) {
+// frame sizes the window (w×h) and records the pill (pw×ph) clicks may
+// land on; not visible, the window is one point and out of the way.
+func (is *island) frame(w, h, pw, ph float64, visible bool) {
 	is.mu.Lock()
 	defer is.mu.Unlock()
 	if is.win == nil {
@@ -225,12 +275,25 @@ func (is *island) frame(w, h float64, visible bool) {
 		return
 	}
 	if !visible {
-		// One point, clicks passing through: there but out of the way.
-		C.mycoIslandPlace(p, 1, 1, 1)
+		is.shown, is.hovered = false, false
+		if is.winW != 1 || is.winH != 1 {
+			C.mycoIslandPlace(p, 1, 1, 1)
+			is.winW, is.winH = 1, 1
+		}
 		return
 	}
 	if w < 40 || h < 10 || w > 800 || h > 600 {
 		return
 	}
-	C.mycoIslandPlace(p, C.double(w), C.double(h), 0)
+	is.pw, is.ph = pw, ph
+	is.shown = true
+	// Only a new size moves the window: the pill springs inside it.
+	if w != is.winW || h != is.winH {
+		pass := 1
+		if is.hovered {
+			pass = 0
+		}
+		C.mycoIslandPlace(p, C.double(w), C.double(h), C.int(pass))
+		is.winW, is.winH = w, h
+	}
 }
