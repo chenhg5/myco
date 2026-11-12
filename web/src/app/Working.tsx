@@ -37,9 +37,9 @@ function cells(rows: string[], top = 0) {
 
 const KIND: Record<string, string> = { C: "is-cap", o: "is-spot", S: "is-stem", e: "is-eye" };
 
-function Mushroom() {
+function Mushroom({ idle }: { idle?: boolean }) {
   return (
-    <svg className="work-sprite" viewBox="0 -4 12 16" width="30" height="40" shapeRendering="crispEdges" aria-hidden="true">
+    <svg className={cn("work-sprite", idle && "is-idle")} viewBox="0 -4 12 16" width="30" height="40" shapeRendering="crispEdges" aria-hidden="true">
       {/* spores drifting up off the cap */}
       <rect className="work-spore" x="2" y="1" width="1" height="1" />
       <rect className="work-spore" x="9" y="0" width="1" height="1" />
@@ -81,7 +81,7 @@ function elapsed(ms: number): string {
   return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
 }
 
-export function WorkingLine({ name, since, status, side }: {
+export function WorkingLine({ name, since, status, side, queued, behind = 0 }: {
   /** who is working */
   name: string;
   /** when it took the task (for the clock) */
@@ -90,6 +90,10 @@ export function WorkingLine({ name, since, status, side }: {
   status?: string;
   /** the side of the conversation its messages are on */
   side: "left" | "right";
+  /** not picked up yet: the mushroom stands and waits */
+  queued?: boolean;
+  /** more tasks for it waiting behind this one */
+  behind?: number;
 }) {
   const start = new Date(since).getTime();
   // A random verb to start with, so two conversations do not say the same.
@@ -100,20 +104,21 @@ export function WorkingLine({ name, since, status, side }: {
     return () => window.clearInterval(t);
   }, []);
   useEffect(() => {
-    if (status) return;
+    if (status || queued) return;
     const t = window.setInterval(() => setTurn((v) => (v + 1 + Math.floor(Math.random() * (VERBS.length - 1))) % VERBS.length), TURN_MS);
     return () => window.clearInterval(t);
-  }, [status]);
+  }, [status, queued]);
   const [zh, en] = VERBS[turn];
-  const text = status || L(zh, en);
+  const text = queued ? L("排队中，等它接手", "Queued, waiting to be picked up") : status || L(zh, en);
   return (
     <div className={cn("work-line", side === "right" && "is-right")} role="status" aria-live="off">
-      <Mushroom />
+      <Mushroom idle={queued} />
       <div className="work-text">
         <span className="work-name">{name}</span>
         {/* keyed, so a new verb fades in */}
-        <span key={text} className="work-verb">{text}</span>
+        <span key={text} className={cn("work-verb", queued && "is-still")}>{text}</span>
         {!Number.isNaN(start) && <span className="work-time">{elapsed(now - start)}</span>}
+        {behind > 0 && <span className="work-time">{L(`后面还有 ${behind} 个任务`, `${behind} more queued`)}</span>}
       </div>
     </div>
   );

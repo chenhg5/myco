@@ -61,6 +61,23 @@ const studioThreadRaw = [
   makeMessage({ thread_id: "th_release", from: "pm-codex", to: "glenn", type: "reply", body: "release/v0.16.8 分支检查全部通过，等你确认后打 tag。", created_at: iso(600), updated_at: iso(600) }),
   makeMessage({ thread_id: "th_release", from: "glenn", to: "pm-codex", type: "task", body: "可以，打 tag 吧。", created_at: iso(300), updated_at: iso(300) }),
 ];
+// A coordinator giving another node several tasks in a row: it answers
+// the first (after two progress updates), is on the second, and the third
+// waits behind it. The answer comes after the third task, so it quotes the
+// task it answers.
+const coordTask = (body, ago, status) => makeMessage({ thread_id: "th_coord", from: "release-cloud", to: "review-cloud", type: "task", body, status, created_at: iso(ago), updated_at: iso(ago) });
+const coordT1 = coordTask("审查 PR 128（节点别名）：接口、权限和测试，能合就说能合。", 1500, "done");
+const coordT2 = coordTask("再看一下 multihub 分支：hub 拒绝 token 之后，缓存还会不会被写回去。", 1460, "acked");
+const coordT3 = coordTask("最后写一段 v0.18.40 的发布说明草稿，放进项目资料。", 1420, "queued");
+const coordSays = (type, task, body, ago) => makeMessage({ thread_id: "th_coord", from: "review-cloud", to: "release-cloud", type, reply_to: task.id, status: "done", body, created_at: iso(ago), updated_at: iso(ago) });
+const coordThread = [
+  coordT1, coordT2, coordT3,
+  coordSays("progress", coordT1, "已拉下 PR 128，正在看 handler 和权限检查。", 1300),
+  coordSays("progress", coordT1, "别名上限没写进错误提示，正在核对测试。", 1120),
+  coordSays("reply", coordT1, "PR 128 可以合。\n\n- 别名上限（3 个）已写进错误提示和 `myco schema`\n- 抢别人名字、超上限、非主人设别名都有测试\n- `make vet`、`make test` 通过", 900),
+  coordSays("progress", coordT2, "正在复现：hub 拒绝 token 后再刷新一次缓存。", 380),
+];
+
 // MOCK_E2E: the console conversation is end-to-end encrypted, one message
 // in it was sealed for someone else.
 const studioThread = process.env.MOCK_E2E
@@ -197,7 +214,7 @@ const state = {
       ok: true,
       hub_version: "0.16.6",
       update_available: true,
-      threads: { th_release: studioThread, ...consoleThreads },
+      threads: { th_release: studioThread, th_coord: coordThread, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",

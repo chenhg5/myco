@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -48,6 +48,28 @@ function dayTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+// A task open longer than this is not being worked on any more.
+const OPEN_FOR_MS = 12 * 3600 * 1000;
+
+/** What a node reported while working on a task, folded to one line ("3 条
+ * 进展") that opens to the list. */
+function ProgressFold({ items }: { items: Message[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={cn("conv-steps", open && "is-open")}>
+      <button type="button" className="conv-steps-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <ChevronRight className="conv-steps-chev" />
+        {L(`${items.length} 条进展`, items.length === 1 ? "1 progress update" : `${items.length} progress updates`)}
+      </button>
+      {open && (
+        <ul className="conv-steps-list">
+          {items.map((p) => <li key={p.id} title={clockTime(p.created_at)}>{p.body}</li>)}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function isOpen(status: string): boolean {
@@ -397,16 +419,75 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Someone else's task that its node is still on (two nodes working
   // together): the foot of the conversation shows it at work. Your own
   // tasks show their run as it goes (TraceView) instead.
+  const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
+
+  // What each task got, by the task's id. Answers and progress updates
+  // point at their task (reply_to). One without it (older runners) answers
+  // the earliest task its sender has not answered in that thread; progress
+  // without it belongs to the latest task its sender had there.
+  const answerOf = new Map<string, Message>();
+  const taskOfAnswer = new Map<string, string>();
+  const progressOf = new Map<string, Message[]>();
+  const taskOfProgress = new Map<string, string>();
+  if (!termMode && shown) {
+    const lastTaskTo = new Map<string, string>();
+    const unanswered = new Map<string, string[]>();
+    for (const m of shown) {
+      const key = (to: string) => `${m.thread_id}\u0000${to}`;
+      if (m.type === "task") {
+        lastTaskTo.set(key(m.to), m.id);
+        unanswered.set(key(m.to), [...(unanswered.get(key(m.to)) || []), m.id]);
+      }
+      if (m.type === "reply" || m.type === "event") {
+        const waiting = unanswered.get(key(m.from)) || [];
+        const task = m.reply_to || waiting[0];
+        if (task && !answerOf.has(task)) {
+          answerOf.set(task, m);
+          taskOfAnswer.set(m.id, task);
+          unanswered.set(key(m.from), waiting.filter((id) => id !== task));
+        }
+      }
+      if (m.type === "progress") {
+        const task = m.reply_to || lastTaskTo.get(`${m.thread_id}\u0000${m.from}`);
+        if (task) {
+          progressOf.set(task, [...(progressOf.get(task) || []), m]);
+          taskOfProgress.set(m.id, task);
+        }
+      }
+    }
+  }
+
+  // Someone else's tasks that are not answered yet (two nodes working
+  // together): the foot of the conversation shows the node at work on the
+  // first, and how many wait behind it. Your own tasks show their run as it
+  // goes (TraceView) instead. A task left open for half a day, or one for a
+  // node that is offline, is not being worked on.
   const working = (() => {
     if (termMode || !shown) return null;
-    for (let i = shown.length - 1; i >= 0; i--) {
-      const m = shown[i];
-      if (m.type === "progress" || m.type === "steer") continue;
-      if (m.type !== "task" || isMe(m.from, row?.hub) || !isOpen(m.status) || m.status === "queued") return null;
-      return m;
-    }
-    return null;
+    const open = shown.filter((m) => m.type === "task" && !isMe(m.from, row?.hub) && isOpen(m.status) && !answerOf.has(m.id)
+      && Date.now() - new Date(m.created_at).getTime() < OPEN_FOR_MS && rowOf(m.to)?.st.state !== "offline");
+    if (!open.length) return null;
+    const task = open.find((m) => m.status !== "queued") || open[0];
+    const said = progressOf.get(task.id);
+    return {
+      task,
+      queued: task.status === "queued",
+      behind: open.filter((m) => m !== task && m.to === task.to).length,
+      // what it last said about this task, else what it says it is doing
+      status: said?.length ? said[said.length - 1].body.split("\n")[0] : rowOf(task.to)?.st.agent.status_text,
+    };
   })();
+
+  // Jump to a message (from a quote of it) and light it up for a moment.
+  const jumpTo = (id: string) => {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("is-flash");
+    void el.offsetWidth;
+    el.classList.add("is-flash");
+    window.setTimeout(() => el.classList.remove("is-flash"), 1600);
+  };
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
@@ -544,6 +625,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   };
 
+  // What the timeline lists. Watching two nodes, progress is folded under
+  // the answer it led to, or shown by the node at work; only the last
+  // progress of a task that ended without an answer here stands in for
+  // all of it.
+  const visible = (shown || []).filter((m) => {
+    if (!observed || m.type !== "progress") return true;
+    const task = taskOfProgress.get(m.id) || "";
+    if (answerOf.has(task) || task === working?.task.id) return false;
+    const all = progressOf.get(task);
+    return !all || all[all.length - 1] === m;
+  });
+  // The message just before each one (what an answer may be answering).
+  const prevShown = new Map<string, string>();
+  visible.forEach((m, i) => { if (i > 0) prevShown.set(m.id, visible[i - 1].id); });
+
   // showName: the first of a run of messages from one sender (watching two
   // nodes, names are shown once per run, as a chat groups them).
   const renderMessage = (m: Message, showName = true) => {
@@ -555,11 +651,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         );
         if (!observed) return line;
-        // Watching two nodes: on its sender's side, under its sender's name.
+        // Watching two nodes, progress is folded under the answer, or shown
+        // by the node at work; what is left (a task that ended without an
+        // answer here) is one folded line on its sender's side.
+        const items = progressOf.get(taskOfProgress.get(m.id) || "") || [m];
         return (
           <div key={m.id} className={cn("conv-msg is-progress", m.from === target.agent ? "is-me" : "is-agent")}>
             {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
-            {line}
+            <ProgressFold items={items} />
           </div>
         );
       }
@@ -574,13 +673,29 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       }
       // In an observed thread, the node you opened is on the right.
       const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub);
+      // Watching two nodes: an answer that does not come right after what it
+      // answers quotes it, as chat apps do; its progress folds under it.
+      const answers = observed ? taskOfAnswer.get(m.id) : undefined;
+      const asked = answers ? shown?.find((x) => x.id === answers) : undefined;
+      // (an answer naming a message not loaded here quotes "an earlier one")
+      const quote = !!answers && prevShown.get(m.id) !== answers && (!!asked || !!m.reply_to);
+      const steps = answers ? progressOf.get(answers) : undefined;
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-turn={turnIds.has(m.id) ? m.id : undefined}>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
           {showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
+          {steps && steps.length > 0 && <ProgressFold items={steps} />}
           <div className="conv-bubble">
+            {quote && (asked ? (
+              <button type="button" className="conv-quote" onClick={() => jumpTo(asked.id)} title={L("跳到这条消息", "Go to this message")}>
+                <span className="conv-quote-name">{nameOf(asked.from)}</span>
+                <span className="conv-quote-text">{asked.unreadable ? L("已加密的消息", "An encrypted message") : asked.body.replace(/\s+/g, " ").trim()}</span>
+              </button>
+            ) : (
+              <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
+            ))}
             {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {m.unreadable
@@ -709,20 +824,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </div>
               <ErrorText error={sendError || stopError} />
               </>
-            ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} hubId={target.hubId} onGrow={followBottom} /> : shown.map((m, i) => {
+            ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} hubId={target.hubId} onGrow={followBottom} /> : visible.map((m, i) => {
               // Exchange view: a new thread starts with a divider.
-              const divider = exchange && i > 0 && shown[i - 1].thread_id !== m.thread_id
+              const divider = exchange && i > 0 && visible[i - 1].thread_id !== m.thread_id
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
                 : null;
-              const prev = shown[i - 1];
+              const prev = visible[i - 1];
               const runStart = !prev || !!divider || prev.from !== m.from || prev.type === "event" || m.type === "event";
               const item = renderMessage(m, runStart);
               return divider ? [divider, item] : item;
             })}
             {working && (
-              <WorkingLine key={working.id} name={nameOf(working.to)} since={working.created_at}
-                status={rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === working.to)?.st.agent.status_text}
-                side={observed && working.to === target.agent ? "right" : "left"} />
+              <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
+                status={working.status} queued={working.queued} behind={working.behind}
+                side={observed && working.task.to === target.agent ? "right" : "left"} />
             )}
             </>
           )}
