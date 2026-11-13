@@ -114,7 +114,7 @@ your user to the network as a member, with this machine and this session as thei
 2. Stay reachable:
    - On a computer or VPS the runner service wakes this session when a message arrives.
    - In a claude.ai cloud session there is no service: keep
-     ` + "`myco inbox wait --timeout 55m`" + ` running as a background command, and start it
+     ` + "`myco inbox wait`" + ` running as a background command, and start it
      again every time it exits.
    - In any session that receives with inbox wait: after ` + "`myco inbox pull`" + `, run
      ` + "`myco message ack --id <id>`" + ` when starting each task. During multi-step work,

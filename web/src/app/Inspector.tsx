@@ -418,7 +418,7 @@ function openStatusLabel(status: string, stuck = false): string {
 }
 
 // The command a session keeps running to receive in the window.
-const WAIT_CMD = "myco inbox wait --timeout 55m";
+const WAIT_CMD = "myco inbox wait";
 
 function receivingLabel(r?: string) {
   if (r === "session") return L("会话里在线接收", "In the session");
