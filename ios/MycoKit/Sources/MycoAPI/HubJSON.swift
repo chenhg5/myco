@@ -19,7 +19,9 @@ public enum HubJSON {
         e.keyEncodingStrategy = .convertToSnakeCase
         e.dateEncodingStrategy = .custom { date, encoder in
             var c = encoder.singleValueContainer()
-            try c.encode(date.formatted(.iso8601))
+            // With milliseconds: what is kept between launches must sort
+            // as it did, and two things in the same second stay apart.
+            try c.encode(Date.ISO8601FormatStyle(includingFractionalSeconds: true).format(date))
         }
         return e
     }

@@ -34,6 +34,13 @@ struct DecodingTests {
         #expect(HubJSON.parseDate("yesterday") == nil)
     }
 
+    @Test func whatIsWrittenReadsBackToTheMillisecond() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_000.123)
+        let data = try HubJSON.encoder().encode([date])
+        let back = try HubJSON.decoder().decode([Date].self, from: data)
+        #expect(abs(back[0].timeIntervalSince(date)) < 0.001)
+    }
+
     @Test func readsAMessageWithoutOptionalFields() throws {
         let json = """
         {"id":"msg_1","from":"@console:glenn","to":"coder","thread_id":"msg_1","type":"task","body":"hi",
