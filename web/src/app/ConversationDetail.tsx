@@ -21,6 +21,7 @@ import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
+import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 
 export interface ConversationTarget {
   hubId: string;
@@ -88,6 +89,25 @@ function ProgressFold({ items }: { items: Message[] }) {
 
 function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
+}
+
+/** Whether a hub's version is at least want ("0.19.2"). Unknown is older. */
+function hubAtLeast(version: string | undefined, want: string): boolean {
+  if (!version) return false;
+  const a = version.replace(/^v/i, "").split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
+  const b = want.split(".").map((x) => Number.parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/** ⌘ on a Mac, Ctrl elsewhere (the same key the input listens for). */
+function modKey(): string {
+  const p = typeof navigator === "undefined" ? "" : navigator.platform || "";
+  return /Mac|iPhone|iPad/.test(p) ? "⌘" : "Ctrl+";
 }
 
 // Conversations opened before: reopening one shows it at once while it
@@ -229,7 +249,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [sending, setSending] = useState(false);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId);
-  const [steerMode, setSteerMode] = useState(false);
+  // Messages put after the running one, while the workspace cannot hold
+  // them (older hubs): kept here, like drafts, and sent when the round ends.
+  const queueKey = chatQueueKey(target.hubId, target.agent);
+  const queueKeyRef = useRef(queueKey);
+  queueKeyRef.current = queueKey;
+  const [localQueue, setLocalQueue] = useState<Queued[]>(() => queueOf(queueKey));
+  const writeQueue = (items: Queued[]) => {
+    setLocalQueue(items);
+    keepQueue(queueKeyRef.current, items);
+  };
+  /** Queued messages withdrawn here (a stopped one may still be polled back). */
+  const [withdrawn, setWithdrawn] = useState<ReadonlySet<string>>(() => new Set());
+  const [queueError, setQueueError] = useState<unknown>(null);
+  const [queueBusy, setQueueBusy] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // grow with the text, up to about eight lines, then scroll
@@ -272,7 +305,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setLoadError(null);
     setSendError(null);
     setDraft(draftOf(chatDraftKey(target.hubId, target.agent)));
-    setSteerMode(false);
+    setLocalQueue(queueOf(chatQueueKey(target.hubId, target.agent)));
+    setQueueError(null);
+    setFlushStalled(false);
+    setWithdrawn(new Set());
     setOlder([]);
     setMore(hit?.more ?? false);
     // Opened at a message: stay there instead of following the bottom.
@@ -435,12 +471,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
-  // Everything shown: in the exchange view, older pages before the newest.
-  const shown: Message[] | null = messages === null ? null : exchange
-    ? [...older.filter((o) => !messages.some((m) => m.id === o.id)), ...messages]
-    : messages;
+  // A message put after a task that is still open waits on the hub: it is
+  // not part of the conversation yet (hubs from v0.19.2 hold it; older hubs
+  // never see one). It is shown above the box until that task ends.
+  const known = new Map((messages || []).map((m) => [m.id, m]));
+  const afterOpen = (m: Message): boolean => {
+    if (!m.after || !isOpen(m.status)) return false;
+    const task = known.get(m.after);
+    return !!task && task.type === "task" && isOpen(task.status);
+  };
+  const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m);
+  const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
 
-  const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub));
+  // Everything shown: in the exchange view, older pages before the newest.
+  const shown: Message[] | null = messages === null ? null : (exchange
+    ? [...older.filter((o) => !messages.some((m) => m.id === o.id)), ...messages]
+    : messages).filter((m) => !hiddenMessage(m));
+
+  const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && !hiddenMessage(m));
   const lastTask = consoleTasks[consoleTasks.length - 1];
   // An answer names its task (reply_to); one that does not (older runners)
   // counts when it came after the task in the same thread. Replies to other
@@ -475,8 +523,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     );
   };
   // Every task of yours still open in this conversation, not only the newest:
-  // an older one that went quiet may be stuck too.
-  const openTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && isOpen(m.status));
+  // an older one that went quiet may be stuck too. (One waiting behind the
+  // running task is not in the conversation yet.)
+  const openTasks = consoleTasks.filter((m) => isOpen(m.status));
   const allStuck = openTasks.length > 0 && openTasks.every(isStuck);
   // The header's 可能卡住 takes you to the (first) stuck task: in a long
   // conversation it can be far above the bottom you are looking at.
@@ -509,7 +558,51 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       : lastTask
         ? { dot: "idle", label: L("已完成", "Done") }
         : { dot: "idle", label: L("空闲", "Idle") };
-  const steerOn = steerMode && !!openTask;
+  // An older hub cannot hold a queued message: the App sends it once the
+  // round it waits for has ended (all of them, in order).
+  const [flushStalled, setFlushStalled] = useState(false);
+  const flushing = useRef(false);
+  useEffect(() => {
+    if (openTask || flushStalled || flushing.current || localQueue.length === 0) return;
+    flushing.current = true;
+    const items = localQueue;
+    // The box may move to another conversation while this runs: its queue is
+    // this one's, and its messages belong in this one's flow.
+    const flushKey = chatQueueKey(target.hubId, target.agent);
+    const here = () => queueKeyRef.current === flushKey;
+    (async () => {
+      let done = 0;
+      try {
+        for (; done < items.length; done++) {
+          const it = items[done];
+          const send = (thread_id?: string) => appApi.sendMessage(target.hubId, {
+            to: target.agent, body: it.body, thread_id, attachments: it.attachments,
+          });
+          let m: Message;
+          try {
+            m = await send(it.threadId);
+          } catch (e) {
+            // The thread was closed or renamed under us: the message still goes.
+            if (!it.threadId || (e as { code?: string }).code !== "not_found") throw e;
+            m = await send(undefined);
+          }
+          if (here()) setMessages((prev) => (prev ? [...prev, m] : [m]));
+        }
+        keepQueue(flushKey, []);
+        if (here()) setLocalQueue([]);
+      } catch (e) {
+        keepQueue(flushKey, items.slice(done));
+        if (here()) {
+          setQueueError(e);
+          setFlushStalled(true);
+          setLocalQueue(items.slice(done));
+        }
+      } finally {
+        flushing.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTask?.id, localQueue, flushStalled, target.hubId, target.agent]);
   // The runner found the agent's session open elsewhere (a terminal, an
   // editor, the Codex app): it waits and retries rather than write into it.
   // Why a task has not started: said in the chat instead of a spinner.
@@ -576,6 +669,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+  // Enter adds to the running task; ⌘/Ctrl+Enter puts the next one behind
+  // it. A hub from v0.19.2 holds both (a steer may carry files, a queued
+  // message knows what it waits for); older hubs get the text as a steer,
+  // and the queue is kept in the App until the round ends.
+  const queueOnHub = hubAtLeast(row?.hub.hub_version, "0.19.2");
+  const supplementing = !shellMode && !!openTask;
+  const mod = modKey();
   // Either way (typing at it, or reading what other nodes ran on it) the
   // pane is a terminal.
   const termMode = shellMode || !!execNode;
@@ -598,7 +698,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A terminal has no rail: it is read from the bottom, like a terminal.
   const turns: Turn[] = [];
   for (const m of shown || []) {
-    if (m.type === "progress" || m.type === "event") continue;
+    // A supplement belongs to the task it names, not a turn of its own.
+    if (m.type === "progress" || m.type === "event" || m.type === "steer") continue;
     // With others' work merged in, a task one of them gave it starts a
     // turn too (a member's pane is mostly the coordinator's tasks).
     const fromOther = !observed && alsoSet.has(m.from) && m.type === "task" && m.to === target.agent;
@@ -755,14 +856,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const onScreen = shown && !Number.isNaN(clearedTime) ? shown.filter((m) => new Date(m.created_at).getTime() > clearedTime) : shown;
   const cleared = !!shown && !!onScreen && onScreen.length < shown.length;
 
-  const send = async () => {
+  const send = async (mode: "now" | "next" = "now") => {
     const typed = draft.trim();
     if (shellMode && (typed === "clear" || typed === "cls")) { clearScreen(); return; }
     if ((!typed && !att.any) || att.busy || sending || busy) return;
     const body = att.body(typed);
     const attachments = att.ids.length ? att.ids : undefined;
+    // While this round runs: Enter adds to it, ⌘/Ctrl+Enter puts the next
+    // one behind it. With nothing running, both send a message.
+    const supplement = mode === "now" && supplementing && !!openTask;
+    const queuedNext = mode === "next" && supplementing && !!openTask;
     setSending(true);
     setSendError(null);
+    setQueueError(null);
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
@@ -776,17 +882,42 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // Opened from a project: the first message starts a thread in it.
       const inProject = !!target.project && !projectStarted.current;
       const threadId = inProject ? undefined : exchange ? continuedThread() : target.threadId;
-      const sendNew = (thread_id?: string) => appApi.sendMessage(target.hubId, { to: target.agent, body, thread_id, attachments, ...(inProject && !thread_id ? { project: target.project } : {}) });
+      const sendNew = (thread_id?: string, after?: string) => appApi.sendMessage(target.hubId, {
+        to: target.agent, body, thread_id, attachments,
+        ...(inProject && !thread_id ? { project: target.project } : {}),
+        ...(after ? { after } : {}),
+      });
+      const sendThread = (thread_id?: string) => sendNew(thread_id).catch((e) => {
+        // The hub does not count you in that thread (sent under an older
+        // name): start a new one; the exchange view shows every thread.
+        if (exchange && thread_id && (e as { code?: string }).code === "not_found") return sendNew(undefined);
+        throw e;
+      });
       if (inProject) projectStarted.current = true;
-      // (A correction carries no files: with files, it goes as a new message.)
-      const m = openTask && steerOn && !attachments
-        ? await appApi.steer(target.hubId, openTask.id, body)
-        : await sendNew(threadId).catch((e) => {
-          // The hub does not count you in that thread (sent under an older
-          // name): start a new one; the exchange view shows every thread.
-          if (exchange && threadId && (e as { code?: string }).code === "not_found") return sendNew(undefined);
-          throw e;
-        });
+      let m: Message;
+      if (supplement) {
+        // An older hub has nowhere to put files with a correction: they go
+        // as a new message, as before.
+        m = attachments && !queueOnHub
+          ? await sendThread(threadId)
+          : await appApi.steer(target.hubId, openTask!.id, body, attachments);
+      } else if (queuedNext) {
+        if (queueOnHub) {
+          m = await sendNew(threadId, openTask!.id);
+        } else {
+          // This hub cannot hold it: keep it here and send it when the
+          // round ends (queued.ts).
+          writeQueue([...localQueue, { id: queuedId(), body, attachments, threadId, at: Date.now() }]);
+          setFlushStalled(false);
+          writeDraft("");
+          att.clear();
+          histPos.current = -1;
+          inputRef.current?.focus();
+          return;
+        }
+      } else {
+        m = await sendThread(threadId);
+      }
       // The hub signs your messages with your name there: when this view
       // assumed another, follow the one it used.
       if (exchange && m.from && target.peer && m.from !== target.peer && m.type !== "steer" && onOpen) {
@@ -799,7 +930,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       writeDraft("");
       att.clear();
       histPos.current = -1;
-      setSteerMode(false);
       atBottom.current = true;
       inputRef.current?.focus();
     } catch (e) {
@@ -837,7 +967,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
-    void send();
+    // Enter adds to the running task; ⌘/Ctrl+Enter puts the next one behind
+    // it. In a terminal both just send the command, as before.
+    if (!shellMode && openTask && (e.metaKey || e.ctrlKey)) void send("next");
+    else void send("now");
   };
 
   // Stop a running task you sent: the hub closes it, its runner ends the run.
@@ -847,7 +980,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     try {
       const m = await appApi.stop(target.hubId, task.id);
       setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
-      setSteerMode(false);
     } catch (e) {
       setStopError(e);
     }
@@ -911,12 +1043,58 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         const next = prev ? prev.map((x) => (x.id === stopped.id ? stopped : x)) : [stopped];
         return [...next, fresh];
       });
-      setSteerMode(false);
       atBottom.current = true;
     } catch (e) {
       setStopError(e);
     } finally {
       setResending(null);
+    }
+  };
+
+  // Messages waiting behind this round, in order: on the hub (v0.19.2) or
+  // here. Both are one list above the box, with edit and withdraw.
+  type QueueItem = { key: string; body: string; server?: Message; local?: Queued };
+  const queueRows: QueueItem[] = [
+    ...localQueue.map((q) => ({ key: q.id, body: q.body, local: q })),
+    ...hubQueue.map((m) => ({ key: m.id, body: m.body, server: m })),
+  ];
+  const dropLocal = (id: string) => {
+    writeQueue(localQueue.filter((x) => x.id !== id));
+    setFlushStalled(false);
+  };
+  const withdrawQueueItem = async (item: QueueItem) => {
+    setQueueError(null);
+    if (item.local) { dropLocal(item.local.id); return; }
+    if (!item.server || queueBusy) return;
+    setQueueBusy(item.key);
+    try {
+      await appApi.stop(target.hubId, item.server.id);
+      setWithdrawn((prev) => new Set([...prev, item.key]));
+    } catch (e) {
+      setQueueError(e);
+    } finally {
+      setQueueBusy(null);
+    }
+  };
+  const editQueueItem = async (item: QueueItem) => {
+    if (item.local) {
+      dropLocal(item.local.id);
+      writeDraft(item.body);
+      inputRef.current?.focus();
+      return;
+    }
+    if (!item.server || queueBusy) return;
+    setQueueError(null);
+    setQueueBusy(item.key);
+    try {
+      await appApi.stop(target.hubId, item.server.id);
+      setWithdrawn((prev) => new Set([...prev, item.key]));
+      writeDraft(item.body);
+      inputRef.current?.focus();
+    } catch (e) {
+      setQueueError(e);
+    } finally {
+      setQueueBusy(null);
     }
   };
 
@@ -935,7 +1113,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const inRun = (task?: Message) => !!task && task.type === "task" && !task.e2e
     && ((isMe(task.from, row?.hub) && !isStuck(task)) || (alsoSet.has(task.from) && task.to === target.agent));
   const byId = new Map((shown || []).map((m) => [m.id, m]));
+  // A supplement is drawn inside the task it names, not as a turn of its
+  // own (only one loading/status for the task remains).
+  const steersOf = new Map<string, Message[]>();
+  for (const m of shown || []) {
+    if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
+    steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
+  }
   const visible = (shown || []).filter((m) => {
+    if (m.type === "steer" && m.reply_to && steersOf.has(m.reply_to)) return false;
     if (m.type !== "progress") return true;
     if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
     const task = taskOfProgress.get(m.id) || "";
@@ -1033,12 +1219,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : (
               <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
             ))}
-            {m.type === "steer" && <span className="conv-tag">{L("修正", "Correct")}</span>}
+            {m.type === "steer" && <span className="conv-tag">{L("补充", "Added")}</span>}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : <MessageContent body={m.body} />}
             {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {(steersOf.get(m.id) || []).map((s) => (
+              <div className="conv-supplement" key={s.id} data-supplement={s.id}>
+                <div className="conv-supplement-head">
+                  <span className="conv-tag">{L("补充", "Added")}</span>
+                  <span className="conv-supplement-time">{clockTime(s.created_at)}</span>
+                </div>
+                {s.unreadable
+                  ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+                  : <MessageContent body={s.body} />}
+                {s.attachments && s.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={s.attachments} />}
+              </div>
+            ))}
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
@@ -1290,10 +1488,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             </span>
           </div>
         )}
-        {steerOn && (
-          <div className="conv-steer-hint">{L("修正会打断当前处理，让 agent 按新的要求继续。", "Correcting interrupts the current work so the agent continues with your new instructions.")}</div>
+        {queueRows.length > 0 && (
+          <div className="conv-queue" data-queue>
+            {queueRows.map((item) => (
+              <div className="conv-queue-row" data-queue-row={item.key} key={item.key}>
+                <span className="conv-queue-text" title={item.body}>
+                  <span className="conv-queue-label">{L("排队中：", "Queued: ")}</span>
+                  {item.body.split("\n")[0].trim() || L("（附件）", "(files)")}
+                </span>
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
+                  onClick={(e) => { e.stopPropagation(); void editQueueItem(item); }}>
+                  {L("编辑", "Edit")}
+                </button>
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
+                  onClick={(e) => { e.stopPropagation(); void withdrawQueueItem(item); }}>
+                  {L("撤回", "Withdraw")}
+                </button>
+              </div>
+            ))}
+          </div>
         )}
-        <div className={cn("conv-compose-box", steerOn && "is-steer")} onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
+        {queueRows.length > 0 && <ErrorText error={queueError} />}
+        <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea
             ref={inputRef}
@@ -1311,7 +1527,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             disabled={busy}
             placeholder={busy
               ? L("会话正开在别处，暂时不能发；可以「复制一份来对话」", "The session is open elsewhere, so you can't send now; you can talk to a copy")
-              : steerOn ? L("修改刚才的任务…", "Change the last task…") : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
+              : supplementing
+                ? L(`补充给 ${agentName}…（${mod}↩ 排到下一条）`, `Add to ${agentName}… (${mod}↩ queues the next one)`)
+                : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
             rows={1}
             aria-label={L("消息", "Message")}
           />
@@ -1320,19 +1538,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 and voice input later */}
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
-              {openTask && (
-                <button
-                  type="button"
-                  className={cn("conv-steer-btn", steerMode && "active")}
-                  aria-pressed={steerMode}
-                  onClick={(e) => { e.stopPropagation(); setSteerMode((s) => !s); }}
-                  title={L("打断当前处理，让 agent 按你新的要求继续", "Interrupt the current work so the agent continues with your new instructions")}
-                >
-                  {L("修正", "Correct")}
-                </button>
-              )}
             </div>
-            <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
+            <span className="conv-compose-hint">
+              {supplementing
+                ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
+                : L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}
+            </span>
             {openTask && !draft.trim() && !att.items.length && !sending ? (
               // Nothing to send while it works: the same button stops it.
               <button
@@ -1350,8 +1561,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 className="conv-send"
                 onClick={(e) => { e.stopPropagation(); void send(); }}
                 disabled={sending || att.busy || (!draft.trim() && !att.any)}
-                title={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
-                aria-label={steerOn ? L("发送修正", "Send correction") : L("发送", "Send")}
+                title={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
+                aria-label={supplementing ? L("补充给这条任务", "Add to this task") : L("发送", "Send")}
               >
                 {sending ? <Loader2 size={15} className="spin" /> : <ArrowUp size={16} strokeWidth={2.4} />}
               </button>

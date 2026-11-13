@@ -373,7 +373,7 @@ const state = {
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
-      hub_version: "0.16.6",
+      hub_version: "0.19.2",
       update_available: true,
       threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, ...consoleThreads },
       machines: [
@@ -558,9 +558,21 @@ function consoleReply() {
   };
 }
 
-// A task gets a progress note after 3s and a reply after 6s.
-function scheduleReply(hub, threadId, agent, taskId) {
-  const later = (ms, fn) => { const t = setTimeout(fn, ms); if (typeof t.unref === "function") t.unref(); };
+// A task gets a progress note after 3s and a reply after 6s. A supplement
+// keeps the same round going: the answer comes 6s after the latest addition,
+// not 6s after the task (and there is only ever one timer for a task).
+const replyTimers = new Map();
+function scheduleReply(hub, threadId, agent, taskId, restart = false) {
+  const had = replyTimers.get(taskId);
+  if (had && !restart) return;
+  if (had) for (const t of had) clearTimeout(t);
+  const timers = [];
+  replyTimers.set(taskId, timers);
+  const later = (ms, fn) => {
+    const t = setTimeout(fn, ms);
+    if (typeof t.unref === "function") t.unref();
+    timers.push(t);
+  };
   later(3000, () => {
     const msgs = hub.threads[threadId];
     if (!msgs) return;
@@ -570,6 +582,7 @@ function scheduleReply(hub, threadId, agent, taskId) {
     }));
   });
   later(6000, () => {
+    replyTimers.delete(taskId);
     const msgs = hub.threads[threadId];
     if (!msgs || msgs.find((m) => m.id === taskId)?.status === "failed") return; // stopped
     const r = consoleReply();
@@ -582,8 +595,25 @@ function scheduleReply(hub, threadId, agent, taskId) {
     if (task) {
       task.status = "done";
       task.updated_at = iso(0);
+      releaseAfter(hub, threadId, taskId);
     }
   });
+}
+
+// Messages sent with `after` wait (held) until that task ends, then go out
+// in the order they were written.
+function releaseAfter(hub, threadId, taskId) {
+  const msgs = hub.threads[threadId];
+  if (!msgs) return;
+  for (const m of msgs) {
+    if (m.after !== taskId || !["held", "queued", "delivered"].includes(m.status)) continue;
+    m.status = "queued";
+    m.updated_at = iso(0);
+    hub.recent = [m, ...(hub.recent || [])].slice(0, 20);
+    const target = (hub.agents || []).find((a) => a.name === m.to);
+    if (target?.binding?.harness === "exec") scheduleExec(hub, threadId, m.to, m.id);
+    else scheduleReply(hub, threadId, m.to, m.id);
+  }
 }
 
 // A shell command that prints a line every 0.7 s, for the live terminal.
@@ -619,6 +649,7 @@ function scheduleExec(hub, threadId, agent, taskId) {
     }));
     task.status = "done";
     task.updated_at = iso(0);
+    releaseAfter(hub, threadId, taskId);
   }, lines.length * EXEC_LINE_MS + 500);
   if (typeof t.unref === "function") t.unref();
 }
@@ -1311,20 +1342,33 @@ const server = http.createServer(async (req, res) => {
       );
       if (!target) return fail(res, 404, "not_found", `没有名为 ${to} 的 AI 或 shell 节点`);
       if (!text) return fail(res, 400, "invalid_argument", "body 不能为空。");
-      const threadId = typeof body.thread_id === "string" && body.thread_id.trim()
-        ? body.thread_id.trim()
-        : `th_c_${state.counter += 1}`;
+      // `after` waits behind an unfinished task: it is held until that one ends.
+      const after = typeof body?.after === "string" && body.after.trim() ? body.after.trim() : "";
+      let afterTask = null;
+      if (after) {
+        afterTask = Object.values(hub.threads || {}).flat().find((m) => m.id === after);
+        if (!afterTask) return fail(res, 404, "not_found", "after 指向的消息不存在。");
+        if (afterTask.type !== "task") return fail(res, 400, "invalid_argument", "after 只能指向一条任务。");
+        if (!["queued", "delivered", "acked", "held"].includes(afterTask.status)) afterTask = null; // already ended
+      }
+      const threadId = afterTask
+        ? afterTask.thread_id
+        : typeof body.thread_id === "string" && body.thread_id.trim()
+          ? body.thread_id.trim()
+          : `th_c_${state.counter += 1}`;
       const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
       const msg = makeMessage({
-        thread_id: threadId, from: CONSOLE, to, type: "task", status: "queued",
+        thread_id: threadId, from: CONSOLE, to, type: "task", status: afterTask ? "held" : "queued",
         body: text, created_at: iso(0), updated_at: iso(0),
         ...(body.project && !body.thread_id ? { project: body.project } : {}),
         ...(atts.length ? { attachments: atts } : {}),
+        ...(afterTask ? { after: afterTask.id } : {}),
       });
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
       hub.threads[threadId].push(msg);
+      if (afterTask) return send(res, 201, msg); // goes out from releaseAfter
       hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
       if (target.binding?.harness === "exec") scheduleExec(hub, threadId, to, msg.id);
       else scheduleReply(hub, threadId, to, msg.id);
@@ -1347,6 +1391,8 @@ const server = http.createServer(async (req, res) => {
       task.error = "stopped by the sender";
       task.updated_at = iso(0);
       for (const [name, m] of stuckCurrent) if (m.id === task.id) stuckCurrent.delete(name);
+      // The round is over, so what was waiting behind it goes out now.
+      releaseAfter(hub, task.thread_id, task.id);
       return send(res, 200, task);
     }
 
@@ -1373,10 +1419,14 @@ const server = http.createServer(async (req, res) => {
         thread_id: task.thread_id, from: CONSOLE, to: task.to, type: "steer", status: "done",
         body: text, reply_to: task.id, created_at: iso(0), updated_at: iso(0),
       });
+      const steerAtts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
+      if (Array.isArray(body.attachments) && steerAtts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
+      if (steerAtts.length) steer.attachments = steerAtts;
       msgs.push(steer);
       task.status = "delivered";
       task.updated_at = iso(0);
-      scheduleReply(hub, task.thread_id, task.to, task.id);
+      // Still the same round: the answer comes after the addition.
+      scheduleReply(hub, task.thread_id, task.to, task.id, true);
       return send(res, 201, steer);
     }
 
