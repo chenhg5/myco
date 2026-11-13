@@ -117,9 +117,14 @@ public enum ConversationBuilder {
         return message.body
     }
 
+    /// A message's first line as plain text, for lists and capsules:
+    /// Markdown marks are dropped, as the desktop app's summaries do.
     public static func firstLine(of body: String) -> String {
         if Envelope.isSealed(body) { return L("🔒 已加密", "🔒 Encrypted") }
         let line = body.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-        return line.trimmingCharacters(in: .whitespaces)
+        return line
+            .replacingOccurrences(of: "[#>*`_~]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 }

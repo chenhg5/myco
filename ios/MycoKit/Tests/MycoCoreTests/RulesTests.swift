@@ -130,6 +130,12 @@ struct ConversationBuilderTests {
         #expect(dispatch.state == .queued)
     }
 
+    @Test func aFirstLineIsPlainText() {
+        #expect(ConversationBuilder.firstLine(of: "定了：**三个 Tab**。\n\n1. 聊天") == "定了：三个 Tab。")
+        #expect(ConversationBuilder.firstLine(of: "## Result  `ok`") == "Result ok")
+        #expect(ConversationBuilder.firstLine(of: "") == "")
+    }
+
     @Test func aStoppedTaskSaysSo() {
         let messages = [Message(id: "t1", from: "me", to: "coder", body: "x", status: "failed", error: RunState.stoppedBySender, createdAt: at(-10))]
         let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
