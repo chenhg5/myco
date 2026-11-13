@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -420,6 +421,60 @@ func (c *Client) uploadSealed(ctx context.Context, path string) (*api.File, erro
 	s.files[out.ID] = fk
 	s.mu.Unlock()
 	return &api.File{ID: out.ID, Name: fk.Name, Size: fk.Size, SHA256: fk.SHA256, ContentType: ct, ExpiresAt: out.ExpiresAt}, nil
+}
+
+// maxConsoleDownload caps what the app reads into memory for one file.
+const maxConsoleDownload = 100 << 20
+
+// ConsoleDownload returns a file attached to a message the console may
+// read, opened (decrypted) when it was sent encrypted and this client has
+// its key from that message.
+func (c *Client) ConsoleDownload(ctx context.Context, id string) (*api.File, []byte, error) {
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/v1/console/files/" + url.PathEscape(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, nil, decodeError(resp.StatusCode, data)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxConsoleDownload+1))
+	if err != nil {
+		return nil, nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	if len(data) > maxConsoleDownload {
+		return nil, nil, &Error{Code: "too_large", Message: fmt.Sprintf("file %s is larger than %d bytes", id, maxConsoleDownload)}
+	}
+	sum := sha256.Sum256(data)
+	got := hex.EncodeToString(sum[:])
+	if want := resp.Header.Get("X-Myco-SHA256"); want != "" && want != got {
+		return nil, nil, &Error{Code: "integrity_error", Message: fmt.Sprintf("checksum mismatch for %s", id), Retryable: true}
+	}
+	if fk, ok := c.fileKeyOf(id); ok {
+		// An encrypted attachment: its key came in the message.
+		plain, err := e2e.OpenBytes(data, fk.Key)
+		if err != nil {
+			return nil, nil, &Error{Code: "integrity_error", Message: "cannot decrypt attachment " + fk.Name}
+		}
+		ps := sha256.Sum256(plain)
+		if hex.EncodeToString(ps[:]) != fk.SHA256 {
+			return nil, nil, &Error{Code: "integrity_error", Message: fmt.Sprintf("checksum mismatch for %s", fk.Name)}
+		}
+		return &api.File{ID: id, Name: fk.Name, Size: int64(len(plain)), SHA256: fk.SHA256, ContentType: fk.ContentType}, plain, nil
+	}
+	name, _ := url.PathUnescape(resp.Header.Get("X-Myco-File-Name"))
+	if name == "" {
+		name = id
+	}
+	return &api.File{ID: id, Name: name, Size: int64(len(data)), SHA256: got, ContentType: resp.Header.Get("Content-Type")}, data, nil
 }
 
 // fileKeyOf returns the key of an encrypted attachment this client has seen.

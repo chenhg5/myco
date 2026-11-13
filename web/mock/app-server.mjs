@@ -3,6 +3,7 @@
 // Serves the `app/...` contract with two hubs: one healthy, one unreachable.
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
+import zlib from "node:zlib";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
@@ -46,6 +47,40 @@ function makeAgent(over) {
 let msgSeq = 0;
 // Files the app uploaded to attach (id -> attachment).
 const uploads = new Map();
+// What was uploaded, by file id (served back to the app).
+const uploadBytes = new Map();
+
+// A real PNG (a soft diagonal gradient with a band), for pictures the mock's
+// agents send back: the app shows them as thumbnails.
+function demoPng(w = 640, h = 400) {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 3 + 1)] = 0;
+    for (let x = 0; x < w; x++) {
+      const o = y * (w * 3 + 1) + 1 + x * 3;
+      const t = (x + y) / (w + h);
+      const band = y > h * 0.42 && y < h * 0.58 ? 30 : 0;
+      raw[o] = Math.round(40 + 60 * t) + band;
+      raw[o + 1] = Math.round(140 + 60 * (1 - t)) + band;
+      raw[o + 2] = Math.round(110 + 80 * t);
+    }
+  }
+  const crc = (buf) => {
+    let c = ~0;
+    for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
+    return (~c) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+const DEMO_PNG = demoPng();
 function makeMessage(over) {
   msgSeq += 1;
   const base = {
@@ -515,8 +550,11 @@ function consoleReply() {
     };
   }
   return {
-    body: "跑完了，日志在附件里。最后一行是 BUILD SUCCESSFUL。",
-    attachments: [{ file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" }],
+    body: "跑完了，截图和日志在附件里。最后一行是 BUILD SUCCESSFUL。",
+    attachments: [
+      { file_id: `f_demo_shot_${replySeq}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
+      { file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" },
+    ],
   };
 }
 
@@ -1227,13 +1265,40 @@ const server = http.createServer(async (req, res) => {
     // /app/hubs/{id}/files?name= — a file to attach to the next message.
     if (parts.length === 4 && parts[3] === "files" && method === "POST") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
-      let size = 0;
-      for await (const c of req) size += c.length;
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const data = Buffer.concat(chunks);
       const name = url.searchParams.get("name") || "file";
       const id = `f_mock_${state.counter += 1}`;
-      const f = { file_id: id, name, size, sha256: "", content_type: req.headers["content-type"] || "" };
+      const f = { file_id: id, name, size: data.length, sha256: "", content_type: req.headers["content-type"] || "" };
       uploads.set(id, f);
-      return send(res, 201, { id, name, size, content_type: f.content_type });
+      uploadBytes.set(id, data);
+      return send(res, 201, { id, name, size: data.length, content_type: f.content_type });
+    }
+    // /app/hubs/{id}/files/{fid} — read an attachment back: a picture in
+    // place (plain raster types only), anything else as a download.
+    if (parts.length === 5 && parts[3] === "files" && method === "GET") {
+      const fid = decodeURIComponent(parts[4]);
+      let data = uploadBytes.get(fid);
+      let meta = uploads.get(fid);
+      if (!data && fid.startsWith("f_demo_shot_")) { data = DEMO_PNG; meta = { name: "首页截图.png", content_type: "image/png" }; }
+      if (!data && fid.startsWith("f_demo_")) { data = Buffer.from("BUILD SUCCESSFUL\n"); meta = { name: "build.log", content_type: "text/plain" }; }
+      if (!data) return fail(res, 404, "not_found", `file ${fid} not found`);
+      const inline = /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(meta.content_type || "") && !url.searchParams.get("download");
+      res.writeHead(200, {
+        "Content-Type": inline ? meta.content_type : "application/octet-stream",
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+        "Content-Length": data.length,
+        "Cache-Control": "private, max-age=86400, immutable",
+      });
+      return res.end(data);
+    }
+    // /app/hubs/{id}/files/{fid}/save — "saved to Downloads".
+    if (parts.length === 6 && parts[3] === "files" && parts[5] === "save" && method === "POST") {
+      const fid = decodeURIComponent(parts[4]);
+      const meta = uploads.get(fid) || (fid.startsWith("f_demo_shot_") ? { name: "首页截图.png" } : fid.startsWith("f_demo_") ? { name: "build.log" } : null);
+      if (!meta) return fail(res, 404, "not_found", `file ${fid} not found`);
+      return send(res, 200, { path: `/Users/glenn/Downloads/${meta.name}` });
     }
 
     if (parts.length === 4 && parts[3] === "messages" && method === "POST") {

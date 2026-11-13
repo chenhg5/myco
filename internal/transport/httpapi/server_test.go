@@ -745,6 +745,7 @@ func TestConsoleFiles(t *testing.T) {
 	h.do("POST", "/v1/messages", alice, map[string]any{"to": "bob", "body": "look", "attachments": []string{fid}}).wantErr(t, 404, "not_found")
 
 	r := h.do("POST", "/v1/console/messages", adminToken, map[string]any{"to": "bob", "body": "看看这张图", "attachments": []string{fid}}).want(t, 201)
+	r0 := r
 	if m, _ := r.body["message"].(map[string]any); m == nil || len(m["attachments"].([]any)) != 1 {
 		t.Fatalf("console send with attachment: %s", r.raw)
 	}
@@ -752,4 +753,22 @@ func TestConsoleFiles(t *testing.T) {
 	if string(r.raw) != "png bytes" {
 		t.Fatalf("recipient download: %q", r.raw)
 	}
+
+	// The console reads files back: its own, and one an agent sent it.
+	r = h.doReq("GET", "/v1/console/files/"+fid, adminToken, nil, nil).want(t, 200)
+	if string(r.raw) != "png bytes" {
+		t.Fatalf("console download of its upload: %q", r.raw)
+	}
+	up := h.doReq("POST", "/v1/files?name=log.txt", bob, "log lines", map[string]string{"Content-Type": "text/plain"}).want(t, 201)
+	bid, _ := up.body["id"].(string)
+	task, _ := r0.body["message"].(map[string]any)
+	h.do("POST", "/v1/inbox/pull", bob, nil).want(t, 200)
+	h.do("POST", "/v1/messages/"+task["id"].(string)+"/reply", bob, map[string]any{"body": "日志在附件里", "attachments": []string{bid}}).want(t, 201)
+	r = h.doReq("GET", "/v1/console/files/"+bid, adminToken, nil, nil).want(t, 200)
+	if string(r.raw) != "log lines" {
+		t.Fatalf("console download of a file it may read: %q", r.raw)
+	}
+	// An agent cannot use the console's door, and an unknown file is not found.
+	h.doReq("GET", "/v1/console/files/"+bid, alice, nil, nil).wantErr(t, 403, "permission_denied")
+	h.doReq("GET", "/v1/console/files/f_nope", adminToken, nil, nil).wantErr(t, 404, "not_found")
 }

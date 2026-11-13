@@ -6,6 +6,7 @@
 package console
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -412,6 +413,42 @@ func (b *Backend) Handler() http.Handler {
 	}))
 	// Project files: upload (the body is the file), download, and save to
 	// this computer's Downloads folder (shown in Finder / Explorer).
+	// A file attached to a message you may read: pictures shown in place
+	// (only plain image types; anything else is a download, never rendered
+	// in the app's page), or saved to Downloads.
+	m.HandleFunc("GET /app/hubs/{id}/files/{fid}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		f, data, err := c.ConsoleDownload(r.Context(), r.PathValue("fid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		ct, disp := "application/octet-stream", "attachment"
+		if inlineImage(f.ContentType) && r.URL.Query().Get("download") == "" {
+			ct, disp = f.ContentType, "inline"
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("Content-Disposition", mime.FormatMediaType(disp, map[string]string{"filename": f.Name}))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; sandbox")
+		// A file id never names other content: the app may keep it.
+		w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+		_, _ = w.Write(data)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/files/{fid}/save", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		f, data, err := c.ConsoleDownload(r.Context(), r.PathValue("fid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		path, err := writeToDownloads(f.Name, bytes.NewReader(data))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		revealFile(path)
+		writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	}))
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
 		if err != nil {
@@ -1347,4 +1384,15 @@ func filterConversations(cs []api.Conversation, query string) []api.Conversation
 		}
 	}
 	return out
+}
+
+// inlineImage reports whether a file of this type may be shown in the
+// app's page as a picture: raster types only (an SVG can carry script).
+func inlineImage(contentType string) bool {
+	t, _, _ := mime.ParseMediaType(contentType)
+	switch t {
+	case "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp":
+		return true
+	}
+	return false
 }

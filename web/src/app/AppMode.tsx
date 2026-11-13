@@ -24,6 +24,7 @@ import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
+import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -220,6 +221,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // The computers agents use, in the sidebar: one click opens a terminal.
   const computers = rows.filter((r) => isWorkspace(r.st.agent))
     .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub)));
+  // Projects and computers in the sidebar go in the order you drag them to
+  // (kept per workspace); new ones first.
+  const projectSort = useSortable(`${hubId}\u0000projects`, liveProjects.map((x) => x.p.name));
+  const navProjects = projectSort.order.map((n) => liveProjects.find((x) => x.p.name === n)!).filter(Boolean);
+  const computerSort = useSortable(`${hubId}\u0000computers`, computers.map((r) => r.st.agent.name));
+  const navComputers = computerSort.order.map((n) => computers.find((r) => r.st.agent.name === n)!).filter(Boolean);
   const people = rows.filter((r) => agentKind(r.st.agent) === "agent")
     .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline"));
 
@@ -407,13 +414,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
                   onClick={() => setNewProjectOpen(true)}><Plus /></button>
               </div>
-              {liveProjects.map((x) => {
+              {navProjects.map((x) => {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const names = new Set(x.p.members.map((m) => m.name));
                 const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name)));
                 return (
-                  <button key={`${x.hubId}/${x.p.name}`} type="button" className={cn("app-nav-item sp-nav", active && "active")}
+                  <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
+                    className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
                     aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
@@ -442,10 +450,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
                   onClick={() => (shownProject && shown ? setAddWorkspace(shown) : setPage("computers"))}><Plus /></button>
               </div>
-              {computers.slice(0, NAV_COMPUTERS).map((r) => {
+              {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                 const dot = workDot([r]);
                 return (
-                  <button key={r.st.agent.name} type="button" className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away")}
+                  <button key={r.st.agent.name} type="button" {...computerSort.bind(r.st.agent.name)}
+                    className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
                     onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
                     <Avatar agent={r.st.agent} size={20} badge={false} />
                     <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>

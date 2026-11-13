@@ -501,6 +501,34 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // Projects in the sidebar go where you drag them, and stay there.
+    if (!narrow) await step("边栏 · 拖动排序", async () => {
+      await sidebar(page, true);
+      const rows = page.locator(".app-nav .app-nav-item[data-sort-id]:not(.sp-nav-pc)");
+      const names = () => rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-sort-id")));
+      const before = await names();
+      if (before.length < 2) return;
+      const dragTo = async (from, to) => {
+        const a = await rows.nth(from).boundingBox();
+        const c = await rows.nth(to).boundingBox();
+        const y0 = a.y + a.height / 2, y1 = c.y + c.height * (to > from ? 0.85 : 0.15);
+        await page.mouse.move(a.x + 30, y0);
+        await page.mouse.down();
+        for (let i = 1; i <= 8; i++) await page.mouse.move(a.x + 30, y0 + (y1 - y0) * i / 8);
+        await page.mouse.up();
+        await page.waitForTimeout(200);
+      };
+      await dragTo(0, 1);
+      const after = await names();
+      if (after[0] !== before[1] || after[1] !== before[0]) throw new Error(`拖动后顺序应变成 ${before[1]}、${before[0]}，实际 ${after.join("、")}`);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".app-shell").waitFor();
+      await rows.first().waitFor({ timeout: 20_000 });
+      const kept = await names();
+      if (kept[0] !== before[1]) throw new Error("拖动后的顺序重开后应还在");
+      await dragTo(0, 1);
+    });
+
     await step("聊天", async () => {
       await go(page, "聊天", narrow);
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
@@ -640,6 +668,35 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 20_000 });
       if (await page.locator(".conv-detail .trace-foot").count()) throw new Error("耗时和费用应跟着回复（复制按钮那一行），不在过程下面");
       await page.locator(".conv-detail .conv-usage").first().waitFor({ state: "attached", timeout: 10_000 });
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // A picture an agent sends shows as a thumbnail and opens full size; a
+    // file that is not one saves to Downloads.
+    await step("单聊 · 图片附件", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const box = page.locator(".conv-detail .conv-compose-input");
+      // The mock's answers take turns; one in four carries a picture.
+      for (let i = 0; i < 4 && !(await page.locator(".conv-detail .conv-attach.is-image").count()); i++) {
+        await box.fill(`图片附件 ${i + 1}`);
+        await box.press("Enter");
+        await page.waitForTimeout(6800);
+      }
+      const thumb = page.locator(".conv-detail .conv-attach.is-image").last();
+      await thumb.waitFor({ timeout: 20_000 });
+      const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
+      if (!w) throw new Error("图片附件应显示缩略图");
+      await thumb.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "message-picture");
+      await thumb.click();
+      await page.locator(".lightbox .lightbox-img").waitFor({ timeout: 5_000 });
+      await shot(page, size, scheme, "message-picture-open");
+      await page.keyboard.press("Escape");
+      await page.locator(".lightbox").waitFor({ state: "hidden", timeout: 5_000 });
+      const file = page.locator(".conv-detail button.conv-attach:not(.is-image)").last();
+      await file.click();
+      await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "已存到「下载」" }).first().waitFor({ timeout: 5_000 });
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 

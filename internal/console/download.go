@@ -21,6 +21,13 @@ func saveToDownloads(ctx context.Context, c *client.Client, project, file string
 		return "", err
 	}
 	defer rc.Close()
+	return writeToDownloads(file, rc)
+}
+
+// writeToDownloads writes r into the Downloads folder (the home folder if
+// there is none) under name, or "name (1).ext" when that is taken, and
+// returns the path.
+func writeToDownloads(file string, r io.Reader) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -47,7 +54,7 @@ func saveToDownloads(ctx context.Context, c *client.Client, project, file string
 		if err != nil {
 			return "", err
 		}
-		if _, err := io.Copy(f, rc); err != nil {
+		if _, err := io.Copy(f, r); err != nil {
 			f.Close()
 			os.Remove(p)
 			return "", err

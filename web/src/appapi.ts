@@ -391,6 +391,13 @@ export const appApi = {
    *  workspace encrypts). Older workspaces answer not_found. */
   uploadAttachment: (hubId: string, file: File, name = file.name) =>
     request<{ id: string; name: string; size: number; content_type?: string }>("POST", `app/hubs/${enc(hubId)}/files?name=${encodeURIComponent(name)}`, file),
+  /** Where a message's attachment is read from (a picture is shown in
+   *  place; anything else comes as a download). */
+  attachmentUrl: (hubId: string, fileId: string) => `app/hubs/${enc(hubId)}/files/${enc(fileId)}`,
+  /** Saves a message's attachment to Downloads and shows it in Finder /
+   *  Explorer. Older workspaces answer not_found. */
+  saveAttachment: (hubId: string, fileId: string) =>
+    request<{ path: string }>("POST", `app/hubs/${enc(hubId)}/files/${enc(fileId)}/save`),
   /** The steps of a task's run after seq (what the agent says, thinks and does). */
   trace: (hubId: string, messageId: string, after = 0) =>
     request<Trace>("GET", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/trace${after ? `?after=${after}` : ""}`),

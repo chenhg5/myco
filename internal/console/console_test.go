@@ -412,4 +412,41 @@ func TestAttachFromTheApp(t *testing.T) {
 	} else if b, _ := os.ReadFile(path); string(b) != "hello from the app" {
 		t.Fatalf("downloaded %q", b)
 	}
+
+	// The app reads it back: a text file only as a download, never shown
+	// in its page; a picture in place.
+	get := func(fid, q string) (*http.Response, string) {
+		t.Helper()
+		resp, err := http.Get(r.app.URL + "/app/hubs/" + id + "/files/" + fid + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, string(b)
+	}
+	resp2, body := get(f.ID, "")
+	if resp2.StatusCode != 200 || body != "hello from the app" || resp2.Header.Get("Content-Type") != "application/octet-stream" ||
+		!strings.HasPrefix(resp2.Header.Get("Content-Disposition"), "attachment") {
+		t.Fatalf("app read of a text file: %d %q %v", resp2.StatusCode, body, resp2.Header)
+	}
+	req, _ = http.NewRequest("POST", r.app.URL+"/app/hubs/"+id+"/files?name=shot.png", strings.NewReader("\x89PNG fake"))
+	req.Header.Set("Content-Type", "image/png")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var img api.File
+	_ = json.NewDecoder(resp.Body).Decode(&img)
+	resp.Body.Close()
+	resp2, body = get(img.ID, "")
+	if resp2.StatusCode != 200 || resp2.Header.Get("Content-Type") != "image/png" || !strings.HasPrefix(resp2.Header.Get("Content-Disposition"), "inline") {
+		t.Fatalf("app read of a picture: %d %q %v", resp2.StatusCode, body, resp2.Header)
+	}
+	if resp2, _ = get(img.ID, "?download=1"); !strings.HasPrefix(resp2.Header.Get("Content-Disposition"), "attachment") {
+		t.Fatalf("a picture asked for as a download: %v", resp2.Header)
+	}
+	if resp2, _ = get("f_nope", ""); resp2.StatusCode != 404 {
+		t.Fatalf("unknown file: %d", resp2.StatusCode)
+	}
 }

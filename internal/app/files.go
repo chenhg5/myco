@@ -99,6 +99,35 @@ func (s *FileService) Open(ctx context.Context, agent *domain.Agent, id string) 
 	return f, rc, err
 }
 
+// OpenScoped returns a file for someone reading from the console: any file
+// when the whole hub is in view, else one shared with one of their names
+// (their console sender, the nodes they own), as the messages they may read.
+func (s *FileService) OpenScoped(ctx context.Context, sc Scope, id string) (*domain.File, io.ReadCloser, error) {
+	f, err := s.files.Get(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	ok := sc.All
+	for _, n := range sc.Names {
+		if ok {
+			break
+		}
+		if ok, err = s.files.CanAccess(ctx, id, n); err != nil {
+			return nil, nil, err
+		}
+	}
+	if !ok {
+		// Do not reveal that the file exists.
+		return nil, nil, domain.Errf(domain.CodeNotFound, "file %s not found", id)
+	}
+	if f.Expired(s.clock.Now()) {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "file %s expired at %s", id, f.ExpiresAt.Format(time.RFC3339)).
+			WithSuggestion("ask the sender to send it again")
+	}
+	rc, err := s.blobs.Open(ctx, id)
+	return f, rc, err
+}
+
 // Sweep deletes expired files; it returns how many were removed.
 func (s *FileService) Sweep(ctx context.Context) (int, error) {
 	expired, err := s.files.ListExpired(ctx, s.clock.Now(), 500)

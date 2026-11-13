@@ -140,6 +140,7 @@ func (s *Server) routes() {
 	// The administrator talking to agents from the console app.
 	m.HandleFunc("POST /v1/console/messages", s.admin(s.consoleSend))
 	m.HandleFunc("POST /v1/console/files", s.admin(s.consoleUpload))
+	m.HandleFunc("GET /v1/console/files/{id}", s.admin(s.consoleDownload))
 	m.HandleFunc("POST /v1/console/messages/{id}/steer", s.admin(s.consoleSteer))
 	m.HandleFunc("POST /v1/console/messages/{id}/stop", s.admin(s.consoleStop))
 	m.HandleFunc("GET /v1/console/messages/{id}/trace", s.admin(s.consoleTrace))
@@ -1637,6 +1638,36 @@ func (s *Server) consoleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	s.record(r, "file.upload", f.ID, f.Name)
 	writeJSON(w, http.StatusCreated, fileDTO(f))
+}
+
+// consoleDownload gives the console a file attached to a message it may
+// read (the same scope as its conversations).
+func (s *Server) consoleDownload(w http.ResponseWriter, r *http.Request) {
+	if !s.filesEnabled(w) {
+		return
+	}
+	sc, _, err := s.scopeOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	f, rc, err := s.files.OpenScoped(r.Context(), sc, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	ct := f.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Length", strconv.FormatInt(f.Size, 10))
+	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(f.Name))
+	w.Header().Set("X-Myco-SHA256", f.SHA256)
+	w.Header().Set("X-Myco-File-Name", url.PathEscape(f.Name))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, rc)
 }
 
 // consoleIdentity is the sender name and member id for what a console

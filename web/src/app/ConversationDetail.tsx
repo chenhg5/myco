@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Paperclip, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -13,12 +13,13 @@ import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
 import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
-import { bytes, cn, timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
 import { Avatar, whereOf } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
+import { MessageAttachments } from "@/app/attachments";
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 
 export interface ConversationTarget {
@@ -1037,17 +1038,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : <MessageContent body={m.body} />}
-            {m.attachments && m.attachments.length > 0 && (
-              <div className="conv-attach-list">
-                {m.attachments.map((a) => (
-                  <div className="conv-attach" key={a.file_id} title={L("下载暂不可用", "Download not available yet")}>
-                    <Paperclip />
-                    <span className="conv-attach-name">{a.name}</span>
-                    <span className="conv-attach-size">{bytes(a.size)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
