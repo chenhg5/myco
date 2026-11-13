@@ -52,9 +52,12 @@ SITE=default
 HUB_NAME_ARGS=()
 if [[ -n "$NAME" ]]; then
   ENV_FILE="/etc/myco/hubs/$NAME/hub.env"
-  DATA_DIR="/var/lib/myco/$NAME"
+  # A sibling of /var/lib/myco, not inside it: systemd hands a unit's whole
+  # StateDirectory (recursively) to that unit's dynamic user on every start,
+  # so a named hub nested in the default one would lose its files to it.
+  DATA_DIR="/var/lib/myco-$NAME"
   UNIT="myco-hub-$NAME.service"
-  STATE_DIR="myco/$NAME"
+  STATE_DIR="myco-$NAME"
   SITE="named-$NAME"
   HUB_NAME_ARGS=(--hub-name "$NAME")
 fi
@@ -181,6 +184,19 @@ migrate_legacy_caddy() {
   rm -f "$tmp"
 }
 
+# The Caddyfile the caddy package ships serves a welcome page on :80. Older
+# versions of this script replaced it; keep doing that when it is still the
+# untouched sample (it would also hold :80 when that port is taken).
+clear_caddy_sample() {
+  local file=/etc/caddy/Caddyfile
+  [[ -f "$file" ]] || return 0
+  local body
+  body="$(sed -e 's/#.*//' -e 's/[[:space:]]\+/ /g' -e 's/^ //' -e 's/ $//' "$file" | grep -v '^$' | tr '\n' '|')"
+  if [[ "$body" == ":80 {|root * /usr/share/caddy|file_server|}|" ]]; then
+    : > "$file"
+  fi
+}
+
 ensure_caddy_import() {
   local file=/etc/caddy/Caddyfile tmp
   [[ -f "$file" ]] || install -m 0644 /dev/null "$file"
@@ -236,6 +252,7 @@ if [[ -n "$DOMAIN" ]]; then
   [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$CADDY_BACKUP/Caddyfile"
   [[ -f /etc/caddy/myco.d/default.caddy ]] && cp -p /etc/caddy/myco.d/default.caddy "$CADDY_BACKUP/default.caddy"
   [[ -f "/etc/caddy/myco.d/$SITE.caddy" ]] && cp -p "/etc/caddy/myco.d/$SITE.caddy" "$CADDY_BACKUP/site.caddy"
+  clear_caddy_sample
   migrate_legacy_caddy
   ensure_caddy_import
   if port_busy 80; then ensure_caddy_http_port; fi

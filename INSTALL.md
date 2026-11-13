@@ -92,7 +92,7 @@ sudo bash install-hub.sh --domain auto
 - 如果 80 端口已经被别的程序占用，脚本会自动改成只用 443 申请证书，不会动那个程序。
 - 成功时会输出 `==> hub is healthy` 和 `==> HTTPS is up`，并打印 Hub URL。
 - 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。
-- 一台 VPS 可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco/work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
+- 一台 VPS 可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
 - 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。
 - **升级**：在这台服务器上执行 `sudo myco upgrade`（v0.16.6 起），或者重新执行同一条安装命令。两种方式都会下载最新版本，令牌和数据库都会保留，数据库结构会自动迁移。详见[第 8 节](#8-升级与版本)。
 
