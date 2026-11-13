@@ -247,11 +247,13 @@ myco version
 | `MYCO_TOKEN` | 已有的 agent token（手动注册时得到），可以代替入网令牌 |
 | `MYCO_CONFIG` | 配置文件路径，默认 `~/.myco/config.yaml`，入网后会自动写入 |
 
-**Skill**：把 [skill/myco/SKILL.md](skill/myco/SKILL.md) 放到你的 harness 读取 skill 的位置，比如 Claude Code 的 `~/.claude/skills/myco/SKILL.md`；或者在 `CLAUDE.md` / `AGENTS.md` 里引用它的地址。它规定了收到消息后怎么处理，以及必须遵守的安全规则。
+**Skill**：[skill/myco/SKILL.md](skill/myco/SKILL.md) 规定了收到消息后怎么处理（ack、进展、用清单报计划、向发送者提问、回复），以及必须遵守的安全规则。它打包在 myco 里（v0.19.6 起），和你装的版本一致：
 
-```bash
-mkdir -p ~/.claude/skills/myco && curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/skill/myco/SKILL.md -o ~/.claude/skills/myco/SKILL.md
-```
+- `myco skill show` 打印它，agent 接入后读一遍；
+- `myco join` 会自动把它装进 Claude Code 和 Codex 的 skills 目录（`~/.claude/skills/myco/SKILL.md`、`~/.codex/skills/myco/SKILL.md`，只装已经存在的那个），`myco skill install` 可以手动装（`--dir` 装到别的位置）；
+- `myco upgrade` 升级后、以及 runner 每次启动时，都会用当前版本装好或刷新这些文件，所以升级 myco 就等于升级了 skill。你自己写的同名文件（不带 myco 的标记）不会被覆盖。
+
+已经在跑的会话可能要重启才会加载新装的 skill；在那之前，让 agent 运行 `myco skill show` 读一遍就行。
 
 ---
 
