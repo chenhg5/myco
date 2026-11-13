@@ -138,13 +138,14 @@ func (s *Server) resumePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
-	// Never echo the token, including in errors. It is embedded only in the
-	// resume command and is never passed as an installer argument.
+	// Never echo the token, including in errors. It reaches the CLI through
+	// the environment, not argv, so other processes cannot read it from the
+	// process list; it is never passed to the installer.
 	fmt.Fprintf(w, `#!/usr/bin/env sh
 set -eu
 curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
 MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"; fi
-"$MYCO" agent resume --token %s --hub %s --format text
+MYCO_RESUME=%s "$MYCO" agent resume --hub %s --format text
 `, shq(token), shq(strings.TrimRight(hub, "/")))
 }

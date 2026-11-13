@@ -104,22 +104,26 @@ func (e *env) autoResume() error {
 func resumeCommands() []*Command {
 	resume := &Command{Name: "resume", Summary: "Restore this agent's identity in a new sandbox", Mutating: true,
 		Examples: []string{"myco agent resume --token myco_resume_... --hub https://hub.example.com", "myco agent resume --token https://hub.example.com/r/myco_resume_..."},
-		Flags:    []Flag{{Name: "token", Kind: String, Required: true, Help: "Recovery token or full /r/ URL; keep private"}},
+		Flags:    []Flag{{Name: "token", Kind: String, Help: "Recovery token or full /r/ URL; keep private (default: MYCO_RESUME, which keeps it out of the process list)"}},
 		Run: handler(func(e *env) error {
-			if err := e.in.Require("token"); err != nil {
-				return err
+			token := e.in.String("token")
+			if token == "" {
+				token = strings.TrimSpace(e.in.Getenv("MYCO_RESUME"))
+			}
+			if token == "" {
+				return errorf("invalid_argument", ExitUsage, "pass --token, or set MYCO_RESUME to the token or the /r/ link", "no recovery token given")
 			}
 			hub := ""
 			if e.in.IsSet("hub") {
 				hub = e.in.String("hub")
 			}
 			if hub == "" {
-				_, hub, _ = resumeTokenAndHub(e.in.String("token"))
+				_, hub, _ = resumeTokenAndHub(token)
 			}
 			if hub == "" {
 				hub = e.cfg.Hub
 			}
-			res, err := e.resumeIdentity(e.in.String("token"), hub, e.in.Bool("dry-run"))
+			res, err := e.resumeIdentity(token, hub, e.in.Bool("dry-run"))
 			if err != nil {
 				return err
 			}

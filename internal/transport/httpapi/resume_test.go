@@ -120,7 +120,9 @@ func TestResumeScriptNoOtherCredentials(t *testing.T) {
 	link := h.do("POST", "/v1/me/resume", alice, nil).want(t, 200)
 	tok := str(link.body, "token")
 	script := string(h.do("GET", "/r/"+tok, "", nil).want(t, 200).raw)
-	if !strings.Contains(script, "agent resume --token") || !strings.Contains(script, tok) || strings.Contains(script, alice) || strings.Contains(script, adminToken) || strings.Contains(script, "echo "+tok) {
+	// The token reaches the CLI through MYCO_RESUME, never argv (where other
+	// processes could read it from the process list).
+	if !strings.Contains(script, "MYCO_RESUME='"+tok+"'") || strings.Contains(script, "--token") || strings.Contains(script, alice) || strings.Contains(script, adminToken) || strings.Contains(script, "echo "+tok) {
 		t.Fatalf("unexpected resume script: %s", script)
 	}
 	h.do("GET", "/r/bad", "", nil).want(t, 404)
@@ -132,7 +134,7 @@ func TestResumeScriptNoOtherCredentials(t *testing.T) {
 	bin := t.TempDir()
 	for name, body := range map[string]string{
 		"curl": "#!/bin/sh\nprintf '#!/bin/bash\\n'\n",
-		"myco": "#!/bin/sh\nprintf 'resumed\\n'\n",
+		"myco": "#!/bin/sh\ncase \"$MYCO_RESUME\" in myco_resume_*) printf 'resumed\\n' ;; *) exit 3 ;; esac\n",
 	} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o755); err != nil {
 			t.Fatal(err)
