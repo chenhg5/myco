@@ -35,6 +35,7 @@ internal/console            local backend the App talks to
 internal/web/dist           built web UI, embedded in the binary (generated, committed)
 internal/integration        hub + HTTP + client + CLI wired in one process
 web/                        React + Vite + Tailwind source of the UI
+ios/                        iOS app (SwiftUI; see ios/README.md). Built with Xcode on a Mac, not by `make`
 skill/myco/SKILL.md         skill that teaches an agent to use myco
 scripts/smoke.sh            drives the real binary as separate processes
 ```

@@ -1,0 +1,460 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		121A24BFD60DBE7DC6B9D14B /* MycoCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0A8F987EE5174C9680E74F9 /* MycoCore */; };
+		123BFA56FB552E17C9F39C66 /* WalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */; };
+		1D545EB0684148316F38D89D /* MycoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18020A27DDD396B1B7EE0BDB /* MycoApp.swift */; };
+		7AC8FDEBBB6425345FF33D1E /* MycoFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 085F2D73144060F86EE604FE /* MycoFeatures */; };
+		A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */ = {isa = PBXBuildFile; productRef = 76BE5F4AA9E3F0885FE556CE /* MycoFake */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		31776AD1BCCFDC6D15FE6FE8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5EF6602D2BF34207657B6821 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 83315C5135EC93F5652C1F13;
+			remoteInfo = Myco;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		05A684EBD68740CF6B348967 /* MycoKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MycoKit; path = MycoKit; sourceTree = SOURCE_ROOT; };
+		18020A27DDD396B1B7EE0BDB /* MycoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MycoApp.swift; sourceTree = "<group>"; };
+		23448C88988322580323A2D7 /* Myco.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Myco.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkthroughTests.swift; sourceTree = "<group>"; };
+		4D0FBB181679672E5351419A /* MycoAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MycoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A21B97B04741466D2E0976B6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7AC8FDEBBB6425345FF33D1E /* MycoFeatures in Frameworks */,
+				121A24BFD60DBE7DC6B9D14B /* MycoCore in Frameworks */,
+				A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		408CD8755B251B091E06B2F1 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				05A684EBD68740CF6B348967 /* MycoKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		4163C16B152BB1C011811440 /* MycoAppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */,
+			);
+			path = MycoAppUITests;
+			sourceTree = "<group>";
+		};
+		8838F4D8FA236050774EC6C3 = {
+			isa = PBXGroup;
+			children = (
+				AAB123FDBC8FF19ED8416896 /* Myco */,
+				4163C16B152BB1C011811440 /* MycoAppUITests */,
+				408CD8755B251B091E06B2F1 /* Packages */,
+				E88353F7B8B398BE36465AAA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AAB123FDBC8FF19ED8416896 /* Myco */ = {
+			isa = PBXGroup;
+			children = (
+				18020A27DDD396B1B7EE0BDB /* MycoApp.swift */,
+			);
+			path = Myco;
+			sourceTree = "<group>";
+		};
+		E88353F7B8B398BE36465AAA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				23448C88988322580323A2D7 /* Myco.app */,
+				4D0FBB181679672E5351419A /* MycoAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2463A3F2E754A71DF6151C84 /* MycoAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 935F5B842D9A8777C81D54F0 /* Build configuration list for PBXNativeTarget "MycoAppUITests" */;
+			buildPhases = (
+				A1CA749CAB0A52CF85134924 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BF1459188387042120F0D7B2 /* PBXTargetDependency */,
+			);
+			name = MycoAppUITests;
+			packageProductDependencies = (
+			);
+			productName = MycoAppUITests;
+			productReference = 4D0FBB181679672E5351419A /* MycoAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		83315C5135EC93F5652C1F13 /* Myco */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 752D1CC1C42CDBCDFB62FBBC /* Build configuration list for PBXNativeTarget "Myco" */;
+			buildPhases = (
+				76777D17D8882094D7F6CFBD /* Sources */,
+				A21B97B04741466D2E0976B6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Myco;
+			packageProductDependencies = (
+				085F2D73144060F86EE604FE /* MycoFeatures */,
+				F0A8F987EE5174C9680E74F9 /* MycoCore */,
+				76BE5F4AA9E3F0885FE556CE /* MycoFake */,
+			);
+			productName = Myco;
+			productReference = 23448C88988322580323A2D7 /* Myco.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5EF6602D2BF34207657B6821 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2463A3F2E754A71DF6151C84 = {
+						TestTargetID = 83315C5135EC93F5652C1F13;
+					};
+					83315C5135EC93F5652C1F13 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2F318710D4D8F0C7F589B2F0 /* Build configuration list for PBXProject "Myco" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 8838F4D8FA236050774EC6C3;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				EB01D8C22378092FD1A69AE4 /* XCLocalSwiftPackageReference "MycoKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E88353F7B8B398BE36465AAA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				83315C5135EC93F5652C1F13 /* Myco */,
+				2463A3F2E754A71DF6151C84 /* MycoAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		76777D17D8882094D7F6CFBD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D545EB0684148316F38D89D /* MycoApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1CA749CAB0A52CF85134924 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				123BFA56FB552E17C9F39C66 /* WalkthroughTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BF1459188387042120F0D7B2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 83315C5135EC93F5652C1F13 /* Myco */;
+			targetProxy = 31776AD1BCCFDC6D15FE6FE8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		180ED9F38D02540EA6EDBCB0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2485A022D5EC86920C5052C7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.myco.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Myco;
+			};
+			name = Release;
+		};
+		54B3A4CDDF7FA6DAF9C5FC2B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = myco;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.myco.ios;
+				PRODUCT_NAME = Myco;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AC45D9462876E1898760CD7C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C1D3F4DD22C69809DCD46A7E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = myco;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.myco.ios;
+				PRODUCT_NAME = Myco;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		CEDCE1F4B716F461DAC1E9B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.myco.ios.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Myco;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2F318710D4D8F0C7F589B2F0 /* Build configuration list for PBXProject "Myco" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				180ED9F38D02540EA6EDBCB0 /* Debug */,
+				AC45D9462876E1898760CD7C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		752D1CC1C42CDBCDFB62FBBC /* Build configuration list for PBXNativeTarget "Myco" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1D3F4DD22C69809DCD46A7E /* Debug */,
+				54B3A4CDDF7FA6DAF9C5FC2B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		935F5B842D9A8777C81D54F0 /* Build configuration list for PBXNativeTarget "MycoAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CEDCE1F4B716F461DAC1E9B9 /* Debug */,
+				2485A022D5EC86920C5052C7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		EB01D8C22378092FD1A69AE4 /* XCLocalSwiftPackageReference "MycoKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = MycoKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		085F2D73144060F86EE604FE /* MycoFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MycoFeatures;
+		};
+		76BE5F4AA9E3F0885FE556CE /* MycoFake */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MycoFake;
+		};
+		F0A8F987EE5174C9680E74F9 /* MycoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MycoCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 5EF6602D2BF34207657B6821 /* Project object */;
+}
