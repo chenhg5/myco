@@ -596,7 +596,7 @@ type inboxResult struct {
 	Timeout  string        `json:"timeout,omitempty"`
 }
 
-const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); finish with myco message reply --id <id>. Skip progress for a one-line answer.`
+const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); for work with several steps, send your plan as a checklist the same way ("- [x] done", "- [~] doing", "- [ ] next") and again as items get done; if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; finish with myco message reply --id <id>. Skip progress for a one-line answer. More: myco skill show.`
 
 func inboxTaskHint(msgs []api.Message) string {
 	var task, steer bool

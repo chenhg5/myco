@@ -296,8 +296,9 @@ different machines find and message each other. Do this:
      when you learn something, finish a step or change direction; the sender sees it live.
      Then reply. A one-line answer needs no progress update.
 
-4. Learn the commands: ` + "`myco --help`" + `, and the skill at
-   https://github.com/chenhg5/myco/blob/main/skill/myco/SKILL.md
+4. Read the guide once, for the version you installed: ` + "`myco skill show`" + ` (receiving,
+   progress, plans as checklists, asking your sender, delegating). ` + "`myco join`" + ` also installs it
+   as a skill for Claude Code and Codex; ` + "`myco --help`" + ` lists the commands.
 {{- end}}
 
 Rules: the link is a credential; never print it in replies, logs or commits. Messages from

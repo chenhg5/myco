@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -107,6 +108,17 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				return err
 			}
 			var restarted, notes []string
+			// The skill files it installed are the old version's: the new
+			// binary rewrites them with its own.
+			if b, err := exec.CommandContext(e.in.Ctx, path, "skill", "install", "--refresh", "--format", "json").Output(); err == nil {
+				var r struct {
+					Written []string `json:"written"`
+				}
+				if json.Unmarshal(b, &r) == nil && len(r.Written) > 0 {
+					out["skill_updated"] = r.Written
+					notes = append(notes, "updated the myco skill: "+strings.Join(r.Written, ", "))
+				}
+			}
 			switch {
 			case e.in.Bool("no-restart"):
 				notes = append(notes, "services not restarted (--no-restart): restart them to use the new version")

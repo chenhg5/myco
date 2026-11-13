@@ -517,6 +517,10 @@ Safe to re-run: the same session gets the same agent back.`,
 			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
 				out["resume_command"] = cmd
 			}
+			// The guide, for the agent CLIs on this machine that read skills
+			// (best effort: joining is done either way).
+			installedTo, _, _ := installSkill(skillTargets(e.in.Getenv), false)
+			out["skill"] = map[string]any{"read": "myco skill show", "installed": nonNilStrings(installedTo)}
 			if project != "" && projectErr == "" {
 				out["project"] = project
 			} else if projectErr != "" {
@@ -547,6 +551,10 @@ Safe to re-run: the same session gets the same agent back.`,
 				} else {
 					fmt.Fprintln(w, openSessionNote)
 				}
+				for _, p := range installedTo {
+					fmt.Fprintf(w, "installed the myco skill: %s (a running session may need a restart to load it)\n", p)
+				}
+				fmt.Fprintln(w, "Read the guide once now, for this version: myco skill show (receiving, progress, plans, asking, delegating)")
 				fmt.Fprintln(w, "Others can now reach it: myco message send --to "+res.Agent.Name+" --body \"...\"")
 			})
 		}),
