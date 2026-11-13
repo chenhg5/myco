@@ -1,0 +1,497 @@
+{
+ "seeds": [
+  {
+   "seed": "",
+   "cap": 8,
+   "pattern": 0,
+   "face": 3,
+   "sprout": true,
+   "word": "look:c8-p0-f3-s1",
+   "color": "#d9824a"
+  },
+  {
+   "seed": "?",
+   "cap": 8,
+   "pattern": 0,
+   "face": 3,
+   "sprout": true,
+   "word": "look:c8-p0-f3-s1",
+   "color": "#d9824a"
+  },
+  {
+   "seed": "a",
+   "cap": 0,
+   "pattern": 2,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c0-p2-f2-s1",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "agt_52w7ewbmgalpumqb",
+   "cap": 5,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c5-p0-f0-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "agt_yfww5cuhqre2ypbt",
+   "cap": 7,
+   "pattern": 0,
+   "face": 0,
+   "sprout": true,
+   "word": "look:c7-p0-f0-s1",
+   "color": "#8a9a3c"
+  },
+  {
+   "seed": "后端工程师",
+   "cap": 4,
+   "pattern": 0,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c4-p0-f2-s0",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "🙂 emoji",
+   "cap": 4,
+   "pattern": 0,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c4-p0-f2-s1",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "studio-claude-2b9c",
+   "cap": 5,
+   "pattern": 1,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c5-p1-f3-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_0",
+   "cap": 2,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c2-p0-f0-s0",
+   "color": "#e7a33e"
+  },
+  {
+   "seed": "ag_63z",
+   "cap": 3,
+   "pattern": 2,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c3-p2-f0-s0",
+   "color": "#5b8def"
+  },
+  {
+   "seed": "ag_c7y",
+   "cap": 5,
+   "pattern": 2,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c5-p2-f3-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_ibx",
+   "cap": 7,
+   "pattern": 1,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c7-p1-f2-s0",
+   "color": "#8a9a3c"
+  },
+  {
+   "seed": "ag_ofw",
+   "cap": 0,
+   "pattern": 1,
+   "face": 0,
+   "sprout": true,
+   "word": "look:c0-p1-f0-s1",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_ujv",
+   "cap": 9,
+   "pattern": 0,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c9-p0-f2-s0",
+   "color": "#6f7fd8"
+  },
+  {
+   "seed": "ag_10nu",
+   "cap": 2,
+   "pattern": 0,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c2-p0-f2-s1",
+   "color": "#e7a33e"
+  },
+  {
+   "seed": "ag_16rt",
+   "cap": 7,
+   "pattern": 2,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c7-p2-f2-s1",
+   "color": "#8a9a3c"
+  },
+  {
+   "seed": "ag_1cvs",
+   "cap": 3,
+   "pattern": 2,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c3-p2-f0-s0",
+   "color": "#5b8def"
+  },
+  {
+   "seed": "ag_1izr",
+   "cap": 0,
+   "pattern": 2,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c0-p2-f1-s0",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_1p3q",
+   "cap": 9,
+   "pattern": 1,
+   "face": 1,
+   "sprout": true,
+   "word": "look:c9-p1-f1-s1",
+   "color": "#6f7fd8"
+  },
+  {
+   "seed": "ag_1v7p",
+   "cap": 8,
+   "pattern": 1,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c8-p1-f2-s0",
+   "color": "#d9824a"
+  },
+  {
+   "seed": "ag_21bo",
+   "cap": 6,
+   "pattern": 1,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c6-p1-f0-s0",
+   "color": "#33aebf"
+  },
+  {
+   "seed": "ag_27fn",
+   "cap": 5,
+   "pattern": 2,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c5-p2-f1-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_2djm",
+   "cap": 3,
+   "pattern": 1,
+   "face": 3,
+   "sprout": true,
+   "word": "look:c3-p1-f3-s1",
+   "color": "#5b8def"
+  },
+  {
+   "seed": "ag_2jnl",
+   "cap": 2,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c2-p0-f0-s0",
+   "color": "#e7a33e"
+  },
+  {
+   "seed": "ag_2prk",
+   "cap": 5,
+   "pattern": 0,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c5-p0-f3-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_2vvj",
+   "cap": 6,
+   "pattern": 1,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c6-p1-f3-s0",
+   "color": "#33aebf"
+  },
+  {
+   "seed": "ag_31zi",
+   "cap": 5,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c5-p0-f0-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_383h",
+   "cap": 4,
+   "pattern": 0,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c4-p0-f1-s0",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "ag_3e7g",
+   "cap": 4,
+   "pattern": 1,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c4-p1-f2-s0",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "ag_3kbf",
+   "cap": 6,
+   "pattern": 1,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c6-p1-f1-s0",
+   "color": "#33aebf"
+  },
+  {
+   "seed": "ag_3qfe",
+   "cap": 5,
+   "pattern": 0,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c5-p0-f1-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_3wjd",
+   "cap": 6,
+   "pattern": 2,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c6-p2-f3-s0",
+   "color": "#33aebf"
+  },
+  {
+   "seed": "ag_42nc",
+   "cap": 1,
+   "pattern": 0,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c1-p0-f3-s0",
+   "color": "#e0675a"
+  },
+  {
+   "seed": "ag_48rb",
+   "cap": 0,
+   "pattern": 0,
+   "face": 3,
+   "sprout": true,
+   "word": "look:c0-p0-f3-s1",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_4eva",
+   "cap": 0,
+   "pattern": 1,
+   "face": 1,
+   "sprout": true,
+   "word": "look:c0-p1-f1-s1",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_4kz9",
+   "cap": 4,
+   "pattern": 1,
+   "face": 1,
+   "sprout": false,
+   "word": "look:c4-p1-f1-s0",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "ag_4r38",
+   "cap": 7,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c7-p0-f0-s0",
+   "color": "#8a9a3c"
+  },
+  {
+   "seed": "ag_4x77",
+   "cap": 0,
+   "pattern": 1,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c0-p1-f2-s0",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_53b6",
+   "cap": 4,
+   "pattern": 0,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c4-p0-f2-s1",
+   "color": "#9b6bd6"
+  },
+  {
+   "seed": "ag_59f5",
+   "cap": 7,
+   "pattern": 2,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c7-p2-f2-s0",
+   "color": "#8a9a3c"
+  },
+  {
+   "seed": "ag_5fj4",
+   "cap": 3,
+   "pattern": 2,
+   "face": 3,
+   "sprout": true,
+   "word": "look:c3-p2-f3-s1",
+   "color": "#5b8def"
+  },
+  {
+   "seed": "ag_5ln3",
+   "cap": 6,
+   "pattern": 2,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c6-p2-f0-s0",
+   "color": "#33aebf"
+  },
+  {
+   "seed": "ag_5rr2",
+   "cap": 5,
+   "pattern": 0,
+   "face": 0,
+   "sprout": false,
+   "word": "look:c5-p0-f0-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_5xv1",
+   "cap": 0,
+   "pattern": 1,
+   "face": 2,
+   "sprout": true,
+   "word": "look:c0-p1-f2-s1",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_63z0",
+   "cap": 3,
+   "pattern": 0,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c3-p0-f2-s0",
+   "color": "#5b8def"
+  },
+  {
+   "seed": "ag_6a2z",
+   "cap": 5,
+   "pattern": 2,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c5-p2-f3-s0",
+   "color": "#e46aa5"
+  },
+  {
+   "seed": "ag_6g6y",
+   "cap": 0,
+   "pattern": 0,
+   "face": 3,
+   "sprout": false,
+   "word": "look:c0-p0-f3-s0",
+   "color": "#3fa37a"
+  },
+  {
+   "seed": "ag_6max",
+   "cap": 4,
+   "pattern": 2,
+   "face": 2,
+   "sprout": false,
+   "word": "look:c4-p2-f2-s0",
+   "color": "#9b6bd6"
+  }
+ ],
+ "avatars": [
+  {
+   "avatar": "look:c3-p1-f2-s1",
+   "look": {
+    "cap": 3,
+    "pattern": 1,
+    "face": 2,
+    "sprout": true
+   }
+  },
+  {
+   "avatar": "look:c0-p0-f0-s0",
+   "look": {
+    "cap": 0,
+    "pattern": 0,
+    "face": 0,
+    "sprout": false
+   }
+  },
+  {
+   "avatar": "look:c9-p2-f3-s1",
+   "look": {
+    "cap": 9,
+    "pattern": 2,
+    "face": 3,
+    "sprout": true
+   }
+  },
+  {
+   "avatar": "look:c10-p0-f0-s0",
+   "look": null
+  },
+  {
+   "avatar": "look:c1-p3-f0-s0",
+   "look": null
+  },
+  {
+   "avatar": "look:c1-p0-f4-s0",
+   "look": null
+  },
+  {
+   "avatar": "look:c1-p0-f0-s2",
+   "look": null
+  },
+  {
+   "avatar": "look:c1-p0-f0",
+   "look": null
+  },
+  {
+   "avatar": "pic:abcdef",
+   "look": null
+  },
+  {
+   "avatar": "",
+   "look": null
+  },
+  {
+   "avatar": "look:cx-p0-f0-s0",
+   "look": null
+  }
+ ]
+}

@@ -1,0 +1,256 @@
+import SwiftUI
+import MycoAPI
+import MycoCore
+import MycoUI
+
+/// An agent's conversation, as its own page.
+struct AgentScreen: View {
+    let name: String
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        ConversationHost(agent: name, project: nil)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Button {
+                        router.sheet = .memberCard(name)
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text(session.displayName(of: name)).font(.headline).foregroundStyle(MycoColor.fg)
+                            if let status = session.status(of: name) {
+                                Text(Words.member(status)).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("conversation.title")
+                }
+            }
+    }
+}
+
+/// A project: the conversation with its coordinator, and above it a strip
+/// of the members with what each is up to.
+struct ProjectScreen: View {
+    let name: String
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        Group {
+            if let project = session.project(name) {
+                if let lead = session.coordinator(of: project) {
+                    VStack(spacing: 0) {
+                        MemberStrip(project: project, lead: lead)
+                        ConversationHost(agent: lead, project: name)
+                    }
+                } else {
+                    EmptyState(
+                        face: .mushroom(MushroomLook(seed: name)), title: L("项目建好了，拉几个 agent 进来吧", "The project is ready. Bring some agents in."),
+                        buttonTitle: L("添加 agent", "Add an agent")) { router.sheet = .addAgent }
+                }
+            } else if session.loadedAt != nil {
+                EmptyState(symbol: "questionmark.folder", title: L("找不到这个项目", "This project is gone"))
+            }
+        }
+        .background(MycoColor.bg)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 1) {
+                    let project = session.project(name)
+                    Text(project.map { $0.title.isEmpty ? $0.name : $0.title } ?? name).font(.headline).foregroundStyle(MycoColor.fg)
+                    if let goal = project?.goal, !goal.isEmpty {
+                        Text(goal).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(L("项目资料", "About this project"), systemImage: "doc.text") { router.push(.projectInfo(name)) }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityIdentifier("project.more")
+            }
+        }
+    }
+}
+
+/// A project's members in a row, the coordinator first: tap one to see
+/// its work.
+private struct MemberStrip: View {
+    let project: Project
+    let lead: String
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 4) {
+                ForEach(session.memberStatuses(of: project)) { status in
+                    Button {
+                        router.push(.agent(status.agent.name, focus: nil))
+                    } label: {
+                        VStack(spacing: 4) {
+                            AvatarView(.of(status.agent), size: 40, status: StatusTone.of(member: status), away: status.state == "offline")
+                            Text(status.agent.name == lead ? L("协调者", "Coordinator") : session.displayName(of: status.agent.name))
+                                .font(.caption2)
+                                .foregroundStyle(MycoColor.muted)
+                                .lineLimit(1)
+                        }
+                        .frame(width: 64)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("strip." + status.agent.name)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .background(MycoColor.bg)
+    }
+}
+
+/// Owns one conversation's model for as long as its page is on screen.
+struct ConversationHost: View {
+    let agent: String
+    let project: String?
+    @Environment(WorkspaceSession.self) private var session
+    @State private var model: ConversationModel?
+
+    var body: some View {
+        ZStack {
+            MycoColor.bg.ignoresSafeArea()
+            if let model { ConversationBody(model: model) }
+        }
+        // Starts once the workspace has said who this device is.
+        .task(id: session.me) {
+            if model == nil { model = ConversationModel(session: session, agent: agent, project: project) }
+            await model?.run()
+        }
+    }
+}
+
+/// What a conversation looks like: what was said, where the open task
+/// stands, and the input. It draws the model and passes taps on.
+struct ConversationBody: View {
+    @Bindable var model: ConversationModel
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(Router.self) private var router
+    @State private var attachNotice = false
+
+    private var name: String { session.displayName(of: model.agent) }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(model.items) { item in
+                    row(item)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .defaultScrollAnchor(.bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .overlay {
+            if model.loaded, model.items.isEmpty {
+                EmptyState(
+                    face: session.agent(model.agent).map(AvatarView.Face.of),
+                    title: model.project == nil
+                        ? L("想让 \(name) 帮你做点什么？", "What should \(name) do for you?")
+                        : L("你想在这个项目里做成什么？", "What do you want to get done here?"),
+                    note: L("一句话就行，它会自己想办法。", "One sentence is enough. It will work out the rest."))
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+        .alert(L("发文件还没做好", "Attachments are not built yet"), isPresented: $attachNotice) {
+            Button(L("好", "OK"), role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder private func row(_ item: ConversationItem) -> some View {
+        switch item.kind {
+        case .mine(let text, let steer):
+            MyBubble(text, label: steer ? L("补充", "Added") : nil)
+        case .reply(let text):
+            ReplyText(text)
+        case .progress(let text):
+            ProgressLine(text)
+        case .failure(let reason):
+            NoticeLine(.failed, reason.isEmpty ? L("没做成", "Did not finish") : L("没做成：\(reason)", "Did not finish: \(reason)"))
+        case .stopped:
+            NoticeLine(.idle, L("已停止", "Stopped"))
+        case .status(let state, _):
+            status(state)
+        case .dispatch(let dispatch):
+            DispatchCapsule(
+                face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
+                text: L("派给 \(session.displayName(of: dispatch.to))：\(dispatch.firstLine)", "To \(session.displayName(of: dispatch.to)): \(dispatch.firstLine)"),
+                stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle
+            ) {
+                router.push(.agent(dispatch.to, focus: dispatch.taskID))
+            }
+        }
+    }
+
+    @ViewBuilder private func status(_ state: RunState) -> some View {
+        let look = MushroomLook.of(session.agent(model.agent))
+        switch state {
+        case .queued:
+            WorkingLine(look: look, text: L("排队中，轮到它时开始", "Waiting its turn"), since: nil)
+        case .working(let since):
+            let text = session.agent(model.agent)?.statusText
+            WorkingLine(look: look, text: (text?.isEmpty == false ? text : nil) ?? L("在干活", "Working"), since: since)
+        case .maybeStuck(let quietSince):
+            NoticeLine(
+                .attention,
+                L("\(RelativeTime.elapsed(since: quietSince))没有动静，可能卡住了", "Quiet for \(RelativeTime.elapsed(since: quietSince)). It may be stuck."),
+                actions: [.init(L("停止", "Stop")) { Task { await model.submitStop() } }])
+        case .done, .stopped, .failed:
+            EmptyView()
+        }
+    }
+
+    private var bottom: some View {
+        VStack(spacing: 0) {
+            if let problem = model.problem {
+                Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 8)
+            }
+            ForEach(Array(model.queued.enumerated()), id: \.offset) { index, text in
+                HStack(spacing: 10) {
+                    Text(L("排队中：", "Queued: ") + ConversationBuilder.firstLine(of: text))
+                        .font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button(L("编辑", "Edit")) { model.unqueue(at: index, edit: true) }
+                    Button(L("撤回", "Remove")) { model.unqueue(at: index, edit: false) }
+                }
+                .font(.footnote)
+                .tint(MycoColor.accent)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            }
+            ComposerView(
+                text: $model.draft,
+                placeholder: model.openTask == nil ? L("发给 \(name)", "Message \(name)") : L("补充给 \(name)", "Add to what \(name) is doing"),
+                mode: mode, enabled: model.canSubmit,
+                queueTitle: L("排到下一条", "Send after this one"),
+                onSubmit: { Task { await model.submit() } },
+                onQueue: { model.queueNext() },
+                onAttach: { attachNotice = true })
+        }
+        .background(.bar)
+    }
+
+    private var mode: ComposerView.Mode {
+        switch model.action {
+        case .send: return .send
+        case .steer: return .steer
+        case .stop: return .stop
+        }
+    }
+}

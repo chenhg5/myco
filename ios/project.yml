@@ -1,0 +1,45 @@
+# The Xcode project is generated from this file with XcodeGen and committed:
+#   cd ios && xcodegen generate
+# The app target is only the entry point; everything else is in MycoKit.
+name: Myco
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  MycoKit:
+    path: MycoKit
+targets:
+  Myco:
+    type: application
+    platform: iOS
+    sources:
+      - Myco
+    dependencies:
+      - package: MycoKit
+        product: MycoFeatures
+      - package: MycoKit
+        product: MycoCore
+      - package: MycoKit
+        product: MycoFake
+    settings:
+      base:
+        # A placeholder until the real bundle id is chosen.
+        PRODUCT_BUNDLE_IDENTIFIER: dev.myco.ios
+        PRODUCT_NAME: Myco
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: myco
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  Myco:
+    build:
+      targets:
+        Myco: all
+    run:
+      config: Debug
