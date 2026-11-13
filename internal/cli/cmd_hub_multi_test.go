@@ -18,21 +18,26 @@ func TestNamedHubPlanListAndPort(t *testing.T) {
 	testutil.SetHome(t, home)
 	base := filepath.Join(home, ".myco")
 	h := &harnessT{t, map[string]string{}}
-	if code, out, e := h.run("hub", "up", "--tunnel", "none", "--dry-run"); code != ExitDryRun || !strings.Contains(out, filepath.Join(base, "hub")) || !strings.Contains(out, ":7777") || !strings.Contains(out, "ai.myco.hub") {
+	type hubPlan struct {
+		Dir, Service string
+		Command      []string
+	}
+	// The plan is JSON: compare fields, not text (Windows paths are escaped).
+	code, out, e := h.run("hub", "up", "--tunnel", "none", "--dry-run")
+	var def hubPlan
+	if code != ExitDryRun || json.Unmarshal([]byte(out), &def) != nil || def.Dir != filepath.Join(base, "hub") ||
+		def.Service != "ai.myco.hub" || !strings.Contains(strings.Join(def.Command, " "), ":7777") {
 		t.Fatalf("default plan changed: %d %s %s", code, out, e)
 	}
 	wantPort, err := firstHubPort(base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, out, e := h.run("hub", "up", "--name", "work", "--tunnel", "none", "--dry-run")
+	code, out, e = h.run("hub", "up", "--name", "work", "--tunnel", "none", "--dry-run")
 	if code != ExitDryRun {
 		t.Fatalf("named plan: %d %s", code, e)
 	}
-	var plan struct {
-		Dir, Service string
-		Command      []string
-	}
+	var plan hubPlan
 	if err := json.Unmarshal([]byte(out), &plan); err != nil {
 		t.Fatal(err)
 	}
