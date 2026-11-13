@@ -30,6 +30,9 @@ targets:
         # Asked the first time the camera is opened from the input, and the
         # first time a picture is saved from a preview.
         NSCameraUsageDescription: "拍照片发给你的 agent。 Take photos to send to your agents."
+        # Asked the first time the input's microphone is tapped.
+        NSMicrophoneUsageDescription: "只在你点了麦克风时听，把你说的话变成消息。 myco listens only after you tap the microphone, to turn what you say into a message."
+        NSSpeechRecognitionUsageDescription: "把你说的话转成文字，用你在 App 里选的语言。 myco turns what you say into text in your message box, in the language you chose for the app."
         NSPhotoLibraryAddUsageDescription: "把对话里的图片存到相册。 Save pictures from conversations to your library."
         CFBundleURLTypes:
           - CFBundleURLName: dev.myco.ios

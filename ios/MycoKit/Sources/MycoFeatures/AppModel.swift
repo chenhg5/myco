@@ -22,17 +22,22 @@ public final class AppModel {
         public var join: @MainActor @Sendable (String) async throws -> WorkspaceSession
         /// Leaves a workspace joined with a link, by its id.
         public var leave: @MainActor @Sendable (String) async -> Void
+        /// Something to hear speech with: the system's recognition, or a
+        /// script in tests.
+        public var speech: @MainActor @Sendable () -> any SpeechListener
 
         public init(
             demo: @escaping @MainActor @Sendable () -> WorkspaceSession,
             restore: @escaping @MainActor @Sendable () async -> WorkspaceSession? = { nil },
             join: @escaping @MainActor @Sendable (String) async throws -> WorkspaceSession = { _ in throw JoinFailure(message: "") },
-            leave: @escaping @MainActor @Sendable (String) async -> Void = { _ in }
+            leave: @escaping @MainActor @Sendable (String) async -> Void = { _ in },
+            speech: @escaping @MainActor @Sendable () -> any SpeechListener = { AppleSpeechListener() }
         ) {
             self.demo = demo
             self.restore = restore
             self.join = join
             self.leave = leave
+            self.speech = speech
         }
     }
 
@@ -48,6 +53,11 @@ public final class AppModel {
     private let doors: Doors
     /// The id the demo workspace goes by: it is never "left" on a hub.
     public static let demoID = "demo"
+
+    /// A listener for one input's microphone.
+    public func speechListener() -> any SpeechListener {
+        doors.speech()
+    }
 
     /// - Parameter session: a workspace to show at once (the demo, in tests);
     ///   nil looks for the one joined earlier.

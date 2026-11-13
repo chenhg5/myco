@@ -82,6 +82,38 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testSpeakingWritesIntoTheInput() {
+        // The microphone hears a script here: nobody speaks to a simulator.
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-dictation", "scripted"])
+        let mic = app.buttons["composer.mic"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 20), "the microphone is beside Send")
+        let input = app.descendants(matching: .any)["composer.input"]
+        mic.tap()
+        // The words grow into the box, a new sentence after the one before.
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "帮我看一下下载页然后改一下标题"), evaluatedWith: input)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(mic.isSelected, "it shows that it is listening")
+        snap("dictation-listening")
+        mic.tap()
+        expectation(for: NSPredicate(format: "selected == false"), evaluatedWith: mic)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue((input.value as? String ?? "").contains("然后改一下标题"), "what was heard stays")
+        XCTAssertTrue(app.descendants(matching: .any)["composer.submit"].isEnabled, "and can be sent")
+    }
+
+    @MainActor
+    func testAMicrophoneThatMayNotListenSaysWhereToAllowIt() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-dictation", "denied"])
+        let mic = app.buttons["composer.mic"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 20))
+        mic.tap()
+        let note = app.descendants(matching: .any)["dictation.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "it says why it does not listen")
+        XCTAssertTrue(app.buttons["Settings"].exists, "and where to allow it")
+        snap("dictation-denied")
+    }
+
+    @MainActor
     func testALongConversationOpensAtItsEndAndScrolls() {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

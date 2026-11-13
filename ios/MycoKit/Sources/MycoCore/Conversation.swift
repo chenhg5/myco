@@ -75,7 +75,7 @@ public enum ConversationBuilder {
         let messages = all.filter { !waiting.contains($0.id) }
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         /// Updates of tasks that have ended, by task, oldest first.
-        var past: [String: [Message]] = [:]
+        var past: [String: [(message: Message, said: String)]] = [:]
         /// My tasks that are still open, with where each stands.
         var myOpen: [(task: Message, state: RunState)] = []
         /// Colleagues' tasks that are still open, with where each stands.
@@ -143,19 +143,22 @@ public enum ConversationBuilder {
                 guard !asked else { continue }
                 // Its task: the one it answers, else the one its thread began with.
                 let taskID = m.replyTo ?? m.threadId
-                // A report that is only a checklist is the task's plan,
-                // ticked off at the top of its work; it is not said again.
-                if let plan = RunProcess.parsePlan(m.body) {
-                    if plans[taskID].map({ m.createdAt >= $0.at }) ?? true { plans[taskID] = (plan, m.createdAt) }
-                    continue
+                // A report with a checklist carries the task's plan, ticked
+                // off at the top of its work. The checklist is not said
+                // again; what was said around it ("好，计划：") still is.
+                var said = text(of: m)
+                if let split = RunProcess.splitPlan(m.body) {
+                    if plans[taskID].map({ m.createdAt >= $0.at }) ?? true { plans[taskID] = (split.items, m.createdAt) }
+                    if split.rest.isEmpty { continue }
+                    said = split.rest
                 }
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m), latest: false)))
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: said, latest: false)))
                     if newestUpdate[taskID].map({ m.createdAt >= $0.at }) ?? true { newestUpdate[taskID] = (m.id, m.createdAt) }
                 } else {
-                    past[taskID, default: []].append(m)
+                    past[taskID, default: []].append((m, said))
                 }
             default:
                 break // events repeat what a failed task already says
@@ -197,10 +200,10 @@ public enum ConversationBuilder {
                 kind: .plan(items: plan.items, live: task.isOpen)))
         }
         for (taskID, updates) in past {
-            let ordered = updates.sorted { $0.createdAt < $1.createdAt }
+            let ordered = updates.sorted { $0.message.createdAt < $1.message.createdAt }
             guard let last = ordered.last else { continue }
             // Where the last update was: right above the answer.
-            items.append(.init(id: taskID + ".progress", at: last.createdAt, kind: .pastProgress(texts: ordered.map { text(of: $0) })))
+            items.append(.init(id: taskID + ".progress", at: last.message.createdAt, kind: .pastProgress(texts: ordered.map(\.said))))
         }
         for task in others where task.type == "task" {
             let dispatch = Dispatch(

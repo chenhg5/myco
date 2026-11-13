@@ -12,8 +12,9 @@ import MycoStore
 /// arguments change that, for tests and for trying things:
 /// `-myco-start demo|empty|long` shows a demo workspace (an in-memory
 /// hub), `-myco-start welcome` the welcome page, `-myco-join <link>`
-/// joins with a link at launch, and `-myco-attach <agent>` starts the demo
-/// with files picked for that agent.
+/// joins with a link at launch, `-myco-attach <agent>` starts the demo
+/// with files picked for that agent, and `-myco-dictation scripted|denied`
+/// replaces the microphone with a script.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -50,9 +51,24 @@ struct MycoApp: App {
                 await snapshots.removeSnapshots(of: id)
                 // What its messages carried goes with it.
                 FileShelf.forget(id)
-            })
+            },
+            speech: Self.speech)
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
+    }
+
+    /// What hears speech: Apple's recognition, or with `-myco-dictation
+    /// scripted|denied` a script, to see and test the microphone where
+    /// there is nobody to speak.
+    private static let speech: @MainActor @Sendable () -> any SpeechListener = {
+        switch UserDefaults.standard.string(forKey: "myco-dictation") {
+        case "scripted":
+            return ScriptedSpeechListener(["帮", "帮我看", "帮我看一下下载页", "然后", "然后改一下标题"], pause: .milliseconds(450))
+        case "denied":
+            return ScriptedSpeechListener([], problem: .microphoneDenied)
+        default:
+            return AppleSpeechListener()
+        }
     }
 
     private static func demo(_ scenario: Scenario) -> WorkspaceSession {

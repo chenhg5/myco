@@ -15,6 +15,15 @@ public struct AttachChoice: Identifiable {
     }
 }
 
+/// The microphone in the input: how it looks now.
+public enum MicState: Sendable, Hashable {
+    case idle
+    /// Listening: red, and breathing.
+    case listening
+    /// It could not listen (no permission, no microphone): amber.
+    case blocked
+}
+
 /// The input at the bottom of a conversation: attach, type, and one button
 /// that sends, adds to the running task, or stops it. What the button does
 /// is decided outside (`mode`); this view only draws it. The files about
@@ -47,13 +56,18 @@ public struct ComposerView: View {
     let attachChoices: [AttachChoice]
     let onRemoveFile: (String) -> Void
     let onRetryFile: (String) -> Void
+    /// Speaking instead of typing: nil leaves the microphone out.
+    let mic: MicState?
+    let micLabel: String
+    let onMic: () -> Void
 
     public init(
         text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
         files: [TrayFile] = [], fileNote: String? = nil, attachLabel: String, removeLabel: String, retryLabel: String,
-        attachChoices: [AttachChoice],
+        attachChoices: [AttachChoice], mic: MicState? = nil, micLabel: String = "",
         onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void,
-        onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in }
+        onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in },
+        onMic: @escaping () -> Void = {}
     ) {
         _text = text
         self.placeholder = placeholder
@@ -71,6 +85,9 @@ public struct ComposerView: View {
         self.attachChoices = attachChoices
         self.onRemoveFile = onRemoveFile
         self.onRetryFile = onRetryFile
+        self.mic = mic
+        self.micLabel = micLabel
+        self.onMic = onMic
     }
 
     public var body: some View {
@@ -111,6 +128,11 @@ public struct ComposerView: View {
                         .padding(.leading, 16)
                         .padding(.vertical, 10)
                         .accessibilityIdentifier("composer.input")
+                    // The microphone beside Send, as in Codex and Claude.
+                    if let mic {
+                        MicButton(state: mic, label: micLabel, action: onMic)
+                            .padding(.bottom, 5)
+                    }
                     submitButton
                         .padding(.trailing, 5)
                         .padding(.bottom, 5)
@@ -154,5 +176,51 @@ public struct ComposerView: View {
             .foregroundStyle(MycoColor.buttonText)
             .frame(width: 32, height: 32)
             .background(MycoColor.button.opacity(enabled ? 1 : 0.3), in: Circle())
+    }
+}
+
+/// The microphone: a tap listens, another stops. While it listens it is
+/// red and breathes.
+private struct MicButton: View {
+    let state: MicState
+    let label: String
+    let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathing = false
+
+    private var color: Color {
+        switch state {
+        case .idle: return MycoColor.fg2
+        case .listening: return MycoColor.red
+        case .blocked: return MycoColor.amber
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: state == .listening ? "mic.fill" : "mic")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 32, height: 32)
+                .background {
+                    if state == .listening {
+                        Circle().fill(MycoColor.red.opacity(0.14))
+                            .scaleEffect(breathing && !reduceMotion ? 1.18 : 0.92)
+                            .opacity(breathing && !reduceMotion ? 0.55 : 1)
+                    }
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("composer.mic")
+        .accessibilityAddTraits(state == .listening ? .isSelected : [])
+        .onChange(of: state, initial: true) { _, now in
+            if now == .listening {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { breathing = true }
+            } else {
+                withAnimation(.easeOut(duration: 0.15)) { breathing = false }
+            }
+        }
     }
 }

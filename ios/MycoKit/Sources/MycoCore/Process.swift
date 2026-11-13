@@ -160,21 +160,47 @@ public struct RunProcess: Hashable, Sendable {
         return tool
     }
 
-    /// A plan written as a checklist: lines like "[x] done", "[~] doing",
-    /// "[ ] to do", or a Markdown task list ("- [x] …"). At least two
-    /// items, every line one of them; otherwise it is not a plan.
-    public static func parsePlan(_ text: String) -> [PlanItem]? {
-        let lines = text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard lines.count >= 2 else { return nil }
-        var items: [PlanItem] = []
-        for line in lines {
-            guard let match = line.wholeMatch(of: /(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)/) else { return nil }
-            let mark = String(match.1)
-            let state: PlanItem.State = mark == " " ? .todo : (mark == "~" || mark == "-" ? .doing : .done)
-            items.append(PlanItem(text: match.2.trimmingCharacters(in: .whitespaces), state: state))
+    /// One line of a checklist: "[x] done", "[~] doing", "[ ] to do", or
+    /// a Markdown task ("- [x] …").
+    static func planItem(_ line: String) -> PlanItem? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let match = trimmed.wholeMatch(of: /(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)/) else { return nil }
+        let mark = String(match.1)
+        let state: PlanItem.State = mark == " " ? .todo : (mark == "~" || mark == "-" ? .doing : .done)
+        return PlanItem(text: match.2.trimmingCharacters(in: .whitespaces), state: state)
+    }
+
+    /// A checklist (two items or more) and what was said around it: an
+    /// agent often writes a line before its plan ("好，计划：") or after
+    /// it. The longest checklist of the text is the plan (the desktop
+    /// app's `splitPlan`).
+    public static func splitPlan(_ text: String) -> (items: [PlanItem], rest: String)? {
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        func blank(_ index: Int) -> Bool { lines[index].trimmingCharacters(in: .whitespaces).isEmpty }
+        var best: (from: Int, to: Int)?
+        var i = 0
+        while i < lines.count {
+            guard planItem(lines[i]) != nil else {
+                i += 1
+                continue
+            }
+            // A run of items, with blank lines between them allowed.
+            var j = i
+            while j + 1 < lines.count, planItem(lines[j + 1]) != nil || blank(j + 1) { j += 1 }
+            while j > i, blank(j) { j -= 1 }
+            if best.map({ j - i > $0.to - $0.from }) ?? true { best = (i, j) }
+            i = j + 1
         }
-        return items
+        guard let best else { return nil }
+        let items = lines[best.from...best.to].compactMap(planItem)
+        guard items.count >= 2 else { return nil }
+        let rest = (lines[..<best.from] + lines[(best.to + 1)...]).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return (items, rest)
+    }
+
+    /// A text that is only a checklist.
+    public static func parsePlan(_ text: String) -> [PlanItem]? {
+        guard let split = splitPlan(text), split.rest.isEmpty else { return nil }
+        return split.items
     }
 }

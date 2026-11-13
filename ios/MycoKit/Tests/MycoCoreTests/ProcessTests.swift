@@ -61,6 +61,27 @@ struct ProcessTests {
         #expect(RunProcess.parsePlan("") == nil)
     }
 
+    @Test func aPlanWithALineBeforeItIsStillAPlan() throws {
+        // What agents really write: a line, then the checklist.
+        let split = try #require(RunProcess.splitPlan("好，计划：\n- [x] 看现有的接口\n- [~] 写设备登记\n- [ ] 补测试"))
+        #expect(split.items.map(\.state) == [.done, .doing, .todo])
+        #expect(split.items[1].text == "写设备登记")
+        #expect(split.rest == "好，计划：")
+        // Said after it too, and blank lines between the items.
+        let around = try #require(RunProcess.splitPlan("先这样：\n\n[x] a\n\n[ ] b\n\n做完告诉你。"))
+        #expect(around.items.count == 2)
+        #expect(around.rest == "先这样：\n\n\n做完告诉你。")
+        // Only the checklist: nothing left to say.
+        #expect(RunProcess.splitPlan("- [x] a\n- [ ] b")?.rest == "")
+        // The longest checklist of the text is the plan.
+        let longest = try #require(RunProcess.splitPlan("- [x] 一条\n说明\n- [ ] a\n- [ ] b\n- [ ] c"))
+        #expect(longest.items.map(\.text) == ["a", "b", "c"])
+        #expect(longest.rest == "- [x] 一条\n说明")
+        // One item is a remark, not a plan; and prose is prose.
+        #expect(RunProcess.splitPlan("记一下：\n- [ ] 只有一条") == nil)
+        #expect(RunProcess.splitPlan("没有清单") == nil)
+    }
+
     @Test func summarisesAGroupInOneLine() {
         let steps = [
             ToolStep(id: 1, tool: "Read", input: "a", failed: false, finished: true),

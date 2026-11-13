@@ -36,6 +36,14 @@ struct MarkdownTests {
         #expect(items.map(\.marker) == ["1.", "2.", "", ""])
         #expect(items[1].text == "second\ncontinued")
         #expect(items.map(\.checked) == [nil, nil, true, false])
+        // The step an agent is on ("[~]", "[-]") is a box too, in hand.
+        guard case .list(let steps) = MarkdownBlock.parse("- [x] a\n- [~] b\n- [-] c\n- [ ] d").first else {
+            Issue.record("a checklist is a list")
+            return
+        }
+        #expect(steps.map(\.checked) == [true, false, false, false])
+        #expect(steps.map(\.inHand) == [false, true, true, false])
+        #expect(steps.map(\.text) == ["a", "b", "c", "d"])
         // A blank line inside a fence stays in the code.
         #expect(blocks[3] == .code(language: "swift", text: "let x = 1\n\nprint(x)"))
         #expect(blocks[4] == .quote("quoted\ntwice"))

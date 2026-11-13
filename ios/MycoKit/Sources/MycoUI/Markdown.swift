@@ -11,6 +11,8 @@ public enum MarkdownBlock: Hashable, Sendable {
         public var level: Int
         /// A task list item: ticked or not. Nil for an ordinary item.
         public var checked: Bool?
+        /// A task being done now ("- [~] step"): not ticked, but in hand.
+        public var inHand = false
     }
 
     case paragraph(String)
@@ -137,12 +139,16 @@ public enum MarkdownBlock: Hashable, Sendable {
         var text = String(match.3)
         var marker = match.2.first!.isNumber ? String(match.2).replacingOccurrences(of: ")", with: ".") : "•"
         var checked: Bool?
-        if let box = text.wholeMatch(of: /\[( |x|X)\]\s+(.*)/) {
-            checked = box.1 != " "
+        var inHand = false
+        // "[~]" and "[-]" are not Markdown's own, but agents write them
+        // for the step they are on.
+        if let box = text.wholeMatch(of: /\[( |x|X|~|-)\]\s+(.*)/) {
+            checked = box.1 == "x" || box.1 == "X"
+            inHand = box.1 == "~" || box.1 == "-"
             marker = ""
             text = String(box.2)
         }
-        return ListItem(marker: marker, text: text, level: min(level, 4), checked: checked)
+        return ListItem(marker: marker, text: text, level: min(level, 4), checked: checked, inHand: inHand)
     }
 
     /// Inline Markdown (bold, italics, code, links) as attributed text.
@@ -196,12 +202,15 @@ public struct ReplyText: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let checked = item.checked {
+                            // The plan card's boxes: ticked, in hand, to do.
                             Image(systemName: checked ? "checkmark.square.fill" : "square")
-                                .font(.subheadline).foregroundStyle(checked ? MycoColor.green : MycoColor.faint)
+                                .font(.subheadline)
+                                .foregroundStyle(checked ? MycoColor.muted : (item.inHand ? MycoColor.fg : MycoColor.faint))
                         } else {
                             Text(item.marker).font(textFont.monospacedDigit()).foregroundStyle(MycoColor.muted)
                         }
                         Text(MarkdownBlock.inline(item.text)).font(textFont).lineSpacing(compact ? 3 : 4)
+                            .foregroundStyle(item.checked == true ? MycoColor.muted : MycoColor.fg)
                     }
                     .padding(.leading, CGFloat(item.level) * 20)
                 }

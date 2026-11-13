@@ -214,6 +214,23 @@ struct ConversationBuilderTests {
         #expect(items[4].kind == .progress(text: "halfway", latest: true))
     }
 
+    @Test func anUpdateThatSaysALineAndThenItsPlan() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "do it", status: "acked", createdAt: at(-100), updatedAt: at(-5)),
+            // A line, then the checklist: the plan card takes the list, the line is still said.
+            Message(id: "p1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress",
+                    body: "好，计划：\n- [x] 看代码\n- [~] 改接口\n- [ ] 补测试", status: "done", createdAt: at(-90)),
+            // Only a checklist: the newer plan, and nothing said.
+            Message(id: "p2", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress",
+                    body: "- [x] 看代码\n- [x] 改接口\n- [~] 补测试", status: "done", createdAt: at(-50)),
+        ]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        #expect(items.map(\.id) == ["t1", "t1.plan", "p1", "t1.status"])
+        #expect(items[1].kind == .plan(
+            items: [PlanItem(text: "看代码", state: .done), PlanItem(text: "改接口", state: .done), PlanItem(text: "补测试", state: .doing)], live: true))
+        #expect(items[2].kind == .progress(text: "好，计划：", latest: true))
+    }
+
     @Test func whatWaitsBehindAnOpenTaskIsNotInTheConversation() {
         let messages = [
             Message(id: "t1", from: "me", to: "coder", body: "first", status: "acked", createdAt: at(-100), updatedAt: at(-5)),

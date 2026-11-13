@@ -149,6 +149,9 @@ struct ConversationBody: View {
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
+    @Environment(AppModel.self) private var app
+    /// Speaking instead of typing: made the first time the microphone is tapped.
+    @State private var dictation: Dictation?
     /// Which way of adding a file is open.
     @State private var pickingPhotos = false
     @State private var picked: [PhotosPickerItem] = []
@@ -335,6 +338,10 @@ struct ConversationBody: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+        // Typing or sending while it listens stops it: nothing late is
+        // written into a box that was emptied.
+        .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
+        .onDisappear { dictation?.stop() }
         .photosPicker(isPresented: $pickingPhotos, selection: $picked, maxSelectionCount: 9, matching: .images, preferredItemEncoding: .compatible)
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
@@ -351,6 +358,37 @@ struct ConversationBody: View {
                 Task { await addPicture(data, name: Self.pictureName(L("照片", "photo"), at: Date(), index: 0)) }
             }
             .ignoresSafeArea()
+        }
+    }
+
+    // MARK: Speaking
+
+    private func toggleDictation() {
+        let dictation = dictation ?? Dictation(listener: app.speechListener())
+        self.dictation = dictation
+        dictation.toggle(typed: { model.draft }, write: { model.draft = $0 })
+    }
+
+    private var micState: MicState {
+        guard let dictation else { return .idle }
+        if dictation.listening { return .listening }
+        return dictation.problem == nil ? .idle : .blocked
+    }
+
+    /// Why it could not listen, and whether Settings is where to fix it.
+    private var dictationNote: (text: String, settings: Bool)? {
+        switch dictation?.problem {
+        case nil: return nil
+        case .speechDenied:
+            return (L("没有语音识别权限：在「设置 › myco」里打开「语音识别」", "No speech recognition access: allow it in Settings › myco"), true)
+        case .microphoneDenied:
+            return (L("没有麦克风权限：在「设置 › myco」里打开「麦克风」", "No microphone access: allow it in Settings › myco"), true)
+        case .unavailable:
+            return (L("这台设备现在没法识别这个语言", "This device cannot recognise this language right now"), false)
+        case .microphone:
+            return (L("麦克风打不开", "Could not open the microphone"), false)
+        case .other(let text):
+            return (text, false)
         }
     }
 
@@ -612,6 +650,19 @@ struct ConversationBody: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
+            if let note = dictationNote {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                    Text(note.text).font(.footnote).foregroundStyle(MycoColor.amber)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("dictation.note")
+                    Spacer(minLength: 0)
+                    if note.settings, let url = URL(string: UIApplication.openSettingsURLString) {
+                        Button(L("去设置", "Settings")) { UIApplication.shared.open(url) }
+                            .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+                    }
+                }
+                .padding(.horizontal, Space.page).padding(.top, Space.s)
+            }
             // What waits behind the task being worked on: not part of the
             // conversation yet, shown here until its turn comes.
             ForEach(model.waiting) { item in
@@ -639,6 +690,7 @@ struct ConversationBody: View {
                 files: trayFiles, fileNote: fileNote,
                 attachLabel: L("加图片或文件", "Add pictures or files"), removeLabel: L("不发这个", "Remove"), retryLabel: L("再传一次", "Try again"),
                 attachChoices: attachChoices,
+                mic: micState, micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 onSubmit: {
                     commits += 1
                     Task { await model.submit() }
@@ -648,10 +700,12 @@ struct ConversationBody: View {
                     Task { await model.queueNext() }
                 },
                 onRemoveFile: { model.removePending($0) },
-                onRetryFile: { id in Task { await model.retryPending(id) } })
+                onRetryFile: { id in Task { await model.retryPending(id) } },
+                onMic: toggleDictation)
         }
         .background(.bar)
         .sensoryFeedback(.impact(weight: .light), trigger: commits)
+        .sensoryFeedback(.selection, trigger: micState == .listening)
     }
 
     private var submitLabel: String {
