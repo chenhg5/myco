@@ -204,7 +204,7 @@ struct ConversationBody: View {
                             .accessibilityIdentifier("conversation.earlier")
                     }
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
-                        row(item)
+                        row(item, at: index)
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
                     }
                     // Marks the end. It is also the room between the last
@@ -358,14 +358,30 @@ struct ConversationBody: View {
         case (.mine, .mine): return Space.s
         case (_, .mine): return Space.xl
         case (.dispatch, .dispatch): return Space.s
-        case (.progress, .progress): return Space.s + 2
+        case (.progress, .progress): return 0
         case (.process, .reply), (.pastProgress, .reply), (.progress, .reply): return Space.m
         case (.mine, .plan), (.plan, .process), (.plan, .progress): return Space.m
         default: return Space.l
         }
     }
 
-    @ViewBuilder private func row(_ item: ConversationItem) -> some View {
+    private func isProgress(_ index: Int) -> Bool {
+        guard model.items.indices.contains(index), case .progress = model.items[index].kind else { return false }
+        return true
+    }
+
+    /// Where an update sits in the run of updates around it: they are
+    /// drawn as one timeline, joined by a line.
+    private func timelinePosition(at index: Int) -> ProgressLine.Position {
+        switch (isProgress(index - 1), isProgress(index + 1)) {
+        case (false, false): return .only
+        case (false, true): return .first
+        case (true, true): return .middle
+        case (true, false): return .last
+        }
+    }
+
+    @ViewBuilder private func row(_ item: ConversationItem, at index: Int) -> some View {
         switch item.kind {
         case .time(let date):
             TimeBreak(Self.timeText(date))
@@ -392,8 +408,10 @@ struct ConversationBody: View {
                 }
             }
             .contextMenu { copyButton(text) }
-        case .progress(let text):
-            ProgressLine(text, time: item.at.formatted(date: .omitted, time: .shortened))
+        case .progress(let text, let latest):
+            ProgressLine(
+                text, time: item.at.formatted(date: .omitted, time: .shortened),
+                position: timelinePosition(at: index), latest: latest)
         case .plan(let plan, _):
             let done = plan.filter { $0.state == .done }.count
             PlanCard(

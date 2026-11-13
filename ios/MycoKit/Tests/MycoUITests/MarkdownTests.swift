@@ -62,3 +62,11 @@ struct MarkdownTests {
         #expect(MarkdownBlock.parse("") == [])
     }
 }
+
+struct TimelineTests {
+    @Test func theLineRunsFromTheFirstDotToTheLast() {
+        #expect(ProgressLine.position(0, of: 1) == .only)
+        #expect((0..<4).map { ProgressLine.position($0, of: 4) } == [.first, .middle, .middle, .last])
+        #expect((0..<2).map { ProgressLine.position($0, of: 2) } == [.first, .last])
+    }
+}

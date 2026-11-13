@@ -85,6 +85,13 @@ public enum Scenario: Sendable {
                     status: "done", project: project, createdAt: ago(1_200)),
             Message(id: "d4", from: lead.name, to: writer.name, body: "把方案写进 docs/design/mobile-ios.md。", status: "failed",
                     error: "the session is gone", project: project, createdAt: ago(2_570), updatedAt: ago(2_000)),
+            // The backend engineer reports to the coordinator as it goes.
+            Message(id: "d1p1", from: backend.name, to: lead.name, threadId: "d1", replyTo: "d1", type: "progress",
+                    body: "看了现有的唤醒方式：webhook、GitHub、Claude 三种。", status: "done", project: project, createdAt: ago(1_800)),
+            Message(id: "d1p2", from: backend.name, to: lead.name, threadId: "d1", replyTo: "d1", type: "progress",
+                    body: "设备登记的接口定了：\n\n- `PUT /v1/console/me/push`\n- 只存令牌，不存内容", status: "done", project: project, createdAt: ago(900)),
+            Message(id: "d1p3", from: backend.name, to: lead.name, threadId: "d1", replyTo: "d1", type: "progress",
+                    body: "正在写中转服务的设计。", status: "done", project: project, createdAt: ago(120)),
             // Me and ops, directly: taken on two hours ago, quiet since.
             Message(id: "o1", from: me, to: ops.name, body: "看一下 Hub 那台机器的磁盘还剩多少。", status: "acked", createdAt: ago(7_500), updatedAt: ago(7_400), activeAt: ago(7_300)),
             // Me and the notes helper, directly: answered yesterday.

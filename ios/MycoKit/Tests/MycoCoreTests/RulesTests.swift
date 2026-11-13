@@ -170,7 +170,7 @@ struct ConversationBuilderTests {
         #expect(items[3].kind == .reply(text: "on it", taskID: "t1", to: nil))
         // The colleague's open task keeps its state with it; mine closes the page.
         #expect(items[6].kind == .status(.working(since: at(-5)), taskID: "c2"))
-        #expect(items[7].kind == .progress(text: "half built"))
+        #expect(items[7].kind == .progress(text: "half built", latest: true))
         #expect(items[9].kind == .status(.queued, taskID: "t2"))
         // The input speaks to my open task, never to a colleague's.
         #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t2")
@@ -210,7 +210,7 @@ struct ConversationBuilderTests {
         // The answered task: one line above its answer. The open one: each update.
         #expect(items.map(\.id) == ["t1", "t1.progress", "r1", "t2", "p3", "t2.status"])
         #expect(items[1].kind == .pastProgress(texts: ["one", "two"]))
-        #expect(items[4].kind == .progress(text: "halfway"))
+        #expect(items[4].kind == .progress(text: "halfway", latest: true))
     }
 
     @Test func whatWaitsBehindAnOpenTaskIsNotInTheConversation() {
@@ -242,6 +242,20 @@ struct ConversationBuilderTests {
         #expect(items[3].kind == .status(.working(since: at(-5)), taskID: "t3"))
     }
 
+    @Test func onlyTheNewestUpdateOfARunningTaskIsMarked() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "build it", status: "acked", createdAt: at(-500), updatedAt: at(-5)),
+            Message(id: "p1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "started", status: "done", createdAt: at(-400)),
+            Message(id: "p2", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "halfway there", status: "done", createdAt: at(-300)),
+            Message(id: "p3", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "nearly done", status: "done", createdAt: at(-200)),
+        ]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        #expect(items.map(\.id) == ["t1", "p1", "p2", "p3", "t1.status"])
+        #expect(items[1].kind == .progress(text: "started", latest: false))
+        #expect(items[2].kind == .progress(text: "halfway there", latest: false))
+        #expect(items[3].kind == .progress(text: "nearly done", latest: true))
+    }
+
     @Test func aChecklistReportedIsThePlanNotAnUpdate() {
         let messages = [
             Message(id: "t1", from: "me", to: "coder", body: "build it", status: "acked", createdAt: at(-500), updatedAt: at(-5)),
@@ -255,7 +269,7 @@ struct ConversationBuilderTests {
         let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], tracedPlans: traced, status: { _ in nil }, now: now))
         #expect(items.map(\.id) == ["t1", "t1.plan", "p3", "t1.status"])
         #expect(items[1].kind == .plan(items: [PlanItem(text: "hub", state: .done), PlanItem(text: "app", state: .doing), PlanItem(text: "docs", state: .todo)], live: true))
-        #expect(items[2].kind == .progress(text: "- [x] hub pushed\nnotifications come later"))
+        #expect(items[2].kind == .progress(text: "- [x] hub pushed\nnotifications come later", latest: true))
     }
 
     @Test func aFirstLineIsPlainText() {

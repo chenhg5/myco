@@ -15,7 +15,8 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         /// Half an hour or more passed since the message above.
         case time(Date)
         /// An interim update from the agent, on a task still being worked on.
-        case progress(text: String)
+        /// `latest`: the newest one of its task (its dot is green).
+        case progress(text: String, latest: Bool)
         /// The updates of a task that has ended, folded into one line that
         /// opens ("3 条进展"): the answer is what matters now.
         case pastProgress(texts: [String])
@@ -75,6 +76,8 @@ public enum ConversationBuilder {
         var past: [String: [Message]] = [:]
         /// My tasks that are still open, with where each stands.
         var myOpen: [(task: Message, state: RunState)] = []
+        /// The newest update shown for each open task, by task.
+        var newestUpdate: [String: (id: String, at: Date)] = [:]
         /// The newest plan of each task: from its steps, or a checklist it reported.
         var plans: [String: (items: [PlanItem], at: Date)] = [:]
         for (taskID, plan) in tracedPlans {
@@ -142,13 +145,20 @@ public enum ConversationBuilder {
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m))))
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m), latest: false)))
+                    if newestUpdate[taskID].map({ m.createdAt >= $0.at }) ?? true { newestUpdate[taskID] = (m.id, m.createdAt) }
                 } else {
                     past[taskID, default: []].append(m)
                 }
             default:
                 break // events repeat what a failed task already says
             }
+        }
+        // The newest update of each task still being worked on is marked.
+        let newest = Set(newestUpdate.values.map(\.id))
+        items = items.map { item in
+            guard newest.contains(item.id), case .progress(let text, _) = item.kind else { return item }
+            return ConversationItem(id: item.id, at: item.at, kind: .progress(text: text, latest: true))
         }
         // One line says where my work with the agent stands, never two:
         // the task being worked on if there is one, else one that may be

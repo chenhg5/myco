@@ -134,26 +134,73 @@ public struct ScrollToEndButton: View {
     }
 }
 
-/// An update from the agent while it works: a dot on a thin line, what it
-/// reported (Markdown, a size smaller than an answer), and when.
+/// An update from the agent while it works, as one entry of a timeline: a
+/// dot on a thin line that joins it to the updates next to it, what it
+/// reported (Markdown, a size smaller than an answer), and when. The
+/// newest update of a task still being worked on has a green dot.
 public struct ProgressLine: View {
+    /// Where the entry sits among the updates it is drawn with: the line
+    /// runs from the first dot to the last, and one alone has none.
+    public enum Position: Sendable, Hashable {
+        case only, first, middle, last
+    }
+
     let text: String
     let time: String?
+    let position: Position
+    let latest: Bool
 
-    public init(_ text: String, time: String? = nil) {
+    public init(_ text: String, time: String? = nil, position: Position = .only, latest: Bool = false) {
         self.text = text
         self.time = time
+        self.position = position
+        self.latest = latest
     }
+
+    /// How far down an entry its dot's centre is: on its first line.
+    private static let dotY: CGFloat = 16
+    /// The rail the dots and the line sit on.
+    private static let railX: CGFloat = 7
 
     public var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Circle().fill(MycoColor.faint).frame(width: 6, height: 6).padding(.top, 7)
+            Color.clear.frame(width: Self.railX * 2, height: 1)
             ReplyText(text, compact: true)
             if let time {
-                Text(time).font(.caption.monospacedDigit()).foregroundStyle(MycoColor.faint).padding(.top, 3)
+                Text(time).font(.caption.monospacedDigit()).foregroundStyle(MycoColor.faint).padding(.top, 2)
             }
         }
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The line joining the dots: from this entry's dot down, up to it,
+        // or straight through.
+        .background(alignment: .topLeading) {
+            switch position {
+            case .only:
+                EmptyView()
+            case .first:
+                Rectangle().fill(MycoColor.line).frame(width: 1).padding(.top, Self.dotY).offset(x: Self.railX - 0.5)
+            case .middle:
+                Rectangle().fill(MycoColor.line).frame(width: 1).offset(x: Self.railX - 0.5)
+            case .last:
+                Rectangle().fill(MycoColor.line).frame(width: 1, height: Self.dotY).offset(x: Self.railX - 0.5)
+            }
+        }
+        // The dot, with a ring of the page's colour so the line stops short of it.
+        .overlay(alignment: .topLeading) {
+            Circle().fill(latest ? MycoColor.green : MycoColor.faint)
+                .frame(width: 6, height: 6)
+                .padding(2)
+                .background(MycoColor.bg, in: Circle())
+                .offset(x: Self.railX - 5, y: Self.dotY - 5)
+        }
+    }
+
+    /// The position of the entry at `index` among `count` drawn together.
+    public static func position(_ index: Int, of count: Int) -> Position {
+        if count <= 1 { return .only }
+        if index == 0 { return .first }
+        return index == count - 1 ? .last : .middle
     }
 }
 
@@ -187,9 +234,9 @@ public struct PastProgress: View {
             .accessibilityIdentifier("progress.fold")
 
             if open {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(texts.enumerated()), id: \.offset) { _, text in
-                        ProgressLine(text)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(texts.enumerated()), id: \.offset) { index, text in
+                        ProgressLine(text, position: ProgressLine.position(index, of: texts.count))
                     }
                 }
                 .transition(.opacity)
