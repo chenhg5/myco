@@ -2,6 +2,13 @@
 
 每次发版在这里加一节（`## vX.Y.Z`，最新的在最上面）。发版时这一节会作为 GitHub Release 的说明。
 
+## v0.19.6
+
+- **skill 跟着 myco 一起升级**：SKILL.md 打包进了 myco。`myco skill show` 打印和当前版本对应的用法说明（收消息、报进展、用清单报计划、`message ask` 提问、进展带截图、派活）。`myco join`、`myco upgrade` 和 runner 每次启动时，会把它装进 Claude Code 和 Codex 的 skills 目录（`~/.claude/skills/myco`、`~/.codex/skills/myco`，只装已经存在的目录）；你自己写的同名文件不会被覆盖。接入时的说明改成「读一遍 `myco skill show`」，不再给 GitHub 链接。
+- **收到任务时的提示更全**：除了 ack、报进展、回复，还会提醒步骤多的时候用清单报计划，需要你决定的时候用 `myco message ask` 问你。任何 harness 都能读到。
+- **语音输入**：输入框旁边有麦克风，可以说话代替打字，按 App 的语言识别。
+- App：HTML 文件可以直接作为网页打开，源码点一下就能看；agent 停顿后再说的话会接在前面的内容后面，不会插到中间；计划前面有一行说明时也能认成计划，清单显示成勾选框。
+
 ## v0.19.5
 
 - **模型、推理强度、额度**：agent 卡片的「运行」一块里可以直接选模型和推理强度（也可以「跟随电脑设置」）。设置存在 Hub 上，任何一台电脑上的 agent 都能改，下次唤醒时生效，优先于那台电脑自己的配置：Claude Code 用 `--model`、`--effort`，Codex 用 `-m`、`model_reasoning_effort`。runner 每次运行后上报账号额度（Claude Code 的 5 小时、7 天窗口，Codex 的各个窗口），卡片上每个窗口一行，用到 90% 变琥珀色，用完变红；电脑页上也会提示这台电脑上额度紧张的 agent。用 `myco inbox wait` 自己收消息的 agent，myco 拿不到它的模型和额度，它可以用 `myco agent runtime set --model …` 报一下自己的模型。
