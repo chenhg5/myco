@@ -151,6 +151,11 @@ struct ConversationBody: View {
     @State private var atBottom = true
     /// It was when the keyboard started to come up: keep it there.
     @State private var followKeyboard = false
+    /// The conversation stays at its end as it grows. Only the person
+    /// scrolling away lets go of it; content getting taller does not.
+    @State private var pinned = true
+    /// A finger moved the conversation a moment ago.
+    @State private var touched = false
     /// Counts what was sent or stopped from here: a light tap answers each.
     @State private var commits = 0
     /// The conversation has opened where it should and settled: from now
@@ -192,12 +197,38 @@ struct ConversationBody: View {
                     // input, so scrolling "to the end" brings that room too.
                     Color.clear.frame(height: Space.xl)
                         .id(Self.bottomID)
-                        .onAppear { atBottom = true }
-                        .onDisappear { atBottom = false }
+                        .onAppear {
+                            atBottom = true
+                            pinned = true
+                        }
+                        .onDisappear {
+                            atBottom = false
+                            // Gone because a finger scrolled away: let go.
+                            // Gone because the page grew: still pinned.
+                            if touched { pinned = false }
+                        }
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
+                // Taller (an answer came, steps loaded, a colleague's
+                // exchange was merged in): a pinned conversation goes along.
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { _ in
+                    guard landed, pinned else { return }
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in touched = true }
+                    .onEnded { _ in
+                        // The glide after a flick still counts as the person's.
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.2))
+                            touched = false
+                        }
+                    })
             // Opens at the bottom, and stays there as content grows while
             // the newest message is in view.
             .defaultScrollAnchor(.bottom)
@@ -209,6 +240,7 @@ struct ConversationBody: View {
             .overlay(alignment: .bottom) {
                 if !atBottom, !model.items.isEmpty {
                     ScrollToEndButton(label: L("回到底部", "Back to the newest")) {
+                        pinned = true
                         withAnimation(.snappy(duration: 0.3)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                     }
                     .padding(.bottom, Space.m)
@@ -216,27 +248,17 @@ struct ConversationBody: View {
                 }
             }
             .animation(.snappy(duration: 0.2), value: atBottom)
-            // More arrived (an answer, a colleague's exchange merged in):
-            // a conversation that was at its end goes with it. One being
-            // read further up is left alone.
-            .onChange(of: model.items.count) {
-                guard landed, atBottom else { return }
-                Task {
-                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
-                    try? await Task.sleep(for: .milliseconds(60))
-                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
-                }
-            }
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, new != nil else { return }
+                pinned = true
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             // The keyboard takes the lower part of the screen. A
             // conversation that was at its end stays at its end; one being
             // read further up stays where it is.
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                followKeyboard = atBottom
+                followKeyboard = pinned || atBottom
                 guard followKeyboard else { return }
                 withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
