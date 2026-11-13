@@ -20,7 +20,7 @@ import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, AvatarStack, isWorkspace, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, nodeName } from "@/app/nodes";
+import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -358,7 +358,19 @@ export default function AppMode({ initialHubs, initialInfo }: {
     : page === "about" ? L("项目资料", "Project notes")
     // A project says its own name, larger, just below.
     : "";
-  const working = (names: string[], hubId: string) => rows.some((r) => r.hub.id === hubId && names.includes(r.st.agent.name) && r.st.state === "working");
+  // A workspace's dot: green while someone is on work that has not gone quiet,
+  // amber when all the work in progress may be stuck (it was picked up, but
+  // nothing is moving). A node with both reads as working: something is live.
+  const workDot = (rs: AgentRow[]): "busy" | "stuck" | null => {
+    let busy = false;
+    let stuck = false;
+    for (const r of rs) {
+      if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
+      if (r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      else stuck = true;
+    }
+    return busy ? "busy" : stuck ? "stuck" : null;
+  };
 
   return (
     <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
@@ -375,12 +387,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
               {looseHubs.map((id) => {
                 const ref: SpaceRef = { hubId: id, loose: true };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
+                const dot = workDot(loose);
                 return (
                   <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => openSpace(ref)}
                     title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
                     <span className="app-nav-label">{L("聊天", "Chat")}</span>
                     {looseAgents.length > 0 && <AvatarStack agents={looseAgents.map((r) => r.st.agent)} size={18} max={3} />}
-                    {working(loose.map((r) => r.st.agent.name), id) && <span className="sp-nav-busy" title={L("有 agent 在干活", "Someone is at work")} />}
+                    {dot && (
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
+                        title={dot === "stuck" ? L("有 agent 可能卡住", "Someone may be stuck") : L("有 agent 在干活", "Someone is at work")} />
+                    )}
                   </button>
                 );
               })}
@@ -394,7 +410,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
               {liveProjects.map((x) => {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
-                const busy = working(x.p.members.map((m) => m.name), x.hubId);
+                const names = new Set(x.p.members.map((m) => m.name));
+                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name)));
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" className={cn("app-nav-item sp-nav", active && "active")}
                     aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
@@ -405,7 +422,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     ])}
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
-                    {busy && <span className="sp-nav-busy" title={L("有成员在干活", "Someone is at work")} />}
+                    {dot && (
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
+                        title={dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
+                    )}
                   </button>
                 );
               })}
@@ -422,14 +442,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
                   onClick={() => (shownProject && shown ? setAddWorkspace(shown) : setPage("computers"))}><Plus /></button>
               </div>
-              {computers.slice(0, NAV_COMPUTERS).map((r) => (
-                <button key={r.st.agent.name} type="button" className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away")}
-                  onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
-                  <Avatar agent={r.st.agent} size={20} badge={false} />
-                  <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
-                  {r.st.state === "working" && <span className="sp-nav-busy" title={L("正在跑命令", "Running a command")} />}
-                </button>
-              ))}
+              {computers.slice(0, NAV_COMPUTERS).map((r) => {
+                const dot = workDot([r]);
+                return (
+                  <button key={r.st.agent.name} type="button" className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away")}
+                    onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                    <Avatar agent={r.st.agent} size={20} badge={false} />
+                    <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
+                    {dot && (
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
+                        title={dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                    )}
+                  </button>
+                );
+              })}
               {computers.length > NAV_COMPUTERS && (
                 <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
                   <span className="app-nav-label">{L(`全部 ${computers.length} 台`, `All ${computers.length}`)}</span>

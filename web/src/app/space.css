@@ -181,6 +181,10 @@
   border-radius: 999px;
   background: var(--green);
 }
+/* Work in progress that has gone quiet: it may be stuck, not running. */
+.sp-nav-busy.is-stuck {
+  background: var(--amber);
+}
 .sp-nav-count {
   flex: none;
   margin-left: auto;

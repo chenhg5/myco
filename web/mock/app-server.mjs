@@ -115,7 +115,23 @@ const stuckTask = makeMessage({
   updated_at: iso(45 * 60),
   active_at: iso(45 * 60),
 });
-const stuckCurrent = new Map([["legacy-codex", stuckTask]]);
+// A command another agent sent to the exec node on Studio Mac: picked up and
+// quiet since, so the computer reads as working while nothing is moving. It
+// is not in a thread you take part in (the terminal shows only your own
+// commands): the amber bar above the terminal is where it is seen and stopped.
+const machineStuckTask = makeMessage({
+  id: "msg_stuck_mac_exec",
+  thread_id: "th_pm_mac_exec_stuck",
+  from: "pm-codex",
+  to: "mac-exec",
+  type: "task",
+  status: "acked",
+  body: "cd ~/code/myco && make app VERSION=v0.18.15-preview",
+  created_at: iso(65 * 60),
+  updated_at: iso(60 * 60),
+  active_at: iso(60 * 60),
+});
+const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
 // the newest message is closed, but the older one is still stuck, so stopping
@@ -840,6 +856,14 @@ const server = http.createServer(async (req, res) => {
     stuckTask.created_at = iso(46 * 60);
     stuckTask.updated_at = iso(45 * 60);
     stuckTask.active_at = iso(45 * 60);
+    // The command another agent left on mac-exec: the sidebar's amber dot and
+    // the terminal's bar come back too, because the smoke test stops them.
+    machineStuckTask.status = "acked";
+    delete machineStuckTask.error;
+    machineStuckTask.created_at = iso(65 * 60);
+    machineStuckTask.updated_at = iso(60 * 60);
+    machineStuckTask.active_at = iso(60 * 60);
+    stuckCurrent.set("mac-exec", machineStuckTask);
     // Keep what was sent there since (a real hub never drops messages, and
     // the app may still show them): only the demo tasks go back.
     // Tasks sent there since count as finished, so the demo tasks are the
@@ -1244,13 +1268,20 @@ const server = http.createServer(async (req, res) => {
 
     // /app/hubs/{id}/messages/{mid}/stop — stop an unfinished task.
     if (parts.length === 6 && parts[3] === "messages" && parts[5] === "stop" && method === "POST") {
-      const task = Object.values(hub.threads || {}).flat().find((m) => m.id === parts[4]);
+      // A command one node sent another may not be in a thread the App reads
+      // (the terminal lists it from the recipient's current work).
+      let task = Object.values(hub.threads || {}).flat().find((m) => m.id === parts[4]);
+      if (!task) task = [...stuckCurrent.values()].find((m) => m.id === parts[4]);
       if (!task) return fail(res, 404, "not_found", "没有这条消息");
-      if (!task.from.startsWith("@console:")) return fail(res, 403, "permission_denied", "只有从 App 发出的任务可以停止。");
+      // Who sent it, or someone who manages the hub.
+      if (!task.from.startsWith("@console:") && !whoami(hub)?.can_manage) {
+        return fail(res, 403, "permission_denied", "只有发送者或能管理这个工作区的人可以停止。");
+      }
       if (!["queued", "delivered", "acked", "held"].includes(task.status)) return fail(res, 409, "invalid_state", "这个任务已经结束了。");
       task.status = "failed";
       task.error = "stopped by the sender";
       task.updated_at = iso(0);
+      for (const [name, m] of stuckCurrent) if (m.id === task.id) stuckCurrent.delete(name);
       return send(res, 200, task);
     }
 
