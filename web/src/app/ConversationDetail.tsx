@@ -20,6 +20,7 @@ import { Avatar, whereOf } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
+import { VersionsContext, versionsOf } from "@/app/preview";
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast } from "@/app/hubVersion";
@@ -1266,7 +1267,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       );
   };
 
+  // A file sent again under the same name is its next version.
+  const versions = versionsOf(shown || []);
+
   return (
+    <VersionsContext.Provider value={versions}>
     <div className={cn("conv-detail", hasRail && "has-rail")}>
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
@@ -1565,6 +1570,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       </div>
       )}
     </div>
+    </VersionsContext.Provider>
   );
 }
 

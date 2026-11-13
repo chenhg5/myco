@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, ChevronRight, Download, FileText, Loader2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Attachment } from "@/api";
 import { bytes } from "@/app/attach";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { FilePreview, isText, useVersion, type Version } from "@/app/preview";
 
 /*
  * The files a message carries, as chat apps show them: pictures as
- * thumbnails (one larger, several in a grid) that open full size, other
- * files as a row you click to save to Downloads (shown in Finder /
- * Explorer). A picture that cannot be read (an older workspace, an expired
+ * thumbnails (one larger, several in a grid) that open full size; a text
+ * file (Markdown, a log, code) as a row that opens to read in the App
+ * (preview.tsx); other files as a row you click to save to Downloads
+ * (shown in Finder / Explorer). A picture that cannot be read (an older workspace, an expired
  * file) falls back to the row.
  */
 
@@ -53,8 +55,31 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
   );
 }
 
-/** A file that is not a picture: click to save it to Downloads. */
+/** A file that is not a picture: a text file (Markdown, a log, code)
+ *  opens to read in the App; anything else saves to Downloads. A file sent
+ *  again under the same name says which version it is. */
 function FileRow({ hubId, a }: { hubId: string; a: Attachment }) {
+  const version = useVersion(a.file_id);
+  const [reading, setReading] = useState(false);
+  if (isText(a)) {
+    return (
+      <>
+        <button type="button" className="conv-attach" onClick={() => setReading(true)} title={L("打开看看", "Open to read")}>
+          <FileText />
+          <span className="conv-attach-name">{a.name}</span>
+          {version && version.n > 1 && <span className="conv-attach-version">{L(`第 ${version.n} 版`, `v${version.n}`)}</span>}
+          <span className="conv-attach-size">{bytes(a.size)}</span>
+          <Eye className="conv-attach-go" />
+        </button>
+        <FilePreview hubId={hubId} file={a} version={version} open={reading} onOpenChange={setReading} />
+      </>
+    );
+  }
+  return <SaveRow hubId={hubId} a={a} version={version} />;
+}
+
+/** A file that is not text: click to save it to Downloads. */
+function SaveRow({ hubId, a, version }: { hubId: string; a: Attachment; version?: Version }) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState("");
   const save = async () => {
@@ -77,6 +102,7 @@ function FileRow({ hubId, a }: { hubId: string; a: Attachment }) {
       title={state === "error" ? error : L("存到「下载」文件夹", "Save to Downloads")}>
       <FileText />
       <span className="conv-attach-name">{a.name}</span>
+      {version && version.n > 1 && <span className="conv-attach-version">{L(`第 ${version.n} 版`, `v${version.n}`)}</span>}
       <span className="conv-attach-size">
         {state === "saving" ? <Loader2 className="att-spin" />
           : state === "saved" ? <><Check />{L("已存到「下载」", "Saved to Downloads")}</>

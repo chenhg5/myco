@@ -3386,6 +3386,79 @@ button.conv-attach:hover .conv-attach-go {
   font-size: 10.5px;
   color: var(--muted);
 }
+/* A file sent again under its name: which version this is. */
+.conv-attach-version {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 10.5px;
+  line-height: 17px;
+}
+.conv-attach-version + .conv-attach-size {
+  margin-left: 6px;
+}
+.conv-attach-name + .conv-attach-version {
+  margin-left: auto;
+}
+
+/* ---------- a file read in the App (preview.tsx) ---------- */
+.fp-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+.fp-views {
+  margin: 2px 0 10px;
+}
+.fp-body {
+  max-height: min(64vh, 640px);
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.fp-body.is-doc {
+  padding: 18px 22px;
+}
+.fp-body.is-doc .md {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.fp-note {
+  margin: 0;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.fp-code,
+.fp-diff {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+}
+.fp-line {
+  display: block;
+  margin: 0 -14px;
+  padding: 0 14px;
+}
+.fp-line.is-add {
+  background: var(--green-soft);
+}
+.fp-line.is-del {
+  background: var(--red-soft);
+  color: var(--fg-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--fg-2) 40%, transparent);
+}
+.fp-line.is-fold {
+  color: var(--muted);
+  font-style: italic;
+}
 
 /* ---------- conversation composer ---------- */
 .conv-compose {

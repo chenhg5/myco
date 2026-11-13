@@ -447,6 +447,15 @@ func TestAttachFromTheApp(t *testing.T) {
 	if resp2, _ = get(img.ID, "?download=1"); !strings.HasPrefix(resp2.Header.Get("Content-Disposition"), "attachment") {
 		t.Fatalf("a picture asked for as a download: %v", resp2.Header)
 	}
+	// Asked for as text (a preview in the app): plain text, never a page;
+	// a file that is not text says so.
+	if resp2, body = get(f.ID, "?as=text"); resp2.StatusCode != 200 || body != "hello from the app" ||
+		resp2.Header.Get("Content-Type") != "text/plain; charset=utf-8" || resp2.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("a text file as text: %d %q %v", resp2.StatusCode, body, resp2.Header)
+	}
+	if resp2, _ = get(img.ID, "?as=text"); resp2.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("a picture as text: %d", resp2.StatusCode)
+	}
 	if resp2, _ = get("f_nope", ""); resp2.StatusCode != 404 {
 		t.Fatalf("unknown file: %d", resp2.StatusCode)
 	}

@@ -530,6 +530,30 @@ if (SHOWCASE) {
 // states can be seen without restarting the mock.
 let joinCount = 0;
 let replySeq = 0;
+// How many release notes the mock's agent has sent (each one a new version).
+let notesSeq = 0;
+
+// The release notes the mock's agent writes: a little different each time,
+// so a second one shows what changed.
+function demoNotes(n) {
+  return [
+    "# v0.16.8 发布说明",
+    "",
+    "## App",
+    "",
+    "- 对话页支持 Markdown 表格与代码块",
+    n > 1 ? "- 进展可以带截图，点开看大图" : "- 本机会话一键接入",
+    "- 侧边栏可以拖宽",
+    "",
+    "## Hub",
+    "",
+    "- 修复 runner 断线后重连",
+    ...(n > 1 ? ["- 文件预览：Markdown 直接在 App 里看"] : []),
+    "",
+    "升级前请先跑一遍 `make check`。",
+    "",
+  ].join("\n");
+}
 
 function consoleReply() {
   replySeq += 1;
@@ -574,6 +598,7 @@ function consoleReply() {
     attachments: [
       { file_id: `f_demo_shot_${replySeq}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
       { file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" },
+      { file_id: `f_demo_md_${(notesSeq += 1)}`, name: "发布说明.md", size: 640, sha256: "demo", content_type: "text/markdown" },
     ],
   };
 }
@@ -1427,8 +1452,14 @@ const server = http.createServer(async (req, res) => {
       let data = uploadBytes.get(fid);
       let meta = uploads.get(fid);
       if (!data && fid.startsWith("f_demo_shot_")) { data = DEMO_PNG; meta = { name: "首页截图.png", content_type: "image/png" }; }
+      if (!data && fid.startsWith("f_demo_md_")) { data = Buffer.from(demoNotes(Number(fid.slice(10)) || 1)); meta = { name: "发布说明.md", content_type: "text/markdown" }; }
       if (!data && fid.startsWith("f_demo_")) { data = Buffer.from("BUILD SUCCESSFUL\n"); meta = { name: "build.log", content_type: "text/plain" }; }
       if (!data) return fail(res, 404, "not_found", `file ${fid} not found`);
+      if (url.searchParams.get("as") === "text") {
+        if (/^image\//.test(meta.content_type || "") || data.includes(0)) return fail(res, 415, "not_text", "this file cannot be shown as text");
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Content-Length": data.length });
+        return res.end(data);
+      }
       const inline = /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(meta.content_type || "") && !url.searchParams.get("download");
       res.writeHead(200, {
         "Content-Type": inline ? meta.content_type : "application/octet-stream",

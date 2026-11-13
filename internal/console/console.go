@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
@@ -449,6 +450,15 @@ func (b *Backend) Handler() http.Handler {
 		ct, disp := "application/octet-stream", "attachment"
 		if inlineImage(f.ContentType) && r.URL.Query().Get("download") == "" {
 			ct, disp = f.ContentType, "inline"
+		}
+		// ?as=text: a text file (Markdown, a log, code) for the app to show
+		// as text, never as a page. Anything that is not text says so.
+		if r.URL.Query().Get("as") == "text" {
+			if len(data) > maxTextPreview || !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+				writeErr(w, &client.Error{Code: "not_text", Message: "this file cannot be shown as text", Status: http.StatusUnsupportedMediaType})
+				return
+			}
+			ct, disp = "text/plain; charset=utf-8", "inline"
 		}
 		w.Header().Set("Content-Type", ct)
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
@@ -1435,6 +1445,10 @@ func filterConversations(cs []api.Conversation, query string) []api.Conversation
 
 // inlineImage reports whether a file of this type may be shown in the
 // app's page as a picture: raster types only (an SVG can carry script).
+// maxTextPreview bounds a file the app shows as text (longer ones are
+// saved instead).
+const maxTextPreview = 2 << 20
+
 func inlineImage(contentType string) bool {
 	t, _, _ := mime.ParseMediaType(contentType)
 	switch t {

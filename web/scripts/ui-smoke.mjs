@@ -761,9 +761,21 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "message-picture-open");
       await page.keyboard.press("Escape");
       await page.locator(".lightbox").waitFor({ state: "hidden", timeout: 5_000 });
-      const file = page.locator(".conv-detail button.conv-attach:not(.is-image)").last();
-      await file.click();
-      await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "已存到「下载」" }).first().waitFor({ timeout: 5_000 });
+      // A Markdown file opens to read in the App, rendered; Save is there.
+      await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "发布说明.md" }).last().click();
+      const doc = page.locator(".app-modal.fp-modal");
+      await doc.locator(".fp-body.is-doc .md h1").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "file-preview");
+      await doc.getByRole("button", { name: "存到「下载」" }).click();
+      await doc.getByRole("button", { name: "已存到「下载」" }).waitFor({ timeout: 5_000 });
+      await doc.getByRole("button", { name: "关闭" }).click();
+      await doc.waitFor({ state: "hidden", timeout: 5_000 });
+      // A log reads as plain text.
+      await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "build.log" }).last().click();
+      await doc.locator(".fp-code", { hasText: "BUILD SUCCESSFUL" }).waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await doc.waitFor({ state: "hidden", timeout: 5_000 });
       // Every one of them answered before the next step uses this chat.
       await page.waitForFunction(() => {
         const d = document.querySelector(".conv-detail");
