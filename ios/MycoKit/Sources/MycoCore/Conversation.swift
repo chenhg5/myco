@@ -73,6 +73,8 @@ public enum ConversationBuilder {
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         /// Updates of tasks that have ended, by task, oldest first.
         var past: [String: [Message]] = [:]
+        /// My tasks that are still open, with where each stands.
+        var myOpen: [(task: Message, state: RunState)] = []
         /// The newest plan of each task: from its steps, or a checklist it reported.
         var plans: [String: (items: [PlanItem], at: Date)] = [:]
         for (taskID, plan) in tracedPlans {
@@ -102,11 +104,16 @@ public enum ConversationBuilder {
                 }
                 switch state {
                 case .queued, .working, .maybeStuck:
-                    // My open task's status closes the page; a colleague's
-                    // stays with its task, so two never stack at the end.
-                    items.append(.init(
-                        id: m.id + ".status", at: mine ? .distantFuture : m.createdAt.addingTimeInterval(0.002),
-                        kind: .status(state, taskID: m.id)))
+                    // My open task's status closes the page (one line,
+                    // added below, however many are open); a colleague's
+                    // stays with its task.
+                    if mine {
+                        myOpen.append((m, state))
+                    } else {
+                        items.append(.init(
+                            id: m.id + ".status", at: m.createdAt.addingTimeInterval(0.002),
+                            kind: .status(state, taskID: m.id)))
+                    }
                 case .failed(let reason):
                     items.append(.init(id: m.id + ".failed", at: m.updatedAt, kind: .failure(reason: reason)))
                 case .stopped:
@@ -142,6 +149,22 @@ public enum ConversationBuilder {
             default:
                 break // events repeat what a failed task already says
             }
+        }
+        // One line says where my work with the agent stands, never two:
+        // the task being worked on if there is one, else one that may be
+        // stuck, else the newest still waiting.
+        func rank(_ state: RunState) -> Int {
+            switch state {
+            case .working: return 0
+            case .maybeStuck: return 1
+            default: return 2
+            }
+        }
+        let leading = myOpen.min { a, b in
+            (rank(a.state), b.task.createdAt) < (rank(b.state), a.task.createdAt)
+        }
+        if let leading {
+            items.append(.init(id: leading.task.id + ".status", at: .distantFuture, kind: .status(leading.state, taskID: leading.task.id)))
         }
         for (taskID, plan) in plans {
             guard let task = byID[taskID] else { continue }

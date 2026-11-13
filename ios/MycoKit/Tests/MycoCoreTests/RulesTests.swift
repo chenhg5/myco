@@ -230,6 +230,18 @@ struct ConversationBuilderTests {
         #expect(ConversationBuilder.threadToContinue(me: "me", messages: messages) == "t1")
     }
 
+    @Test func severalOpenTasksOfMineStillMakeOneStatusLine() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "one", status: "queued", createdAt: at(-300)),
+            Message(id: "t2", from: "me", to: "coder", body: "two", status: "acked", createdAt: at(-200), updatedAt: at(-9)),
+            Message(id: "t3", from: "me", to: "coder", body: "three", status: "acked", createdAt: at(-100), updatedAt: at(-5)),
+        ]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        // The newest one being worked on speaks for all of them.
+        #expect(items.map(\.id) == ["t1", "t2", "t3", "t3.status"])
+        #expect(items[3].kind == .status(.working(since: at(-5)), taskID: "t3"))
+    }
+
     @Test func aChecklistReportedIsThePlanNotAnUpdate() {
         let messages = [
             Message(id: "t1", from: "me", to: "coder", body: "build it", status: "acked", createdAt: at(-500), updatedAt: at(-5)),
