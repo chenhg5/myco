@@ -42,6 +42,19 @@ func NewAgentService(agents domain.AgentRepository, tokens TokenIssuer, ids IDGe
 	return &AgentService{agents: agents, tokens: tokens, ids: ids, clock: clock, onlineWindow: onlineWindow, wakers: wakers}
 }
 
+// agentTouchEvery limits last-seen writes to one per agent per 15 seconds.
+const agentTouchEvery = 15 * time.Second
+
+// touchEvery is agentTouchEvery, shorter for a short online window: what is
+// stored is never older than a quarter of the window, so an agent that
+// keeps calling stays online.
+func (s *AgentService) touchEvery() time.Duration {
+	if w := s.onlineWindow / 4; w > 0 && w < agentTouchEvery {
+		return w
+	}
+	return agentTouchEvery
+}
+
 // OnlineWindow is how recently an agent must have been seen to count as online.
 func (s *AgentService) OnlineWindow() time.Duration { return s.onlineWindow }
 
@@ -372,11 +385,14 @@ func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.
 	if err != nil {
 		return nil, err
 	}
-	now := s.clock.Now()
-	if err := s.agents.Touch(ctx, a.Name, now); err != nil {
-		return nil, err
+	// Seen again: written at most once per touchEvery, so a request that
+	// only reads (or starts a long-poll) does not also write to the database.
+	if now := s.clock.Now(); now.Sub(a.LastSeenAt) >= s.touchEvery() {
+		if err := s.agents.Touch(ctx, a.Name, now); err != nil {
+			return nil, err
+		}
+		a.LastSeenAt = now
 	}
-	a.LastSeenAt = now
 	return a, nil
 }
 
