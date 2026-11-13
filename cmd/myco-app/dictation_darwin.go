@@ -105,9 +105,16 @@ import (
 	"github.com/chenhg5/myco/internal/console"
 )
 
+// A listening: where its text goes, and its sentences so far (the
+// recognizer starts over after a pause).
+type listening struct {
+	h *console.Hearing
+	u console.Utterances
+}
+
 var (
 	hearingsMu sync.Mutex
-	hearingsBy = map[int]*console.Hearing{}
+	hearingsBy = map[int]*listening{}
 	nextSid    int
 )
 
@@ -118,7 +125,7 @@ var listen = func(lang string, h *console.Hearing) (func(), error) {
 	hearingsMu.Lock()
 	nextSid++
 	sid := nextSid
-	hearingsBy[sid] = h
+	hearingsBy[sid] = &listening{h: h}
 	hearingsMu.Unlock()
 	cs := C.CString(lang)
 	defer C.free(unsafe.Pointer(cs))
@@ -129,16 +136,28 @@ var listen = func(lang string, h *console.Hearing) (func(), error) {
 // dictate: on a Mac the app listens itself (listen).
 var dictate func(lang string) error
 
-func heard(sid int) *console.Hearing {
+// heard passes on what the recognizer has now, after what it said before
+// a pause.
+func heard(sid int, text string, final bool) {
 	hearingsMu.Lock()
-	defer hearingsMu.Unlock()
-	return hearingsBy[sid]
+	l := hearingsBy[sid]
+	var all string
+	if l != nil {
+		all = l.u.Add(text)
+	}
+	hearingsMu.Unlock()
+	if l != nil {
+		l.h.Heard(all, final)
+	}
 }
 
 func heardDone(sid int) *console.Hearing {
 	hearingsMu.Lock()
 	defer hearingsMu.Unlock()
-	h := hearingsBy[sid]
+	l := hearingsBy[sid]
 	delete(hearingsBy, sid)
-	return h
+	if l == nil {
+		return nil
+	}
+	return l.h
 }

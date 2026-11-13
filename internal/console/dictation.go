@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/client"
 )
@@ -196,4 +198,51 @@ func hearingID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// Utterances keeps what a recognizer heard when it starts over after a
+// pause (Apple's does, on this Mac: after a pause its text is only the new
+// sentence): what came before stays, the new sentence goes after it.
+type Utterances struct{ done, last string }
+
+// Add takes the recognizer's text now and returns all of it so far.
+func (u *Utterances) Add(text string) string {
+	if u.last != "" && startsOver(u.last, text) {
+		u.done = joinText(u.done, u.last)
+	}
+	u.last = text
+	return joinText(u.done, text)
+}
+
+// startsOver: next is a new sentence, not prev revised or carried on. A
+// revision keeps the start (at least two letters, or all of a short
+// beginning); a new sentence shares nothing with it.
+func startsOver(prev, next string) bool {
+	p, n := []rune(prev), []rune(next)
+	same := 0
+	for same < len(p) && same < len(n) && p[same] == n[same] {
+		same++
+	}
+	if same >= 2 || same == len(p) || same == len(n) {
+		return false
+	}
+	// The first word or two may still change as it hears more.
+	return len(p) > 3
+}
+
+// joinText puts b after a: words in a Latin script get a space between.
+func joinText(a, b string) string {
+	if a == "" || b == "" {
+		return a + b
+	}
+	last, _ := utf8.DecodeLastRuneInString(a)
+	first, _ := utf8.DecodeRuneInString(b)
+	if latin(last) && latin(first) {
+		return a + " " + b
+	}
+	return a + b
+}
+
+func latin(r rune) bool {
+	return r < 0x2E80 && (unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsPunct(r))
 }

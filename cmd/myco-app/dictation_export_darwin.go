@@ -9,8 +9,8 @@ import "C"
 //
 //export mycoHeard
 func mycoHeard(sid C.int, text *C.char, final C.int) {
-	if h := heard(int(sid)); h != nil && text != nil {
-		h.Heard(C.GoString(text), final != 0)
+	if text != nil {
+		heard(int(sid), C.GoString(text), final != 0)
 	}
 }
 
