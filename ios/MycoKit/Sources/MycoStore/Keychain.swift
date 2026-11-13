@@ -61,9 +61,9 @@ public actor FileWorkspaceStore: WorkspaceStore {
     }
 }
 
-/// Snapshots as files in the app's caches folder, protected until the
-/// device is first unlocked. The system may clear them; nothing depends on
-/// them being there.
+/// Snapshots as files in the app's caches folder, one folder per
+/// workspace, protected until the device is first unlocked. The system may
+/// clear them; nothing depends on them being there.
 public struct FileSnapshotStore: SnapshotStore {
     private let folder: URL
 
@@ -71,20 +71,30 @@ public struct FileSnapshotStore: SnapshotStore {
         self.folder = folder ?? URL.cachesDirectory.appending(path: "myco/snapshots")
     }
 
-    private func file(_ workspace: String) -> URL {
-        folder.appending(path: workspace.replacingOccurrences(of: "/", with: "_") + ".json")
+    /// A name safe to use as a file's: letters, digits, dots, dashes.
+    private static func safe(_ text: String) -> String {
+        String(text.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") ? $0 : "_" })
     }
 
-    public func snapshot(for workspace: String) async -> Data? {
-        try? Data(contentsOf: file(workspace))
+    private func file(_ workspace: String, _ name: String) -> URL {
+        folder.appending(path: Self.safe(workspace)).appending(path: Self.safe(name) + ".json")
     }
 
-    public func setSnapshot(_ data: Data?, for workspace: String) async {
+    public func snapshot(of workspace: String, name: String) async -> Data? {
+        try? Data(contentsOf: file(workspace, name))
+    }
+
+    public func setSnapshot(_ data: Data?, of workspace: String, name: String) async {
+        let file = file(workspace, name)
         guard let data else {
-            try? FileManager.default.removeItem(at: file(workspace))
+            try? FileManager.default.removeItem(at: file)
             return
         }
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? data.write(to: file(workspace), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    public func removeSnapshots(of workspace: String) async {
+        try? FileManager.default.removeItem(at: folder.appending(path: Self.safe(workspace)))
     }
 }

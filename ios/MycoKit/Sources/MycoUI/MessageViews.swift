@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// What I said: a small bubble on the right. A message added to a running
 /// task carries a small label above it.
@@ -18,14 +19,102 @@ public struct MyBubble: View {
             }
             Text(text)
                 .font(.body)
+                .lineSpacing(3)
                 .foregroundStyle(MycoColor.fg)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .padding(.leading, 48)
+        .padding(.leading, 56)
+    }
+}
+
+/// The time, written small and centred where a conversation paused.
+public struct TimeBreak: View {
+    let text: String
+
+    public init(_ text: String) {
+        self.text = text
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(MycoColor.faint)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+/// What can be done with an answer, in a quiet row under it: copy it, and
+/// see when it came and what it took.
+public struct ReplyActions: View {
+    let text: String
+    let detail: String
+    let copyLabel: String
+    @State private var copied = false
+
+    /// - Parameter detail: the time, and what the run took ("14:32 · 12 秒").
+    public init(copying text: String, detail: String, copyLabel: String) {
+        self.text = text
+        self.detail = detail
+        self.copyLabel = copyLabel
+    }
+
+    public var body: some View {
+        HStack(spacing: Space.s) {
+            Button {
+                UIPasteboard.general.string = text
+                copied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1.6))
+                    copied = false
+                }
+            } label: {
+                Image(systemName: copied ? "checkmark" : "square.on.square")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(copied ? MycoColor.green : MycoColor.muted)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(PressScaleStyle())
+            .accessibilityLabel(copyLabel)
+            .accessibilityIdentifier("reply.copy")
+            .sensoryFeedback(.success, trigger: copied) { _, now in now }
+
+            Text(detail).font(.footnote).foregroundStyle(MycoColor.faint).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        // The icon's box hangs into the margin, so its glyph lines up with the text above.
+        .padding(.leading, -9)
+    }
+}
+
+/// Back to the newest message: a round button that floats over a
+/// conversation while its end is out of sight.
+public struct ScrollToEndButton: View {
+    let label: String
+    let action: () -> Void
+
+    public init(label: String, action: @escaping () -> Void) {
+        self.label = label
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(MycoColor.fg)
+                .frame(width: 38, height: 38)
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().stroke(MycoColor.line, lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("conversation.toEnd")
     }
 }
 
@@ -38,9 +127,9 @@ public struct ProgressLine: View {
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle().fill(MycoColor.faint).frame(width: 5, height: 5).offset(y: -2)
-            Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(MycoColor.faint).frame(width: 5, height: 5).offset(y: -3)
+            Text(text).font(.subheadline).lineSpacing(3).foregroundStyle(MycoColor.fg2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -102,10 +191,14 @@ public struct WorkingLine: View {
         self.since = since
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     public var body: some View {
-        HStack(spacing: 8) {
-            AvatarView(.mushroom(look), size: 22)
-            Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2)
+        HStack(spacing: 10) {
+            // At work, the little mushroom bobs; waiting its turn, it stands.
+            AvatarView(.mushroom(look), size: 26)
+                .modifier(Bobbing(active: since != nil && !reduceMotion))
+            Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(2)
             if let since {
                 Text(since, style: .timer)
                     .font(.subheadline.monospacedDigit())
@@ -114,6 +207,20 @@ public struct WorkingLine: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A slow, small up-and-down, for as long as `active`.
+private struct Bobbing: ViewModifier {
+    let active: Bool
+    @State private var up = false
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: active && up ? -2.5 : 0)
+            .animation(active ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true) : .default, value: up)
+            .onAppear { up = active }
+            .onChange(of: active) { _, now in up = now }
     }
 }
 

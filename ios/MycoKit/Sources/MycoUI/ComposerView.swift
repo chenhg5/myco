@@ -36,29 +36,36 @@ public struct ComposerView: View {
     }
 
     public var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 10) {
             Button(action: onAttach) {
                 Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(MycoColor.fg2)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 42, height: 42)
                     .background(MycoColor.pill, in: Circle())
             }
             .buttonStyle(PressScaleStyle())
             .accessibilityIdentifier("composer.attach")
 
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(1...8)
-                .font(.body)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .accessibilityIdentifier("composer.input")
-
-            submitButton
+            // The field and its button are one shape: the button sits inside
+            // the field's trailing edge and stays at the bottom as it grows.
+            HStack(alignment: .bottom, spacing: 4) {
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(1...8)
+                    .font(.body)
+                    .padding(.leading, 16)
+                    .padding(.vertical, 10)
+                    .accessibilityIdentifier("composer.input")
+                submitButton
+                    .padding(.trailing, 5)
+                    .padding(.bottom, 5)
+            }
+            .frame(minHeight: 42)
+            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder private var submitButton: some View {
@@ -86,9 +93,9 @@ public struct ComposerView: View {
 
     private var icon: some View {
         Image(systemName: mode == .stop ? "stop.fill" : "arrow.up")
-            .font(.system(size: mode == .stop ? 13 : 16, weight: .bold))
+            .font(.system(size: mode == .stop ? 12 : 15, weight: .bold))
             .foregroundStyle(MycoColor.buttonText)
-            .frame(width: 36, height: 36)
+            .frame(width: 32, height: 32)
             .background(MycoColor.button.opacity(enabled ? 1 : 0.3), in: Circle())
     }
 }

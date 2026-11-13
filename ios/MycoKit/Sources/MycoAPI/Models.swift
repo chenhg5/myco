@@ -304,6 +304,11 @@ public struct TraceStep: Codable, Sendable, Hashable {
     public var input: String?
     public var output: String?
     public var failed: Bool?
+    /// A `usage` step: what the run took.
+    public var durationMs: Double?
+    public var inputTokens: Int?
+    public var outputTokens: Int?
+    public var costUsd: Double?
 
     public init(id: String? = nil, text: String? = nil, tool: String? = nil, input: String? = nil, output: String? = nil, failed: Bool? = nil) {
         self.id = id

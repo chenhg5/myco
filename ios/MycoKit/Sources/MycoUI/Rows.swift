@@ -24,10 +24,10 @@ public struct PersonRow: View {
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            AvatarView(face, size: 40, badge: badge, away: away)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+        HStack(spacing: 13) {
+            AvatarView(face, size: 50, badge: badge, away: away)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg).lineLimit(1)
                 if !subtitle.isEmpty {
                     Text(subtitle).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)
                 }

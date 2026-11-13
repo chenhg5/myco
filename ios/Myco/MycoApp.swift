@@ -46,7 +46,7 @@ struct MycoApp: App {
             },
             leave: { id in
                 await workspaces.leave(id)
-                await snapshots.setSnapshot(nil, for: id)
+                await snapshots.removeSnapshots(of: id)
             })
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))

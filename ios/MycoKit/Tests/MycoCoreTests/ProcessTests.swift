@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import MycoAPI
 import MycoFake
+import MycoStore
 @testable import MycoCore
 
 struct ProcessTests {
@@ -86,10 +87,41 @@ struct ConversationProcessTests {
         await session.refresh()
         let model = ConversationModel(session: session, agent: "cloud-lead", project: "myco-ios")
         await model.reload()
-        #expect(model.items.map(\.id).starts(with: ["m1", "m1.process", "m2"]))
+        #expect(model.items.map(\.id).starts(with: ["m1.time", "m1", "m1.process", "m2"]))
         let process = try! #require(model.process(of: "m1"))
         #expect(process.plan?.count == 4)
         #expect(!process.segments.isEmpty)
+        AppLanguage.$forced.withValue(.en) {
+            #expect(RunProcess(events: FakeHub.scriptForTests).usage == "12s · 1500 tokens · $0.02")
+        }
+    }
+
+    @Test func aConversationOpensOnWhatItShowedLast() async {
+        let store = MemoryStore()
+        let first = WorkspaceSession(id: "w1", name: "Demo", hub: FakeHub(), snapshots: store)
+        await first.refresh()
+        let model = first.conversation(with: "cloud-lead", project: "myco-ios")
+        await model.reload()
+        let shown = model.items.map(\.id)
+        #expect(shown.contains("m2"))
+        // Asked for again while the workspace is on screen: the same one.
+        #expect(first.conversation(with: "cloud-lead", project: "myco-ios") === model)
+
+        // The next launch, with the workspace not answering.
+        let hub = FakeHub()
+        await hub.setUnreachable(true)
+        let second = WorkspaceSession(id: "w1", name: "Demo", hub: hub, snapshots: store)
+        await second.restore()
+        let again = second.conversation(with: "cloud-lead", project: "myco-ios")
+        #expect(again.items.isEmpty)
+        await again.restore()
+        #expect(again.loaded)
+        #expect(again.items.map(\.id) == shown)
+        #expect(again.process(of: "m1")?.plan?.count == 4)
+        // Another conversation has nothing kept under this one's name.
+        let other = second.conversation(with: "studio-codex-e07b")
+        await other.restore()
+        #expect(other.items.isEmpty)
     }
 
     @Test func workOthersGaveAnAgentShowsOnItsPage() async {

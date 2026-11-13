@@ -113,4 +113,14 @@ final class WalkthroughTests: XCTestCase {
         app.buttons["workspace.button"].tap()
         XCTAssertTrue(app.buttons["Join another workspace"].waitForExistence(timeout: 5), "the workspace panel opens")
     }
+
+    @MainActor
+    func testAddingAnAgentGivesASentenceWithARealLink() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        app.buttons["Add an agent"].firstMatch.tap()
+        let sentence = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "curl -fsSL https://demo.myco.example/j/")).firstMatch
+        XCTAssertTrue(sentence.waitForExistence(timeout: 5), "the sentence carries the workspace's join link")
+        XCTAssertTrue(app.buttons["Copy"].isEnabled)
+    }
 }

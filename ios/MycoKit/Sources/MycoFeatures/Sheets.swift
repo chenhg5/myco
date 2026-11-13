@@ -268,55 +268,93 @@ struct SettingsScreen: View {
 /// Adding an agent from the phone: one sentence to send to any AI session.
 struct AddAgentSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(WorkspaceSession.self) private var session
     @State private var copied = false
+    @State private var link: JoinLink?
+    @State private var problem: String?
 
-    // The real sentence carries a join link made by the workspace; this is
-    // its shape until the app talks to one.
+    /// What to tell an agent so it joins: one command when the workspace
+    /// guides agents itself, the steps spelled out for older ones.
     private var sentence: String {
-        L("加入 myco：在终端运行 curl -fsSL https://你的工作区/j/… | bash ，再照它最后的输出做完。",
-          "Join myco: run curl -fsSL https://your-workspace/j/… | bash in a terminal, then do what its last lines say.")
+        guard let link else { return "" }
+        let command = "curl -fsSL \(link.joinUrl) | bash"
+        if link.agentGuide == true {
+            return L("加入 myco：在终端运行 \(command) ，再照它最后的输出做完。",
+                     "Join myco: run \(command) in a terminal, then do what its last lines say.")
+        }
+        return L("加入 myco：在终端运行 \(command) ，然后在你这个会话里运行 myco join --display-name \"你的分工\" --description \"一句话说你负责什么\"，再照它的输出接收消息。",
+                 "Join myco: run \(command) in a terminal, then in this session run myco join --display-name \"your role\" --description \"one line on what you do\", and receive messages as its output says.")
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L("把这句话发给任何一个 AI 会话（Claude Code、Codex、claude.ai……），它会自己装好 myco 并加入。",
-                       "Send this sentence to any AI session (Claude Code, Codex, claude.ai…). It installs myco and joins by itself."))
-                    .font(.subheadline).foregroundStyle(MycoColor.fg2)
-                Text(sentence)
-                    .font(.callout.monospaced())
-                    .foregroundStyle(MycoColor.fg)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .textSelection(.enabled)
-                Text(L("演示工作区没有真的链接，这里只是这句话的样子。", "The demo workspace has no real link. This only shows what the sentence looks like."))
-                    .font(.footnote).foregroundStyle(MycoColor.muted)
-                HStack(spacing: 10) {
-                    Button(copied ? L("已复制", "Copied") : L("复制", "Copy")) {
-                        UIPasteboard.general.string = sentence
-                        copied = true
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    ShareLink(item: sentence) {
-                        Text(L("分享", "Share")).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg)
-                            .frame(maxWidth: .infinity).padding(.vertical, 13)
-                            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                }
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack {
+                Text(L("添加 agent", "Add an agent")).font(.title3.weight(.semibold)).foregroundStyle(MycoColor.fg)
                 Spacer()
-            }
-            .padding(20)
-            .background(MycoColor.bg)
-            .navigationTitle(L("添加 agent", "Add an agent"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("关闭", "Close")) { dismiss() }
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(MycoColor.muted)
+                        .frame(width: 30, height: 30)
+                        .background(MycoColor.pill, in: Circle())
                 }
+                .buttonStyle(PressScaleStyle())
+                .accessibilityLabel(L("关闭", "Close"))
+            }
+            Text(L("把这句话发给任何一个 AI 会话（Claude Code、Codex、claude.ai……），它会自己装好 myco 并加入。",
+                   "Send this sentence to any AI session (Claude Code, Codex, claude.ai…). It installs myco and joins by itself."))
+                .font(.subheadline).lineSpacing(3).foregroundStyle(MycoColor.fg2)
+            Group {
+                if link != nil {
+                    Text(sentence).textSelection(.enabled)
+                } else if let problem {
+                    Text(problem).foregroundStyle(MycoColor.red)
+                } else {
+                    // The sentence's shape while the workspace makes the link.
+                    Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
+                }
+            }
+            .font(.callout.monospaced())
+            .lineSpacing(3)
+            .foregroundStyle(MycoColor.fg)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .accessibilityIdentifier("add.sentence")
+            Text(L("链接能用 10 次，一周内有效。", "The link works ten times, for a week."))
+                .font(.footnote).foregroundStyle(MycoColor.muted)
+            HStack(spacing: 10) {
+                Button(copied ? L("已复制", "Copied") : L("复制", "Copy")) {
+                    UIPasteboard.general.string = sentence
+                    copied = true
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                ShareLink(item: sentence) {
+                    Text(L("分享", "Share")).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+            .padding(.top, Space.xs)
+            .disabled(link == nil)
+            .opacity(link == nil ? 0.4 : 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 26)
+        .padding(.bottom, 12)
+        .background(MycoColor.bg)
+        // As tall as what is in it: the buttons sit near the bottom edge.
+        .fittedSheet()
+        .sensoryFeedback(.success, trigger: copied) { _, now in now }
+        .task {
+            do {
+                link = try await session.hub.joinLink()
+            } catch {
+                problem = L("没能拿到加入链接：", "Could not make a join link: ") + ((error as? HubError)?.message ?? error.localizedDescription)
             }
         }
-        .presentationDetents([.medium, .large])
     }
 }
 

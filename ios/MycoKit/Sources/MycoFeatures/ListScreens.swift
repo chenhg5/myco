@@ -25,7 +25,7 @@ struct ChatsScreen: View {
                     tone: StatusTone.of(row.state), away: row.away)
             }
             .buttonStyle(RowButtonStyle())
-            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .contextMenu {
@@ -91,7 +91,7 @@ struct ProjectsScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(RowButtonStyle())
-            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .accessibilityIdentifier("project." + project.name)
@@ -141,7 +141,7 @@ struct MembersScreen: View {
                                 tone: StatusTone.of(member: status), away: status.state == "offline")
                         }
                         .buttonStyle(RowButtonStyle())
-                        .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
                         .listRowBackground(MycoColor.bg)
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("member." + status.agent.name)
@@ -197,6 +197,8 @@ private struct WorkspaceChrome: ViewModifier {
                 if !isSearching { AppTabBar() }
             }
             .toolbar(.hidden, for: .tabBar)
+            // Pulling down asks the workspace again, now.
+            .refreshable { await session.refresh() }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)

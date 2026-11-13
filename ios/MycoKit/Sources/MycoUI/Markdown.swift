@@ -166,7 +166,7 @@ public struct ReplyText: View {
     private var color: Color { dim ? MycoColor.muted : MycoColor.fg }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.m) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
@@ -179,13 +179,14 @@ public struct ReplyText: View {
     @ViewBuilder private func view(for block: MarkdownBlock) -> some View {
         switch block {
         case .paragraph(let text):
-            Text(MarkdownBlock.inline(text)).font(.body).textSelection(.enabled)
+            Text(MarkdownBlock.inline(text)).font(.body).lineSpacing(5)
         case .heading(let level, let text):
             Text(MarkdownBlock.inline(text))
                 .font(level <= 1 ? .title3.weight(.semibold) : .headline)
-                .padding(.top, 2)
+                .lineSpacing(3)
+                .padding(.top, 6)
         case .list(let items):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let checked = item.checked {
@@ -194,24 +195,25 @@ public struct ReplyText: View {
                         } else {
                             Text(item.marker).font(.body.monospacedDigit()).foregroundStyle(MycoColor.muted)
                         }
-                        Text(MarkdownBlock.inline(item.text)).font(.body).textSelection(.enabled)
+                        Text(MarkdownBlock.inline(item.text)).font(.body).lineSpacing(4)
                     }
-                    .padding(.leading, CGFloat(item.level) * 18)
+                    .padding(.leading, CGFloat(item.level) * 20)
                 }
             }
         case .code(_, let text):
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
                     .font(.footnote.monospaced())
+                    .lineSpacing(3)
                     .foregroundStyle(MycoColor.fg)
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(14)
             }
-            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         case .quote(let text):
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 1.5).fill(MycoColor.line).frame(width: 3)
-                Text(MarkdownBlock.inline(text)).font(.body).foregroundStyle(MycoColor.fg2)
+                Text(MarkdownBlock.inline(text)).font(.body).lineSpacing(5).foregroundStyle(MycoColor.fg2)
             }
             .fixedSize(horizontal: false, vertical: true)
         case .table(let header, let rows):

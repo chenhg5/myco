@@ -65,6 +65,17 @@ public struct HubClient: HubAPI {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/stop")
     }
 
+    public func joinLink() async throws -> JoinLink {
+        struct Request: Encodable {
+            var kind = "link"
+            var maxUses = 10
+            var ttlSeconds = 7 * 24 * 3600
+            var note = "myco ios"
+        }
+        let data = try await call("POST", "/v1/enrollments", body: HubJSON.encoder().encode(Request()))
+        return try Self.decode(JoinLink.self, from: data)
+    }
+
     /// Signs this device out on the hub: its token stops working.
     public func removeThisDevice() async throws {
         guard let id = try await whoami().device?.id else { return }

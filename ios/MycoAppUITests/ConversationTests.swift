@@ -44,6 +44,17 @@ final class ConversationTests: XCTestCase {
         XCTAssertFalse(last.exists && last.isHittable, "scrolling up leaves the end behind")
         snap("long-scrolled-up")
 
+        // Away from the end, a button leads back to it.
+        let toEnd = app.buttons["conversation.toEnd"]
+        XCTAssertTrue(toEnd.waitForExistence(timeout: 3), "a button offers the way back")
+        toEnd.tap()
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: last)
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(toEnd.exists, "and goes away at the end")
+        // The newest answer carries its row of actions.
+        XCTAssertTrue(app.buttons["reply.copy"].exists, "the newest answer can be copied with one tap")
+        for _ in 0..<3 { list.swipeDown(velocity: .fast) }
+
         // Saying something new brings the end back into view.
         input.tap()
         input.typeText("One more question")

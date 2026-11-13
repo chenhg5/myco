@@ -107,6 +107,9 @@ public actor FakeHub: HubAPI {
         return Trace(message: messageID, status: task.status, events: Self.script.prefix(shown).filter { $0.seq > seq })
     }
 
+    /// The fake run, for tests that read a whole one.
+    public static var scriptForTests: [TraceEvent] { script }
+
     /// What a run looks like: it says something, runs and reads, keeps a
     /// plan, edits, and says what it found.
     static let script: [TraceEvent] = [
@@ -126,6 +129,14 @@ public actor FakeHub: HubAPI {
         TraceEvent(seq: 14, kind: "tool_result", data: TraceStep(id: "c6", output: "FAIL", failed: true)),
         TraceEvent(seq: 15, kind: "tool", data: TraceStep(id: "c7", tool: "Bash", input: "go test ./internal/api/...")),
         TraceEvent(seq: 16, kind: "tool_result", data: TraceStep(id: "c7", output: "ok")),
+        TraceEvent(seq: 17, kind: "usage", data: {
+            var step = TraceStep()
+            step.durationMs = 12_400
+            step.inputTokens = 1_200
+            step.outputTokens = 300
+            step.costUsd = 0.02
+            return step
+        }()),
     ]
 
     public func send(_ request: SendRequest) throws -> Message {
@@ -160,6 +171,11 @@ public actor FakeHub: HubAPI {
         messages[i].error = "stopped by the sender"
         messages[i].updatedAt = Date()
         simulated[messageID] = nil
+    }
+
+    public func joinLink() throws -> JoinLink {
+        try check()
+        return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
     }
 
     // MARK: Simulation

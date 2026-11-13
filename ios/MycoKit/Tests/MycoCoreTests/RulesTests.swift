@@ -102,6 +102,25 @@ struct ConversationBuilderTests {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     func at(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(seconds) }
 
+    /// What a conversation shows, without the lines that only tell the time.
+    func said(_ items: [ConversationItem]) -> [ConversationItem] {
+        items.filter { if case .time = $0.kind { return false } else { return true } }
+    }
+
+    @Test func aLongPauseGetsTheTimeWritten() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "first", status: "done", createdAt: at(-7_200)),
+            Message(id: "r1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "done", status: "done", createdAt: at(-7_100)),
+            Message(id: "t2", from: "me", to: "coder", body: "second", status: "acked", createdAt: at(-60), updatedAt: at(-5)),
+        ]
+        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        // At the top, and again after nearly two quiet hours; never before
+        // the open task's status, which has no time of its own.
+        #expect(items.map(\.id) == ["t1.time", "t1", "r1", "t2.time", "t2", "t2.status"])
+        #expect(items[3].kind == .time(at(-60)))
+        #expect(items[2].kind == .reply(text: "done", taskID: "t1"))
+    }
+
     @Test func aRoundReadsInOrderWithItsOpenTaskLast() {
         let messages = [
             Message(id: "r1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "done", status: "done", createdAt: at(-80)),
@@ -110,7 +129,7 @@ struct ConversationBuilderTests {
             Message(id: "s1", from: "me", to: "coder", threadId: "t2", type: "steer", body: "also this", status: "done", createdAt: at(-30)),
             Message(id: "p1", from: "coder", to: "me", threadId: "t2", type: "progress", body: "halfway", status: "done", createdAt: at(-20)),
         ]
-        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
         #expect(items.map(\.id) == ["t1", "r1", "t2", "s1", "p1", "t2.status"])
         #expect(items[3].kind == .mine(text: "also this", steer: true))
         #expect(items[5].kind == .status(.working(since: at(-5)), taskID: "t2"))
@@ -120,7 +139,7 @@ struct ConversationBuilderTests {
     @Test func othersWorkShowsAsCapsulesInTime() {
         let mine = [Message(id: "t1", from: "me", to: "lead", body: "plan it", status: "done", createdAt: at(-100))]
         let others = [Message(id: "d1", from: "lead", to: "coder", body: "write the API\\nwith tests", status: "queued", createdAt: at(-50))]
-        let items = ConversationBuilder.items(me: "me", messages: mine, others: others, status: { _ in nil }, now: now)
+        let items = said(ConversationBuilder.items(me: "me", messages: mine, others: others, status: { _ in nil }, now: now))
         #expect(items.map(\.id) == ["t1", "d1.dispatch"])
         guard case .dispatch(let dispatch) = items[1].kind else {
             Issue.record("the coordinator's task is a capsule")
@@ -139,7 +158,7 @@ struct ConversationBuilderTests {
             Message(id: "t2", from: "me", to: "coder", body: "second", status: "acked", createdAt: at(-60), updatedAt: at(-5)),
             Message(id: "p3", from: "coder", to: "me", threadId: "t2", replyTo: "t2", type: "progress", body: "halfway", status: "done", createdAt: at(-20)),
         ]
-        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
         // The answered task: one line above its answer. The open one: each update.
         #expect(items.map(\.id) == ["t1", "t1.progress", "r1", "t2", "p3", "t2.status"])
         #expect(items[1].kind == .pastProgress(texts: ["one", "two"]))
@@ -154,7 +173,7 @@ struct ConversationBuilderTests {
 
     @Test func aStoppedTaskSaysSo() {
         let messages = [Message(id: "t1", from: "me", to: "coder", body: "x", status: "failed", error: RunState.stoppedBySender, createdAt: at(-10))]
-        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
         #expect(items.map(\.kind) == [.mine(text: "x", steer: false), .stopped])
         #expect(ConversationBuilder.openTask(me: "me", messages: messages) == nil)
     }

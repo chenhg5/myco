@@ -115,24 +115,22 @@ private struct MemberStrip: View {
     }
 }
 
-/// Owns one conversation's model for as long as its page is on screen.
+/// Shows one conversation. Its model lives with the workspace, so coming
+/// back to a conversation finds it as it was.
 struct ConversationHost: View {
     let agent: String
     let project: String?
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
-    @State private var model: ConversationModel?
 
     var body: some View {
+        let model = session.conversation(with: agent, project: project)
         ZStack {
             MycoColor.bg.ignoresSafeArea()
-            if let model { ConversationBody(model: model, focus: focus) }
+            ConversationBody(model: model, focus: focus)
         }
         // Starts once the workspace has said who this device is.
-        .task(id: session.me) {
-            if model == nil { model = ConversationModel(session: session, agent: agent, project: project) }
-            await model?.run()
-        }
+        .task(id: session.me) { await model.run() }
     }
 }
 
@@ -150,10 +148,10 @@ struct ConversationBody: View {
     @State private var atBottom = true
     /// It was when the keyboard started to come up: keep it there.
     @State private var followKeyboard = false
-
-    private static let bottomID = "conversation.bottom"
     /// Counts what was sent or stopped from here: a light tap answers each.
     @State private var commits = 0
+
+    private static let bottomID = "conversation.bottom"
 
     private var name: String { session.displayName(of: model.agent) }
 
@@ -162,12 +160,18 @@ struct ConversationBody: View {
         model.items.last { if case .mine = $0.kind { return true } else { return false } }?.id
     }
 
+    /// The newest answer: the one that carries the row of actions.
+    private var newestReply: String? {
+        model.items.last { if case .reply = $0.kind { return true } else { return false } }?.id
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(model.items) { item in
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item)
+                            .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
                     }
                     // Marks the end: on screen means "at the bottom".
                     Color.clear.frame(height: 1)
@@ -175,18 +179,31 @@ struct ConversationBody: View {
                         .onAppear { atBottom = true }
                         .onDisappear { atBottom = false }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.horizontal, Space.page)
+                .padding(.top, Space.l)
+                .padding(.bottom, Space.m)
             }
             // Opens at the bottom, and stays there as content grows while
             // the newest message is in view.
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .modifier(SolidTopEdge())
+            // A tap anywhere on the conversation puts the keyboard away.
+            .simultaneousGesture(TapGesture().onEnded { Self.dismissKeyboard() })
+            // Away from the end: one tap goes back to it.
+            .overlay(alignment: .bottom) {
+                if !atBottom, !model.items.isEmpty {
+                    ScrollToEndButton(label: L("回到底部", "Back to the newest")) {
+                        withAnimation(.snappy(duration: 0.3)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                    }
+                    .padding(.bottom, Space.m)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy(duration: 0.2), value: atBottom)
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
-                guard old != nil, let new else { return }
-                _ = new
+                guard old != nil, new != nil else { return }
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             // The keyboard takes the lower part of the screen. A
@@ -223,12 +240,46 @@ struct ConversationBody: View {
         }
     }
 
+    private static func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    /// How far a thing keeps from the one above it: close inside a turn,
+    /// further between its parts, furthest where a new turn begins.
+    private func gap(from above: ConversationItem, to item: ConversationItem) -> CGFloat {
+        switch (above.kind, item.kind) {
+        case (.time, _): return Space.m
+        case (_, .time): return Space.xl
+        case (.mine, .mine): return Space.s
+        case (_, .mine): return Space.xl
+        case (.dispatch, .dispatch): return Space.s
+        case (.progress, .progress): return Space.s + 2
+        case (.process, .reply), (.pastProgress, .reply), (.progress, .reply): return Space.m
+        default: return Space.l
+        }
+    }
+
     @ViewBuilder private func row(_ item: ConversationItem) -> some View {
         switch item.kind {
+        case .time(let date):
+            TimeBreak(Self.timeText(date))
         case .mine(let text, let steer):
             MyBubble(text, label: steer ? L("补充", "Added") : nil)
-        case .reply(let text):
-            ReplyText(text)
+                .contextMenu { copyButton(text) }
+        case .reply(let text, let taskID):
+            VStack(alignment: .leading, spacing: Space.s) {
+                ReplyText(text)
+                // The newest answer carries what can be done with it; the
+                // others keep the page quiet (a long press copies any).
+                if item.id == newestReply {
+                    let took = taskID.flatMap { model.process(of: $0)?.usage }
+                    ReplyActions(
+                        copying: text,
+                        detail: [item.at.formatted(date: .omitted, time: .shortened), took].compactMap { $0 }.joined(separator: " · "),
+                        copyLabel: L("复制", "Copy"))
+                }
+            }
+            .contextMenu { copyButton(text) }
         case .progress(let text):
             ProgressLine(text)
         case .pastProgress(let texts):
@@ -258,6 +309,20 @@ struct ConversationBody: View {
         }
     }
 
+    private func copyButton(_ text: String) -> some View {
+        Button(L("复制", "Copy"), systemImage: "square.on.square") { UIPasteboard.general.string = text }
+    }
+
+    /// "14:32" today, "昨天 14:32", else "11月12日 14:32".
+    private static func timeText(_ date: Date) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return time }
+        if calendar.isDateInYesterday(date) { return L("昨天 \(time)", "Yesterday \(time)") }
+        let locale = Locale(identifier: AppLanguage.current == .zh ? "zh-Hans" : "en")
+        return date.formatted(.dateTime.month().day().locale(locale)) + " " + time
+    }
+
     @ViewBuilder private func status(_ state: RunState) -> some View {
         let look = MushroomLook.of(session.agent(model.agent))
         switch state {
@@ -281,7 +346,7 @@ struct ConversationBody: View {
             if let problem = model.problem {
                 Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16).padding(.top, 8)
+                    .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             ForEach(Array(model.queued.enumerated()), id: \.offset) { index, text in
                 HStack(spacing: 10) {
@@ -293,8 +358,8 @@ struct ConversationBody: View {
                 }
                 .font(.footnote)
                 .tint(MycoColor.accent)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, Space.page)
+                .padding(.top, Space.s)
             }
             ComposerView(
                 text: $model.draft,
@@ -337,7 +402,7 @@ struct ProcessView: View {
     let live: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
             if let plan = process.plan {
                 let done = plan.filter { $0.state == .done }.count
                 PlanCard(

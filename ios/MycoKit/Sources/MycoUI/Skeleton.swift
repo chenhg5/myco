@@ -10,10 +10,10 @@ public struct SkeletonRows: View {
     }
 
     public var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
             ForEach(0..<count, id: \.self) { index in
                 HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous).fill(MycoColor.pill).frame(width: 40, height: 40)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous).fill(MycoColor.pill).frame(width: 50, height: 50)
                     VStack(alignment: .leading, spacing: 7) {
                         Capsule().fill(MycoColor.pill).frame(width: index.isMultiple(of: 2) ? 120 : 90, height: 11)
                         Capsule().fill(MycoColor.pill).frame(width: index.isMultiple(of: 3) ? 210 : 170, height: 9)

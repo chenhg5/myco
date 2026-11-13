@@ -17,6 +17,19 @@ public struct SendRequest: Codable, Sendable, Hashable {
     }
 }
 
+/// A link that lets machines and agents join the workspace.
+public struct JoinLink: Codable, Sendable, Hashable {
+    public var joinUrl: String
+    /// The hub's join script ends with the agent's last step, so one
+    /// command is all an agent needs (hubs before this leave it out).
+    public var agentGuide: Bool?
+
+    public init(joinUrl: String, agentGuide: Bool? = true) {
+        self.joinUrl = joinUrl
+        self.agentGuide = agentGuide
+    }
+}
+
 /// One workspace (a hub), as this device sees it. Every method is one of
 /// the hub's `/v1/console/*` calls; nothing here caches, decrypts or knows
 /// about more than one workspace.
@@ -40,4 +53,7 @@ public protocol HubAPI: Sendable {
     func steer(_ messageID: String, body: String) async throws
     /// `POST /v1/console/messages/{id}/stop`
     func stop(_ messageID: String) async throws
+    /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
+    /// agent or a machine (ten uses, a week), as the desktop app makes.
+    func joinLink() async throws -> JoinLink
 }

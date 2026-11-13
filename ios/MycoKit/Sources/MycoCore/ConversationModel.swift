@@ -60,7 +60,33 @@ public final class ConversationModel {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// What is kept of a conversation between launches.
+    struct Snapshot: Codable {
+        var messages: [Message]
+        var others: [Message]
+        var traces: [String: [TraceEvent]]
+    }
+
+    private var snapshotName: String { "conversation-" + agent + "-" + (project ?? "") }
+    private var restored = false
+    private var lastSaved: Data?
+
+    /// Shows what this conversation showed last, until the workspace answers.
+    public func restore() async {
+        guard !restored, !loaded else { return }
+        restored = true
+        guard let data = await session.snapshots?.snapshot(of: session.id, name: snapshotName),
+              let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data), !loaded
+        else { return }
+        traces = snapshot.traces
+        processes = snapshot.traces.mapValues { RunProcess(events: $0) }
+        // Closed tasks' steps are complete: no need to fetch them again.
+        settled = Set(snapshot.messages.filter { !$0.isOpen }.map(\.id)).intersection(snapshot.traces.keys)
+        show(messages: snapshot.messages, others: snapshot.others)
+    }
+
     public func run() async {
+        await restore()
         while !Task.isCancelled {
             await reload()
             try? await Task.sleep(for: Self.pollInterval)
@@ -80,20 +106,32 @@ public final class ConversationModel {
             let messages = try await session.hub.exchanges(between: me, and: agent)
             let others = try await othersWork()
             await loadSteps(of: messages.filter { $0.from == me && $0.type == "task" && $0.status != "queued" })
-            let built = ConversationBuilder.items(
-                me: me, messages: messages, others: others, incomingTo: project == nil ? agent : nil,
-                processes: Set(processes.filter { !$0.value.isEmpty }.keys),
-                status: { self.session.status(of: $0) }, now: Date())
-            // Nothing new: leave the list alone, so the page does not redraw.
-            if built != items { items = built }
-            openTask = ConversationBuilder.openTask(me: me, messages: messages)
-            loaded = true
+            show(messages: messages, others: others)
+            await save(Snapshot(messages: messages, others: others, traces: traces))
         } catch is CancellationError {
             return
         } catch {
             // The workspace's own banner says it cannot be reached.
             loaded = true
         }
+    }
+
+    private func show(messages: [Message], others: [Message]) {
+        let me = session.me
+        let built = ConversationBuilder.items(
+            me: me, messages: messages, others: others, incomingTo: project == nil ? agent : nil,
+            processes: Set(processes.filter { !$0.value.isEmpty }.keys),
+            status: { self.session.status(of: $0) }, now: Date())
+        // Nothing new: leave the list alone, so the page does not redraw.
+        if built != items { items = built }
+        openTask = ConversationBuilder.openTask(me: me, messages: messages)
+        loaded = true
+    }
+
+    private func save(_ snapshot: Snapshot) async {
+        guard let store = session.snapshots, let data = try? HubJSON.encoder().encode(snapshot), data != lastSaved else { return }
+        lastSaved = data
+        await store.setSnapshot(data, of: session.id, name: snapshotName)
     }
 
     /// On a project's page: what its coordinator gave the other members.

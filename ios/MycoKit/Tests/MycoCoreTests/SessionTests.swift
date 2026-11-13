@@ -86,6 +86,12 @@ struct SessionTests {
         #expect(second.problem != nil)
         #expect(second.members.count == 8)
 
+        // Leaving a workspace forgets what was kept for it.
+        await store.removeSnapshots(of: "w1")
+        let third = WorkspaceSession(id: "w1", name: "Demo", hub: hub, snapshots: store)
+        await third.restore()
+        #expect(third.members.isEmpty)
+
         // Another workspace's snapshot is not this one's.
         let other = WorkspaceSession(id: "w2", name: "Other", hub: hub, snapshots: store)
         await other.restore()

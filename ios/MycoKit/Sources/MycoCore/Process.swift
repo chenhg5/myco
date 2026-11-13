@@ -45,6 +45,8 @@ public struct RunProcess: Hashable, Sendable {
     public var segments: [ProcessSegment] = []
     /// The latest plan, when it keeps one.
     public var plan: [PlanItem]?
+    /// What the run took, once it reported it: "12 秒 · 1500 tokens · $0.02".
+    public var usage: String?
 
     public var isEmpty: Bool { segments.isEmpty && plan == nil }
 
@@ -80,10 +82,29 @@ public struct RunProcess: Hashable, Sendable {
                 if let text = step.text, !text.isEmpty { segments.append(.thought(id: event.seq, text: text)) }
             case "error":
                 segments.append(.failure(id: event.seq, text: step.text ?? step.output ?? ""))
+            case "usage":
+                usage = Self.usageLine(step)
             default:
-                break // usage, output
+                break // output
             }
         }
+    }
+
+    /// A run's usage in one line, as the desktop app writes it.
+    static func usageLine(_ step: TraceStep) -> String? {
+        var parts: [String] = []
+        if let ms = step.durationMs, ms > 0 {
+            let s = Int((ms / 1000).rounded())
+            parts.append(s >= 60 ? L("\(s / 60) 分 \(s % 60) 秒", "\(s / 60)m \(s % 60)s") : L("\(s) 秒", "\(s)s"))
+        }
+        let tokens = (step.inputTokens ?? 0) + (step.outputTokens ?? 0)
+        if tokens >= 10_000 {
+            parts.append(L(String(format: "%.1f 万 token", Double(tokens) / 10_000), String(format: "%.1fk tokens", Double(tokens) / 1_000)))
+        } else if tokens > 0 {
+            parts.append("\(tokens) token\(tokens > 1 ? "s" : "")")
+        }
+        if let cost = step.costUsd, cost > 0 { parts.append(String(format: "$%.2f", cost)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     static let readTools: Set<String> = ["Read", "NotebookRead"]

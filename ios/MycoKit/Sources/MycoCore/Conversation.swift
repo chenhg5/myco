@@ -7,8 +7,10 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public enum Kind: Hashable, Sendable {
         /// What I said. `steer`: it was added to a task already running.
         case mine(text: String, steer: Bool)
-        /// The agent's answer (Markdown).
-        case reply(text: String)
+        /// The agent's answer (Markdown). `taskID`: the task it answers.
+        case reply(text: String, taskID: String?)
+        /// Half an hour or more passed since the message above.
+        case time(Date)
         /// An interim update from the agent, on a task still being worked on.
         case progress(text: String)
         /// The updates of a task that has ended, folded into one line that
@@ -67,7 +69,7 @@ public enum ConversationBuilder {
             switch m.type {
             case "task", "note":
                 guard mine else {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m))))
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: nil)))
                     continue
                 }
                 items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false)))
@@ -93,7 +95,7 @@ public enum ConversationBuilder {
             case "steer":
                 if mine { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true))) }
             case "reply":
-                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m)))) }
+                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: m.replyTo))) }
             case "progress":
                 guard !mine else { continue }
                 // Its task: the one it answers, else the one its thread began with.
@@ -121,7 +123,28 @@ public enum ConversationBuilder {
                 state: RunState.of(task, recipient: status(task.to), now: now), incoming: task.to == incomingTo)
             items.append(.init(id: task.id + ".dispatch", at: task.createdAt, kind: .dispatch(dispatch)))
         }
-        return items.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+        return withTimeBreaks(items.sorted { ($0.at, $0.id) < ($1.at, $1.id) })
+    }
+
+    /// A long quiet stretch gets the time written before what follows it.
+    public static let timeBreakAfter: TimeInterval = 30 * 60
+
+    static func withTimeBreaks(_ sorted: [ConversationItem]) -> [ConversationItem] {
+        var result: [ConversationItem] = []
+        var last: Date?
+        for item in sorted {
+            // An open task's status sorts last on purpose: it has no time of its own.
+            if item.at != .distantFuture {
+                if let last, item.at.timeIntervalSince(last) >= timeBreakAfter {
+                    result.append(.init(id: item.id + ".time", at: item.at, kind: .time(item.at)))
+                } else if last == nil {
+                    result.append(.init(id: item.id + ".time", at: item.at, kind: .time(item.at)))
+                }
+                last = item.at
+            }
+            result.append(item)
+        }
+        return result
     }
 
     /// The newest task of mine that is still open: what the input speaks to.

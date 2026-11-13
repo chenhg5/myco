@@ -27,7 +27,19 @@ public final class WorkspaceSession {
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
 
-    private let snapshots: (any SnapshotStore)?
+    let snapshots: (any SnapshotStore)?
+    /// The conversations opened this launch, kept so reopening one is instant.
+    private var conversations: [String: ConversationModel] = [:]
+
+    /// The conversation with an agent (in a project: with its coordinator).
+    /// One model per conversation for as long as the workspace is on screen.
+    public func conversation(with agent: String, project: String? = nil) -> ConversationModel {
+        let key = agent + "|" + (project ?? "")
+        if let known = conversations[key] { return known }
+        let model = ConversationModel(session: self, agent: agent, project: project)
+        conversations[key] = model
+        return model
+    }
 
     /// - Parameter snapshots: where what it showed last is kept, so the
     ///   next launch opens on it at once; nil keeps nothing.
@@ -50,7 +62,7 @@ public final class WorkspaceSession {
 
     /// Shows what the workspace showed last, until it answers.
     public func restore() async {
-        guard loadedAt == nil, let data = await snapshots?.snapshot(for: id),
+        guard loadedAt == nil, let data = await snapshots?.snapshot(of: id, name: "lists"),
               let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data)
         else { return }
         me = snapshot.me
@@ -64,7 +76,7 @@ public final class WorkspaceSession {
     private func save() async {
         guard let snapshots else { return }
         let snapshot = Snapshot(me: me, statuses: statuses, machines: machines, projects: projects, recent: recent, savedAt: Date())
-        await snapshots.setSnapshot(try? HubJSON.encoder().encode(snapshot), for: id)
+        await snapshots.setSnapshot(try? HubJSON.encoder().encode(snapshot), of: id, name: "lists")
     }
 
     /// Refreshes until the surrounding task is cancelled (the page left the
