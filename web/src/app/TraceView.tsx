@@ -8,6 +8,7 @@ import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
+import { AskCard } from "@/app/AskCard";
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -124,7 +125,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage, answers, canAnswer, onAnswer }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -132,12 +133,19 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   /** what the agent reported on this task (myco message progress): part of
    *  the run, in time order, as it says things between its steps */
   said?: Message[];
+  /** the steers that answered its questions, by question id */
+  answers?: Map<string, Message>;
+  /** you sent the task: you may answer its questions */
+  canAnswer?: boolean;
+  onAnswer?: (text: string) => Promise<void>;
   /** why it has not started yet, when known (the session is open elsewhere) */
   waiting?: string;
   /** its answer is in the conversation: done, even if its status lags */
   answered?: boolean;
 }) {
   const running = isOpen(task.status) && !answered;
+  // Waiting on a question to its sender: not at work, no loading.
+  const asking = running && !!task.asking;
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
@@ -264,11 +272,12 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   // time); each run of steps in between folds into one line ("跑了 3 条命令、
   // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
   // say what it is doing now; at the very end, while it works, the mushroom.
-  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; row?: Row };
+  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; row?: Row };
   const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
     if (planReports.has(p.id)) continue;
-    const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at, files: p.attachments } };
+    const it: Item = p.ask ? { at: p.created_at, ask: p }
+      : { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at, files: p.attachments } };
     // after the last step made before it (steps without a time: at the end)
     let i = items.length;
     if (items.every((x) => x.at)) {
@@ -280,11 +289,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   }
   type Report = { key: string; text: string; when: string; files?: Attachment[] };
   type Segment = { kind: "say"; key: string; text: string }
+    | { kind: "ask"; msg: Message }
     | { kind: "think"; key: string; text: string }
     | { kind: "reports"; items: Report[] }
     | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
   for (const it of items) {
+    if (it.ask) { segments.push({ kind: "ask", msg: it.ask }); continue; }
     if (it.say?.report) {
       const lastSeg = segments[segments.length - 1];
       const r = { key: it.say.key, text: it.say.text, when: it.say.when || "", files: it.say.files };
@@ -311,7 +322,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
 
   return (
-    <div className={cn("trace is-flow", running && "is-live")} ref={body}>
+    <div className={cn("trace is-flow", running && !asking && "is-live")} ref={body}>
       {plan && <PlanCard items={plan.items} live={running} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
@@ -319,6 +330,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
         </div>
       ) : seg.kind === "think" ? (
         <Thought key={seg.key} text={seg.text} />
+      ) : seg.kind === "ask" ? (
+        <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
+          open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
       ) : seg.kind === "reports" ? (
         // What it reported (myco message progress): a small timeline of its
         // own, quieter than the answer, each with when.
@@ -338,7 +352,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
       ) : (
         <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
       ))}
-      {running && endsWithSay && (
+      {running && !asking && endsWithSay && (
         <div className="trace-head trace-wait">
           <Mushroom />
           <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>

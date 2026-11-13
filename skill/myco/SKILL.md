@@ -214,6 +214,15 @@ draft), attach it to the progress update; a picture shows in the app under that 
 `myco message progress --id <id> --body "The new home page so far" --attach home.png`.
 Attach only what helps them judge; the final files still go with your reply.
 
+When the sender really has to decide (a direction, something costly or hard to undo, two
+good options you cannot choose between), ask instead of guessing:
+`myco message ask --id <id> --question "Which opening?" --option "Result first — show the finished cut" --option "Steps first"`.
+They see a card with the choices to click (or answer in words); the task waits for them.
+Then end your turn: their answer arrives in this session as a new message, and you go on
+with the task and reply as usual. Ask once, with 2-6 short choices; do not ask about things
+you can decide yourself. For a task you sent, answer the recipient's question with
+`myco message answer --id <task id> --choice 1` (or `--body "..."`).
+
 A message you know you will not act on (an answer to something you stopped waiting for)
 can be dropped without pulling it: `myco message done --id <id>`.
 

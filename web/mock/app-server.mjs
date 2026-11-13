@@ -607,6 +607,8 @@ function consoleReply() {
 // keeps the same round going: the answer comes 6s after the latest addition,
 // not 6s after the task (and there is only ever one timer for a task).
 const replyTimers = new Map();
+// Agents waiting on a question they asked, by agent name: the task.
+const askingBy = new Map();
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const had = replyTimers.get(taskId);
   if (had && !restart) return;
@@ -634,6 +636,30 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       body: "正在处理…", created_at: iso(0), updated_at: iso(0),
     }));
   });
+  // Asked to let you choose: the agent asks (myco message ask) and the task
+  // waits for the answer instead of replying.
+  {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    if (task && /问我|让我选/.test(task.body) && !task.asked_once) {
+      later(2500, () => {
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        replyTimers.delete(taskId);
+        for (const t of timers) clearTimeout(t);
+        const q = makeMessage({
+          thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, ask: true,
+          body: "开场先放哪个？\n\n1. 先放结果 — 一开头就看到剪好的成片\n2. 先放操作 — 从打开 App 开始一步步来",
+          created_at: iso(0), updated_at: iso(0),
+        });
+        msgs.push(q);
+        task.status = "held";
+        task.asking = q.id;
+        task.updated_at = iso(0);
+        askingBy.set(agent, task);
+      });
+      return;
+    }
+  }
   // Asked for a screenshot: one comes along the way, with what it shows.
   later(3800, () => {
     const msgs = hub.threads[threadId];
@@ -850,6 +876,10 @@ function agentStatus(a) {
   const atWork = working
     ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
     : [];
+  const asking = askingBy.get(a.name);
+  if (asking) {
+    return { agent: a, state: "pending", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: "runner", current: [asking] };
+  }
   return {
     agent: a, state,
     queued: (a.queued ?? (working ? 1 + stale.length : 0)) + delivered.length,
@@ -1564,6 +1594,13 @@ const server = http.createServer(async (req, res) => {
         thread_id: task.thread_id, from: CONSOLE, to: task.to, type: "steer", status: "done",
         body: text, reply_to: task.id, created_at: iso(0), updated_at: iso(0),
       });
+      // While it waits on a question, whatever you say answers it.
+      if (task.asking) {
+        steer.answers = task.asking;
+        delete task.asking;
+        task.asked_once = true;
+        askingBy.delete(task.to);
+      }
       const steerAtts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && steerAtts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
       if (steerAtts.length) steer.attachments = steerAtts;

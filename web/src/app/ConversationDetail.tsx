@@ -531,6 +531,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ? { dot: "pending", label: L("会话被占用", "Session in use") }
     : allStuck
     ? { dot: "pending", label: L("可能卡住", "May be stuck") }
+    : openTask?.asking
+    ? { dot: "pending", label: L("等你决定", "Needs your decision") }
     : openTask && offline
     ? { dot: "idle", label: L("离线 · 等它上线", "Offline · waiting") }
     : openTask && openTask.status !== "acked"
@@ -1109,11 +1111,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A supplement is drawn inside the task it names, not as a turn of its
   // own (only one loading/status for the task remains).
   const steersOf = new Map<string, Message[]>();
+  // What answered a question an agent asked: shown on its card.
+  const answerTo = new Map<string, Message>();
   for (const m of shown || []) {
+    if (m.type === "steer" && m.answers && byId.get(m.answers)) { answerTo.set(m.answers, m); continue; }
     if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
+  const answerAsk = (task: Message) => async (text: string) => {
+    const m = await appApi.steer(target.hubId, task.id, text, undefined);
+    setMessages((prev) => (prev ? [...prev, m] : [m]));
+    atBottom.current = true;
+  };
   const visible = (shown || []).filter((m) => {
+    if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
     if (m.type === "steer" && m.reply_to && steersOf.has(m.reply_to)) return false;
     if (m.type !== "progress") return true;
     if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
@@ -1258,10 +1269,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} />)}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+          answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -1524,6 +1536,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             disabled={busy}
             placeholder={busy
               ? L("会话正开在别处，暂时不能发；可以「复制一份来对话」", "The session is open elsewhere, so you can't send now; you can talk to a copy")
+              : supplementing && openTask?.asking
+                ? L(`回答 ${agentName} 的问题…`, `Answer ${agentName}'s question…`)
               : supplementing
                 ? L(`补充给 ${agentName}…（${mod}↩ 排到下一条）`, `Add to ${agentName}… (${mod}↩ queues the next one)`)
                 : L(`发给 ${agentName}…`, `Message ${agentName}…`)}

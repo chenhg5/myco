@@ -2421,6 +2421,187 @@ body.is-sorting * {
   .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
 }
 
+/* A question an agent asked you (AskCard): the choices to click and a line
+   to answer in words; black, white and grey like the plan. While it waits
+   the card has a darker outline; answered, it keeps what was chosen. */
+.ask {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ask.is-live {
+  box-shadow: inset 0 0 0 1.5px var(--fg-2);
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ask-icon {
+  width: 14px;
+  height: 14px;
+}
+.ask-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.ask-question {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.ask-question > :first-child { margin-top: 0; }
+.ask-question > :last-child { margin-bottom: 0; }
+.ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ask-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.ask-option:hover:not(:disabled) {
+  background: var(--pill-hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ask-option:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+.ask-option.is-chosen {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.5px var(--fg-2);
+  color: var(--fg);
+}
+.ask-option-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ask-option.is-chosen .ask-option-n {
+  background: var(--fg-2);
+  box-shadow: none;
+  color: var(--card);
+}
+.ask-option-n svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.ask-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ask-option-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ask-option-detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ask-say {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ask-say-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.ask-say-input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--focus, var(--line));
+}
+.ask-say-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-fg);
+  cursor: pointer;
+}
+.ask-say-send:disabled {
+  background: var(--pill);
+  color: var(--faint);
+  cursor: default;
+}
+.ask-say-send svg {
+  width: 14px;
+  height: 14px;
+}
+.ask-answer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+.ask-answer > svg {
+  width: 13px;
+  height: 13px;
+}
+.ask-answer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ask-error {
+  margin-top: 6px;
+  color: var(--red);
+  font-size: 12px;
+}
+/* An agent waiting on you, in the sidebar: amber like a pause. */
+.sp-nav-busy.is-asking {
+  background: var(--amber);
+}
+
 /* A calm note in a dialog: what it means, in plain words, no alarm colour. */
 .app-notice {
   display: flex;

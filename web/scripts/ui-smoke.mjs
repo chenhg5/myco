@@ -823,6 +823,34 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // An agent asks you to decide: a card with the choices, the round waits
+    // (no loading), a click answers it and the round goes on.
+    await step("单聊 · 点选卡", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const box = page.locator(".conv-detail .conv-compose-input");
+      // No round running (the chat may still be empty when run alone).
+      await page.waitForFunction(() => {
+        const el = document.querySelector(".conv-detail .conv-compose-input");
+        return !!el && !(el.getAttribute("placeholder") || "").includes("补充");
+      }, null, { timeout: 30_000 });
+      await box.fill("把演示剪成 40 秒，开场怎么放你问我");
+      await box.press("Enter");
+      const card = page.locator(".conv-detail .ask.is-live").last();
+      await card.waitFor({ timeout: 15_000 });
+      if (await page.locator(".conv-detail .trace.is-live").count()) throw new Error("等你决定时不该还显示在干活");
+      if (!((await box.getAttribute("placeholder")) || "").includes("回答")) throw new Error("等你决定时输入框应提示回答它的问题");
+      await settle(page, 300);
+      await shot(page, size, scheme, "ask-card");
+      await card.getByRole("button", { name: /先放结果/ }).click();
+      await page.locator(".conv-detail .ask.is-answered .ask-answer", { hasText: "你选了：先放结果" }).last().waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-detail .conv-supplement", { hasText: "先放结果" }).count()) throw new Error("回答不该再显示成一条补充");
+      await page.waitForFunction(() => {
+        const d = document.querySelector(".conv-detail");
+        return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
+      }, null, { timeout: 30_000 });
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // While a round is running the box speaks for that round: Enter adds to
     // it (one run, one loading) and ⌘/Ctrl+Enter puts the next message
     // behind it, listed above the box until the round ends.

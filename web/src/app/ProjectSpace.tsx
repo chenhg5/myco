@@ -962,6 +962,13 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
   // Working means the node acknowledged a task. A task it only pulled
   // (`delivered`) has not started: it is still queued.
+  // Waiting on a question it asked: whoever gave it the task decides.
+  const asked = open.find((m) => m.asking);
+  if ((r.st.asking || 0) > 0) {
+    const from = asked ? nameOf(asked.from) : "";
+    return { text: asked && !isMe(asked.from, r.hub) ? L(`等 ${from} 决定`, `Waiting for ${from} to decide`) : L("等你决定", "Needs your decision"),
+      meta: asked ? asked.body.replace(/\s+/g, " ").trim() : undefined };
+  }
   const doing = open.find((m) => m.status === "acked") || (r.st.state === "working" ? open[0] : undefined);
   if (r.st.state === "working" || doing) {
     const text = a.status_text || (doing ? doing.body.replace(/\s+/g, " ").trim() : "") || L("在干活", "Working");

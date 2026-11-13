@@ -108,6 +108,13 @@ export interface Message {
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the person behind the sender (member name) */
   from_owner?: string;
+  /** a progress update asking the task's sender to decide (body: the
+   *  question, then the choices as a numbered list) */
+  ask?: boolean;
+  /** on a task: the question it waits on */
+  asking?: string;
+  /** on a steer: the question it answers */
+  answers?: string;
   /** end-to-end encrypted (decrypted by the app when it may read it) */
   e2e?: boolean;
   /** why the app could not decrypt it */
@@ -120,7 +127,10 @@ export interface Message {
 /** Another node a node exchanged messages with. */
 export interface Peer { agent: string; messages: number; last?: Message }
 export type State = "working" | "pending" | "idle" | "offline";
-export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number; current?: Message[];
+export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
+  /** held tasks waiting on a question to their sender (absent on older hubs) */
+  asking?: number;
+  current?: Message[];
   /** how it receives right now: a session keeps `inbox wait` running, or a runner wakes the session per message */
   receiving?: "session" | "runner";
   /** the runner recently found the session in use and handed messages back */
