@@ -156,6 +156,10 @@ struct ConversationBody: View {
     @State private var pinned = true
     /// A finger moved the conversation a moment ago.
     @State private var touched = false
+    /// How tall the part of the conversation on screen is.
+    @State private var viewport: CGFloat = 800
+
+    private static let space = "conversation"
     /// Counts what was sent or stopped from here: a light tap answers each.
     @State private var commits = 0
     /// The conversation has opened where it should and settled: from now
@@ -179,37 +183,54 @@ struct ConversationBody: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    // Older messages exist: reaching this row loads them.
+                // Not lazy, on purpose. A conversation comes a page at a
+                // time, so the rows are few enough to lay out all at once,
+                // and then every one has its real height: where the page
+                // is scrolled to is exact, which a lazy stack's estimates
+                // (with rows as tall as an agent's run) could not promise.
+                VStack(alignment: .leading, spacing: 0) {
+                    // Older messages exist: coming near this row loads them.
                     if model.hasEarlier {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.bottom, Space.l)
-                            .onAppear { loadEarlier(proxy) }
+                            .onGeometryChange(for: Bool.self) { proxy in
+                                proxy.frame(in: .named(Self.space)).maxY > -240
+                            } action: { near in
+                                if near { loadEarlier(proxy) }
+                            }
                             .accessibilityIdentifier("conversation.earlier")
                     }
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item)
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
                     }
-                    // Marks the end: on screen means "at the bottom". It is
-                    // also the room between the last thing said and the
-                    // input, so scrolling "to the end" brings that room too.
+                    // Marks the end. It is also the room between the last
+                    // thing said and the input, so "the end" includes it.
+                    // On screen (or nearly) means "at the bottom".
                     Color.clear.frame(height: Space.xl)
                         .id(Self.bottomID)
-                        .onAppear {
-                            atBottom = true
-                            pinned = true
-                        }
-                        .onDisappear {
-                            atBottom = false
-                            // Gone because a finger scrolled away: let go.
-                            // Gone because the page grew: still pinned.
-                            if touched { pinned = false }
+                        .onGeometryChange(for: Bool.self) { proxy in
+                            proxy.frame(in: .named(Self.space)).minY <= viewport + 40
+                        } action: { there in
+                            atBottom = there
+                            if there {
+                                pinned = true
+                            } else if touched {
+                                // Gone because a finger scrolled away: let
+                                // go. Gone because the page grew: pinned.
+                                pinned = false
+                            }
                         }
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
+            }
+            .coordinateSpace(.named(Self.space))
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                viewport = height
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 8)
