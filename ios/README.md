@@ -2,7 +2,7 @@
 
 The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, iPhone in portrait. No third-party dependencies.
 
-Status: phase 1 of the plan (skeleton on a demo workspace). It does not talk to a real hub yet: pairing, sending to a real workspace, end-to-end encryption and push come in later phases.
+Status: phases 1 and 2 of the plan (the pages and the conversation, on a demo workspace), checked in a simulator only. It does not talk to a real hub yet: pairing, sending to a real workspace, end-to-end encryption and push come in later phases.
 
 ## Layout
 
@@ -32,7 +32,7 @@ On a Mac with Xcode 26 or later:
 ```bash
 cd ios/MycoKit && xcodebuild test -scheme MycoKit-Package -destination 'platform=iOS Simulator,name=iPhone 17'   # unit tests
 cd ios && xcodebuild test -project Myco.xcodeproj -scheme Myco -destination 'platform=iOS Simulator,name=iPhone 17'   # UI tests
-cd ios && xcodegen generate            # after changing project.yml; commit the result
+cd ios && xcodegen generate            # after changing project.yml or adding a file to Myco/ or MycoAppUITests/; commit the result
 node ios/scripts/gen-look-fixtures.mjs # after changing how faces are drawn in web/src/app/persona.tsx
 ```
 
@@ -42,7 +42,7 @@ The app opens on a demo workspace. Launch arguments pick what to show:
 
 | Argument | Values |
 |---|---|
-| `-myco-start` | `demo` (default), `welcome`, `empty` |
+| `-myco-start` | `demo` (default), `welcome`, `empty`, `long` (the demo plus a 400-message conversation) |
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-appearance` | `system`, `light`, `dark` |
 | `-myco-lang` | `system`, `zh`, `en` |
