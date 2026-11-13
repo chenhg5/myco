@@ -1270,9 +1270,10 @@ async function runMatrix(browser, size, scheme) {
         throw new Error(`App 后端没有收到${what}`);
       };
       const color = (name) => page.evaluate((n) => {
+        // Inside the App: its colour tokens are set on .app-shell, not body.
         const el = document.createElement("span");
         el.style.color = `var(${n})`;
-        document.body.appendChild(el);
+        (document.querySelector(".app-shell") || document.body).appendChild(el);
         const c = getComputedStyle(el).color;
         el.remove();
         return c;
@@ -1361,8 +1362,9 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑", async () => {
       await go(page, "电脑", narrow);
       await page.locator(".pc-row").first().waitFor({ timeout: 20_000 });
-      // Its agent's quota is nearly used: the row says so, quietly.
-      await page.locator(".pc-quota", { hasText: "额度 95%" }).waitFor({ timeout: 10_000 });
+      // An agent on that computer has nearly used its quota: the rows of
+      // that machine say so, quietly.
+      await page.locator(".pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
       // A folder's terminal opens from here.
