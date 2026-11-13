@@ -30,6 +30,7 @@ import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useSidebarWidth } from "@/app/sidebarWidth";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -352,6 +353,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return next;
     });
   };
+  const sidebar = useSidebarWidth(() => {
+    setCollapsed(true);
+    try { localStorage.setItem(SIDEBAR_KEY, "closed"); } catch { /* storage unavailable */ }
+  });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
   const navMenu = useContextMenu();
@@ -404,9 +409,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   return (
-    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
+    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}
+      style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
       {!collapsed && (
         <aside className="app-sidebar">
+          {/* Its right edge: drag to make it wider or narrower. */}
+          <div className={cn("app-sidebar-edge", sidebar.dragging && "is-dragging", sidebar.hiding && "is-hiding")}
+            {...sidebar.handle} style={{ ["--wails-draggable" as string]: "no-drag" }}
+            aria-label={L("拖动调整边栏宽度", "Drag to resize the sidebar")}
+            title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} />
           <div className="app-sidebar-head" style={dragStyle}>
             <div className="brand"><LogoWordmark className="app-brand-wordmark" /></div>
           </div>

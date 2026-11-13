@@ -99,11 +99,57 @@
 
 /* ---------- sidebar & shell chrome ---------- */
 .app-sidebar {
-  width: 232px;
+  position: relative;
+  width: var(--sidebar-w, 232px);
   flex: none;
   display: flex;
   flex-direction: column;
   user-select: none;
+}
+/* The sidebar's right edge, in the gap before the page: drag it to resize.
+   A hairline shows on hover and while dragging; it fades when letting go
+   would hide the sidebar. */
+.app-sidebar-edge {
+  position: absolute;
+  top: 8px;
+  right: -5px;
+  bottom: 8px;
+  z-index: 5;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.app-sidebar-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.app-sidebar-edge:hover::after {
+  opacity: 0.5;
+  transition-delay: 0.15s;
+}
+.app-sidebar-edge.is-dragging::after,
+.app-sidebar-edge:focus-visible::after {
+  opacity: 1;
+  transition-delay: 0s;
+}
+.app-sidebar-edge.is-hiding::after {
+  opacity: 0.25;
+}
+.app-sidebar-edge:focus-visible {
+  outline: none;
+}
+body.is-resizing,
+body.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 /* Its centre lines up with the panel's top bar (8px gap + 40px bar). */
 .app-sidebar-head {

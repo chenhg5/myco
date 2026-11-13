@@ -564,6 +564,29 @@ async function runMatrix(browser, size, scheme) {
       await dragTo(0, 1);
     });
 
+    if (!narrow) await step("边栏 · 拖宽", async () => {
+      await sidebar(page, true);
+      const side = page.locator(".app-sidebar");
+      const width = async () => (await side.boundingBox()).width;
+      const w0 = await width();
+      const edge = await page.locator(".app-sidebar-edge").boundingBox();
+      const x = edge.x + edge.width / 2, y = edge.y + 160;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      for (let i = 1; i <= 6; i++) await page.mouse.move(x + 15 * i, y);
+      await page.mouse.up();
+      await page.waitForTimeout(150);
+      const w1 = await width();
+      // The edge follows the pointer, whatever the text size.
+      if (Math.abs(w1 - w0 - 90) > 3) throw new Error(`边栏拖宽 90px 后应宽 ${Math.round(w0 + 90)}，实际 ${Math.round(w1)}`);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await side.waitFor();
+      if (Math.abs(await width() - w1) > 2) throw new Error("边栏宽度重开后应还在");
+      await page.locator(".app-sidebar-edge").dblclick();
+      await page.waitForTimeout(150);
+      if (Math.abs(await width() - w0) > 2) throw new Error("双击边缘应恢复默认宽度");
+    });
+
     await step("聊天", async () => {
       await go(page, "聊天", narrow);
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
