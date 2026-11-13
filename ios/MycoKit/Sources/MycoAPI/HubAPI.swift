@@ -4,14 +4,18 @@ import Foundation
 public struct SendRequest: Codable, Sendable, Hashable {
     public var to: String
     public var body: String
+    /// The thread it continues; nil starts a new one.
+    public var threadId: String?
+    /// Puts a new thread in this project.
     public var project: String?
     /// A task from this sender to the same recipient: delivery waits until
     /// it closes (hubs from v0.19.2).
     public var after: String?
 
-    public init(to: String, body: String, project: String? = nil, after: String? = nil) {
+    public init(to: String, body: String, threadId: String? = nil, project: String? = nil, after: String? = nil) {
         self.to = to
         self.body = body
+        self.threadId = threadId
         self.project = project
         self.after = after
     }

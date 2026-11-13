@@ -45,10 +45,14 @@ public struct RunProcess: Hashable, Sendable {
     public var segments: [ProcessSegment] = []
     /// The latest plan, when it keeps one.
     public var plan: [PlanItem]?
+    /// When that plan was written, when the steps say.
+    public var planAt: Date?
     /// What the run took, once it reported it: "12 秒 · 1500 tokens · $0.02".
     public var usage: String?
 
     public var isEmpty: Bool { segments.isEmpty && plan == nil }
+    /// It has something to show under its task besides a plan.
+    public var hasSteps: Bool { !segments.isEmpty }
 
     public init(events: [TraceEvent]) {
         var calls: [String: (segment: Int, step: Int)] = [:]
@@ -58,7 +62,10 @@ public struct RunProcess: Hashable, Sendable {
             case "tool":
                 // A plan is shown as a checklist, not as a step.
                 if step.tool == "TodoWrite" {
-                    if let items = Self.parsePlan(step.input ?? "") { plan = items }
+                    if let items = Self.parsePlan(step.input ?? "") {
+                        plan = items
+                        planAt = event.at
+                    }
                     continue
                 }
                 let tool = ToolStep(id: event.seq, tool: step.tool ?? "", input: step.input ?? "", failed: false, finished: false)

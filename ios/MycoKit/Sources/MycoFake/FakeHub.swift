@@ -155,7 +155,7 @@ public actor FakeHub: HubAPI {
         try check()
         let now = Date()
         let message = Message(
-            id: nextID(), from: Self.me, to: request.to, after: request.after, body: request.body,
+            id: nextID(), from: Self.me, to: request.to, threadId: request.threadId, after: request.after, body: request.body,
             status: "queued", project: request.project, createdAt: now)
         messages.append(message)
         simulated[message.id] = now
@@ -200,6 +200,11 @@ public actor FakeHub: HubAPI {
         let now = Date()
         for (id, sentAt) in simulated {
             guard let i = messages.firstIndex(where: { $0.id == id }) else { continue }
+            // Put after a task that is still open: it waits, as on a hub.
+            if let after = messages[i].after, messages.first(where: { $0.id == after })?.isOpen == true {
+                simulated[id] = now
+                continue
+            }
             let age = now.timeIntervalSince(sentAt)
             if age >= Self.replyAfter {
                 messages[i].status = "done"

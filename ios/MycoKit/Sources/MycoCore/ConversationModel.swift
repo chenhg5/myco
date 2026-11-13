@@ -18,8 +18,26 @@ public final class ConversationModel {
     public private(set) var loaded = false
     /// Why the last send, steer or stop did not go through.
     public private(set) var problem: String?
-    /// Messages waiting for the open task to finish, in order.
-    public private(set) var queued: [String] = []
+    /// A message waiting for the open task to finish.
+    public struct Waiting: Identifiable, Hashable, Sendable {
+        public var id: String
+        public var body: String
+        /// Held by the workspace (true), or kept here because the
+        /// workspace is too old to hold it.
+        public var onHub: Bool
+    }
+
+    /// Messages waiting behind the open task, in the order they will go:
+    /// those the workspace holds, then those kept here.
+    public private(set) var waiting: [Waiting] = []
+    /// Kept here: the workspace could not hold them.
+    private var queued: [String] = []
+    /// Waiting messages taken back here (a stopped one may still come back
+    /// once more from the workspace).
+    private var withdrawn: Set<String> = []
+    /// A project's page starts a thread in the project with its first
+    /// message of this visit, then continues it.
+    private var startedProjectThread = false
     public var draft = ""
 
     /// Older messages exist than the ones shown: scrolling up loads them.
@@ -170,19 +188,40 @@ public final class ConversationModel {
         let me = session.me
         // Mine with the agent, and on a member's page the agent's with its
         // colleagues, as one conversation.
-        var all = known
+        var all = known.filter { !withdrawn.contains($0.key) }
         for (id, message) in colleagueMessages where all[id] == nil { all[id] = message }
+        var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
+        for (taskID, process) in processes {
+            if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
+        }
         let built = ConversationBuilder.items(
             me: me, agent: agent, messages: Array(all.values), others: others,
-            processes: Set(processes.filter { !$0.value.isEmpty }.keys),
+            processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans,
             status: { self.session.status(of: $0) }, now: Date())
+        let mine = Array(known.values).filter { !withdrawn.contains($0.id) }
+        let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
+            .map { Waiting(id: $0.id, body: $0.body, onHub: true) }
+        let local = queued.enumerated().map { Waiting(id: "local-\($0.offset)", body: $0.element, onHub: false) }
+        if waiting != held + local { waiting = held + local }
         // Nothing new: leave the list alone, so the page does not redraw.
         if built != items {
             items = built
             revision += 1
         }
-        openTask = ConversationBuilder.openTask(me: me, messages: Array(known.values))
+        openTask = ConversationBuilder.openTask(me: me, messages: mine)
         loaded = true
+    }
+
+    /// A new message of mine: in the thread my last exchange was in. On a
+    /// project's page, the first one of this visit starts a thread in the
+    /// project (as the desktop app does).
+    private func request(_ body: String, after: String? = nil) -> SendRequest {
+        if project != nil, !startedProjectThread {
+            startedProjectThread = true
+            return SendRequest(to: agent, body: body, project: project, after: after)
+        }
+        let thread = ConversationBuilder.threadToContinue(me: session.me, messages: Array(known.values))
+        return SendRequest(to: agent, body: body, threadId: thread, project: thread == nil ? project : nil, after: after)
     }
 
     private func save(_ snapshot: Snapshot) async {
@@ -251,7 +290,7 @@ public final class ConversationModel {
         do {
             switch action {
             case .send:
-                _ = try await session.hub.send(SendRequest(to: agent, body: text, project: project))
+                _ = try await session.hub.send(request(text))
             case .steer:
                 if let task = openTask { try await session.hub.steer(task.id, body: text) }
             case .stop:
@@ -281,18 +320,48 @@ public final class ConversationModel {
         await reload()
     }
 
-    /// Holds the typed text until the open task finishes, then sends it.
-    public func queueNext() {
+    /// Puts the typed text behind the open task: the workspace holds it
+    /// and delivers it when that task ends. A workspace too old to hold it
+    /// refuses; then it is kept here and sent when the task ends.
+    public func queueNext() async {
         let text = trimmedDraft
-        guard !text.isEmpty else { return }
-        queued.append(text)
+        guard !text.isEmpty, !sending else { return }
+        guard let task = openTask else {
+            await submit()
+            return
+        }
         draft = ""
+        sending = true
+        do {
+            _ = try await session.hub.send(request(text, after: task.id))
+            problem = nil
+        } catch let error as HubError where error.error == "invalid_argument" {
+            queued.append(text)
+        } catch {
+            draft = text
+            problem = (error as? HubError)?.message ?? error.localizedDescription
+        }
+        sending = false
+        await reload()
     }
 
-    public func unqueue(at index: Int, edit: Bool) {
-        guard queued.indices.contains(index) else { return }
-        let text = queued.remove(at: index)
-        if edit { draft = text }
+    /// Takes a waiting message back: it will not be sent. `edit` puts its
+    /// words back in the input.
+    public func withdraw(_ item: Waiting, edit: Bool) async {
+        if item.onHub {
+            do {
+                try await session.hub.stop(item.id)
+                withdrawn.insert(item.id)
+                problem = nil
+            } catch {
+                problem = (error as? HubError)?.message ?? error.localizedDescription
+                return
+            }
+        } else if let index = waiting.filter({ !$0.onHub }).firstIndex(of: item), queued.indices.contains(index) {
+            queued.remove(at: index)
+        }
+        if edit { draft = item.body }
+        show(others: others)
     }
 
     /// Sends the first waiting message once nothing is open. True if it went.
@@ -301,7 +370,7 @@ public final class ConversationModel {
         sending = true
         defer { sending = false }
         do {
-            _ = try await session.hub.send(SendRequest(to: agent, body: next, project: project))
+            _ = try await session.hub.send(request(next))
             queued.removeFirst()
             return true
         } catch {

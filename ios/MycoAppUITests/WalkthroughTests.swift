@@ -84,6 +84,33 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAMessageQueuedBehindARunningTaskWaitsAboveTheInput() {
+        let app = launch(["-myco-route", "agent:studio-codex-e07b"])
+        let input = app.descendants(matching: .any)["composer.input"]
+        let submit = app.buttons["composer.submit"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        input.tap()
+        input.typeText("Translate the readme")
+        submit.tap()
+        XCTAssertTrue(app.staticTexts["Translate the readme"].waitForExistence(timeout: 5))
+
+        // Something typed while it runs: a long press on the button offers
+        // to send it after this one.
+        input.typeText("Then the changelog")
+        submit.press(forDuration: 1.0)
+        let after = app.buttons["Send after this one"]
+        XCTAssertTrue(after.waitForExistence(timeout: 3), "the long press offers to queue it")
+        after.tap()
+        let row = app.descendants(matching: .any)["queue.row"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "it waits above the input")
+        XCTAssertFalse(app.staticTexts["Then the changelog"].exists, "and is not part of the conversation yet")
+
+        // When the first is answered, the queued one becomes a message.
+        XCTAssertTrue(app.staticTexts["Then the changelog"].waitForExistence(timeout: 20), "its turn comes when the first ends")
+        XCTAssertFalse(row.exists, "and the queue is empty")
+    }
+
+    @MainActor
     func testTheWelcomePageLeadsIntoTheDemo() {
         let app = launch(["-myco-start", "welcome"])
         XCTAssertTrue(app.buttons["welcome.join"].waitForExistence(timeout: 15))

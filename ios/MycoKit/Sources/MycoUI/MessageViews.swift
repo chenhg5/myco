@@ -134,18 +134,24 @@ public struct ScrollToEndButton: View {
     }
 }
 
-/// An interim update from the agent: one quiet line.
+/// An update from the agent while it works: a dot on a thin line, what it
+/// reported (Markdown, a size smaller than an answer), and when.
 public struct ProgressLine: View {
     let text: String
+    let time: String?
 
-    public init(_ text: String) {
+    public init(_ text: String, time: String? = nil) {
         self.text = text
+        self.time = time
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle().fill(MycoColor.faint).frame(width: 5, height: 5).offset(y: -3)
-            Text(text).font(.subheadline).lineSpacing(3).foregroundStyle(MycoColor.fg2)
+        HStack(alignment: .top, spacing: 10) {
+            Circle().fill(MycoColor.faint).frame(width: 6, height: 6).padding(.top, 7)
+            ReplyText(text, compact: true)
+            if let time {
+                Text(time).font(.caption.monospacedDigit()).foregroundStyle(MycoColor.faint).padding(.top, 3)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -200,11 +206,14 @@ public struct WorkingLine: View {
     let text: String
     /// Counted from here while it is being worked on; nil while it waits.
     let since: Date?
+    /// How the time it has taken reads ("20 分 37 秒").
+    let elapsed: (Date) -> String
 
-    public init(look: MushroomLook, text: String, since: Date?) {
+    public init(look: MushroomLook, text: String, since: Date?, elapsed: @escaping (Date) -> String = { _ in "" }) {
         self.look = look
         self.text = text
         self.since = since
+        self.elapsed = elapsed
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -216,9 +225,13 @@ public struct WorkingLine: View {
                 .modifier(Bobbing(active: since != nil && !reduceMotion))
             Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(2)
             if let since {
-                Text(since, style: .timer)
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(MycoColor.muted)
+                // Counted in words, as the desktop app does, once a second.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text("· " + elapsed(since))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(MycoColor.muted)
+                        .id(Int(context.date.timeIntervalSince1970))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

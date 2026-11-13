@@ -23,7 +23,10 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         case failure(reason: String)
         /// A task I stopped.
         case stopped
-        /// How a task of mine was worked on: what the agent said and did.
+        /// The plan the agent is working through for a task: the latest one,
+        /// from its steps or from a checklist it reported.
+        case plan(items: [PlanItem], live: Bool)
+        /// How a task was worked on: what the agent said and did.
         /// `live`: it is still being worked on.
         case process(taskID: String, live: Bool)
         /// An open task of mine: where it stands now.
@@ -55,15 +58,26 @@ public enum ConversationBuilder {
     ///   - others: tasks the agent gave out, to show as one-line capsules
     ///     (a coordinator's hand-outs on its project's page).
     ///   - processes: tasks whose steps are known and worth a row.
+    ///   - tracedPlans: the plan each task's steps hold, and when it was written.
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
-        me: String, agent: String, messages: [Message], others: [Message], processes: Set<String> = [],
+        me: String, agent: String, messages all: [Message], others: [Message], processes: Set<String> = [],
+        tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
+        // What waits behind an open task is not part of the conversation
+        // yet: it shows above the input until its turn comes.
+        let waiting = Set(queuedBehind(all).map(\.id))
+        let messages = all.filter { !waiting.contains($0.id) }
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         /// Updates of tasks that have ended, by task, oldest first.
         var past: [String: [Message]] = [:]
+        /// The newest plan of each task: from its steps, or a checklist it reported.
+        var plans: [String: (items: [PlanItem], at: Date)] = [:]
+        for (taskID, plan) in tracedPlans {
+            plans[taskID] = (plan.items, plan.at ?? byID[taskID]?.createdAt ?? .distantPast)
+        }
         for m in messages {
             let mine = m.from == me
             // Whoever gives the agent work is on the asking side: me, or a
@@ -112,6 +126,12 @@ public enum ConversationBuilder {
                 guard !asked else { continue }
                 // Its task: the one it answers, else the one its thread began with.
                 let taskID = m.replyTo ?? m.threadId
+                // A report that is only a checklist is the task's plan,
+                // ticked off at the top of its work; it is not said again.
+                if let plan = RunProcess.parsePlan(m.body) {
+                    if plans[taskID].map({ m.createdAt >= $0.at }) ?? true { plans[taskID] = (plan, m.createdAt) }
+                    continue
+                }
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
@@ -122,6 +142,13 @@ public enum ConversationBuilder {
             default:
                 break // events repeat what a failed task already says
             }
+        }
+        for (taskID, plan) in plans {
+            guard let task = byID[taskID] else { continue }
+            // Right under what was asked, above how it was worked on.
+            items.append(.init(
+                id: taskID + ".plan", at: task.createdAt.addingTimeInterval(0.0005),
+                kind: .plan(items: plan.items, live: task.isOpen)))
         }
         for (taskID, updates) in past {
             let ordered = updates.sorted { $0.createdAt < $1.createdAt }
@@ -159,9 +186,28 @@ public enum ConversationBuilder {
         return result
     }
 
-    /// The newest task of mine that is still open: what the input speaks to.
+    /// Messages put after a task that is still open: the hub holds them
+    /// until that task ends (hubs from v0.19.2). Oldest first.
+    public static func queuedBehind(_ messages: [Message]) -> [Message] {
+        let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return messages.filter { m in
+            guard let after = m.after, !after.isEmpty, ["queued", "delivered", "held", "acked"].contains(m.status) else { return false }
+            return byID[after]?.isOpen ?? false
+        }
+        .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// The newest task of mine that is still open: what the input speaks
+    /// to. Not one that waits behind another: that one has not begun.
     public static func openTask(me: String, messages: [Message]) -> Message? {
-        messages.filter { $0.from == me && $0.isOpen }.max { $0.createdAt < $1.createdAt }
+        let waiting = Set(queuedBehind(messages).map(\.id))
+        return messages.filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }.max { $0.createdAt < $1.createdAt }
+    }
+
+    /// The thread a new message of mine continues: the one my last exchange
+    /// with the agent was in.
+    public static func threadToContinue(me: String, messages: [Message]) -> String? {
+        messages.filter { $0.from == me || $0.to == me }.max { $0.createdAt < $1.createdAt }?.threadId
     }
 
     /// What a message says, as shown: its body, or a note that it is

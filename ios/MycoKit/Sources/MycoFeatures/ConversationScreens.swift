@@ -14,6 +14,7 @@ struct AgentScreen: View {
     var body: some View {
         ConversationHost(agent: name, project: nil, focus: focus)
             .navigationBarTitleDisplayMode(.inline)
+            .solidTopBar()
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Button {
@@ -58,6 +59,7 @@ struct ProjectScreen: View {
         }
         .background(MycoColor.bg)
         .navigationBarTitleDisplayMode(.inline)
+        .solidTopBar()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
@@ -358,6 +360,7 @@ struct ConversationBody: View {
         case (.dispatch, .dispatch): return Space.s
         case (.progress, .progress): return Space.s + 2
         case (.process, .reply), (.pastProgress, .reply), (.progress, .reply): return Space.m
+        case (.mine, .plan), (.plan, .process), (.plan, .progress): return Space.m
         default: return Space.l
         }
     }
@@ -390,7 +393,12 @@ struct ConversationBody: View {
             }
             .contextMenu { copyButton(text) }
         case .progress(let text):
-            ProgressLine(text)
+            ProgressLine(text, time: item.at.formatted(date: .omitted, time: .shortened))
+        case .plan(let plan, _):
+            let done = plan.filter { $0.state == .done }.count
+            PlanCard(
+                title: L("计划", "Plan"), count: L("\(done) / \(plan.count) 完成", "\(done) of \(plan.count) done"),
+                lines: plan.map { .init(text: $0.text, mark: $0.state == .done ? .done : ($0.state == .doing ? .doing : .todo)) })
         case .pastProgress(let texts):
             PastProgress(title: L("\(texts.count) 条进展", texts.count == 1 ? "1 update" : "\(texts.count) updates"), texts: texts)
         case .failure(let reason):
@@ -435,8 +443,14 @@ struct ConversationBody: View {
         case .queued:
             WorkingLine(look: look, text: L("排队中，轮到它时开始", "Waiting its turn"), since: nil)
         case .working(let since):
+            // What it says it is doing; when it has not said, a playful
+            // word that changes every few seconds, as on the desktop.
             let text = session.agent(model.agent)?.statusText
-            WorkingLine(look: look, text: (text?.isEmpty == false ? text : nil) ?? L("在干活", "Working"), since: since)
+            TimelineView(.periodic(from: .now, by: 3.6)) { context in
+                WorkingLine(
+                    look: look, text: (text?.isEmpty == false ? text : nil) ?? RelativeTime.workingVerb(now: context.date),
+                    since: since, elapsed: { RelativeTime.working(since: $0) })
+            }
         case .maybeStuck(let quietSince):
             NoticeLine(
                 .attention,
@@ -454,18 +468,24 @@ struct ConversationBody: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
-            ForEach(Array(model.queued.enumerated()), id: \.offset) { index, text in
+            // What waits behind the task being worked on: not part of the
+            // conversation yet, shown here until its turn comes.
+            ForEach(model.waiting) { item in
                 HStack(spacing: 10) {
-                    Text(L("排队中：", "Queued: ") + ConversationBuilder.firstLine(of: text))
+                    Text(L("排队中：", "Queued: ") + ConversationBuilder.firstLine(of: item.body))
                         .font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(1)
                     Spacer(minLength: 4)
-                    Button(L("编辑", "Edit")) { model.unqueue(at: index, edit: true) }
-                    Button(L("撤回", "Remove")) { model.unqueue(at: index, edit: false) }
+                    Button(L("编辑", "Edit")) { Task { await model.withdraw(item, edit: true) } }
+                    Button(L("撤回", "Withdraw")) { Task { await model.withdraw(item, edit: false) } }
                 }
                 .font(.footnote)
                 .tint(MycoColor.accent)
-                .padding(.horizontal, Space.page)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 14)
                 .padding(.top, Space.s)
+                .accessibilityIdentifier("queue.row")
             }
             ComposerView(
                 text: $model.draft,
@@ -476,7 +496,10 @@ struct ConversationBody: View {
                     commits += 1
                     Task { await model.submit() }
                 },
-                onQueue: { model.queueNext() },
+                onQueue: {
+                    commits += 1
+                    Task { await model.queueNext() }
+                },
                 onAttach: { attachNotice = true })
         }
         .background(.bar)
@@ -509,12 +532,6 @@ struct ProcessView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            if let plan = process.plan {
-                let done = plan.filter { $0.state == .done }.count
-                PlanCard(
-                    title: L("计划", "Plan"), count: L("\(done) / \(plan.count) 完成", "\(done) of \(plan.count) done"),
-                    lines: plan.map { .init(text: $0.text, mark: $0.state == .done ? .done : ($0.state == .doing ? .doing : .todo)) })
-            }
             ForEach(process.segments) { segment in
                 switch segment {
                 case .said(_, let text):
@@ -557,5 +574,14 @@ private struct SolidTopEdge: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+extension View {
+    /// A top bar with a background of its own on pages of running text: a
+    /// conversation's words pass under it without showing through the title.
+    func solidTopBar() -> some View {
+        toolbarBackground(MycoColor.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
     }
 }

@@ -202,15 +202,34 @@ struct SessionTests {
         await model.submit()
         #expect(model.items.contains { $0.kind == .mine(text: "British spelling", steer: true, by: nil) })
 
+        // Put behind the open task: the workspace holds it. It waits above
+        // the input, and is not part of the conversation yet.
         model.draft = "then the changelog"
-        model.queueNext()
-        #expect(model.queued == ["then the changelog"])
+        await model.queueNext()
         #expect(model.draft.isEmpty)
+        #expect(model.waiting.map(\.body) == ["then the changelog"])
+        #expect(model.waiting.first?.onHub == true)
+        #expect(!model.items.contains { $0.kind == .mine(text: "then the changelog", steer: false, by: nil) })
+        // The input still speaks to the task being worked on.
+        #expect(model.openTask?.body == "translate the readme")
+
+        // A second one, taken back to edit: gone from the queue, its words
+        // in the input.
+        model.draft = "and the license"
+        await model.queueNext()
+        #expect(model.waiting.count == 2)
+        let second = try! #require(model.waiting.last)
+        await model.withdraw(second, edit: true)
+        #expect(model.waiting.map(\.body) == ["then the changelog"])
+        #expect(model.draft == "and the license")
+        model.draft = ""
 
         await model.submit() // stop
         #expect(model.items.contains { $0.kind == .stopped })
-        // The open task closed, so the queued message went out as a new one.
-        #expect(model.queued.isEmpty)
+        // The open task ended: what waited is an ordinary message now.
+        await model.reload()
+        #expect(model.waiting.isEmpty)
+        #expect(model.items.contains { $0.kind == .mine(text: "then the changelog", steer: false, by: nil) })
         #expect(model.openTask?.body == "then the changelog")
     }
 }

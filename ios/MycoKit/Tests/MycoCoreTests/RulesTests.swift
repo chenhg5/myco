@@ -213,6 +213,39 @@ struct ConversationBuilderTests {
         #expect(items[4].kind == .progress(text: "halfway"))
     }
 
+    @Test func whatWaitsBehindAnOpenTaskIsNotInTheConversation() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "first", status: "acked", createdAt: at(-100), updatedAt: at(-5)),
+            Message(id: "q1", from: "me", to: "coder", threadId: "t1", after: "t1", body: "then this", status: "queued", createdAt: at(-50)),
+            Message(id: "q2", from: "me", to: "coder", threadId: "t1", after: "t1", body: "and this", status: "queued", createdAt: at(-40)),
+            // Put after a task that has ended: an ordinary message.
+            Message(id: "t0", from: "me", to: "coder", body: "earlier", status: "done", createdAt: at(-300)),
+            Message(id: "q0", from: "me", to: "coder", threadId: "t0", after: "t0", body: "after earlier", status: "done", createdAt: at(-250)),
+        ]
+        #expect(ConversationBuilder.queuedBehind(messages).map(\.id) == ["q1", "q2"])
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        // No bubble and no "waiting its turn" line for either of them.
+        #expect(items.map(\.id) == ["t0", "q0", "t1", "t1.status"])
+        #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t1")
+        #expect(ConversationBuilder.threadToContinue(me: "me", messages: messages) == "t1")
+    }
+
+    @Test func aChecklistReportedIsThePlanNotAnUpdate() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "build it", status: "acked", createdAt: at(-500), updatedAt: at(-5)),
+            Message(id: "p1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "- [x] hub\n- [ ] app", status: "done", createdAt: at(-400)),
+            Message(id: "p2", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "- [x] hub\n- [~] app\n- [ ] docs", status: "done", createdAt: at(-300)),
+            // A checklist with a sentence after it is an update, in words.
+            Message(id: "p3", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "- [x] hub pushed\nnotifications come later", status: "done", createdAt: at(-200)),
+        ]
+        // The steps hold an older plan: the newest one wins.
+        let traced: [String: (items: [PlanItem], at: Date?)] = ["t1": ([PlanItem(text: "old", state: .todo), PlanItem(text: "plan", state: .todo)], at(-450))]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], tracedPlans: traced, status: { _ in nil }, now: now))
+        #expect(items.map(\.id) == ["t1", "t1.plan", "p3", "t1.status"])
+        #expect(items[1].kind == .plan(items: [PlanItem(text: "hub", state: .done), PlanItem(text: "app", state: .doing), PlanItem(text: "docs", state: .todo)], live: true))
+        #expect(items[2].kind == .progress(text: "- [x] hub pushed\nnotifications come later"))
+    }
+
     @Test func aFirstLineIsPlainText() {
         #expect(ConversationBuilder.firstLine(of: "定了：**三个 Tab**。\n\n1. 聊天") == "定了：三个 Tab。")
         #expect(ConversationBuilder.firstLine(of: "## Result  `ok`") == "Result ok")

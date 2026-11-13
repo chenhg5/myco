@@ -156,17 +156,23 @@ public enum MarkdownBlock: Hashable, Sendable {
 public struct ReplyText: View {
     let blocks: [MarkdownBlock]
     let dim: Bool
+    let compact: Bool
 
-    /// - Parameter dim: a quieter colour, for what it thought.
-    public init(_ text: String, dim: Bool = false) {
+    /// - Parameters:
+    ///   - dim: a quieter colour, for what it thought.
+    ///   - compact: a size smaller and a shade lighter, for an update
+    ///     along the way: it must not read as the answer.
+    public init(_ text: String, dim: Bool = false, compact: Bool = false) {
         blocks = MarkdownBlock.parse(text)
         self.dim = dim
+        self.compact = compact
     }
 
-    private var color: Color { dim ? MycoColor.muted : MycoColor.fg }
+    private var color: Color { dim ? MycoColor.muted : (compact ? MycoColor.fg2 : MycoColor.fg) }
+    private var textFont: Font { compact ? .subheadline : .body }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
+        VStack(alignment: .leading, spacing: compact ? Space.s : Space.m) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
@@ -179,23 +185,23 @@ public struct ReplyText: View {
     @ViewBuilder private func view(for block: MarkdownBlock) -> some View {
         switch block {
         case .paragraph(let text):
-            Text(MarkdownBlock.inline(text)).font(.body).lineSpacing(5)
+            Text(MarkdownBlock.inline(text)).font(textFont).lineSpacing(compact ? 3 : 5)
         case .heading(let level, let text):
             Text(MarkdownBlock.inline(text))
                 .font(level <= 1 ? .title3.weight(.semibold) : .headline)
                 .lineSpacing(3)
                 .padding(.top, 6)
         case .list(let items):
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: compact ? 6 : 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let checked = item.checked {
                             Image(systemName: checked ? "checkmark.square.fill" : "square")
                                 .font(.subheadline).foregroundStyle(checked ? MycoColor.green : MycoColor.faint)
                         } else {
-                            Text(item.marker).font(.body.monospacedDigit()).foregroundStyle(MycoColor.muted)
+                            Text(item.marker).font(textFont.monospacedDigit()).foregroundStyle(MycoColor.muted)
                         }
-                        Text(MarkdownBlock.inline(item.text)).font(.body).lineSpacing(4)
+                        Text(MarkdownBlock.inline(item.text)).font(textFont).lineSpacing(compact ? 3 : 4)
                     }
                     .padding(.leading, CGFloat(item.level) * 20)
                 }

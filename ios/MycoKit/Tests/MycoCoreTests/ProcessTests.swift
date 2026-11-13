@@ -87,7 +87,8 @@ struct ConversationProcessTests {
         await session.refresh()
         let model = ConversationModel(session: session, agent: "cloud-lead", project: "myco-ios")
         await model.reload()
-        #expect(model.items.map(\.id).starts(with: ["m1.time", "m1", "m1.process", "m2"]))
+        // What I asked, its plan, how it was worked on, the answer.
+        #expect(model.items.map(\.id).starts(with: ["m1.time", "m1", "m1.plan", "m1.process", "m2"]))
         let process = try! #require(model.process(of: "m1"))
         #expect(process.plan?.count == 4)
         #expect(!process.segments.isEmpty)
