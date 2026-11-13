@@ -96,11 +96,11 @@ func TestInboxWaitTimeoutAndInterruptRemindOnlyWait(t *testing.T) {
 		t.Fatalf("timeout exit: %d %s", code, stderr)
 	}
 	var failure Error
-	if err := json.Unmarshal([]byte(stderr), &failure); err != nil || !strings.HasSuffix(failure.Suggestion, waitAgainHint) {
+	if err := json.Unmarshal([]byte(stderr), &failure); err != nil || !strings.HasSuffix(failure.Suggestion, waitAgainNow) {
 		t.Fatalf("timeout error: %+v %v", failure, err)
 	}
 	code, _, stderr = cli.run("inbox", "wait", "--timeout", "1ms", "--format", "text")
-	if code != ExitTimeout || !strings.HasSuffix(strings.TrimSpace(stderr), waitAgainHint) {
+	if code != ExitTimeout || !strings.HasSuffix(strings.TrimSpace(stderr), waitAgainNow) {
 		t.Fatalf("timeout text: %d %q", code, stderr)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -111,8 +111,17 @@ func TestInboxWaitTimeoutAndInterruptRemindOnlyWait(t *testing.T) {
 	if code != ExitTimeout {
 		t.Fatalf("interrupted exit: %d %q", code, errb.String())
 	}
-	if err := json.Unmarshal(errb.Bytes(), &failure); err != nil || !strings.HasSuffix(failure.Suggestion, waitAgainHint) {
+	if err := json.Unmarshal(errb.Bytes(), &failure); err != nil || !strings.HasSuffix(failure.Suggestion, waitAgainNow) {
 		t.Fatalf("interrupted error: %+v %v", failure, err)
+	}
+}
+
+// A usage or credential error is not "run it again": it needs fixing first.
+func TestInboxWaitHintSkipsErrorsToFix(t *testing.T) {
+	cli := &harnessT{t, map[string]string{"MYCO_CONFIG": filepath.Join(t.TempDir(), "none.yaml")}}
+	code, _, stderr := cli.run("inbox", "wait", "--timeout", "nonsense", "--format", "json")
+	if code == 0 || strings.Contains(stderr, waitAgainNow) || strings.Contains(stderr, waitAgainHint) {
+		t.Fatalf("a usage error got the restart hint: %d %s", code, stderr)
 	}
 }
 
