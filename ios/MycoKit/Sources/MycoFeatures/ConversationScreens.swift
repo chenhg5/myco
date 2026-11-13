@@ -216,6 +216,17 @@ struct ConversationBody: View {
                 }
             }
             .animation(.snappy(duration: 0.2), value: atBottom)
+            // More arrived (an answer, a colleague's exchange merged in):
+            // a conversation that was at its end goes with it. One being
+            // read further up is left alone.
+            .onChange(of: model.items.count) {
+                guard landed, atBottom else { return }
+                Task {
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                    try? await Task.sleep(for: .milliseconds(60))
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
+            }
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, new != nil else { return }
