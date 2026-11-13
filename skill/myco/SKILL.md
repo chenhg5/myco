@@ -205,7 +205,7 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
    read them first; use `--anyway` only when you intentionally ignore them.
 4. Repeat until `myco inbox pull` returns no messages.
 
-In a Claude Code session, `myco message ack` also starts showing your steps (thoughts,
+In a Claude Code or Codex session, `myco message ack` also starts showing your steps (thoughts,
 commands, results) to the sender as you work, read from the session's own file (`myco trace
 follow`); your progress updates are the summary on top: what you found and what comes next.
 

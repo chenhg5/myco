@@ -16,7 +16,9 @@ import (
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/claude"
+	"github.com/chenhg5/myco/internal/harness/codex"
 	"github.com/chenhg5/myco/internal/runner"
 )
 
@@ -36,7 +38,8 @@ func traceCommands() *Command {
 		Name:    "follow",
 		Summary: "Upload what this session does to a task as its steps, from the session's own file",
 		Long: `For a session that receives with myco inbox wait (no runner reports its steps): reads the new
-lines of the session file its agent CLI writes (Claude Code, found from CLAUDE_CODE_SESSION_ID)
+lines of the session file its agent CLI writes (Claude Code from CLAUDE_CODE_SESSION_ID, Codex
+from CODEX_THREAD_ID)
 and uploads them to the task, so its sender sees thoughts, commands and results live, as for a
 runner. myco message ack starts it in the background; you rarely run it yourself. It stops when
 the task is answered or failed, when another task is acked in this session, or after --for.
@@ -58,7 +61,7 @@ Set MYCO_NO_TRACE_FOLLOW=1 to turn the automatic start off.`,
 				file = sessionFile(e.in.Getenv)
 			}
 			if file == "" {
-				return errorf("not_found", ExitNotFound, "pass --file, or run it inside a Claude Code session", "no session file found for this session")
+				return errorf("not_found", ExitNotFound, "pass --file, or run it inside a Claude Code or Codex session", "no session file found for this session")
 			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "trace_follow", "task": id, "file": file})
@@ -79,12 +82,25 @@ Set MYCO_NO_TRACE_FOLLOW=1 to turn the automatic start off.`,
 	return (&Command{Name: "trace", Summary: "A task's steps, as its sender sees them live"}).Add(follow)
 }
 
-// sessionFile is this session's file, "" if the agent CLI keeps none we read.
+// sessionFile is this session's file, "" if the agent CLI keeps none we
+// read: Claude Code (CLAUDE_CODE_SESSION_ID) or Codex (CODEX_THREAD_ID).
 func sessionFile(getenv func(string) string) string {
 	if getenv == nil {
 		return ""
 	}
-	return claude.TranscriptPath(getenv("CLAUDE_CODE_SESSION_ID"))
+	if f := claude.TranscriptPath(getenv("CLAUDE_CODE_SESSION_ID")); f != "" {
+		return f
+	}
+	return codex.TranscriptPath(getenv("CODEX_THREAD_ID"))
+}
+
+// stepsOf picks how to read a session file's lines: a Codex rollout file,
+// else Claude Code's.
+func stepsOf(file string) func([]byte) []harness.Event {
+	if strings.HasPrefix(filepath.Base(file), "rollout-") {
+		return codex.TranscriptEvents
+	}
+	return claude.TranscriptEvents
 }
 
 // tracePoster is what a follower needs from the hub.
@@ -150,6 +166,7 @@ func (e *env) followTrace(ctx context.Context, c tracePoster, id, file string, l
 		_ = os.MkdirAll(filepath.Dir(marker), 0o700)
 		_ = os.WriteFile(marker, []byte(id), 0o600)
 	}
+	parse := stepsOf(file)
 	tr := runner.NewTracer(ctx, c, id, runner.TraceFull, after, log)
 	defer tr.Close()
 
@@ -174,7 +191,7 @@ func (e *env) followTrace(ctx context.Context, c tracePoster, id, file string, l
 					line = append(partial, line...)
 					partial = nil
 				}
-				for _, ev := range claude.TranscriptEvents(line) {
+				for _, ev := range parse(line) {
 					tr.Add(ev)
 					steps++
 				}
