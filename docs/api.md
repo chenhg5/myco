@@ -21,6 +21,13 @@ Errors (any non-2xx):
 
 ## Endpoints
 
+The App's local backend also exposes `GET /app/local`: `hub` remains the default
+hub for older App clients, while `hubs` lists every locally configured hub as
+`{name, running, local_url, public_url, version, added}` (`name: ""` for the
+default). `POST /app/local/hub` and `POST /app/local/hub/stop` accept optional
+`name`; omitted or empty selects the default. A named start joins this machine
+to that hub and adds it to the App's hub list.
+
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |

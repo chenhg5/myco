@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/console"
 )
 
@@ -19,6 +20,7 @@ import (
 // `console token create` issues a real console token with the admin token.
 type fakeCLI struct {
 	r        *rig
+	named    *rig
 	home     string
 	calls    [][]string
 	failUp   bool
@@ -41,14 +43,23 @@ func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...stri
 			return []byte(`{"error":"tunnel_not_ready","message":"Funnel is not enabled for this device","suggestion":"enable it: tailscale funnel 7777"}`), errors.New("exit status 2")
 		}
 		dir := filepath.Join(f.home, ".myco", "hub")
+		target := f.r
+		if f.named != nil && slices.Contains(args, "--name") {
+			dir = filepath.Join(f.home, ".myco", "hubs", "work")
+			target = f.named
+		}
 		os.MkdirAll(dir, 0o700)
-		os.WriteFile(filepath.Join(dir, "hub.env"), []byte("MYCO_ADMIN_TOKEN="+adminToken+"\nMYCO_HUB="+f.r.hubURL+"\n"), 0o600)
+		os.WriteFile(filepath.Join(dir, "hub.env"), []byte("MYCO_ADMIN_TOKEN="+adminToken+"\nMYCO_HUB="+target.hubURL+"\n"), 0o600)
 		return []byte(`{"public_url":"https://abc.trycloudflare.com","reachable":false,"join_url":"https://abc.trycloudflare.com/j/myco_enroll_x"}`), nil
 	case "console token":
 		if !slices.Contains(args, "--hub") || !slices.Contains(args, "test-mac-app") {
 			f.r.t.Errorf("console token create args: %v", args)
 		}
-		res, err := f.r.admin.CreateConsoleToken(context.Background(), "test-mac-app")
+		target := f.r
+		if f.named != nil && slices.Contains(args, f.named.hubURL) {
+			target = f.named
+		}
+		res, err := target.admin.CreateConsoleToken(context.Background(), "test-mac-app")
 		if err != nil {
 			return nil, err
 		}
@@ -58,16 +69,32 @@ func (f *fakeCLI) run(_ context.Context, env []string, name string, args ...stri
 	case "runner service":
 		return []byte(`{"installed":true,"running":true}`), nil
 	case "link create":
-		if !slices.Contains(env, "MYCO_ADMIN_TOKEN="+adminToken) || !slices.Contains(env, "MYCO_HUB="+f.r.hubURL) {
+		target := f.r
+		if f.named != nil && slices.Contains(env, "MYCO_HUB="+f.named.hubURL) {
+			target = f.named
+		}
+		if !slices.Contains(env, "MYCO_ADMIN_TOKEN="+adminToken) || !slices.Contains(env, "MYCO_HUB="+target.hubURL) {
 			f.r.t.Errorf("link create must use the local hub's admin token: %v", env)
 		}
-		return []byte(`{"join_url":"` + f.r.hubURL + `/j/myco_enroll_local"}`), nil
+		return []byte(`{"join_url":"` + target.hubURL + `/j/myco_enroll_local"}`), nil
 	case "machine join":
 		if !slices.Contains(args, "--no-service") {
 			f.r.t.Errorf("a running runner must not be reinstalled (restarted) by the join: %v", args)
 		}
 		f.joins++
-		os.WriteFile(filepath.Join(f.home, ".myco", "machine.yaml"), []byte("hub: "+f.r.hubURL+"\nmachine: test-mac\nenroll_token: x\nname_prefix: test-mac-\n"), 0o600)
+		hubURL := f.r.hubURL
+		if f.named != nil && slices.Contains(args, f.named.hubURL+"/j/myco_enroll_local") {
+			hubURL = f.named.hubURL
+		}
+		path := filepath.Join(f.home, ".myco", "config.yaml")
+		machine, _ := config.LoadMachine(path)
+		if machine == nil {
+			machine = &config.Machine{}
+		}
+		machine.Put(config.MachineHub{Hub: hubURL, Machine: "test-mac", EnrollToken: "x", NamePrefix: "test-mac-"})
+		if err := config.SaveMachine(path, machine); err != nil {
+			return nil, err
+		}
 		return []byte(`{"machine":"test-mac"}`), nil
 	}
 	f.r.t.Fatalf("unexpected myco call: %v", args)
@@ -171,5 +198,54 @@ func TestNoLocalRoutesWithoutLocal(t *testing.T) {
 	b.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/app/local", nil))
 	if rec.Code != 404 {
 		t.Fatalf("/app/local without Local: %d", rec.Code)
+	}
+}
+
+func TestNamedLocalHub(t *testing.T) {
+	r := newRig(t)
+	named := newRig(t)
+	home := t.TempDir()
+	f := &fakeCLI{r: r, named: named, home: home}
+	l := &console.Local{Home: home, Device: "test-mac", Run: f.run,
+		LookPath: func(name string) (string, error) {
+			if name == "myco" {
+				return "/usr/local/bin/myco", nil
+			}
+			return "", errors.New("missing")
+		}}
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: l}
+	r.app.Config.Handler = b.Handler()
+	if code, _, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "none"}); code != 201 {
+		t.Fatalf("default start: %d %s", code, raw)
+	}
+	code, _, raw := r.do("POST", "/app/local/hub", map[string]string{"name": "work", "tunnel": "none"})
+	if code != 201 {
+		t.Fatalf("named start: %d %s", code, raw)
+	}
+	if f.joins != 2 {
+		t.Fatalf("both hubs must join this computer: %d", f.joins)
+	}
+	if hubs, err := b.Store.List(); err != nil || len(hubs) != 2 || hubs[1].Name != "work" || hubs[1].URL != named.hubURL {
+		t.Fatalf("stored hubs: %+v %v", hubs, err)
+	}
+	var st console.LocalStatus
+	_, _, raw = r.do("GET", "/app/local", nil)
+	if err := json.Unmarshal(raw, &st); err != nil || st.Hub == nil || len(st.Hubs) != 2 || st.Hubs[0].Name != "" || st.Hubs[1].Name != "work" || !st.Hubs[1].Running || !st.Hubs[1].Added {
+		t.Fatalf("local hubs: %v %s", err, raw)
+	}
+	if code, _, raw := r.do("POST", "/app/local/hub/stop", map[string]string{"name": "work"}); code != 200 {
+		t.Fatalf("named stop: %d %s", code, raw)
+	}
+	stopped := false
+	for _, call := range f.calls {
+		if len(call) >= 2 && call[0] == "hub" && call[1] == "down" && slices.Contains(call, "--name") && slices.Contains(call, "work") {
+			stopped = true
+		}
+	}
+	if !stopped {
+		t.Fatalf("named stop args: %v", f.calls)
+	}
+	if code, _, _ := r.do("POST", "/app/local/hub", map[string]string{"name": "Invalid!", "tunnel": "none"}); code != 400 {
+		t.Fatalf("invalid name status: %d", code)
 	}
 }

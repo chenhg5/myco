@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -87,6 +88,20 @@ var (
 	RunnerID = ID{Label: Label, Unit: "myco-runner.service", Description: "myco runner (serves every local agent)"}
 	HubID    = ID{Label: "ai.myco.hub", Unit: "myco-hub.service", Description: "myco hub"}
 )
+
+var hubNamePattern = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
+
+// ValidHubName reports whether name can safely identify a named local hub.
+// The empty name denotes the original, default hub.
+func ValidHubName(name string) bool { return name == "" || hubNamePattern.MatchString(name) }
+
+// HubIDFor keeps the original service identity for the default hub.
+func HubIDFor(name string) ID {
+	if name == "" {
+		return HubID
+	}
+	return ID{Label: HubID.Label + "." + name, Unit: "myco-hub-" + name + ".service", Description: "myco hub " + name}
+}
 
 func (id ID) orDefault() ID {
 	if id.Label == "" {

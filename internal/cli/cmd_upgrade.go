@@ -14,6 +14,7 @@ import (
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/service"
 )
@@ -151,7 +152,7 @@ func upgradeTarget(getenv func(string) string) (string, error) {
 // system units (install-hub.sh's myco-hub, exec nodes, ...).
 func restartMycoServices() (restarted, notes []string) {
 	if home, err := os.UserHomeDir(); err == nil {
-		for _, id := range []service.ID{service.RunnerID, service.HubID} {
+		for _, id := range localHubServiceIDs(config.Dir(config.DefaultPath())) {
 			m, err := service.DetectID(home, service.ExecRunner{}, id)
 			if err != nil {
 				continue
@@ -198,4 +199,14 @@ func restartMycoServices() (restarted, notes []string) {
 		notes = append(notes, "no running myco services found here; restart any myco processes you started by hand")
 	}
 	return restarted, notes
+}
+
+func localHubServiceIDs(base string) []service.ID {
+	ids := []service.ID{service.RunnerID, service.HubID}
+	for _, hub := range localHubDirs(base) {
+		if hub.Name != "" {
+			ids = append(ids, service.HubIDFor(hub.Name))
+		}
+	}
+	return ids
 }

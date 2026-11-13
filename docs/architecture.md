@@ -4,6 +4,12 @@
 
 ## 概念
 
+一台机器可以运行多个独立 Hub。`myco hub up` 仍使用默认的 `~/.myco/hub/`
+和 7777 端口；`myco hub up --name <名字>` 使用 `~/.myco/hubs/<名字>/`，
+各自保存令牌、数据库和服务定义，默认从 7778 起选择端口。`myco hub list`
+列出本机实例，`myco hub down --name <名字>` 只停止指定实例。VPS 安装脚本
+也支持 `--name`，每个实例有独立的 systemd 服务和 Caddy 站点文件。
+
 | 概念 | 说明 |
 |---|---|
 | Agent | 有名字、描述、能力标签和收件箱。`--allow-from` 限制谁能给它派任务 |
