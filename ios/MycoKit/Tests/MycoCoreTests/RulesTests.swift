@@ -71,15 +71,18 @@ struct NamingTests {
     }
 
     @Test func aGeneratedNameBecomesTheFolder() {
-        UserDefaults.standard.set("zh", forKey: AppLanguage.defaultsKey)
-        defer { UserDefaults.standard.removeObject(forKey: AppLanguage.defaultsKey) }
         let first = agent("studio-claude-x9k2", day: 0)
         let second = agent("laptop-codex-0a1b", harness: "codex", day: 1)
         let third = agent("box-claude-77ff", dir: "/srv/myco/", day: 2)
         let all = [third, first, second]
-        #expect(Naming.name(of: first, among: all, machines: machines) == "myco 助手")
-        #expect(Naming.name(of: second, among: all, machines: machines) == "myco 助手 二号")
-        #expect(Naming.name(of: third, among: all, machines: machines) == "myco 助手 三号")
+        AppLanguage.$forced.withValue(.zh) {
+            #expect(Naming.name(of: first, among: all, machines: machines) == "myco 助手")
+            #expect(Naming.name(of: second, among: all, machines: machines) == "myco 助手 二号")
+            #expect(Naming.name(of: third, among: all, machines: machines) == "myco 助手 三号")
+        }
+        AppLanguage.$forced.withValue(.en) {
+            #expect(Naming.name(of: second, among: all, machines: machines) == "myco assistant #2")
+        }
     }
 
     @Test func aComputerIsWhichOneAndTheFolder() {

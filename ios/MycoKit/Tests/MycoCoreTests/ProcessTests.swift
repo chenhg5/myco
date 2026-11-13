@@ -61,8 +61,6 @@ struct ProcessTests {
     }
 
     @Test func summarisesAGroupInOneLine() {
-        UserDefaults.standard.set("en", forKey: AppLanguage.defaultsKey)
-        defer { UserDefaults.standard.removeObject(forKey: AppLanguage.defaultsKey) }
         let steps = [
             ToolStep(id: 1, tool: "Read", input: "a", failed: false, finished: true),
             ToolStep(id: 2, tool: "Bash", input: "x", failed: true, finished: true),
@@ -72,7 +70,12 @@ struct ProcessTests {
             ToolStep(id: 6, tool: "Grep", input: "z", failed: false, finished: true),
         ]
         // The same file edited twice counts once.
-        #expect(RunProcess.summary(of: steps) == "read 1 file, ran 2 commands, edited 1 file, 1 other step, 1 failed")
+        AppLanguage.$forced.withValue(.en) {
+            #expect(RunProcess.summary(of: steps) == "read 1 file, ran 2 commands, edited 1 file, 1 other step, 1 failed")
+        }
+        AppLanguage.$forced.withValue(.zh) {
+            #expect(RunProcess.summary(of: steps) == "读了 1 个文件、跑了 2 条命令、改了 1 个文件、另外 1 次操作、1 次失败")
+        }
     }
 }
 

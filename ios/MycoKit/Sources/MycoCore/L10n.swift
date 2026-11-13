@@ -8,8 +8,12 @@ public enum AppLanguage: String, Sendable, CaseIterable {
     /// The key the choice is stored under ("system", "zh" or "en").
     public static let defaultsKey = "myco-lang"
 
+    /// A language for the current task only (tests): nothing global changes.
+    @TaskLocal public static var forced: AppLanguage?
+
     /// The language in use: the one chosen in Settings, else the system's.
     public static var current: AppLanguage {
+        if let forced { return forced }
         if let chosen = UserDefaults.standard.string(forKey: defaultsKey), let lang = AppLanguage(rawValue: chosen) {
             return lang
         }
