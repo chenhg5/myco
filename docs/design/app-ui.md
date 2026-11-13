@@ -357,9 +357,17 @@
 
 ```bash
 cd web && npm run typecheck
-cd web && npm run test:ui     # 每个页面在两种宽度、浅色和深色下截图到 web/ui-smoke/
+cd web && npm run test:ui     # 每个页面在两种宽度、浅色和深色下截图到 web/ui-smoke/（约 2 分钟）
 make web                      # 重新生成 internal/web/dist 并提交
 make vet && make test
+```
+
+`test:ui` 先把 App 构建一次（几秒），再让四种「宽度 × 深浅色」同时跑，每种有自己的 mock 后端和端口（mock 从 7781、App 从 5173 起各占一个），互不影响；跑完列出最慢的几步。改的时候可以只跑相关的步骤，提交前再跑全部：
+
+```bash
+npm run test:ui -- --only 单聊              # 只跑名字里有「单聊」的步骤（可写多个）
+npm run test:ui -- --combo 1200-light       # 只跑一种（1200-light、1200-dark、760-light、760-dark）
+npm run test:ui -- --serial                 # 一种接一种地跑，日志好读
 ```
 
 提交前自己看一遍截图，至少确认：

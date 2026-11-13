@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-// App UI smoke test: starts the mock backend and Vite, opens every App page
-// and the main dialogs with Playwright at two window sizes in light and dark,
-// saves one screenshot each under web/ui-smoke/, and fails on console errors
-// or uncaught page errors.
+// App UI smoke test: builds the App once, then opens every App page and the
+// main dialogs with Playwright at two window sizes in light and dark, saves
+// one screenshot each under web/ui-smoke/, and fails on console errors or
+// uncaught page errors. The four sizes and themes run at the same time, each
+// against its own mock backend and a small server for the built App, so a
+// step in one never sees what another did.
 //
 //   cd web && npm run test:ui
+//   npm run test:ui -- --only 单聊            # just the steps whose name has 单聊
+//   npm run test:ui -- --combo 1200-light     # one size and theme (or 760-dark, ...)
+//   npm run test:ui -- --serial               # one after another (easier to read)
 //
 // Environment:
-//   UI_SMOKE_PORT        Vite port (default 5173)
+//   UI_SMOKE_PORT        first port of the App servers (default 5173; one each)
 //   UI_SMOKE_EXECUTABLE  a Chromium/Chrome binary to drive, if Playwright's
 //                        own browser is not downloaded on this machine
 //
@@ -16,7 +21,9 @@
 // npm root, or NODE_PATH).
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, access } from "node:fs/promises";
+import http from "node:http";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -26,22 +33,45 @@ const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
 // A 1x1 PNG, for choosing a picture as a face.
 const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-const VITE_PORT = Number(process.env.UI_SMOKE_PORT || 5173);
-// vite.config.ts proxies /app to this port, so it is not configurable.
+const APP_PORT = Number(process.env.UI_SMOKE_PORT || 5173);
 const MOCK_PORT = 7781;
-const BASE = `http://${HOST}:${VITE_PORT}`;
 const VIEWPORTS = [
   { width: 1200, height: 800 },
   { width: 760, height: 800 },
 ];
 const SCHEMES = ["light", "dark"];
 
+// Command line: --only <text> (steps whose name has it), --combo <w-scheme>
+// (repeatable or comma separated), --serial.
+function flag(name) {
+  const out = [];
+  const argv = process.argv.slice(2);
+  argv.forEach((a, i) => {
+    if (a === `--${name}` && argv[i + 1]) out.push(argv[i + 1]);
+    else if (a.startsWith(`--${name}=`)) out.push(a.slice(name.length + 3));
+  });
+  return out.flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
+}
+const ONLY = flag("only");
+const COMBOS = flag("combo");
+const SERIAL = process.argv.includes("--serial");
+
+// What each running size and theme has of its own: its mock backend, the
+// App's address, its log and the step it is on.
+const runCtx = new AsyncLocalStorage();
+const run = () => runCtx.getStore();
+const mockPort = () => run()?.mockPort ?? MOCK_PORT;
+
 const children = [];
 let stopping = false;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Inside a size and theme the lines are kept and printed together when it
+// ends, so four at once do not interleave.
 function log(...args) {
-  console.log(...args);
+  const r = run();
+  if (r) r.lines.push(args.join(" "));
+  else console.log(...args);
 }
 
 function portHint(port) {
@@ -178,16 +208,14 @@ async function loadPlaywright() {
 }
 
 // The page a failure belongs to, set by step(); the window it happened in.
-let currentStep = "启动";
-let currentMatrix = "";
 const problems = [];
 const seenProblems = new Set();
 
-function addProblem(kind, text, where) {
-  const key = `${currentMatrix} ${currentStep} ${kind} ${text}`;
+function addProblem(r, kind, text, where) {
+  const key = `${r.matrix} ${r.step} ${kind} ${text}`;
   if (seenProblems.has(key)) return;
   seenProblems.add(key);
-  problems.push({ matrix: currentMatrix, step: currentStep, kind, text, where });
+  problems.push({ matrix: r.matrix, step: r.step, kind, text, where });
 }
 
 function reportProblems() {
@@ -204,16 +232,18 @@ function reportProblems() {
 }
 
 function watchPage(page, size, scheme) {
+  // Page events come outside this run's async context: keep it here.
+  const r = run();
   page.on("console", (msg) => {
     if (msg.type() !== "error") return;
     const loc = msg.location();
     const where = loc.url ? `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}` : "";
-    addProblem("console", msg.text(), where);
+    addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
-    addProblem("pageerror", err.stack || String(err), "");
+    addProblem(r, "pageerror", err.stack || String(err), "");
   });
-  page.on("crash", () => addProblem("crash", "The page crashed", `${size.width}×${size.height} ${scheme}`));
+  page.on("crash", () => addProblem(r, "crash", "The page crashed", `${size.width}×${size.height} ${scheme}`));
 }
 
 async function settle(page, ms = 700) {
@@ -250,7 +280,7 @@ const NEXT_KEY = process.platform === "darwin" ? "Meta+Enter" : "Control+Enter";
 /** A message written from "another device": straight to the mock, so two
  *  tasks can be on their way at once (the box adds to the running one now). */
 async function sendFromElsewhere(hubId, agent, body) {
-  const r = await fetch(`http://${HOST}:${MOCK_PORT}/app/hubs/${hubId}/messages`, {
+  const r = await fetch(`http://${HOST}:${mockPort()}/app/hubs/${hubId}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ to: agent, body }),
@@ -304,21 +334,21 @@ async function closeDialog(page) {
 }
 
 async function runMatrix(browser, size, scheme) {
-  currentMatrix = `${size.width}×${size.height} ${scheme}`;
-  log(`\n▶ ${currentMatrix}`);
+  const r = run();
+  log(`\n▶ ${r.matrix}`);
   // The stuck-task step stops and resends the demo task; the mock keeps
   // running, so put it back before each width and theme.
-  const reset = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/stuck`, { method: "POST" });
+  const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/stuck`, { method: "POST" });
   if (!reset.ok) throw new Error(`重置「可能卡住」的演示任务失败：HTTP ${reset.status}`);
   // The machine-delete step removes the demo machine and its nodes.
-  const resetMachine = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/machine`, { method: "POST" });
+  const resetMachine = await fetch(`http://${HOST}:${mockPort()}/app/mock/machine`, { method: "POST" });
   if (!resetMachine.ok) throw new Error(`重置演示机器失败：HTTP ${resetMachine.status}`);
   // A workspace on this computer is started by name below; put the demo
   // ones back so every width and theme starts with the same two.
-  const resetLocal = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/local`, { method: "POST" });
+  const resetLocal = await fetch(`http://${HOST}:${mockPort()}/app/mock/local`, { method: "POST" });
   if (!resetLocal.ok) throw new Error(`重置这台电脑上的工作区失败：HTTP ${resetLocal.status}`);
   // The resume step makes and revokes a line; put the demo one back.
-  const resetResume = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/resume`, { method: "POST" });
+  const resetResume = await fetch(`http://${HOST}:${mockPort()}/app/mock/resume`, { method: "POST" });
   if (!resetResume.ok) throw new Error(`重置重新接入链接失败：HTTP ${resetResume.status}`);
   const context = await browser.newContext({
     viewport: size,
@@ -337,15 +367,19 @@ async function runMatrix(browser, size, scheme) {
   watchPage(page, size, scheme);
   const narrow = size.width < 860;
   const step = async (label, fn) => {
-    currentStep = label;
+    // --only: just the steps named; the others are left out.
+    if (ONLY.length && !ONLY.some((x) => label.includes(x))) return;
+    r.step = label;
+    const t0 = Date.now();
     log(`  · ${label}`);
     await fn();
     await page.waitForTimeout(250);
+    r.timings.push({ label, ms: Date.now() - t0 });
   };
 
   try {
-    currentStep = "启动";
-    await page.goto(`${BASE}/?lang=zh`, { waitUntil: "domcontentloaded" });
+    r.step = "启动";
+    await page.goto(`${r.base}/?lang=zh`, { waitUntil: "domcontentloaded" });
     await page.locator(".app-shell").waitFor();
     await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
     await settle(page);
@@ -1297,13 +1331,68 @@ async function runMatrix(browser, size, scheme) {
   }
 }
 
-async function main() {
-  log("myco App · 界面冒烟测试");
-  log(`  mock 后端 http://${HOST}:${MOCK_PORT}`);
-  log(`  Vite      ${BASE}`);
+/** Builds the App into a folder of its own (not internal/web/dist). */
+async function buildApp(viteBin) {
+  const dir = path.join(OUT, ".app");
+  const build = start("vite build", [viteBin, "build", "--outDir", dir, "--emptyOutDir", "--logLevel", "warn"], {});
+  const code = await new Promise((resolve) => build.on("exit", resolve));
+  if (code !== 0) throw new Error(`Building the App failed (exit ${code}).\n${build.output()}`);
+  return dir;
+}
 
-  await requirePort(MOCK_PORT, "the mock backend");
-  await requirePort(VITE_PORT, "Vite");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
+  ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".ico": "image/x-icon" };
+
+/** Serves the built App on port, and /app and /api from that run's mock. */
+function serveApp(dir, port, mock) {
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url || "/", `http://${HOST}`);
+    if (url.pathname.startsWith("/app/") || url.pathname.startsWith("/api/")) {
+      const up = http.request({ host: HOST, port: mock, path: req.url, method: req.method, headers: req.headers }, (r) => {
+        res.writeHead(r.statusCode || 502, r.headers);
+        r.pipe(res);
+      });
+      up.on("error", () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+      req.pipe(up);
+      return;
+    }
+    const file = path.join(dir, path.normalize(url.pathname === "/" ? "/index.html" : url.pathname));
+    if (!file.startsWith(dir)) { res.writeHead(403); res.end(); return; }
+    try {
+      const data = await readFile(file);
+      res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
+      res.end(data);
+    } catch {
+      // Like Vite's dev server: any other path is the App (a missing
+      // built file is still a 404).
+      if (url.pathname.startsWith("/assets/")) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "Content-Type": TYPES[".html"] });
+      res.end(await readFile(path.join(dir, "index.html")));
+    }
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, HOST, () => resolve(server));
+  });
+}
+
+function seconds(ms) {
+  return ms >= 60_000 ? `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+async function main() {
+  const t0 = Date.now();
+  const combos = VIEWPORTS.flatMap((size) => SCHEMES.map((scheme) => ({ size, scheme, key: `${size.width}-${scheme}` })))
+    .filter((c) => !COMBOS.length || COMBOS.some((x) => c.key === x || `${c.size.width}x${c.size.height}-${c.scheme}` === x));
+  if (!combos.length) throw new Error(`--combo matches none of: ${VIEWPORTS.flatMap((v) => SCHEMES.map((s) => `${v.width}-${s}`)).join(", ")}`);
+  log("myco App · 界面冒烟测试");
+  log(`  ${combos.length} 个窗口组合${SERIAL || combos.length === 1 ? "，一个接一个" : "，同时跑"}；mock 后端从 ${MOCK_PORT}、App 从 ${APP_PORT} 起各用一个端口`);
+  if (ONLY.length) log(`  只跑名字里有「${ONLY.join("」或「")}」的步骤`);
+
+  for (let i = 0; i < combos.length; i++) {
+    await requirePort(MOCK_PORT + i, "a mock backend");
+    await requirePort(APP_PORT + i, "the App");
+  }
 
   const viteBin = path.join(WEB, "node_modules", "vite", "bin", "vite.js");
   try {
@@ -1332,33 +1421,65 @@ async function main() {
   }
 
   await mkdir(OUT, { recursive: true });
-
+  const servers = [];
+  const runs = [];
   try {
-    const mock = start("mock 后端", [mockEntry], { APP_MOCK_PORT: String(MOCK_PORT) });
-    await waitForHttp(`http://${HOST}:${MOCK_PORT}/app/hubs`, mock);
+    const tb = Date.now();
+    const dir = await buildApp(viteBin);
+    log(`  构建 App ${seconds(Date.now() - tb)}`);
+    for (let i = 0; i < combos.length; i++) {
+      const mock = start(`mock 后端 ${combos[i].key}`, [mockEntry], { APP_MOCK_PORT: String(MOCK_PORT + i) });
+      await waitForHttp(`http://${HOST}:${MOCK_PORT + i}/app/hubs`, mock);
+      servers.push(await serveApp(dir, APP_PORT + i, MOCK_PORT + i));
+    }
 
-    const vite = start("Vite", [viteBin, "--host", HOST, "--port", String(VITE_PORT), "--strictPort"], {
-      UI_SMOKE: "1",
-    });
-    await waitForHttp(BASE, vite);
-
-    for (const size of VIEWPORTS) {
-      for (const scheme of SCHEMES) {
-        await runMatrix(browser, size, scheme);
-      }
+    const go = (c, i) => {
+      const r = {
+        matrix: `${c.size.width}×${c.size.height} ${c.scheme}`, step: "启动", lines: [], timings: [],
+        mockPort: MOCK_PORT + i, base: `http://${HOST}:${APP_PORT + i}`, ok: false, error: null, ms: 0,
+      };
+      runs.push(r);
+      const t = Date.now();
+      return runCtx.run(r, () => runMatrix(browser, c.size, c.scheme))
+        .then(() => { r.ok = true; }, (err) => { r.error = err; })
+        .finally(() => {
+          r.ms = Date.now() - t;
+          // Its lines, together, as soon as it ends.
+          console.log(r.lines.join("\n"));
+          console.log(r.ok ? `  ✓ ${r.matrix} ${seconds(r.ms)}` : `  ✖ ${r.matrix} 失败于「${r.step}」`);
+        });
+    };
+    if (SERIAL) {
+      for (let i = 0; i < combos.length; i++) await go(combos[i], i);
+    } else {
+      await Promise.all(combos.map(go));
     }
   } finally {
     await browser.close().catch(() => undefined);
+    for (const s of servers) s.close();
     stopAll();
   }
 
-  const count = VIEWPORTS.length * SCHEMES.length;
-  log(`\n${count} 个窗口组合，全部页面截图完成。`);
+  const failed = runs.filter((r) => !r.ok);
+  // The slowest steps, to know where the time goes.
+  const slow = runs.flatMap((r) => r.timings.map((t) => ({ ...t, matrix: r.matrix }))).sort((a, b) => b.ms - a.ms).slice(0, 6);
+  if (slow.length) {
+    log("\n最慢的步骤：");
+    for (const t of slow) log(`  ${seconds(t.ms).padStart(6)}  ${t.label}（${t.matrix}）`);
+  }
+  log(`\n${runs.length} 个窗口组合用了 ${seconds(Date.now() - t0)}。`);
+  if (failed.length) {
+    for (const r of failed) console.error(`\n✖ 冒烟测试失败于「${r.matrix} · ${r.step}」：\n${r.error?.stack || r.error?.message || r.error}`);
+    if (problems.length > 0) reportProblems();
+    process.exitCode = 1;
+    return;
+  }
+  log("全部页面截图完成。");
   reportProblems();
 }
 
 main().catch((err) => {
-  console.error(`\n✖ 冒烟测试失败于「${currentMatrix ? `${currentMatrix} · ` : ""}${currentStep}」：\n${err.stack || err.message}`);
+  console.error(`\n✖ 冒烟测试没能开始：\n${err.stack || err.message}`);
   if (problems.length > 0) reportProblems();
   stopAll();
   process.exitCode = 1;
