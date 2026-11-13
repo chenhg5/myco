@@ -1040,6 +1040,13 @@ textarea.app-input {
 .app-kv-note {
   color: var(--muted);
 }
+/* A second, quieter line under a value: the address under its access kind. */
+.app-kv-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--muted);
+}
 /* A row with an explanation: label and value on one line, the
    explanation under them across the row, left-aligned. */
 .app-kv.has-help {
@@ -1917,6 +1924,17 @@ textarea.app-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A workspace that runs on this computer, where it was started. */
+.app-hub-menu-tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
 .app-hub-menu-check {
   width: 14px;
   height: 14px;
@@ -2172,6 +2190,24 @@ textarea.app-input {
 .app-settings-body {
   flex: 1;
   min-width: 0;
+}
+/* A group of cards under one small heading ("Workspaces on this computer"). */
+.app-setting-group {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.app-setting-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 .app-setting-card {
   margin-bottom: 12px;

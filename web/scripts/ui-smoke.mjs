@@ -313,6 +313,10 @@ async function runMatrix(browser, size, scheme) {
   // The machine-delete step removes the demo machine and its nodes.
   const resetMachine = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/machine`, { method: "POST" });
   if (!resetMachine.ok) throw new Error(`重置演示机器失败：HTTP ${resetMachine.status}`);
+  // A workspace on this computer is started by name below; put the demo
+  // ones back so every width and theme starts with the same two.
+  const resetLocal = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/local`, { method: "POST" });
+  if (!resetLocal.ok) throw new Error(`重置这台电脑上的工作区失败：HTTP ${resetLocal.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -1136,6 +1140,54 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
       if (await page.locator(".app-hub-menu").isVisible().catch(() => false)) await page.locator(".sp-switch .app-hub-trigger").click();
+      if (narrow) await sidebar(page, false);
+    });
+
+    // A computer can run more than one workspace: the switcher starts
+    // another by name, tags the ones on this computer, and Settings lists
+    // them under one heading.
+    await step("工作区 · 这台电脑上再开一个", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "在这台电脑上新建工作区" }));
+      const dialog = page.locator(".app-modal");
+      await dialog.waitFor({ timeout: 10_000 });
+      const field = dialog.locator(".app-field .app-input");
+      await field.fill("Studio");
+      // The internal name follows what was typed: latin names become a slug.
+      const note = compactText(await dialog.locator(".app-field .app-small-note").innerText());
+      if (!note.includes("studio")) throw new Error(`内部名应按工作区名生成，实际「${note}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-new-workspace");
+      await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      // It switches over: the switcher at the bottom shows the new name.
+      await page.locator(".sp-switch .app-hub-name", { hasText: "Studio" }).waitFor({ timeout: 20_000 });
+      // Both workspaces this computer runs carry the tag; the other one does not.
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      await page.waitForFunction(() => {
+        const rows = [...document.querySelectorAll(".app-hub-menu-item")];
+        return rows.filter((r) => r.querySelector(".app-hub-menu-tag")).length === 2;
+      }, null, { timeout: 10_000 });
+      const tagged = await page.locator(".app-hub-menu-item", { has: page.locator(".app-hub-menu-tag") }).allInnerTexts();
+      for (const row of tagged.map(compactText)) {
+        if (!row.includes("这台电脑")) throw new Error(`这台电脑上的工作区应带标签，实际「${row}」`);
+      }
+      await settle(page, 200);
+      await shot(page, size, scheme, "workspace-local-tag");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
+      // Settings lists both, one card each, under the heading.
+      await go(page, "设置", narrow);
+      await page.locator("[data-local-ws]").first().waitFor({ timeout: 20_000 });
+      const localCount = await page.locator("[data-local-ws]").count();
+      if (localCount !== 2) throw new Error(`设置页应列出这台电脑上的两个工作区，实际 ${localCount} 个`);
+      const heading = compactText(await page.locator(".app-setting-group").first().innerText());
+      if (!heading.includes("这台电脑上的工作区")) throw new Error(`设置页应有「这台电脑上的工作区」，实际「${heading}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "settings-local-workspaces");
       if (narrow) await sidebar(page, false);
     });
 

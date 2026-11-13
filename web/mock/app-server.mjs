@@ -480,6 +480,20 @@ const state = {
       ],
     },
     {
+      // This computer's own workspace: it is in `local.hubs` too, and the
+      // settings page lists it under "这台电脑上的工作区".
+      id: "hub_local",
+      name: "本机 Hub",
+      url: "http://127.0.0.1:7780",
+      token: "myco_console_local_demo",
+      ok: true,
+      hub_version: "0.16.8",
+      update_available: false,
+      agents: [],
+      threads: {},
+      recent: [],
+    },
+    {
       id: "hub_lab",
       name: "Lab Linux",
       url: "http://10.0.0.42:7780",
@@ -686,7 +700,14 @@ const localProviderAgents = new Map([["docs-claude", { local: true, harness: "cl
 const local = {
   hostname: "Studio.local",
   myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
+  // The default workspace on this computer (older pages read only this one).
   hub: null,
+  // `myco hub up --name` runs several on one machine. "studio" is already
+  // there, stopped and not in the app: the smoke test starts it by name.
+  hubs: [
+    { name: "", running: true, local_url: "http://127.0.0.1:7780", version: "0.16.8", added: true },
+    { name: "studio", running: false, local_url: "http://127.0.0.1:7790", version: "0.16.8", added: false },
+  ],
   tools: {
     cloudflared: { path: "/opt/homebrew/bin/cloudflared" },
     tailscale: null,
@@ -699,6 +720,12 @@ if (SHOWCASE) {
   local.hostname = "glenns-mbp.local";
   if (local.myco) local.myco.version = "0.17.2";
 }
+// What was there at the start: the smoke test starts another workspace and
+// stops this one, and the mock keeps running across widths and themes.
+const localHubsAtStart = JSON.parse(JSON.stringify(local.hubs));
+// This computer's entries in the app's workspace list, as they start.
+const localAppHubsAtStart = JSON.parse(JSON.stringify(state.hubs.filter((h) => h.id === "hub_local")));
+local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
 
 // A node is working only when it acknowledged an open task. `status_text` is
 // this mock's stand-in for an acknowledged task; a task it only pulled
@@ -974,6 +1001,19 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/local — the smoke test starts another workspace on this
+  // computer; put the demo ones back between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "local" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    local.hubs = JSON.parse(JSON.stringify(localHubsAtStart));
+    local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+    state.hubs = [
+      ...state.hubs.filter((h) => !h.id.startsWith("hub_local")),
+      ...JSON.parse(JSON.stringify(localAppHubsAtStart)),
+    ];
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/machine — the smoke test deletes the demo machine; put it and its
   // nodes back, because the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "machine" && parts.length === 3) {
@@ -1162,6 +1202,12 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 400, "invalid_hostname", "域名看起来不对。", "例如 hub.example.com。");
       }
 
+      // Which hub on this computer; "" (or none) is the default one.
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (name && !/^[a-z][a-z0-9-]*$/.test(name)) {
+        return fail(res, 400, "invalid_name", "工作区名只能用小写字母、数字和横线。", "比如 studio、team-notes。");
+      }
+
       await sleep(tunnel === "none" ? 2000 : 4000);
 
       const publicUrl = tunnel === "none"
@@ -1179,19 +1225,27 @@ const server = http.createServer(async (req, res) => {
             ? ["请确认域名已托管在 Cloudflare，并且执行过一次 cloudflared tunnel login。"]
             : ["临时地址会在 Hub 重启后变化。", "这台电脑休眠或关机时，其他机器会连不上。"];
 
-      local.hub = {
-        running: true,
-        local_url: "http://127.0.0.1:7780",
-        ...(publicUrl ? { public_url: publicUrl } : {}),
-        version: "0.16.8",
-        added: true,
-      };
+      let entry = local.hubs.find((h) => h.name === name);
+      if (!entry) {
+        entry = {
+          name, running: false, version: "0.16.8", added: false,
+          local_url: `http://127.0.0.1:${7790 + local.hubs.length}`,
+        };
+        local.hubs.push(entry);
+      }
+      entry.running = true;
+      entry.added = true;
+      entry.version = "0.16.8";
+      if (publicUrl) entry.public_url = publicUrl;
+      else delete entry.public_url;
+      local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || entry));
 
-      const appUrl = publicUrl || local.hub.local_url;
-      let appHub = state.hubs.find((h) => h.id === "hub_local");
+      const appUrl = publicUrl || entry.local_url;
+      const appId = name ? `hub_local_${name}` : "hub_local";
+      let appHub = state.hubs.find((h) => h.id === appId);
       if (!appHub) {
         appHub = {
-          id: "hub_local", name: `${local.device} 本机`, url: appUrl,
+          id: appId, name: name ? `${local.device} ${name}` : "本机 Hub", url: appUrl,
           token: "myco_console_local_demo", ok: true, hub_version: "0.16.8",
           update_available: false, agents: [], threads: {}, recent: [],
         };
@@ -1204,18 +1258,25 @@ const server = http.createServer(async (req, res) => {
 
       return send(res, 200, {
         hub: hubView(appHub),
-        public_url: publicUrl || local.hub.local_url,
+        public_url: publicUrl || entry.local_url,
         ...(publicUrl ? { join_url: `${publicUrl}/j/myco_enroll_k3v9q2wd7hx4m8pa` } : {}),
         warnings,
       });
     }
 
     if (parts.length === 4 && parts[2] === "hub" && parts[3] === "stop" && method === "POST") {
-      if (local.hub) local.hub.running = false;
-      const appHub = state.hubs.find((h) => h.id === "hub_local");
+      const body = await readBody(req);
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      const entry = local.hubs.find((h) => h.name === name) || (name ? null : local.hubs.find((h) => !h.name));
+      if (entry) {
+        entry.running = false;
+        delete entry.public_url;
+      }
+      local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+      const appHub = state.hubs.find((h) => h.id === (name ? `hub_local_${name}` : "hub_local"));
       if (appHub) {
         appHub.ok = false;
-        appHub.error = "本机 Hub 已停止";
+        appHub.error = name ? `${name} 已停止` : "本机 Hub 已停止";
       }
       return send(res, 200, { stopped: true });
     }
@@ -1230,7 +1291,12 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length === 3 && method === "DELETE") {
       state.hubs = state.hubs.filter((h) => h.id !== hub.id);
-      if (hub.id === "hub_local" && local.hub) local.hub.added = false;
+      if (hub.id.startsWith("hub_local")) {
+        const name = hub.id === "hub_local" ? "" : hub.id.slice("hub_local_".length);
+        const entry = local.hubs.find((h) => h.name === name);
+        if (entry) entry.added = false;
+        local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+      }
       return send(res, 204);
     }
 

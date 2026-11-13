@@ -13,6 +13,7 @@ import { setHubLook, useHubLooks, type HubLook } from "@/app/hubLooks";
 import { colorIndex, HubFace } from "@/app/HubSwitcher";
 import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
+import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { L, lang, type LangChoice } from "@/lib/i18n";
@@ -241,7 +242,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [local, setLocalState] = useState<LocalState | null>(() => recall<LocalState | null>("local") ?? null);
   const setLocal = (d: LocalState | null) => { if (d) remember("local", d); setLocalState(d); };
   const [localError, setLocalError] = useState<unknown>(null);
-  const [busy, setBusy] = useState<null | "start" | "stop">(null);
+  // Which local workspace is starting or stopping ("start:<name>").
+  const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [renameTarget, setRenameTarget] = useState<Hub | null>(null);
   const hubLooks = useHubLooks();
@@ -249,8 +251,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [lookError, setLookError] = useState<unknown>(null);
   const [renameValue, setRenameValue] = useState("");
   const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
-  const [stopOpen, setStopOpen] = useState(false);
-  const [publicOpen, setPublicOpen] = useState(false);
+  const [stopTarget, setStopTarget] = useState<LocalWorkspace | null>(null);
+  const [publicTarget, setPublicTarget] = useState<LocalWorkspace | null>(null);
 
   // "Hub 设置" in the switcher should land on the Hub list, even when this
   // page was last left on another section.
@@ -276,11 +278,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     return () => { cancelled = true; };
   }, [refreshKey, reloadLocal]);
 
-  const isLocalHub = (h: Hub) => {
-    if (!local?.hub) return false;
-    const urls = [local.hub.local_url, local.hub.public_url].filter(Boolean).map((u) => stripSlash(u!));
-    return urls.includes(stripSlash(h.url));
-  };
+  const isLocalHub = (h: Hub) => !!localWorkspaceOf(local, h.url);
 
   const saveRename = () => {
     if (!renameTarget) return;
@@ -295,11 +293,11 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     setLookError(null);
   };
 
-  const startLocal = async () => {
-    setBusy("start");
+  const startLocal = async (name?: string) => {
+    setBusy(`start:${name || ""}`);
     setActionError(null);
     try {
-      await appApi.startLocalHub({ tunnel: "none" });
+      await appApi.startLocalHub({ tunnel: "none", name: name || undefined });
       await reloadLocal();
       await onRefresh();
     } catch (e) {
@@ -310,11 +308,13 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   };
 
   const stopLocal = async () => {
-    setBusy("stop");
+    if (!stopTarget) return;
+    const name = stopTarget.name;
+    setBusy(`stop:${name}`);
     setActionError(null);
     try {
-      await appApi.stopLocalHub();
-      setStopOpen(false);
+      await appApi.stopLocalHub(name || undefined);
+      setStopTarget(null);
       await reloadLocal();
       await onRefresh();
     } catch (e) {
@@ -337,7 +337,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     }
   };
 
-  const localRunning = !!local?.hub?.running;
+  const localWs = localWorkspaces(local);
+  const otherHubs = hubs.filter((h) => !isLocalHub(h));
 
   return (
     <div className="app-page app-settings">
@@ -360,78 +361,81 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <div className="app-settings-body">
         {section === "hubs" && (
           <>
-            <p className="app-summary">{L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A Hub is the server your nodes live on. Once connected, every page shows only the selected Hub.")}</p>
+            <p className="app-summary">{L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A workspace is the server your nodes live on. Once connected, every page shows only the selected workspace.")}</p>
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
-            {hubs.map((h) => {
-              const localHub = isLocalHub(h);
-              const hubLocal = localHub ? local?.hub : null;
+
+            {/* The workspaces this computer runs: one row each, with what they
+                are reachable at and how they are opened. */}
+            {localWs.length > 0 && (
+              <h4 className="app-setting-group">{L("这台电脑上的工作区", "Workspaces on this computer")}</h4>
+            )}
+            {localWs.map((w) => {
+              const urls = [w.local_url, w.public_url].filter(Boolean).map((u) => stripSlash(u!));
+              const linked = hubs.find((h) => urls.includes(stripSlash(h.url)));
+              const name = linked?.name || w.name || L("默认工作区", "Default workspace");
+              const starting = busy === `start:${w.name}`;
+              const stopping = busy === `stop:${w.name}`;
               return (
-                <section className="app-setting-card" key={h.id}>
+                <section className="app-setting-card" key={`local:${w.name}`} data-local-ws={w.name || "default"}>
                   <div className="app-setting-head">
-                    <HubFace name={h.name} id={h.id} size={32} />
+                    <HubFace name={name} id={linked?.id || `local:${w.name}`} size={32} />
                     <div className="titles">
-                      <h3>{h.name}</h3>
-                      <p className="mono">{host(h.url)}</p>
+                      <h3>{name}</h3>
+                      <p className="mono">{w.local_url}</p>
                     </div>
-                    <button
-                      type="button"
-                      className="app-btn app-btn-plain"
-                      onClick={() => openRename(h)}
-                      aria-label={L("改名字和头像", "Name and face")}
-                      title={L("改名字和头像", "Name and face")}
-                    >
-                      <Pencil />
-                    </button>
+                    <span className="app-setting-tag">{L("这台电脑", "This computer")}</span>
+                    {linked && (
+                      <button
+                        type="button"
+                        className="app-btn app-btn-plain"
+                        onClick={() => openRename(linked)}
+                        aria-label={L("改名字和头像", "Name and face")}
+                        title={L("改名字和头像", "Name and face")}
+                      >
+                        <Pencil />
+                      </button>
+                    )}
                   </div>
 
                   <div className="app-setting-rows">
-                    <div className="app-kv"><span className="app-kv-label">{L("地址", "Address")}</span><span className="app-kv-value mono clip" title={h.url}>{h.url}</span></div>
-                    <div className="app-kv"><span className="app-kv-label">{L("版本", "Version")}</span><span className="app-kv-value">{h.hub_version ? ver(h.hub_version) : "—"}</span></div>
+                    <div className="app-kv"><span className="app-kv-label">{L("地址", "Address")}</span><span className="app-kv-value mono clip" title={w.local_url}>{w.local_url}</span></div>
+                    <div className="app-kv"><span className="app-kv-label">{L("版本", "Version")}</span><span className="app-kv-value">{(w.version || linked?.hub_version) ? ver(w.version || linked?.hub_version) : "—"}</span></div>
                     <div className="app-kv">
                       <span className="app-kv-label">{L("状态", "Status")}</span>
                       <span className="app-kv-value">
-                        <span className={cn("app-status-text", !h.ok && "is-bad")}>
-                          <span className={cn("dot", h.ok ? "working" : "offline")} />
-                          {h.ok ? L("已连接", "Connected") : L("连不上", "Unreachable")}
+                        <span className={cn("app-status-text", !w.running && "is-bad")}>
+                          <span className={cn("dot", w.running ? "working" : "offline")} />
+                          {w.running ? L("运行中", "Running") : L("已停止", "Stopped")}
                         </span>
                       </span>
                     </div>
-                    <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
-                    {localHub && (
-                      <div className="app-kv">
-                        <span className="app-kv-label">{L("访问", "Access")}</span>
-                        <span className="app-kv-value">
-                          {hubLocal?.running && hubLocal.public_url
-                            ? <span className="mono clip" title={hubLocal.public_url}>{hubLocal.public_url}</span>
-                            : L("只在本机/局域网", "This computer and local network only")}
-                        </span>
-                      </div>
-                    )}
+                    <div className="app-kv">
+                      <span className="app-kv-label">{L("访问", "Access")}</span>
+                      <span className="app-kv-value">
+                        {accessLabel(w)}
+                        {w.running && w.public_url && (
+                          <span className="app-kv-sub mono" title={w.public_url}>{w.public_url}</span>
+                        )}
+                      </span>
+                    </div>
+                    {linked && <E2ERow hubId={linked.id} ov={hubsOv?.find((o) => o.id === linked.id)} onChanged={onRefresh} />}
                   </div>
-                  {localHub && !h.ok && !localRunning && (
-                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("这台电脑上的工作区已停止，点「启动这台电脑上的工作区」重新启动。", "The local Hub has stopped. Start it again with “Start local Hub”.")}</div>
+                  {!w.running && (
+                    <div className="app-small-note" style={{ marginTop: 8 }}>{L("这个工作区已停止，点「启动」重新运行。", "This workspace is stopped. Start it again to bring it back.")}</div>
                   )}
 
                   <div className="app-setting-actions">
-                    {localHub ? (
-                      <>
-                        <button type="button" className="app-btn" onClick={() => setPublicOpen(true)} disabled={busy !== null}>
-                          <Globe />{L("开放到公网", "Open to the internet")}
-                        </button>
-                        {localRunning ? (
-                          <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => setStopOpen(true)} disabled={busy !== null}>
-                            {L("停止这台电脑上的工作区", "Stop local Hub")}
-                          </button>
-                        ) : (
-                          <button type="button" className="app-btn app-btn-primary" onClick={() => void startLocal()} disabled={busy !== null}>
-                            {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : L("启动这台电脑上的工作区", "Start local Hub")}
-                          </button>
-                        )}
-                      </>
+                    <button type="button" className="app-btn" onClick={() => setPublicTarget(w)} disabled={busy !== null}>
+                      <Globe />{L("开放到公网", "Open to the internet")}
+                    </button>
+                    {w.running ? (
+                      <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => setStopTarget(w)} disabled={busy !== null}>
+                        {stopping ? <><span className="app-spinner" />{L("正在停止…", "Stopping…")}</> : L("停止", "Stop")}
+                      </button>
                     ) : (
-                      <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>
-                        {L("移除", "Remove")}
+                      <button type="button" className="app-btn app-btn-primary" onClick={() => void startLocal(w.name)} disabled={busy !== null}>
+                        {starting ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : L("启动", "Start")}
                       </button>
                     )}
                   </div>
@@ -439,27 +443,69 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
               );
             })}
 
-            {hubs.length === 0 && (
-              <div className="app-empty-note" style={{ marginTop: 8 }}>{L("还没有工作区。先连接一个，或者在这台电脑上启动一个。", "No Hubs yet. Connect one, or start one on this computer.")}</div>
+            {otherHubs.map((h) => (
+              <section className="app-setting-card" key={h.id}>
+                <div className="app-setting-head">
+                  <HubFace name={h.name} id={h.id} size={32} />
+                  <div className="titles">
+                    <h3>{h.name}</h3>
+                    <p className="mono">{host(h.url)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="app-btn app-btn-plain"
+                    onClick={() => openRename(h)}
+                    aria-label={L("改名字和头像", "Name and face")}
+                    title={L("改名字和头像", "Name and face")}
+                  >
+                    <Pencil />
+                  </button>
+                </div>
+
+                <div className="app-setting-rows">
+                  <div className="app-kv"><span className="app-kv-label">{L("地址", "Address")}</span><span className="app-kv-value mono clip" title={h.url}>{h.url}</span></div>
+                  <div className="app-kv"><span className="app-kv-label">{L("版本", "Version")}</span><span className="app-kv-value">{h.hub_version ? ver(h.hub_version) : "—"}</span></div>
+                  <div className="app-kv">
+                    <span className="app-kv-label">{L("状态", "Status")}</span>
+                    <span className="app-kv-value">
+                      <span className={cn("app-status-text", !h.ok && "is-bad")}>
+                        <span className={cn("dot", h.ok ? "working" : "offline")} />
+                        {h.ok ? L("已连接", "Connected") : L("连不上", "Unreachable")}
+                      </span>
+                    </span>
+                  </div>
+                  <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
+                </div>
+
+                <div className="app-setting-actions">
+                  <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>
+                    {L("移除", "Remove")}
+                  </button>
+                </div>
+              </section>
+            ))}
+
+            {hubs.length === 0 && localWs.length === 0 && (
+              <div className="app-empty-note" style={{ marginTop: 8 }}>{L("还没有工作区。先连接一个，或者在这台电脑上启动一个。", "No workspaces yet. Connect one, or start one on this computer.")}</div>
             )}
 
             <div className="app-setting-add">
               <button type="button" className="app-setting-add-row" onClick={onAddHub}>
-                <Plus />{L("添加工作区", "Add Hub")}
+                <Plus />{L("添加工作区", "Add workspace")}
               </button>
-              {!localRunning && (
+              {localWs.length === 0 && (
                 <button
                   type="button"
                   className="app-setting-add-row"
                   onClick={() => void startLocal()}
                   disabled={busy !== null}
                 >
-                  {busy === "start" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : <><Terminal />{L("在这台电脑上启动工作区", "Start a Hub on this computer")}</>}
+                  {busy === "start:" ? <><span className="app-spinner" />{L("正在启动…", "Starting…")}</> : <><Terminal />{L("在这台电脑上启动工作区", "Start a workspace on this computer")}</>}
                 </button>
               )}
             </div>
             <div className="app-hint">
-              {L("名称只在这个 App 里显示，不会改到工作区上。地址和令牌保存在这台电脑上。", "Names show only in this app and don’t change the Hub. Addresses and tokens are saved on this computer.")}
+              {L("名称只在这个 App 里显示，不会改到工作区上。地址和令牌保存在这台电脑上。", "Names show only in this app and don’t change the workspace. Addresses and tokens are saved on this computer.")}
             </div>
           </>
         )}
@@ -583,20 +629,21 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       </Modal>
 
       <PublicAccessDialog
-        open={publicOpen}
-        onOpenChange={setPublicOpen}
+        open={!!publicTarget}
+        onOpenChange={(o) => !o && setPublicTarget(null)}
         local={local}
-        onDone={() => { void reloadLocal(); void onRefresh(); }}
+        name={publicTarget?.name}
+        onDone={() => { setPublicTarget(null); void reloadLocal(); void onRefresh(); }}
       />
 
       <ConfirmDialog
-        open={stopOpen}
-        onOpenChange={(o) => !o && setStopOpen(false)}
-        title={L("停止这台电脑上的工作区？", "Stop the local Hub?")}
-        description={L("工作区会在这台电脑上停止运行。", "The Hub will stop running on this computer.")}
+        open={!!stopTarget}
+        onOpenChange={(o) => !o && setStopTarget(null)}
+        title={L("停止这个工作区？", "Stop this workspace?")}
+        description={L("它会在这台电脑上停止运行。", "It will stop running on this computer.")}
         consequences={<p>{L("其他电脑会连不上它。数据和令牌都保留，重新开启即可恢复。", "Other machines won’t be able to reach it. Data and tokens are kept; start it again to bring it back.")}</p>}
         confirmLabel={L("停止", "Stop")}
-        busy={busy === "stop"}
+        busy={busy === `stop:${stopTarget?.name || ""}`}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
         onConfirm={() => void stopLocal()}
       />
@@ -616,10 +663,12 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }
 
 /** Reconfigure the local hub behind a public tunnel. */
-function PublicAccessDialog({ open, onOpenChange, local, onDone }: {
+function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   local: LocalState | null;
+  /** which hub on this computer ("") for the default one */
+  name?: string;
   onDone: () => void;
 }) {
   const [choice, setChoice] = useState<TunnelChoice>(0);
@@ -646,11 +695,12 @@ function PublicAccessDialog({ open, onOpenChange, local, onDone }: {
   const submit = async () => {
     setBusy(true);
     setError(null);
+    const which = name ? { name } : {};
     const input = choice === 1
-      ? { tunnel: "cloudflare" as const, hostname: hostname.trim() }
+      ? { tunnel: "cloudflare" as const, hostname: hostname.trim(), ...which }
       : choice === 2
-        ? { tunnel: "tailscale" as const }
-        : { tunnel: "cloudflare" as const };
+        ? { tunnel: "tailscale" as const, ...which }
+        : { tunnel: "cloudflare" as const, ...which };
     try {
       setResult(await appApi.startLocalHub(input));
       onDone();

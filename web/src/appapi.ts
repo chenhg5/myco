@@ -178,6 +178,9 @@ export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 export interface MycoInstall { path: string; version: string }
 /** A Hub running on this machine (started from the App). */
 export interface LocalHub {
+  /** The name `myco hub up --name` gave it; "" is the default one. Absent on
+   *  older backends, which know a single local hub. */
+  name?: string;
   running: boolean;
   local_url: string;
   public_url?: string;
@@ -189,7 +192,10 @@ export interface LocalTool { path: string }
 export interface LocalTools { cloudflared: LocalTool | null; tailscale: LocalTool | null }
 export interface LocalState {
   myco: MycoInstall | null;
+  /** The default hub on this computer (older backends have only this one). */
   hub: LocalHub | null;
+  /** Every hub on this computer (v0.19.4+); fall back to `hub` when absent. */
+  hubs?: LocalHub[];
   tools: LocalTools;
   device: string;
   /** This computer's host name, as its runners report it for their machine. */
@@ -200,7 +206,7 @@ export interface LocalState {
   shell_allowed?: boolean;
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
-export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string }
+export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }
 export interface StartLocalHubResult {
   hub: Hub;
   public_url: string;
@@ -529,7 +535,8 @@ export const appApi = {
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
   startLocalHub: (input: StartLocalHubInput) =>
     request<StartLocalHubResult>("POST", "app/local/hub", input),
-  stopLocalHub: () => request<{ stopped: true }>("POST", "app/local/hub/stop"),
+  stopLocalHub: (name?: string) =>
+    request<{ stopped: true }>("POST", "app/local/hub/stop", name ? { name } : undefined),
 };
 
 /** A cc-switch provider (keys are never sent to the page). */
