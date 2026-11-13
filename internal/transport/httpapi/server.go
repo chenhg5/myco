@@ -1119,7 +1119,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if !see.Sees(a.Agent) {
 			continue
 		}
-		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
+		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Asking: a.Asking}
 		if viewer != nil {
 			if viewer.Name == a.Agent.Name && s.resume != nil {
 				if c, err := s.resume.Get(r.Context(), a.Agent.Name); err == nil {
@@ -1386,7 +1386,11 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 		if kind == "steer" {
 			m, err = s.messages.SteerWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		} else {
-			m, err = s.messages.ProgressWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
+			progress := s.messages.ProgressWith
+			if req.Ask {
+				progress = s.messages.Ask
+			}
+			m, err = progress(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		}
 		if err != nil {
 			writeError(w, err)

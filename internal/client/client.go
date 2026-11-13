@@ -722,6 +722,34 @@ func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.
 	return c.ProgressWith(ctx, id, body, nil, dry)
 }
 
+// Ask asks task id's sender to decide (body: the question, then the
+// choices as a numbered list) and holds the task until they answer. On a
+// hub before questions (it refuses the field) it reports the question as
+// progress and holds the task, so the answer still comes back as a steer;
+// fellBack says so.
+func (c *Client) Ask(ctx context.Context, id, body string, attachments []string, dry bool) (m *api.Message, fellBack bool, err error) {
+	sealed, err := c.sealAbout(ctx, id, false, "progress", body, attachments)
+	if err != nil {
+		return nil, false, err
+	}
+	var out api.MessageResult
+	err = c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: sealed, Attachments: attachments, Ask: true}, &out)
+	var e *Error
+	if errors.As(err, &e) && e.Code == "invalid_argument" && strings.Contains(e.Message, `unknown field "ask"`) {
+		p, err := c.ProgressWith(ctx, id, body, attachments, dry)
+		if err != nil {
+			return nil, true, err
+		}
+		if !dry {
+			if _, err := c.Transition(ctx, id, "hold", false); err != nil {
+				return p, true, err
+			}
+		}
+		return p, true, nil
+	}
+	return &out.Message, false, err
+}
+
 // ProgressWith reports progress with uploaded files (their ids). Hubs
 // before progress attachments keep the text and drop the files: the
 // answer then has none.

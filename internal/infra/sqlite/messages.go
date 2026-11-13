@@ -19,7 +19,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project, ask, asking, answers`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -31,9 +31,9 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 		idem = m.IdempotencyKey
 	}
 	att, _ := json.Marshal(nonNil(m.Attachments))
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.After, m.Type, m.Body, m.Status, m.Attempts,
-		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project)
+		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
 	}
@@ -41,8 +41,8 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 }
 
 func updateMessage(ctx context.Context, x execer, m *domain.Message) error {
-	_, err := x.ExecContext(ctx, `UPDATE messages SET status=?, attempts=?, lease_until=?, error=?, updated_at=? WHERE id=?`,
-		m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.ID)
+	_, err := x.ExecContext(ctx, `UPDATE messages SET status=?, attempts=?, lease_until=?, error=?, updated_at=?, asking=? WHERE id=?`,
+		m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.Asking, m.ID)
 	return internal(err)
 }
 
@@ -51,9 +51,10 @@ func (r *MessageRepo) Create(ctx context.Context, m *domain.Message) error {
 }
 
 func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[domain.Status]int, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, status, COUNT(*) FROM messages
+	// A held task waiting on its question is counted under CountAsking.
+	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, CASE WHEN status='held' AND asking!='' THEN '`+string(domain.CountAsking)+`' ELSE status END AS st, COUNT(*) FROM messages
 		WHERE status IN ('delivered','acked','held') OR (status='queued' AND `+afterReady+`)
-		GROUP BY to_agent, status`)
+		GROUP BY to_agent, st`)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -289,7 +290,7 @@ func scanMessage(s scanner) (*domain.Message, error) {
 		att                     string
 	)
 	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.After, &m.Type, &m.Body, &m.Status,
-		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project)
+		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project, &m.Ask, &m.Asking, &m.Answers)
 	if err != nil {
 		return nil, err
 	}

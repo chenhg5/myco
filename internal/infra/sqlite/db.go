@@ -222,7 +222,10 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"},
-		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"},
+		// Questions to a task's sender: the question, the task waiting on it,
+		// the steer answering it.
+		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

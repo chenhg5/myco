@@ -380,8 +380,123 @@ started, the note is added to it. Agents without a runner receive it in their in
 		}),
 	}
 
+	ask := &Command{
+		Name:     "ask",
+		Summary:  "Ask the sender of a task to decide, and wait for the answer",
+		Mutating: true,
+		Long: `Only when the sender really has to decide (a direction, something costly or hard to undo):
+the question shows in their app as a card with the choices to click, or they can just write.
+The task waits (held) until they answer. End your turn after asking: the answer comes back to
+this session as a new message, and you go on with the task and reply as usual.`,
+		Examples: []string{
+			`myco message ask --question "Which opening?" --option "Result first — show the finished cut" --option "Steps first"   # inside a runner, --id is $MYCO_MESSAGE_ID`,
+			`myco message ask --id msg_abc123 --question "Delete the old table now or after the migration?"`,
+			`myco message ask --question "Which layout?" --option "A" --option "B" --attach a.png --attach b.png`,
+		},
+		Flags: []Flag{
+			idFlag,
+			{Name: "question", Kind: String, Required: true, Help: "What they should decide"},
+			{Name: "option", Kind: List, Help: "A choice: a short label, optionally \" — \" and a line on it; repeatable (2-6). Without any, they answer in words"},
+			attachFlag,
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id", "question"); err != nil {
+				return err
+			}
+			body, err := askBody(e.in.String("question"), e.in.List("option"))
+			if err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
+			m, fellBack, err := c.Ask(e.in.Ctx, e.in.String("id"), body, atts, dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "ask", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m, "task": e.in.String("id"), "held": true, "plain_progress": fellBack}, func(w io.Writer) {
+				fmt.Fprintf(w, "asked %s; task %s waits for the answer\n", m.To, e.in.String("id"))
+				if fellBack {
+					fmt.Fprintln(w, "(this hub predates questions: it shows as a progress update; the answer still comes back here)")
+				}
+				fmt.Fprintln(w, "End your turn now: the answer arrives in this session as a new message; then finish the task and reply.")
+			})
+		}),
+	}
+
+	answer := &Command{
+		Name:     "answer",
+		Summary:  "Answer the question a task you sent is waiting on",
+		Mutating: true,
+		Long: `For a task you sent whose recipient asked you to decide (myco message ask). The answer is a
+steer: the recipient goes on with the task in the same session. --choice picks one of its
+choices by number; --body says it in words (or adds to the choice).`,
+		Examples: []string{
+			`myco message answer --id msg_abc123 --choice 1`,
+			`myco message answer --id msg_abc123 --choice 2 --body "but keep it under 40 seconds"`,
+			`myco message answer --id msg_abc123 --body "neither: show both side by side"`,
+		},
+		Flags: []Flag{
+			{Name: "id", Kind: String, Required: true, Help: "ID of the task you sent"},
+			{Name: "choice", Kind: Int, Help: "Number of the choice (1, 2, ...)"},
+			{Name: "body", Kind: String, Help: "The answer in words"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id"); err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			task, err := c.GetMessage(e.in.Ctx, e.in.String("id"))
+			if err != nil {
+				return err
+			}
+			if task.Asking == "" {
+				return &Error{Code: "invalid_state", Message: fmt.Sprintf("task %s is not waiting on a question", task.ID),
+					Suggestion: "to change what it does, use: myco message steer --id " + task.ID + " --body ...", Exit: ExitConflict}
+			}
+			body := strings.TrimSpace(e.in.String("body"))
+			if n := e.in.Int("choice"); n > 0 {
+				q, err := c.GetMessage(e.in.Ctx, task.Asking)
+				if err != nil {
+					return err
+				}
+				question, options := parseAsk(q.Body)
+				if n > len(options) {
+					return &Error{Code: "invalid_usage", Message: fmt.Sprintf("the question has %d choices", len(options)), Exit: ExitUsage}
+				}
+				body = strings.TrimSpace("「" + question + "」" + options[n-1] + "\n" + body)
+			}
+			if body == "" {
+				return &Error{Code: "invalid_usage", Message: "give --choice or --body", Exit: ExitUsage}
+			}
+			dry := e.in.Bool("dry-run")
+			m, err := c.SteerWith(e.in.Ctx, task.ID, body, nil, dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "answer", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) {
+				fmt.Fprintf(w, "answer sent to %s for task %s\nwait for the reply with: myco message wait --id %s --timeout 30m\n", m.To, task.ID, task.ID)
+			})
+		}),
+	}
+
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
-		send, get, wait, progress, steer, reply, fail, release, stopMessageCommand(),
+		send, get, wait, progress, ask, answer, steer, reply, fail, release, stopMessageCommand(),
 		transition("ack", "Start work on a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
 		transition("done", "Close a message without replying (also one still queued, to drop it unread)", "myco message done --id msg_abc123"),
@@ -592,4 +707,51 @@ func (e *env) waitWithProgress(c *client.Client, id string, d time.Duration) (*a
 func printReply(w io.Writer, m *api.Message) {
 	fmt.Fprintf(w, "%s from %s:\n%s\n", m.Type, m.From, strings.TrimRight(m.Body, "\n"))
 	printAttachments(w, m.Attachments)
+}
+
+// askBody writes a question and its choices the way the app reads them:
+// the question, a blank line, then "1. label — detail" one a line.
+func askBody(question string, options []string) (string, error) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "", &Error{Code: "invalid_usage", Message: "--question is empty", Exit: ExitUsage}
+	}
+	if len(options) == 1 || len(options) > 6 {
+		return "", &Error{Code: "invalid_usage", Message: fmt.Sprintf("give 2 to 6 --option (or none), not %d", len(options)),
+			Suggestion: "without --option they answer in words", Exit: ExitUsage}
+	}
+	var b strings.Builder
+	b.WriteString(question)
+	for i, o := range options {
+		o = strings.Join(strings.Fields(o), " ")
+		if o == "" {
+			return "", &Error{Code: "invalid_usage", Message: fmt.Sprintf("--option %d is empty", i+1), Exit: ExitUsage}
+		}
+		if i == 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "%d. %s\n", i+1, o)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+// parseAsk reads a question back: the text before the trailing numbered
+// list, and the list's items (labels, with their detail).
+func parseAsk(body string) (question string, options []string) {
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	end := len(lines)
+	start := end
+	for start > 0 {
+		l := strings.TrimSpace(lines[start-1])
+		dot := strings.Index(l, ". ")
+		if dot <= 0 || strings.Trim(l[:dot], "0123456789") != "" {
+			break
+		}
+		start--
+	}
+	for _, l := range lines[start:end] {
+		l = strings.TrimSpace(l)
+		options = append(options, strings.TrimSpace(l[strings.Index(l, ". ")+2:]))
+	}
+	return strings.TrimSpace(strings.Join(lines[:start], "\n")), options
 }

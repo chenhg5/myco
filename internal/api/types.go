@@ -47,6 +47,7 @@ type Agent struct {
 	Queued     int    `json:"queued"`
 	InProgress int    `json:"in_progress"`
 	Held       int    `json:"held"`
+	Asking     int    `json:"asking,omitempty"`
 	// StatusText is the agent's public progress line (myco agent status set).
 	StatusText  string     `json:"status_text,omitempty"`
 	StatusAt    *time.Time `json:"status_at,omitempty"`
@@ -186,6 +187,14 @@ type Message struct {
 	// people call it (inbox pulls, from v0.18.36). Address it by From.
 	FromDisplay string       `json:"from_display,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	// Ask: a progress update asking the task's sender to decide; its body
+	// is the question, then the choices as a numbered list ("1. label —
+	// detail"). Asking, on a task: the id of its question still waiting for
+	// an answer. Answers, on a steer: the question it answers. Whatever the
+	// sender says while a question waits is its answer.
+	Ask     bool   `json:"ask,omitempty"`
+	Asking  string `json:"asking,omitempty"`
+	Answers string `json:"answers,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -406,6 +415,9 @@ type AgentList struct {
 type ReplyRequest struct {
 	Body        string   `json:"body"`
 	Attachments []string `json:"attachments,omitempty"`
+	// Ask (progress only): the update asks the task's sender to decide, and
+	// the task waits (held) until they answer. Older hubs refuse the field.
+	Ask bool `json:"ask,omitempty"`
 }
 
 // ReleaseRequest is the body of POST /v1/messages/{id}/release.
@@ -553,12 +565,15 @@ type Viewer struct {
 
 // AgentStatus is one agent with live counters (GET /v1/overview).
 type AgentStatus struct {
-	Agent      Agent     `json:"agent"`
-	State      string    `json:"state"` // working | pending | idle | offline
-	Queued     int       `json:"queued"`
-	InProgress int       `json:"in_progress"`
-	Held       int       `json:"held"`
-	Current    []Message `json:"current,omitempty"`
+	Agent      Agent  `json:"agent"`
+	State      string `json:"state"` // working | pending | idle | offline
+	Queued     int    `json:"queued"`
+	InProgress int    `json:"in_progress"`
+	Held       int    `json:"held"`
+	// Asking counts held tasks waiting on a question to their sender
+	// (myco message ask); they are in Held too. Absent on older hubs.
+	Asking  int       `json:"asking,omitempty"`
+	Current []Message `json:"current,omitempty"`
 	// Receiving is how the agent gets messages right now: "session" (a
 	// session keeps `inbox wait` running), "runner" (a runner wakes the
 	// session per message) or empty (nothing is receiving).

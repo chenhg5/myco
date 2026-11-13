@@ -87,7 +87,7 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 	if states, err := s.overview.States(ctx); err == nil {
 		for _, d := range dtos {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
-				d.State, d.Queued, d.InProgress, d.Held = string(st.State), st.Queued, st.InProgress, st.Held
+				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}
 	}
@@ -127,6 +127,7 @@ func messageDTO(m *domain.Message) api.Message {
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
+		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)

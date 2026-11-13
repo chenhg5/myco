@@ -465,13 +465,27 @@ func (s *MessageService) Progress(ctx context.Context, agent *domain.Agent, id, 
 // ProgressWith is a progress update that shows files too (a screenshot of
 // the page so far, a draft): the task's sender may read them.
 func (s *MessageService) ProgressWith(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	return s.update(ctx, agent, id, body, attachIDs, false, dryRun)
+}
+
+// Ask is a progress update that asks the task's sender to decide; the task
+// waits (held) until they answer, and their answer resumes it.
+func (s *MessageService) Ask(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	return s.update(ctx, agent, id, body, attachIDs, true, dryRun)
+}
+
+func (s *MessageService) update(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, ask, dryRun bool) (*domain.Message, error) {
 	atts, err := resolveAttachments(ctx, s.files, s.clock, agent.Name, attachIDs)
 	if err != nil {
 		return nil, err
 	}
 	var out *domain.Message
 	err = s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
-		p, err := m.Progress(agent.Name, s.ids.New("msg"), body, s.clock.Now())
+		progress := m.Progress
+		if ask {
+			progress = m.AskSender
+		}
+		p, err := progress(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}

@@ -56,7 +56,8 @@ type MessageRepository interface {
 	// ListBroadcast returns the messages of a broadcast, oldest first.
 	ListBroadcast(ctx context.Context, broadcastID string) ([]*Message, error)
 	// OpenCounts returns, per recipient, how many messages are in each open
-	// status (queued, delivered, acked, held).
+	// status (queued, delivered, acked, held); held tasks waiting on a
+	// question to their sender count under CountAsking instead.
 	OpenCounts(ctx context.Context) (map[AgentName]map[Status]int, error)
 	// ListOpen returns open (not queued, not closed) messages of recipient.
 	ListOpen(ctx context.Context, recipient AgentName, limit int) ([]*Message, error)
