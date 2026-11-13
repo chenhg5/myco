@@ -279,6 +279,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   }
   type Report = { key: string; text: string; when: string };
   type Segment = { kind: "say"; key: string; text: string }
+    | { kind: "think"; key: string; text: string }
     | { kind: "reports"; items: Report[] }
     | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
@@ -296,6 +297,12 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
       if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text });
       continue;
     }
+    // Some models (DeepSeek, for one) say what they are doing only as
+    // thinking: read as faded prose between the steps, not folded away.
+    if (r.kind === "thinking") {
+      if (r.step.text?.trim()) segments.push({ kind: "think", key: r.key, text: r.step.text });
+      continue;
+    }
     const lastSeg = segments[segments.length - 1];
     if (lastSeg?.kind === "steps") lastSeg.rows.push(r);
     else segments.push({ kind: "steps", rows: [r] });
@@ -309,6 +316,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
         <div key={seg.key} className="trace-say">
           <MessageContent body={seg.text} />
         </div>
+      ) : seg.kind === "think" ? (
+        <Thought key={seg.key} text={seg.text} />
       ) : seg.kind === "reports" ? (
         // What it reported (myco message progress): a small timeline of its
         // own, quieter than the answer, each with when.
@@ -344,6 +353,20 @@ function clock(iso: string): string {
 
 /** A run of steps between two things it said: one line, open to see them.
  *  The newest, while it runs, says what it is doing now. */
+/** A thinking step as faded prose: the first lines, all of it on a click. */
+function Thought({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const body = text.trim();
+  const long = body.length > 280 || body.split("\n").length > 4;
+  return (
+    <div className={cn("trace-say trace-think", long && !open && "is-clamped", long && "is-long")}
+      title={long && !open ? L("点开看完整的思考", "Show the whole thought") : undefined}
+      onClick={long ? () => setOpen((o) => !o) : undefined}>
+      {body}
+    </div>
+  );
+}
+
 function StepGroup({ rows, live, since }: { rows: Row[]; live: boolean; since: string }) {
   const [open, setOpen] = useState(false);
   const last = rows[rows.length - 1];

@@ -2149,6 +2149,22 @@ body.is-resizing {
   color: var(--faint, var(--muted));
   font-variant-numeric: tabular-nums;
 }
+/* Thinking, read as faded prose between the steps (long ones show their
+   first lines until clicked). */
+.trace-think {
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.trace-think.is-long {
+  cursor: pointer;
+}
+.trace-think.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .trace-say > :first-child {
   margin-top: 0;
 }

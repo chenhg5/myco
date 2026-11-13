@@ -1423,7 +1423,7 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 403, "permission_denied", "只有从 App 发出的任务可以这样修正。");
       }
       if (!["queued", "delivered", "acked", "held"].includes(task.status)) {
-        return fail(res, 409, "task_finished", "这个任务已经结束了。");
+        return fail(res, 409, "invalid_state", "这个任务已经结束了。");
       }
       const steer = makeMessage({
         thread_id: task.thread_id, from: CONSOLE, to: task.to, type: "steer", status: "done",

@@ -898,9 +898,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       if (supplement) {
         // An older hub has nowhere to put files with a correction: they go
         // as a new message, as before.
+        // The round may have ended just now: then this is a new message.
         m = attachments && !queueOnHub
           ? await sendThread(threadId)
-          : await appApi.steer(target.hubId, openTask!.id, body, attachments);
+          : await appApi.steer(target.hubId, openTask!.id, body, attachments).catch((e) => {
+            if ((e as { code?: string }).code === "invalid_state") return sendThread(threadId);
+            throw e;
+          });
       } else if (queuedNext) {
         if (queueOnHub) {
           m = await sendNew(threadId, openTask!.id);
