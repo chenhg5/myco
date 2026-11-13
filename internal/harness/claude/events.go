@@ -2,7 +2,9 @@ package claude
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/chenhg5/myco/internal/harness"
 )
@@ -28,7 +30,9 @@ type streamLine struct {
 	Result       string  `json:"result"`
 	DurationMS   int64   `json:"duration_ms"`
 	TotalCostUSD float64 `json:"total_cost_usd"`
-	Usage        struct {
+	// rate_limit_event: the account's usage limits.
+	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
+	Usage         struct {
 		InputTokens              int64 `json:"input_tokens"`
 		OutputTokens             int64 `json:"output_tokens"`
 		CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
@@ -64,6 +68,10 @@ func lineEvents(line []byte) []harness.Event {
 			if c.Type == "tool_result" {
 				out = append(out, harness.Event{Kind: "tool_result", ID: c.ToolUseID, Output: resultText(c.Content), Failed: c.IsError})
 			}
+		}
+	case "rate_limit_event":
+		if q := l.RateLimitInfo.quota(); q != nil {
+			out = append(out, harness.Event{Kind: "quota", Quota: q})
 		}
 	case "result":
 		u := l.Usage
@@ -156,4 +164,56 @@ func orStr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// rateLimitInfo is Claude Code's rate_limit_event payload, e.g.
+// {"status":"allowed","rateLimitType":"five_hour","resetsAt":1794587400,
+// "unifiedWindows":{"five_hour":{"utilization":0.17,"resetsAt":...,"status":"allowed"},
+// "seven_day":{...}}}.
+type rateLimitInfo struct {
+	Status         string `json:"status"`
+	RateLimitType  string `json:"rateLimitType"`
+	ResetsAt       int64  `json:"resetsAt"`
+	UnifiedWindows map[string]struct {
+		Utilization float64 `json:"utilization"`
+		ResetsAt    int64   `json:"resetsAt"`
+		Status      string  `json:"status"`
+	} `json:"unifiedWindows"`
+}
+
+func (r *rateLimitInfo) quota() *harness.Quota {
+	if r == nil {
+		return nil
+	}
+	q := &harness.Quota{Source: "claude"}
+	for _, name := range []string{"five_hour", "seven_day"} {
+		if w, ok := r.UnifiedWindows[name]; ok {
+			q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
+		}
+	}
+	var others []string // any other window, after the known two, in name order
+	for name := range r.UnifiedWindows {
+		if name != "five_hour" && name != "seven_day" {
+			others = append(others, name)
+		}
+	}
+	sort.Strings(others)
+	for _, name := range others {
+		w := r.UnifiedWindows[name]
+		q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
+	}
+	if len(q.Windows) == 0 && r.RateLimitType != "" { // older shape: one window, no utilization
+		q.Windows = append(q.Windows, harness.QuotaWindow{Name: r.RateLimitType, ResetsAt: unix(r.ResetsAt), Status: r.Status})
+	}
+	if len(q.Windows) == 0 {
+		return nil
+	}
+	return q
+}
+
+func unix(s int64) time.Time {
+	if s <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(s, 0).UTC()
 }

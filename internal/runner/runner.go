@@ -45,6 +45,11 @@ type Options struct {
 	// Provider, when set, is called before every invocation and returns the
 	// pinned model provider (nil = the machine's own setting).
 	Provider func() *harness.ProviderSettings
+	// OnRunSettings hears the model and effort each run is started with
+	// (the agent's run settings from the hub; "" = the machine's own).
+	OnRunSettings func(model, effort string)
+	// OnQuota hears the account's usage limits whenever a run reports them.
+	OnQuota func(harness.Quota)
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -82,6 +87,7 @@ type Runner struct {
 	threadLocks sync.Map // thread_id -> *sync.Mutex
 
 	mu         sync.Mutex
+	settings   api.RunSettings       // the agent's run settings, as last read from the hub
 	ownRunEnd  map[string]time.Time  // session id -> when our last run ended
 	pending    map[string]pendingRun // acked tasks not yet durably finished
 	busyStreak map[string]int        // session key -> consecutive busy releases
@@ -431,6 +437,10 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		res    harness.Result
 		runErr error
 	)
+	runModel, runEffort := "", ""
+	if !executor {
+		runModel, runEffort = r.runSettings(ctx, log)
+	}
 	for first := true; ; first = false {
 		// Steers that arrived before this run (task still queued, or the
 		// previous run was interrupted by them).
@@ -472,8 +482,15 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		// keeps working is not cut off, a silent one is.
 		var lastActive atomic.Int64
 		lastActive.Store(time.Now().UnixNano())
+		req.Model, req.Effort = runModel, runEffort
 		req.OnEvent = func(ev harness.Event) {
 			lastActive.Store(time.Now().UnixNano())
+			if ev.Kind == "quota" { // not a step of the run: it goes with the runtime
+				if ev.Quota != nil && r.opts.OnQuota != nil {
+					r.opts.OnQuota(*ev.Quota)
+				}
+				return
+			}
 			if tr != nil {
 				tr.add(ev)
 			}
@@ -756,6 +773,39 @@ func (r *Runner) routeSteer(ctx context.Context, log *slog.Logger, m api.Message
 		return done("steer for a finished task; dropped")
 	}
 	return false
+}
+
+// meReader is a hub that returns the calling agent (its run settings).
+type meReader interface {
+	Me(ctx context.Context) (*api.Agent, error)
+}
+
+// runSettings are the model and effort chosen for this agent on the hub
+// ("" = the machine's own). A hub that cannot answer keeps the last ones
+// known: a run is never held up by it.
+func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) (string, string) {
+	if hub, ok := r.hub.(meReader); ok {
+		c, cancel := context.WithTimeout(ctx, 5*time.Second)
+		me, err := hub.Me(c)
+		cancel()
+		r.mu.Lock()
+		if err == nil {
+			r.settings = api.RunSettings{}
+			if me.RunSettings != nil {
+				r.settings = *me.RunSettings
+			}
+		} else {
+			log.Debug("reading run settings failed; using the last known", "err", err)
+		}
+		r.mu.Unlock()
+	}
+	r.mu.Lock()
+	rs := r.settings
+	r.mu.Unlock()
+	if r.opts.OnRunSettings != nil {
+		r.opts.OnRunSettings(rs.Model, rs.Effort)
+	}
+	return rs.Model, rs.Effort
 }
 
 // watchIdle ends the run when the harness reports nothing for the timeout.

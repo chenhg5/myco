@@ -288,6 +288,8 @@ var agentColumnsV2 = [][2]string{
 	{"avatar", "TEXT NOT NULL DEFAULT ''"},
 	{"avatar_type", "TEXT NOT NULL DEFAULT ''"},
 	{"avatar_data", "BLOB"},
+	// The model and reasoning effort chosen for the agent's runner (v0.19.5).
+	{"run_settings", "TEXT NOT NULL DEFAULT '{}'"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

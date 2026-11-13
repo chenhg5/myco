@@ -466,3 +466,20 @@ func (s *AgentService) SetOwner(ctx context.Context, name, memberID string) (*do
 	a.Owner = memberID
 	return a, s.agents.Save(ctx, a)
 }
+
+// SetRunSettings records the model and reasoning effort its runner starts
+// the agent's CLI with ("" follows the machine's own settings).
+func (s *AgentService) SetRunSettings(ctx context.Context, name domain.AgentName, rs domain.RunSettings) (*domain.Agent, error) {
+	a, err := s.agents.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := rs.Validate(a.Binding.Harness); err != nil {
+		return nil, err
+	}
+	if err := s.agents.SetRunSettings(ctx, name, rs); err != nil {
+		return nil, err
+	}
+	a.RunSettings = rs
+	return a, nil
+}

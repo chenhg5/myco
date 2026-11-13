@@ -314,6 +314,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			rep.Provider(ch)
 			return ch.settings
 		},
+		OnRunSettings: rep.RunSettings,
+		OnQuota:       rep.Quota,
 	}, alog), nil
 }
 

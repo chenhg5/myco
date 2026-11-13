@@ -287,6 +287,19 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/run-settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.RunSettings
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		a, err := c.SetRunSettings(r.Context(), r.PathValue("name"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/aliases", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListAliases(r.Context())
 		if err != nil {

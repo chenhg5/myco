@@ -424,7 +424,7 @@ runner:
 
 `full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。
 
-无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。
+无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；它可以用 `myco agent runtime set --model …` 报一下自己的模型，只用于显示。
 
 ### 注意事项（适用于 4.2 到 4.5）
 

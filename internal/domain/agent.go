@@ -164,6 +164,9 @@ type Agent struct {
 	// Both are set only through SetMachine / SetRuntime.
 	MachineID string
 	Runtime   Runtime
+	// RunSettings are the model and reasoning effort its owner chose for
+	// its runner (set only through SetRunSettings).
+	RunSettings RunSettings
 	// Owner is the member who added the agent ("" on hubs without members).
 	Owner string
 	// Visibility: team (everyone; "" before it existed) or private (only

@@ -1190,3 +1190,14 @@ func (c *Client) AgentAvatar(ctx context.Context, name string) (string, []byte, 
 	}
 	return resp.Header.Get("Content-Type"), data, nil
 }
+
+// SetRunSettings chooses the model and reasoning effort an agent's runner
+// uses ("" follows the machine's setting); name "" is the caller itself.
+func (c *Client) SetRunSettings(ctx context.Context, name string, rs api.RunSettings) (*api.Agent, error) {
+	path := "/v1/me/run-settings"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/run-settings"
+	}
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, path, nil, rs, &out)
+}

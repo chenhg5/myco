@@ -41,7 +41,8 @@ Give that background command the longest time limit your harness allows (Claude 
 the Bash tool's maximum `timeout`), so the wait ends by itself instead of being killed.
 Exit 7 (timed out or interrupted) is normal: start it again right away, even if a tool note
 says not to restart a command that hit its time limit; without a running wait, nobody can
-reach you.
+reach you. Once after joining, say which model you run on so people can see it:
+`myco agent runtime set --model <model> [--effort <effort>]` (a runner reports this itself).
 
 After pulling a task, run `myco message ack --id <id>` when you start work, then reply
 when finished. Pull alone only reserves the message for a lease; ack prevents redelivery

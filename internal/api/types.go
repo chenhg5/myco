@@ -79,6 +79,9 @@ type Agent struct {
 	MachineID string `json:"machine_id,omitempty"`
 	// Runtime is its CLI and model, as its runner reports them.
 	Runtime *Runtime `json:"runtime,omitempty"`
+	// RunSettings are the model and effort chosen for its runner (absent
+	// when none is chosen).
+	RunSettings *RunSettings `json:"run_settings,omitempty"`
 }
 
 type ResumeInfo struct {
@@ -114,6 +117,38 @@ type Runtime struct {
 	// missing (the pinned provider no longer exists; the machine's is used).
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// Effort is the reasoning effort the CLI runs with; EffortSource: app
+	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
+	Effort       string `json:"effort,omitempty"`
+	EffortSource string `json:"effort_source,omitempty"`
+	// Quota is the account's usage limits as the CLI last reported them.
+	Quota *Quota `json:"quota,omitempty"`
+}
+
+// Quota is a CLI account's usage limits at one moment (from v0.19.5).
+type Quota struct {
+	// Source: claude or codex.
+	Source  string        `json:"source"`
+	At      time.Time     `json:"at"`
+	Windows []QuotaWindow `json:"windows"`
+}
+
+// QuotaWindow is one limit: Used is the share used (0..1).
+type QuotaWindow struct {
+	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
+	Name     string     `json:"name"`
+	Label    string     `json:"label,omitempty"`
+	Used     float64    `json:"used"`
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	// Status: allowed, or why work is refused.
+	Status string `json:"status,omitempty"`
+}
+
+// RunSettings choose how an agent's runner starts its CLI ("" follows the
+// machine's own setting). PUT /v1/agents/{name}/run-settings (from v0.19.5).
+type RunSettings struct {
+	Model  string `json:"model"`
+	Effort string `json:"effort"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
