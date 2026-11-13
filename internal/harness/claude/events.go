@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -216,4 +217,30 @@ func unix(s int64) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(s, 0).UTC()
+}
+
+// TranscriptEvents turns one line of a Claude Code session file
+// (~/.claude/projects/<project>/<session>.jsonl) into steps. Those lines
+// carry the same assistant and user messages as stream-json.
+func TranscriptEvents(line []byte) []harness.Event {
+	var out []harness.Event
+	for _, ev := range lineEvents(line) {
+		if ev.Kind != "quota" && ev.Kind != "usage" {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// TranscriptPath is the session file of a Claude Code session, "" if none.
+func TranscriptPath(sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	for _, pat := range transcriptPatterns(sessionID) {
+		if m, _ := filepath.Glob(pat); len(m) > 0 {
+			return m[0]
+		}
+	}
+	return ""
 }

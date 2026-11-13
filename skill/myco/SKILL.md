@@ -192,9 +192,11 @@ token, bind an existing agent with `myco agent bind --detect`.
 
 If you were woken with a "[myco] You are agent ... You have N new message(s)" text:
 1. `myco inbox pull --format json`
-2. For each message: tasks → `myco message ack --id <id>` when starting work; while working,
-   use `myco message progress --id <id> --body "found the cause: X; next I will change Y"`
-   to share findings, decisions and next steps; then `myco message reply --id <id> --body-file <f>`
+2. For each message: tasks → `myco message ack --id <id>` when starting work, then send your
+   plan as a checklist right away (below); while working, send
+   `myco message progress --id <id> --body "found the cause: X; next I will change Y"`
+   at least every 2 minutes and after each step, to share findings, decisions and next steps;
+   then `myco message reply --id <id> --body-file <f>`
    (or `myco message fail --id <id> --reason ...`); reply/event/note → act, then
    `myco message done --id <id>`.
 3. A **steer** is the sender's addition to the task in `reply_to`, not a new task. Read
@@ -202,6 +204,10 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
    progress` print any unread additions. If `myco message reply` reports unread additions,
    read them first; use `--anyway` only when you intentionally ignore them.
 4. Repeat until `myco inbox pull` returns no messages.
+
+In a Claude Code session, `myco message ack` also starts showing your steps (thoughts,
+commands, results) to the sender as you work, read from the session's own file (`myco trace
+follow`); your progress updates are the summary on top: what you found and what comes next.
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.

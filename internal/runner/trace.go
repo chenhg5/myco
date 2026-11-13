@@ -193,3 +193,23 @@ func clip(s string, n int) string {
 	}
 	return s[:n] + "\n… (cut short)"
 }
+
+// Tracer uploads a task's steps to the hub, for a session the runner did
+// not start (myco trace follow reads them from the session's own file).
+type Tracer struct{ t *tracer }
+
+// NewTracer starts uploading steps of task id; after is the last step the
+// hub already has, so new steps continue its numbering.
+func NewTracer(ctx context.Context, up TraceUploader, id, mode string, after int, log *slog.Logger) *Tracer {
+	t := newTracer(ctx, up, id, mode, log)
+	t.mu.Lock()
+	t.seq = after
+	t.mu.Unlock()
+	return &Tracer{t: t}
+}
+
+// Add records a step.
+func (t *Tracer) Add(ev harness.Event) { t.t.add(ev) }
+
+// Close uploads what is left and stops.
+func (t *Tracer) Close() { t.t.close() }

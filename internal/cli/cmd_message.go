@@ -275,9 +275,26 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 					if err != nil {
 						return err
 					}
-					return e.p.Print(map[string]any{"message": m, "steers": steers}, func(w io.Writer) {
+					out := map[string]any{"message": m, "steers": steers}
+					following := ""
+					if m.Type == "task" {
+						out["hint"] = strings.ReplaceAll(ackHint, "<id>", m.ID)
+						if !m.E2E {
+							following = e.startFollower(m.ID)
+						}
+					}
+					if following != "" {
+						out["steps_shown"] = true
+					}
+					return e.p.Print(out, func(w io.Writer) {
 						fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status)
 						printSteers(w, steers)
+						if h, ok := out["hint"].(string); ok {
+							fmt.Fprintln(w, h)
+						}
+						if following != "" {
+							fmt.Fprintln(w, "Your steps (thoughts, commands, results) now show to the sender as you work, read from this session's file.")
+						}
 					})
 				}
 				return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status) })
@@ -595,6 +612,9 @@ type inboxResult struct {
 	Hint     string        `json:"hint,omitempty"`
 	Timeout  string        `json:"timeout,omitempty"`
 }
+
+// ackHint: said when work starts, the moment it is likeliest to be done.
+const ackHint = `Now send your plan as a checklist: myco message progress --id <id> --body $'- [~] first step\n- [ ] next step'. Then send progress at least every 2 minutes of work and after each step (what you found, what is next); the sender sees it live.`
 
 const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); for work with several steps, send your plan as a checklist the same way ("- [x] done", "- [~] doing", "- [ ] next") and again as items get done; if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; finish with myco message reply --id <id>. Skip progress for a one-line answer. More: myco skill show.`
 
