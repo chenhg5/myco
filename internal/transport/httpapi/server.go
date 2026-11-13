@@ -1668,13 +1668,18 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.messageDTO(m))
 }
 
-// consoleStop stops a running task sent from the console.
+// consoleStop stops a running task: one sent from the console (by its
+// sender or a hub manager), or one another agent sent to a node the caller
+// owns or manages.
 func (s *Server) consoleStop(w http.ResponseWriter, r *http.Request) {
 	name, _ := s.consoleIdentity(r)
-	m, err := s.messages.StopFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"))
+	m, err := s.messages.StopFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"), s.mayCloseFor(r, "stop"))
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if !app.IsConsoleSender(m.From) {
+		s.record(r, "message.stop", string(m.To), m.ID+" from "+string(m.From))
 	}
 	writeJSON(w, http.StatusOK, s.messageDTO(m))
 }
@@ -1689,12 +1694,11 @@ func (s *Server) stopBySender(w http.ResponseWriter, r *http.Request, a *domain.
 	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
-// consoleDismiss closes an open message for its recipient (owner of the
-// recipient node, or someone who manages the hub), without a reply.
-func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
+// mayCloseFor allows closing a node's messages from the console: the node's
+// owner, or someone who manages the hub.
+func (s *Server) mayCloseFor(r *http.Request, verb string) func(to domain.AgentName) error {
 	actor := s.actorOf(r)
-	id := r.PathValue("id")
-	m, err := s.messages.DismissFromConsole(r.Context(), id, func(to domain.AgentName) error {
+	return func(to domain.AgentName) error {
 		if actor.Manages() {
 			return nil
 		}
@@ -1703,11 +1707,18 @@ func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if !actor.Owns(a.Owner) {
-			return domain.Errf(domain.CodePermissionDenied, "you can only dismiss messages of your own nodes").
+			return domain.Errf(domain.CodePermissionDenied, "you can only %s messages of your own nodes", verb).
 				WithSuggestion("ask the node's owner or a hub admin")
 		}
 		return nil
-	})
+	}
+}
+
+// consoleDismiss closes an open message for its recipient (owner of the
+// recipient node, or someone who manages the hub), without a reply.
+func (s *Server) consoleDismiss(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	m, err := s.messages.DismissFromConsole(r.Context(), id, s.mayCloseFor(r, "dismiss"))
 	if err != nil {
 		writeError(w, err)
 		return
