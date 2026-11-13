@@ -146,6 +146,12 @@ struct ConversationBody: View {
     @Environment(Router.self) private var router
     @State private var attachNotice = false
     @State private var landed = false
+    /// The end of the conversation is on screen.
+    @State private var atBottom = true
+    /// It was when the keyboard started to come up: keep it there.
+    @State private var followKeyboard = false
+
+    private static let bottomID = "conversation.bottom"
 
     private var name: String { session.displayName(of: model.agent) }
 
@@ -161,6 +167,11 @@ struct ConversationBody: View {
                     ForEach(model.items) { item in
                         row(item)
                     }
+                    // Marks the end: on screen means "at the bottom".
+                    Color.clear.frame(height: 1)
+                        .id(Self.bottomID)
+                        .onAppear { atBottom = true }
+                        .onDisappear { atBottom = false }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -172,7 +183,19 @@ struct ConversationBody: View {
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, let new else { return }
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(model.items.last?.id ?? new, anchor: .bottom) }
+                _ = new
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+            }
+            // The keyboard takes the lower part of the screen. A
+            // conversation that was at its end stays at its end; one being
+            // read further up stays where it is.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                followKeyboard = atBottom
+                guard followKeyboard else { return }
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                if followKeyboard { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             .onChange(of: model.loaded, initial: true) { _, loaded in
                 guard loaded, !landed, let focus else { return }
