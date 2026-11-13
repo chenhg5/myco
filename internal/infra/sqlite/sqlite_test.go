@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,11 +80,42 @@ func ids(ms []*domain.Message) []string {
 
 func TestOpenMemoryCreatesSchema(t *testing.T) {
 	db := openMem(t)
-	for _, table := range []string{"agents", "messages", "enrollments", "files", "file_access", "aliases"} {
+	for _, table := range []string{"agents", "agent_resumes", "messages", "enrollments", "files", "file_access", "aliases"} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s: n=%d err=%v", table, n, err)
 		}
+	}
+}
+
+func TestResumePutIfAbsentConcurrent(t *testing.T) {
+	db := openMem(t)
+	repo := sqlite.NewResumeRepo(db)
+	var wg sync.WaitGroup
+	results := make(chan bool, 16)
+	for i := range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ok, err := repo.PutIfAbsent(context.Background(), &domain.ResumeCredential{
+				Agent: "alice", TokenHash: fmt.Sprintf("hash-%d", i), CreatedAt: t0,
+			})
+			if err != nil {
+				t.Errorf("insert: %v", err)
+			}
+			results <- ok
+		}()
+	}
+	wg.Wait()
+	close(results)
+	created := 0
+	for ok := range results {
+		if ok {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Fatalf("created %d recovery links, want one", created)
 	}
 }
 
@@ -149,6 +181,11 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 	defer db.Close()
 	a, err := sqlite.NewAgentRepo(db).Get(ctx, "legacy")
 	mustNoErr(t, err)
+	// A pre-recovery database gains the new table without changing its agent.
+	mustNoErr(t, sqlite.NewResumeRepo(db).Put(ctx, &domain.ResumeCredential{Agent: "legacy", TokenHash: "resume-hash", CreatedAt: t0}))
+	if c, err := sqlite.NewResumeRepo(db).Get(ctx, "legacy"); err != nil || c.TokenHash != "resume-hash" {
+		t.Fatalf("migrated resume table: %+v %v", c, err)
+	}
 	if a.Delivery.Mode != "pull" || !slices.Equal(a.Capabilities, []string{"code"}) || len(a.Labels) != 0 || a.Binding.Harness != "" {
 		t.Fatalf("legacy agent: %+v", a)
 	}

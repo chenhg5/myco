@@ -126,6 +126,7 @@ func Build(o Options) (*Hub, error) {
 	files := app.NewFileService(fileRepo, blob.FS{Dir: filesDir}, ids, clock, policy, o.Log)
 	messages.SetFiles(fileRepo)
 	srv := httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...)
+	srv.SetResume(app.NewResumeService(sqlite.NewResumeRepo(db), agentsRepo, security.Tokens{}, clock))
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	var latest func() string
@@ -254,6 +255,9 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		h.ServeHTTP(rec, r)
 		path := r.URL.Path
+		if strings.HasPrefix(path, "/r/") {
+			path = "/r/<redacted>" // agent recovery links carry a credential
+		}
 		if strings.HasPrefix(path, "/j/") {
 			path = "/j/<redacted>" // join links carry a credential
 		}

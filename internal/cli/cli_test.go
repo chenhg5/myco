@@ -1023,7 +1023,7 @@ func TestJoinLinks(t *testing.T) {
 	// No resumable session: register a stable inbox-only agent.
 	os.RemoveAll(filepath.Join(home, ".codex"))
 	code, out, e = cx.run("join", "--format", "json")
-	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "runner cannot wake this agent") {
+	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "runner cannot wake this agent") || !strings.Contains(out, `"resume_command": "curl -fsSL `+hub+`/r/myco_resume_`) {
 		t.Fatalf("inbox join: %d %s %s", code, out, e)
 	}
 	var inboxJoin struct{ Agent struct{ Name string } }

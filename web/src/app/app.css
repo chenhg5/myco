@@ -4241,6 +4241,14 @@ button.conv-attach:hover .conv-attach-go {
   justify-content: flex-end;
   gap: 5px;
 }
+/* The resume row's state and its actions, right-aligned like a value. */
+.app-resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 10px;
+}
 .app-alias-form {
   flex-basis: 100%;
   display: flex;

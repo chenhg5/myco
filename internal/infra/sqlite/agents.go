@@ -87,6 +87,9 @@ func (r *AgentRepo) List(ctx context.Context) ([]*domain.Agent, error) {
 }
 
 func (r *AgentRepo) Delete(ctx context.Context, name domain.AgentName) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM agent_resumes WHERE agent=?`, name); err != nil {
+		return internal(err)
+	}
 	res, err := r.db.ExecContext(ctx, `DELETE FROM agents WHERE name=?`, name)
 	if err != nil {
 		return internal(err)

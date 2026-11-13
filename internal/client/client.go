@@ -311,6 +311,34 @@ func (c *Client) Enroll(ctx context.Context, req api.EnrollRequest, dry bool) (*
 	return &out, c.do(ctx, http.MethodPost, "/v1/enroll", dryQuery(dry), req, &out)
 }
 
+// CreateResume rotates an agent's recovery link, or returns metadata only
+// when ifMissing is set and one already exists.
+func (c *Client) CreateResume(ctx context.Context, name string, ifMissing bool) (*api.ResumeLink, error) {
+	path := "/v1/me/resume"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/resume"
+	}
+	q := url.Values{}
+	if ifMissing {
+		q.Set("if_missing", "true")
+	}
+	var out api.ResumeLink
+	return &out, c.do(ctx, http.MethodPost, path, q, nil, &out)
+}
+
+func (c *Client) RevokeResume(ctx context.Context, name string) error {
+	path := "/v1/me/resume"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/resume"
+	}
+	return c.do(ctx, http.MethodDelete, path, nil, nil, nil)
+}
+
+func (c *Client) Resume(ctx context.Context, req api.ResumeRequest) (*api.RegisterResponse, error) {
+	var out api.RegisterResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/resume", nil, req, &out)
+}
+
 // SetLabels changes labels of the caller (name == "") or, with an admin
 // token, of agent name.
 func (c *Client) SetLabels(ctx context.Context, name string, req api.LabelsRequest) (*api.Agent, error) {

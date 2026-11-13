@@ -268,6 +268,24 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, a)
 	}))
+	// An agent's resume line: the command that brings the same agent back in
+	// a new sandbox. Making one revokes the one before. Hubs before v0.19.5
+	// answer 404 (and the app hides the row).
+	m.HandleFunc("POST /app/hubs/{id}/agents/{name}/resume", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		link, err := c.CreateResume(r.Context(), r.PathValue("name"), false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"url": link.URL, "command": link.Command})
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/agents/{name}/resume", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if err := c.RevokeResume(r.Context(), r.PathValue("name")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/aliases", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		list, err := c.ListAliases(r.Context())
 		if err != nil {

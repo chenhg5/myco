@@ -190,6 +190,9 @@ func (e *env) hubURL() (string, error) {
 
 // agentClient returns a client authenticated as the configured agent.
 func (e *env) agentClient() (*client.Client, error) {
+	if err := e.autoResume(); err != nil {
+		return nil, err
+	}
 	hub, err := e.hubURL()
 	if err != nil {
 		return nil, err

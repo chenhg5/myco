@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS agent_resumes (
+  agent         TEXT PRIMARY KEY,
+  token_hash    TEXT NOT NULL UNIQUE,
+  created_at    INTEGER NOT NULL,
+  last_used_at  INTEGER NOT NULL DEFAULT 0,
+  last_used_env TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS messages (
   id              TEXT PRIMARY KEY,
   from_agent      TEXT NOT NULL,
