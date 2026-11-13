@@ -153,6 +153,8 @@ export interface SendMessageInput {
   body: string;
   /** Omit to start a new conversation. */
   thread_id?: string;
+  /** Deliver after this task ends (v0.19.2). */
+  after?: string;
   type?: string;
   /** Puts a new conversation in a project. */
   project?: string;
@@ -405,8 +407,8 @@ export const appApi = {
   stop: (hubId: string, messageId: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/stop`),
   /** Corrects an unfinished task the console sent. */
-  steer: (hubId: string, messageId: string, body: string) =>
-    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body }),
+  steer: (hubId: string, messageId: string, body: string, attachments?: string[]) =>
+    request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body, attachments }),
   /** Closes an open message for its recipient without replying (owner or admin). */
   dismissMessage: (hubId: string, messageId: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),

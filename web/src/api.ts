@@ -90,7 +90,7 @@ export interface Machine {
 export interface MachineRemoveResult { machine: Machine; removed: string[]; dry_run: boolean }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
-  id: string; from: string; to: string; thread_id: string; reply_to?: string; type: string; body: string;
+  id: string; from: string; to: string; thread_id: string; reply_to?: string; after?: string; type: string; body: string;
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the person behind the sender (member name) */
   from_owner?: string;

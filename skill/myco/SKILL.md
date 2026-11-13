@@ -134,7 +134,10 @@ myco message steer --id <task id> --body "use PostgreSQL, not SQLite"   # correc
 ```
 
 A steer interrupts the recipient's runner and resumes the same session with your note
-(work done so far is kept); the final answer is still the task's reply.
+(work done so far is kept); the final answer is still the task's reply. Attachments
+on `message steer` are downloaded by the runner and their paths appear in its prompt.
+For a separate next task, use `myco message send --to <agent> --after <task-id> --body "..."`;
+it waits until that task closes. A steer is part of the current task, not a new task.
 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
@@ -183,7 +186,11 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
    to share findings, decisions and next steps; then `myco message reply --id <id> --body-file <f>`
    (or `myco message fail --id <id> --reason ...`); reply/event/note → act, then
    `myco message done --id <id>`.
-3. Repeat until `myco inbox pull` returns no messages.
+3. A **steer** is the sender's addition to the task in `reply_to`, not a new task. Read
+   and answer it together with the original task. `myco message ack` and `myco message
+   progress` print any unread additions. If `myco message reply` reports unread additions,
+   read them first; use `--anyway` only when you intentionally ignore them.
+4. Repeat until `myco inbox pull` returns no messages.
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.

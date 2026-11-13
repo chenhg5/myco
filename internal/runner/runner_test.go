@@ -88,6 +88,20 @@ func (f fakeHarness) Run(_ context.Context, r harness.Request) (harness.Result, 
 
 func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
+func TestSteerSectionDownloadsAttachments(t *testing.T) {
+	r := New(newFakeHub(), fakeHarness{}, NewMemorySessions(), nil, Options{Once: true, AttachmentsDir: t.TempDir()}, quiet())
+	section, dirs := r.steerSection(context.Background(), quiet(), []api.Message{{ID: "steer1", Body: "use the revised file", Attachments: []api.Attachment{{FileID: "f_note", Name: "note.txt"}}}})
+	if !strings.Contains(section, "use the revised file") || !strings.Contains(section, "note.txt") || !strings.Contains(section, "f_note.txt") {
+		t.Fatalf("steer prompt missing file: %s", section)
+	}
+	if len(dirs) != 1 {
+		t.Fatalf("attachment directory missing: %v", dirs)
+	}
+	if data, err := os.ReadFile(filepath.Join(dirs[0], "f_note.txt")); err != nil || string(data) != "content of f_note" {
+		t.Fatalf("downloaded steer attachment: %q %v", data, err)
+	}
+}
+
 func TestRunnerRepliesFailsAndNeverAnswersReplies(t *testing.T) {
 	hub := newFakeHub(
 		api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th1", Body: "ok"},

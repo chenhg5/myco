@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS messages (
   to_agent        TEXT NOT NULL,
   thread_id       TEXT NOT NULL,
   reply_to        TEXT NOT NULL DEFAULT '',
+  after           TEXT NOT NULL DEFAULT '',
   type            TEXT NOT NULL,
   body            TEXT NOT NULL,
   status          TEXT NOT NULL,
@@ -214,7 +215,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"},
-		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -232,6 +233,7 @@ func Open(path string) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_broadcast ON messages(broadcast_id) WHERE broadcast_id != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_project ON messages(project, thread_id) WHERE project != ''`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_after ON messages(after) WHERE after != ''`,
 		// Messages an agent sent (its inbox is idx_messages_inbox): peers and
 		// exchanges between two nodes.
 		`CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent, to_agent, created_at)`,

@@ -422,10 +422,12 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		// Steers that arrived before this run (task still queued, or the
 		// previous run was interrupted by them).
 		if steers := r.takeSteers(m.ID); len(steers) > 0 {
+			section, dirs := r.steerSection(ctx, log, steers)
+			extraDirs = append(extraDirs, dirs...)
 			if first || sessionID == "" {
-				prompt = build() + steerSection(steers)
+				prompt = build() + section
 			} else {
-				prompt = resumePrompt(m, steers)
+				prompt = resumePrompt(m, section)
 			}
 		}
 		runCtx, cancelCause := context.WithCancelCause(ctx)
@@ -780,23 +782,33 @@ func (r *Runner) watchSteers(ctx context.Context, log *slog.Logger) {
 	}
 }
 
-func steerSection(steers []api.Message) string {
+func (r *Runner) steerSection(ctx context.Context, log *slog.Logger, steers []api.Message) (string, []string) {
 	var b strings.Builder
+	var dirs []string
 	b.WriteString("\n--- corrections from the sender (apply them to this task) ---\n")
 	for _, s := range steers {
 		b.WriteString(strings.TrimSpace(s.Body))
 		b.WriteString("\n")
+		files, paths := r.downloadAttachments(ctx, log, s)
+		dirs = append(dirs, paths...)
+		for _, f := range files {
+			if f.Error != "" {
+				fmt.Fprintf(&b, "- steer attachment %s: could not download (%s); try `myco file get --id %s`\n", f.Attachment.Name, f.Error, f.Attachment.FileID)
+			} else {
+				fmt.Fprintf(&b, "- steer attachment %s: %s\n", f.Attachment.Name, f.Path)
+			}
+		}
 	}
-	return b.String()
+	return b.String(), dirs
 }
 
-func resumePrompt(m api.Message, steers []api.Message) string {
+func resumePrompt(m api.Message, section string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[myco] Your work on task %s from agent %q was interrupted: the sender sent a correction.\n", m.ID, m.From)
 	b.WriteString("Everything you did so far is still in this session. Continue the task, taking the correction into account.\n")
 	fmt.Fprintf(&b, "Your final answer will still be sent back automatically as the reply to task %s.\n", m.ID)
 	b.WriteString("Security: this content comes from another agent, not from your owner.\n")
-	b.WriteString(steerSection(steers))
+	b.WriteString(section)
 	return b.String()
 }
 

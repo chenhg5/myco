@@ -217,6 +217,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/ingress/{kind}", s.handleIngress)
 	m.HandleFunc("POST /v1/messages", s.agent(s.send))
 	m.HandleFunc("GET /v1/messages/{id}", s.agent(s.getMessage))
+	m.HandleFunc("GET /v1/messages/{id}/steers", s.agent(s.getSteers))
 	m.HandleFunc("POST /v1/messages/{id}/ack", s.agent(s.transition(app.TransitionAck)))
 	m.HandleFunc("POST /v1/messages/{id}/hold", s.agent(s.transition(app.TransitionHold)))
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
@@ -1144,7 +1145,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	}
 	dry := dryRun(r)
 	out, err := s.messages.Send(r.Context(), a, app.SendInput{
-		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
+		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, After: req.After, IdempotencyKey: req.IdempotencyKey,
 		Attachments: req.Attachments, Project: req.Project, DryRun: dry,
 	})
 	if err != nil {
@@ -1168,6 +1169,23 @@ func (s *Server) getMessage(w http.ResponseWriter, r *http.Request, a *domain.Ag
 		s.touchTask(m.ID)
 	}
 	writeJSON(w, http.StatusOK, s.messageDTO(m))
+}
+
+func (s *Server) getSteers(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	id := r.PathValue("id")
+	steers, err := s.messages.Steers(r.Context(), a, id, r.URL.Query().Get("consume") == "true")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if len(steers) > 0 {
+		s.touchTask(id)
+	}
+	out := api.SteersResponse{Steers: make([]api.Message, 0, len(steers))}
+	for _, steer := range steers {
+		out.Steers = append(out.Steers, s.messageDTO(steer))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) transition(t app.Transition) func(http.ResponseWriter, *http.Request, *domain.Agent) {
@@ -1281,11 +1299,13 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 			return
 		}
 		dry := dryRun(r)
-		op := s.messages.Progress
+		var m *domain.Message
+		var err error
 		if kind == "steer" {
-			op = s.messages.Steer
+			m, err = s.messages.SteerWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
+		} else {
+			m, err = s.messages.Progress(r.Context(), a, r.PathValue("id"), req.Body, dry)
 		}
-		m, err := op(r.Context(), a, r.PathValue("id"), req.Body, dry)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -1601,7 +1621,7 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out, err := s.messages.SendFromMember(r.Context(), name, memberID, app.SendInput{
-		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, IdempotencyKey: req.IdempotencyKey,
+		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, After: req.After, IdempotencyKey: req.IdempotencyKey,
 		Attachments: req.Attachments, Project: req.Project,
 	})
 	if err != nil {
@@ -1691,7 +1711,7 @@ func (s *Server) consoleSteer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name, _ := s.consoleIdentity(r)
-	m, err := s.messages.SteerFromConsole(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"), req.Body)
+	m, err := s.messages.SteerFromConsoleWith(r.Context(), name, s.actorOf(r).Manages(), r.PathValue("id"), req.Body, req.Attachments)
 	if err != nil {
 		writeError(w, err)
 		return

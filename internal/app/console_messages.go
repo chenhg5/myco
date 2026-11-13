@@ -44,6 +44,10 @@ func (s *MessageService) SendFromMember(ctx context.Context, name, memberID stri
 // SteerFromConsole corrects a task sent from the app: by the member who sent
 // it (any of their devices), or by someone who manages the hub.
 func (s *MessageService) SteerFromConsole(ctx context.Context, name string, manages bool, id, body string) (*domain.Message, error) {
+	return s.SteerFromConsoleWith(ctx, name, manages, id, body, nil)
+}
+
+func (s *MessageService) SteerFromConsoleWith(ctx context.Context, name string, manages bool, id, body string, attachments []string) (*domain.Message, error) {
 	m, err := s.messages.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -55,7 +59,7 @@ func (s *MessageService) SteerFromConsole(ctx context.Context, name string, mana
 		return nil, domain.Errf(domain.CodePermissionDenied, "only the person who sent this task can correct it")
 	}
 	// Any of the administrator's devices may correct the conversation.
-	return s.Steer(ctx, &domain.Agent{Name: m.From}, id, body, false)
+	return s.SteerWith(ctx, &domain.Agent{Name: m.From}, id, body, attachments, false)
 }
 
 // StopFromConsole stops a running task sent from the console, for the
@@ -95,6 +99,7 @@ func (s *MessageService) StopFromConsole(ctx context.Context, name string, manag
 		return nil, err
 	}
 	s.notifier.Publish(replyTopic(id))
+	s.wakeAfter(ctx, id)
 	return out, nil
 }
 
@@ -113,6 +118,7 @@ func (s *MessageService) StopBySender(ctx context.Context, agent *domain.Agent, 
 	})
 	if err == nil {
 		s.notifier.Publish(replyTopic(id))
+		s.wakeAfter(ctx, id)
 	}
 	return m, err
 }

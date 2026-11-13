@@ -92,6 +92,7 @@ type SendInput struct {
 	Type           string
 	Body           string
 	ThreadID       string
+	After          string
 	IdempotencyKey string
 	// Attachments are file ids (from upload) the sender may share.
 	Attachments []string
@@ -144,6 +145,20 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	to = recipient.Name // messages always store the real name
+	var afterOpen bool
+	if in.After != "" {
+		parent, err := s.messages.Get(ctx, in.After)
+		if err != nil {
+			if !domain.IsCode(err, domain.CodeNotFound) {
+				return nil, err
+			}
+			return nil, domain.Errf(domain.CodeInvalidArgument, "after must name a task sent by %s to %s", sender.Name, to)
+		}
+		if parent.Type != domain.TypeTask || parent.From != sender.Name || parent.To != to {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "after must name a task sent by %s to %s", sender.Name, to)
+		}
+		afterOpen = !parent.Status.Terminal()
+	}
 	if !domain.MaySendTo(sender, recipient) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "%s is private to its owner", to).
 			WithSuggestion("only its owner and the owner's own agents can give it tasks; ask them to make it visible to the team")
@@ -169,6 +184,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	m.Project = project
+	m.After = in.After
 	m.FromOwner = s.ownerName(ctx, sender)
 	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {
 		return nil, err
@@ -190,8 +206,29 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		}
 		return nil, err
 	}
-	s.queued(to)
+	if afterOpen {
+		// A close racing with Create may have happened before the close's
+		// wake-up query. Recheck after storing so neither side misses it.
+		if parent, err := s.messages.Get(ctx, in.After); err == nil && parent.Status.Terminal() {
+			s.queued(to)
+		}
+	} else {
+		s.queued(to)
+	}
 	return &SendOutput{Message: m, ViaAlias: via}, nil
+}
+
+// wakeAfter releases the notification for messages gated on a closed task.
+// Their eligibility is checked in the repository; a failed wake-up query is
+// recovered by the dispatcher's periodic scan.
+func (s *MessageService) wakeAfter(ctx context.Context, id string) {
+	recipients, err := s.messages.AfterRecipients(ctx, id)
+	if err != nil {
+		return
+	}
+	for _, to := range recipients {
+		s.queued(to)
+	}
 }
 
 func (s *MessageService) requireThreadParticipant(ctx context.Context, agent domain.AgentName, threadID string) error {
@@ -279,9 +316,7 @@ func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit in
 		}
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
 		now := s.clock.Now()
-		msgs, err := s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
-			return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
-		})
+		msgs, err := s.claimDue(ctx, agent.Name, now, limit, types)
 		if err != nil || len(msgs) > 0 {
 			cancel()
 			return msgs, err
@@ -302,11 +337,26 @@ func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit in
 				return nil, nil
 			}
 			now := s.clock.Now()
-			return s.messages.ClaimDue(ctx, agent.Name, now, limit, types, func(m *domain.Message) bool {
-				return m.Claim(now, s.policy.Lease, s.policy.MaxAttempts)
-			})
+			return s.claimDue(ctx, agent.Name, now, limit, types)
 		}
 	}
+}
+
+func (s *MessageService) claimDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int, types []domain.MessageType) ([]*domain.Message, error) {
+	var expired []string
+	msgs, err := s.messages.ClaimDue(ctx, recipient, now, limit, types, func(m *domain.Message) bool {
+		if m.Claim(now, s.policy.Lease, s.policy.MaxAttempts) {
+			return true
+		}
+		expired = append(expired, m.ID)
+		return false
+	})
+	if err == nil {
+		for _, id := range expired {
+			s.wakeAfter(ctx, id)
+		}
+	}
+	return msgs, err
 }
 
 // Transition names a recipient-side state change.
@@ -339,9 +389,13 @@ func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id
 		}
 		return m, apply(m)
 	}
-	return s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) {
+	m, err := s.messages.Mutate(ctx, id, func(m *domain.Message) ([]*domain.Message, error) {
 		return nil, apply(m)
 	})
+	if err == nil && t == TransitionComplete {
+		s.wakeAfter(ctx, id)
+	}
+	return m, err
 }
 
 // Release defers message id (addressed to agent) for redelivery after delay
@@ -397,6 +451,7 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 			s.queued(reply.To)
 		}
 		s.notifier.Publish(replyTopic(id))
+		s.wakeAfter(ctx, id)
 	}
 	return reply, nil
 }
@@ -425,12 +480,22 @@ func (s *MessageService) Progress(ctx context.Context, agent *domain.Agent, id, 
 // Steer sends a correction for open task id from its sender to the task's
 // recipient.
 func (s *MessageService) Steer(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	return s.SteerWith(ctx, agent, id, body, nil, dryRun)
+}
+
+// SteerWith corrects a task and shares optional uploaded files with its recipient.
+func (s *MessageService) SteerWith(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	atts, err := resolveAttachments(ctx, s.files, s.clock, agent.Name, attachIDs)
+	if err != nil {
+		return nil, err
+	}
 	var out *domain.Message
-	err := s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
+	err = s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
 		st, err := m.Steer(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}
+		st.Attachments = atts
 		out = st
 		return []*domain.Message{st}, nil
 	})
@@ -438,9 +503,30 @@ func (s *MessageService) Steer(ctx context.Context, agent *domain.Agent, id, bod
 		return nil, err
 	}
 	if !dryRun {
+		if s.files != nil {
+			if err := grantAttachments(ctx, s.files, atts, out.To); err != nil {
+				return nil, err
+			}
+		}
 		s.queued(out.To)
 	}
 	return out, nil
+}
+
+// Steers lists a task's unhandled corrections for its recipient. Consuming
+// marks the returned corrections done so an inbox agent need not pull them.
+func (s *MessageService) Steers(ctx context.Context, recipient *domain.Agent, id string, consume bool) ([]*domain.Message, error) {
+	task, err := s.messages.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if task.To != recipient.Name {
+		return nil, domain.Errf(domain.CodePermissionDenied, "only the recipient of %s may read its steers", id)
+	}
+	if task.Type != domain.TypeTask {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "%s is not a task", id)
+	}
+	return s.messages.ListOpenSteers(ctx, id, consume, s.clock.Now())
 }
 
 // WaitUpdate is WaitReply that also returns early with the task's progress
@@ -553,6 +639,7 @@ func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reas
 		}
 		s.notifier.Publish(replyTopic(id))
 	}
+	s.wakeAfter(ctx, id)
 	return m, nil
 }
 
