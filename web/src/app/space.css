@@ -1924,11 +1924,11 @@ body.is-resizing {
 .trace.is-flow {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 12px;
+  margin-top: 12px;
 }
 .trace.is-flow > .trace-wait {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .trace-say {
   padding: 4px 4px 4px 2px;
@@ -1948,7 +1948,7 @@ body.is-resizing {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 3px 4px 3px 20px;
+  padding: 6px 4px 6px 20px;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--fg-2);
@@ -1964,10 +1964,10 @@ body.is-resizing {
   background: var(--line);
 }
 .trace-report:first-child::before {
-  top: 12px;
+  top: 15px;
 }
 .trace-report:last-child::before {
-  bottom: calc(100% - 12px);
+  bottom: calc(100% - 15px);
 }
 .trace-report:only-child::before {
   display: none;
@@ -1975,7 +1975,7 @@ body.is-resizing {
 .trace-report-dot {
   position: absolute;
   left: 4px;
-  top: 9.5px;
+  top: 12.5px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -2156,9 +2156,10 @@ body.is-sorting * {
   cursor: grabbing !important;
   user-select: none !important;
 }
+/* The row being carried: lifted off the list, a soft shadow under it. */
 .app-nav-item.is-dragging {
   background: var(--card);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--line);
-  position: relative;
-  z-index: 2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--line);
+  scale: 1.02;
+  transition: scale 0.12s ease, box-shadow 0.12s ease;
 }
