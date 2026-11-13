@@ -51,11 +51,11 @@ extension StatusTone {
 
     /// A member's state; nothing while it is free.
     static func of(member status: AgentStatus) -> StatusTone? {
-        switch status.state {
-        case "working": return .working
-        case "pending": return .attention
-        case "offline": return .away
-        default: return nil
+        switch MemberState.of(status) {
+        case .working: return .working
+        case .possiblyStuck, .waiting: return .attention
+        case .away: return .away
+        case .free: return nil
         }
     }
 }
@@ -75,13 +75,12 @@ enum Words {
 
     /// What a member is doing, in plain words.
     static func member(_ status: AgentStatus) -> String {
-        switch status.state {
-        case "working":
-            if let text = status.agent.statusText, !text.isEmpty { return text }
-            return L("在干活", "Working")
-        case "pending": return L("等着接活", "About to start")
-        case "offline": return L("不在线", "Away")
-        default: return L("空闲", "Free")
+        switch MemberState.of(status) {
+        case .working(let text): return text ?? L("在干活", "Working")
+        case .possiblyStuck: return L("可能卡住", "Possibly stuck")
+        case .waiting: return L("等着接活", "About to start")
+        case .away: return L("不在线", "Away")
+        case .free: return L("空闲", "Free")
         }
     }
 

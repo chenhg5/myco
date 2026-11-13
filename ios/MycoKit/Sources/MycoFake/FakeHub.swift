@@ -172,6 +172,7 @@ public actor FakeHub: HubAPI {
         s.inProgress = open.filter { $0.status == "acked" }.count
         s.queued = open.count - s.inProgress
         s.state = s.inProgress > 0 ? "working" : (s.queued > 0 ? "pending" : "idle")
+        s.current = open
         return s
     }
 

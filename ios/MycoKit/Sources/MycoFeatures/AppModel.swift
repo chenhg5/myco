@@ -108,11 +108,15 @@ extension View {
     /// The pages a tab's stack can show.
     func routed() -> some View {
         navigationDestination(for: Route.self) { route in
-            switch route {
-            case .project(let name): ProjectScreen(name: name)
-            case .agent(let name, _): AgentScreen(name: name)
-            case .projectInfo(let name): ProjectInfoScreen(name: name)
+            Group {
+                switch route {
+                case .project(let name): ProjectScreen(name: name)
+                case .agent(let name, _): AgentScreen(name: name)
+                case .projectInfo(let name): ProjectInfoScreen(name: name)
+                }
             }
+            // A pushed page takes the whole screen: no tab bar under its input.
+            .toolbar(.hidden, for: .tabBar)
         }
     }
 }

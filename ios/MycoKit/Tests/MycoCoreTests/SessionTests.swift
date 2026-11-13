@@ -47,6 +47,11 @@ struct SessionTests {
             Issue.record("ops took a task two hours ago and went quiet")
             return
         }
+        // And the member itself reads as possibly stuck, not as at work.
+        let opsStatus = try! #require(session.status(of: "vps-codex-90aa"))
+        #expect(MemberState.of(opsStatus) == .possiblyStuck)
+        let backend = try! #require(session.status(of: "studio-codex-7f3a"))
+        #expect(MemberState.of(backend) == .working(text: nil))
     }
 
     @Test func anUnreachableWorkspaceKeepsWhatItShowed() async {

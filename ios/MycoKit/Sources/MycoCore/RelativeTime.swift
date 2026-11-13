@@ -11,7 +11,8 @@ public enum RelativeTime {
         if hours < 24 { return L("\(hours) 小时前", "\(hours)h ago") }
         let days = hours / 24
         if days < 7 { return L("\(days) 天前", "\(days)d ago") }
-        return date.formatted(.dateTime.month().day())
+        let locale = Locale(identifier: AppLanguage.current == .zh ? "zh-Hans" : "en")
+        return date.formatted(.dateTime.month().day().locale(locale))
     }
 
     /// How long something has been going: "40 秒", "12 分钟", "2 小时".
