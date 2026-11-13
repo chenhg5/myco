@@ -62,6 +62,11 @@ func TranscriptEvents(line []byte) []harness.Event {
 			return []harness.Event{{Kind: "thinking", Text: strings.Join(parts, "\n\n")}}
 		}
 	case "custom_tool_call", "function_call":
+		if p.Name == "update_plan" { // its plan: shown as a checklist, as Claude Code's TodoWrite
+			if plan := planChecklist(p.Arguments); plan != "" {
+				return []harness.Event{{Kind: "tool", Tool: "TodoWrite", ID: p.CallID, Input: plan}}
+			}
+		}
 		name, input := p.Name, p.Input
 		if input == "" {
 			input = p.Arguments
@@ -148,4 +153,33 @@ func TranscriptPath(id string) string {
 		}
 	}
 	return ""
+}
+
+// planChecklist turns update_plan's arguments ({"plan":[{"step":"...",
+// "status":"pending|in_progress|completed"}]}) into "[x] / [~] / [ ]" lines.
+func planChecklist(args string) string {
+	var a struct {
+		Plan []struct {
+			Step   string `json:"step"`
+			Status string `json:"status"`
+		} `json:"plan"`
+	}
+	if json.Unmarshal([]byte(args), &a) != nil {
+		return ""
+	}
+	var lines []string
+	for _, it := range a.Plan {
+		if strings.TrimSpace(it.Step) == "" {
+			continue
+		}
+		mark := "[ ] "
+		switch it.Status {
+		case "completed":
+			mark = "[x] "
+		case "in_progress":
+			mark = "[~] "
+		}
+		lines = append(lines, mark+strings.TrimSpace(it.Step))
+	}
+	return strings.Join(lines, "\n")
 }
