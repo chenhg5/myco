@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/service"
 )
 
 // Version is set at build time via -ldflags "-X .../cli.Version=...".
@@ -58,6 +59,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	if err != nil {
 		e := toError(err, cmd.Path())
+		if cmd.Path() == "myco inbox wait" {
+			appendInboxWaitHint(e)
+		}
 		var usage *cmdkit.UsageError
 		if errors.As(err, &usage) && strings.HasPrefix(usage.Message, "unknown command ") {
 			if hint := unknownCommandUpgradeHint(ctx, args, getenv); hint != "" {
@@ -85,6 +89,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return int(status)
 	}
 	e := toError(err, cmd.Path())
+	if cmd.Path() == "myco inbox wait" {
+		appendInboxWaitHint(e)
+	}
 	p.PrintError(e)
 	return e.Exit
 }
@@ -161,6 +168,16 @@ func nonEmpty(s string) []string {
 }
 
 func (e *env) hubURL() (string, error) {
+	if name := e.in.String("hub-name"); name != "" && !e.in.IsSet("hub") {
+		if !service.ValidHubName(name) {
+			return "", errorf("invalid_argument", ExitUsage, "use 1–32 lowercase letters, digits or hyphens", "invalid hub name %q", name)
+		}
+		if h := e.readHubEnv()[config.EnvHub]; h != "" {
+			e.cfg.Hub = h
+		} else {
+			return "", errorf("not_configured", ExitUsage, "check the named hub's hub.env or run myco hub list", "named hub %q is not configured here", name)
+		}
+	}
 	if e.cfg.Hub == "" {
 		// A machine that joined with a link, or the hub's own host (as root).
 		if m, _ := config.LoadMachine(e.defaultPath); m != nil && m.Hub != "" {
@@ -179,6 +196,9 @@ func (e *env) hubURL() (string, error) {
 
 // agentClient returns a client authenticated as the configured agent.
 func (e *env) agentClient() (*client.Client, error) {
+	if err := e.autoResume(); err != nil {
+		return nil, err
+	}
 	hub, err := e.hubURL()
 	if err != nil {
 		return nil, err
@@ -392,7 +412,14 @@ func (e *env) dryRun(v any) error {
 var hubEnvPath = "/etc/myco/hub.env"
 
 func (e *env) readHubEnv() map[string]string {
-	for _, path := range []string{filepath.Join(e.hubDir(), "hub.env"), hubEnvPath} {
+	paths := []string{filepath.Join(e.hubDir(), "hub.env"), hubEnvPath}
+	if name := e.in.String("hub-name"); name != "" {
+		if !service.ValidHubName(name) {
+			return nil
+		}
+		paths = []string{filepath.Join(e.hubDirFor(name), "hub.env"), filepath.Join(filepath.Dir(hubEnvPath), "hubs", name, "hub.env")}
+	}
+	for _, path := range paths {
 		vals, err := config.ReadEnvFile(path)
 		if err != nil {
 			continue

@@ -58,6 +58,10 @@ const (
 	StatusFailed    Status = "failed"
 )
 
+// CountAsking is not a status: it is where open counts put held tasks that
+// wait on a question to their sender (see Message.AskSender).
+const CountAsking Status = "asking"
+
 // Terminal reports whether no further transitions are possible.
 func (s Status) Terminal() bool { return s == StatusDone || s == StatusFailed }
 
@@ -89,6 +93,14 @@ type Message struct {
 	// FromOwner is the person behind the sender when it was sent: the
 	// member who wrote it in the app, or the sending agent's owner.
 	FromOwner string
+	// Ask marks a progress update that asks the task's sender to decide
+	// (its body: the question, then the choices as a numbered list).
+	Ask bool
+	// Asking, on a task, is the id of its question still waiting for an
+	// answer ("" when none).
+	Asking string
+	// Answers, on a steer, is the id of the question it answers.
+	Answers   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -271,9 +283,37 @@ func (m *Message) Progress(by AgentName, id, body string, now time.Time) (*Messa
 	return p, nil
 }
 
+// AskSender returns a question for task m's sender (a progress update that
+// asks them to decide) and holds m until it is answered: the recipient
+// ends its turn, and the answer comes back as a steer that resumes it.
+func (m *Message) AskSender(by AgentName, id, body string, now time.Time) (*Message, error) {
+	p, err := m.Progress(by, id, body, now)
+	if err != nil {
+		return nil, err
+	}
+	p.Ask = true
+	if m.Status != StatusHeld {
+		if err := m.Hold(by, now); err != nil {
+			return nil, err
+		}
+	}
+	m.Asking, m.UpdatedAt = p.ID, now
+	return p, nil
+}
+
 // Steer returns a correction to open task m from its sender, delivered to
-// the recipient like any message.
+// the recipient like any message. While m waits on a question, whatever its
+// sender says is the answer to it.
 func (m *Message) Steer(by AgentName, id, body string, now time.Time) (*Message, error) {
+	st, err := m.steer(by, id, body, now)
+	if err == nil && m.Asking != "" {
+		st.Answers = m.Asking
+		m.Asking, m.UpdatedAt = "", now
+	}
+	return st, err
+}
+
+func (m *Message) steer(by AgentName, id, body string, now time.Time) (*Message, error) {
 	if m.From != by {
 		return nil, Errf(CodePermissionDenied, "only the sender of %s (%s) can steer it", m.ID, m.From)
 	}

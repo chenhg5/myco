@@ -7,7 +7,7 @@ import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
   accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
-  canManage, cleanLabel, groupsOf, isMe, machineOfRow, modelSourceLabel, nodeIcon, personLabel, tagsOf,
+  canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton, useCopy } from "@/app/copy";
@@ -18,6 +18,8 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
+import { ResumeRow } from "@/app/ResumeRow";
+import { RunRows } from "@/app/RunSettings";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
 
@@ -417,7 +419,7 @@ function openStatusLabel(status: string, stuck = false): string {
 }
 
 // The command a session keeps running to receive in the window.
-const WAIT_CMD = "myco inbox wait --timeout 55m";
+const WAIT_CMD = "myco inbox wait";
 
 function receivingLabel(r?: string) {
   if (r === "session") return L("会话里在线接收", "In the session");
@@ -932,15 +934,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   {kind === "human" ? "—" : <>{cliName(ag)}{cliVersion(ag) ? ` ${cliVersion(ag)}` : ""}</>}
                 </span>
               </div>
-              <div className="app-kv">
-                <span className="app-kv-label">{L("模型", "Model")}</span>
-                <span className="app-kv-value">
-                  {rt?.model || "—"}
-                  {rt?.model && modelSourceLabel(rt.model_source) && (
-                    <span className="app-kv-note">{lang() === "zh" ? <>（{modelSourceLabel(rt.model_source)}）</> : <> ({modelSourceLabel(rt.model_source)})</>}</span>
-                  )}
-                </span>
-              </div>
+              <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
               {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
               <div className="app-kv">
                 <span className="app-kv-label">{L("权限", "Access")}</span>
@@ -1066,6 +1060,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("agent 名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
+              <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>

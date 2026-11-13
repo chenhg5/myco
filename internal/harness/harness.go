@@ -53,6 +53,10 @@ type Request struct {
 	// settings.json env beats the process environment). Harnesses without a
 	// stronger channel add them to the process environment.
 	Provider *ProviderSettings
+	// Model and Effort, when set, override the harness's configured model
+	// and the CLI's reasoning effort for this run (the agent's run settings).
+	Model  string
+	Effort string
 	// OnEvent, when set, gets the run's steps as they happen (what the
 	// agent says, thinks and does), for the live view in the app. Harnesses
 	// that cannot tell leave it uncalled. It may be called from several goroutines.
@@ -80,6 +84,23 @@ type Event struct {
 	OutputTokens int64   `json:"output_tokens,omitempty"`
 	CostUSD      float64 `json:"cost_usd,omitempty"`
 	DurationMS   int64   `json:"duration_ms,omitempty"`
+	// Quota (kind quota): the account's usage limits as the CLI reports
+	// them. Not a step of the run: the runner reports it with the runtime.
+	Quota *Quota `json:"-"`
+}
+
+// Quota is a CLI account's usage limits.
+type Quota struct {
+	Source  string
+	Windows []QuotaWindow
+}
+
+// QuotaWindow is one limit; Used is the share used (0..1).
+type QuotaWindow struct {
+	Name, Label string
+	Used        float64
+	ResetsAt    time.Time // zero if unknown
+	Status      string
 }
 
 // ErrForkUnsupported: the harness cannot copy a session.

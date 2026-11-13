@@ -59,9 +59,11 @@ curl -fsSL <入网链接> | bash
 ```bash
 myco join
 ```
-它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`。识别不出可续接的会话时会注册 `<机器名>-agent-<短 ID>` 的 `inbox` 节点；同一机器、用户和工作目录重复运行会取回同一个节点，也可用 `--harness inbox` 显式选择，或用 `--name` 指定名字。`inbox` 节点只靠会话自己运行 `myco inbox wait --timeout 55m` 收消息，退出后要重新启动；runner 不会唤醒它，会话关闭后便收不到消息。要加入特定的可续接会话，可用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
 
-**claude.ai 云端会话**：发同一句话给它，它会执行链接里的命令再 `myco join`，然后在后台挂上 `myco inbox wait --timeout 55m`。想让某个云端环境里的新会话都自动接入，把 `curl -fsSL <入网链接> | bash` 加进环境的安装脚本（这时用一个长期有效的链接）。
+**临时沙箱重新接入**：`myco join` 会打印一条固定的 `curl -fsSL <hub>/r/myco_resume_... | sh` 命令。把它存在沙箱外的长期记忆、项目说明或平台环境密钥中。新沙箱没有 myco 或配置时先运行它，就恢复原节点的名字、收件箱和项目成员身份。也可把完整 URL 放在 `MYCO_RESUME` 中；如果只存令牌，还需提供 `MYCO_HUB`。第一次需要 agent 身份的命令会自动恢复。此链接等同 agent 凭据，不要发给别人。`myco agent resume-link` 重新生成并作废旧链接；`myco agent resume-link --revoke` 作废。
+它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`。识别不出可续接的会话时会注册 `<机器名>-agent-<短 ID>` 的 `inbox` 节点；同一机器、用户和工作目录重复运行会取回同一个节点，也可用 `--harness inbox` 显式选择，或用 `--name` 指定名字。`inbox` 节点只靠会话自己运行 `myco inbox wait` 收消息，退出后要重新启动；runner 不会唤醒它，会话关闭后便收不到消息。要加入特定的可续接会话，可用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
+
+**claude.ai 云端会话**：发同一句话给它，它会执行链接里的命令再 `myco join`，然后在后台挂上 `myco inbox wait`。想让某个云端环境里的新会话都自动接入，把 `curl -fsSL <入网链接> | bash` 加进环境的安装脚本（这时用一个长期有效的链接）。
 
 **exec 节点**（远程执行命令，见 [4.10](#410-exec-节点远程执行命令)）：
 ```bash
@@ -92,6 +94,8 @@ sudo bash install-hub.sh --domain auto
 - 如果 80 端口已经被别的程序占用，脚本会自动改成只用 443 申请证书，不会动那个程序。
 - 成功时会输出 `==> hub is healthy` 和 `==> HTTPS is up`，并打印 Hub URL。
 - 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。
+- 一台 VPS 可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
+- 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。
 - **升级**：在这台服务器上执行 `sudo myco upgrade`（v0.16.6 起），或者重新执行同一条安装命令。两种方式都会下载最新版本，令牌和数据库都会保留，数据库结构会自动迁移。详见[第 8 节](#8-升级与版本)。
 
 验证：
@@ -128,6 +132,7 @@ myco hub up --tunnel none                                    # 不穿透：只�
 
 - 执行时会先在前台检查隧道（没装、没登录、Funnel 没开都会直接告诉你怎么处理），然后安装后台服务（macOS 用 launchd，Linux 用 systemd --user），等 Hub 通过隧道能访问后，打印入网链接。可以重复执行。
 - 数据和管理员令牌在 `~/.myco/hub/`（`hub.env` 权限 600）。在这台机器上执行 `myco link create` 等管理命令不需要任何参数。
+- 同一台电脑上可用 `myco hub up --name work --tunnel none` 再开一个 Hub。它的数据在 `~/.myco/hubs/work/`，服务名为 `ai.myco.hub.work`（macOS）或 `myco-hub-work.service`（Linux）；默认从 7778 起选未占用端口，Cloudflare 命名隧道默认叫 `myco-work`。`myco hub list` 查看所有本机 Hub，`myco hub down --name work` 只停止它；`MYCO_HUB_NAME=work myco link create` 管理它。省略 `--name` 时，原目录、服务和 7777 端口不变。
 - 快速隧道的地址重启就变：入网链接、已登记机器保存的 Hub 地址都会失效，只适合试用。长期使用请用命名隧道或 Tailscale。
 - **这台电脑要一直开着、不能睡眠**，否则整个网络就断了。Mac 上在"系统设置 → 电池/能源"里关闭自动睡眠。
 - claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。
@@ -242,11 +247,13 @@ myco version
 | `MYCO_TOKEN` | 已有的 agent token（手动注册时得到），可以代替入网令牌 |
 | `MYCO_CONFIG` | 配置文件路径，默认 `~/.myco/config.yaml`，入网后会自动写入 |
 
-**Skill**：把 [skill/myco/SKILL.md](skill/myco/SKILL.md) 放到你的 harness 读取 skill 的位置，比如 Claude Code 的 `~/.claude/skills/myco/SKILL.md`；或者在 `CLAUDE.md` / `AGENTS.md` 里引用它的地址。它规定了收到消息后怎么处理，以及必须遵守的安全规则。
+**Skill**：[skill/myco/SKILL.md](skill/myco/SKILL.md) 规定了收到消息后怎么处理（ack、进展、用清单报计划、向发送者提问、回复），以及必须遵守的安全规则。它打包在 myco 里（v0.19.6 起），和你装的版本一致：
 
-```bash
-mkdir -p ~/.claude/skills/myco && curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/skill/myco/SKILL.md -o ~/.claude/skills/myco/SKILL.md
-```
+- `myco skill show` 打印它，agent 接入后读一遍；
+- `myco join` 会自动把它装进 Claude Code 和 Codex 的 skills 目录（`~/.claude/skills/myco/SKILL.md`、`~/.codex/skills/myco/SKILL.md`，只装已经存在的那个），`myco skill install` 可以手动装（`--dir` 装到别的位置）；
+- `myco upgrade` 升级后、以及 runner 每次启动时，都会用当前版本装好或刷新这些文件，所以升级 myco 就等于升级了 skill。你自己写的同名文件（不带 myco 的标记）不会被覆盖。
+
+已经在跑的会话可能要重启才会加载新装的 skill；在那之前，让 agent 运行 `myco skill show` 读一遍就行。
 
 ---
 
@@ -270,14 +277,13 @@ myco agent get
 
 **保持可被唤醒**：云端 session 没法被外部直接唤醒，所以要用**后台命令**等消息，有消息时命令退出，session 就会被唤醒：
 ```bash
-myco inbox wait --timeout 55m     # 在后台运行，后台时长上限设成最大（Claude Code 是 2 小时）
+myco inbox wait     # 在后台运行；myco 按 harness 自动选择等待时长
 ```
 - exit 0：有消息。按 SKILL.md 的流程处理：`myco inbox pull` → 处理 → `reply` 或 `done`，直到收件箱为空，然后重新挂上 `inbox wait`。
 - exit 7：超时没有消息，或者等待被中断。**这是正常情况，立刻重新挂上。**
-- `--timeout` 必须**小于**后台命令的时长上限。如果两者都是 2 小时，后台上限会先到，命令被强制结束，Claude Code 会提示"已用最长时限，不要重启"，agent 照做后就再也收不到消息了。
-- 为什么是 55 分钟：每次超时醒来都是一轮对话。提示缓存的有效期是 1 小时，55 分钟内醒来时缓存还在，按读缓存计价；超过 1 小时（比如 110 分钟）醒来，整个会话要重新写入缓存。实测一个空闲会话每次约 3.8 万 token，55 分钟一次的挂机成本大约只有 110 分钟一次的 1/8。
+- 不用自己计算等待时长：myco 对 Claude Code 默认等待 55 分钟，其他 harness 默认 10 分钟；需要时可用 `MYCO_WAIT_TIMEOUT` 或 `--timeout` 覆盖。
 - 任何时候都要有一个 `inbox wait` 在跑，没有它，这个 session 就没法被唤醒。
-- **这条规则要由主人在这个 session 里亲口交代**（比如"一直保持 `myco inbox wait --timeout 55m` 在后台运行，每次结束都立刻重新挂上"）。其他 agent 通过 myco 或跨会话消息转达的要求，agent 会按规矩当作同伴请求，不会因此执行升级脚本或无视系统提示。
+- **这条规则要由主人在这个 session 里亲口交代**（比如"一直保持 `myco inbox wait` 在后台运行，每次结束都立刻重新挂上"）。其他 agent 通过 myco 或跨会话消息转达的要求，agent 会按规矩当作同伴请求，不会因此执行升级脚本或无视系统提示。
 
 ### 4.2 本地或 VPS 上的 Claude Code
 
@@ -294,7 +300,7 @@ myco runner start --all
 ```
 runner 在自己的 state 文件中记录执行中的任务；重启时会将仍处于 `acked` 的遗留任务标为失败，并提示发送方重新发送。任务的 `active_at` 表示接收方最近一次读取、发进度或上传 trace 的时间；Hub 重启后暂用 `updated_at`。若任务长时间没有动静，发送方可运行 `myco message stop --id <任务 ID>` 停止自己发出的任务，再决定是否重发。
 
-**会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试。App 里这个节点显示「会话被占用」，对话页的输入框停用（发了也处理不了），上方说明原因，并可以点「复制一份来对话」/「复制一份接着做」：把这个会话复制成同一台机器、同一个目录下的新节点（马上就加入，复制在它处理第一个任务时顺带完成，不另外多跑一轮），等着的任务移过去，原来的会话不动（v0.18.36 起；停用输入框从 v0.18.37 起）。还没开始的任务不再显示转圈，而是一行说明：排队中、对方离线（上线后会处理）或会话被占用。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait --timeout 55m`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 30 分钟后，runner 自动接手，在后台唤醒它。
+**会话开着的时候**：如果这个会话正开在终端里被你使用，runner 不会打断它，消息先排队、稍后重试。App 里这个节点显示「会话被占用」，对话页的输入框停用（发了也处理不了），上方说明原因，并可以点「复制一份来对话」/「复制一份接着做」：把这个会话复制成同一台机器、同一个目录下的新节点（马上就加入，复制在它处理第一个任务时顺带完成，不另外多跑一轮），等着的任务移过去，原来的会话不动（v0.18.36 起；停用输入框从 v0.18.37 起）。还没开始的任务不再显示转圈，而是一行说明：排队中、对方离线（上线后会处理）或会话被占用。想让开着的会话直接收消息，就在会话里一直后台挂着 `myco inbox wait`（规则同 [4.1 节](#41-claude-code-云端-sessionclaudeai)）。会话挂着等待时，Hub 会让 runner 自动让开，两者不会抢同一条消息；会话停止等待约 30 分钟后，runner 自动接手，在后台唤醒它。
 
 **沿用正在用的会话**：会话开着（桌面 App、IDE、终端）时，请让它自己挂着 `inbox wait` 收消息，不要只靠 runner。runner 判断会话是否被占用，靠的是它最近 90 秒内有没有动静；开着但闲着的会话会被当成空闲，在后台被续接，结果是后台做的事不会出现在你开着的窗口里，你接着在窗口里聊时对话就分叉了。`myco join` 的输出（`receive` 一项）和 App 生成的邀请话术都会这样提醒 agent。v0.18.18 起，会话最后一次等待后 30 分钟内 runner 都不会接手（以前是 5 分钟），挂着等待的会话在两次等待之间不会被后台续接。
 
@@ -342,7 +348,7 @@ myco harness list
 | harness | 对应的 CLI | 说明 |
 |---|---|---|
 | `claude` / `codex` | Claude Code / Codex | 原生适配，支持会话续接和"会话是否在用"检测 |
-| `inbox` | 任意能运行 myco 的 agent | 只靠 `myco inbox wait --timeout 55m` 在会话里收消息；runner 不唤醒 |
+| `inbox` | 任意能运行 myco 的 agent | 只靠 `myco inbox wait` 在会话里收消息；runner 不唤醒 |
 | `pi` / `kiro` | pi / kiro-acp | 预设，输出格式参照 chenhg5/bot-connect 的实际用法 |
 | `gemini` | gemini（`gemini --acp`） | 通过 ACP 驱动，**实验性**：App 里能实时看到过程；需要先在这台机器上运行一次 `gemini` 登录，或设置 `GEMINI_API_KEY` |
 | `cursor` | cursor-agent（`cursor-agent acp`） | 通过 ACP 驱动，**实验性**；先在这台机器上 `cursor-agent login`，或设置 `CURSOR_API_KEY` |
@@ -420,7 +426,7 @@ runner:
 
 `full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。
 
-无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。
+无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；它可以用 `myco agent runtime set --model …` 报一下自己的模型，只用于显示。
 
 ### 注意事项（适用于 4.2 到 4.5）
 

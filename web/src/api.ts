@@ -5,19 +5,43 @@ export interface Delivery { mode: string; url?: string; has_secret?: boolean; pa
 /** What a node is. `machine` is a machine node (`xxx-machine`), not shown as a node. */
 export type AgentKind = "agent" | "shell" | "human" | "machine";
 export type RuntimeAccess = "readonly" | "workspace" | "full";
-export type ModelSource = "configured" | "cli-config" | "observed" | "default" | "provider";
+/** app: chosen for this node in the App; self: reported by the session itself. */
+export type ModelSource = "app" | "self" | "configured" | "cli-config" | "observed" | "default" | "provider";
 /** pinned: chosen for this node; machine: the machine's current setting; env_file: entered by hand; missing: the pinned one is gone. */
 export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
+/** One usage window of a plan (5 hours, 7 days, ...). */
+export interface QuotaWindow {
+  name: string;
+  label?: string;
+  /** 0..1 */
+  used: number;
+  resets_at: string;
+  /** "allowed" while there is room; anything else means the window is spent. */
+  status?: string;
+}
+/** A CLI's own usage report (Claude or Codex), as its local files hold it. */
+export interface Quota {
+  source: "claude" | "codex";
+  at: string;
+  windows: QuotaWindow[];
+}
+/** What the node runs unless told otherwise; absent on nodes reported by old runners. */
+export interface RunSettings { model?: string; effort?: string }
 /** What the node actually runs; absent on nodes reported by old runners. */
 export interface Runtime {
   cli: string;
   cli_version?: string;
   model?: string;
   model_source?: ModelSource;
+  /** reasoning effort (low/medium/high/... depends on the CLI) */
+  effort?: string;
+  effort_source?: ModelSource;
   access?: RuntimeAccess;
   /** model provider's name (never its key) */
   provider?: string;
   provider_source?: ProviderSource;
+  /** plan usage, when the CLI writes it on this computer */
+  quota?: Quota;
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
@@ -72,8 +96,22 @@ export interface Agent {
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
+  /** the model and effort chosen for this node in the App ("" = follow the
+   *  computer's setting); from v0.19.5, and only those who may manage it */
+  run_settings?: RunSettings;
   /** the person who added it (member name) */
   owner?: string; owner_id?: string;
+  /** its resume line's state, for those who may manage it (hubs from
+   *  v0.19.5; absent on older hubs and before a line is made) */
+  resume?: AgentResume;
+}
+/** An agent's resume line: running its command in a new sandbox brings the
+ *  same agent (same name, id and history) back. */
+export interface AgentResume {
+  created_at: string;
+  last_used_at?: string;
+  /** the sandbox it was last run in */
+  last_used_env?: string;
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
 export interface Machine {
@@ -97,6 +135,13 @@ export interface Message {
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the person behind the sender (member name) */
   from_owner?: string;
+  /** a progress update asking the task's sender to decide (body: the
+   *  question, then the choices as a numbered list) */
+  ask?: boolean;
+  /** on a task: the question it waits on */
+  asking?: string;
+  /** on a steer: the question it answers */
+  answers?: string;
   /** end-to-end encrypted (decrypted by the app when it may read it) */
   e2e?: boolean;
   /** why the app could not decrypt it */
@@ -109,7 +154,10 @@ export interface Message {
 /** Another node a node exchanged messages with. */
 export interface Peer { agent: string; messages: number; last?: Message }
 export type State = "working" | "pending" | "idle" | "offline";
-export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number; current?: Message[];
+export interface AgentStatus { agent: Agent; state: State; queued: number; in_progress: number; held: number;
+  /** held tasks waiting on a question to their sender (absent on older hubs) */
+  asking?: number;
+  current?: Message[];
   /** how it receives right now: a session keeps `inbox wait` running, or a runner wakes the session per message */
   receiving?: "session" | "runner";
   /** the runner recently found the session in use and handed messages back */

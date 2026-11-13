@@ -4,6 +4,8 @@ import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
+import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
+import { DictateButton } from "@/app/Dictate";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -860,9 +862,12 @@ function Composer({ hubId, project, agents, onSent }: {
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  // ↑ / ↓ from an empty box: what you sent from here before.
+  const sentKey = groupDraftKey(hubId, project?.name);
+  const [sent, setSent] = useState(() => keptSent(sentKey));
+  const history = useInputHistory(sent, draft, setDraft);
   // Files going with the task (pasted, dropped or picked).
   const att = useAttachments(hubId);
-  const [hinted, setHinted] = useState(() => { try { return localStorage.getItem("myco-space-hinted") === "1"; } catch { return true; } });
   const menu = useContextMenu();
   const input = useRef<HTMLTextAreaElement>(null);
   // Grows with what is typed, as chat apps do; past COMPOSE_MAX it scrolls.
@@ -879,12 +884,13 @@ function Composer({ hubId, project, agents, onSent }: {
     setError(null);
     try {
       await appApi.sendMessage(hubId, { to: recipient, body: att.body(typed), ...(att.ids.length ? { attachments: att.ids } : {}), ...(project ? { project: project.name } : {}) });
+      if (typed) {
+        keepSent(sentKey, typed);
+        setSent(keptSent(sentKey));
+      }
+      history.reset();
       setDraft("");
       att.clear();
-      if (!hinted) {
-        setHinted(true);
-        try { localStorage.setItem("myco-space-hinted", "1"); } catch { /* not kept */ }
-      }
       onSent();
     } catch (e) {
       setError(e);
@@ -905,7 +911,7 @@ function Composer({ hubId, project, agents, onSent }: {
           className="sp-compose-input"
           value={draft}
           rows={1}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => { setDraft(e.target.value); history.reset(); }}
           onPaste={(e) => {
             const files = pastedFiles(e);
             if (!files.length) return;
@@ -913,6 +919,7 @@ function Composer({ hubId, project, agents, onSent }: {
             att.add(files);
           }}
           onKeyDown={(e) => {
+            if (history.onKeyDown(e)) return;
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();
@@ -931,22 +938,21 @@ function Composer({ hubId, project, agents, onSent }: {
                 checked: r.st.agent.name === recipient,
                 onSelect: () => pick(r.st.agent.name),
               })),
-            ])} title={L("换一个收件人", "Change who gets it")}>
+            ])} title={rec ? L(`只有 ${nodeName(rec.st.agent, rec.hub)} 会收到这条，其他成员看得到但不会动手。点一下换一个`, `Only ${nodeName(rec.st.agent, rec.hub)} gets this; the others see it but won't act on it. Click to change`) : L("换一个收件人", "Change who gets it")}>
               <span className="sp-to-label">{L("发给", "To")}</span>
               {rec && <Avatar agent={rec.st.agent} size={16} badge={false} />}
               <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
               <ChevronDown />
             </button>
+            {/* How to send, beside the tools, as in a member's chat. */}
+            <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
           </div>
+          {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
+          <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} disabled={busy} />
           <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
             <ArrowUp />
           </button>
         </div>
-      </div>
-      <div className="sp-compose-hint">
-        {hinted
-          ? L("回车发送 · Shift+回车换行", "Enter to send · Shift+Enter for a new line")
-          : L(`只有 ${rec ? nodeName(rec.st.agent, rec.hub) : "它"} 会收到这条，其他成员看得到但不会动手。`, `Only ${rec ? nodeName(rec.st.agent, rec.hub) : "it"} gets this; the others can see it but won't act on it.`)}
       </div>
       {menu.element}
     </div>
@@ -962,6 +968,13 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   const open = (r.st.current || []).filter((m) => m.to === a.name && m.type === "task");
   // Working means the node acknowledged a task. A task it only pulled
   // (`delivered`) has not started: it is still queued.
+  // Waiting on a question it asked: whoever gave it the task decides.
+  const asked = open.find((m) => m.asking);
+  if ((r.st.asking || 0) > 0) {
+    const from = asked ? nameOf(asked.from) : "";
+    return { text: asked && !isMe(asked.from, r.hub) ? L(`等 ${from} 决定`, `Waiting for ${from} to decide`) : L("等你决定", "Needs your decision"),
+      meta: asked ? asked.body.replace(/\s+/g, " ").trim() : undefined };
+  }
   const doing = open.find((m) => m.status === "acked") || (r.st.state === "working" ? open[0] : undefined);
   if (r.st.state === "working" || doing) {
     const text = a.status_text || (doing ? doing.body.replace(/\s+/g, " ").trim() : "") || L("在干活", "Working");

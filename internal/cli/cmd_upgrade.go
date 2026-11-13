@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
+	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/service"
 )
@@ -106,6 +108,17 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				return err
 			}
 			var restarted, notes []string
+			// The skill the agent CLIs here read becomes the new version's
+			// (written by the new binary, which carries it).
+			if b, err := exec.CommandContext(e.in.Ctx, path, "skill", "install", "--format", "json").Output(); err == nil {
+				var r struct {
+					Written []string `json:"written"`
+				}
+				if json.Unmarshal(b, &r) == nil && len(r.Written) > 0 {
+					out["skill_updated"] = r.Written
+					notes = append(notes, "installed the myco skill of this version: "+strings.Join(r.Written, ", "))
+				}
+			}
 			switch {
 			case e.in.Bool("no-restart"):
 				notes = append(notes, "services not restarted (--no-restart): restart them to use the new version")
@@ -151,7 +164,7 @@ func upgradeTarget(getenv func(string) string) (string, error) {
 // system units (install-hub.sh's myco-hub, exec nodes, ...).
 func restartMycoServices() (restarted, notes []string) {
 	if home, err := os.UserHomeDir(); err == nil {
-		for _, id := range []service.ID{service.RunnerID, service.HubID} {
+		for _, id := range localHubServiceIDs(config.Dir(config.DefaultPath())) {
 			m, err := service.DetectID(home, service.ExecRunner{}, id)
 			if err != nil {
 				continue
@@ -198,4 +211,14 @@ func restartMycoServices() (restarted, notes []string) {
 		notes = append(notes, "no running myco services found here; restart any myco processes you started by hand")
 	}
 	return restarted, notes
+}
+
+func localHubServiceIDs(base string) []service.ID {
+	ids := []service.ID{service.RunnerID, service.HubID}
+	for _, hub := range localHubDirs(base) {
+		if hub.Name != "" {
+			ids = append(ids, service.HubIDFor(hub.Name))
+		}
+	}
+	return ids
 }

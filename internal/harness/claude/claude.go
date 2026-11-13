@@ -172,8 +172,11 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 			args = append(args, "--fork-session")
 		}
 	}
-	if c.opts.Model != "" {
-		args = append(args, "--model", c.opts.Model)
+	if m := firstOf(req.Model, c.opts.Model); m != "" {
+		args = append(args, "--model", m)
+	}
+	if req.Effort != "" {
+		args = append(args, "--effort", req.Effort)
 	}
 	args = append(args, accessArgs[c.opts.Access]...)
 	// myco is the agent's own messaging channel (reply, hold, delegate):
@@ -277,4 +280,13 @@ func traceEvents(name, stdout string) {
 	}
 	defer f.Close()
 	_, _ = f.WriteString(stdout)
+}
+
+func firstOf(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

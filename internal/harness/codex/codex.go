@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,8 +86,12 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 
 	// codex exec [flags] [resume <id>] -   (prompt read from stdin)
 	args := []string{"exec", "--json", "--output-last-message", lastMsg}
-	if c.opts.Model != "" {
-		args = append(args, "-m", c.opts.Model)
+	model := req.Model
+	if model == "" {
+		model = c.opts.Model
+	}
+	if model != "" {
+		args = append(args, "-m", model)
 	}
 	args = append(args, accessArgs[c.opts.Access]...)
 	env := req.Env
@@ -97,6 +102,11 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		env = append(p.EnvList(), env...)
 	}
 	args = append(args, c.opts.Args...)
+	// After the runner's own args: the effort chosen in the app wins over
+	// a model_reasoning_effort set there (the last -c of a key wins).
+	if req.Effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(req.Effort))
+	}
 	switch {
 	case req.SessionID != "" && req.Fork:
 		args = append(args, "fork", req.SessionID)
@@ -128,6 +138,12 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	if req.SessionID != "" && res.SessionID == "" && !req.Fork {
 		res.SessionID = req.SessionID
+	}
+	// The account's limits, as this run left them in the session file.
+	if req.OnEvent != nil && res.SessionID != "" {
+		if q := sessionQuota(res.SessionID); q != nil {
+			req.OnEvent(harness.Event{Kind: "quota", Quota: q})
+		}
 	}
 	if runErr != nil && strings.Contains(runErr.Error()+failure, "already has an active writer") {
 		return res, fmt.Errorf("%w: codex thread %s is open elsewhere (interactive session?)", harness.ErrSessionBusy, req.SessionID)
@@ -263,4 +279,111 @@ func sessionTokens(id string) (tokenTotal, bool) {
 	// No count yet: a session without a turn starts from zero (when the
 	// whole file was read).
 	return tokenTotal{}, whole
+}
+
+// rateLimits is the rate_limits of a token_count event in a Codex session
+// file, e.g. {"primary":{"used_percent":7.0,"window_minutes":10080,
+// "resets_at":1794735584},"secondary":null,"rate_limit_reached_type":null}.
+type rateLimits struct {
+	Primary     *rateWindow `json:"primary"`
+	Secondary   *rateWindow `json:"secondary"`
+	ReachedType *string     `json:"rate_limit_reached_type"`
+}
+
+type rateWindow struct {
+	UsedPercent   float64 `json:"used_percent"`
+	WindowMinutes int64   `json:"window_minutes"`
+	ResetsAt      int64   `json:"resets_at"`
+	// Older Codex versions said how long until the reset instead.
+	ResetsInSeconds int64 `json:"resets_in_seconds"`
+}
+
+// sessionQuota is the latest rate_limits in a session's file, nil if none.
+func sessionQuota(id string) *harness.Quota {
+	var path string
+	for _, pat := range transcriptPatterns(id) {
+		if m, _ := filepath.Glob(pat); len(m) > 0 {
+			path = m[0]
+			break
+		}
+	}
+	if path == "" {
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err == nil && st.Size() > tailBytes {
+		if _, err := f.Seek(-tailBytes, io.SeekEnd); err != nil {
+			return nil
+		}
+	}
+	var last *rateLimits
+	var at time.Time
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 32<<20)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(`"rate_limits"`)) {
+			continue
+		}
+		var ev struct {
+			Timestamp time.Time `json:"timestamp"`
+			Payload   struct {
+				RateLimits *rateLimits `json:"rate_limits"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(line, &ev) == nil && ev.Payload.RateLimits != nil {
+			last, at = ev.Payload.RateLimits, ev.Timestamp
+		}
+	}
+	return last.quota(at)
+}
+
+func (r *rateLimits) quota(at time.Time) *harness.Quota {
+	if r == nil {
+		return nil
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	q := &harness.Quota{Source: "codex"}
+	for _, w := range []struct {
+		name string
+		win  *rateWindow
+	}{{"primary", r.Primary}, {"secondary", r.Secondary}} {
+		if w.win == nil {
+			continue
+		}
+		qw := harness.QuotaWindow{Name: w.name, Label: windowLabel(w.win.WindowMinutes), Used: w.win.UsedPercent / 100}
+		switch {
+		case w.win.ResetsAt > 0:
+			qw.ResetsAt = time.Unix(w.win.ResetsAt, 0).UTC()
+		case w.win.ResetsInSeconds > 0:
+			qw.ResetsAt = at.Add(time.Duration(w.win.ResetsInSeconds) * time.Second).UTC()
+		}
+		if r.ReachedType != nil && *r.ReachedType != "" && qw.Used >= 1 {
+			qw.Status = *r.ReachedType
+		}
+		q.Windows = append(q.Windows, qw)
+	}
+	if len(q.Windows) == 0 {
+		return nil
+	}
+	return q
+}
+
+// windowLabel names a window by its length: 5h, 7d.
+func windowLabel(minutes int64) string {
+	switch {
+	case minutes <= 0:
+		return ""
+	case minutes%(24*60) == 0:
+		return strconv.FormatInt(minutes/(24*60), 10) + "d"
+	case minutes%60 == 0:
+		return strconv.FormatInt(minutes/60, 10) + "h"
+	}
+	return strconv.FormatInt(minutes, 10) + "m"
 }

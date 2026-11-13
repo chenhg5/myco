@@ -57,7 +57,8 @@ lipo -archs dist/myco.app/Contents/MacOS/myco-app
 
 # Sign inside out: the bundled CLI, then the app (hardened runtime, timestamp).
 codesign --force --options runtime --timestamp --sign "$MYCO_SIGN_IDENTITY" dist/myco.app/Contents/Resources/myco
-codesign --force --options runtime --timestamp --sign "$MYCO_SIGN_IDENTITY" dist/myco.app
+# The app's entitlements: the microphone, for speaking instead of typing.
+codesign --force --options runtime --timestamp --entitlements cmd/myco-app/build/darwin/entitlements.plist --sign "$MYCO_SIGN_IDENTITY" dist/myco.app
 codesign --verify --strict --deep dist/myco.app
 
 echo "==> notarizing the app"

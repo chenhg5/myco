@@ -985,7 +985,7 @@ func TestJoinLinks(t *testing.T) {
 	}
 	// A local session is told to keep inbox wait running while it stays open
 	// (the runner would continue it behind the open window).
-	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "stays open") {
+	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait") || !strings.Contains(out, "When it exits") || !strings.Contains(out, "save the resume command") || !strings.Contains(out, "stays open") {
 		t.Fatalf("join does not say how to receive while open: %s", out)
 	}
 	// Joining with --project also puts it in the project (one it can see);
@@ -1023,8 +1023,11 @@ func TestJoinLinks(t *testing.T) {
 	// No resumable session: register a stable inbox-only agent.
 	os.RemoveAll(filepath.Join(home, ".codex"))
 	code, out, e = cx.run("join", "--format", "json")
-	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "runner cannot wake this agent") {
+	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco inbox wait") || !strings.Contains(out, "When it exits") || !strings.Contains(out, "save the resume command") || !strings.Contains(out, "runner cannot wake this inbox agent") || !strings.Contains(out, `"resume_command": "curl -fsSL `+hub+`/r/myco_resume_`) {
 		t.Fatalf("inbox join: %d %s %s", code, out, e)
+	}
+	if code, textOut, errOut := cx.run("join", "--format", "text"); code != 0 || !strings.Contains(textOut, inboxReceiveNote) {
+		t.Fatalf("inbox join text instructions: %d %s %s", code, textOut, errOut)
 	}
 	var inboxJoin struct{ Agent struct{ Name string } }
 	if err := json.Unmarshal([]byte(out), &inboxJoin); err != nil {
@@ -1391,5 +1394,68 @@ func TestExecAllowAnyoneNeedsRiskFlag(t *testing.T) {
 	// "*" cannot be set by hand, only through the explicit flag.
 	if code, _, _ := admin.run("agent", "update", "--name", "box", "--allow-from", "*"); code == 0 {
 		t.Fatal(`allow-from "*" must be rejected as a name`)
+	}
+}
+
+// A recipient asks the task's sender to decide; the sender answers by
+// choice; the task waits (held) in between.
+func TestAskAndAnswer(t *testing.T) {
+	hub := newHub(t)
+	dir := t.TempDir()
+	boss := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "a.yaml")}}
+	worker := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "b.yaml")}}
+	boss.run("agent", "register", "--name", "boss")
+	worker.run("agent", "register", "--name", "worker")
+	_, out, _ := boss.run("message", "send", "--to", "worker", "--body", "cut the demo to 40s")
+	var sent struct{ Message struct{ ID string } }
+	if err := json.Unmarshal([]byte(out), &sent); err != nil {
+		t.Fatalf("send: %q", out)
+	}
+	id := sent.Message.ID
+	worker.run("inbox", "pull")
+	worker.run("message", "ack", "--id", id)
+
+	if code, _, _ := worker.run("message", "ask", "--id", id, "--question", "Which opening?", "--option", "only one"); code != ExitUsage {
+		t.Fatalf("one option: exit %d", code)
+	}
+	code, out, e := worker.run("message", "ask", "--id", id, "--question", "Which opening?",
+		"--option", "Result first — show the finished cut", "--option", "Steps first")
+	if code != 0 || !strings.Contains(out, `"held": true`) {
+		t.Fatalf("ask: %d %s %s", code, out, e)
+	}
+	_, out, _ = boss.run("message", "get", "--id", id)
+	if !strings.Contains(out, `"status": "held"`) || !strings.Contains(out, `"asking": "msg_`) {
+		t.Fatalf("task waits on the question: %s", out)
+	}
+	if code, _, _ := boss.run("message", "answer", "--id", id, "--choice", "3"); code != ExitUsage {
+		t.Fatalf("no third choice: exit %d", code)
+	}
+	if code, out, e := boss.run("message", "answer", "--id", id, "--choice", "1", "--body", "keep it under 40s"); code != 0 {
+		t.Fatalf("answer: %d %s %s", code, out, e)
+	}
+	_, out, _ = boss.run("message", "get", "--id", id)
+	if strings.Contains(out, `"asking"`) {
+		t.Fatalf("answered: %s", out)
+	}
+	_, out, _ = worker.run("inbox", "pull")
+	if !strings.Contains(out, `"answers": "msg_`) || !strings.Contains(out, "Result first — show the finished cut") || !strings.Contains(out, "keep it under 40s") {
+		t.Fatalf("the answer reaches the worker as a steer: %s", out)
+	}
+	if code, _, _ := boss.run("message", "answer", "--id", id, "--choice", "1"); code != ExitConflict {
+		t.Fatalf("nothing left to answer: exit %d", code)
+	}
+}
+
+func TestAskBody(t *testing.T) {
+	body, err := askBody("  Which one?\n(pick)", []string{"A — the first", "B"})
+	if err != nil || body != "Which one?\n(pick)\n\n1. A — the first\n2. B" {
+		t.Fatalf("askBody: %q %v", body, err)
+	}
+	q, opts := parseAsk(body)
+	if q != "Which one?\n(pick)" || len(opts) != 2 || opts[0] != "A — the first" || opts[1] != "B" {
+		t.Fatalf("parseAsk: %q %q", q, opts)
+	}
+	if q, opts := parseAsk("Just a question"); q != "Just a question" || len(opts) != 0 {
+		t.Fatalf("no choices: %q %q", q, opts)
 	}
 }

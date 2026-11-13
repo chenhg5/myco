@@ -49,6 +49,7 @@ type Server struct {
 	members   *app.MemberService
 	audit     *app.AuditService
 	projects  *app.ProjectService
+	resume    *app.ResumeService
 	traces    *app.TraceService
 	activity  sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu sync.Mutex // serialize alias permission checks with writes
@@ -64,6 +65,8 @@ func (s *Server) SetMachines(m *app.MachineService) { s.machines = m }
 // SetProjects enables /v1/projects (and project coordinators editing their
 // members' cards).
 func (s *Server) SetProjects(p *app.ProjectService) { s.projects = p }
+
+func (s *Server) SetResume(v *app.ResumeService) { s.resume = v }
 
 // SetConsole enables console tokens (per-device admin credentials) and the
 // /v1/console/tokens endpoints.
@@ -177,6 +180,13 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
 	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)
+	m.HandleFunc("GET /r/{token}", s.resumePage)
+	m.HandleFunc("POST /v1/resume", s.useResume)
+	m.HandleFunc("POST /v1/agents/{name}/resume", s.admin(s.createAgentResume))
+	// The model and effort its runner uses: the agent's owner or a hub
+	// manager (not a project coordinator: it spends the owner's quota).
+	m.HandleFunc("PUT /v1/agents/{name}/run-settings", s.admin(s.setAgentRunSettings))
+	m.HandleFunc("DELETE /v1/agents/{name}/resume", s.admin(s.revokeAgentResume))
 	// An app link opened in a browser: say how to use it (never echoes
 	// whether the token is valid).
 	m.HandleFunc("GET /c/{token}", s.appLinkPage)
@@ -205,6 +215,9 @@ func (s *Server) routes() {
 
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
+	m.HandleFunc("POST /v1/me/resume", s.agent(s.createMyResume))
+	m.HandleFunc("PUT /v1/me/run-settings", s.agent(s.setMyRunSettings))
+	m.HandleFunc("DELETE /v1/me/resume", s.agent(s.revokeMyResume))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
 	m.HandleFunc("PUT /v1/me/skills", s.agent(s.mySkills))
@@ -542,12 +555,19 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto := s.agentDTO(a)
+	s.attachResume(r, a, &dto)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dto := s.agentDTO(a)
+	if s.resume != nil {
+		if c, err := s.resume.Get(r.Context(), a.Name); err == nil {
+			info := s.resumeInfo(c)
+			dto.Resume = &info
+		}
+	}
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -1103,7 +1123,17 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if !see.Sees(a.Agent) {
 			continue
 		}
-		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held}
+		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Asking: a.Asking}
+		if viewer != nil {
+			if viewer.Name == a.Agent.Name && s.resume != nil {
+				if c, err := s.resume.Get(r.Context(), a.Agent.Name); err == nil {
+					info := s.resumeInfo(c)
+					st.Agent.Resume = &info
+				}
+			}
+		} else {
+			s.attachResume(r, a.Agent, &st.Agent)
+		}
 		st.Receiving, st.SessionInUse = s.messages.Presence().State(a.Agent.Name, s.agents.OnlineWindow())
 		if a.Agent.Binding.Harness == "inbox" {
 			st.Receiving, st.SessionInUse = app.ReceivingSession, false
@@ -1360,7 +1390,11 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 		if kind == "steer" {
 			m, err = s.messages.SteerWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		} else {
-			m, err = s.messages.Progress(r.Context(), a, r.PathValue("id"), req.Body, dry)
+			progress := s.messages.ProgressWith
+			if req.Ask {
+				progress = s.messages.Ask
+			}
+			m, err = progress(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		}
 		if err != nil {
 			writeError(w, err)
@@ -1646,7 +1680,8 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
-		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource}); err != nil {
+		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
+		Effort: in.Effort, EffortSource: in.EffortSource, Quota: quotaFromAPI(in.Quota)}); err != nil {
 		writeError(w, err)
 		return
 	}

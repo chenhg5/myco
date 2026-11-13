@@ -56,7 +56,10 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out.OwnerID, out.Owner = a.Owner, s.ownerName(a.Owner)
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
-			Provider: rt.Provider, ProviderSource: rt.ProviderSource}
+			Provider: rt.Provider, ProviderSource: rt.ProviderSource, Effort: rt.Effort, EffortSource: rt.EffortSource, Quota: quotaDTO(rt.Quota)}
+	}
+	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
+		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort}
 	}
 	if a.Private() {
 		out.Visibility = string(domain.VisibilityPrivate)
@@ -87,7 +90,7 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 	if states, err := s.overview.States(ctx); err == nil {
 		for _, d := range dtos {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
-				d.State, d.Queued, d.InProgress, d.Held = string(st.State), st.Queued, st.InProgress, st.Held
+				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}
 	}
@@ -127,6 +130,7 @@ func messageDTO(m *domain.Message) api.Message {
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
+		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
@@ -188,4 +192,29 @@ func writeError(w http.ResponseWriter, err error) {
 		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion,
 		Retryable: de.Code == domain.CodeInternal,
 	})
+}
+
+func quotaDTO(q *domain.Quota) *api.Quota {
+	if q == nil {
+		return nil
+	}
+	out := &api.Quota{Source: q.Source, At: q.At, Windows: []api.QuotaWindow{}}
+	for _, w := range q.Windows {
+		out.Windows = append(out.Windows, api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, ResetsAt: w.ResetsAt, Status: w.Status})
+	}
+	return out
+}
+
+func quotaFromAPI(q *api.Quota) *domain.Quota {
+	if q == nil {
+		return nil
+	}
+	out := &domain.Quota{Source: q.Source, At: q.At}
+	for i, w := range q.Windows {
+		if i == 8 { // a handful of windows at most
+			break
+		}
+		out.Windows = append(out.Windows, domain.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, ResetsAt: w.ResetsAt, Status: w.Status})
+	}
+	return out
 }

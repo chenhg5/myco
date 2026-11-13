@@ -3,7 +3,6 @@ package console
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,8 +26,16 @@ type appHub struct {
 
 func (l *Local) appHubFile() string { return filepath.Join(l.Home, ".myco", "hub", "app-hub.json") }
 
+func (l *Local) appHubFileFor(name string) string {
+	return filepath.Join(l.hubDir(name), "app-hub.json")
+}
+
 func (l *Local) readAppHub() *appHub {
-	b, err := os.ReadFile(l.appHubFile())
+	return l.readAppHubName("")
+}
+
+func (l *Local) readAppHubName(name string) *appHub {
+	b, err := os.ReadFile(l.appHubFileFor(name))
 	if err != nil {
 		return nil
 	}
@@ -40,32 +47,44 @@ func (l *Local) readAppHub() *appHub {
 }
 
 func (l *Local) writeAppHub(h *appHub) error {
+	return l.writeAppHubName("", h)
+}
+
+func (l *Local) writeAppHubName(name string, h *appHub) error {
 	b, _ := json.Marshal(h)
-	return os.WriteFile(l.appHubFile(), b, 0o600)
+	return os.WriteFile(l.appHubFileFor(name), b, 0o600)
 }
 
 // startAppHub starts the hub command in the background (log in
 // ~/.myco/hub/hub.log) and waits for it to answer.
 func (l *Local) startAppHub(ctx context.Context, h *appHub) error {
+	return l.startAppHubName(ctx, "", h)
+}
+
+func (l *Local) startAppHubName(ctx context.Context, name string, h *appHub) error {
 	if l.StartProcess == nil {
 		l.StartProcess = startDetached
 	}
-	pid, err := l.StartProcess(h.Command, filepath.Join(l.Home, ".myco", "hub", "hub.log"), l.env())
+	pid, err := l.StartProcess(h.Command, filepath.Join(l.hubDir(name), "hub.log"), l.env())
 	if err != nil {
 		return fmt.Errorf("cannot start the hub: %w", err)
 	}
 	h.PID = pid
-	if err := l.writeAppHub(h); err != nil {
+	if err := l.writeAppHubName(name, h); err != nil {
 		return err
 	}
-	return l.waitHubUp(ctx, 30*time.Second)
+	return l.waitHubUpName(ctx, name, 30*time.Second)
 }
 
 // waitHubUp waits until the local hub (hub.env's address) answers.
 func (l *Local) waitHubUp(ctx context.Context, d time.Duration) error {
+	return l.waitHubUpName(ctx, "", d)
+}
+
+func (l *Local) waitHubUpName(ctx context.Context, name string, d time.Duration) error {
 	deadline := time.Now().Add(d)
 	for {
-		if u := l.hubEnv()[config.EnvHub]; u != "" {
+		if u := l.hubEnvFor(name)[config.EnvHub]; u != "" {
 			if c, err := client.New(u, ""); err == nil {
 				cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				_, err := c.Health(cctx)
@@ -76,7 +95,7 @@ func (l *Local) waitHubUp(ctx context.Context, d time.Duration) error {
 			}
 		}
 		if time.Now().After(deadline) {
-			return errors.New("the hub did not start; see ~/.myco/hub/hub.log")
+			return fmt.Errorf("the hub did not start; see %s", filepath.Join(l.hubDir(name), "hub.log"))
 		}
 		select {
 		case <-ctx.Done():
@@ -88,36 +107,54 @@ func (l *Local) waitHubUp(ctx context.Context, d time.Duration) error {
 
 // stopAppHub stops the hub the app started and forgets it.
 func (l *Local) stopAppHub() error {
-	h := l.readAppHub()
+	return l.stopAppHubName("")
+}
+
+func (l *Local) stopAppHubName(name string) error {
+	h := l.readAppHubName(name)
 	if h == nil {
 		return nil
 	}
 	// Only while the hub answers: a pid from before a reboot may belong to
 	// another program by now.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	up := l.waitHubUp(ctx, 0) == nil
+	up := l.waitHubUpName(ctx, name, 0) == nil
 	cancel()
 	if h.PID > 0 && up {
 		if p, err := os.FindProcess(h.PID); err == nil {
 			_ = p.Kill()
 		}
 	}
-	return os.Remove(l.appHubFile())
+	return os.Remove(l.appHubFileFor(name))
 }
 
 // keepAppHub starts the app-run hub again (once per app run) when it was
 // running before and does not answer now.
 func (l *Local) keepAppHub() {
+	l.keepAppHubName("")
+}
+
+func (l *Local) keepAppHubName(name string) {
 	if !l.NoServiceManager {
 		return
 	}
-	l.appHubOnce.Do(func() {
-		h := l.readAppHub()
+	l.appHubMu.Lock()
+	if l.appHubStarted == nil {
+		l.appHubStarted = map[string]bool{}
+	}
+	if l.appHubStarted[name] {
+		l.appHubMu.Unlock()
+		return
+	}
+	l.appHubStarted[name] = true
+	l.appHubMu.Unlock()
+	func() {
+		h := l.readAppHubName(name)
 		if h == nil {
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		up := l.waitHubUp(ctx, 0) == nil
+		up := l.waitHubUpName(ctx, name, 0) == nil
 		cancel()
 		if up {
 			return
@@ -125,9 +162,9 @@ func (l *Local) keepAppHub() {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 			defer cancel()
-			_ = l.startAppHub(ctx, h)
+			_ = l.startAppHubName(ctx, name, h)
 		}()
-	})
+	}()
 }
 
 // startDetached starts command in the background with output to logPath and

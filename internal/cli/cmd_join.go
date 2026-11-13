@@ -309,7 +309,7 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	}
 	switch {
 	case cloud:
-		notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then keep `myco inbox wait --timeout 55m` running as a background command. "+inboxWorkNote)
+		notes = append(notes, "claude.ai cloud: no background service here. Run `myco join` in this session, then run `myco inbox wait` in the background. When it exits, handle the inbox and run it again. If the sandbox is temporary, save the resume command from join outside it.")
 	case e.in.Bool("no-service"):
 		notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
 	default:
@@ -514,6 +514,13 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
+				out["resume_command"] = cmd
+			}
+			// The guide, for the agent CLIs on this machine that read skills
+			// (best effort: joining is done either way).
+			installedTo, _, _ := installSkill(skillTargets(e.in.Getenv), false)
+			out["skill"] = map[string]any{"read": "myco skill show", "installed": nonNilStrings(installedTo)}
 			if project != "" && projectErr == "" {
 				out["project"] = project
 			} else if projectErr != "" {
@@ -521,10 +528,7 @@ Safe to re-run: the same session gets the same agent back.`,
 				out["project_suggestion"] = "ask the project's owner to add " + res.Agent.Name + " (myco project add), or check the name with myco project list --all"
 			}
 			if cloud {
-				out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; " + inboxWorkNote
-				if b.Harness == "inbox" {
-					out["receive"] = "keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits; " + inboxWorkNote + " A runner cannot wake this agent, so it stops receiving when the session closes."
-				}
+				out["receive"] = inboxReceiveNote
 			} else {
 				out["receive"] = openSessionNote
 			}
@@ -534,21 +538,23 @@ Safe to re-run: the same session gets the same agent back.`,
 					verb = "already joined as"
 				}
 				fmt.Fprintf(w, "%s %s (%s)\n", verb, res.Agent.Name, how)
+				if cmd, ok := out["resume_command"].(string); ok {
+					fmt.Fprintln(w, "If this sandbox is temporary, save this credential outside it (memory, project instructions or an environment variable). Run it first if myco or its config is missing; keep it private:\n  "+cmd)
+				}
 				if project != "" && projectErr == "" {
 					fmt.Fprintf(w, "joined project %s\n", project)
 				} else if projectErr != "" {
 					fmt.Fprintf(w, "could not join project %s: %s\n  ask its owner to add %s (myco project add), or check the name with myco project list --all\n", project, projectErr, res.Agent.Name)
 				}
 				if cloud {
-					fmt.Fprintln(w, "To stay reachable, keep this running as a background command and start it again whenever it exits:")
-					fmt.Fprintln(w, "  myco inbox wait --timeout 55m")
-					fmt.Fprintln(w, inboxWorkNote)
-					if b.Harness == "inbox" {
-						fmt.Fprintln(w, "This agent cannot be woken by a runner; it stops receiving when its session closes.")
-					}
+					fmt.Fprintln(w, inboxReceiveNote)
 				} else {
 					fmt.Fprintln(w, openSessionNote)
 				}
+				for _, p := range installedTo {
+					fmt.Fprintf(w, "installed the myco skill: %s (a running session may need a restart to load it)\n", p)
+				}
+				fmt.Fprintln(w, "Read the guide once now, for this version: myco skill show (receiving, progress, plans, asking, delegating)")
 				fmt.Fprintln(w, "Others can now reach it: myco message send --to "+res.Agent.Name+" --body \"...\"")
 			})
 		}),
@@ -565,12 +571,10 @@ func joinProject(e *env, hub, token, project, agent string) error {
 	return err
 }
 
-// openSessionNote tells a local session how it receives: by itself while it
-// stays open, through the runner once it is closed. Waking an open session
-// from the runner would continue it behind the open window.
-const inboxWorkNote = "After `myco inbox pull`, run `myco message ack --id <id>` when starting each task. For multi-step work, send `myco message progress --id <id> --body \"found the cause; next I will fix it\"` as you learn things or change course; the sender sees it live. Finish with `myco message reply --id <id>`. A one-line answer needs no progress update."
+// An open local session and an inbox-only session both receive through wait.
+const inboxReceiveNote = "Run `myco inbox wait` in the background; the runner cannot wake this inbox agent. When it exits, handle messages in the inbox, then run it again. If this sandbox is temporary, save the resume command outside it."
 
-const openSessionNote = "If this session stays open (desktop app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command and start it again whenever it exits: the open session then receives its own messages. " + inboxWorkNote + " Once it is closed, the machine's runner wakes it in the background (about 30 minutes after its last wait)."
+const openSessionNote = "While this session stays open, run `myco inbox wait` in the background. When it exits, handle messages in the inbox, then run it again. If this sandbox is temporary, save the resume command outside it."
 
 func machineName(m *config.MachineHub) string {
 	if m == nil {

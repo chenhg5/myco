@@ -4,6 +4,7 @@ import { appApi, type LocalState } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub, nodeName } from "@/app/nodes";
+import { agentQuotaHint } from "@/app/quota";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { projectsOf } from "@/app/Members";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -19,6 +20,30 @@ type Projects = { hubId: string; p: Project }[];
  * for its terminal. Connecting another is at the top; below, in one line,
  * the computers connected (each can be removed from there).
  */
+/**
+ * The tightest quota among the agents running on this computer's machine
+ * (a shell node has none of its own), named in the title: out of quota
+ * first, then the most used.
+ */
+function machineQuotaHint(r: AgentRow, rows: AgentRow[]) {
+  const mid = r.st.agent.machine_id;
+  if (!mid) return undefined;
+  let best: (NonNullable<ReturnType<typeof agentQuotaHint>> & { who: string }) | undefined;
+  let bestRank = -1;
+  for (const x of rows) {
+    if (x.hub.id !== r.hub.id || x.st.agent.machine_id !== mid || x.st.agent.name === r.st.agent.name) continue;
+    const h = agentQuotaHint(x.st.agent);
+    if (!h) continue;
+    const used = Math.max(...(x.st.agent.runtime?.quota?.windows || []).map((w) => w.used), 0);
+    const rank = (h.level === "spent" ? 2 : 0) + Math.min(used, 1.99) / 2;
+    if (rank > bestRank) {
+      best = { ...h, who: nodeName(x.st.agent, x.hub) };
+      bestRank = rank;
+    }
+  }
+  return best && { ...best, title: L(`${best.who}：${best.title}`, `${best.who}: ${best.title}`) };
+}
+
 export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer, onChanged }: {
   rows: AgentRow[];
   projects: Projects;
@@ -68,6 +93,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
           {list.map((r) => {
             const a = r.st.agent;
             const ps = projectsOf(r, projects);
+            const quota = machineQuotaHint(r, rows);
             return (
               <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row", r.st.state === "offline" && "is-away")}>
                 <Avatar agent={a} size={34} state={r.st.state} />
@@ -76,6 +102,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
                   <span className="pc-row-sub">
                     {a.binding.workdir && <span className="mono">{a.binding.workdir}</span>}
                     {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
+                    {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
                     {r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
                   </span>
                 </button>

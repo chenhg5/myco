@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 )
@@ -69,11 +70,79 @@ type Runtime struct {
 	// pinned | machine | env_file | missing.
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// Effort is the reasoning effort the CLI runs with; EffortSource is
+	// app (the agent's run settings), self (the agent reported it) or "".
+	Effort       string `json:"effort,omitempty"`
+	EffortSource string `json:"effort_source,omitempty"`
+	// Quota is the account's usage limits as the CLI last reported them
+	// (nil until a run reported any).
+	Quota *Quota `json:"quota,omitempty"`
+}
+
+// Quota is a CLI account's usage limits at one moment.
+type Quota struct {
+	// Source is the CLI that reported it: claude or codex.
+	Source  string        `json:"source"`
+	At      time.Time     `json:"at"`
+	Windows []QuotaWindow `json:"windows"`
+}
+
+// QuotaWindow is one limit: how much of it is used (0..1) and when it resets.
+type QuotaWindow struct {
+	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
+	Name string `json:"name"`
+	// Label describes the window when its name does not, e.g. "5h" or "7d".
+	Label    string     `json:"label,omitempty"`
+	Used     float64    `json:"used"`
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	// Status: allowed, or why work is refused (e.g. rejected, limit reached).
+	Status string `json:"status,omitempty"`
+}
+
+// RunSettings choose how an agent's runner starts its CLI; "" follows the
+// machine's own settings.
+type RunSettings struct {
+	Model  string `json:"model,omitempty"`
+	Effort string `json:"effort,omitempty"`
+}
+
+// Efforts are the reasoning efforts each CLI takes.
+var Efforts = map[string][]string{
+	"claude": {"low", "medium", "high", "xhigh", "max"},
+	"codex":  {"minimal", "low", "medium", "high", "xhigh"},
+}
+
+// Validate checks the settings for an agent on harness h.
+func (rs RunSettings) Validate(h string) error {
+	for _, s := range []string{rs.Model, rs.Effort} {
+		if len(s) > 80 || strings.ContainsAny(s, "\x00\n\r \t") {
+			return Errf(CodeInvalidArgument, "model and effort must be single words under 80 characters")
+		}
+	}
+	if rs.Effort == "" {
+		return nil
+	}
+	allowed, ok := Efforts[h]
+	if !ok {
+		return Errf(CodeInvalidArgument, "%s agents have no reasoning effort setting", orNone(h)).
+			WithSuggestion("set only the model, or leave the effort empty")
+	}
+	if !slices.Contains(allowed, rs.Effort) {
+		return Errf(CodeInvalidArgument, "effort %q is not one of %s for %s", rs.Effort, strings.Join(allowed, ", "), h)
+	}
+	return nil
+}
+
+func orNone(h string) string {
+	if h == "" {
+		return "these"
+	}
+	return h
 }
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}

@@ -33,6 +33,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>myco listens only while you hold the microphone button on, to turn what you say into a message. 只在你点了麦克风时听，把你说的话变成消息。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>myco turns what you say into text in your message box, in the language you chose for the app. 把你说的话转成文字，用你在 App 里选的语言。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT License</string>
 </dict>

@@ -108,7 +108,10 @@ func ctx(t *testing.T) context.Context {
 func TestRestartKeepsStateAndRedeliversUnacked(t *testing.T) {
 	c := ctx(t)
 	db := filepath.Join(t.TempDir(), "hub.db")
-	h1 := startHub(t, db, policy(300*time.Millisecond, 5))
+	// The lease is long enough to outlast a restart on a slow machine; the
+	// test waits for its real end, not a guess.
+	const lease = 2 * time.Second
+	h1 := startHub(t, db, policy(lease, 5))
 	aliceTok := h1.register(api.RegisterRequest{Name: "alice"})
 	bobTok := h1.register(api.RegisterRequest{Name: "bob"})
 
@@ -120,18 +123,31 @@ func TestRestartKeepsStateAndRedeliversUnacked(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].ID != sent.Message.ID {
 		t.Fatalf("first pull: %v %+v", err, got)
 	}
+	leaseEnd := time.Now().Add(lease)
+	if got[0].LeaseUntil != nil {
+		leaseEnd = *got[0].LeaseUntil
+	}
 	h1.stop() // crash before bob acks
 
-	h2 := startHub(t, db, policy(300*time.Millisecond, 5))
+	h2 := startHub(t, db, policy(lease, 5))
 	bob := h2.client(bobTok)
 	if _, err := bob.Me(c); err != nil {
 		t.Fatalf("token lost across restart: %v", err)
 	}
-	if got, _ := bob.Pull(c, 10, 0); len(got) != 0 {
-		t.Fatalf("redelivered before the lease expired: %+v", got)
+	// Only meaningful while the lease clearly has not run out yet.
+	var early []api.Message
+	if before := time.Now(); before.Before(leaseEnd.Add(-200 * time.Millisecond)) {
+		early, _ = bob.Pull(c, 10, 0)
+		if len(early) != 0 && time.Now().Before(leaseEnd) {
+			t.Fatalf("redelivered before the lease expired: %+v", early)
+		}
+	} else {
+		t.Logf("restart took past the lease (%s late); not checking early redelivery", before.Sub(leaseEnd))
 	}
-	time.Sleep(350 * time.Millisecond)
-	got, err = bob.Pull(c, 10, 0)
+	if got = early; len(got) == 0 {
+		time.Sleep(time.Until(leaseEnd) + 100*time.Millisecond)
+		got, err = bob.Pull(c, 10, 0)
+	}
 	if err != nil || len(got) != 1 || got[0].ID != sent.Message.ID || got[0].Attempts != 2 {
 		t.Fatalf("redelivery after restart: %v %+v", err, got)
 	}

@@ -311,6 +311,34 @@ func (c *Client) Enroll(ctx context.Context, req api.EnrollRequest, dry bool) (*
 	return &out, c.do(ctx, http.MethodPost, "/v1/enroll", dryQuery(dry), req, &out)
 }
 
+// CreateResume rotates an agent's recovery link, or returns metadata only
+// when ifMissing is set and one already exists.
+func (c *Client) CreateResume(ctx context.Context, name string, ifMissing bool) (*api.ResumeLink, error) {
+	path := "/v1/me/resume"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/resume"
+	}
+	q := url.Values{}
+	if ifMissing {
+		q.Set("if_missing", "true")
+	}
+	var out api.ResumeLink
+	return &out, c.do(ctx, http.MethodPost, path, q, nil, &out)
+}
+
+func (c *Client) RevokeResume(ctx context.Context, name string) error {
+	path := "/v1/me/resume"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/resume"
+	}
+	return c.do(ctx, http.MethodDelete, path, nil, nil, nil)
+}
+
+func (c *Client) Resume(ctx context.Context, req api.ResumeRequest) (*api.RegisterResponse, error) {
+	var out api.RegisterResponse
+	return &out, c.do(ctx, http.MethodPost, "/v1/resume", nil, req, &out)
+}
+
 // SetLabels changes labels of the caller (name == "") or, with an admin
 // token, of agent name.
 func (c *Client) SetLabels(ctx context.Context, name string, req api.LabelsRequest) (*api.Agent, error) {
@@ -691,12 +719,47 @@ func (c *Client) SetStatus(ctx context.Context, text string) (*api.Agent, error)
 
 // Progress posts an interim update on task id (as its recipient).
 func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
-	body, err := c.sealAbout(ctx, id, false, "progress", body, nil)
+	return c.ProgressWith(ctx, id, body, nil, dry)
+}
+
+// Ask asks task id's sender to decide (body: the question, then the
+// choices as a numbered list) and holds the task until they answer. On a
+// hub before questions (it refuses the field) it reports the question as
+// progress and holds the task, so the answer still comes back as a steer;
+// fellBack says so.
+func (c *Client) Ask(ctx context.Context, id, body string, attachments []string, dry bool) (m *api.Message, fellBack bool, err error) {
+	sealed, err := c.sealAbout(ctx, id, false, "progress", body, attachments)
+	if err != nil {
+		return nil, false, err
+	}
+	var out api.MessageResult
+	err = c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: sealed, Attachments: attachments, Ask: true}, &out)
+	var e *Error
+	if errors.As(err, &e) && e.Code == "invalid_argument" && strings.Contains(e.Message, `unknown field "ask"`) {
+		p, err := c.ProgressWith(ctx, id, body, attachments, dry)
+		if err != nil {
+			return nil, true, err
+		}
+		if !dry {
+			if _, err := c.Transition(ctx, id, "hold", false); err != nil {
+				return p, true, err
+			}
+		}
+		return p, true, nil
+	}
+	return &out.Message, false, err
+}
+
+// ProgressWith reports progress with uploaded files (their ids). Hubs
+// before progress attachments keep the text and drop the files: the
+// answer then has none.
+func (c *Client) ProgressWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, false, "progress", body, attachments)
 	if err != nil {
 		return nil, err
 	}
 	var out api.MessageResult
-	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body, Attachments: attachments}, &out)
 }
 
 // Steer sends a correction for open task id (as its sender).
@@ -1126,4 +1189,15 @@ func (c *Client) AgentAvatar(ctx context.Context, name string) (string, []byte, 
 		return "", nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
 	}
 	return resp.Header.Get("Content-Type"), data, nil
+}
+
+// SetRunSettings chooses the model and reasoning effort an agent's runner
+// uses ("" follows the machine's setting); name "" is the caller itself.
+func (c *Client) SetRunSettings(ctx context.Context, name string, rs api.RunSettings) (*api.Agent, error) {
+	path := "/v1/me/run-settings"
+	if name != "" {
+		path = "/v1/agents/" + esc(name) + "/run-settings"
+	}
+	var out api.Agent
+	return &out, c.do(ctx, http.MethodPut, path, nil, rs, &out)
 }

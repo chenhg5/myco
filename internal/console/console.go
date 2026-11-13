@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
@@ -166,6 +167,13 @@ type Backend struct {
 	// Version and Shell answer GET /app/info; Shell is "mac" for the app
 	// window (hidden title bar) and "browser" for --serve.
 	Version, Shell string
+	// Speaking instead of typing (dictation.go), set by the desktop app,
+	// nil in a browser; /app/info says whether there is either. Listen hears
+	// in lang itself and tells h what it heard (macOS); it returns how to
+	// stop. Dictate starts the system's voice typing in lang into the field
+	// that has the keyboard (Windows).
+	Listen  func(lang string, h *Hearing) (stop func(), err error)
+	Dictate func(lang string) error
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -202,7 +210,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"version": b.Version, "shell": orStr(b.Shell, "browser")})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -221,6 +229,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("GET /app/local/agents/{name}/provider", b.getAgentProvider)
 		m.HandleFunc("PUT /app/local/agents/{name}/provider", b.putAgentProvider)
 	}
+	b.dictationRoutes(m)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})
@@ -262,6 +271,37 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		a, err := c.UpdateProfile(r.Context(), r.PathValue("name"), api.ProfileRequest{DisplayName: in.DisplayName, Description: in.Description, Avatar: in.Avatar})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}))
+	// An agent's resume line: the command that brings the same agent back in
+	// a new sandbox. Making one revokes the one before. Hubs before v0.19.5
+	// answer 404 (and the app hides the row).
+	m.HandleFunc("POST /app/hubs/{id}/agents/{name}/resume", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		link, err := c.CreateResume(r.Context(), r.PathValue("name"), false)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"url": link.URL, "command": link.Command})
+	}))
+	m.HandleFunc("DELETE /app/hubs/{id}/agents/{name}/resume", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		if err := c.RevokeResume(r.Context(), r.PathValue("name")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/run-settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.RunSettings
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		a, err := c.SetRunSettings(r.Context(), r.PathValue("name"), in)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -431,6 +471,15 @@ func (b *Backend) Handler() http.Handler {
 		ct, disp := "application/octet-stream", "attachment"
 		if inlineImage(f.ContentType) && r.URL.Query().Get("download") == "" {
 			ct, disp = f.ContentType, "inline"
+		}
+		// ?as=text: a text file (Markdown, a log, code) for the app to show
+		// as text, never as a page. Anything that is not text says so.
+		if r.URL.Query().Get("as") == "text" {
+			if len(data) > maxTextPreview || !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+				writeErr(w, &client.Error{Code: "not_text", Message: "this file cannot be shown as text", Status: http.StatusUnsupportedMediaType})
+				return
+			}
+			ct, disp = "text/plain; charset=utf-8", "inline"
 		}
 		w.Header().Set("Content-Type", ct)
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
@@ -1417,6 +1466,10 @@ func filterConversations(cs []api.Conversation, query string) []api.Conversation
 
 // inlineImage reports whether a file of this type may be shown in the
 // app's page as a picture: raster types only (an SVG can carry script).
+// maxTextPreview bounds a file the app shows as text (longer ones are
+// saved instead).
+const maxTextPreview = 2 << 20
+
 func inlineImage(contentType string) bool {
 	t, _, _ := mime.ParseMediaType(contentType)
 	switch t {

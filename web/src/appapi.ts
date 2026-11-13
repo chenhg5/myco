@@ -170,7 +170,11 @@ export interface SendMessageInput {
 
 /** How the App window is hosted: native macOS shell or a plain browser. */
 export type Shell = "mac" | "browser";
-export interface AppInfo { version: string; shell: Shell }
+export interface AppInfo {
+  version: string; shell: Shell;
+  /** the desktop app does speech to text (POST app/dictation) */
+  dictation?: boolean;
+}
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 
@@ -178,6 +182,9 @@ export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 export interface MycoInstall { path: string; version: string }
 /** A Hub running on this machine (started from the App). */
 export interface LocalHub {
+  /** The name `myco hub up --name` gave it; "" is the default one. Absent on
+   *  older backends, which know a single local hub. */
+  name?: string;
   running: boolean;
   local_url: string;
   public_url?: string;
@@ -189,7 +196,10 @@ export interface LocalTool { path: string }
 export interface LocalTools { cloudflared: LocalTool | null; tailscale: LocalTool | null }
 export interface LocalState {
   myco: MycoInstall | null;
+  /** The default hub on this computer (older backends have only this one). */
   hub: LocalHub | null;
+  /** Every hub on this computer (v0.19.4+); fall back to `hub` when absent. */
+  hubs?: LocalHub[];
   tools: LocalTools;
   device: string;
   /** This computer's host name, as its runners report it for their machine. */
@@ -200,7 +210,7 @@ export interface LocalState {
   shell_allowed?: boolean;
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
-export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string }
+export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }
 export interface StartLocalHubResult {
   hub: Hub;
   public_url: string;
@@ -331,6 +341,13 @@ export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 export const appApi = {
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
+  /** Speech to text in lang (desktop app): "system" types into the focused
+   *  field itself; "listen" has text to ask for (dictationState). */
+  startDictation: (lang: string) => request<{ mode: "system" | "listen"; id?: string }>("POST", "app/dictation", { lang }),
+  /** What a listening heard after seq (waits a few seconds for more). */
+  dictationState: (id: string, seq: number) =>
+    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
+  stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
   update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),
@@ -424,6 +441,18 @@ export const appApi = {
     `app/hubs/${enc(hubId)}/agents/${enc(name)}/avatar?v=${encodeURIComponent(v)}`,
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Makes the agent's resume line (the old one stops working): the command
+   *  to run in a new sandbox to bring the same agent back. Hubs before
+   *  v0.19.5 answer not_found. */
+  createAgentResume: (hubId: string, name: string) =>
+    request<{ url: string; command: string }>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
+  /** Revokes it: the command made before no longer works. */
+  revokeAgentResume: (hubId: string, name: string) =>
+    request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
+  /** The model and effort this node runs with; "" follows the computer's
+   *  setting. Hubs before the feature answer not_found. */
+  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string }) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
   project: (hubId: string, name: string, bodies = false) =>
@@ -529,7 +558,8 @@ export const appApi = {
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
   startLocalHub: (input: StartLocalHubInput) =>
     request<StartLocalHubResult>("POST", "app/local/hub", input),
-  stopLocalHub: () => request<{ stopped: true }>("POST", "app/local/hub/stop"),
+  stopLocalHub: (name?: string) =>
+    request<{ stopped: true }>("POST", "app/local/hub/stop", name ? { name } : undefined),
 };
 
 /** A cc-switch provider (keys are never sent to the page). */

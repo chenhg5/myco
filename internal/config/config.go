@@ -32,6 +32,9 @@ type Config struct {
 	Hub   string `yaml:"hub,omitempty" json:"hub,omitempty"`
 	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
 	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+	// ResumeToken is the durable recovery credential for this identity. It is
+	// only saved locally to avoid rotating an existing link on every join.
+	ResumeToken string `yaml:"resume_token,omitempty" json:"-"`
 	// Harness and SessionID record which session this identity belongs to,
 	// so the CLI can pick the right profile automatically inside a session.
 	Harness   string `yaml:"harness,omitempty" json:"harness,omitempty"`
@@ -122,6 +125,9 @@ func (c *Config) ApplyEnv(getenv func(string) string) {
 func (c Config) Redacted() Config {
 	if c.Token != "" {
 		c.Token = "***"
+	}
+	if c.ResumeToken != "" {
+		c.ResumeToken = "***"
 	}
 	return c
 }

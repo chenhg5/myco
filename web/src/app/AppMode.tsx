@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Plus, WifiOff } from "lucide-react";
 import "@/app/app.css";
 import "@/app/space.css";
-import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub } from "@/appapi";
+import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
-import { useHubNames } from "@/app/hubNames";
+import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
 import { SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
@@ -18,6 +18,8 @@ import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/Project
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
+import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
+import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, AvatarStack, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
@@ -28,6 +30,8 @@ import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { setSystemDictation } from "@/app/Dictate";
+import { useSidebarWidth } from "@/app/sidebarWidth";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -79,6 +83,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
+  setSystemDictation(!!info?.dictation);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
   // What the hubs showed last (also from before a restart) until they answer.
@@ -105,6 +110,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectPrefill, setConnectPrefill] = useState("");
   const [addMachineOpen, setAddMachineOpen] = useState(false);
+  const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
@@ -112,6 +118,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number } | null>(null);
   const [projectReload, setProjectReload] = useState(0);
+  // This computer's workspaces (the switcher tags them, the dialog names them).
+  const [local, setLocal] = useState<LocalState | null>(() => recall<LocalState | null>("local") ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,8 +143,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (refreshing.current) return;
     refreshing.current = true;
     try {
-      const [h, o, pending] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink()]);
+      const [h, o, pending, l] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink(),
+        appApi.local().catch(() => null)]);
       setHubs(h);
+      if (l) setLocal(l);
       // The overview says what is on each hub; the hub list says which
       // version it is. The conversation needs both (what the hub can do).
       const versionOf = new Map(h.map((x) => [x.id, x.hub_version]));
@@ -327,6 +337,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
     await refresh();
   };
 
+  // Another workspace on this computer: start it, show it under the name
+  // that was typed, and switch to it.
+  const startAnotherLocal = async (name: string, display: string) => {
+    const r = await appApi.startLocalHub({ tunnel: "none", name });
+    if (display) renameHub(r.hub.id, display);
+    await refresh();
+    setHubPick(r.hub.id);
+    setPage("space");
+    setChatWith(null);
+  };
+
   const toggleSidebar = () => {
     setCollapsed((c) => {
       const next = !c;
@@ -334,6 +355,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return next;
     });
   };
+  const sidebar = useSidebarWidth(() => {
+    setCollapsed(true);
+    try { localStorage.setItem(SIDEBAR_KEY, "closed"); } catch { /* storage unavailable */ }
+  });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
   const navMenu = useContextMenu();
@@ -374,7 +399,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // A workspace's dot: green while someone is on work that has not gone quiet,
   // amber when all the work in progress may be stuck (it was picked up, but
   // nothing is moving). A node with both reads as working: something is live.
-  const workDot = (rs: AgentRow[]): "busy" | "stuck" | null => {
+  // An agent waiting on your decision comes first: amber, saying so.
+  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | null => {
+    if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
     let busy = false;
     let stuck = false;
     for (const r of rs) {
@@ -386,9 +413,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   return (
-    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}>
+    <div key={lang()} className={cn("app-shell", isMac && "shell-mac", collapsed && "collapsed")}
+      style={{ ["--sidebar-w" as string]: `${sidebar.width}px` }}>
       {!collapsed && (
         <aside className="app-sidebar">
+          {/* Its right edge: drag to make it wider or narrower. */}
+          <div className={cn("app-sidebar-edge", sidebar.dragging && "is-dragging", sidebar.hiding && "is-hiding")}
+            {...sidebar.handle} style={{ ["--wails-draggable" as string]: "no-drag" }}
+            aria-label={L("拖动调整边栏宽度", "Drag to resize the sidebar")}
+            title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} />
           <div className="app-sidebar-head" style={dragStyle}>
             <div className="brand"><LogoWordmark className="app-brand-wordmark" /></div>
           </div>
@@ -407,8 +440,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     <span className="app-nav-label">{L("聊天", "Chat")}</span>
                     {looseAgents.length > 0 && <AvatarStack agents={looseAgents.map((r) => r.st.agent)} size={18} max={3} />}
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
-                        title={dot === "stuck" ? L("有 agent 可能卡住", "Someone may be stuck") : L("有 agent 在干活", "Someone is at work")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有 agent 可能卡住", "Someone may be stuck") : L("有 agent 在干活", "Someone is at work")} />
                     )}
                   </button>
                 );
@@ -437,8 +470,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
-                        title={dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
                     )}
                   </button>
                 );
@@ -465,8 +498,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     <Avatar agent={r.st.agent} size={20} badge={false} />
                     <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck")}
-                        title={dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
                     )}
                   </button>
                 );
@@ -497,7 +530,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <div className="sp-switch">
               <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubId}
                 onChange={(v) => { setHubPick(v); setPage("space"); setChatWith(null); }}
-                onAdd={() => setConnectOpen(true)} onSettings={() => setPage("settings")} />
+                onAdd={() => setConnectOpen(true)} onNewLocal={() => setNewLocalOpen(true)}
+                isLocal={(h) => isLocalUrl(local, h.url)}
+                onSettings={() => setPage("settings")} />
             </div>
           </div>
         </aside>
@@ -623,6 +658,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
       <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} />
+      <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
+        taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
 
       <MemberSheet row={profileRow} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
         onChat={chatWithMember} onChanged={() => void refresh()} onRefresh={refresh}

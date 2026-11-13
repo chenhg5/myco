@@ -51,6 +51,11 @@ const uploads = new Map();
 const uploadBytes = new Map();
 // Pictures agents use as faces, by "hub/name".
 const avatarPics = new Map();
+// Times the page asked the "desktop app" to listen, in which language, and
+// what each listening hears.
+let dictations = 0;
+let lastDictationLang = "";
+const hearings = new Map();
 
 // A real PNG (a soft diagonal gradient with a band), for pictures the mock's
 // agents send back: the app shows them as thumbnails.
@@ -375,7 +380,7 @@ const state = {
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
-      hub_version: "0.19.2",
+      hub_version: "0.19.5",
       update_available: true,
       threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, ...consoleThreads },
       machines: [
@@ -397,7 +402,19 @@ const state = {
         makeAgent({
           name: "pm-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+          // Its 5-hour window is nearly used (amber), the weekly one is not.
+          runtime: {
+            cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
+            effort: "high", effort_source: "app", access: "workspace",
+            quota: {
+              source: "codex", at: iso(120),
+              windows: [
+                { name: "five_hour", used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
+                { name: "seven_day", used: 0.62, resets_at: iso(-(3 * 86_400)) },
+              ],
+            },
+          },
+          run_settings: { model: "gpt-6-sol", effort: "high" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=官网改版", "role=pm", "review", "release"], capabilities: ["review", "release"],
           skills: [
@@ -406,11 +423,26 @@ const state = {
           ],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco", session_id: "01a1-pm-session" }, session_in_use: true,
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
+          // A resume line made five days ago and last used an hour ago in a
+          // sandbox: the row shows when and where. Making or revoking one is
+          // demoed by the smoke test.
+          resume: { created_at: iso(86_400 * 5), last_used_at: iso(3_600), last_used_env: "codespaces-4f2a" },
         }),
         makeAgent({
           name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly", provider: "DeepSeek", provider_source: "machine" },
+          runtime: {
+            cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
+            effort: "low", effort_source: "app", access: "readonly", provider: "DeepSeek", provider_source: "machine",
+            quota: {
+              source: "claude", at: iso(600),
+              windows: [
+                { name: "five_hour", used: 0.4, resets_at: iso(-(2 * 3600)) },
+                { name: "seven_day", used: 0.18, resets_at: iso(-(2 * 86_400)) },
+              ],
+            },
+          },
+          run_settings: { model: "", effort: "low" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
           online: false, last_seen_at: iso(5400), status_at: iso(5400),
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
@@ -443,7 +475,15 @@ const state = {
         }),
         makeAgent({
           name: "review-cloud", owner: "matthew", owner_id: "mem_matthew", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
-          kind: "agent", runtime: { cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly" },
+          kind: "agent",
+          runtime: {
+            cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly",
+            // Out of quota two hours ago: red, and the numbers are stale.
+            quota: {
+              source: "codex", at: iso(2 * 3600),
+              windows: [{ name: "five_hour", used: 1, resets_at: iso(-(40 * 60)), status: "rejected" }],
+            },
+          },
           labels: ["group=release"], binding: { harness: "codex-cloud", environment: "Codex 云端" },
         }),
         makeAgent({
@@ -457,6 +497,8 @@ const state = {
         makeAgent({
           name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", display_name: "Myco (Grok)", description: "在 Grok 会话里用 inbox wait 接收消息。",
           kind: "agent", machine_id: "m_studio", receiving: "session",
+          // It runs its CLI in its own session and reports the model itself.
+          runtime: { cli: "inbox", model: "grok-4", model_source: "self" },
           // Pulled from the inbox but not acked: queued, so not working.
           delivered: [grokPulledTask],
           labels: ["machine=studio-mac", "group=release"],
@@ -478,6 +520,20 @@ const state = {
         makeMessage({ thread_id: "th_ios", from: "glenn", to: "ios-shell", type: "task", body: "请跑一遍 iOS 测试套件，附上日志。", created_at: iso(240), updated_at: iso(240) }),
         makeMessage({ thread_id: "th_console_release", from: "pm-codex", to: CONSOLE, type: "reply", status: "done", body: "v0.16.8 发布说明已整理好。", created_at: iso(6800), updated_at: iso(6800) }),
       ],
+    },
+    {
+      // This computer's own workspace: it is in `local.hubs` too, and the
+      // settings page lists it under "这台电脑上的工作区".
+      id: "hub_local",
+      name: "本机 Hub",
+      url: "http://127.0.0.1:7780",
+      token: "myco_console_local_demo",
+      ok: true,
+      hub_version: "0.16.8",
+      update_available: false,
+      agents: [],
+      threads: {},
+      recent: [],
     },
     {
       id: "hub_lab",
@@ -512,6 +568,30 @@ if (SHOWCASE) {
 // states can be seen without restarting the mock.
 let joinCount = 0;
 let replySeq = 0;
+// How many release notes the mock's agent has sent (each one a new version).
+let notesSeq = 0;
+
+// The release notes the mock's agent writes: a little different each time,
+// so a second one shows what changed.
+function demoNotes(n) {
+  return [
+    "# v0.16.8 发布说明",
+    "",
+    "## App",
+    "",
+    "- 对话页支持 Markdown 表格与代码块",
+    n > 1 ? "- 进展可以带截图，点开看大图" : "- 本机会话一键接入",
+    "- 侧边栏可以拖宽",
+    "",
+    "## Hub",
+    "",
+    "- 修复 runner 断线后重连",
+    ...(n > 1 ? ["- 文件预览：Markdown 直接在 App 里看"] : []),
+    "",
+    "升级前请先跑一遍 `make check`。",
+    "",
+  ].join("\n");
+}
 
 function consoleReply() {
   replySeq += 1;
@@ -548,7 +628,7 @@ function consoleReply() {
   }
   if (form === 2) {
     return {
-      body: "处理好了。改动集中在 console 的 session 读取和 App 的对话页面，类型检查和构建都已经通过。\n\n需要我继续把发布说明也写好吗？",
+      body: "处理好了。改动集中在 console 的 session 读取和 App 的对话页面，类型检查和构建都已经通过。\n\n- [x] 改 session 读取\n- [x] 改对话页面\n- [~] 写发布说明\n- [ ] 发版\n\n需要我继续把发布说明也写好吗？",
     };
   }
   return {
@@ -556,6 +636,8 @@ function consoleReply() {
     attachments: [
       { file_id: `f_demo_shot_${replySeq}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
       { file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" },
+      { file_id: `f_demo_md_${(notesSeq += 1)}`, name: "发布说明.md", size: 640, sha256: "demo", content_type: "text/markdown" },
+      { file_id: `f_demo_html_${replySeq}`, name: "首页.html", size: 420, sha256: "demo", content_type: "text/html" },
     ],
   };
 }
@@ -564,6 +646,8 @@ function consoleReply() {
 // keeps the same round going: the answer comes 6s after the latest addition,
 // not 6s after the task (and there is only ever one timer for a task).
 const replyTimers = new Map();
+// Agents waiting on a question they asked, by agent name: the task.
+const askingBy = new Map();
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const had = replyTimers.get(taskId);
   if (had && !restart) return;
@@ -581,7 +665,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (!msgs) return;
     msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
   };
-  later(1500, plan("- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
+  later(1500, plan("好，先这样做：\n- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
   later(4500, plan("- [x] 读一下相关代码\n- [x] 动手改\n- [~] 跑测试，看有没有破坏别的"));
   later(3000, () => {
     const msgs = hub.threads[threadId];
@@ -589,6 +673,42 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     msgs.push(makeMessage({
       thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done",
       body: "正在处理…", created_at: iso(0), updated_at: iso(0),
+    }));
+  });
+  // Asked to let you choose: the agent asks (myco message ask) and the task
+  // waits for the answer instead of replying.
+  {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    if (task && /问我|让我选/.test(task.body) && !task.asked_once) {
+      later(2500, () => {
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        replyTimers.delete(taskId);
+        for (const t of timers) clearTimeout(t);
+        const q = makeMessage({
+          thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, ask: true,
+          body: "开场先放哪个？\n\n1. 先放结果 — 一开头就看到剪好的成片\n2. 先放操作 — 从打开 App 开始一步步来",
+          created_at: iso(0), updated_at: iso(0),
+        });
+        msgs.push(q);
+        task.status = "held";
+        task.asking = q.id;
+        task.updated_at = iso(0);
+        askingBy.set(agent, task);
+      });
+      return;
+    }
+  }
+  // Asked for a screenshot: one comes along the way, with what it shows.
+  later(3800, () => {
+    const msgs = hub.threads[threadId];
+    const task = msgs?.find((m) => m.id === taskId);
+    if (!msgs || !/截图|screenshot/i.test(task?.body || "")) return;
+    const id = `f_demo_shot_${(state.counter += 1)}`;
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      body: "首页改好一半了，先看看效果", attachments: [{ file_id: id, name: "首页-进行中.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" }],
+      created_at: iso(0), updated_at: iso(0),
     }));
   });
   later(6000, () => {
@@ -683,10 +803,37 @@ const ccProviders = [
 ];
 const localProviderAgents = new Map([["docs-claude", { local: true, harness: "claude", provider: "" }]]);
 
+// Resume lines the smoke test makes and revokes; put the demo ones back
+// between widths and themes.
+const resumeAtStart = new Map();
+for (const h of state.hubs) {
+  for (const a of h.agents || []) {
+    if (a.resume) resumeAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify(a.resume)));
+  }
+}
+
+// Run settings (and what runtime says about the model and effort) the smoke
+// test changes; put the demo ones back between widths and themes. It also
+// reads back the last body the App sent there.
+const runSettingsAtStart = new Map();
+for (const h of state.hubs) {
+  for (const a of h.agents || []) {
+    runSettingsAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify({ run_settings: a.run_settings, runtime: a.runtime })));
+  }
+}
+let lastRunSettings = null;
+
 const local = {
   hostname: "Studio.local",
   myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
+  // The default workspace on this computer (older pages read only this one).
   hub: null,
+  // `myco hub up --name` runs several on one machine. "notes" is already
+  // there, stopped and not in the app; the smoke test adds "studio".
+  hubs: [
+    { name: "", running: true, local_url: "http://127.0.0.1:7780", version: "0.16.8", added: true },
+    { name: "notes", running: false, local_url: "http://127.0.0.1:7790", version: "0.16.8", added: false },
+  ],
   tools: {
     cloudflared: { path: "/opt/homebrew/bin/cloudflared" },
     tailscale: null,
@@ -699,6 +846,12 @@ if (SHOWCASE) {
   local.hostname = "glenns-mbp.local";
   if (local.myco) local.myco.version = "0.17.2";
 }
+// What was there at the start: the smoke test starts another workspace and
+// stops this one, and the mock keeps running across widths and themes.
+const localHubsAtStart = JSON.parse(JSON.stringify(local.hubs));
+// This computer's entries in the app's workspace list, as they start.
+const localAppHubsAtStart = JSON.parse(JSON.stringify(state.hubs.filter((h) => h.id === "hub_local")));
+local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
 
 // A node is working only when it acknowledged an open task. `status_text` is
 // this mock's stand-in for an acknowledged task; a task it only pulled
@@ -773,6 +926,10 @@ function agentStatus(a) {
   const atWork = working
     ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
     : [];
+  const asking = askingBy.get(a.name);
+  if (asking) {
+    return { agent: a, state: "pending", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: "runner", current: [asking] };
+  }
   return {
     agent: a, state,
     queued: (a.queued ?? (working ? 1 + stale.length : 0)) + delivered.length,
@@ -974,6 +1131,52 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/resume — the smoke test makes and revokes a resume line; put
+  // the demo ones back between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "resume" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    for (const h of state.hubs) {
+      for (const a of h.agents || []) {
+        const was = resumeAtStart.get(`${h.id}/${a.name}`);
+        if (was) a.resume = JSON.parse(JSON.stringify(was)); else delete a.resume;
+      }
+    }
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/run-settings — the smoke test changes a node's model and
+  // effort; put the demo ones back between widths and themes. GET returns
+  // the last body the App sent there.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-settings" && parts.length === 3) {
+    if (method === "GET") return send(res, 200, { last: lastRunSettings });
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    for (const h of state.hubs) {
+      for (const a of h.agents || []) {
+        const was = runSettingsAtStart.get(`${h.id}/${a.name}`);
+        if (!was) continue;
+        if (was.run_settings) a.run_settings = JSON.parse(JSON.stringify(was.run_settings));
+        else delete a.run_settings;
+        if (was.runtime) a.runtime = JSON.parse(JSON.stringify(was.runtime));
+        else delete a.runtime;
+      }
+    }
+    lastRunSettings = null;
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/local — the smoke test starts another workspace on this
+  // computer; put the demo ones back between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "local" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    local.hubs = JSON.parse(JSON.stringify(localHubsAtStart));
+    local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+    state.hubs = [
+      ...state.hubs.filter((h) => !h.id.startsWith("hub_local")),
+      ...JSON.parse(JSON.stringify(localAppHubsAtStart)),
+    ];
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/machine — the smoke test deletes the demo machine; put it and its
   // nodes back, because the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "machine" && parts.length === 3) {
@@ -1077,7 +1280,32 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
+  }
+  // /app/dictation: the Mac app listens itself in the language asked for;
+  // the words grow, then it ends. GET (no id) says how many times and in
+  // which language, for the smoke.
+  if (parts[0] === "app" && parts[1] === "dictation" && parts.length === 2) {
+    if (method === "GET") return send(res, 200, { started: dictations, lang: lastDictationLang });
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    dictations += 1;
+    lastDictationLang = body?.lang || "";
+    const id = `d${dictations}`;
+    const words = lastDictationLang === "en-US" ? ["Please", "Please check the", "Please check the download page"] : ["帮我", "帮我看一下", "帮我看一下下载页"];
+    hearings.set(id, { words, at: Date.now(), stopped: false });
+    return send(res, 200, { mode: "listen", id });
+  }
+  if (parts[0] === "app" && parts[1] === "dictation" && parts.length === 3) {
+    const h = hearings.get(decodeURIComponent(parts[2]));
+    if (!h) return fail(res, 404, "not_found", "no such listening");
+    if (method === "DELETE") { h.stopped = true; res.writeHead(204); return res.end(); }
+    const seq = Number(url.searchParams.get("seq") || 0);
+    // A word every 400 ms; it ends after the last one (or when stopped).
+    await new Promise((r) => setTimeout(r, 400));
+    const n = Math.min(h.words.length, Math.floor((Date.now() - h.at) / 400));
+    const done = h.stopped || n >= h.words.length;
+    return send(res, 200, { seq: Math.max(seq + 1, n + (done ? 1 : 0)), text: n ? h.words[n - 1] : "", final: done, done });
   }
 
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")
@@ -1162,6 +1390,12 @@ const server = http.createServer(async (req, res) => {
         return fail(res, 400, "invalid_hostname", "域名看起来不对。", "例如 hub.example.com。");
       }
 
+      // Which hub on this computer; "" (or none) is the default one.
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (name && !/^[a-z][a-z0-9-]*$/.test(name)) {
+        return fail(res, 400, "invalid_name", "工作区名只能用小写字母、数字和横线。", "比如 studio、team-notes。");
+      }
+
       await sleep(tunnel === "none" ? 2000 : 4000);
 
       const publicUrl = tunnel === "none"
@@ -1179,19 +1413,27 @@ const server = http.createServer(async (req, res) => {
             ? ["请确认域名已托管在 Cloudflare，并且执行过一次 cloudflared tunnel login。"]
             : ["临时地址会在 Hub 重启后变化。", "这台电脑休眠或关机时，其他机器会连不上。"];
 
-      local.hub = {
-        running: true,
-        local_url: "http://127.0.0.1:7780",
-        ...(publicUrl ? { public_url: publicUrl } : {}),
-        version: "0.16.8",
-        added: true,
-      };
+      let entry = local.hubs.find((h) => h.name === name);
+      if (!entry) {
+        entry = {
+          name, running: false, version: "0.16.8", added: false,
+          local_url: `http://127.0.0.1:${7790 + local.hubs.length}`,
+        };
+        local.hubs.push(entry);
+      }
+      entry.running = true;
+      entry.added = true;
+      entry.version = "0.16.8";
+      if (publicUrl) entry.public_url = publicUrl;
+      else delete entry.public_url;
+      local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || entry));
 
-      const appUrl = publicUrl || local.hub.local_url;
-      let appHub = state.hubs.find((h) => h.id === "hub_local");
+      const appUrl = publicUrl || entry.local_url;
+      const appId = name ? `hub_local_${name}` : "hub_local";
+      let appHub = state.hubs.find((h) => h.id === appId);
       if (!appHub) {
         appHub = {
-          id: "hub_local", name: `${local.device} 本机`, url: appUrl,
+          id: appId, name: name ? `${local.device} ${name}` : "本机 Hub", url: appUrl,
           token: "myco_console_local_demo", ok: true, hub_version: "0.16.8",
           update_available: false, agents: [], threads: {}, recent: [],
         };
@@ -1204,18 +1446,25 @@ const server = http.createServer(async (req, res) => {
 
       return send(res, 200, {
         hub: hubView(appHub),
-        public_url: publicUrl || local.hub.local_url,
+        public_url: publicUrl || entry.local_url,
         ...(publicUrl ? { join_url: `${publicUrl}/j/myco_enroll_k3v9q2wd7hx4m8pa` } : {}),
         warnings,
       });
     }
 
     if (parts.length === 4 && parts[2] === "hub" && parts[3] === "stop" && method === "POST") {
-      if (local.hub) local.hub.running = false;
-      const appHub = state.hubs.find((h) => h.id === "hub_local");
+      const body = await readBody(req);
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      const entry = local.hubs.find((h) => h.name === name) || (name ? null : local.hubs.find((h) => !h.name));
+      if (entry) {
+        entry.running = false;
+        delete entry.public_url;
+      }
+      local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+      const appHub = state.hubs.find((h) => h.id === (name ? `hub_local_${name}` : "hub_local"));
       if (appHub) {
         appHub.ok = false;
-        appHub.error = "本机 Hub 已停止";
+        appHub.error = name ? `${name} 已停止` : "本机 Hub 已停止";
       }
       return send(res, 200, { stopped: true });
     }
@@ -1230,7 +1479,12 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length === 3 && method === "DELETE") {
       state.hubs = state.hubs.filter((h) => h.id !== hub.id);
-      if (hub.id === "hub_local" && local.hub) local.hub.added = false;
+      if (hub.id.startsWith("hub_local")) {
+        const name = hub.id === "hub_local" ? "" : hub.id.slice("hub_local_".length);
+        const entry = local.hubs.find((h) => h.name === name);
+        if (entry) entry.added = false;
+        local.hub = JSON.parse(JSON.stringify(local.hubs.find((h) => !h.name) || null));
+      }
       return send(res, 204);
     }
 
@@ -1323,8 +1577,18 @@ const server = http.createServer(async (req, res) => {
       let data = uploadBytes.get(fid);
       let meta = uploads.get(fid);
       if (!data && fid.startsWith("f_demo_shot_")) { data = DEMO_PNG; meta = { name: "首页截图.png", content_type: "image/png" }; }
+      if (!data && fid.startsWith("f_demo_html_")) {
+        data = Buffer.from('<h1>新版首页</h1><p>把 <b>myco</b> 装上，<a href="https://example.com">看文档</a>。</p><script>document.title = "ran"</script>');
+        meta = { name: "首页.html", content_type: "text/html" };
+      }
+      if (!data && fid.startsWith("f_demo_md_")) { data = Buffer.from(demoNotes(Number(fid.slice(10)) || 1)); meta = { name: "发布说明.md", content_type: "text/markdown" }; }
       if (!data && fid.startsWith("f_demo_")) { data = Buffer.from("BUILD SUCCESSFUL\n"); meta = { name: "build.log", content_type: "text/plain" }; }
       if (!data) return fail(res, 404, "not_found", `file ${fid} not found`);
+      if (url.searchParams.get("as") === "text") {
+        if (/^image\//.test(meta.content_type || "") || data.includes(0)) return fail(res, 415, "not_text", "this file cannot be shown as text");
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Content-Length": data.length });
+        return res.end(data);
+      }
       const inline = /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(meta.content_type || "") && !url.searchParams.get("download");
       res.writeHead(200, {
         "Content-Type": inline ? meta.content_type : "application/octet-stream",
@@ -1429,6 +1693,13 @@ const server = http.createServer(async (req, res) => {
         thread_id: task.thread_id, from: CONSOLE, to: task.to, type: "steer", status: "done",
         body: text, reply_to: task.id, created_at: iso(0), updated_at: iso(0),
       });
+      // While it waits on a question, whatever you say answers it.
+      if (task.asking) {
+        steer.answers = task.asking;
+        delete task.asking;
+        task.asked_once = true;
+        askingBy.delete(task.to);
+      }
       const steerAtts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && steerAtts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
       if (steerAtts.length) steer.attachments = steerAtts;
@@ -1936,6 +2207,63 @@ const server = http.createServer(async (req, res) => {
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
         return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/run-settings — the model and effort this
+      // node is woken with; "" follows the computer's setting.
+      if (parts.length === 6 && parts[5] === "run-settings" && method === "PUT") {
+        if (process.env.MOCK_OLD_HUB) {
+          return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/run-settings`);
+        }
+        const body = await readBody(req);
+        if (!body || typeof body.model !== "string" || typeof body.effort !== "string") {
+          return fail(res, 400, "invalid_argument", 'model and effort are required ("" follows the computer)');
+        }
+        const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
+        const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });
+        agent.run_settings = {};
+        if (body.model) agent.run_settings.model = body.model;
+        if (body.effort) agent.run_settings.effort = body.effort;
+        // What the runtime now reports, as a real hub's runner would.
+        if (body.model) {
+          rt.model = body.model;
+          rt.model_source = "app";
+        } else if (was?.runtime) {
+          if (was.runtime.model) rt.model = was.runtime.model;
+          else delete rt.model;
+          // Following the computer again: what it was before the App chose.
+          rt.model_source = was.run_settings?.model ? "configured" : was.runtime.model_source;
+          if (!rt.model_source) delete rt.model_source;
+        }
+        if (body.effort) {
+          rt.effort = body.effort;
+          rt.effort_source = "app";
+        } else if (was?.runtime) {
+          if (was.runtime.effort) rt.effort = was.runtime.effort;
+          else delete rt.effort;
+          rt.effort_source = was.run_settings?.effort ? "configured" : was.runtime.effort_source;
+          if (!rt.effort_source) delete rt.effort_source;
+        }
+        lastRunSettings = { hub: hub.id, agent: agent.name, body };
+        return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/resume — the line that brings the same
+      // agent back in a new sandbox. Making one revokes the one before.
+      if (parts.length === 6 && parts[5] === "resume") {
+        if (process.env.MOCK_OLD_HUB) {
+          return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/resume`);
+        }
+        if (method === "POST") {
+          const token = "rsm_" + Math.random().toString(36).slice(2, 12);
+          agent.resume = { created_at: new Date().toISOString() };
+          return send(res, 200, {
+            url: `${hub.url}/r/${token}`,
+            command: `curl -fsSL ${hub.url}/r/${token} | sh`,
+          });
+        }
+        if (method === "DELETE") {
+          delete agent.resume;
+          return send(res, 200, { ok: true });
+        }
       }
       if (parts.length === 6 && parts[5] === "history" && method === "GET") {
         const t = (min) => new Date(Date.now() - min * 60000).toISOString();

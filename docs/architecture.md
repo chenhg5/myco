@@ -4,6 +4,12 @@
 
 ## 概念
 
+一台机器可以运行多个独立 Hub。`myco hub up` 仍使用默认的 `~/.myco/hub/`
+和 7777 端口；`myco hub up --name <名字>` 使用 `~/.myco/hubs/<名字>/`，
+各自保存令牌、数据库和服务定义，默认从 7778 起选择端口。`myco hub list`
+列出本机实例，`myco hub down --name <名字>` 只停止指定实例。VPS 安装脚本
+也支持 `--name`，每个实例有独立的 systemd 服务和 Caddy 站点文件。
+
 | 概念 | 说明 |
 |---|---|
 | Agent | 有名字、描述、能力标签和收件箱。`--allow-from` 限制谁能给它派任务 |
@@ -54,7 +60,7 @@ stateDiagram-v2
 - **reply / event / note**：交给 CLI 处理，但**不会自动回复**，避免两个 runner 无限互相回复。
 - 如果 agent 在执行过程中自己调用了 `myco message reply/hold/fail`，runner 就不再替它回复。
 - 传给 CLI 的环境变量：`MYCO_MESSAGE_ID`、`MYCO_THREAD_ID`、`MYCO_FROM`、`MYCO_MESSAGE_TYPE`、`MYCO_PROJECT`（消息所属的项目，没有则为空；有项目时，runner 在每个会话第一次处理这个项目的消息时，把项目的目标、成员分工和说明（4 KB 以内）放在消息正文前面），以及 `MYCO_CONFIG`、`MYCO_HUB`、`MYCO_TOKEN`。所以 agent 在执行过程中可以直接用 `myco` 继续派活。
-- 把 [skill/myco/SKILL.md](../skill/myco/SKILL.md) 装进 agent 的 skills 目录，agent 就知道该怎么用 myco。
+- [skill/myco/SKILL.md](../skill/myco/SKILL.md) 打包在 myco 二进制里（`skill` 包，`go:embed`）：`myco skill show` 打印当前版本的内容，`myco join` / `myco skill install` 装进 Claude Code、Codex 的 skills 目录，`myco upgrade` 用新版本刷新带 myco 标记的文件。
 
 内置的 harness（`myco harness list` 可以看本机装了哪些）：
 

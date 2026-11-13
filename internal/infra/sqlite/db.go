@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS agent_resumes (
+  agent         TEXT PRIMARY KEY,
+  token_hash    TEXT NOT NULL UNIQUE,
+  created_at    INTEGER NOT NULL,
+  last_used_at  INTEGER NOT NULL DEFAULT 0,
+  last_used_env TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS messages (
   id              TEXT PRIMARY KEY,
   from_agent      TEXT NOT NULL,
@@ -215,7 +222,10 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := addColumns(db, "messages", [][2]string{{"broadcast_id", "TEXT NOT NULL DEFAULT ''"}, {"attachments", "TEXT NOT NULL DEFAULT '[]'"},
-		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"},
+		// Questions to a task's sender: the question, the task waiting on it,
+		// the steer answering it.
+		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -278,6 +288,8 @@ var agentColumnsV2 = [][2]string{
 	{"avatar", "TEXT NOT NULL DEFAULT ''"},
 	{"avatar_type", "TEXT NOT NULL DEFAULT ''"},
 	{"avatar_data", "BLOB"},
+	// The model and reasoning effort chosen for the agent's runner (v0.19.5).
+	{"run_settings", "TEXT NOT NULL DEFAULT '{}'"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

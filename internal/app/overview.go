@@ -26,6 +26,9 @@ type AgentOverview struct {
 	Queued     int
 	InProgress int // acked only
 	Held       int
+	// Asking counts held tasks waiting on a question to their sender (they
+	// are in Held too).
+	Asking int
 	// Current lists open messages; only filled when the viewer may see them
 	// (admin, or the agent itself).
 	Current []*domain.Message
@@ -74,7 +77,8 @@ func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]Agen
 func (s *OverviewService) stateOf(a *domain.Agent, c map[domain.Status]int, now time.Time) AgentOverview {
 	o := AgentOverview{
 		Agent: a, Online: a.IsOnline(now, s.onlineWindow),
-		Queued: c[domain.StatusQueued] + c[domain.StatusDelivered], InProgress: c[domain.StatusAcked], Held: c[domain.StatusHeld],
+		Queued: c[domain.StatusQueued] + c[domain.StatusDelivered], InProgress: c[domain.StatusAcked], Held: c[domain.StatusHeld] + c[domain.CountAsking],
+		Asking: c[domain.CountAsking],
 	}
 	switch {
 	case o.InProgress > 0:

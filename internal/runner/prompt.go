@@ -66,8 +66,16 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 			"If the work takes a while, tell the sender how it is going with `myco message progress --body \"...\"` " +
 			"(it does not end the task), and optionally publish a one-line status for everyone with `myco agent status set --text \"...\"`.\n" +
 			"If you need to delegate and answer later, run `myco message hold --id " + m.ID + "` now, " +
-			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n")
+			"send sub-tasks with `myco message send`, and later answer with `myco message reply --id " + m.ID + "`.\n" +
+			"If the sender really has to decide (a direction, something costly or hard to undo), ask with " +
+			"`myco message ask --question \"...\" --option \"...\" --option \"...\"` and end your turn: their answer comes back here.\n")
 	case "steer":
+		if m.Answers != "" {
+			b.WriteString("This is the sender's answer to the question you asked about task " + m.ReplyTo + " (myco message ask). " +
+				"Go on with that task as they decided; answer it as usual with `myco message reply --id " + m.ReplyTo + "` when done. " +
+				"Nothing is sent back automatically for this message.\n")
+			break
+		}
 		b.WriteString("This is a correction from the sender of task " + m.ReplyTo + ", which you are handling (or holding). " +
 			"Apply it to that task; answer the task as usual with `myco message reply --id " + m.ReplyTo + "` when done. " +
 			"Nothing is sent back automatically for this message.\n")

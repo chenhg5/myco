@@ -556,10 +556,13 @@
   width: 15px;
   height: 15px;
 }
-.sp-compose-hint {
-  padding: 6px 4px 0;
-  font-size: 11px;
-  color: var(--faint);
+/* How to send: beside the tools while the box has the caret, as in a
+   member's chat (.conv-compose-hint). */
+.sp-compose-tools .conv-compose-hint {
+  margin-left: 6px;
+}
+.sp-compose-box:focus-within .conv-compose-hint {
+  visibility: visible;
 }
 
 /* The members and workspaces on the right. */
@@ -1667,6 +1670,13 @@
 .pc-row-sub .mono {
   font-size: 11px;
 }
+/* Its agent's plan is nearly (or fully) used. */
+.pc-quota {
+  color: var(--amber);
+}
+.pc-quota.is-spent {
+  color: var(--red);
+}
 .pc-remove {
   opacity: 0;
 }
@@ -2143,6 +2153,17 @@ body.is-resizing {
 .trace-report-text > :last-child {
   margin-bottom: 0;
 }
+/* Files it showed along the way: a screenshot a little smaller than in a
+   message, under what it said. */
+.trace-report-files {
+  margin-top: 6px;
+}
+.trace-report-files .conv-shots {
+  margin-top: 0;
+}
+.trace-report-files .conv-shots.is-one {
+  grid-template-columns: minmax(0, 260px);
+}
 .trace-report-time {
   flex: none;
   font-size: 11px;
@@ -2201,6 +2222,35 @@ body.is-resizing {
 .att-btn svg {
   width: 15px;
   height: 15px;
+}
+/* Speaking instead of typing (Dictate.tsx): while the page listens the
+   microphone is red and breathes; a problem shows as its tip. */
+/* Beside Send, on the right of the bar. */
+.conv-compose-bar > .dictate-btn {
+  margin-left: auto;
+}
+.conv-compose-bar > .dictate-btn + .conv-send {
+  margin-left: 0;
+}
+.dictate-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+.dictate-btn.is-listening,
+.dictate-btn.is-listening:hover:not(:disabled) {
+  background: var(--red-soft);
+  color: var(--red);
+  animation: dictate-breathe 1.4s ease-in-out infinite;
+}
+.dictate-btn.is-note {
+  color: var(--amber);
+}
+@keyframes dictate-breathe {
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dictate-btn.is-listening { animation: none; }
 }
 .att-list {
   display: flex;
@@ -2373,7 +2423,7 @@ body.is-sorting * {
   width: 15px;
   height: 15px;
   margin-top: 2px;
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--faint);
   border-radius: 4px;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
@@ -2381,11 +2431,13 @@ body.is-sorting * {
   width: 11px;
   height: 11px;
   stroke-width: 3;
-  color: #fff;
+  color: var(--card);
 }
+/* Black, white and grey: a ticked box is a quiet grey, the step in hand
+   has a darker outline. No colour, so it reads as the answer's notes. */
 .trace-plan-item.is-done .trace-plan-box {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: var(--muted);
+  background: var(--muted);
 }
 .trace-plan-item.is-done .trace-plan-text {
   color: var(--muted);
@@ -2393,7 +2445,7 @@ body.is-sorting * {
   text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent);
 }
 .trace-plan-item.is-doing .trace-plan-box {
-  border-color: var(--green);
+  border-color: var(--fg-2);
 }
 .trace-plan-item.is-doing .trace-plan-text {
   font-weight: 500;
@@ -2402,10 +2454,191 @@ body.is-sorting * {
   animation: plan-pulse 1.4s ease-in-out infinite;
 }
 @keyframes plan-pulse {
-  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
   .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
+}
+
+/* A question an agent asked you (AskCard): the choices to click and a line
+   to answer in words; black, white and grey like the plan. While it waits
+   the card has a darker outline; answered, it keeps what was chosen. */
+.ask {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ask.is-live {
+  box-shadow: inset 0 0 0 1.5px var(--fg-2);
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ask-icon {
+  width: 14px;
+  height: 14px;
+}
+.ask-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.ask-question {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.ask-question > :first-child { margin-top: 0; }
+.ask-question > :last-child { margin-bottom: 0; }
+.ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ask-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.ask-option:hover:not(:disabled) {
+  background: var(--pill-hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ask-option:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+.ask-option.is-chosen {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.5px var(--fg-2);
+  color: var(--fg);
+}
+.ask-option-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ask-option.is-chosen .ask-option-n {
+  background: var(--fg-2);
+  box-shadow: none;
+  color: var(--card);
+}
+.ask-option-n svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.ask-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ask-option-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ask-option-detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ask-say {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ask-say-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.ask-say-input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--focus, var(--line));
+}
+.ask-say-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-fg);
+  cursor: pointer;
+}
+.ask-say-send:disabled {
+  background: var(--pill);
+  color: var(--faint);
+  cursor: default;
+}
+.ask-say-send svg {
+  width: 14px;
+  height: 14px;
+}
+.ask-answer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+.ask-answer > svg {
+  width: 13px;
+  height: 13px;
+}
+.ask-answer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ask-error {
+  margin-top: 6px;
+  color: var(--red);
+  font-size: 12px;
+}
+/* An agent waiting on you, in the sidebar: amber like a pause. */
+.sp-nav-busy.is-asking {
+  background: var(--amber);
 }
 
 /* A calm note in a dialog: what it means, in plain words, no alarm colour. */

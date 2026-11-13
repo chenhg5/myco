@@ -8,10 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +33,54 @@ import (
 // LocalOnlyMarker, in the hub's directory, records `hub up --local-only`.
 const LocalOnlyMarker = "local-only"
 
-func (e *env) hubDir() string { return filepath.Join(config.Dir(e.defaultPath), "hub") }
+func (e *env) hubDir() string { return e.hubDirFor("") }
+
+func (e *env) hubDirFor(name string) string {
+	base := config.Dir(e.defaultPath)
+	if name == "" {
+		return filepath.Join(base, "hub")
+	}
+	return filepath.Join(base, "hubs", name)
+}
+
+func hubPort(dir string) int {
+	vals, err := config.ReadEnvFile(filepath.Join(dir, "hub.env"))
+	if err != nil {
+		return 0
+	}
+	for _, kv := range vals {
+		if v, ok := strings.CutPrefix(kv, config.EnvHub+"="); ok {
+			u, err := url.Parse(v)
+			if err == nil {
+				p, _ := strconv.Atoi(u.Port())
+				return p
+			}
+		}
+	}
+	return 0
+}
+
+func firstHubPort(base string) (int, error) {
+	used := map[int]bool{hubPort(filepath.Join(base, "hub")): true}
+	if entries, err := os.ReadDir(filepath.Join(base, "hubs")); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				used[hubPort(filepath.Join(base, "hubs", entry.Name()))] = true
+			}
+		}
+	}
+	for port := 7778; port <= 65535; port++ {
+		if used[port] {
+			continue
+		}
+		l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		if err == nil {
+			_ = l.Close()
+			return port, nil
+		}
+	}
+	return 0, errors.New("no free local port for the hub")
+}
 
 func hubUpCommand() *Command {
 	return &Command{
@@ -39,7 +89,9 @@ func hubUpCommand() *Command {
 		Mutating: true,
 		Long: `Installs the hub as a background service on this machine (launchd on macOS, systemd --user on
 Linux) and publishes it at a public HTTPS URL through a tunnel, then prints a join link. Re-running
-is safe (it updates the service; the admin token and data stay in ~/.myco/hub).
+is safe (it updates the service and keeps its admin token and data). Without --name the original
+hub stays in ~/.myco/hub on port 7777. With --name it lives in ~/.myco/hubs/<name> and gets its
+own service; if --port is omitted, the first available port from 7778 is used.
 
   --tunnel cloudflare --hostname hub.example.com   stable URL on your domain (free Cloudflare account,
                                                    domain on Cloudflare; run "cloudflared tunnel login" once)
@@ -58,10 +110,11 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			"myco hub up --tunnel tailscale --dry-run   # show what would be installed",
 		},
 		Flags: []Flag{
+			{Name: "name", Kind: String, Help: "Named hub (1–32 lowercase letters, digits or hyphens); omitted for the original default hub"},
 			{Name: "tunnel", Kind: Enum, Values: append([]string{"none"}, tunnel.Kinds...), Required: true, Help: "cloudflare, tailscale, or none (reachable on this machine and its local network only)"},
 			{Name: "hostname", Kind: String, Help: "cloudflare: your hostname on Cloudflare, e.g. hub.example.com (empty = temporary URL)"},
 			{Name: "tunnel-name", Kind: String, Default: "myco", Help: "cloudflare: named tunnel to create or reuse"},
-			{Name: "port", Kind: Int, Default: "7777", Help: "Port (with a tunnel the hub listens on 127.0.0.1 only; with --tunnel none on every interface, so the LAN can reach it)"},
+			{Name: "port", Kind: Int, Default: "7777", Help: "Port (default hub: 7777; new named hub: first free from 7778). With a tunnel listen on 127.0.0.1; with none on every interface"},
 			{Name: "local-only", Kind: Bool, Help: "--tunnel none: listen on 127.0.0.1 only (this machine; no LAN access)"},
 			{Name: "no-service", Kind: Bool, Help: "Do not install a service; print the command to run instead"},
 			{Name: "no-update-check", Kind: Bool, Help: "Do not look for new myco releases"},
@@ -70,11 +123,33 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if err := e.in.Require("tunnel"); err != nil {
 				return err
 			}
+			name := e.in.String("name")
+			if !service.ValidHubName(name) || (e.in.IsSet("name") && name == "") {
+				return errorf("invalid_argument", ExitUsage, "use 1–32 lowercase letters, digits or hyphens", "invalid hub name %q", name)
+			}
 			kind, port := e.in.String("tunnel"), e.in.Int("port")
 			if kind != "cloudflare" && e.in.String("hostname") != "" {
 				return errorf("invalid_argument", ExitUsage, "--hostname is for --tunnel cloudflare; Tailscale picks <machine>.<tailnet>.ts.net", "--hostname needs --tunnel cloudflare")
 			}
-			dir := e.hubDir()
+			dir := e.hubDirFor(name)
+			if name != "" && !e.in.IsSet("port") {
+				port = hubPort(dir)
+				if port == 0 {
+					var err error
+					port, err = firstHubPort(config.Dir(e.defaultPath))
+					if err != nil {
+						return err
+					}
+				}
+			}
+			if port < 1 || port > 65535 {
+				return errorf("invalid_argument", ExitUsage, "choose a port from 1 to 65535", "invalid port %d", port)
+			}
+			tunnelName := e.in.String("tunnel-name")
+			if name != "" && !e.in.IsSet("tunnel-name") {
+				tunnelName = "myco-" + name
+			}
+			id := service.HubIDFor(name)
 			local := "http://127.0.0.1:" + strconv.Itoa(port)
 			dry := e.in.Bool("dry-run")
 			bin, err := os.Executable()
@@ -99,11 +174,11 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if kind != "none" {
 				args = append(args, "--tunnel", kind)
 				if h := e.in.String("hostname"); h != "" {
-					args = append(args, "--tunnel-hostname", h, "--tunnel-name", e.in.String("tunnel-name"))
+					args = append(args, "--tunnel-hostname", h, "--tunnel-name", tunnelName)
 				}
 			}
 			if dry {
-				return e.dryRun(map[string]any{"action": "hub_up", "dir": dir, "service": service.HubID.Label, "command": append([]string{bin}, args...)})
+				return e.dryRun(map[string]any{"action": "hub_up", "name": name, "dir": dir, "service": id.Label, "command": append([]string{bin}, args...)})
 			}
 
 			// 1. Admin token (kept across re-runs) and local hub URL.
@@ -122,7 +197,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			// (not logged in, Funnel disabled) show up here, not in a log.
 			public := local
 			if kind != "none" {
-				t, err := tunnel.New(tunnel.Options{Kind: kind, Hostname: e.in.String("hostname"), Name: e.in.String("tunnel-name"), StateDir: dir})
+				t, err := tunnel.New(tunnel.Options{Kind: kind, Hostname: e.in.String("hostname"), Name: tunnelName, StateDir: dir})
 				if err != nil {
 					return err
 				}
@@ -149,7 +224,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if err != nil {
 				return err
 			}
-			m, err := service.DetectID(home, service.ExecRunner{}, service.HubID)
+			m, err := service.DetectID(home, service.ExecRunner{}, id)
 			if err != nil {
 				return errorf("unsupported", ExitError, "run it under your own process manager: myco hub up --no-service", "%v", err)
 			}
@@ -170,6 +245,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			reachable := kind == "none" || waitHealth(e.in.Ctx, public, 90*time.Second) == nil
 			out["public_url"], out["reachable"], out["service"] = public, reachable, plan.Manager
+			_ = writeHubPublic(dir, public)
 			if lan {
 				if ip := osutil.LANAddr(); ip != "" {
 					out["lan_url"] = "http://" + ip + ":" + strconv.Itoa(port)
@@ -199,7 +275,11 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 					fmt.Fprintf(w, "\nAdd a computer or server (macOS / Linux / WSL), run this on it:\n  curl -fsSL %s | bash\n", l)
 					fmt.Fprintf(w, "\nConnect an AI session (Claude Code, Codex, claude.ai), tell it:\n  接入 myco：%s\n", l)
 				}
-				fmt.Fprintln(w, "\nNew join link any time: myco link create")
+				if name == "" {
+					fmt.Fprintln(w, "\nNew join link any time: myco link create")
+				} else {
+					fmt.Fprintf(w, "\nNew join link any time: MYCO_HUB_NAME=%s myco link create\n", name)
+				}
 				if runtime.GOOS == "darwin" {
 					fmt.Fprintln(w, "Keep this Mac awake while it serves the hub (System Settings → Energy / Battery → prevent automatic sleeping).")
 				}
@@ -216,13 +296,18 @@ func hubDownCommand() *Command {
 		Name:     "down",
 		Summary:  "Stop the hub started by `myco hub up` and remove its service (data is kept)",
 		Mutating: true,
-		Examples: []string{"myco hub down"},
+		Examples: []string{"myco hub down", "myco hub down --name work"},
+		Flags:    []Flag{{Name: "name", Kind: String, Help: "Named hub to stop; omitted for the default hub"}},
 		Run: handler(func(e *env) error {
+			name := e.in.String("name")
+			if !service.ValidHubName(name) || (e.in.IsSet("name") && name == "") {
+				return errorf("invalid_argument", ExitUsage, "use 1–32 lowercase letters, digits or hyphens", "invalid hub name %q", name)
+			}
 			home, err := os.UserHomeDir()
 			if err != nil {
 				return err
 			}
-			m, err := service.DetectID(home, service.ExecRunner{}, service.HubID)
+			m, err := service.DetectID(home, service.ExecRunner{}, service.HubIDFor(name))
 			if err != nil {
 				return errorf("unsupported", ExitError, "", "%v", err)
 			}
@@ -234,11 +319,81 @@ func hubDownCommand() *Command {
 				return err
 			}
 			_ = os.Remove(plan.File)
-			return e.p.Print(map[string]any{"stopped": true, "data": e.hubDir()}, func(w io.Writer) {
-				fmt.Fprintf(w, "hub stopped; its data stays in %s (myco hub up starts it again)\n", e.hubDir())
+			return e.p.Print(map[string]any{"stopped": true, "data": e.hubDirFor(name)}, func(w io.Writer) {
+				fmt.Fprintf(w, "hub stopped; its data stays in %s (myco hub up starts it again)\n", e.hubDirFor(name))
 			})
 		}),
 	}
+}
+
+type localHubItem struct {
+	Name      string `json:"name"`
+	Dir       string `json:"dir"`
+	LocalURL  string `json:"local_url"`
+	PublicURL string `json:"public_url"`
+	Running   bool   `json:"running"`
+	Service   string `json:"service"`
+}
+
+func writeHubPublic(dir, public string) error {
+	return os.WriteFile(filepath.Join(dir, "public-url"), []byte(public+"\n"), 0o600)
+}
+
+func localHubDirs(base string) []localHubItem {
+	var out []localHubItem
+	add := func(name, dir string) {
+		port := hubPort(dir)
+		if port == 0 {
+			return
+		}
+		public, _ := os.ReadFile(filepath.Join(dir, "public-url"))
+		id := service.HubIDFor(name)
+		serviceName := id.Unit
+		if runtime.GOOS == "darwin" {
+			serviceName = id.Label
+		}
+		if runtime.GOOS == "windows" {
+			serviceName = "app-hub.json"
+		}
+		out = append(out, localHubItem{Name: name, Dir: dir, LocalURL: "http://127.0.0.1:" + strconv.Itoa(port), PublicURL: strings.TrimSpace(string(public)), Service: serviceName})
+	}
+	add("", filepath.Join(base, "hub"))
+	if entries, err := os.ReadDir(filepath.Join(base, "hubs")); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && service.ValidHubName(entry.Name()) {
+				add(entry.Name(), filepath.Join(base, "hubs", entry.Name()))
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func hubListCommand() *Command {
+	return &Command{Name: "list", Summary: "List hubs started with `myco hub up` on this computer", Run: handler(func(e *env) error {
+		items := localHubDirs(config.Dir(e.defaultPath))
+		home, _ := os.UserHomeDir()
+		for i := range items {
+			if m, err := service.DetectID(home, service.ExecRunner{}, service.HubIDFor(items[i].Name)); err == nil {
+				if st, err := m.Status(); err == nil {
+					items[i].Running = st.Running
+				}
+			}
+			ctx, cancel := context.WithTimeout(e.in.Ctx, 500*time.Millisecond)
+			if h, err := health(ctx, items[i].LocalURL); err == nil {
+				items[i].Running = true
+				if h.PublicURL != "" {
+					items[i].PublicURL = h.PublicURL
+				}
+			}
+			cancel()
+		}
+		return e.p.Print(map[string]any{"hubs": items}, func(w io.Writer) {
+			for _, h := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%v\t%s\n", orStr(h.Name, "(default)"), h.LocalURL, h.PublicURL, h.Running, h.Service)
+			}
+		})
+	})}
 }
 
 // writeHubEnv creates <dir>/hub.env with a new admin token, or updates the

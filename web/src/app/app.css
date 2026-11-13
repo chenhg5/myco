@@ -99,11 +99,57 @@
 
 /* ---------- sidebar & shell chrome ---------- */
 .app-sidebar {
-  width: 232px;
+  position: relative;
+  width: var(--sidebar-w, 232px);
   flex: none;
   display: flex;
   flex-direction: column;
   user-select: none;
+}
+/* The sidebar's right edge, in the gap before the page: drag it to resize.
+   A hairline shows on hover and while dragging; it fades when letting go
+   would hide the sidebar. */
+.app-sidebar-edge {
+  position: absolute;
+  top: 8px;
+  right: -5px;
+  bottom: 8px;
+  z-index: 5;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.app-sidebar-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.app-sidebar-edge:hover::after {
+  opacity: 0.5;
+  transition-delay: 0.15s;
+}
+.app-sidebar-edge.is-dragging::after,
+.app-sidebar-edge:focus-visible::after {
+  opacity: 1;
+  transition-delay: 0s;
+}
+.app-sidebar-edge.is-hiding::after {
+  opacity: 0.25;
+}
+.app-sidebar-edge:focus-visible {
+  outline: none;
+}
+body.is-resizing,
+body.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 /* Its centre lines up with the panel's top bar (8px gap + 40px bar). */
 .app-sidebar-head {
@@ -1040,6 +1086,13 @@ textarea.app-input {
 .app-kv-note {
   color: var(--muted);
 }
+/* A second, quieter line under a value: the address under its access kind. */
+.app-kv-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--muted);
+}
 /* A row with an explanation: label and value on one line, the
    explanation under them across the row, left-aligned. */
 .app-kv.has-help {
@@ -1917,6 +1970,17 @@ textarea.app-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A workspace that runs on this computer, where it was started. */
+.app-hub-menu-tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
 .app-hub-menu-check {
   width: 14px;
   height: 14px;
@@ -2172,6 +2236,24 @@ textarea.app-input {
 .app-settings-body {
   flex: 1;
   min-width: 0;
+}
+/* A group of cards under one small heading ("Workspaces on this computer"). */
+.app-setting-group {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.app-setting-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 .app-setting-card {
   margin-bottom: 12px;
@@ -3304,6 +3386,91 @@ button.conv-attach:hover .conv-attach-go {
   font-size: 10.5px;
   color: var(--muted);
 }
+/* A file sent again under its name: which version this is. */
+.conv-attach-version {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 10.5px;
+  line-height: 17px;
+}
+.conv-attach-version + .conv-attach-size {
+  margin-left: 6px;
+}
+.conv-attach-name + .conv-attach-version {
+  margin-left: auto;
+}
+
+/* ---------- a file read in the App (preview.tsx) ---------- */
+.fp-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+.fp-views {
+  margin: 2px 0 10px;
+}
+.fp-body {
+  max-height: min(64vh, 640px);
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.fp-body.is-doc {
+  padding: 18px 22px;
+}
+/* An HTML file as a page: white like a page, in its own frame. */
+.fp-body.is-page {
+  overflow: hidden;
+  background: #fff;
+}
+.fp-frame {
+  display: block;
+  width: 100%;
+  height: min(64vh, 640px);
+  border: 0;
+  background: #fff;
+}
+.fp-body.is-doc .md {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.fp-note {
+  margin: 0;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.fp-code,
+.fp-diff {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+}
+.fp-line {
+  display: block;
+  margin: 0 -14px;
+  padding: 0 14px;
+}
+.fp-line.is-add {
+  background: var(--green-soft);
+}
+.fp-line.is-del {
+  background: var(--red-soft);
+  color: var(--fg-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--fg-2) 40%, transparent);
+}
+.fp-line.is-fold {
+  color: var(--muted);
+  font-style: italic;
+}
 
 /* ---------- conversation composer ---------- */
 .conv-compose {
@@ -3560,8 +3727,14 @@ button.conv-attach:hover .conv-attach-go {
   gap: 6px;
   margin-bottom: 3px;
 }
+/* The tag's own space under it would lift it above the time beside it. */
+.conv-supplement-head .conv-tag {
+  margin-bottom: 0;
+  line-height: 16px;
+}
 .conv-supplement-time {
   font-size: 10.5px;
+  line-height: 16px;
   color: var(--faint);
 }
 .conv-compose-box {
@@ -4158,6 +4331,14 @@ button.conv-attach:hover .conv-attach-go {
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
+}
+/* The resume row's state and its actions, right-aligned like a value. */
+.app-resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 10px;
 }
 .app-alias-form {
   flex-basis: 100%;
@@ -5280,6 +5461,30 @@ body.is-resizing {
   padding: 0 26px 0 8px;
   font-size: 12px;
 }
+/* Run settings: the inline field for a model typed by hand. */
+.app-run-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-run-input {
+  width: 150px;
+  height: 26px;
+  font-size: 12px;
+}
+/* A plan window nearly used (amber) or spent (red). */
+.app-quota.is-tight .app-kv-value {
+  color: var(--amber);
+}
+.app-quota.is-over .app-kv-value {
+  color: var(--red);
+}
+/* Usage older than an hour: the numbers have moved on. */
+.app-quota-stale {
+  padding: 5px 12px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
 
 /* Node details: changes to its card */
 .app-history {
@@ -5941,5 +6146,55 @@ body.is-resizing {
 .app-convpick-group {
   margin: 10px 2px 6px;
   font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* A reply growing in (Reveal.tsx): the newest block fades up a little. */
+.reveal.is-growing .md > :last-child:not(ul):not(ol),
+.reveal.is-growing .md > :is(ul, ol):last-child > li:last-child {
+  animation: reveal-in 0.24s ease-out;
+}
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal.is-growing .md > * { animation: none; }
+}
+
+/* A checklist in a message (Markdown.tsx): boxes like the plan card's,
+   black, white and grey; a ticked item's text fades and is struck. */
+.md li:has(> .md-check) {
+  list-style: none;
+  margin-left: -1.1em;
+}
+.md-check {
+  display: inline-block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  margin-right: 7px;
+  vertical-align: -2px;
+  border: 1.5px solid var(--faint);
+  border-radius: 3.5px;
+}
+.md-check.is-doing {
+  border-color: var(--fg-2);
+}
+.md-check.is-done {
+  border-color: var(--muted);
+  background: var(--muted);
+}
+.md-check.is-done::after {
+  content: "";
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 3px;
+  height: 7px;
+  border: solid var(--card);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+.md li:has(> .md-check.is-done) {
   color: var(--muted);
 }

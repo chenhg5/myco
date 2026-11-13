@@ -44,10 +44,16 @@ func (l *Local) localHubJoined(ctx context.Context, localURL string) bool {
 // join link from the hub's admin token, then `myco machine join`. A no-op
 // when it already is one.
 func (l *Local) joinLocalHub(ctx context.Context) error {
-	env := l.hubEnv()
+	return l.joinLocalHubName(ctx, "")
+}
+
+func (l *Local) joinLocalHubName(ctx context.Context, name string) error {
+	l.joinRunMu.Lock()
+	defer l.joinRunMu.Unlock()
+	env := l.hubEnvFor(name)
 	localURL, admin := env[config.EnvHub], env[config.EnvAdminToken]
 	if localURL == "" || admin == "" {
-		return errors.New("~/.myco/hub/hub.env has no hub address or admin token")
+		return errors.New("local hub.env has no hub address or admin token")
 	}
 	if l.localHubJoined(ctx, localURL) {
 		return nil
@@ -86,13 +92,27 @@ func (l *Local) runnerRunning(ctx context.Context) bool {
 
 // joinLocalHubOnce runs joinLocalHub in the background, once per app run.
 func (l *Local) joinLocalHubOnce() {
-	l.joinOnce.Do(func() {
+	l.joinLocalHubOnceFor("")
+}
+
+func (l *Local) joinLocalHubOnceFor(name string) {
+	l.joinMu.Lock()
+	if l.joined == nil {
+		l.joined = map[string]bool{}
+	}
+	if l.joined[name] {
+		l.joinMu.Unlock()
+		return
+	}
+	l.joined[name] = true
+	l.joinMu.Unlock()
+	func() {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			if err := l.joinLocalHub(ctx); err != nil {
+			if err := l.joinLocalHubName(ctx, name); err != nil {
 				slog.Default().With("component", "local-hub").Warn("could not add this computer to the local hub", "err", err)
 			}
 		}()
-	})
+	}()
 }

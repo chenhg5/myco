@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/osutil"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/service"
 )
 
 // Local runs a hub on this computer through the myco CLI (`myco hub up`),
@@ -51,11 +52,14 @@ type Local struct {
 	// StartProcess starts a background process (tests replace it).
 	StartProcess func(command []string, logPath string, env []string) (pid int, err error)
 
-	appHubOnce sync.Once
+	appHubMu      sync.Mutex
+	appHubStarted map[string]bool
 
 	lanOnce sync.Once
-	// joinOnce: add this computer to its local hub as a machine (once per run).
-	joinOnce sync.Once
+	// Remember which local hubs we already tried to join during this App run.
+	joinMu    sync.Mutex
+	joinRunMu sync.Mutex
+	joined    map[string]bool
 }
 
 // EnsureCLI installs the app's bundled myco CLI into ~/.local/bin when no
@@ -233,7 +237,34 @@ func lastLine(b []byte) string {
 }
 
 func (l *Local) hubEnv() map[string]string {
-	vals, err := config.ReadEnvFile(filepath.Join(l.Home, ".myco", "hub", "hub.env"))
+	return l.hubEnvFor("")
+}
+
+func (l *Local) hubDir(name string) string {
+	if name == "" {
+		return filepath.Join(l.Home, ".myco", "hub")
+	}
+	return filepath.Join(l.Home, ".myco", "hubs", name)
+}
+
+func (l *Local) hubNames() []string {
+	var names []string
+	if _, err := os.Stat(filepath.Join(l.hubDir(""), "hub.env")); err == nil {
+		names = append(names, "")
+	}
+	entries, _ := os.ReadDir(filepath.Join(l.Home, ".myco", "hubs"))
+	for _, entry := range entries {
+		if entry.IsDir() && service.ValidHubName(entry.Name()) {
+			if _, err := os.Stat(filepath.Join(l.hubDir(entry.Name()), "hub.env")); err == nil {
+				names = append(names, entry.Name())
+			}
+		}
+	}
+	return names
+}
+
+func (l *Local) hubEnvFor(name string) map[string]string {
+	vals, err := config.ReadEnvFile(filepath.Join(l.hubDir(name), "hub.env"))
 	if err != nil {
 		return nil
 	}
@@ -254,6 +285,7 @@ type Tool struct {
 
 // LocalHub is the hub `myco hub up` runs on this computer.
 type LocalHub struct {
+	Name      string `json:"name"`
 	Running   bool   `json:"running"`
 	LocalURL  string `json:"local_url"`
 	PublicURL string `json:"public_url,omitempty"`
@@ -265,6 +297,7 @@ type LocalHub struct {
 type LocalStatus struct {
 	Myco   *Tool            `json:"myco"`
 	Hub    *LocalHub        `json:"hub"`
+	Hubs   []LocalHub       `json:"hubs"`
 	Tools  map[string]*Tool `json:"tools"`
 	Device string           `json:"device"`
 	// Hostname is this computer's host name, as runners report it for
@@ -301,32 +334,34 @@ func (b *Backend) localStatus(ctx context.Context) LocalStatus {
 			}
 		}
 	}
-	env := l.hubEnv()
-	if env == nil || env[config.EnvHub] == "" {
-		return st
-	}
-	h := &LocalHub{LocalURL: env[config.EnvHub]}
-	// Older local hubs listened on 127.0.0.1 only: move this one onto the
-	// LAN (once, in the background).
-	l.moveHubToLAN()
-	l.keepAppHub()
-	if c, err := client.New(h.LocalURL, ""); err == nil {
-		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		if hl, err := c.Health(cctx); err == nil {
-			h.Running, h.PublicURL, h.Version = true, hl.PublicURL, hl.ServerVersion
-			// The hub's own computer should be one of its machines.
-			l.joinLocalHubOnce()
+	st.Hubs = []LocalHub{}
+	stored, _ := b.Store.List()
+	for _, name := range l.hubNames() {
+		env := l.hubEnvFor(name)
+		h := LocalHub{Name: name, LocalURL: env[config.EnvHub]}
+		if name == "" {
+			l.moveHubToLAN()
 		}
-		cancel()
-	}
-	if hubs, err := b.Store.List(); err == nil {
-		for _, x := range hubs {
+		l.keepAppHubName(name)
+		if c, err := client.New(h.LocalURL, ""); err == nil {
+			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			if hl, err := c.Health(cctx); err == nil {
+				h.Running, h.PublicURL, h.Version = true, hl.PublicURL, hl.ServerVersion
+				l.joinLocalHubOnceFor(name)
+			}
+			cancel()
+		}
+		for _, x := range stored {
 			if x.URL == h.LocalURL || (h.PublicURL != "" && x.URL == strings.TrimRight(h.PublicURL, "/")) {
 				h.Added = true
 			}
 		}
+		st.Hubs = append(st.Hubs, h)
+		if name == "" {
+			copy := h
+			st.Hub = &copy
+		}
 	}
-	st.Hub = h
 	return st
 }
 
@@ -388,10 +423,15 @@ type StartLocalResult struct {
 // adds the hub to the app by its local address.
 func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 	var in struct {
+		Name     string `json:"name"`
 		Tunnel   string `json:"tunnel"`
 		Hostname string `json:"hostname"`
 	}
 	if !decode(w, r, &in) {
+		return
+	}
+	if !service.ValidHubName(in.Name) {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "hub name must be 1–32 lowercase letters, digits or hyphens"})
 		return
 	}
 	switch in.Tunnel {
@@ -421,13 +461,16 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args := []string{"hub", "up", "--tunnel", in.Tunnel}
+	if in.Name != "" {
+		args = append(args, "--name", in.Name)
+	}
 	if in.Hostname != "" {
 		args = append(args, "--hostname", in.Hostname)
 	}
 	if l.NoServiceManager {
 		// No service manager: prepare, then run the hub from the app.
 		args = append(args, "--no-service")
-		_ = l.stopAppHub()
+		_ = l.stopAppHubName(in.Name)
 	}
 	out, err := l.run(ctx, args...)
 	if err != nil {
@@ -442,13 +485,13 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, errors.New("unexpected output from myco hub up --no-service"))
 			return
 		}
-		if err := l.startAppHub(ctx, &appHub{Command: prep.Command}); err != nil {
+		if err := l.startAppHubName(ctx, in.Name, &appHub{Command: prep.Command}); err != nil {
 			writeErr(w, err)
 			return
 		}
 		// Report what a service install would have (the public URL comes
 		// from the running hub).
-		out, _ = json.Marshal(map[string]any{"public_url": l.publicURLNow(ctx), "reachable": true})
+		out, _ = json.Marshal(map[string]any{"public_url": l.publicURLNowFor(ctx, in.Name), "reachable": true})
 	}
 	var up struct {
 		PublicURL     string `json:"public_url"`
@@ -471,15 +514,15 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		res.Warnings = append(res.Warnings, "入网链接没有生成："+up.JoinLinkError)
 	}
 
-	env := l.hubEnv()
+	env := l.hubEnvFor(in.Name)
 	localURL := env[config.EnvHub]
 	if localURL == "" {
-		writeErr(w, errors.New("myco hub up finished but ~/.myco/hub/hub.env has no hub address"))
+		writeErr(w, fmt.Errorf("myco hub up finished but %s has no hub address", filepath.Join(l.hubDir(in.Name), "hub.env")))
 		return
 	}
 	// This computer is the hub's first machine: sessions can be started on
 	// it right away (添加节点 → 在机器上新建).
-	if err := l.joinLocalHub(ctx); err != nil {
+	if err := l.joinLocalHubName(ctx, in.Name); err != nil {
 		res.Warnings = append(res.Warnings, "这台电脑没能加入本机工作区："+err.Error())
 	}
 	// Already in the app: nothing more to add.
@@ -504,7 +547,11 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errors.New("myco console token create did not return a token"))
 		return
 	}
-	h, err := b.Store.Add("我的工作区", localURL)
+	display := in.Name
+	if display == "" {
+		display = "我的工作区"
+	}
+	h, err := b.Store.Add(display, localURL)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -519,17 +566,31 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Backend) stopLocal(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if r.ContentLength != 0 && !decode(w, r, &in) {
+		return
+	}
+	if !service.ValidHubName(in.Name) {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "hub name must be 1–32 lowercase letters, digits or hyphens"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
 	if b.Local.NoServiceManager {
-		if err := b.Local.stopAppHub(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := b.Local.stopAppHubName(in.Name); err != nil && !errors.Is(err, os.ErrNotExist) {
 			writeErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"stopped": true})
 		return
 	}
-	if _, err := b.Local.run(ctx, "hub", "down"); err != nil {
+	args := []string{"hub", "down"}
+	if in.Name != "" {
+		args = append(args, "--name", in.Name)
+	}
+	if _, err := b.Local.run(ctx, args...); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -591,7 +652,11 @@ func (l *Local) upgradeCLIDetached() {
 
 // publicURLNow is the running local hub's public URL ("" when it has none).
 func (l *Local) publicURLNow(ctx context.Context) string {
-	u := l.hubEnv()[config.EnvHub]
+	return l.publicURLNowFor(ctx, "")
+}
+
+func (l *Local) publicURLNowFor(ctx context.Context, name string) string {
+	u := l.hubEnvFor(name)[config.EnvHub]
 	c, err := client.New(u, "")
 	if err != nil {
 		return ""

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, ChevronDown, ChevronUp, Plus, Settings,
+  Check, ChevronDown, ChevronUp, Laptop, Plus, Settings,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { useHubLooks, type HubLook } from "@/app/hubLooks";
@@ -14,6 +14,7 @@ type Variant = "sidebar" | "pill";
 type Entry =
   | { key: string; kind: "hub"; hub: Hub }
   | { key: string; kind: "add" }
+  | { key: string; kind: "newLocal" }
   | { key: string; kind: "settings" };
 
 function initial(name: string): string {
@@ -53,14 +54,18 @@ function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | unde
 
 /** Workspace picker: one at a time (they are kept apart), add another, or
  *  open their settings. */
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, variant = "sidebar", down = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onSettings, isLocal, variant = "sidebar", down = false }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   /** the workspace on show */
   value: string;
   onChange: (value: string) => void;
   onAdd: () => void;
+  /** starts another workspace on this computer */
+  onNewLocal: () => void;
   onSettings: () => void;
+  /** whether a hub runs on this computer (it gets a tag) */
+  isLocal?: (hub: Hub) => boolean;
   variant?: Variant;
   /** at the top of the sidebar: the menu opens downwards */
   down?: boolean;
@@ -77,6 +82,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
   const entries = useMemo<Entry[]>(() => [
     ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
     { key: "add", kind: "add" },
+    { key: "newLocal", kind: "newLocal" },
     { key: "settings", kind: "settings" },
   ], [hubs]);
 
@@ -97,6 +103,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
     if (!e) return;
     if (e.kind === "hub") pick(e.hub.id);
     else if (e.kind === "add") { close(); onAdd(); }
+    else if (e.kind === "newLocal") { close(); onNewLocal(); }
     else if (e.kind === "settings") { close(); onSettings(); }
   };
 
@@ -223,12 +230,13 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <Avatar name={e.hub.name} id={e.hub.id} />
                   <span className="app-hub-menu-name">{e.hub.name}</span>
+                  {isLocal?.(e.hub) && <span className="app-hub-menu-tag">{L("这台电脑", "This computer")}</span>}
                   <span className={cn("dot", e.hub.ok ? "working" : "down")} />
                   {value === e.hub.id && <Check className="app-hub-menu-check" />}
                 </button>
               );
             }
-            const Icon = e.kind === "add" ? Plus : Settings;
+            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : Settings;
             return (
               <Fragment key={e.key}>
                 {e.kind === "add" && <div className="app-hub-menu-sep" />}
@@ -242,7 +250,11 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onSettings, 
                 >
                   <span className="app-hub-menu-icon-wrap"><Icon /></span>
                   <span className="app-hub-menu-name">
-                    {e.kind === "add" ? L("加入或新建工作区", "Join or start a workspace") : L("设置", "Settings")}
+                    {e.kind === "add"
+                      ? L("加入或新建工作区", "Join or start a workspace")
+                      : e.kind === "newLocal"
+                        ? L("在这台电脑上新建工作区", "New workspace on this computer")
+                        : L("设置", "Settings")}
                   </span>
                 </button>
               </Fragment>

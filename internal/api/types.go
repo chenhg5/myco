@@ -31,9 +31,10 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name,omitempty"`
+	ID          string      `json:"id"`
+	Resume      *ResumeInfo `json:"resume,omitempty"`
+	Name        string      `json:"name"`
+	DisplayName string      `json:"display_name,omitempty"`
 	// Avatar is the face people chose: "look:<parts>" (drawn by clients)
 	// or "pic:<hash>" (GET /v1/agents/{name}/avatar; the hash changes with
 	// the picture). Empty: draw the default one from the id.
@@ -46,6 +47,7 @@ type Agent struct {
 	Queued     int    `json:"queued"`
 	InProgress int    `json:"in_progress"`
 	Held       int    `json:"held"`
+	Asking     int    `json:"asking,omitempty"`
 	// StatusText is the agent's public progress line (myco agent status set).
 	StatusText  string     `json:"status_text,omitempty"`
 	StatusAt    *time.Time `json:"status_at,omitempty"`
@@ -77,6 +79,27 @@ type Agent struct {
 	MachineID string `json:"machine_id,omitempty"`
 	// Runtime is its CLI and model, as its runner reports them.
 	Runtime *Runtime `json:"runtime,omitempty"`
+	// RunSettings are the model and effort chosen for its runner (absent
+	// when none is chosen).
+	RunSettings *RunSettings `json:"run_settings,omitempty"`
+}
+
+type ResumeInfo struct {
+	CreatedAt   time.Time  `json:"created_at"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	LastUsedEnv string     `json:"last_used_env,omitempty"`
+}
+
+type ResumeLink struct {
+	Token   string     `json:"token,omitempty"`
+	URL     string     `json:"url,omitempty"`
+	Command string     `json:"command,omitempty"`
+	Resume  ResumeInfo `json:"resume"`
+}
+
+type ResumeRequest struct {
+	Token   string  `json:"token"`
+	Binding Binding `json:"binding"`
 }
 
 // Runtime is what an agent runs on.
@@ -94,6 +117,38 @@ type Runtime struct {
 	// missing (the pinned provider no longer exists; the machine's is used).
 	Provider       string `json:"provider,omitempty"`
 	ProviderSource string `json:"provider_source,omitempty"`
+	// Effort is the reasoning effort the CLI runs with; EffortSource: app
+	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
+	Effort       string `json:"effort,omitempty"`
+	EffortSource string `json:"effort_source,omitempty"`
+	// Quota is the account's usage limits as the CLI last reported them.
+	Quota *Quota `json:"quota,omitempty"`
+}
+
+// Quota is a CLI account's usage limits at one moment (from v0.19.5).
+type Quota struct {
+	// Source: claude or codex.
+	Source  string        `json:"source"`
+	At      time.Time     `json:"at"`
+	Windows []QuotaWindow `json:"windows"`
+}
+
+// QuotaWindow is one limit: Used is the share used (0..1).
+type QuotaWindow struct {
+	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
+	Name     string     `json:"name"`
+	Label    string     `json:"label,omitempty"`
+	Used     float64    `json:"used"`
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	// Status: allowed, or why work is refused.
+	Status string `json:"status,omitempty"`
+}
+
+// RunSettings choose how an agent's runner starts its CLI ("" follows the
+// machine's own setting). PUT /v1/agents/{name}/run-settings (from v0.19.5).
+type RunSettings struct {
+	Model  string `json:"model"`
+	Effort string `json:"effort"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
@@ -167,6 +222,14 @@ type Message struct {
 	// people call it (inbox pulls, from v0.18.36). Address it by From.
 	FromDisplay string       `json:"from_display,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	// Ask: a progress update asking the task's sender to decide; its body
+	// is the question, then the choices as a numbered list ("1. label —
+	// detail"). Asking, on a task: the id of its question still waiting for
+	// an answer. Answers, on a steer: the question it answers. Whatever the
+	// sender says while a question waits is its answer.
+	Ask     bool   `json:"ask,omitempty"`
+	Asking  string `json:"asking,omitempty"`
+	Answers string `json:"answers,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -387,6 +450,9 @@ type AgentList struct {
 type ReplyRequest struct {
 	Body        string   `json:"body"`
 	Attachments []string `json:"attachments,omitempty"`
+	// Ask (progress only): the update asks the task's sender to decide, and
+	// the task waits (held) until they answer. Older hubs refuse the field.
+	Ask bool `json:"ask,omitempty"`
 }
 
 // ReleaseRequest is the body of POST /v1/messages/{id}/release.
@@ -534,12 +600,15 @@ type Viewer struct {
 
 // AgentStatus is one agent with live counters (GET /v1/overview).
 type AgentStatus struct {
-	Agent      Agent     `json:"agent"`
-	State      string    `json:"state"` // working | pending | idle | offline
-	Queued     int       `json:"queued"`
-	InProgress int       `json:"in_progress"`
-	Held       int       `json:"held"`
-	Current    []Message `json:"current,omitempty"`
+	Agent      Agent  `json:"agent"`
+	State      string `json:"state"` // working | pending | idle | offline
+	Queued     int    `json:"queued"`
+	InProgress int    `json:"in_progress"`
+	Held       int    `json:"held"`
+	// Asking counts held tasks waiting on a question to their sender
+	// (myco message ask); they are in Held too. Absent on older hubs.
+	Asking  int       `json:"asking,omitempty"`
+	Current []Message `json:"current,omitempty"`
 	// Receiving is how the agent gets messages right now: "session" (a
 	// session keeps `inbox wait` running), "runner" (a runner wakes the
 	// session per message) or empty (nothing is receiving).

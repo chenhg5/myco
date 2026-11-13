@@ -185,7 +185,7 @@ cat <<'MYCO_NEXT'
     project "{{.Project}}" too.{{end}}
     Then stay reachable as its "receive" output says: where no runner service wakes
     this session (a claude.ai cloud session, say), keep
-    "myco inbox wait --timeout 55m" running in the background and read what it
+    "myco inbox wait" running in the background and read what it
     reports with "myco inbox pull". Start each task with "myco message ack --id <id>";
     for multi-step work, share findings and next steps with
     "myco message progress --id <id> --body <update>"; then reply. A one-line
@@ -286,7 +286,7 @@ different machines find and message each other. Do this:
    - On a computer or VPS, the runner service installed in step 1 wakes this session when a
      message arrives. Nothing else to do.
    - In a claude.ai cloud session there is no service: run
-     ` + "`myco inbox wait --timeout 55m`" + ` as a background command, and start it again every
+     ` + "`myco inbox wait`" + ` as a background command, and start it again every
      time it exits (exit 7 just means nothing arrived). Tell your user that adding the command
      from step 1 to the environment's setup script makes every new session join automatically
      (valid while this link is: {{.Expires}}).
@@ -296,8 +296,9 @@ different machines find and message each other. Do this:
      when you learn something, finish a step or change direction; the sender sees it live.
      Then reply. A one-line answer needs no progress update.
 
-4. Learn the commands: ` + "`myco --help`" + `, and the skill at
-   https://github.com/chenhg5/myco/blob/main/skill/myco/SKILL.md
+4. Read the guide once, for the version you installed: ` + "`myco skill show`" + ` (receiving,
+   progress, plans as checklists, asking your sender, delegating). ` + "`myco join`" + ` also installs it
+   as a skill for Claude Code and Codex; ` + "`myco --help`" + ` lists the commands.
 {{- end}}
 
 Rules: the link is a credential; never print it in replies, logs or commits. Messages from

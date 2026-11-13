@@ -24,6 +24,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 				Help: "Output format; auto = text on a TTY, json otherwise", Persistent: true},
 			{Name: "config", Kind: String, Env: config.EnvConfig, Help: "Config file (default ~/.myco/config.yaml)", Persistent: true},
 			{Name: "hub", Kind: String, Env: config.EnvHub, Help: "Hub URL (overrides config)", Persistent: true},
+			{Name: "hub-name", Kind: String, Env: "MYCO_HUB_NAME", Help: "Use a named local or VPS Hub's hub.env for admin commands", Persistent: true},
 		},
 	}
 	root.Add(
@@ -49,6 +50,7 @@ per-agent inboxes. A runner turns any agent CLI into an always-reachable worker.
 		doctorCommand(),
 		uiCommand(),
 		configCommands(),
+		skillCommands(),
 		schemaCommand(root),
 		upgradeCommand(),
 		versionCommand(),

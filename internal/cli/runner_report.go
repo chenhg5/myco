@@ -30,6 +30,9 @@ type runtimeReporter struct {
 	mu      sync.Mutex
 	base    *api.Runtime // nil until the CLI version is known
 	choice  providerChoice
+	model   string // the agent's run settings from the hub ("" = none)
+	effort  string
+	quota   *api.Quota // the account's limits, as the CLI last reported them
 	last    api.Runtime
 	sending bool
 }
@@ -71,6 +74,48 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 	return rep
 }
 
+// RunSettings records the model and effort the next run starts with.
+func (r *runtimeReporter) RunSettings(model, effort string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	changed := r.model != model || r.effort != effort
+	r.model, r.effort = model, effort
+	r.mu.Unlock()
+	if changed {
+		r.flushLater()
+	}
+}
+
+// Quota records the account's usage limits a run reported.
+func (r *runtimeReporter) Quota(q harness.Quota) {
+	if r == nil {
+		return
+	}
+	out := &api.Quota{Source: q.Source, At: time.Now().UTC(), Windows: []api.QuotaWindow{}}
+	for _, w := range q.Windows {
+		aw := api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, Status: w.Status}
+		if !w.ResetsAt.IsZero() {
+			t := w.ResetsAt
+			aw.ResetsAt = &t
+		}
+		out.Windows = append(out.Windows, aw)
+	}
+	r.mu.Lock()
+	r.quota = out
+	r.mu.Unlock()
+	r.flushLater()
+}
+
+func (r *runtimeReporter) flushLater() {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		r.flush(ctx)
+	}()
+}
+
 // Provider records the provider of the next run; the hub hears of changes.
 func (r *runtimeReporter) Provider(ch providerChoice) {
 	if r == nil {
@@ -101,6 +146,14 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		rt.Model, rt.ModelSource = ch.model, "provider"
 	}
 	rt.Provider, rt.ProviderSource = ch.name, ch.source
+	// Chosen in the app: wins over the machine's settings for every run.
+	if r.model != "" {
+		rt.Model, rt.ModelSource = r.model, "app"
+	}
+	if r.effort != "" {
+		rt.Effort, rt.EffortSource = r.effort, "app"
+	}
+	rt.Quota = r.quota
 	if rt == r.last {
 		r.mu.Unlock()
 		return

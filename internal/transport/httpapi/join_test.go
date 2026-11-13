@@ -122,7 +122,7 @@ func TestJoinPageProject(t *testing.T) {
 	}
 	curl := map[string]string{"User-Agent": "curl/8.5.0"}
 	body := string(h.doReq("GET", "/j/"+tok+"/web-redo", "", nil, curl).want(t, 200).raw)
-	for _, want := range []string{"export MYCO_JOIN_TOKEN='" + tok + "'", `myco join --project web-redo --display-name "<your role>"`, "myco inbox wait --timeout 55m"} {
+	for _, want := range []string{"export MYCO_JOIN_TOKEN='" + tok + "'", `myco join --project web-redo --display-name "<your role>"`, "myco inbox wait"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("script lacks %q:\n%s", want, body)
 		}

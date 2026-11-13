@@ -379,7 +379,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), login, bind, agentUpdateCommand(), agentStatusCommands(), label, agentSkillsCommands(), agentVisibilityCommand(), agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove, agentCleanupCommand())
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), resumeCommands()[0], resumeCommands()[1], login, bind, agentUpdateCommand(), agentStatusCommands(), agentRuntimeCommands(), label, agentSkillsCommands(), agentVisibilityCommand(), agentAliasCommands(), agentSpawnCommand(), agentOwnerCommand(), list, get, kick, remove, agentCleanupCommand())
 }
 
 // bindingFromFlags merges --detect results with explicit flags.
@@ -499,6 +499,11 @@ func (e *env) deliveryFromFlags() (api.Delivery, error) {
 
 // agentOrAdminClient prefers the agent token, falling back to the admin token.
 func (e *env) agentOrAdminClient() (*client.Client, error) {
+	if e.cfg.Token == "" && e.in.Getenv("MYCO_RESUME") != "" {
+		if err := e.autoResume(); err != nil {
+			return nil, err
+		}
+	}
 	if e.cfg.Token != "" {
 		return e.agentClient()
 	}

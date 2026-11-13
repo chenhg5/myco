@@ -21,10 +21,26 @@ Errors (any non-2xx):
 
 ## Endpoints
 
+The App's local backend also exposes `GET /app/local`: `hub` remains the default
+hub for older App clients, while `hubs` lists every locally configured hub as
+`{name, running, local_url, public_url, version, added}` (`name: ""` for the
+default). `POST /app/local/hub` and `POST /app/local/hub/stop` accept optional
+`name`; omitted or empty selects the default. A named start joins this machine
+to that hub and adds it to the App's hub list.
+
+Agent detail and overview entries include `resume: {created_at, last_used_at?, last_used_env?}` only when the caller manages that agent (or is the agent itself). The Hub stores only a hash of each recovery token, one per agent. Creating, revoking and using a link are audited without its token.
+
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |
 | `POST /v1/agents` | admin | Register `{name, display_name?, description?, capabilities?, allow_from?, binding?, delivery?: {mode, url, secret, params}, rotate_token?}` → `{agent, token, created}` (token returned once; delivery secret never returned) |
+| `POST /v1/me/resume?if_missing=true` | agent | Create a recovery credential for yourself: `{token, url, command, resume}`. Without `if_missing`, rotates and revokes the old credential. With it, an existing link is left intact and only metadata is returned (no plaintext can be recovered). `command` is `curl -fsSL <url> \| sh` |
+| `POST /v1/agents/{name}/resume` | owning member, hub owner/admin | Create or rotate that agent's link; same response. Other members and agents get 403 |
+| `DELETE /v1/me/resume`, `DELETE /v1/agents/{name}/resume` | self agent; owning member or hub owner/admin | Revoke the link without deleting the agent |
+| `POST /v1/resume` | recovery token in body | `{token, binding}` → `{agent, token}` as in enroll. Rebinds the same agent to the new environment/session, rotates its login token and records `last_used_at`/`last_used_env`. Recovery token remains reusable; messages and project membership remain. No other credential required |
+| `PUT /v1/agents/{name}/run-settings`, `PUT /v1/me/run-settings` | owning member or hub owner/admin (not a project coordinator: it spends the owner's quota); self agent | `{model, effort}` → the agent. The model and reasoning effort its runner starts the CLI with, from the next run on; `""` follows the machine's own setting, and both empty removes `run_settings`. `effort` is checked per CLI: Claude Code `low`/`medium`/`high`/`xhigh`/`max`, Codex `minimal`/`low`/`medium`/`high`/`xhigh`; other CLIs take none. Audited as `agent.run_settings`. Agents carry `run_settings` when set (from v0.19.5) |
+| `PUT /v1/me/runtime` | agent (its runner) | The CLI, model and provider it runs with, as `runtime` on the agent. From v0.19.5 also `effort`/`effort_source` (`app`: its run settings; `self`: it said so with `myco agent runtime set`) and `quota`: `{source: claude\|codex, at, windows: [{name, label?, used (0..1), resets_at?, status?}]}`, the account's usage limits as the CLI last reported them (Claude Code: `five_hour`, `seven_day`; Codex: `primary`, `secondary`, labelled by their length, e.g. `7d`). Only a runner can see them; an agent that receives in its own session has none |
+| `GET /r/{token}` | recovery token in URL | Shell install/reconnect script; `?format=md` returns instructions. Responses have `Cache-Control: no-store`; the script never echoes the token, and Hub request logs redact the URL path |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `POST /v1/agents/cleanup?dry_run=` | admin (members: their own nodes) | `{offline_days}` → `{agents, removed}`: removes nodes offline for that many days or more (never seen: since they joined); hand-registered identities and machine nodes are kept; each removal audited |
 | `GET /v1/console/me` | admin | `{member?, admin?, can_manage}`: the person behind a console token |
@@ -83,7 +99,7 @@ Errors (any non-2xx):
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), `queued` (queued + delivered, pulled but not acked), `in_progress` (acked only), `held` (separate), `receiving` (`session`/`runner`) and `session_in_use`; `working` means at least one acked task, `pending` means queued/delivered/held without acked work; message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}`; each agent carries `skills` (`[{name, summary?, examples?}]`, from v0.18.21) and `capabilities` (their names; agents from before skills have bare skills named after their capabilities). `capability` matches a skill name. Private nodes (see `visibility`) are listed only to those who may see them, and `GET /v1/agents/{name}` answers 404 for the others |
-| `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases` |
+| `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases`. Those who may manage it also get `resume` (`{created_at, last_used_at?, last_used_env?}`, from v0.19.5) once it has a resume line |
 | `GET /v1/me` | agent | The calling agent |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
@@ -100,7 +116,8 @@ Errors (any non-2xx):
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
-| `POST /v1/messages/{id}/progress` | recipient | `{body}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender) |
+| `POST /v1/messages/{id}/progress` | recipient | `{body, attachments?, ask?}` → interim update on an open task (type `progress`, stored closed: never pulled, never wakes the sender). `attachments` are ids of files the recipient uploaded (a screenshot, a draft); the task's sender may read them. Hubs before this keep the text and drop the files (the answer has no `attachments`; the CLI says so) |
+| `POST /v1/messages/{id}/progress` with `ask: true` | recipient | A question for the task's sender (`myco message ask`): the update has `ask: true`, its body is the question then the choices as a numbered list (`1. label — detail`); the task is held and its `asking` names the question. Whatever the sender says next (a steer) answers it: the steer has `answers` (the question's id) and the task's `asking` is cleared; the recipient's runner resumes the held task's session with it. Agents count such tasks as `asking` (also in `held`). Older hubs refuse the field (the CLI then sends plain progress and holds the task) |
 | `POST /v1/messages/{id}/steer` | sender | `{body, attachments?: [file_id]}` → correction for an open task (type `steer`, delivered to the recipient; runners interrupt and resume the task with it) |
 | `GET /v1/messages/{id}/steers?consume=` | task recipient | `{steers: [message...]}` lists unhandled corrections (from v0.19.2). `consume=true` atomically marks those corrections done; `consume=false` only reads. CLI ack/progress consume and show them, while CLI reply checks and refuses unread corrections unless `--anyway`. Older hubs return 404 and CLI skips the check |
 | `POST /v1/messages/{id}/stop?dry_run=` | sender | Stop a task you sent, including queued or running tasks → `{message,dry_run}`; task becomes failed with `error: "stopped by the sender"`. Another agent gets 403 |
@@ -192,3 +209,5 @@ envelope. See [design/e2e-encryption.md](design/e2e-encryption.md) for the forma
 The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}/aliases` returns `{aliases:[{alias,target,created_at,updated_at}]}`. `PUT /app/hubs/{id}/aliases/{alias}` accepts `{target}` and returns `{alias:{...},dry_run}`. `DELETE /app/hubs/{id}/aliases/{alias}` returns `{alias:{...},removed,dry_run}`. PUT and DELETE support `?dry_run=true`; errors preserve the Hub's structured code and HTTP status.
 
 `DELETE /app/hubs/{id}/machines/{mid}?dry_run=true` proxies machine removal and returns `{machine, removed, dry_run}` with the Hub's status and structured errors.
+
+`PUT /app/hubs/{id}/agents/{name}/run-settings` forwards to the Hub's run settings route (above). `POST /app/hubs/{id}/agents/{name}/resume` makes (or rotates) that agent's resume line and returns `{url, command}`; `DELETE /app/hubs/{id}/agents/{name}/resume` revokes it. Both forward to the Hub routes above and keep its structured errors; a Hub before v0.19.5 answers 404, and the App then shows the values without controls.

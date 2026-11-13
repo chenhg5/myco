@@ -827,3 +827,68 @@ func TestAgentAvatar(t *testing.T) {
 	h.doReq("GET", "/v1/agents/bob/avatar", alice, nil, nil).wantErr(t, 404, "not_found")
 	h.doReq("GET", "/v1/agents/nobody/avatar", alice, nil, nil).wantErr(t, 404, "not_found")
 }
+
+// A progress update can show files: the task's sender reads them (the
+// console too), others cannot.
+func TestProgressAttachments(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	bob := h.register("bob", nil)
+	carol := h.register("carol", nil)
+
+	sent := h.do("POST", "/v1/messages", alice, map[string]any{"to": "bob", "body": "redo the home page"}).want(t, 201)
+	task, _ := sent.body["message"].(map[string]any)
+	tid := task["id"].(string)
+	h.do("POST", "/v1/inbox/pull", bob, nil).want(t, 200)
+
+	up := h.doReq("POST", "/v1/files?name=home.png", bob, "png bytes", map[string]string{"Content-Type": "image/png"}).want(t, 201)
+	fid, _ := up.body["id"].(string)
+	r := h.do("POST", "/v1/messages/"+tid+"/progress", bob, map[string]any{"body": "the page so far", "attachments": []string{fid}}).want(t, 201)
+	m, _ := r.body["message"].(map[string]any)
+	if atts, _ := m["attachments"].([]any); len(atts) != 1 {
+		t.Fatalf("progress with a file: %s", r.raw)
+	}
+	r = h.doReq("GET", "/v1/files/"+fid, alice, nil, nil).want(t, 200)
+	if string(r.raw) != "png bytes" {
+		t.Fatalf("the sender reads the file: %q", r.raw)
+	}
+	h.doReq("GET", "/v1/files/"+fid, carol, nil, nil).wantErr(t, 404, "not_found")
+
+	// Someone else's file cannot be attached.
+	other := h.doReq("POST", "/v1/files?name=x.txt", carol, "x", map[string]string{"Content-Type": "text/plain"}).want(t, 201)
+	h.do("POST", "/v1/messages/"+tid+"/progress", bob, map[string]any{"body": "x", "attachments": []string{other.body["id"].(string)}}).wantErr(t, 404, "not_found")
+}
+
+// Only the recipient asks; the agent counts as waiting on its sender until
+// whatever the sender says next answers it.
+func TestAskCountsAndAnswers(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	bob := h.register("bob", nil)
+	sent := h.do("POST", "/v1/messages", alice, map[string]any{"to": "bob", "body": "make a cut"}).want(t, 201)
+	tid := sent.body["message"].(map[string]any)["id"].(string)
+	h.do("POST", "/v1/inbox/pull", bob, nil).want(t, 200)
+
+	h.do("POST", "/v1/messages/"+tid+"/progress", alice, map[string]any{"body": "which?\n\n1. A\n2. B", "ask": true}).wantErr(t, 403, "permission_denied")
+	r := h.do("POST", "/v1/messages/"+tid+"/progress", bob, map[string]any{"body": "which?\n\n1. A\n2. B", "ask": true}).want(t, 201)
+	ask := r.body["message"].(map[string]any)
+	if ask["ask"] != true {
+		t.Fatalf("a question: %s", r.raw)
+	}
+	r = h.do("GET", "/v1/agents/bob", adminToken, nil).want(t, 200)
+	if r.body["asking"] != float64(1) || r.body["held"] != float64(1) {
+		t.Fatalf("bob waits on its sender: %s", r.raw)
+	}
+	r = h.do("POST", "/v1/messages/"+tid+"/steer", alice, map[string]any{"body": "A, please"}).want(t, 201)
+	if r.body["message"].(map[string]any)["answers"] != ask["id"] {
+		t.Fatalf("the steer answers the question: %s", r.raw)
+	}
+	r = h.do("GET", "/v1/agents/bob", adminToken, nil).want(t, 200)
+	if _, ok := r.body["asking"]; ok {
+		t.Fatalf("answered: %s", r.raw)
+	}
+	r = h.do("POST", "/v1/messages/"+tid+"/steer", alice, map[string]any{"body": "and make it short"}).want(t, 201)
+	if _, ok := r.body["message"].(map[string]any)["answers"]; ok {
+		t.Fatalf("a later steer answers nothing: %s", r.raw)
+	}
+}

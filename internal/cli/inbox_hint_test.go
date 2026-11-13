@@ -43,7 +43,13 @@ func TestInboxHintOnlyForTasks(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &result); err != nil || len(result.Messages) == 0 {
 			t.Fatalf("%s json: %s (%v)", command, out, err)
 		}
-		if wantHint != (result.Hint != "") || (wantHint && (!strings.Contains(result.Hint, "message ack") || !strings.Contains(result.Hint, "message progress") || !strings.Contains(result.Hint, "message reply"))) {
+		if command == "wait" && !strings.HasSuffix(result.Hint, waitAgainHint) {
+			t.Fatalf("%s json wait reminder: %s", command, out)
+		}
+		if command == "pull" && !wantHint && result.Hint != "" {
+			t.Fatalf("%s json unexpected hint: %s", command, out)
+		}
+		if wantHint != strings.Contains(result.Hint, "message progress") || (wantHint && (!strings.Contains(result.Hint, "message ack") || !strings.Contains(result.Hint, "message reply"))) {
 			t.Fatalf("%s json hint: %s", command, out)
 		}
 	}

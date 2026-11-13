@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
-import type { Message, TraceEvent, TraceStep } from "@/api";
+import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
+import { MessageAttachments } from "@/app/attachments";
+import { AskCard } from "@/app/AskCard";
+import { drafted, grown, Reveal } from "@/app/Reveal";
+
+/** When this App first had each thing an agent said in a run. */
+const sayFirstSeen = new Map<string, number>();
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -92,16 +98,37 @@ export type PlanItem = { text: string; state: "done" | "doing" | "todo" };
 /** A plan written as a checklist: lines like "[x] done", "[~] doing",
  *  "[ ] to do", or a markdown task list ("- [x] …"). At least two items,
  *  every line one of them; otherwise it is not a plan. */
-export function parsePlan(text: string): PlanItem[] | null {
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return null;
-  const items: PlanItem[] = [];
-  for (const l of lines) {
-    const m = /^(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)$/.exec(l);
-    if (!m) return null;
-    items.push({ text: m[2].trim(), state: m[1] === " " ? "todo" : m[1] === "~" || m[1] === "-" ? "doing" : "done" });
+const PLAN_ITEM = /^(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)$/;
+
+function itemOf(line: string): PlanItem | null {
+  const m = PLAN_ITEM.exec(line.trim());
+  return m ? { text: m[2].trim(), state: m[1] === " " ? "todo" : m[1] === "~" || m[1] === "-" ? "doing" : "done" } : null;
+}
+
+/** A checklist (two items or more), and what was said around it: an agent
+ *  often writes a line before its plan ("好，计划：") or after it. */
+export function splitPlan(text: string): { items: PlanItem[]; rest: string } | null {
+  const lines = text.split("\n");
+  let best: { from: number; to: number } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!itemOf(lines[i])) continue;
+    let j = i;
+    while (j + 1 < lines.length && (itemOf(lines[j + 1]) || !lines[j + 1].trim())) j++;
+    while (j > i && !lines[j].trim()) j--;
+    if (!best || j - i > best.to - best.from) best = { from: i, to: j };
+    i = j;
   }
-  return items;
+  if (!best) return null;
+  const items = lines.slice(best.from, best.to + 1).map(itemOf).filter((x): x is PlanItem => !!x);
+  if (items.length < 2) return null;
+  const rest = [...lines.slice(0, best.from), ...lines.slice(best.to + 1)].join("\n").trim();
+  return { items, rest };
+}
+
+/** A message that is only a checklist. */
+export function parsePlan(text: string): PlanItem[] | null {
+  const p = splitPlan(text);
+  return p && !p.rest ? p.items : null;
 }
 
 function usageLine(u?: TraceStep): string {
@@ -123,7 +150,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage, answers, canAnswer, onAnswer }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -131,12 +158,26 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   /** what the agent reported on this task (myco message progress): part of
    *  the run, in time order, as it says things between its steps */
   said?: Message[];
+  /** the steers that answered its questions, by question id */
+  answers?: Map<string, Message>;
+  /** you sent the task: you may answer its questions */
+  canAnswer?: boolean;
+  onAnswer?: (text: string) => Promise<void>;
   /** why it has not started yet, when known (the session is open elsewhere) */
   waiting?: string;
   /** its answer is in the conversation: done, even if its status lags */
   answered?: boolean;
 }) {
   const running = isOpen(task.status) && !answered;
+  // What it says that arrives after this run was first drawn grows in.
+  const openedAt = useRef(Date.now());
+  const sayGrows = (key: string) => {
+    if (grown.has(key)) return false;
+    if (!sayFirstSeen.has(key)) sayFirstSeen.set(key, Date.now());
+    return running && sayFirstSeen.get(key)! - openedAt.current > 2000;
+  };
+  // Waiting on a question to its sender: not at work, no loading.
+  const asking = running && !!task.asking;
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
@@ -231,6 +272,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   const steps = rows.filter((x) => x.kind !== "text").length;
   let end = rows.length;
   while (end > 0 && rows[end - 1].kind === "text") end--;
+  // While it works, what it is writing now shows at once (it may be the
+  // start of the answer); once the answer is in, it is the message.
+  const writing = running && !asking && end < rows.length && steps > 0;
+  if (writing) {
+    end = rows.length;
+    drafted.add(task.id);
+  }
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
   if (!reports.length) {
@@ -245,17 +293,18 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   // ticked off as it goes. A report that is only the plan is not repeated
   // in the timeline.
   let plan: { items: PlanItem[]; at: string } | null = null;
-  const planReports = new Set<string>();
+  // Reports that carried the plan: what else they said, if anything.
+  const planReports = new Map<string, string>();
   for (const r of rows) {
     if (r.kind !== "tool" || r.call.tool !== "TodoWrite") continue;
     const items = parsePlan(r.call.input || "");
     if (items && (!plan || (r.at || "") >= plan.at)) plan = { items, at: r.at || "" };
   }
   for (const p of reports) {
-    const items = parsePlan(p.body);
-    if (!items) continue;
-    planReports.add(p.id);
-    if (!plan || p.created_at >= plan.at) plan = { items, at: p.created_at };
+    const split = splitPlan(p.body);
+    if (!split) continue;
+    planReports.set(p.id, split.rest);
+    if (!plan || p.created_at >= plan.at) plan = { items: split.items, at: p.created_at };
   }
 
   // As Claude Code and Codex show a run: what it says between steps is
@@ -263,11 +312,14 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   // time); each run of steps in between folds into one line ("跑了 3 条命令、
   // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
   // say what it is doing now; at the very end, while it works, the mushroom.
-  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string }; row?: Row };
+  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; row?: Row };
   const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
-    if (planReports.has(p.id)) continue;
-    const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at } };
+    // The plan is the card at the top; what was said with it stays here.
+    if (planReports.has(p.id) && !planReports.get(p.id)) continue;
+    const body = planReports.get(p.id) || p.body;
+    const it: Item = p.ask ? { at: p.created_at, ask: p }
+      : { at: p.created_at, say: { key: p.id, text: body, report: true, when: p.created_at, files: p.attachments } };
     // after the last step made before it (steps without a time: at the end)
     let i = items.length;
     if (items.every((x) => x.at)) {
@@ -277,16 +329,18 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
     }
     items.splice(i, 0, it);
   }
-  type Report = { key: string; text: string; when: string };
+  type Report = { key: string; text: string; when: string; files?: Attachment[] };
   type Segment = { kind: "say"; key: string; text: string }
+    | { kind: "ask"; msg: Message }
     | { kind: "think"; key: string; text: string }
     | { kind: "reports"; items: Report[] }
     | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
   for (const it of items) {
+    if (it.ask) { segments.push({ kind: "ask", msg: it.ask }); continue; }
     if (it.say?.report) {
       const lastSeg = segments[segments.length - 1];
-      const r = { key: it.say.key, text: it.say.text, when: it.say.when || "" };
+      const r = { key: it.say.key, text: it.say.text, when: it.say.when || "", files: it.say.files };
       if (lastSeg?.kind === "reports") lastSeg.items.push(r);
       else segments.push({ kind: "reports", items: [r] });
       continue;
@@ -310,14 +364,18 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
 
   return (
-    <div className={cn("trace is-flow", running && "is-live")} ref={body}>
+    <div className={cn("trace is-flow", running && !asking && "is-live")} ref={body}>
       {plan && <PlanCard items={plan.items} live={running} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
-          <MessageContent body={seg.text} />
+          {/* What it says while you watch grows in; what was there, is. */}
+          {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <MessageContent body={seg.text} />}
         </div>
       ) : seg.kind === "think" ? (
         <Thought key={seg.key} text={seg.text} />
+      ) : seg.kind === "ask" ? (
+        <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
+          open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
       ) : seg.kind === "reports" ? (
         // What it reported (myco message progress): a small timeline of its
         // own, quieter than the answer, each with when.
@@ -325,7 +383,11 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
           {seg.items.map((r, j) => (
             <li key={r.key} className={cn("trace-report", running && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
               <span className="trace-report-dot" aria-hidden />
-              <div className="trace-report-text"><MessageContent body={r.text} /></div>
+              <div className="trace-report-text">
+                <MessageContent body={r.text} />
+                {/* What it showed along the way: a screenshot, a draft. */}
+                {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
+              </div>
               {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
             </li>
           ))}
@@ -333,7 +395,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
       ) : (
         <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
       ))}
-      {running && endsWithSay && (
+      {running && !asking && endsWithSay && (
         <div className="trace-head trace-wait">
           <Mushroom />
           <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>

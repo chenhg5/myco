@@ -64,8 +64,8 @@ function joinSentence(link: JoinLink, project?: string): string {
   }
   const into = project ? ` --project ${project}` : "";
   return L(
-    `加入 myco：在终端运行 ${link.command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait --timeout 55m，收到消息用 myco inbox pull 读取并处理。`,
-    `Join myco: run ${link.command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait --timeout 55m running in the background, and read what it reports with myco inbox pull.`,
+    `加入 myco：在终端运行 ${link.command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait，收到消息用 myco inbox pull 读取并处理。`,
+    `Join myco: run ${link.command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait running in the background, and read what it reports with myco inbox pull.`,
   );
 }
 
