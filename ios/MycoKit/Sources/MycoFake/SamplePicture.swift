@@ -43,15 +43,16 @@ public enum SamplePicture {
         let c = brightness * saturation
         let x = c * (1 - abs(h.truncatingRemainder(dividingBy: 2) - 1))
         let m = brightness - c
-        let (r, g, b): (Double, Double, Double)
+        let rgb: (r: Double, g: Double, b: Double)
         switch Int(h) {
-        case 0: (r, g, b) = (c, x, 0)
-        case 1: (r, g, b) = (x, c, 0)
-        case 2: (r, g, b) = (0, c, x)
-        case 3: (r, g, b) = (0, x, c)
-        case 4: (r, g, b) = (x, 0, c)
-        default: (r, g, b) = (c, 0, x)
+        case 0: rgb = (c, x, 0)
+        case 1: rgb = (x, c, 0)
+        case 2: rgb = (0, c, x)
+        case 3: rgb = (0, x, c)
+        case 4: rgb = (x, 0, c)
+        default: rgb = (c, 0, x)
         }
-        return CGColor(colorSpace: CGColorSpaceCreateDeviceRGB(), components: [r + m, g + m, b + m, alpha]) ?? CGColor(gray: 0.5, alpha: 1)
+        let (r, g, b) = rgb
+        return CGColor(colorSpace: CGColorSpaceCreateDeviceRGB(), components: [CGFloat(r + m), CGFloat(g + m), CGFloat(b + m), CGFloat(alpha)]) ?? CGColor(gray: 0.5, alpha: 1)
     }
 }

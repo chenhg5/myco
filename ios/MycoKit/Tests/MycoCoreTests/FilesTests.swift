@@ -11,7 +11,7 @@ struct FilesTests {
         FileManager.default.temporaryDirectory.appending(path: "myco-tests-" + UUID().uuidString)
     }
 
-    func open(_ agent: String = "studio-claude-c41f") async -> (ConversationModel, FakeHub, WorkspaceSession) {
+    func chat(_ agent: String = "studio-claude-c41f") async -> (ConversationModel, FakeHub, WorkspaceSession) {
         let hub = FakeHub()
         let session = WorkspaceSession(id: "files", name: "Demo", hub: hub, files: Self.folder())
         await session.refresh()
@@ -21,7 +21,7 @@ struct FilesTests {
     }
 
     @Test func aFileGoesUpWhenPickedAndOutWithTheMessage() async throws {
-        let (model, hub, _) = await open()
+        let (model, hub, _) = await chat()
         #expect(model.canSubmit == false)
         await model.attach(SamplePicture.png(hue: 0.3, width: 300, height: 200), name: "照片.png", contentType: "image/png")
         await model.attach(Data("hello".utf8), name: "notes.md", contentType: "text/markdown")
@@ -36,7 +36,8 @@ struct FilesTests {
         await model.submit()
         #expect(model.pending.isEmpty)
         #expect(model.draft.isEmpty)
-        let sent = try #require(await hub.allMessages().last { $0.from == FakeHub.me && $0.to == "studio-claude-c41f" })
+        let all = await hub.allMessages()
+        let sent = try #require(all.last { $0.from == FakeHub.me && $0.to == "studio-claude-c41f" })
         #expect(sent.body == "看看这两个")
         #expect(sent.attachments.map(\.name) == ["照片.png", "notes.md"])
         // And the conversation shows them with what was said.
@@ -46,42 +47,54 @@ struct FilesTests {
     }
 
     @Test func filesCanGoWithoutWords() async throws {
-        let (model, hub, _) = await open()
+        let (model, hub, _) = await chat()
         await model.attach(Data("a".utf8), name: "a.txt", contentType: "text/plain")
         #expect(model.canSubmit)
         #expect(model.action == .send)
-        await model.submit()
-        #expect(await hub.allMessages().last?.body == "发来一个文件：a.txt")
+        // The message says what came, in the desktop app's words.
+        await AppLanguage.$forced.withValue(.zh) {
+            await model.submit()
+        }
+        let last = await hub.allMessages().last
+        #expect(last?.body == "发来一个文件：a.txt")
+        #expect(last?.attachments.map(\.name) == ["a.txt"])
 
-        // Several: all their names.
+        // Several: all their names. Words of my own are left as they are.
         await model.attach(Data("b".utf8), name: "b.txt", contentType: "text/plain")
         await model.attach(Data("c".utf8), name: "c.txt", contentType: "text/plain")
-        #expect(ConversationModel.body("", files: model.pending) == "发来 2 个文件：b.txt、c.txt")
+        AppLanguage.$forced.withValue(.zh) {
+            #expect(ConversationModel.body("", files: model.pending) == "发来 2 个文件：b.txt、c.txt")
+        }
+        AppLanguage.$forced.withValue(.en) {
+            #expect(ConversationModel.body("", files: model.pending) == "Sent 2 files: b.txt, c.txt")
+        }
         #expect(ConversationModel.body("说明", files: model.pending) == "说明")
     }
 
     @Test func filesAddToATaskBeingWorkedOn() async throws {
         // Ops took a task two hours ago: what I send now adds to it.
-        let (model, hub, _) = await open("vps-codex-90aa")
+        let (model, hub, _) = await chat("vps-codex-90aa")
         #expect(model.openTask != nil)
         #expect(model.action == .stop)
         await model.attach(Data("log".utf8), name: "disk.log", contentType: "text/plain")
         // Something to send: the button adds, it does not stop.
         #expect(model.action == .steer)
         await model.submit()
-        let steer = try #require(await hub.allMessages().last)
+        let all = await hub.allMessages()
+        let steer = try #require(all.last)
         #expect(steer.type == "steer")
         #expect(steer.attachments.map(\.name) == ["disk.log"])
         #expect(model.items.last { $0.id == steer.id }?.files.count == 1)
     }
 
     @Test func aFileBehindTheOpenTaskWaitsWithItsMessage() async throws {
-        let (model, hub, _) = await open("vps-codex-90aa")
+        let (model, hub, _) = await chat("vps-codex-90aa")
         let task = try #require(model.openTask)
         await model.attach(Data("x".utf8), name: "next.txt", contentType: "text/plain")
         model.draft = "下一件事"
         await model.queueNext()
-        let queued = try #require(await hub.allMessages().last)
+        let all = await hub.allMessages()
+        let queued = try #require(all.last)
         #expect(queued.after == task.id)
         #expect(queued.attachments.map(\.name) == ["next.txt"])
         #expect(model.pending.isEmpty)
@@ -89,14 +102,14 @@ struct FilesTests {
     }
 
     @Test func aWorkspaceTooOldSaysSoAndSendsNothing() async {
-        let (model, hub, _) = await open()
+        let (model, hub, _) = await chat()
         await hub.setTooOldForFiles(true)
         await model.attach(Data("a".utf8), name: "a.txt", contentType: "text/plain")
         guard case .failed(let reason) = model.pending.first?.state else {
             Issue.record("the upload should have failed")
             return
         }
-        #expect(reason.contains("升级"))
+        #expect(reason.contains("升级") || reason.contains("update"))
         // Nothing went up: with no words there is nothing to send.
         #expect(model.canSubmit == false)
 
@@ -111,7 +124,7 @@ struct FilesTests {
     }
 
     @Test func aFileTooLargeIsRefusedHere() async {
-        let (model, _, _) = await open()
+        let (model, _, _) = await chat()
         await model.attach(Data(count: HubFile.maxSize + 1), name: "big.bin", contentType: "application/octet-stream")
         guard case .failed = model.pending.first?.state else {
             Issue.record("a file over the limit should not go up")
@@ -120,7 +133,7 @@ struct FilesTests {
     }
 
     @Test func aFailedSendGivesTheFilesBack() async {
-        let (model, hub, _) = await open()
+        let (model, hub, _) = await chat()
         await model.attach(Data("a".utf8), name: "a.txt", contentType: "text/plain")
         model.draft = "带个文件"
         await hub.setUnreachable(true)
@@ -181,11 +194,12 @@ struct FilesTests {
     }
 
     @Test func whatISentIsAlreadyHere() async throws {
-        let (model, hub, session) = await open()
+        let (model, hub, session) = await chat()
         let bytes = SamplePicture.png(hue: 0.3, width: 200, height: 200)
         await model.attach(bytes, name: "a.png", contentType: "image/png")
         await model.submit()
-        let sent = try #require(await hub.allMessages().last?.attachments.first)
+        let all = await hub.allMessages()
+        let sent = try #require(all.last?.attachments.first)
         // The workspace is gone, the picture I just sent still shows.
         await hub.setUnreachable(true)
         let url = try await session.shelf.url(of: sent)

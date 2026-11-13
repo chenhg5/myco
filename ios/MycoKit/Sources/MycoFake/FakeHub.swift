@@ -30,7 +30,7 @@ public actor FakeHub: HubAPI {
         machines = world.machines
         projectList = world.projects
         messages = world.messages
-        for stored in world.files { files[stored.file.id] = stored }
+        files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     public func setTooOldForFiles(_ value: Bool) {

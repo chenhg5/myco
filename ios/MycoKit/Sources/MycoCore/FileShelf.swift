@@ -45,16 +45,17 @@ public actor FileShelf {
         if let task = running[attachment.fileId] { return try await task.value }
         let id = attachment.fileId
         let task = Task<URL, Error> {
+            // Its turn among the downloads, given back however it ends.
             await self.enter()
+            let fetched: Result<Data, Error>
             do {
-                let data = try await fetch(id)
-                self.leave()
-                try self.write(data, to: file)
-                return file
+                fetched = .success(try await self.fetch(id))
             } catch {
-                self.leave()
-                throw error
+                fetched = .failure(error)
             }
+            self.leave()
+            try self.write(try fetched.get(), to: file)
+            return file
         }
         running[id] = task
         defer { running[id] = nil }

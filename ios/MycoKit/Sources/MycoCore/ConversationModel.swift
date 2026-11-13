@@ -156,7 +156,10 @@ public final class ConversationModel {
     public func attach(_ data: Data, name: String, contentType: String) async {
         pendingCount += 1
         let id = "pending-\(pendingCount)"
-        let preview = contentType.hasPrefix("image/") ? await Task.detached { Pictures.thumbnail(data) }.value : nil
+        var preview: Data?
+        if contentType.hasPrefix("image/") {
+            preview = await Task.detached { Pictures.thumbnail(data) }.value
+        }
         var file = PendingFile(id: id, name: name, size: data.count, contentType: contentType, preview: preview, state: .uploading)
         guard data.count <= HubFile.maxSize else {
             file.state = .failed(L("超过 50 MB，发不了", "Larger than 50 MB: it cannot be sent"))
@@ -188,7 +191,7 @@ public final class ConversationModel {
 
     private func upload(_ id: String) async {
         guard let data = payloads[id], let file = pending.first(where: { $0.id == id }) else { return }
-        var state: PendingFile.State
+        let state: PendingFile.State
         do {
             let stored = try await session.hub.upload(data, name: file.name, contentType: file.contentType)
             // Already here: showing it once sent needs no download.

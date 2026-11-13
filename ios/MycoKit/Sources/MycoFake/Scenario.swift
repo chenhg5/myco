@@ -74,10 +74,10 @@ public enum Scenario: Sendable {
             world.files.append((HubFile(id: id, name: name, size: Int64(data.count), contentType: type), data))
             return Attachment(fileId: id, name: name, size: Int64(data.count), contentType: type)
         }
-        let sketch1 = file("f_sketch1", "导航草图-1.png", "image/png", SamplePicture.png(hue: 0.38, width: 900, height: 1200))
-        let sketch2 = file("f_sketch2", "导航草图-2.png", "image/png", SamplePicture.png(hue: 0.58, width: 1200, height: 900))
-        let sketch3 = file("f_sketch3", "导航草图-3.png", "image/png", SamplePicture.png(hue: 0.08, width: 1000, height: 1000))
-        let board = file("f_board", "白板.png", "image/png", SamplePicture.png(hue: 0.72, width: 1400, height: 900))
+        let sketch1 = file("f_sketch1", "导航草图-1.png", "image/png", SamplePicture.png(hue: 0.38, width: 600, height: 800))
+        let sketch2 = file("f_sketch2", "导航草图-2.png", "image/png", SamplePicture.png(hue: 0.58, width: 800, height: 600))
+        let sketch3 = file("f_sketch3", "导航草图-3.png", "image/png", SamplePicture.png(hue: 0.08, width: 700, height: 700))
+        let board = file("f_board", "白板.png", "image/png", SamplePicture.png(hue: 0.72, width: 900, height: 600))
         let notes = file(
             "f_notes", "会议结论.md", "text/markdown",
             Data("# 会议结论\n\n1. iOS 用原生 SwiftUI\n2. 先做跟进和指挥，不做搭建\n3. 推送要一个中转服务\n".utf8))
