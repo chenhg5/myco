@@ -1,8 +1,24 @@
 import SwiftUI
 
+/// One way to add a file from the input's plus button ("Photo Library").
+public struct AttachChoice: Identifiable {
+    public var id: String
+    public var title: String
+    public var systemImage: String
+    public var action: () -> Void
+
+    public init(id: String, title: String, systemImage: String, action: @escaping () -> Void) {
+        self.id = id
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
+}
+
 /// The input at the bottom of a conversation: attach, type, and one button
 /// that sends, adds to the running task, or stops it. What the button does
-/// is decided outside (`mode`); this view only draws it.
+/// is decided outside (`mode`); this view only draws it. The files about
+/// to go sit above the words, inside the same shape.
 public struct ComposerView: View {
     public enum Mode: Sendable, Hashable {
         case send, steer, stop
@@ -18,11 +34,26 @@ public struct ComposerView: View {
     let queueTitle: String
     let onSubmit: () -> Void
     let onQueue: () -> Void
-    let onAttach: () -> Void
+    /// The files about to go, and what can be done with each.
+    let files: [TrayFile]
+    /// Why a file did not go up, said under the tiles.
+    let fileNote: String?
+    /// What VoiceOver calls the plus button, a tile's remove button and
+    /// its "try again".
+    let attachLabel: String
+    let removeLabel: String
+    let retryLabel: String
+    /// What the plus button offers.
+    let attachChoices: [AttachChoice]
+    let onRemoveFile: (String) -> Void
+    let onRetryFile: (String) -> Void
 
     public init(
         text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
-        onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void, onAttach: @escaping () -> Void
+        files: [TrayFile] = [], fileNote: String? = nil, attachLabel: String, removeLabel: String, retryLabel: String,
+        attachChoices: [AttachChoice],
+        onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void,
+        onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in }
     ) {
         _text = text
         self.placeholder = placeholder
@@ -32,36 +63,62 @@ public struct ComposerView: View {
         self.queueTitle = queueTitle
         self.onSubmit = onSubmit
         self.onQueue = onQueue
-        self.onAttach = onAttach
+        self.files = files
+        self.fileNote = fileNote
+        self.attachLabel = attachLabel
+        self.removeLabel = removeLabel
+        self.retryLabel = retryLabel
+        self.attachChoices = attachChoices
+        self.onRemoveFile = onRemoveFile
+        self.onRetryFile = onRetryFile
     }
 
     public var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            Button(action: onAttach) {
+            // A tap opens the ways to add something, right at the finger.
+            Menu {
+                ForEach(attachChoices) { choice in
+                    Button(choice.title, systemImage: choice.systemImage, action: choice.action)
+                }
+            } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(MycoColor.fg2)
                     .frame(width: 42, height: 42)
                     .background(MycoColor.pill, in: Circle())
             }
-            .buttonStyle(PressScaleStyle())
+            .menuOrder(.fixed)
+            .accessibilityLabel(attachLabel)
             .accessibilityIdentifier("composer.attach")
 
-            // The field and its button are one shape: the button sits inside
-            // the field's trailing edge and stays at the bottom as it grows.
-            HStack(alignment: .bottom, spacing: 4) {
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .lineLimit(1...8)
-                    .font(.body)
-                    .padding(.leading, 16)
-                    .padding(.vertical, 10)
-                    .accessibilityIdentifier("composer.input")
-                submitButton
-                    .padding(.trailing, 5)
-                    .padding(.bottom, 5)
+            // The files, the field and its button are one shape: the
+            // button sits inside the field's trailing edge and stays at
+            // the bottom as it grows.
+            VStack(alignment: .leading, spacing: 0) {
+                if !files.isEmpty {
+                    AttachmentTray(files: files, removeLabel: removeLabel, retryLabel: retryLabel, onRemove: onRemoveFile, onRetry: onRetryFile)
+                        .padding(.top, 6)
+                    if let fileNote {
+                        Text(fileNote).font(.caption).foregroundStyle(MycoColor.red)
+                            .padding(.horizontal, 14).padding(.top, 6)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                HStack(alignment: .bottom, spacing: 4) {
+                    TextField(placeholder, text: $text, axis: .vertical)
+                        .lineLimit(1...8)
+                        .font(.body)
+                        .padding(.leading, 16)
+                        .padding(.vertical, 10)
+                        .accessibilityIdentifier("composer.input")
+                    submitButton
+                        .padding(.trailing, 5)
+                        .padding(.bottom, 5)
+                }
+                .frame(minHeight: 42)
             }
-            .frame(minHeight: 42)
             .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+            .animation(.snappy(duration: 0.2), value: files.isEmpty)
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)

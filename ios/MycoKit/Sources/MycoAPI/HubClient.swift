@@ -61,9 +61,31 @@ public struct HubClient: HubAPI {
         return try Self.decode(SendEnvelope.self, from: data).message
     }
 
-    public func steer(_ messageID: String, body: String) async throws {
-        _ = try await call("POST", "/v1/console/messages/\(messageID)/steer", body: HubJSON.encoder().encode(["body": body]))
+    public func steer(_ messageID: String, body: String, attachments: [String]) async throws {
+        struct Request: Encodable {
+            var body: String
+            var attachments: [String]?
+        }
+        let request = Request(body: body, attachments: attachments.isEmpty ? nil : attachments)
+        _ = try await call("POST", "/v1/console/messages/\(messageID)/steer", body: HubJSON.encoder().encode(request))
     }
+
+    public func upload(_ data: Data, name: String, contentType: String) async throws -> HubFile {
+        // A file takes as long as the connection needs; the hub refuses
+        // one that is too large by itself.
+        let answer = try await call(
+            "POST", "/v1/console/files", query: ["name": name], body: data,
+            contentType: contentType.isEmpty ? "application/octet-stream" : contentType, timeout: Self.transferTimeout)
+        return try Self.decode(HubFile.self, from: answer)
+    }
+
+    public func file(_ id: String) async throws -> Data {
+        let safe = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? id
+        return try await call("GET", "/v1/console/files/\(safe)", timeout: Self.transferTimeout)
+    }
+
+    /// How long a file may take to go up or come down.
+    static let transferTimeout: TimeInterval = 300
 
     public func stop(_ messageID: String) async throws {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/stop")
@@ -108,23 +130,29 @@ public struct HubClient: HubAPI {
         }
     }
 
-    private func call(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil) async throws -> Data {
+    private func call(
+        _ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
+        contentType: String = "application/json", timeout: TimeInterval = 20
+    ) async throws -> Data {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw HubError(error: "invalid_argument", message: "The workspace's address is not a URL.")
         }
         components.path = components.path.trimmingSuffix("/") + path
         if !query.isEmpty {
             components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+            // A "+" is left as it is by URLComponents and read as a space
+            // by the hub: a file called "a+b.txt" would lose its plus.
+            components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         }
         guard let url = components.url else {
             throw HubError(error: "invalid_argument", message: "The workspace's address is not a URL.")
         }
-        var request = URLRequest(url: url, timeoutInterval: 20)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         if !token.isEmpty { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
         if let body {
             request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
         let data: Data
         let response: URLResponse

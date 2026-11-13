@@ -170,6 +170,51 @@ struct HubClientTests {
         await #expect(throws: HubError.self) { _ = try await hub.whoami() }
     }
 
+    @Test func aFileGoesUpAsItIsUnderItsName() async throws {
+        let hub = client()
+        Stub.handler = { _ in (201, Data(#"{"id":"f_1","name":"a+b 图.png","size":3,"sha256":"x","content_type":"image/png","owner":"@console:glenn","created_at":"2026-11-13T10:00:00Z"}"#.utf8)) }
+        let file = try await hub.upload(Data([1, 2, 3]), name: "a+b 图.png", contentType: "image/png")
+        #expect(file == HubFile(id: "f_1", name: "a+b 图.png", size: 3, contentType: "image/png"))
+        let request = try #require(Stub.seen.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/base/v1/console/files")
+        // The name survives the query: a plus stays a plus, not a space.
+        #expect(request.url?.query(percentEncoded: true) == "name=a%2Bb%20%E5%9B%BE.png")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "image/png")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer tok")
+    }
+
+    @Test func aFileComesDownAsItsBytes() async throws {
+        let hub = client()
+        Stub.handler = { _ in (200, Data([9, 8, 7])) }
+        #expect(try await hub.file("f_1") == Data([9, 8, 7]))
+        #expect(Stub.seen.first?.url?.path == "/base/v1/console/files/f_1")
+        // Gone, or a hub from before this: the hub's own error.
+        Stub.handler = { _ in (404, try! RealAnswersTests.fixture("error")) }
+        await #expect(throws: HubError.self) { _ = try await hub.file("f_gone") }
+    }
+
+    @Test func messagesNameTheirFilesOnlyWhenTheyHaveSome() throws {
+        func json(_ request: SendRequest) throws -> [String: Any] {
+            try #require(JSONSerialization.jsonObject(with: HubJSON.encoder().encode(request)) as? [String: Any])
+        }
+        let plain = try json(SendRequest(to: "cloud-lead", body: "hi"))
+        #expect(plain["attachments"] == nil)
+        let withFiles = try json(SendRequest(to: "cloud-lead", body: "hi", threadId: "t1", attachments: ["f_1", "f_2"]))
+        #expect(withFiles["attachments"] as? [String] == ["f_1", "f_2"])
+        #expect(withFiles["thread_id"] as? String == "t1")
+    }
+
+    @Test func tellsPicturesFromOtherFiles() {
+        #expect(Attachment(fileId: "f", name: "x", size: 1, contentType: "image/png").isPicture)
+        #expect(Attachment(fileId: "f", name: "x", size: 1, contentType: "image/jpeg; charset=binary").isPicture)
+        #expect(!Attachment(fileId: "f", name: "x.png", size: 1, contentType: "application/pdf").isPicture)
+        // No type (an older upload): by its name.
+        #expect(Attachment(fileId: "f", name: "Shot.JPG", size: 1).isPicture)
+        #expect(!Attachment(fileId: "f", name: "notes.md", size: 1).isPicture)
+        #expect(!Attachment(fileId: "f", name: "vector.svg", size: 1, contentType: "image/svg+xml").isPicture)
+    }
+
     @Test func pairingSendsTheCodeAndNoToken() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [Stub.self]

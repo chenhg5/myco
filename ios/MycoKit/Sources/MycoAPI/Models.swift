@@ -87,7 +87,8 @@ public struct Machine: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-public struct Attachment: Codable, Sendable, Hashable {
+public struct Attachment: Codable, Sendable, Hashable, Identifiable {
+    public var id: String { fileId }
     public var fileId: String
     public var name: String
     public var size: Int64
@@ -99,6 +100,18 @@ public struct Attachment: Codable, Sendable, Hashable {
         self.size = size
         self.contentType = contentType
     }
+
+    /// A picture the app can show: by its type, else by its name (the same
+    /// rule as the desktop app's).
+    public var isPicture: Bool {
+        if let type = contentType?.split(separator: ";").first.map({ $0.trimmingCharacters(in: .whitespaces).lowercased() }), !type.isEmpty {
+            return Self.pictureTypes.contains(type)
+        }
+        return Self.pictureExtensions.contains((name as NSString).pathExtension.lowercased())
+    }
+
+    static let pictureTypes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/heic"]
+    static let pictureExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "heic"]
 }
 
 public struct Message: Codable, Sendable, Hashable, Identifiable {

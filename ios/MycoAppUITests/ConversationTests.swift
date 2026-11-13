@@ -29,6 +29,49 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testMessagesShowTheirPicturesAndFiles() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        // What I sent came with a picture; the answer with a file.
+        let picture = app.buttons["attachment.picture"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 20), "a picture shows as a thumbnail")
+        let file = app.buttons["attachment.file"].firstMatch
+        XCTAssertTrue(file.exists, "another file shows as a row")
+        XCTAssertTrue(file.label.contains("会议结论.md"), "with its name")
+        snap("files-in-messages")
+
+        // The plus button offers where a file can come from.
+        app.descendants(matching: .any)["composer.attach"].tap()
+        XCTAssertTrue(app.buttons["Photo Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Choose Files"].exists)
+        snap("files-menu")
+    }
+
+    @MainActor
+    func testPickedFilesWaitAboveTheInputAndGoWithTheMessage() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-attach", "studio-claude-c41f"])
+        let tiles = app.descendants(matching: .any).matching(identifier: "composer.file")
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(tiles.firstMatch.waitForExistence(timeout: 20), "what was picked shows above the input")
+        expectation(for: NSPredicate(format: "count == 2"), evaluatedWith: tiles)
+        // Once they are in the workspace they can go, with no words at all.
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
+        snap("files-tray")
+
+        // One is taken off again.
+        app.buttons.matching(identifier: "composer.file.remove").element(boundBy: 1).tap()
+        expectation(for: NSPredicate(format: "count == 1"), evaluatedWith: tiles)
+        waitForExpectations(timeout: 5)
+
+        let before = app.buttons.matching(identifier: "attachment.picture").count
+        submit.tap()
+        expectation(for: NSPredicate(format: "count == 0"), evaluatedWith: tiles)
+        expectation(for: NSPredicate(format: "count == %d", before + 1), evaluatedWith: app.buttons.matching(identifier: "attachment.picture"))
+        waitForExpectations(timeout: 10)
+        snap("files-sent")
+    }
+
+    @MainActor
     func testALongConversationOpensAtItsEndAndScrolls() {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

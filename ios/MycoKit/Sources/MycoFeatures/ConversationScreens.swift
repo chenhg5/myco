@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 import MycoAPI
 import MycoCore
 import MycoUI
@@ -147,7 +149,11 @@ struct ConversationBody: View {
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
-    @State private var attachNotice = false
+    /// Which way of adding a file is open.
+    @State private var pickingPhotos = false
+    @State private var picked: [PhotosPickerItem] = []
+    @State private var pickingFiles = false
+    @State private var takingPhoto = false
     @State private var landed = false
     /// The end of the conversation is on screen.
     @State private var atBottom = true
@@ -329,8 +335,120 @@ struct ConversationBody: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
-        .alert(L("发文件还没做好", "Attachments are not built yet"), isPresented: $attachNotice) {
-            Button(L("好", "OK"), role: .cancel) {}
+        .photosPicker(isPresented: $pickingPhotos, selection: $picked, maxSelectionCount: 9, matching: .images, preferredItemEncoding: .compatible)
+        .onChange(of: picked) { _, items in
+            guard !items.isEmpty else { return }
+            picked = []
+            Task { await addPhotos(items) }
+        }
+        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls { Task { await addFile(url) } }
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraPicker { image in
+                guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+                Task { await addPicture(data, name: Self.pictureName(L("照片", "photo"), at: Date(), index: 0)) }
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    // MARK: Adding files
+
+    /// The ways to add a file, in the plus button's menu.
+    private var attachChoices: [AttachChoice] {
+        var choices = [
+            AttachChoice(id: "photos", title: L("照片图库", "Photo Library"), systemImage: "photo.on.rectangle") { pickingPhotos = true },
+        ]
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            choices.append(AttachChoice(id: "camera", title: L("拍照", "Take Photo"), systemImage: "camera") { takingPhoto = true })
+        }
+        choices.append(AttachChoice(id: "files", title: L("选文件", "Choose Files"), systemImage: "folder") { pickingFiles = true })
+        return choices
+    }
+
+    /// Pictures picked from the library, in the order they were picked.
+    private func addPhotos(_ items: [PhotosPickerItem]) async {
+        let now = Date()
+        for (index, item) in items.enumerated() {
+            let name = Self.pictureName(L("照片", "photo"), at: now, index: index)
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                model.couldNotRead(name)
+                continue
+            }
+            await addPicture(data, name: name)
+        }
+    }
+
+    /// A picture goes as something every agent can read: a phone's own
+    /// format and its largest photos are made into a JPEG of sensible size.
+    private func addPicture(_ data: Data, name: String) async {
+        guard let prepared = await Task.detached(operation: { Pictures.prepared(data) }).value else {
+            model.couldNotRead(name)
+            return
+        }
+        // Each goes up on its own: the next one does not wait for it.
+        Task { await model.attach(prepared.data, name: name + "." + prepared.fileExtension, contentType: prepared.contentType) }
+    }
+
+    /// A file picked in Files, as it is.
+    private func addFile(_ url: URL) async {
+        let name = url.lastPathComponent
+        let read = await Task.detached { () -> Data? in
+            // Files hands out what the person picked for as long as it is asked for.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            return try? Data(contentsOf: url, options: .mappedIfSafe)
+        }.value
+        guard let read else {
+            model.couldNotRead(name)
+            return
+        }
+        let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        await model.attach(read, name: name, contentType: type)
+    }
+
+    /// "照片-153012", and "照片-153012-2" for the second picked at once.
+    static func pictureName(_ word: String, at date: Date, index: Int) -> String {
+        let parts = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
+        let time = String(format: "%02d%02d%02d", parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0)
+        return index == 0 ? "\(word)-\(time)" : "\(word)-\(time)-\(index + 1)"
+    }
+
+    /// The files about to go, as the input shows them.
+    private var trayFiles: [TrayFile] {
+        model.pending.map { file in
+            let state: TrayFile.State
+            switch file.state {
+            case .uploading: state = .uploading
+            case .ready: state = .ready
+            case .failed: state = .failed
+            }
+            return TrayFile(id: file.id, name: file.name, preview: file.preview, state: state)
+        }
+    }
+
+    /// Why the first file that did not go up did not.
+    private var fileNote: String? {
+        for file in model.pending {
+            if case .failed(let reason) = file.state { return reason }
+        }
+        return nil
+    }
+
+    /// The files a message came with, under it.
+    @ViewBuilder private func files(of item: ConversationItem, trailing: Bool) -> some View {
+        if !item.files.isEmpty {
+            let attachments = item.files
+            MessageFiles(
+                attachments.map { MessageFile(id: $0.fileId, name: $0.name, detail: byteCount($0.size), isPicture: $0.isPicture) },
+                trailing: trailing,
+                failedText: L("拿不到了：可能已过期", "Not available: it may have expired")
+            ) { id in
+                guard let attachment = attachments.first(where: { $0.fileId == id }) else { throw CancellationError() }
+                return try await session.shelf.url(of: attachment)
+            }
         }
     }
 
@@ -387,8 +505,11 @@ struct ConversationBody: View {
             TimeBreak(Self.timeText(date))
         case .mine(let text, let steer, let by):
             // A colleague's task carries their name; mine needs none.
-            MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
-                .contextMenu { copyButton(text) }
+            VStack(alignment: .trailing, spacing: Space.s) {
+                MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
+                    .contextMenu { copyButton(text) }
+                files(of: item, trailing: true)
+            }
         case .reply(let text, let taskID, let to):
             VStack(alignment: .leading, spacing: Space.s) {
                 if let to {
@@ -397,6 +518,7 @@ struct ConversationBody: View {
                         .font(.footnote.weight(.medium)).foregroundStyle(MycoColor.muted)
                 }
                 ReplyText(text)
+                files(of: item, trailing: false)
                 // The newest answer carries what can be done with it; the
                 // others keep the page quiet (a long press copies any).
                 if item.id == newestReply {
@@ -510,6 +632,9 @@ struct ConversationBody: View {
                 placeholder: model.openTask == nil ? L("发给 \(name)", "Message \(name)") : L("补充给 \(name)", "Add to what \(name) is doing"),
                 mode: mode, enabled: model.canSubmit, submitLabel: submitLabel,
                 queueTitle: L("排到下一条", "Send after this one"),
+                files: trayFiles, fileNote: fileNote,
+                attachLabel: L("加图片或文件", "Add pictures or files"), removeLabel: L("不发这个", "Remove"), retryLabel: L("再传一次", "Try again"),
+                attachChoices: attachChoices,
                 onSubmit: {
                     commits += 1
                     Task { await model.submit() }
@@ -518,7 +643,8 @@ struct ConversationBody: View {
                     commits += 1
                     Task { await model.queueNext() }
                 },
-                onAttach: { attachNotice = true })
+                onRemoveFile: { model.removePending($0) },
+                onRetryFile: { id in Task { await model.retryPending(id) } })
         }
         .background(.bar)
         .sensoryFeedback(.impact(weight: .light), trigger: commits)
@@ -579,6 +705,44 @@ struct ProcessView: View {
         case "Grep", "Glob", "LS": return "magnifyingglass"
         case "WebFetch", "WebSearch": return "globe"
         default: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+/// The camera, to take one photo and hand it over.
+private struct CameraPicker: UIViewControllerRepresentable {
+    let onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImage: onImage, dismiss: { dismiss() })
+    }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImage: (UIImage) -> Void
+        let dismiss: () -> Void
+
+        init(onImage: @escaping (UIImage) -> Void, dismiss: @escaping () -> Void) {
+            self.onImage = onImage
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage { onImage(image) }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
         }
     }
 }

@@ -16,6 +16,7 @@ public enum Scenario: Sendable {
         var machines: [Machine] = []
         var projects: [Project] = []
         var messages: [Message] = []
+        var files: [(file: HubFile, data: Data)] = []
     }
 
     func build(now: Date) -> World {
@@ -68,13 +69,26 @@ public enum Scenario: Sendable {
                 docs: [ProjectDoc(name: "mobile-ios.md", size: 8_412, updatedAt: ago(3_600))]),
         ]
 
+        // A few files, to see messages that carry them.
+        func file(_ id: String, _ name: String, _ type: String, _ data: Data) -> Attachment {
+            world.files.append((HubFile(id: id, name: name, size: Int64(data.count), contentType: type), data))
+            return Attachment(fileId: id, name: name, size: Int64(data.count), contentType: type)
+        }
+        let sketch1 = file("f_sketch1", "导航草图-1.png", "image/png", SamplePicture.png(hue: 0.38, width: 900, height: 1200))
+        let sketch2 = file("f_sketch2", "导航草图-2.png", "image/png", SamplePicture.png(hue: 0.58, width: 1200, height: 900))
+        let sketch3 = file("f_sketch3", "导航草图-3.png", "image/png", SamplePicture.png(hue: 0.08, width: 1000, height: 1000))
+        let board = file("f_board", "白板.png", "image/png", SamplePicture.png(hue: 0.72, width: 1400, height: 900))
+        let notes = file(
+            "f_notes", "会议结论.md", "text/markdown",
+            Data("# 会议结论\n\n1. iOS 用原生 SwiftUI\n2. 先做跟进和指挥，不做搭建\n3. 推送要一个中转服务\n".utf8))
+
         let project = "myco-ios"
         world.messages = [
             // Me and the coordinator: a finished round.
             Message(id: "m1", from: me, to: lead.name, body: "把 iOS 第一版的导航定下来，然后分给大家做。", status: "done", project: project, createdAt: ago(3_000)),
             Message(id: "m2", from: lead.name, to: me, threadId: "m1", replyTo: "m1", type: "reply",
                     body: "定了：底部三个 Tab（**聊天、项目、成员**）。\n\n我已经把活分下去了：\n\n1. 后端工程师：推送接口的设计\n2. 前端工程师：对话页\n3. 测试：真机清单\n\n有进展我再告诉你。",
-                    status: "done", project: project, createdAt: ago(2_700)),
+                    status: "done", project: project, createdAt: ago(2_700), attachments: [sketch1, sketch2, sketch3]),
             // The coordinator's dispatches, in every state.
             Message(id: "d1", from: lead.name, to: backend.name, body: "设计 Hub 的推送接口：设备登记推送令牌、哪些事件要推。\n先出设计，不要直接改。",
                     status: "acked", project: project, createdAt: ago(2_600), updatedAt: ago(2_500), activeAt: ago(40)),
@@ -95,10 +109,10 @@ public enum Scenario: Sendable {
             // Me and ops, directly: taken on two hours ago, quiet since.
             Message(id: "o1", from: me, to: ops.name, body: "看一下 Hub 那台机器的磁盘还剩多少。", status: "acked", createdAt: ago(7_500), updatedAt: ago(7_400), activeAt: ago(7_300)),
             // Me and the notes helper, directly: answered yesterday.
-            Message(id: "h1", from: me, to: helper.name, body: "帮我把昨天的会议记录整理成三条结论。", status: "done", createdAt: ago(90_000)),
+            Message(id: "h1", from: me, to: helper.name, body: "帮我把昨天的会议记录整理成三条结论。", status: "done", createdAt: ago(90_000), attachments: [board]),
             Message(id: "h2", from: helper.name, to: me, threadId: "h1", replyTo: "h1", type: "reply",
                     body: "整理好了：\n\n1. iOS 用原生 SwiftUI\n2. 先做跟进和指挥，不做搭建\n3. 推送要一个中转服务",
-                    status: "done", createdAt: ago(89_800)),
+                    status: "done", createdAt: ago(89_800), attachments: [notes]),
             // Me and the backend engineer, directly, inside the project.
             Message(id: "b1", from: me, to: backend.name, type: "note", body: "推送中转先别定用哪家，等我回来再说。", status: "done", project: project, createdAt: ago(2_400)),
             Message(id: "b2", from: backend.name, to: me, threadId: "d1", replyTo: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),

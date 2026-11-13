@@ -11,13 +11,34 @@ public struct SendRequest: Codable, Sendable, Hashable {
     /// A task from this sender to the same recipient: delivery waits until
     /// it closes (hubs from v0.19.2).
     public var after: String?
+    /// Files uploaded from this device (`upload`), by id: attaching one
+    /// lets the recipient read it. Left out when there are none.
+    public var attachments: [String]?
 
-    public init(to: String, body: String, threadId: String? = nil, project: String? = nil, after: String? = nil) {
+    public init(
+        to: String, body: String, threadId: String? = nil, project: String? = nil, after: String? = nil, attachments: [String] = []
+    ) {
         self.to = to
         self.body = body
         self.threadId = threadId
         self.project = project
         self.after = after
+        self.attachments = attachments.isEmpty ? nil : attachments
+    }
+}
+
+/// A file kept by the workspace: what an upload answers with.
+public struct HubFile: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var size: Int64
+    public var contentType: String?
+
+    public init(id: String, name: String, size: Int64, contentType: String? = nil) {
+        self.id = id
+        self.name = name
+        self.size = size
+        self.contentType = contentType
     }
 }
 
@@ -75,11 +96,31 @@ public protocol HubAPI: Sendable {
     func trace(of messageID: String, after seq: Int) async throws -> Trace
     /// `POST /v1/console/messages`
     func send(_ request: SendRequest) async throws -> Message
-    /// `POST /v1/console/messages/{id}/steer`
-    func steer(_ messageID: String, body: String) async throws
+    /// `POST /v1/console/messages/{id}/steer`: adds to a task being worked
+    /// on, with files if any (their ids).
+    func steer(_ messageID: String, body: String, attachments: [String]) async throws
+    /// `POST /v1/console/files?name=`: keeps a file in the workspace as
+    /// mine, to attach to what I send next. A workspace too old for this
+    /// answers `not_found`.
+    func upload(_ data: Data, name: String, contentType: String) async throws -> HubFile
+    /// `GET /v1/console/files/{id}`: a file attached to a message this
+    /// device may read.
+    func file(_ id: String) async throws -> Data
     /// `POST /v1/console/messages/{id}/stop`
     func stop(_ messageID: String) async throws
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink
+}
+
+extension HubAPI {
+    /// Adds words alone to a task being worked on.
+    public func steer(_ messageID: String, body: String) async throws {
+        try await steer(messageID, body: body, attachments: [])
+    }
+}
+
+extension HubFile {
+    /// The largest file a workspace takes by default (its `--max-file-size`).
+    public static let maxSize = 50 * 1024 * 1024
 }

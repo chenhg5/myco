@@ -72,12 +72,18 @@ public final class WorkspaceSession {
 
     /// - Parameter snapshots: where what it showed last is kept, so the
     ///   next launch opens on it at once; nil keeps nothing.
-    public init(id: String, name: String, hub: any HubAPI, snapshots: (any SnapshotStore)? = nil) {
+    ///   - files: the folder its messages' files are kept in once
+    ///     fetched; nil is its own folder in the caches.
+    public init(id: String, name: String, hub: any HubAPI, snapshots: (any SnapshotStore)? = nil, files: URL? = nil) {
         self.id = id
         self.name = name
         self.hub = hub
         self.snapshots = snapshots
+        shelf = FileShelf(folder: files ?? FileShelf.folder(of: id)) { [hub] id in try await hub.file(id) }
     }
+
+    /// The files of this workspace's messages, on this device once fetched.
+    public let shelf: FileShelf
 
     /// What is kept between launches: the lists, never a token.
     struct Snapshot: Codable {

@@ -11,8 +11,9 @@ import MycoStore
 /// It opens the workspace joined earlier, or the welcome page. Launch
 /// arguments change that, for tests and for trying things:
 /// `-myco-start demo|empty|long` shows a demo workspace (an in-memory
-/// hub), `-myco-start welcome` the welcome page, and `-myco-join <link>`
-/// joins with a link at launch.
+/// hub), `-myco-start welcome` the welcome page, `-myco-join <link>`
+/// joins with a link at launch, and `-myco-attach <agent>` starts the demo
+/// with files picked for that agent.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -47,13 +48,26 @@ struct MycoApp: App {
             leave: { id in
                 await workspaces.leave(id)
                 await snapshots.removeSnapshots(of: id)
+                // What its messages carried goes with it.
+                FileShelf.forget(id)
             })
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
 
     private static func demo(_ scenario: Scenario) -> WorkspaceSession {
-        WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: FakeHub(scenario: scenario))
+        let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: FakeHub(scenario: scenario))
+        // `-myco-attach <agent>`: the demo starts with a picture and a
+        // file picked for that agent, to see and test the input with files
+        // without going through the system's pickers.
+        if let agent = UserDefaults.standard.string(forKey: "myco-attach"), !agent.isEmpty {
+            let conversation = session.conversation(with: agent)
+            Task {
+                await conversation.attach(SamplePicture.png(hue: 0.45, width: 800, height: 1100), name: "照片-101500.png", contentType: "image/png")
+                await conversation.attach(Data("# 需求\n\n- 发图片\n- 发文件\n".utf8), name: "需求说明.md", contentType: "text/markdown")
+            }
+        }
+        return session
     }
 
     var body: some Scene {

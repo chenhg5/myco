@@ -27,6 +27,10 @@ targets:
         # local network (myco hub up --tunnel none). Everything else is HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # Asked the first time the camera is opened from the input, and the
+        # first time a picture is saved from a preview.
+        NSCameraUsageDescription: "拍照片发给你的 agent。 Take photos to send to your agents."
+        NSPhotoLibraryAddUsageDescription: "把对话里的图片存到相册。 Save pictures from conversations to your library."
         CFBundleURLTypes:
           - CFBundleURLName: dev.myco.ios
             CFBundleURLSchemes: [myco]

@@ -60,6 +60,7 @@ public enum ComposerAction: Sendable, Hashable {
     /// Stops the task being worked on.
     case stop
 
+    /// - Parameter hasText: something is there to send: words, or files.
     public static func resolve(hasOpenTask: Bool, hasText: Bool) -> ComposerAction {
         guard hasOpenTask else { return .send }
         return hasText ? .steer : .stop

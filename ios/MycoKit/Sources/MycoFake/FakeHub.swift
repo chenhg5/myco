@@ -19,6 +19,10 @@ public actor FakeHub: HubAPI {
     private var simulated: [String: Date] = [:]
     /// Makes every call fail, to see the app without its workspace.
     private var unreachable = false
+    /// The files kept here, by id.
+    private var files: [String: (file: HubFile, data: Data)] = [:]
+    /// Acts like a hub from before files could be sent from the app.
+    private var tooOldForFiles = false
 
     public init(scenario: Scenario = .team, now: Date = Date()) {
         let world = scenario.build(now: now)
@@ -26,6 +30,16 @@ public actor FakeHub: HubAPI {
         machines = world.machines
         projectList = world.projects
         messages = world.messages
+        for stored in world.files { files[stored.file.id] = stored }
+    }
+
+    public func setTooOldForFiles(_ value: Bool) {
+        tooOldForFiles = value
+    }
+
+    /// What was sent to it, for tests.
+    public func allMessages() -> [Message] {
+        messages
     }
 
     public func setUnreachable(_ value: Bool) {
@@ -156,20 +170,20 @@ public actor FakeHub: HubAPI {
         let now = Date()
         let message = Message(
             id: nextID(), from: Self.me, to: request.to, threadId: request.threadId, after: request.after, body: request.body,
-            status: "queued", project: request.project, createdAt: now)
+            status: "queued", project: request.project, createdAt: now, attachments: try attached(request.attachments ?? []))
         messages.append(message)
         simulated[message.id] = now
         return message
     }
 
-    public func steer(_ messageID: String, body: String) throws {
+    public func steer(_ messageID: String, body: String, attachments: [String]) throws {
         try check()
         guard let task = messages.first(where: { $0.id == messageID }), task.isOpen else {
             throw HubError(error: "invalid_state", message: "the task is not open")
         }
         messages.append(Message(
             id: nextID(), from: Self.me, to: task.to, threadId: task.threadId, type: "steer", body: body,
-            status: "done", project: task.project, createdAt: Date()))
+            status: "done", project: task.project, createdAt: Date(), attachments: try attached(attachments)))
         // More to do: the answer comes a little later.
         if simulated[messageID] != nil { simulated[messageID] = Date().addingTimeInterval(-Self.ackAfter) }
     }
@@ -183,6 +197,31 @@ public actor FakeHub: HubAPI {
         messages[i].error = "stopped by the sender"
         messages[i].updatedAt = Date()
         simulated[messageID] = nil
+    }
+
+    public func upload(_ data: Data, name: String, contentType: String) async throws -> HubFile {
+        try check()
+        if tooOldForFiles { throw HubError(error: "not_found", message: "not found") }
+        // A moment on the way up, as on a real connection.
+        try? await Task.sleep(for: .milliseconds(400))
+        seq += 1
+        let file = HubFile(id: "f_fake\(seq)", name: name.isEmpty ? "file" : name, size: Int64(data.count), contentType: contentType)
+        files[file.id] = (file, data)
+        return file
+    }
+
+    public func file(_ id: String) throws -> Data {
+        try check()
+        guard let stored = files[id] else { throw HubError(error: "not_found", message: "file \(id) not found") }
+        return stored.data
+    }
+
+    /// The files a message names, as it carries them.
+    private func attached(_ ids: [String]) throws -> [Attachment] {
+        try ids.map { id in
+            guard let file = files[id]?.file else { throw HubError(error: "not_found", message: "file \(id) not found") }
+            return Attachment(fileId: file.id, name: file.name, size: file.size, contentType: file.contentType)
+        }
     }
 
     public func joinLink() throws -> JoinLink {

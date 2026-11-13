@@ -36,6 +36,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>拍照片发给你的 agent。 Take photos to send to your agents.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>把对话里的图片存到相册。 Save pictures from conversations to your library.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

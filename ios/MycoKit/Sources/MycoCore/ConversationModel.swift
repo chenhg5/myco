@@ -2,6 +2,26 @@ import Foundation
 import Observation
 import MycoAPI
 
+/// A file about to go with the next message. It is uploaded as soon as it
+/// is added (to the workspace, as mine), so sending is only the message.
+public struct PendingFile: Identifiable, Hashable, Sendable {
+    public enum State: Hashable, Sendable {
+        case uploading
+        /// In the workspace, under this id.
+        case ready(fileID: String)
+        /// Why it did not go up.
+        case failed(String)
+    }
+
+    public var id: String
+    public var name: String
+    public var size: Int
+    public var contentType: String
+    /// A small picture of it, when it is one.
+    public var preview: Data?
+    public var state: State
+}
+
 /// One conversation on screen: what was said, where the open task stands,
 /// and what the input does. The page binds to it and draws; it does not
 /// decide any of this itself.
@@ -31,7 +51,18 @@ public final class ConversationModel {
     /// those the workspace holds, then those kept here.
     public private(set) var waiting: [Waiting] = []
     /// Kept here: the workspace could not hold them.
-    private var queued: [String] = []
+    private var queued: [Queued] = []
+
+    private struct Queued {
+        var body: String
+        var attachments: [String]
+    }
+
+    /// The files that go with the next message, in the order they were added.
+    public private(set) var pending: [PendingFile] = []
+    /// The bytes of those not in the workspace yet (to try again).
+    private var payloads: [String: Data] = [:]
+    private var pendingCount = 0
     /// Waiting messages taken back here (a stopped one may still come back
     /// once more from the workspace).
     private var withdrawn: Set<String> = []
@@ -89,12 +120,89 @@ public final class ConversationModel {
     }
 
     public var action: ComposerAction {
-        ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty)
+        ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
 
-    /// Sending is off while a send is under way, or with nothing to send.
+    /// Sending is off while a send is under way, while a file is still
+    /// going up, or with nothing to send. Files can go without words.
     public var canSubmit: Bool {
-        !sending && (action == .stop || !trimmedDraft.isEmpty)
+        guard !sending else { return false }
+        if action == .stop { return true }
+        return !pending.contains { $0.state == .uploading } && (!trimmedDraft.isEmpty || !readyFiles.isEmpty)
+    }
+
+    /// The files that made it to the workspace.
+    private var readyFiles: [PendingFile] {
+        pending.filter { if case .ready = $0.state { return true } else { return false } }
+    }
+
+    private static func ids(of files: [PendingFile]) -> [String] {
+        files.compactMap { if case .ready(let id) = $0.state { return id } else { return nil } }
+    }
+
+    /// What a message says: what was typed, or (files alone) what they
+    /// are, in the desktop app's words.
+    static func body(_ text: String, files: [PendingFile]) -> String {
+        if !text.isEmpty || files.isEmpty { return text }
+        if files.count == 1 { return L("发来一个文件：\(files[0].name)", "Sent a file: \(files[0].name)") }
+        let names = files.map(\.name)
+        return L("发来 \(files.count) 个文件：\(names.joined(separator: "、"))", "Sent \(files.count) files: \(names.joined(separator: ", "))")
+    }
+
+    // MARK: Files
+
+    /// Adds a file to the next message and starts sending it to the
+    /// workspace.
+    public func attach(_ data: Data, name: String, contentType: String) async {
+        pendingCount += 1
+        let id = "pending-\(pendingCount)"
+        let preview = contentType.hasPrefix("image/") ? await Task.detached { Pictures.thumbnail(data) }.value : nil
+        var file = PendingFile(id: id, name: name, size: data.count, contentType: contentType, preview: preview, state: .uploading)
+        guard data.count <= HubFile.maxSize else {
+            file.state = .failed(L("超过 50 MB，发不了", "Larger than 50 MB: it cannot be sent"))
+            pending.append(file)
+            return
+        }
+        payloads[id] = data
+        pending.append(file)
+        await upload(id)
+    }
+
+    /// Something picked could not be read on this device: said under the input.
+    public func couldNotRead(_ name: String) {
+        problem = L("读不了「\(name)」", "Could not read \"\(name)\"")
+    }
+
+    /// Takes a file off the next message.
+    public func removePending(_ id: String) {
+        pending.removeAll { $0.id == id }
+        payloads[id] = nil
+    }
+
+    /// Tries again to send a file that did not go up.
+    public func retryPending(_ id: String) async {
+        guard let index = pending.firstIndex(where: { $0.id == id }), case .failed = pending[index].state, payloads[id] != nil else { return }
+        pending[index].state = .uploading
+        await upload(id)
+    }
+
+    private func upload(_ id: String) async {
+        guard let data = payloads[id], let file = pending.first(where: { $0.id == id }) else { return }
+        var state: PendingFile.State
+        do {
+            let stored = try await session.hub.upload(data, name: file.name, contentType: file.contentType)
+            // Already here: showing it once sent needs no download.
+            await session.shelf.keep(data, as: Attachment(fileId: stored.id, name: stored.name, size: stored.size, contentType: stored.contentType))
+            payloads[id] = nil
+            state = .ready(fileID: stored.id)
+        } catch let error as HubError where error.error == "not_found" {
+            state = .failed(L("这个工作区还不能从 App 发文件，升级它的 myco 就可以", "This workspace can't take files from the app yet; update its myco"))
+        } catch {
+            state = .failed((error as? HubError)?.message ?? L("没传上去", "It did not go up"))
+        }
+        // Taken off while it was going up: nothing to mark.
+        guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending[index].state = state
     }
 
     private var trimmedDraft: String {
@@ -201,7 +309,7 @@ public final class ConversationModel {
         let mine = Array(known.values).filter { !withdrawn.contains($0.id) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
             .map { Waiting(id: $0.id, body: $0.body, onHub: true) }
-        let local = queued.enumerated().map { Waiting(id: "local-\($0.offset)", body: $0.element, onHub: false) }
+        let local = queued.enumerated().map { Waiting(id: "local-\($0.offset)", body: $0.element.body, onHub: false) }
         if waiting != held + local { waiting = held + local }
         // Nothing new: leave the list alone, so the page does not redraw.
         if built != items {
@@ -215,13 +323,14 @@ public final class ConversationModel {
     /// A new message of mine: in the thread my last exchange was in. On a
     /// project's page, the first one of this visit starts a thread in the
     /// project (as the desktop app does).
-    private func request(_ body: String, after: String? = nil) -> SendRequest {
+    private func request(_ body: String, after: String? = nil, attachments: [String] = []) -> SendRequest {
         if project != nil, !startedProjectThread {
             startedProjectThread = true
-            return SendRequest(to: agent, body: body, project: project, after: after)
+            return SendRequest(to: agent, body: body, project: project, after: after, attachments: attachments)
         }
         let thread = ConversationBuilder.threadToContinue(me: session.me, messages: Array(known.values))
-        return SendRequest(to: agent, body: body, threadId: thread, project: thread == nil ? project : nil, after: after)
+        return SendRequest(
+            to: agent, body: body, threadId: thread, project: thread == nil ? project : nil, after: after, attachments: attachments)
     }
 
     private func save(_ snapshot: Snapshot) async {
@@ -285,25 +394,54 @@ public final class ConversationModel {
         guard canSubmit else { return }
         let action = action
         let text = trimmedDraft
-        if action != .stop { draft = "" }
+        let files = pending
+        let attachments = Self.ids(of: files)
+        let body = Self.body(text, files: readyFiles)
+        if action != .stop { takeDraft() }
         sending = true
         do {
             switch action {
             case .send:
-                _ = try await session.hub.send(request(text))
+                _ = try await session.hub.send(request(body, attachments: attachments))
             case .steer:
-                if let task = openTask { try await session.hub.steer(task.id, body: text) }
+                guard let task = openTask else { break }
+                do {
+                    try await session.hub.steer(task.id, body: body, attachments: attachments)
+                } catch let error as HubError where error.error == "invalid_state" {
+                    // The task ended just now: this is a new message.
+                    _ = try await session.hub.send(request(body, attachments: attachments))
+                }
             case .stop:
                 if let task = openTask { try await session.hub.stop(task.id) }
             }
             problem = nil
+            if action != .stop { dropSentPayloads() }
         } catch {
-            // Give the words back: nothing typed is lost to a failed send.
-            if action != .stop, draft.isEmpty { draft = text }
+            // Give it all back: nothing typed or picked is lost to a failed send.
+            if action != .stop { giveBack(text, files) }
             problem = (error as? HubError)?.message ?? error.localizedDescription
         }
         sending = false
         await reload()
+    }
+
+    /// Empties the input: its words and files are on their way.
+    private func takeDraft() {
+        draft = ""
+        pending = []
+    }
+
+    /// The bytes kept to try an upload again are only those of files
+    /// still waiting to go.
+    private func dropSentPayloads() {
+        let waiting = Set(pending.map(\.id))
+        payloads = payloads.filter { waiting.contains($0.key) }
+    }
+
+    /// Puts back what a failed send took, before anything added since.
+    private func giveBack(_ text: String, _ files: [PendingFile]) {
+        if draft.isEmpty { draft = text }
+        pending = files + pending
     }
 
     /// Stops the open task whatever is typed (the action on a stuck task).
@@ -324,21 +462,26 @@ public final class ConversationModel {
     /// and delivers it when that task ends. A workspace too old to hold it
     /// refuses; then it is kept here and sent when the task ends.
     public func queueNext() async {
-        let text = trimmedDraft
-        guard !text.isEmpty, !sending else { return }
+        guard canSubmit, action != .stop else { return }
         guard let task = openTask else {
             await submit()
             return
         }
-        draft = ""
+        let text = trimmedDraft
+        let files = pending
+        let attachments = Self.ids(of: files)
+        let body = Self.body(text, files: readyFiles)
+        takeDraft()
         sending = true
         do {
-            _ = try await session.hub.send(request(text, after: task.id))
+            _ = try await session.hub.send(request(body, after: task.id, attachments: attachments))
             problem = nil
+            dropSentPayloads()
         } catch let error as HubError where error.error == "invalid_argument" {
-            queued.append(text)
+            queued.append(Queued(body: body, attachments: attachments))
+            dropSentPayloads()
         } catch {
-            draft = text
+            giveBack(text, files)
             problem = (error as? HubError)?.message ?? error.localizedDescription
         }
         sending = false
@@ -370,7 +513,7 @@ public final class ConversationModel {
         sending = true
         defer { sending = false }
         do {
-            _ = try await session.hub.send(request(next))
+            _ = try await session.hub.send(request(next.body, attachments: next.attachments))
             queued.removeFirst()
             return true
         } catch {

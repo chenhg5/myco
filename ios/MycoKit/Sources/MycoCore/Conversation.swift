@@ -39,6 +39,8 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public var id: String
     public var at: Date
     public var kind: Kind
+    /// The files that came with it (what was asked, or an answer).
+    public var files: [Attachment] = []
 }
 
 /// A task between two others, shown as a one-line capsule.
@@ -95,10 +97,12 @@ public enum ConversationBuilder {
             case "task", "note":
                 guard asked else {
                     // The agent speaking first, or giving work to someone.
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: nil, to: m.to == me ? nil : m.to)))
+                    items.append(.init(
+                        id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: nil, to: m.to == me ? nil : m.to),
+                        files: files(of: m)))
                     continue
                 }
-                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by)))
+                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by), files: files(of: m)))
                 guard m.type == "task" else { continue }
                 let state = RunState.of(m, recipient: status(m.to), now: now)
                 if processes.contains(m.id) {
@@ -125,12 +129,15 @@ public enum ConversationBuilder {
                     break
                 }
             case "steer":
-                if asked { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by))) }
+                if asked {
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by), files: files(of: m)))
+                }
             case "reply":
                 if !asked {
                     items.append(.init(
                         id: m.id, at: m.createdAt,
-                        kind: .reply(text: text(of: m), taskID: m.replyTo, to: m.to == me ? nil : m.to)))
+                        kind: .reply(text: text(of: m), taskID: m.replyTo, to: m.to == me ? nil : m.to),
+                        files: files(of: m)))
                 }
             case "progress":
                 guard !asked else { continue }
@@ -256,6 +263,13 @@ public enum ConversationBuilder {
             return L("🔒 已加密，这台设备还读不了", "🔒 Encrypted: this device cannot read it yet")
         }
         return message.body
+    }
+
+    /// The files a message shows. A sealed message's files are sealed
+    /// too: they are opened when it can be.
+    public static func files(of message: Message) -> [Attachment] {
+        if !(message.unreadable ?? "").isEmpty || message.e2e == true || Envelope.isSealed(message.body) { return [] }
+        return message.attachments
     }
 
     /// A message's first line as plain text, for lists and capsules:
