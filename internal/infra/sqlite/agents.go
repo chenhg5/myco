@@ -20,15 +20,15 @@ var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
   harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at,
-  machine_id, runtime, owner, skills, visibility, avatar`
+  machine_id, runtime, owner, skills, visibility, avatar, run_settings`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar)
+		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar, runSettingsJSON(a.RunSettings))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -121,11 +121,12 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 		caps, allow, params, labels string
 		created, lastSeen, statusAt int64
 		runtime, skills, visibility string
+		runSettings                 string
 	)
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
 		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt,
-		&a.MachineID, &runtime, &a.Owner, &skills, &visibility, &a.Avatar); err != nil {
+		&a.MachineID, &runtime, &a.Owner, &skills, &visibility, &a.Avatar, &runSettings); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)
@@ -133,6 +134,7 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	_ = json.Unmarshal([]byte(params), &d.Params)
 	_ = json.Unmarshal([]byte(labels), &a.Labels)
 	_ = json.Unmarshal([]byte(runtime), &a.Runtime)
+	_ = json.Unmarshal([]byte(runSettings), &a.RunSettings)
 	_ = json.Unmarshal([]byte(skills), &a.Skills)
 	a.NormalizeSkills()
 	a.Visibility = domain.Visibility(visibility)
@@ -182,6 +184,15 @@ func (r *AgentRepo) SetMachine(ctx context.Context, name domain.AgentName, machi
 
 func (r *AgentRepo) SetRuntime(ctx context.Context, name domain.AgentName, rt domain.Runtime) error {
 	return r.setColumn(ctx, name, "runtime", runtimeJSON(rt))
+}
+
+func runSettingsJSON(rs domain.RunSettings) string {
+	b, _ := json.Marshal(rs)
+	return string(b)
+}
+
+func (r *AgentRepo) SetRunSettings(ctx context.Context, name domain.AgentName, rs domain.RunSettings) error {
+	return r.setColumn(ctx, name, "run_settings", runSettingsJSON(rs))
 }
 
 var _ domain.AvatarStore = (*AgentRepo)(nil)

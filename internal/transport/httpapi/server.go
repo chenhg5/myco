@@ -183,6 +183,9 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /r/{token}", s.resumePage)
 	m.HandleFunc("POST /v1/resume", s.useResume)
 	m.HandleFunc("POST /v1/agents/{name}/resume", s.admin(s.createAgentResume))
+	// The model and effort its runner uses: the agent's owner or a hub
+	// manager (not a project coordinator: it spends the owner's quota).
+	m.HandleFunc("PUT /v1/agents/{name}/run-settings", s.admin(s.setAgentRunSettings))
 	m.HandleFunc("DELETE /v1/agents/{name}/resume", s.admin(s.revokeAgentResume))
 	// An app link opened in a browser: say how to use it (never echoes
 	// whether the token is valid).
@@ -213,6 +216,7 @@ func (s *Server) routes() {
 	// Agent-scoped operations.
 	m.HandleFunc("GET /v1/me", s.agent(s.me))
 	m.HandleFunc("POST /v1/me/resume", s.agent(s.createMyResume))
+	m.HandleFunc("PUT /v1/me/run-settings", s.agent(s.setMyRunSettings))
 	m.HandleFunc("DELETE /v1/me/resume", s.agent(s.revokeMyResume))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
@@ -1676,7 +1680,8 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
-		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource}); err != nil {
+		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource,
+		Effort: in.Effort, EffortSource: in.EffortSource, Quota: quotaFromAPI(in.Quota)}); err != nil {
 		writeError(w, err)
 		return
 	}

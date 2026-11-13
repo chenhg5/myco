@@ -20,6 +20,8 @@ type AgentRepository interface {
 	// SetMachine and SetRuntime record what the agent's runner reports.
 	SetMachine(ctx context.Context, name AgentName, machineID string) error
 	SetRuntime(ctx context.Context, name AgentName, rt Runtime) error
+	// SetRunSettings records the model and effort chosen for its runner.
+	SetRunSettings(ctx context.Context, name AgentName, rs RunSettings) error
 }
 
 // EnrollmentRepository persists enrollments.
