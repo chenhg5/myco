@@ -22,6 +22,7 @@ import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
+import { hubAtLeast } from "@/app/hubVersion";
 
 export interface ConversationTarget {
   hubId: string;
@@ -89,19 +90,6 @@ function ProgressFold({ items }: { items: Message[] }) {
 
 function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
-}
-
-/** Whether a hub's version is at least want ("0.19.2"). Unknown is older. */
-function hubAtLeast(version: string | undefined, want: string): boolean {
-  if (!version) return false;
-  const a = version.replace(/^v/i, "").split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
-  const b = want.split(".").map((x) => Number.parseInt(x, 10) || 0);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y;
-  }
-  return true;
 }
 
 /** ⌘ on a Mac, Ctrl elsewhere (the same key the input listens for). */

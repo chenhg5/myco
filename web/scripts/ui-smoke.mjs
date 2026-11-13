@@ -317,6 +317,9 @@ async function runMatrix(browser, size, scheme) {
   // ones back so every width and theme starts with the same two.
   const resetLocal = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/local`, { method: "POST" });
   if (!resetLocal.ok) throw new Error(`重置这台电脑上的工作区失败：HTTP ${resetLocal.status}`);
+  // The resume step makes and revokes a line; put the demo one back.
+  const resetResume = await fetch(`http://${HOST}:${MOCK_PORT}/app/mock/resume`, { method: "POST" });
+  if (!resetResume.ok) throw new Error(`重置重新接入链接失败：HTTP ${resetResume.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -1068,6 +1071,47 @@ async function runMatrix(browser, size, scheme) {
       await face.getByRole("button", { name: "用这个头像" }).click();
       await face.waitFor({ state: "hidden", timeout: 5_000 });
       await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    await step("成员 · 重新接入", async () => {
+      // PM has a resume line last used in a sandbox: making a new one kills
+      // it, the dialog shows the curl command, and revoking goes back to none.
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const resume = page.locator(".ms .ms-fold-body .app-kv", { hasText: "重新接入" });
+      await resume.waitFor({ timeout: 5_000 });
+      await resume.scrollIntoViewIfNeeded();
+      if (!(await resume.innerText()).includes("codespaces-4f2a")) {
+        throw new Error("重新接入应该说明上次在哪个沙箱用过");
+      }
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-resume");
+      await resume.getByRole("button", { name: "生成新链接" }).click();
+      const resumeConfirm = page.locator(".app-modal.app-confirm");
+      await resumeConfirm.waitFor({ timeout: 5_000 });
+      if (!(await resumeConfirm.innerText()).includes("旧的链接会立刻作废")) {
+        throw new Error("生成新链接前应说明旧链接会作废");
+      }
+      await resumeConfirm.getByRole("button", { name: "生成新链接" }).click();
+      const linkDlg = page.locator(".app-modal", { hasText: "重新接入链接" });
+      await linkDlg.waitFor({ timeout: 5_000 });
+      const resumeCmd = (await linkDlg.locator(".app-command code").innerText()).trim();
+      if (!resumeCmd.includes("curl -fsSL")) throw new Error(`弹窗里的重新接入命令不对：${resumeCmd}`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-resume-link");
+      await linkDlg.getByRole("button", { name: "完成" }).click();
+      await linkDlg.waitFor({ state: "hidden" });
+      await resume.getByText("还没用过").waitFor({ timeout: 5_000 });
+      await resume.getByRole("button", { name: "作废", exact: true }).click();
+      await resumeConfirm.waitFor({ timeout: 5_000 });
+      await resumeConfirm.getByRole("button", { name: "作废", exact: true }).click();
+      await resumeConfirm.waitFor({ state: "hidden" });
+      await resume.getByText("还没有链接").waitFor({ timeout: 5_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });

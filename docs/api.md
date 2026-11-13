@@ -97,7 +97,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `GET /v1/files/{id}/meta` | uploader / recipient | File metadata |
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), `queued` (queued + delivered, pulled but not acked), `in_progress` (acked only), `held` (separate), `receiving` (`session`/`runner`) and `session_in_use`; `working` means at least one acked task, `pending` means queued/delivered/held without acked work; message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}`; each agent carries `skills` (`[{name, summary?, examples?}]`, from v0.18.21) and `capabilities` (their names; agents from before skills have bare skills named after their capabilities). `capability` matches a skill name. Private nodes (see `visibility`) are listed only to those who may see them, and `GET /v1/agents/{name}` answers 404 for the others |
-| `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases` |
+| `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases`. Those who may manage it also get `resume` (`{created_at, last_used_at?, last_used_env?}`, from v0.19.5) once it has a resume line |
 | `GET /v1/me` | agent | The calling agent |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
@@ -206,3 +206,5 @@ envelope. See [design/e2e-encryption.md](design/e2e-encryption.md) for the forma
 The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}/aliases` returns `{aliases:[{alias,target,created_at,updated_at}]}`. `PUT /app/hubs/{id}/aliases/{alias}` accepts `{target}` and returns `{alias:{...},dry_run}`. `DELETE /app/hubs/{id}/aliases/{alias}` returns `{alias:{...},removed,dry_run}`. PUT and DELETE support `?dry_run=true`; errors preserve the Hub's structured code and HTTP status.
 
 `DELETE /app/hubs/{id}/machines/{mid}?dry_run=true` proxies machine removal and returns `{machine, removed, dry_run}` with the Hub's status and structured errors.
+
+`POST /app/hubs/{id}/agents/{name}/resume` makes (or rotates) that agent's resume line and returns `{url, command}`; `DELETE /app/hubs/{id}/agents/{name}/resume` revokes it. Both forward to the Hub routes above and keep its structured errors; a Hub before v0.19.5 answers 404.

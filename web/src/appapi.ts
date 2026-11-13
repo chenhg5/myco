@@ -430,6 +430,14 @@ export const appApi = {
     `app/hubs/${enc(hubId)}/agents/${enc(name)}/avatar?v=${encodeURIComponent(v)}`,
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
+  /** Makes the agent's resume line (the old one stops working): the command
+   *  to run in a new sandbox to bring the same agent back. Hubs before
+   *  v0.19.5 answer not_found. */
+  createAgentResume: (hubId: string, name: string) =>
+    request<{ url: string; command: string }>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
+  /** Revokes it: the command made before no longer works. */
+  revokeAgentResume: (hubId: string, name: string) =>
+    request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),
   project: (hubId: string, name: string, bodies = false) =>

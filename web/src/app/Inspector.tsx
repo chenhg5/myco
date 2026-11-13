@@ -18,6 +18,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
+import { ResumeRow } from "@/app/ResumeRow";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
 
@@ -1066,6 +1067,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-list">
               <div className="app-kv"><span className="app-kv-label">{L("agent 名", "Node name")}</span><span className="app-kv-value mono">{ag.name}</span></div>
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
+              <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">Hub</span><span className="app-kv-value">{row.hub.name}</span></div>
               <div className="app-kv"><span className="app-kv-label">Agent ID</span><span className="app-kv-value mono">{ag.id}</span></div>
               <div className="app-kv"><span className="app-kv-label">{L("会话 ID", "Session ID")}</span><span className="app-kv-value mono">{ag.binding.session_id || "—"}</span></div>

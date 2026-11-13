@@ -57,7 +57,6 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
-	resume?: { created_at: string; last_used_at?: string; last_used_env?: string };
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
@@ -75,6 +74,17 @@ export interface Agent {
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
   /** the person who added it (member name) */
   owner?: string; owner_id?: string;
+  /** its resume line's state, for those who may manage it (hubs from
+   *  v0.19.5; absent on older hubs and before a line is made) */
+  resume?: AgentResume;
+}
+/** An agent's resume line: running its command in a new sandbox brings the
+ *  same agent (same name, id and history) back. */
+export interface AgentResume {
+  created_at: string;
+  last_used_at?: string;
+  /** the sandbox it was last run in */
+  last_used_env?: string;
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
 export interface Machine {

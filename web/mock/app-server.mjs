@@ -375,7 +375,7 @@ const state = {
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
-      hub_version: "0.19.2",
+      hub_version: "0.19.5",
       update_available: true,
       threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, ...consoleThreads },
       machines: [
@@ -406,6 +406,10 @@ const state = {
           ],
           binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/myco", session_id: "01a1-pm-session" }, session_in_use: true,
           aliases: ["pm"], allow_from: ["glenn"], enrolled_by: "console",
+          // A resume line made five days ago and last used an hour ago in a
+          // sandbox: the row shows when and where. Making or revoking one is
+          // demoed by the smoke test.
+          resume: { created_at: iso(86_400 * 5), last_used_at: iso(3_600), last_used_env: "codespaces-4f2a" },
         }),
         makeAgent({
           name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
@@ -696,6 +700,15 @@ const ccProviders = [
   { ref: "cc-switch:kimi", id: "kimi", name: "Kimi", app: "claude", host: "api.moonshot.cn" },
 ];
 const localProviderAgents = new Map([["docs-claude", { local: true, harness: "claude", provider: "" }]]);
+
+// Resume lines the smoke test makes and revokes; put the demo ones back
+// between widths and themes.
+const resumeAtStart = new Map();
+for (const h of state.hubs) {
+  for (const a of h.agents || []) {
+    if (a.resume) resumeAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify(a.resume)));
+  }
+}
 
 const local = {
   hostname: "Studio.local",
@@ -998,6 +1011,19 @@ const server = http.createServer(async (req, res) => {
     }
     const consoleWithReview = (m) => (m.from === "review-cloud" && m.to.startsWith("@console:")) || (m.to === "review-cloud" && m.from.startsWith("@console:"));
     hub.recent = (hub.recent || []).filter((m) => m.from !== "legacy-codex" && m.to !== "legacy-codex" && !consoleWithReview(m));
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/resume — the smoke test makes and revokes a resume line; put
+  // the demo ones back between widths and themes.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "resume" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    for (const h of state.hubs) {
+      for (const a of h.agents || []) {
+        const was = resumeAtStart.get(`${h.id}/${a.name}`);
+        if (was) a.resume = JSON.parse(JSON.stringify(was)); else delete a.resume;
+      }
+    }
     return send(res, 200, { ok: true });
   }
 
@@ -2002,6 +2028,25 @@ const server = http.createServer(async (req, res) => {
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
         return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/resume — the line that brings the same
+      // agent back in a new sandbox. Making one revokes the one before.
+      if (parts.length === 6 && parts[5] === "resume") {
+        if (process.env.MOCK_OLD_HUB) {
+          return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/resume`);
+        }
+        if (method === "POST") {
+          const token = "rsm_" + Math.random().toString(36).slice(2, 12);
+          agent.resume = { created_at: new Date().toISOString() };
+          return send(res, 200, {
+            url: `${hub.url}/r/${token}`,
+            command: `curl -fsSL ${hub.url}/r/${token} | sh`,
+          });
+        }
+        if (method === "DELETE") {
+          delete agent.resume;
+          return send(res, 200, { ok: true });
+        }
       }
       if (parts.length === 6 && parts[5] === "history" && method === "GET") {
         const t = (min) => new Date(Date.now() - min * 60000).toISOString();
