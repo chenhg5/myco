@@ -11,6 +11,7 @@
 		123BFA56FB552E17C9F39C66 /* WalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */; };
 		1D545EB0684148316F38D89D /* MycoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18020A27DDD396B1B7EE0BDB /* MycoApp.swift */; };
 		7AC8FDEBBB6425345FF33D1E /* MycoFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 085F2D73144060F86EE604FE /* MycoFeatures */; };
+		83854068EBC85383E1D126EE /* MycoStore in Frameworks */ = {isa = PBXBuildFile; productRef = 20963E2AF56CF797BFFFCF13 /* MycoStore */; };
 		A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */ = {isa = PBXBuildFile; productRef = 76BE5F4AA9E3F0885FE556CE /* MycoFake */; };
 		BF25CC0A2487CCA0CA2595B6 /* ConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 007DD7BA2A2C98B9AB1F5FDD /* ConversationTests.swift */; };
 /* End PBXBuildFile section */
@@ -32,6 +33,7 @@
 		23448C88988322580323A2D7 /* Myco.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Myco.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkthroughTests.swift; sourceTree = "<group>"; };
 		4D0FBB181679672E5351419A /* MycoAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MycoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB46834E6F9C7052F7503569 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -42,6 +44,7 @@
 				7AC8FDEBBB6425345FF33D1E /* MycoFeatures in Frameworks */,
 				121A24BFD60DBE7DC6B9D14B /* MycoCore in Frameworks */,
 				A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */,
+				83854068EBC85383E1D126EE /* MycoStore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +81,7 @@
 		AAB123FDBC8FF19ED8416896 /* Myco */ = {
 			isa = PBXGroup;
 			children = (
+				CB46834E6F9C7052F7503569 /* Info.plist */,
 				18020A27DDD396B1B7EE0BDB /* MycoApp.swift */,
 			);
 			path = Myco;
@@ -129,6 +133,7 @@
 				085F2D73144060F86EE604FE /* MycoFeatures */,
 				F0A8F987EE5174C9680E74F9 /* MycoCore */,
 				76BE5F4AA9E3F0885FE556CE /* MycoFake */,
+				20963E2AF56CF797BFFFCF13 /* MycoStore */,
 			);
 			productName = Myco;
 			productReference = 23448C88988322580323A2D7 /* Myco.app */;
@@ -291,10 +296,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = myco;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_FILE = Myco/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -371,10 +373,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = myco;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_FILE = Myco/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -449,6 +448,10 @@
 		085F2D73144060F86EE604FE /* MycoFeatures */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MycoFeatures;
+		};
+		20963E2AF56CF797BFFFCF13 /* MycoStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MycoStore;
 		};
 		76BE5F4AA9E3F0885FE556CE /* MycoFake */ = {
 			isa = XCSwiftPackageProductDependency;
