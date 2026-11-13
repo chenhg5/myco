@@ -24,6 +24,9 @@ public final class ConversationModel {
 
     /// Older messages exist than the ones shown: scrolling up loads them.
     public private(set) var hasEarlier = false
+    /// Goes up whenever what the page shows changed: a message, or a
+    /// task's steps (which make a row taller without adding one).
+    public private(set) var revision = 0
 
     private let session: WorkspaceSession
     private var sending = false
@@ -174,7 +177,10 @@ public final class ConversationModel {
             processes: Set(processes.filter { !$0.value.isEmpty }.keys),
             status: { self.session.status(of: $0) }, now: Date())
         // Nothing new: leave the list alone, so the page does not redraw.
-        if built != items { items = built }
+        if built != items {
+            items = built
+            revision += 1
+        }
         openTask = ConversationBuilder.openTask(me: me, messages: Array(known.values))
         loaded = true
     }
@@ -225,7 +231,11 @@ public final class ConversationModel {
             if !trace.events.isEmpty || processes[task.id] == nil {
                 let events = known + trace.events
                 traces[task.id] = events
-                processes[task.id] = RunProcess(events: events)
+                let process = RunProcess(events: events)
+                if processes[task.id] != process {
+                    processes[task.id] = process
+                    revision += 1
+                }
             }
             if !task.isOpen { settled.insert(task.id) }
         }

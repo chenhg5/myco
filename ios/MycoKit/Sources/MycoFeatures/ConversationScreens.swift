@@ -210,14 +210,6 @@ struct ConversationBody: View {
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
-                // Taller (an answer came, steps loaded, a colleague's
-                // exchange was merged in): a pinned conversation goes along.
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { _ in
-                    guard landed, pinned else { return }
-                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
-                }
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 8)
@@ -248,6 +240,21 @@ struct ConversationBody: View {
                 }
             }
             .animation(.snappy(duration: 0.2), value: atBottom)
+            // What the page shows changed (an answer came, a task's steps
+            // loaded, a colleague's exchange was merged in): a pinned
+            // conversation goes to its end again. A few times, a moment
+            // apart, as rows take their real heights; never in answer to
+            // the layout itself, which would chase its own tail.
+            .onChange(of: model.revision) {
+                guard landed, pinned else { return }
+                Task {
+                    for pause in [0, 80, 300] {
+                        try? await Task.sleep(for: .milliseconds(pause))
+                        guard pinned else { return }
+                        proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                    }
+                }
+            }
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, new != nil else { return }
