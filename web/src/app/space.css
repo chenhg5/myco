@@ -1581,6 +1581,13 @@
   height: 74%;
   color: inherit;
 }
+/* The apple is a full, heavy shape: smaller in its tile than the others,
+   so it does not crowd it. */
+.pa-sprite.is-darwin,
+.app-nav-item .pa-sprite.is-darwin {
+  width: 56%;
+  height: 56%;
+}
 
 /* Adding an agent: three ways, as tabs. */
 .add-tabs {
@@ -2162,4 +2169,150 @@ body.is-sorting * {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--line);
   scale: 1.02;
   transition: scale 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* The plan a run works through (Claude Code's to-do list, Codex's plan, a
+   checklist reported with myco message progress): ticked off as it goes. */
+.trace-plan {
+  padding: 10px 12px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--pill) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.trace-plan-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.trace-plan-count {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace-plan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.trace-plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg);
+}
+.trace-plan-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.trace-plan-box svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 3;
+  color: #fff;
+}
+.trace-plan-item.is-done .trace-plan-box {
+  border-color: var(--green);
+  background: var(--green);
+}
+.trace-plan-item.is-done .trace-plan-text {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.trace-plan-item.is-doing .trace-plan-box {
+  border-color: var(--green);
+}
+.trace-plan-item.is-doing .trace-plan-text {
+  font-weight: 500;
+}
+.trace-plan-item.is-doing.is-live .trace-plan-box {
+  animation: plan-pulse 1.4s ease-in-out infinite;
+}
+@keyframes plan-pulse {
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
+}
+
+/* A calm note in a dialog: what it means, in plain words, no alarm colour. */
+.app-notice {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.app-notice > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+/* Adding a computer: the ones the workspace already has, one click each. */
+.ws-existing {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+.ws-existing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 9px;
+}
+.ws-existing-row:hover {
+  background: var(--nav-hover);
+}
+.ws-existing-row.is-away .ws-existing-name {
+  color: var(--muted);
+}
+.ws-existing-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-existing-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-existing-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-or {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  color: var(--muted);
 }

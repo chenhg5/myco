@@ -561,6 +561,14 @@ function consoleReply() {
 // A task gets a progress note after 3s and a reply after 6s.
 function scheduleReply(hub, threadId, agent, taskId) {
   const later = (ms, fn) => { const t = setTimeout(fn, ms); if (typeof t.unref === "function") t.unref(); };
+  // A plan, reported as a checklist, ticked off as it goes.
+  const plan = (body) => () => {
+    const msgs = hub.threads[threadId];
+    if (!msgs) return;
+    msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
+  };
+  later(1500, plan("- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
+  later(4500, plan("- [x] 读一下相关代码\n- [x] 动手改\n- [~] 跑测试，看有没有破坏别的"));
   later(3000, () => {
     const msgs = hub.threads[threadId];
     if (!msgs) return;

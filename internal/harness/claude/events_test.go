@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/chenhg5/myco/internal/harness"
@@ -36,5 +37,19 @@ func TestLineEvents(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("event %d: got %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+// TodoWrite's plan reaches the trace as a checklist, each item with its
+// status, so the app can show it being ticked off.
+func TestTodoWriteIsAChecklist(t *testing.T) {
+	in := json.RawMessage(`{"todos":[
+		{"content":"读代码","status":"completed","activeForm":"读代码中"},
+		{"content":"改接口","status":"in_progress","activeForm":"改接口中"},
+		{"content":"跑测试","status":"pending","activeForm":"跑测试中"}]}`)
+	got := toolInput("TodoWrite", in)
+	want := "[x] 读代码\n[~] 改接口\n[ ] 跑测试"
+	if got != want {
+		t.Fatalf("TodoWrite input = %q, want %q", got, want)
 	}
 }

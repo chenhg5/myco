@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { Info, Plus, Trash2 } from "lucide-react";
 import { appApi, type LocalState } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -171,8 +171,8 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
         </div>
       )}
       {gone !== null && (
-        <div className="app-warn">
-          <AlertTriangle />
+        <div className="app-notice">
+          <Info />
           <div>
             <div>{n > 0
               ? L(`它上面的 ${n} 个 agent 和电脑会一起移除；聊过的内容都保留。`, `The ${n} agent${n === 1 ? "" : "s"} and computers on it go too; conversations are kept.`)

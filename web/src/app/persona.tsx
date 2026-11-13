@@ -148,7 +148,7 @@ export function rememberMachines(ms: { id: string; os?: string }[]) {
 function WorkspaceFace({ os }: { os?: string }) {
   const grid = (os && OS_FACE[os]) || SCREEN;
   return (
-    <svg className="pa-sprite" viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden="true">
+    <svg className={cn("pa-sprite", os && OS_FACE[os] && `is-${os}`)} viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden="true">
       {grid.flatMap((row, y) => [...row].map((k, x) => (k === "." ? null : <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={FACE_FILL[k]} />)))}
     </svg>
   );

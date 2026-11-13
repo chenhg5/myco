@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import type { Machine } from "@/api";
 import { appApi, type LocalState } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
@@ -31,8 +31,8 @@ export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "
 
   if (!here) {
     return (
-      <div className="app-warn">
-        <AlertTriangle />
+      <div className="app-notice">
+        <ShieldCheck />
         <span>{risk}{" "}{L("这需要那台电脑自己点头：在那台电脑上打开 myco App，到这里点「允许」。", "That computer has to agree first: open the myco app on it and choose Allow there.")}</span>
       </div>
     );
@@ -65,8 +65,8 @@ export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "
   }
 
   return (
-    <div className="app-warn" style={{ alignItems: "flex-start" }}>
-      <AlertTriangle />
+    <div className="app-notice" style={{ alignItems: "flex-start" }}>
+      <ShieldCheck />
       <div style={{ flex: 1 }}>
         {!confirming ? (
           <>

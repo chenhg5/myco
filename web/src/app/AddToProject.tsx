@@ -5,7 +5,7 @@ import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
-import { Avatar, isWorkspace } from "@/app/persona";
+import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { Elapsed, Mushroom } from "@/app/Working";
@@ -538,6 +538,32 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
     .filter((n) => rows.some((r) => r.hub.id === hubId && r.st.agent.name === n && agentKind(r.st.agent) === "agent"));
   // Folders already used on that computer, one click away.
   const folders = usedFolders(rows, hubId, machineId);
+  // The workspace's computers not in this project yet: one click puts one
+  // in, and lets the project's agents use it.
+  const inProject = new Set((project?.members || []).map((m) => m.name));
+  const existing = project ? rows.filter((r) => r.hub.id === hubId && isWorkspace(r.st.agent) && !inProject.has(r.st.agent.name)) : [];
+  const [joining, setJoining] = useState<string | null>(null);
+  const addExisting = async (r: AgentRow) => {
+    if (!project || joining) return;
+    setJoining(r.st.agent.name);
+    setError(null);
+    try {
+      await appApi.putProjectMember(hubId, project.name, r.st.agent.name);
+      // Who may send it commands: the project's agents too (unless it
+      // already takes them from anyone).
+      const now = (r.st.agent.allow_from || []).filter((x) => !isNobody(x));
+      if (now.length && !now.includes("*")) {
+        const next = [...new Set([...now, ...users])];
+        if (next.length !== now.length) await appApi.updateAllowFrom(hubId, r.st.agent.name, next).catch(() => undefined);
+      }
+      onAdded();
+      onClose();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setJoining(null);
+    }
+  };
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -560,6 +586,26 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("给项目加一台电脑", "Add a computer to the project")}
       description={L("选你的一台电脑和其中一个文件夹，项目里的 agent 就能在里面跑命令。你也可以打开它的终端在旁边看着。", "Pick one of your computers and a folder on it, and the project's agents can run commands there. You can open its terminal and watch.")}
       className="app-modal-add">
+      {existing.length > 0 && (
+        <div className="app-field">
+          <span className="app-field-label">{L("已有的电脑", "Computers you already have")}</span>
+          <div className="ws-existing">
+            {existing.map((r) => (
+              <div key={r.st.agent.name} className={cn("ws-existing-row", r.st.state === "offline" && "is-away")}>
+                <Avatar agent={r.st.agent} size={28} badge={false} />
+                <span className="ws-existing-text">
+                  <span className="ws-existing-name">{nodeName(r.st.agent, r.hub)}</span>
+                  <span className="ws-existing-sub">{whereOf(r)}</span>
+                </span>
+                <button type="button" className="app-btn app-btn-small" onClick={() => void addExisting(r)} disabled={!!joining || !!busy}>
+                  {joining === r.st.agent.name ? L("正在加…", "Adding…") : L("加进来", "Add")}
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="ws-or">{L("或者，用一台电脑上的另一个文件夹", "Or use another folder on a computer")}</div>
+        </div>
+      )}
       <form onSubmit={add}>
         <div className="app-field">
           <span className="app-field-label">{L("在哪台电脑上", "On which computer")}</span>

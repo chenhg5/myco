@@ -101,16 +101,26 @@ func toolInput(tool string, raw json.RawMessage) string {
 	case "Task", "Agent":
 		return orStr(str("description"), str("prompt"))
 	case "TodoWrite":
+		// The plan as a checklist, one item a line, as Codex's is: "[x]"
+		// done, "[~]" being done, "[ ]" still to do (the app shows it as
+		// a list being ticked off).
 		if todos, ok := in["todos"].([]any); ok {
 			var items []string
 			for _, t := range todos {
 				if m, ok := t.(map[string]any); ok {
 					if c, _ := m["content"].(string); c != "" {
-						items = append(items, c)
+						mark := "[ ] "
+						switch m["status"] {
+						case "completed":
+							mark = "[x] "
+						case "in_progress":
+							mark = "[~] "
+						}
+						items = append(items, mark+c)
 					}
 				}
 			}
-			return strings.Join(items, "; ")
+			return strings.Join(items, "\n")
 		}
 	}
 	b, _ := json.Marshal(in)

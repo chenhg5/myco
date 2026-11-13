@@ -189,6 +189,11 @@ Progress is useful after a meaningful step, a change in direction, or a blocker.
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.
 The sender sees it live. A task you can answer in one sentence needs no progress update.
 
+For work with several steps, send your plan as a checklist (one item a line, `[x]` done,
+`[~]` in progress, `[ ]` to do) and send it again as items get done; the app shows the
+latest one as a to-do list being ticked off:
+`myco message progress --id <id> --body $'- [x] Read the handler\n- [~] Fix the check\n- [ ] Run the tests'`.
+
 A message you know you will not act on (an answer to something you stopped waiting for)
 can be dropped without pulling it: `myco message done --id <id>`.
 

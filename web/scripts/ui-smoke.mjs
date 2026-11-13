@@ -481,6 +481,8 @@ async function runMatrix(browser, size, scheme) {
         const dialog = page.locator(".app-modal-add");
         await dialog.waitFor();
         await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
+        // What it means is said calmly (no red block).
+        if (await dialog.locator(".app-warn").count()) throw new Error("加电脑的弹窗不该有红色警告块");
         const folder = `~/code/smoke-${size.width}-${scheme}`;
         await dialog.locator("input.app-input").fill(folder);
         await settle(page, 300);
@@ -643,6 +645,10 @@ async function runMatrix(browser, size, scheme) {
       // mushroom stays at the very bottom.
       const run = page.locator(".conv-detail .trace").last();
       await run.locator(".trace-reports .trace-report", { hasText: "正在处理" }).waitFor({ timeout: 10_000 });
+      // A plan reported as a checklist is a to-do card at the top of the
+      // run (ticked off as it goes), not a line of text.
+      await run.locator(".trace-plan .trace-plan-item", { hasText: "读一下相关代码" }).waitFor({ timeout: 10_000 });
+      if (await run.locator(".trace-reports .trace-report", { hasText: "读一下相关代码" }).count()) throw new Error("清单式的进展应显示成计划卡片，不再是一行文字");
       if (await page.locator(".conv-detail .conv-progress", { hasText: "正在处理" }).count()) throw new Error("进展应写在任务的工作过程里，不是单独一行");
       const wrongOrder = await run.evaluate((el) => {
         const kids = [...el.children];

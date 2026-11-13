@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brain, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
+import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
 import type { Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
@@ -84,6 +84,24 @@ function summaryOf(rows: Row[]): string {
   if (other) parts.push(L(`另外 ${other} 次操作`, `${other} other step${other > 1 ? "s" : ""}`));
   if (failed) parts.push(L(`${failed} 次失败`, `${failed} failed`));
   return parts.join(L("、", ", "));
+}
+
+/** One item of a plan the agent is working through. */
+export type PlanItem = { text: string; state: "done" | "doing" | "todo" };
+
+/** A plan written as a checklist: lines like "[x] done", "[~] doing",
+ *  "[ ] to do", or a markdown task list ("- [x] …"). At least two items,
+ *  every line one of them; otherwise it is not a plan. */
+export function parsePlan(text: string): PlanItem[] | null {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+  const items: PlanItem[] = [];
+  for (const l of lines) {
+    const m = /^(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)$/.exec(l);
+    if (!m) return null;
+    items.push({ text: m[2].trim(), state: m[1] === " " ? "todo" : m[1] === "~" || m[1] === "-" ? "doing" : "done" });
+  }
+  return items;
 }
 
 function usageLine(u?: TraceStep): string {
@@ -221,6 +239,25 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
     if (running && steps === 0) return atWork;
   }
 
+  // The plan it is working through, as Claude Code's to-do list and
+  // Codex's plan are: the latest one, from its steps (TodoWrite) or what it
+  // reported (a checklist in myco message progress), at the top of the run,
+  // ticked off as it goes. A report that is only the plan is not repeated
+  // in the timeline.
+  let plan: { items: PlanItem[]; at: string } | null = null;
+  const planReports = new Set<string>();
+  for (const r of rows) {
+    if (r.kind !== "tool" || r.call.tool !== "TodoWrite") continue;
+    const items = parsePlan(r.call.input || "");
+    if (items && (!plan || (r.at || "") >= plan.at)) plan = { items, at: r.at || "" };
+  }
+  for (const p of reports) {
+    const items = parsePlan(p.body);
+    if (!items) continue;
+    planReports.add(p.id);
+    if (!plan || p.created_at >= plan.at) plan = { items, at: p.created_at };
+  }
+
   // As Claude Code and Codex show a run: what it says between steps is
   // text, in the open (what it reported with myco message progress too, by
   // time); each run of steps in between folds into one line ("跑了 3 条命令、
@@ -229,6 +266,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string }; row?: Row };
   const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
+    if (planReports.has(p.id)) continue;
     const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at } };
     // after the last step made before it (steps without a time: at the end)
     let i = items.length;
@@ -266,6 +304,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
 
   return (
     <div className={cn("trace is-flow", running && "is-live")} ref={body}>
+      {plan && <PlanCard items={plan.items} live={running} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
           <MessageContent body={seg.text} />
@@ -367,6 +406,28 @@ function TraceRow({ row, live }: { row: Row; live: boolean }) {
           {r?.output ? <pre className="trace-pre">{r.output}</pre> : <div className="trace-note">{L("没有输出", "No output")}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The plan: a short list being ticked off. Done items are checked and
+ *  struck through; the one in hand is marked while it runs. */
+function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
+  const done = items.filter((x) => x.state === "done").length;
+  return (
+    <div className="trace-plan">
+      <div className="trace-plan-head">
+        <span>{L("计划", "Plan")}</span>
+        <span className="trace-plan-count">{L(`${done} / ${items.length} 完成`, `${done} of ${items.length} done`)}</span>
+      </div>
+      <ul className="trace-plan-list">
+        {items.map((x, i) => (
+          <li key={i} className={cn("trace-plan-item", `is-${x.state}`, live && x.state === "doing" && "is-live")}>
+            <span className="trace-plan-box" aria-hidden>{x.state === "done" && <Check />}</span>
+            <span className="trace-plan-text">{x.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
