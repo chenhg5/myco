@@ -131,6 +131,9 @@ struct ConversationHost: View {
         }
         // Starts once the workspace has said who this device is.
         .task(id: session.me) { await model.run() }
+        // On screen, and whenever something new arrives while it is: read.
+        .onChange(of: model.items.last?.id, initial: true) { session.markRead(agent) }
+        .onDisappear { session.markRead(agent) }
     }
 }
 
@@ -150,6 +153,9 @@ struct ConversationBody: View {
     @State private var followKeyboard = false
     /// Counts what was sent or stopped from here: a light tap answers each.
     @State private var commits = 0
+    /// The conversation has opened where it should and settled: from now
+    /// on, reaching its top asks for older messages.
+    @State private var settled = false
 
     private static let bottomID = "conversation.bottom"
 
@@ -169,6 +175,14 @@ struct ConversationBody: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    // Older messages exist: reaching this row loads them.
+                    if model.hasEarlier {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, Space.l)
+                            .onAppear { loadEarlier(proxy) }
+                            .accessibilityIdentifier("conversation.earlier")
+                    }
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item)
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
@@ -181,7 +195,8 @@ struct ConversationBody: View {
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
-                .padding(.bottom, Space.m)
+                // Room between the last thing said and the input.
+                .padding(.bottom, Space.xl)
             }
             // Opens at the bottom, and stays there as content grows while
             // the newest message is in view.
@@ -228,12 +243,15 @@ struct ConversationBody: View {
                 let target = focus.flatMap { focus in model.items.first { $0.id == focus || $0.id == focus + ".dispatch" }?.id }
                 if let target {
                     proxy.scrollTo(target, anchor: .center)
+                    settled = true
                     return
                 }
                 proxy.scrollTo(Self.bottomID, anchor: .bottom)
                 Task {
                     try? await Task.sleep(for: .milliseconds(60))
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                    try? await Task.sleep(for: .milliseconds(400))
+                    settled = true
                 }
             }
         }
@@ -250,6 +268,17 @@ struct ConversationBody: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
         .alert(L("发文件还没做好", "Attachments are not built yet"), isPresented: $attachNotice) {
             Button(L("好", "OK"), role: .cancel) {}
+        }
+    }
+
+    /// Loads the page of older messages, and keeps what was at the top of
+    /// the screen where it was: the new rows go in above it.
+    private func loadEarlier(_ proxy: ScrollViewProxy) {
+        guard settled else { return }
+        let anchor = model.items.first?.id
+        Task {
+            guard await model.loadEarlier(), let anchor else { return }
+            proxy.scrollTo(anchor, anchor: .top)
         }
     }
 

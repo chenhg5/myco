@@ -27,6 +27,35 @@ public final class WorkspaceSession {
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
 
+    /// When each conversation was last looked at, by the agent on the other
+    /// side. Kept on this device only.
+    public private(set) var readAt: [String: Date] = [:]
+    /// When this device first saw the workspace: what was there before
+    /// counts as read.
+    public private(set) var readBaseline: Date?
+
+    struct ReadState: Codable {
+        var baseline: Date
+        var readAt: [String: Date]
+    }
+
+    /// The conversation with this agent is on screen: nothing in it is unread.
+    public func markRead(_ agent: String) {
+        readAt[agent] = Date()
+        Task { await saveRead() }
+    }
+
+    /// Conversations with something unread.
+    public var unreadCount: Int {
+        chatRows.filter(\.unread).count
+    }
+
+    private func saveRead() async {
+        guard let snapshots, let readBaseline else { return }
+        let state = ReadState(baseline: readBaseline, readAt: readAt)
+        await snapshots.setSnapshot(try? HubJSON.encoder().encode(state), of: id, name: "read")
+    }
+
     let snapshots: (any SnapshotStore)?
     /// The conversations opened this launch, kept so reopening one is instant.
     private var conversations: [String: ConversationModel] = [:]
@@ -62,6 +91,11 @@ public final class WorkspaceSession {
 
     /// Shows what the workspace showed last, until it answers.
     public func restore() async {
+        if readBaseline == nil, let data = await snapshots?.snapshot(of: id, name: "read"),
+           let state = try? HubJSON.decoder().decode(ReadState.self, from: data) {
+            readBaseline = state.baseline
+            readAt = state.readAt
+        }
         guard loadedAt == nil, let data = await snapshots?.snapshot(of: id, name: "lists"),
               let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data)
         else { return }
@@ -102,6 +136,11 @@ public final class WorkspaceSession {
             self.recent = r
             loadedAt = Date()
             problem = nil
+            if readBaseline == nil {
+                // The first look at this workspace: all of it counts as seen.
+                readBaseline = Date()
+                await saveRead()
+            }
             await save()
         } catch let error as HubError {
             problem = error.message

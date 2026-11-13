@@ -22,8 +22,19 @@ public final class ConversationModel {
     public private(set) var queued: [String] = []
     public var draft = ""
 
+    /// Older messages exist than the ones shown: scrolling up loads them.
+    public private(set) var hasEarlier = false
+
     private let session: WorkspaceSession
     private var sending = false
+    /// Every message of this conversation seen so far, by id: the newest
+    /// page, refreshed all the time, and the older pages scrolled back to.
+    private var known: [String: Message] = [:]
+    private var others: [Message] = []
+    private var loadingEarlier = false
+    /// Older pages were loaded: the newest page no longer says whether
+    /// there is more.
+    private var wentBack = false
     /// The steps of my tasks, by task id.
     private var traces: [String: [TraceEvent]] = [:]
     /// Tasks that are closed and whose steps are all here.
@@ -78,6 +89,7 @@ public final class ConversationModel {
         guard let data = await session.snapshots?.snapshot(of: session.id, name: snapshotName),
               let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data), !loaded
         else { return }
+        for message in snapshot.messages { known[message.id] = message }
         traces = snapshot.traces
         processes = snapshot.traces.mapValues { RunProcess(events: $0) }
         // Closed tasks' steps are complete: no need to fetch them again.
@@ -103,11 +115,14 @@ public final class ConversationModel {
         let me = session.me
         guard !me.isEmpty else { return }
         do {
-            let messages = try await session.hub.exchanges(between: me, and: agent)
+            let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
+            for message in page.messages { known[message.id] = message }
+            if !wentBack { hasEarlier = page.more }
             let others = try await othersWork()
-            await loadSteps(of: messages.filter { $0.from == me && $0.type == "task" && $0.status != "queued" })
-            show(messages: messages, others: others)
-            await save(Snapshot(messages: messages, others: others, traces: traces))
+            await loadSteps(of: page.messages.filter { $0.from == me && $0.type == "task" && $0.status != "queued" })
+            show(messages: Array(known.values), others: others)
+            // Only the newest page is kept between launches.
+            await save(Snapshot(messages: page.messages, others: others, traces: traces))
         } catch is CancellationError {
             return
         } catch {
@@ -116,7 +131,22 @@ public final class ConversationModel {
         }
     }
 
+    /// Loads the page before the oldest message shown. True if it brought any.
+    @discardableResult
+    public func loadEarlier() async -> Bool {
+        guard hasEarlier, !loadingEarlier, let oldest = known.values.map(\.createdAt).min() else { return false }
+        loadingEarlier = true
+        defer { loadingEarlier = false }
+        guard let page = try? await session.hub.exchanges(between: session.me, and: agent, before: oldest) else { return false }
+        wentBack = true
+        hasEarlier = page.more && !page.messages.isEmpty
+        for message in page.messages { known[message.id] = message }
+        show(messages: Array(known.values), others: others)
+        return !page.messages.isEmpty
+    }
+
     private func show(messages: [Message], others: [Message]) {
+        self.others = others
         let me = session.me
         let built = ConversationBuilder.items(
             me: me, messages: messages, others: others, incomingTo: project == nil ? agent : nil,

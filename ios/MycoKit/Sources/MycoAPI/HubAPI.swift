@@ -17,6 +17,17 @@ public struct SendRequest: Codable, Sendable, Hashable {
     }
 }
 
+/// One page of a conversation, newest first; `more`: older ones exist.
+public struct MessagePage: Sendable, Hashable {
+    public var messages: [Message]
+    public var more: Bool
+
+    public init(messages: [Message], more: Bool) {
+        self.messages = messages
+        self.more = more
+    }
+}
+
 /// A link that lets machines and agents join the workspace.
 public struct JoinLink: Codable, Sendable, Hashable {
     public var joinUrl: String
@@ -42,9 +53,10 @@ public protocol HubAPI: Sendable {
     func projects() async throws -> [Project]
     /// `GET /v1/console/recent`: newest first; `project` narrows it.
     func recent(project: String?) async throws -> [RecentItem]
-    /// `GET /v1/console/exchanges`: every message between two parties,
-    /// newest first.
-    func exchanges(between a: String, and b: String) async throws -> [Message]
+    /// `GET /v1/console/exchanges`: the messages between two parties in
+    /// every thread, newest first, a page at a time. `before`: only those
+    /// older than this (to page back); nil is the newest page.
+    func exchanges(between a: String, and b: String, before: Date?) async throws -> MessagePage
     /// `GET /v1/console/messages/{id}/trace`
     func trace(of messageID: String, after seq: Int) async throws -> Trace
     /// `POST /v1/console/messages`

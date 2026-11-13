@@ -145,10 +145,14 @@ struct HubClientTests {
     @Test func aConsoleSenderSurvivesTheQuery() async throws {
         let hub = client()
         Stub.handler = { _ in (200, try! RealAnswersTests.fixture("exchanges")) }
-        _ = try await hub.exchanges(between: "@console:glenn", and: "cloud-lead")
+        let page = try await hub.exchanges(between: "@console:glenn", and: "cloud-lead", before: Date(timeIntervalSince1970: 1_800_000_000.5))
+        #expect(page.messages.count == 3)
+        #expect(page.more == false)
         let items = URLComponents(url: try #require(Stub.seen.first?.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(items.first { $0.name == "a" }?.value == "@console:glenn")
         #expect(items.first { $0.name == "b" }?.value == "cloud-lead")
+        // Paging back: the hub takes the time in milliseconds.
+        #expect(items.first { $0.name == "before" }?.value == "1800000000500")
     }
 
     @Test func theHubsErrorComesThroughAsItIs() async throws {

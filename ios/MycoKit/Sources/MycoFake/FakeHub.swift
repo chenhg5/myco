@@ -81,12 +81,22 @@ public actor FakeHub: HubAPI {
         .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    public func exchanges(between a: String, and b: String) throws -> [Message] {
+    /// How many messages one page of a conversation holds here.
+    public static let pageSize = 60
+
+    public func exchanges(between a: String, and b: String, before: Date?) throws -> MessagePage {
         try check()
         advance()
-        return messages
+        let all = messages
             .filter { ($0.from == a && $0.to == b) || ($0.from == b && $0.to == a) }
+            .filter { before == nil || $0.createdAt < before! }
             .sorted { $0.createdAt > $1.createdAt }
+        return MessagePage(messages: Array(all.prefix(Self.pageSize)), more: all.count > Self.pageSize)
+    }
+
+    /// Something an agent says to me out of the blue (for tests of what is unread).
+    public func deliver(from agent: String, body: String) {
+        messages.append(Message(id: nextID(), from: agent, to: Self.me, type: "note", body: body, status: "done", createdAt: Date()))
     }
 
     public func trace(of messageID: String, after seq: Int) throws -> Trace {

@@ -98,6 +98,71 @@ struct SessionTests {
         #expect(other.members.isEmpty)
     }
 
+    @Test func whatCameSinceILookedIsUnread() async {
+        let store = MemoryStore()
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "w1", name: "Demo", hub: hub, snapshots: store)
+        await session.refresh()
+        // The first look at a workspace: what was already there is not news.
+        #expect(session.unreadCount == 0)
+
+        await hub.deliver(from: "studio-claude-c41f", body: "还有一件事。")
+        await hub.deliver(from: "cloud-lead", body: "活都派完了。")
+        await session.refresh()
+        let unread = Set(session.chatRows.filter(\.unread).map(\.target))
+        // The coordinator's words light up its project's row.
+        #expect(unread == [.agent("studio-claude-c41f"), .project("myco-ios")])
+        #expect(session.unreadCount == 2)
+
+        session.markRead("studio-claude-c41f")
+        #expect(Set(session.chatRows.filter(\.unread).map(\.target)) == [.project("myco-ios")])
+
+        // What I say myself is never unread.
+        _ = try? await hub.send(SendRequest(to: "vps-codex-90aa", body: "还在吗"))
+        await session.refresh()
+        #expect(session.chatRows.first { $0.target == .agent("vps-codex-90aa") }?.unread == false)
+
+        // The next launch remembers what was read.
+        try? await Task.sleep(for: .milliseconds(50))
+        let again = WorkspaceSession(id: "w1", name: "Demo", hub: hub, snapshots: store)
+        await again.restore()
+        await again.refresh()
+        #expect(Set(again.chatRows.filter(\.unread).map(\.target)) == [.project("myco-ios")])
+    }
+
+    @Test func scrollingBackLoadsOlderPages() async {
+        let session = WorkspaceSession(id: "w1", name: "Demo", hub: FakeHub(scenario: .long))
+        await session.refresh()
+        let model = session.conversation(with: "studio-claude-c41f")
+        await model.reload()
+        func questions() -> Int { model.items.filter { if case .mine = $0.kind { return true } else { return false } }.count }
+        // The newest page only, and more behind it.
+        #expect(model.hasEarlier)
+        #expect(questions() == FakeHub.pageSize / 2)
+        #expect(model.items.contains { $0.id == "L199a" })
+        #expect(!model.items.contains { $0.id == "L0q" })
+
+        #expect(await model.loadEarlier())
+        #expect(questions() == FakeHub.pageSize)
+        // A refresh of the newest page does not drop what was scrolled back to.
+        await model.reload()
+        #expect(questions() == FakeHub.pageSize)
+        #expect(model.hasEarlier)
+
+        var pages = 0
+        while model.hasEarlier, pages < 20 {
+            await model.loadEarlier()
+            pages += 1
+        }
+        // All of it, once each, in order.
+        #expect(!model.hasEarlier)
+        #expect(model.items.contains { $0.id == "L0q" })
+        let ids = model.items.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        #expect(model.items.map(\.at) == model.items.map(\.at).sorted())
+        #expect(await model.loadEarlier() == false)
+    }
+
     @Test func aWorkspaceAtAnAddressGetsAPlainName() {
         func record(_ name: String, _ url: String) -> WorkspaceRecord { WorkspaceRecord(id: "x", name: name, url: URL(string: url)!) }
         AppLanguage.$forced.withValue(.en) {

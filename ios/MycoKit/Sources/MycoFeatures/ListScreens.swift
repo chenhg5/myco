@@ -22,7 +22,7 @@ struct ChatsScreen: View {
                     face: row.face.map(AvatarView.Face.of) ?? .computer,
                     title: row.title, subtitle: row.subtitle,
                     trailing: row.updatedAt.map { RelativeTime.short($0) },
-                    tone: StatusTone.of(row.state), away: row.away)
+                    tone: StatusTone.of(row.state), away: row.away, unread: row.unread)
             }
             .buttonStyle(RowButtonStyle())
             .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
@@ -231,7 +231,7 @@ struct AppTabBar: View {
     var body: some View {
         MycoTabBar(
             items: [
-                .init(id: AppTab.chats, title: L("聊天", "Chats"), symbol: "bubble.left.and.bubble.right", accessibilityID: "tab.chats"),
+                .init(id: AppTab.chats, title: L("聊天", "Chats"), symbol: "bubble.left.and.bubble.right", unread: session.unreadCount > 0, accessibilityID: "tab.chats"),
                 .init(id: AppTab.projects, title: L("项目", "Projects"), symbol: "square.stack.3d.up", tone: projectsTone, accessibilityID: "tab.projects"),
                 .init(id: AppTab.members, title: L("成员", "Members"), symbol: "person.2", accessibilityID: "tab.members"),
             ],

@@ -8,7 +8,7 @@ public struct HubClient: HubAPI {
     private let session: URLSession
 
     /// How many rows or messages one call asks for.
-    static let pageSize = 200
+    static let pageSize = 100
 
     public init(baseURL: URL, token: String, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -43,9 +43,12 @@ public struct HubClient: HubAPI {
         return envelope.items
     }
 
-    public func exchanges(between a: String, and b: String) async throws -> [Message] {
-        let envelope: ExchangeEnvelope = try await get("/v1/console/exchanges", ["a": a, "b": b, "limit": String(Self.pageSize)])
-        return envelope.messages
+    public func exchanges(between a: String, and b: String, before: Date?) async throws -> MessagePage {
+        var query = ["a": a, "b": b, "limit": String(Self.pageSize)]
+        // The hub pages by time in milliseconds.
+        if let before { query["before"] = String(Int64((before.timeIntervalSince1970 * 1000).rounded(.down))) }
+        let envelope: ExchangeEnvelope = try await get("/v1/console/exchanges", query)
+        return MessagePage(messages: envelope.messages, more: envelope.more ?? false)
     }
 
     public func trace(of messageID: String, after seq: Int) async throws -> Trace {
@@ -142,7 +145,10 @@ public struct HubClient: HubAPI {
 
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }
 struct RecentEnvelope: Decodable { @LossyList var items: [RecentItem] }
-struct ExchangeEnvelope: Decodable { @LossyList var messages: [Message] }
+struct ExchangeEnvelope: Decodable {
+    @LossyList var messages: [Message]
+    var more: Bool?
+}
 struct SendEnvelope: Decodable { var message: Message }
 
 private extension String {

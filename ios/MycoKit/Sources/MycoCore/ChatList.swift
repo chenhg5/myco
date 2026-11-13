@@ -18,6 +18,10 @@ public struct ChatRow: Identifiable, Hashable, Sendable {
     /// The agent whose face the row shows (a project shows its coordinator).
     public var face: Agent?
     public var away: Bool
+    /// The agent on the other side (a project's: its coordinator).
+    public var party: String = ""
+    /// Something came from the other side since this conversation was last looked at.
+    public var unread = false
 
     public var id: String {
         switch target {
@@ -67,7 +71,7 @@ extension WorkspaceSession {
                 target: .project(project.name), title: project.title.isEmpty ? project.name : project.title,
                 subtitle: subtitle, updatedAt: newest?.updatedAt ?? project.updatedAt,
                 state: working > 0 ? .working(since: now) : openState(in: mine, now: now),
-                face: agent(lead), away: false))
+                face: agent(lead), away: false, party: lead, unread: isUnread(lead, in: mine)))
         }
         for (name, items) in byAgent {
             guard let status = status(of: name), Naming.kind(of: status.agent) == .agent else { continue }
@@ -77,9 +81,18 @@ extension WorkspaceSession {
             if case .working = open, let text = status.agent.statusText, !text.isEmpty { subtitle = text }
             rows.append(ChatRow(
                 target: .agent(name), title: displayName(of: name), subtitle: subtitle,
-                updatedAt: newest?.updatedAt, state: open, face: status.agent, away: status.state == "offline"))
+                updatedAt: newest?.updatedAt, state: open, face: status.agent, away: status.state == "offline",
+                party: name, unread: isUnread(name, in: items)))
         }
         return rows.sorted { ($0.updatedAt ?? .distantPast, $0.id) > ($1.updatedAt ?? .distantPast, $1.id) }
+    }
+
+    /// Unread: the newest thing in the conversation came from the other
+    /// side (an interim update does not count), after it was last looked at.
+    private func isUnread(_ party: String, in items: [RecentItem]) -> Bool {
+        let incoming = items.map(\.last).filter { $0.from != me && $0.type != "progress" }.map(\.createdAt).max()
+        guard let incoming, let seen = readAt[party] ?? readBaseline else { return false }
+        return incoming > seen
     }
 
     private func openState(in items: [RecentItem], now: Date) -> RunState? {

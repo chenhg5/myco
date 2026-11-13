@@ -65,6 +65,21 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testScrollingToTheTopBringsOlderMessages() {
+        let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
+        XCTAssertTrue(app.staticTexts[Self.lastReply].waitForExistence(timeout: 20))
+        // The newest page holds the last thirty questions (171 to 200).
+        let older = app.staticTexts["第 150 个问题：这件事接下来怎么做？"]
+        let list = app.scrollViews.firstMatch
+        var swipes = 0
+        while !older.exists, swipes < 40 {
+            list.swipeDown(velocity: .fast)
+            swipes += 1
+        }
+        XCTAssertTrue(older.exists, "scrolling past the first page loads the one before it")
+    }
+
+    @MainActor
     func testTheKeyboardComesAndGoesWithoutHidingTheEnd() throws {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

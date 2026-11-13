@@ -25,6 +25,8 @@ public enum MycoColor {
     /// Failed, unreachable, dangerous.
     public static let red = dynamic(0xD64545, 0xF28B82)
     public static let redSoft = dynamic(0xFBE9E9, 0x45272A)
+    /// Something new since it was last looked at.
+    public static let unread = dynamic(0x2F7BF6, 0x5B9DFF)
     /// Text links.
     public static let accent = dynamic(0x3A9A78, 0x52A685)
     /// The one solid button on a screen.

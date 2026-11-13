@@ -9,11 +9,14 @@ public struct PersonRow: View {
     let trailing: String?
     let tone: StatusTone?
     let away: Bool
+    /// Something new is in it: a blue dot, and its words stand out more.
+    let unread: Bool
 
     public init(
         face: AvatarView.Face, badge: AvatarView.Badge? = nil, title: String, subtitle: String,
-        trailing: String? = nil, tone: StatusTone? = nil, away: Bool = false
+        trailing: String? = nil, tone: StatusTone? = nil, away: Bool = false, unread: Bool = false
     ) {
+        self.unread = unread
         self.face = face
         self.badge = badge
         self.title = title
@@ -29,16 +32,21 @@ public struct PersonRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg).lineLimit(1)
                 if !subtitle.isEmpty {
-                    Text(subtitle).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)
+                    Text(subtitle).font(.subheadline.weight(unread ? .medium : .regular))
+                        .foregroundStyle(unread ? MycoColor.fg : MycoColor.muted).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 7) {
                 if let trailing {
-                    Text(trailing).font(.footnote).foregroundStyle(MycoColor.faint)
+                    Text(trailing).font(.footnote).foregroundStyle(unread ? MycoColor.unread : MycoColor.faint)
                 }
-                if let tone {
-                    StatusDot(tone)
+                HStack(spacing: 6) {
+                    if let tone { StatusDot(tone) }
+                    if unread {
+                        Circle().fill(MycoColor.unread).frame(width: 10, height: 10)
+                            .accessibilityIdentifier("row.unread")
+                    }
                 }
             }
         }
