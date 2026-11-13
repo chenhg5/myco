@@ -691,12 +691,19 @@ func (c *Client) SetStatus(ctx context.Context, text string) (*api.Agent, error)
 
 // Progress posts an interim update on task id (as its recipient).
 func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
-	body, err := c.sealAbout(ctx, id, false, "progress", body, nil)
+	return c.ProgressWith(ctx, id, body, nil, dry)
+}
+
+// ProgressWith reports progress with uploaded files (their ids). Hubs
+// before progress attachments keep the text and drop the files: the
+// answer then has none.
+func (c *Client) ProgressWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, false, "progress", body, attachments)
 	if err != nil {
 		return nil, err
 	}
 	var out api.MessageResult
-	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/progress", dryQuery(dry), api.ReplyRequest{Body: body, Attachments: attachments}, &out)
 }
 
 // Steer sends a correction for open task id (as its sender).

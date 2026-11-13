@@ -459,12 +459,23 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 // Progress records an interim update on task id from its recipient and
 // wakes anyone waiting for the task's reply.
 func (s *MessageService) Progress(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {
+	return s.ProgressWith(ctx, agent, id, body, nil, dryRun)
+}
+
+// ProgressWith is a progress update that shows files too (a screenshot of
+// the page so far, a draft): the task's sender may read them.
+func (s *MessageService) ProgressWith(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	atts, err := resolveAttachments(ctx, s.files, s.clock, agent.Name, attachIDs)
+	if err != nil {
+		return nil, err
+	}
 	var out *domain.Message
-	err := s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
+	err = s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
 		p, err := m.Progress(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}
+		p.Attachments = atts
 		out = p
 		return []*domain.Message{p}, nil
 	})
@@ -472,6 +483,11 @@ func (s *MessageService) Progress(ctx context.Context, agent *domain.Agent, id, 
 		return nil, err
 	}
 	if !dryRun {
+		if s.files != nil {
+			if err := grantAttachments(ctx, s.files, atts, out.To); err != nil {
+				return nil, err
+			}
+		}
 		s.notifier.Publish(replyTopic(id))
 	}
 	return out, nil

@@ -2143,6 +2143,17 @@ body.is-resizing {
 .trace-report-text > :last-child {
   margin-bottom: 0;
 }
+/* Files it showed along the way: a screenshot a little smaller than in a
+   message, under what it said. */
+.trace-report-files {
+  margin-top: 6px;
+}
+.trace-report-files .conv-shots {
+  margin-top: 0;
+}
+.trace-report-files .conv-shots.is-one {
+  grid-template-columns: minmax(0, 260px);
+}
 .trace-report-time {
   flex: none;
   font-size: 11px;

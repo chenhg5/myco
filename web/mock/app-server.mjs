@@ -605,6 +605,18 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       body: "正在处理…", created_at: iso(0), updated_at: iso(0),
     }));
   });
+  // Asked for a screenshot: one comes along the way, with what it shows.
+  later(3800, () => {
+    const msgs = hub.threads[threadId];
+    const task = msgs?.find((m) => m.id === taskId);
+    if (!msgs || !/截图|screenshot/i.test(task?.body || "")) return;
+    const id = `f_demo_shot_${(state.counter += 1)}`;
+    msgs.push(makeMessage({
+      thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId,
+      body: "首页改好一半了，先看看效果", attachments: [{ file_id: id, name: "首页-进行中.png", size: DEMO_PNG.length, sha256: "", content_type: "image/png" }],
+      created_at: iso(0), updated_at: iso(0),
+    }));
+  });
   later(6000, () => {
     replyTimers.delete(taskId);
     const msgs = hub.threads[threadId];

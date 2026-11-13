@@ -744,7 +744,8 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
       // The mock's answers take turns, one in four carries a picture: four
       // tasks (as from another device, so none is a supplement to another).
-      for (let i = 0; i < 4; i++) await sendFromElsewhere("hub_studio", "review-cloud", `图片附件 ${i + 1}`);
+      // The first asks for a screenshot: one comes with a progress update.
+      for (let i = 0; i < 4; i++) await sendFromElsewhere("hub_studio", "review-cloud", i === 0 ? "图片附件 1：改完截图给我看" : `图片附件 ${i + 1}`);
       const thumb = page.locator(".conv-detail .conv-attach.is-image").last();
       await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
@@ -765,6 +766,10 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 45_000 });
+      // A screenshot sent with a progress update shows under that update.
+      const along = page.locator(".conv-detail .trace-report-files .conv-attach.is-image img").last();
+      await along.waitFor({ timeout: 5_000 });
+      if (!await along.evaluate((img) => img.complete && img.naturalWidth > 0)) throw new Error("进展里的截图应显示缩略图");
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
     });

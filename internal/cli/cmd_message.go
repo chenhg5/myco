@@ -295,8 +295,9 @@ status everyone can see, use myco agent status set.`,
 		Examples: []string{
 			`myco message progress --body "tests pass; now updating the docs (2/3)"   # inside a runner, --id is $MYCO_MESSAGE_ID`,
 			`myco message progress --id msg_abc123 --body "found the cause: a race in the lease check"`,
+			`myco message progress --body "the new home page so far" --attach home.png   # a screenshot shows in the app`,
 		},
-		Flags: []Flag{idFlag, {Name: "body", Kind: String, Required: true, Help: "Update text"}},
+		Flags: []Flag{idFlag, {Name: "body", Kind: String, Required: true, Help: "Update text"}, attachFlag},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id", "body"); err != nil {
 				return err
@@ -306,12 +307,20 @@ status everyone can see, use myco agent status set.`,
 				return err
 			}
 			dry := e.in.Bool("dry-run")
-			m, err := c.Progress(e.in.Ctx, e.in.String("id"), e.in.String("body"), dry)
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
+			m, err := c.ProgressWith(e.in.Ctx, e.in.String("id"), e.in.String("body"), atts, dry)
 			if err != nil {
 				return err
 			}
 			if dry {
 				return e.dryRun(map[string]any{"action": "progress", "message": m})
+			}
+			if len(atts) > 0 && len(m.Attachments) == 0 {
+				// A hub before progress attachments keeps only the text.
+				fmt.Fprintln(e.in.Stderr, "note: the hub kept the text but not the files (it predates files in progress updates); send them with the reply instead")
 			}
 			steers, err := pendingSteers(e.in.Ctx, c, e.in.String("id"), true)
 			if err != nil {
@@ -575,6 +584,7 @@ func (e *env) waitWithProgress(c *client.Client, id string, d time.Duration) (*a
 	reply, err := c.WaitReplyProgress(e.in.Ctx, id, d, func(p api.Message) {
 		progress = append(progress, p)
 		fmt.Fprintf(e.in.Stderr, "[progress %s from %s] %s\n", p.CreatedAt.Local().Format("15:04:05"), p.From, strings.TrimSpace(p.Body))
+		printAttachments(e.in.Stderr, p.Attachments)
 	})
 	return reply, progress, err
 }

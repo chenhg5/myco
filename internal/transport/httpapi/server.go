@@ -1360,7 +1360,7 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 		if kind == "steer" {
 			m, err = s.messages.SteerWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		} else {
-			m, err = s.messages.Progress(r.Context(), a, r.PathValue("id"), req.Body, dry)
+			m, err = s.messages.ProgressWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
 		}
 		if err != nil {
 			writeError(w, err)

@@ -201,6 +201,11 @@ For work with several steps, send your plan as a checklist (one item a line, `[x
 latest one as a to-do list being ticked off:
 `myco message progress --id <id> --body $'- [x] Read the handler\n- [~] Fix the check\n- [ ] Run the tests'`.
 
+When the person would want to see how it looks so far (a page you changed, a chart, a
+draft), attach it to the progress update; a picture shows in the app under that update:
+`myco message progress --id <id> --body "The new home page so far" --attach home.png`.
+Attach only what helps them judge; the final files still go with your reply.
+
 A message you know you will not act on (an answer to something you stopped waiting for)
 can be dropped without pulling it: `myco message done --id <id>`.
 

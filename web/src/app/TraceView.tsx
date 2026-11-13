@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
-import type { Message, TraceEvent, TraceStep } from "@/api";
+import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
+import { MessageAttachments } from "@/app/attachments";
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -263,11 +264,11 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   // time); each run of steps in between folds into one line ("跑了 3 条命令、
   // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
   // say what it is doing now; at the very end, while it works, the mushroom.
-  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string }; row?: Row };
+  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; row?: Row };
   const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
     if (planReports.has(p.id)) continue;
-    const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at } };
+    const it: Item = { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at, files: p.attachments } };
     // after the last step made before it (steps without a time: at the end)
     let i = items.length;
     if (items.every((x) => x.at)) {
@@ -277,7 +278,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
     }
     items.splice(i, 0, it);
   }
-  type Report = { key: string; text: string; when: string };
+  type Report = { key: string; text: string; when: string; files?: Attachment[] };
   type Segment = { kind: "say"; key: string; text: string }
     | { kind: "think"; key: string; text: string }
     | { kind: "reports"; items: Report[] }
@@ -286,7 +287,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   for (const it of items) {
     if (it.say?.report) {
       const lastSeg = segments[segments.length - 1];
-      const r = { key: it.say.key, text: it.say.text, when: it.say.when || "" };
+      const r = { key: it.say.key, text: it.say.text, when: it.say.when || "", files: it.say.files };
       if (lastSeg?.kind === "reports") lastSeg.items.push(r);
       else segments.push({ kind: "reports", items: [r] });
       continue;
@@ -325,7 +326,11 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
           {seg.items.map((r, j) => (
             <li key={r.key} className={cn("trace-report", running && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
               <span className="trace-report-dot" aria-hidden />
-              <div className="trace-report-text"><MessageContent body={r.text} /></div>
+              <div className="trace-report-text">
+                <MessageContent body={r.text} />
+                {/* What it showed along the way: a screenshot, a draft. */}
+                {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
+              </div>
               {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
             </li>
           ))}
