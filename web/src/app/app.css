@@ -5449,6 +5449,30 @@ body.is-resizing {
   padding: 0 26px 0 8px;
   font-size: 12px;
 }
+/* Run settings: the inline field for a model typed by hand. */
+.app-run-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-run-input {
+  width: 150px;
+  height: 26px;
+  font-size: 12px;
+}
+/* A plan window nearly used (amber) or spent (red). */
+.app-quota.is-tight .app-kv-value {
+  color: var(--amber);
+}
+.app-quota.is-over .app-kv-value {
+  color: var(--red);
+}
+/* Usage older than an hour: the numbers have moved on. */
+.app-quota-stale {
+  padding: 5px 12px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
 
 /* Node details: changes to its card */
 .app-history {

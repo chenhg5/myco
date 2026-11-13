@@ -4,6 +4,7 @@ import { appApi, type LocalState } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub, nodeName } from "@/app/nodes";
+import { agentQuotaHint } from "@/app/quota";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { projectsOf } from "@/app/Members";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -68,6 +69,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
           {list.map((r) => {
             const a = r.st.agent;
             const ps = projectsOf(r, projects);
+            const quota = agentQuotaHint(a);
             return (
               <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row", r.st.state === "offline" && "is-away")}>
                 <Avatar agent={a} size={34} state={r.st.state} />
@@ -76,6 +78,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
                   <span className="pc-row-sub">
                     {a.binding.workdir && <span className="mono">{a.binding.workdir}</span>}
                     {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
+                    {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
                     {r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
                   </span>
                 </button>

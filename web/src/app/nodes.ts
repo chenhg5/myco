@@ -110,6 +110,8 @@ export function kindLabel(kind: Kind): string {
 }
 
 export function modelSourceLabel(source?: ModelSource): string | undefined {
+  if (source === "app") return L("App 设置", "App setting");
+  if (source === "self") return L("它自己报的", "Reported by itself");
   if (source === "configured") return L("配置", "Configured");
   if (source === "observed") return L("实际使用", "In use");
   if (source === "default") return L("CLI 默认", "CLI default");
