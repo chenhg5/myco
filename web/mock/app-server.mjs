@@ -51,6 +51,8 @@ const uploads = new Map();
 const uploadBytes = new Map();
 // Pictures agents use as faces, by "hub/name".
 const avatarPics = new Map();
+// Times the page asked the "desktop app" to start dictation.
+let dictations = 0;
 
 // A real PNG (a soft diagonal gradient with a band), for pictures the mock's
 // agents send back: the app shows them as thumbnails.
@@ -1274,7 +1276,16 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
+  }
+  // /app/dictation: the desktop app starts the system's dictation (counted
+  // here, for the smoke: GET says how many times).
+  if (parts[0] === "app" && parts[1] === "dictation" && parts.length === 2) {
+    if (method === "GET") return send(res, 200, { started: dictations });
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    dictations += 1;
+    res.writeHead(204);
+    return res.end();
   }
 
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")

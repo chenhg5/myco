@@ -30,6 +30,7 @@ import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { setSystemDictation } from "@/app/Dictate";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 
 const POLL_MS = 5000;
@@ -82,6 +83,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
+  setSystemDictation(!!info?.dictation);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
   // What the hubs showed last (also from before a restart) until they answer.

@@ -5,6 +5,7 @@ import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
+import { DictateButton } from "@/app/Dictate";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -930,6 +931,7 @@ function Composer({ hubId, project, agents, onSent }: {
         <div className="sp-compose-bar">
           <div className="sp-compose-tools">
             <AttachButton onFiles={att.add} />
+            <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} />
             <button type="button" className="sp-to" onClick={(e) => menu.openUnder(e.currentTarget, [
               { header: L("发给谁", "Send to") },
               ...agents.map((r) => ({

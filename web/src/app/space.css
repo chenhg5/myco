@@ -2223,6 +2223,22 @@ body.is-resizing {
   width: 15px;
   height: 15px;
 }
+/* Speaking instead of typing (Dictate.tsx): while the page listens the
+   microphone is red and breathes; a problem shows as its tip. */
+.dictate-btn.is-listening {
+  background: var(--red-soft);
+  color: var(--red);
+  animation: dictate-breathe 1.4s ease-in-out infinite;
+}
+.dictate-btn.is-note {
+  color: var(--amber);
+}
+@keyframes dictate-breathe {
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dictate-btn.is-listening { animation: none; }
+}
 .att-list {
   display: flex;
   flex-wrap: wrap;

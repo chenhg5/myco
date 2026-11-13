@@ -170,7 +170,11 @@ export interface SendMessageInput {
 
 /** How the App window is hosted: native macOS shell or a plain browser. */
 export type Shell = "mac" | "browser";
-export interface AppInfo { version: string; shell: Shell }
+export interface AppInfo {
+  version: string; shell: Shell;
+  /** the desktop app can start the system's dictation (POST app/dictation) */
+  dictation?: boolean;
+}
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
 
@@ -337,6 +341,8 @@ export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 export const appApi = {
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
+  /** Starts the system's dictation into the focused field (desktop app). */
+  dictate: () => request<void>("POST", "app/dictation"),
   update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),

@@ -23,6 +23,7 @@ import { MessageAttachments } from "@/app/attachments";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
+import { DictateButton } from "@/app/Dictate";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -1619,6 +1620,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 and voice input later */}
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
+              {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
             </div>
             <span className="conv-compose-hint">
               {supplementing

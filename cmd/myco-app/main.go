@@ -72,6 +72,7 @@ func main() {
 		return
 	}
 	b.Shell = guiShell
+	b.Dictate = dictate
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)

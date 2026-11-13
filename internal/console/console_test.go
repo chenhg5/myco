@@ -502,3 +502,23 @@ func TestAvatarFromTheApp(t *testing.T) {
 		t.Fatalf("no picture: %d", resp.StatusCode)
 	}
 }
+
+// The desktop app starts the system's dictation; a browser has none.
+func TestDictation(t *testing.T) {
+	r := newRig(t)
+	if code, m, _ := r.do("GET", "/app/info", nil); code != 200 || m["dictation"] != false {
+		t.Fatalf("no dictation in a browser: %d %v", code, m)
+	}
+	if code, _, _ := r.do("POST", "/app/dictation", nil); code != 404 {
+		t.Fatalf("dictation without one: %d", code)
+	}
+	started := 0
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Shell: "mac", Dictate: func() error { started++; return nil }}
+	r.app.Config.Handler = b.Handler()
+	if code, m, _ := r.do("GET", "/app/info", nil); code != 200 || m["dictation"] != true {
+		t.Fatalf("the app says it has dictation: %d %v", code, m)
+	}
+	if code, _, _ := r.do("POST", "/app/dictation", nil); code != 204 || started != 1 {
+		t.Fatalf("start dictation: %d, started %d", code, started)
+	}
+}

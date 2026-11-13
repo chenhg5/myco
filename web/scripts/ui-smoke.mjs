@@ -827,6 +827,21 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // Speaking instead of typing: the microphone beside the files starts the
+    // system's dictation (the mock is the Mac app) with the caret in the box.
+    await step("单聊 · 语音输入", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const mic = page.locator(".conv-detail .conv-compose-tools .dictate-btn");
+      await mic.waitFor({ timeout: 10_000 });
+      const before = (await (await fetch(`http://${HOST}:${mockPort()}/app/dictation`)).json()).started;
+      await mic.click();
+      await page.waitForFunction(() => document.activeElement?.classList.contains("conv-compose-input"), null, { timeout: 5_000 });
+      const after = (await (await fetch(`http://${HOST}:${mockPort()}/app/dictation`)).json()).started;
+      if (after !== before + 1) throw new Error("点麦克风应让 App 打开系统听写");
+      if (await mic.evaluate((el) => el.classList.contains("is-note"))) throw new Error(`语音输入不该报错：${await mic.getAttribute("title")}`);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // An agent asks you to decide: a card with the choices, the round waits
     // (no loading), a click answers it and the round goes on.
     await step("单聊 · 点选卡", async () => {
