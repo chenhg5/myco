@@ -26,6 +26,7 @@ public struct StepGroupView: View {
     let summary: String
     let steps: [StepLine]
     @State private var open = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(summary: String, steps: [StepLine]) {
         self.summary = summary
@@ -35,7 +36,9 @@ public struct StepGroupView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                open.toggle()
+                // Opens in place, quickly, with no bounce; at once for
+                // people who asked for less motion.
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) { open.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     Text(summary).font(.subheadline).foregroundStyle(MycoColor.muted).multilineTextAlignment(.leading)
@@ -65,6 +68,7 @@ public struct StepGroupView: View {
                     }
                 }
                 .padding(.leading, 2)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

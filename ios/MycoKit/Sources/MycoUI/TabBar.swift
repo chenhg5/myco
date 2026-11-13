@@ -53,15 +53,16 @@ public struct MycoTabBar<ID: Hashable & Sendable>: View {
                     .frame(maxWidth: .infinity, minHeight: 54)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressScaleStyle())
                 .accessibilityIdentifier(item.accessibilityID)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
         .padding(.top, 2)
-        .background(MycoColor.bg, ignoresSafeAreaEdges: .bottom)
-        .overlay(alignment: .top) {
-            Rectangle().fill(MycoColor.line).frame(height: 0.5)
-        }
+        // A translucent layer: the list scrolls on under it, and no hard
+        // line divides the two. (The system makes it solid when people ask
+        // for less transparency.)
+        .background(.bar, ignoresSafeAreaEdges: .bottom)
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }

@@ -44,7 +44,7 @@ public struct ComposerView: View {
                     .frame(width: 36, height: 36)
                     .background(MycoColor.pill, in: Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressScaleStyle())
             .accessibilityIdentifier("composer.attach")
 
             TextField(placeholder, text: $text, axis: .vertical)
@@ -77,7 +77,7 @@ public struct ComposerView: View {
             .accessibilityIdentifier("composer.submit")
         } else {
             Button(action: onSubmit) { icon }
-                .buttonStyle(.plain)
+                .buttonStyle(PressScaleStyle())
                 .disabled(!enabled)
                 .accessibilityLabel(submitLabel)
                 .accessibilityIdentifier("composer.submit")

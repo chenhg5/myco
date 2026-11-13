@@ -104,7 +104,7 @@ private struct MemberStrip: View {
                         }
                         .frame(width: 64)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressScaleStyle())
                     .accessibilityIdentifier("strip." + status.agent.name)
                 }
             }
@@ -152,6 +152,8 @@ struct ConversationBody: View {
     @State private var followKeyboard = false
 
     private static let bottomID = "conversation.bottom"
+    /// Counts what was sent or stopped from here: a light tap answers each.
+    @State private var commits = 0
 
     private var name: String { session.displayName(of: model.agent) }
 
@@ -300,11 +302,15 @@ struct ConversationBody: View {
                 placeholder: model.openTask == nil ? L("发给 \(name)", "Message \(name)") : L("补充给 \(name)", "Add to what \(name) is doing"),
                 mode: mode, enabled: model.canSubmit, submitLabel: submitLabel,
                 queueTitle: L("排到下一条", "Send after this one"),
-                onSubmit: { Task { await model.submit() } },
+                onSubmit: {
+                    commits += 1
+                    Task { await model.submit() }
+                },
                 onQueue: { model.queueNext() },
                 onAttach: { attachNotice = true })
         }
         .background(.bar)
+        .sensoryFeedback(.impact(weight: .light), trigger: commits)
     }
 
     private var submitLabel: String {

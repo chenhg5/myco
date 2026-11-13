@@ -135,7 +135,7 @@ public struct DispatchCapsule: View {
 
     public var body: some View {
         if let action {
-            Button(action: action) { capsule }.buttonStyle(.plain)
+            Button(action: action) { capsule }.buttonStyle(PressScaleStyle())
         } else {
             capsule
         }

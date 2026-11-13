@@ -25,8 +25,8 @@ struct ChatsScreen: View {
                     trailing: row.updatedAt.map { RelativeTime.short($0) },
                     tone: StatusTone.of(row.state), away: row.away)
             }
-            .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            .buttonStyle(RowButtonStyle())
+            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .contextMenu {
@@ -91,8 +91,8 @@ struct ProjectsScreen: View {
                 .padding(.vertical, 6)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            .buttonStyle(RowButtonStyle())
+            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .accessibilityIdentifier("project." + project.name)
@@ -141,8 +141,8 @@ struct MembersScreen: View {
                                 subtitle: status.state == "working" ? Words.member(status) : status.agent.description,
                                 tone: StatusTone.of(member: status), away: status.state == "offline")
                         }
-                        .buttonStyle(.plain)
-                        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+                        .buttonStyle(RowButtonStyle())
+                        .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
                         .listRowBackground(MycoColor.bg)
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("member." + status.agent.name)
