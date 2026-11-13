@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import MycoAPI
+import MycoStore
 
 /// The workspace on screen: its members, projects and recent conversations,
 /// kept fresh while the app is in front. Pages read it; they do not call
@@ -26,15 +27,50 @@ public final class WorkspaceSession {
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
 
-    public init(id: String, name: String, hub: any HubAPI) {
+    private let snapshots: (any SnapshotStore)?
+
+    /// - Parameter snapshots: where what it showed last is kept, so the
+    ///   next launch opens on it at once; nil keeps nothing.
+    public init(id: String, name: String, hub: any HubAPI, snapshots: (any SnapshotStore)? = nil) {
         self.id = id
         self.name = name
         self.hub = hub
+        self.snapshots = snapshots
+    }
+
+    /// What is kept between launches: the lists, never a token.
+    struct Snapshot: Codable {
+        var me: String
+        var statuses: [AgentStatus]
+        var machines: [Machine]
+        var projects: [Project]
+        var recent: [RecentItem]
+        var savedAt: Date
+    }
+
+    /// Shows what the workspace showed last, until it answers.
+    public func restore() async {
+        guard loadedAt == nil, let data = await snapshots?.snapshot(for: id),
+              let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data)
+        else { return }
+        me = snapshot.me
+        statuses = snapshot.statuses
+        machines = snapshot.machines
+        projects = snapshot.projects
+        recent = snapshot.recent
+        loadedAt = snapshot.savedAt
+    }
+
+    private func save() async {
+        guard let snapshots else { return }
+        let snapshot = Snapshot(me: me, statuses: statuses, machines: machines, projects: projects, recent: recent, savedAt: Date())
+        await snapshots.setSnapshot(try? HubJSON.encoder().encode(snapshot), for: id)
     }
 
     /// Refreshes until the surrounding task is cancelled (the page left the
     /// screen, the app went to the background).
     public func run() async {
+        await restore()
         while !Task.isCancelled {
             await refresh()
             try? await Task.sleep(for: Self.pollInterval)
@@ -54,6 +90,7 @@ public final class WorkspaceSession {
             self.recent = r
             loadedAt = Date()
             problem = nil
+            await save()
         } catch let error as HubError {
             problem = error.message
         } catch is CancellationError {

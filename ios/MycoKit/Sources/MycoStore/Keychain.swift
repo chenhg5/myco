@@ -60,3 +60,31 @@ public actor FileWorkspaceStore: WorkspaceStore {
         try JSONEncoder().encode(workspaces).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }
+
+/// Snapshots as files in the app's caches folder, protected until the
+/// device is first unlocked. The system may clear them; nothing depends on
+/// them being there.
+public struct FileSnapshotStore: SnapshotStore {
+    private let folder: URL
+
+    public init(folder: URL? = nil) {
+        self.folder = folder ?? URL.cachesDirectory.appending(path: "myco/snapshots")
+    }
+
+    private func file(_ workspace: String) -> URL {
+        folder.appending(path: workspace.replacingOccurrences(of: "/", with: "_") + ".json")
+    }
+
+    public func snapshot(for workspace: String) async -> Data? {
+        try? Data(contentsOf: file(workspace))
+    }
+
+    public func setSnapshot(_ data: Data?, for workspace: String) async {
+        guard let data else {
+            try? FileManager.default.removeItem(at: file(workspace))
+            return
+        }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? data.write(to: file(workspace), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+}

@@ -39,6 +39,8 @@ targets:
         product: MycoFake
       - package: MycoKit
         product: MycoStore
+      - package: MycoKit
+        product: MycoAPI
     settings:
       base:
         # A placeholder until the real bundle id is chosen.

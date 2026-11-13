@@ -184,6 +184,10 @@ private struct WorkspaceChrome: ViewModifier {
         content
             // Rows are compact: more of the list fits on a screen.
             .environment(\.defaultMinListRowHeight, 0)
+            // Waiting for the first answer: rows in the shape of what comes.
+            .overlay {
+                if session.loadedAt == nil, session.problem == nil { SkeletonRows() }
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let problem = session.problem { StaleBanner(staleText(problem)) }
             }

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import MycoAPI
 import MycoFake
+import MycoStore
 @testable import MycoCore
 
 /// The session and a conversation against the fake workspace: what the
@@ -63,6 +64,43 @@ struct SessionTests {
         await hub.setUnreachable(false)
         await session.refresh()
         #expect(session.problem == nil)
+    }
+
+    @Test func opensOnWhatItShowedLast() async {
+        let store = MemoryStore()
+        let first = WorkspaceSession(id: "w1", name: "Demo", hub: FakeHub(), snapshots: store)
+        await first.refresh()
+        #expect(first.members.count == 8)
+
+        // The next launch: the workspace does not answer, the lists are there.
+        let hub = FakeHub()
+        await hub.setUnreachable(true)
+        let second = WorkspaceSession(id: "w1", name: "Demo", hub: hub, snapshots: store)
+        #expect(second.loadedAt == nil)
+        await second.restore()
+        #expect(second.members.count == 8)
+        #expect(second.me == FakeHub.me)
+        #expect(second.loadedAt != nil)
+        #expect(second.chatRows.isEmpty == false)
+        await second.refresh()
+        #expect(second.problem != nil)
+        #expect(second.members.count == 8)
+
+        // Another workspace's snapshot is not this one's.
+        let other = WorkspaceSession(id: "w2", name: "Other", hub: hub, snapshots: store)
+        await other.restore()
+        #expect(other.members.isEmpty)
+    }
+
+    @Test func aWorkspaceAtAnAddressGetsAPlainName() {
+        func record(_ name: String, _ url: String) -> WorkspaceRecord { WorkspaceRecord(id: "x", name: name, url: URL(string: url)!) }
+        AppLanguage.$forced.withValue(.en) {
+            #expect(Workspaces.displayName(of: record("193-46-198-17.sslip.io", "https://193-46-198-17.sslip.io")) == "My workspace")
+            #expect(Workspaces.displayName(of: record("192.168.1.20", "http://192.168.1.20:7777")) == "My workspace")
+            #expect(Workspaces.displayName(of: record("hub.example.com", "https://hub.example.com")) == "hub.example.com")
+            // A name someone gave it stays.
+            #expect(Workspaces.displayName(of: record("Studio", "https://193-46-198-17.sslip.io")) == "Studio")
+        }
     }
 
     @Test func anEmptyWorkspaceLoadsWithNobody() async {

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import MycoAPI
 import MycoCore
 import MycoFake
 import MycoFeatures
@@ -20,11 +21,15 @@ struct MycoApp: App {
     init() {
         start = UserDefaults.standard.string(forKey: "myco-start") ?? ""
         let workspaces = Workspaces(records: FileWorkspaceStore(), secrets: KeychainStore(), deviceName: Self.deviceName())
+        let snapshots = FileSnapshotStore()
+        @Sendable @MainActor func session(_ current: (record: WorkspaceRecord, hub: HubClient)) -> WorkspaceSession {
+            WorkspaceSession(id: current.record.id, name: Workspaces.displayName(of: current.record), hub: current.hub, snapshots: snapshots)
+        }
         let doors = AppModel.Doors(
             demo: { Self.demo(.team) },
             restore: {
                 guard let current = await workspaces.current() else { return nil }
-                return WorkspaceSession(id: current.record.id, name: current.record.name, hub: current.hub)
+                return session(current)
             },
             join: { link in
                 do {
@@ -37,9 +42,12 @@ struct MycoApp: App {
                 guard let current = await workspaces.current() else {
                     throw AppModel.JoinFailure(message: L("加入了，但没能保存在这台设备上。", "Joined, but it could not be saved on this device."))
                 }
-                return WorkspaceSession(id: current.record.id, name: current.record.name, hub: current.hub)
+                return session(current)
             },
-            leave: { id in await workspaces.leave(id) })
+            leave: { id in
+                await workspaces.leave(id)
+                await snapshots.setSnapshot(nil, for: id)
+            })
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }

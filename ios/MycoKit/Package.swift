@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "MycoFeatures", targets: ["MycoFeatures"]),
         .library(name: "MycoCore", targets: ["MycoCore"]),
         .library(name: "MycoStore", targets: ["MycoStore"]),
+        .library(name: "MycoAPI", targets: ["MycoAPI"]),
         .library(name: "MycoFake", targets: ["MycoFake"]),
     ],
     targets: [

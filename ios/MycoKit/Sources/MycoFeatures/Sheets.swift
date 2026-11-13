@@ -202,7 +202,7 @@ struct WorkspaceSheet: View {
                         WorkspaceBadge(name: session.name, size: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(session.name).font(.body.weight(.medium))
-                            Text(session.problem == nil ? L("已连接", "Connected") : L("连不上", "Unreachable"))
+                            Text(session.problem != nil ? L("连不上", "Unreachable") : (session.loadedAt == nil ? L("正在连接…", "Connecting…") : L("已连接", "Connected")))
                                 .font(.footnote).foregroundStyle(session.problem == nil ? MycoColor.muted : MycoColor.red)
                         }
                         Spacer()

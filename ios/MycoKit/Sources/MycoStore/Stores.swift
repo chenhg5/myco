@@ -31,8 +31,18 @@ public protocol DraftStore: Sendable {
     func setDraft(_ text: String, for conversation: String) async
 }
 
+/// What a workspace showed last, so its pages open with something at once.
+public protocol SnapshotStore: Sendable {
+    func snapshot(for workspace: String) async -> Data?
+    func setSnapshot(_ data: Data?, for workspace: String) async
+}
+
 /// Everything in memory: for previews, tests and the demo workspace.
-public actor MemoryStore: SecretStore, WorkspaceStore, DraftStore {
+public actor MemoryStore: SecretStore, WorkspaceStore, DraftStore, SnapshotStore {
+    private var snapshots: [String: Data] = [:]
+    public func snapshot(for workspace: String) -> Data? { snapshots[workspace] }
+    public func setSnapshot(_ data: Data?, for workspace: String) { snapshots[workspace] = data }
+
     private var secrets: [String: String] = [:]
     private var records: [WorkspaceRecord] = []
     private var drafts: [String: String] = [:]

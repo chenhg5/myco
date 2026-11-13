@@ -99,12 +99,22 @@ public final class ConversationModel {
     /// On a project's page: what its coordinator gave the other members.
     /// On an agent's own page: what others gave it.
     private func othersWork() async throws -> [Message] {
-        let tasks = try await session.hub.recent(project: project).compactMap(\.task)
-        if project != nil {
+        if let project {
+            let tasks = try await session.hub.recent(project: project).compactMap(\.task)
             return tasks.filter { $0.from == agent && $0.to != session.me }
         }
-        return tasks.filter { $0.to == agent && $0.from != session.me }
+        // Its own page: what was given to it in the projects it is in (the
+        // list of my own chats holds none of that).
+        var tasks: [Message] = []
+        for project in session.projects(of: agent).prefix(Self.projectsScanned) {
+            let recent = (try? await session.hub.recent(project: project.name)) ?? []
+            tasks += recent.compactMap(\.task).filter { $0.to == agent && $0.from != session.me }
+        }
+        return tasks
     }
+
+    /// How many of an agent's projects are looked through for work given to it.
+    static let projectsScanned = 3
 
     /// Fetches the steps of my newest tasks: all of them once for a closed
     /// task, the new ones each time for one still being worked on.

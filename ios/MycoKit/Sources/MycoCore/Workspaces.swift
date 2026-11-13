@@ -25,6 +25,15 @@ public struct Workspaces: Sendable {
 
     private func tokenKey(_ id: String) -> String { "workspace.\(id).token" }
 
+    /// What a workspace is called on screen. A host that is an address
+    /// ("192.168.1.20", "193-46-198-17.sslip.io") says nothing to a person:
+    /// it reads as "my workspace" until they name it.
+    public static func displayName(of record: WorkspaceRecord) -> String {
+        let host = record.url.host() ?? ""
+        guard record.name == host, host.first?.isNumber == true || host == "localhost" else { return record.name }
+        return L("我的工作区", "My workspace")
+    }
+
     /// Joins the workspace a link leads to. A one-time code is traded for
     /// this device's own token; the token goes to the keychain.
     public func join(link: String) async throws -> WorkspaceRecord {

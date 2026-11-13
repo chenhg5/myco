@@ -182,6 +182,7 @@ struct ConversationBody: View {
             // the newest message is in view.
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            .modifier(SolidTopEdge())
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, let new else { return }
@@ -374,6 +375,18 @@ struct ProcessView: View {
         case "Grep", "Glob", "LS": return "magnifyingglass"
         case "WebFetch", "WebSearch": return "globe"
         default: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+/// Where text scrolls under the top bar, the bar stays solid enough to
+/// read its title: a conversation's words do not show through it.
+private struct SolidTopEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            content
         }
     }
 }
