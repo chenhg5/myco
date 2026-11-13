@@ -397,7 +397,19 @@ const state = {
         makeAgent({
           name: "pm-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "PM (Codex)", description: "规划发布并审查 PR。",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "configured", access: "workspace" },
+          // Its 5-hour window is nearly used (amber), the weekly one is not.
+          runtime: {
+            cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
+            effort: "high", effort_source: "app", access: "workspace",
+            quota: {
+              source: "codex", at: iso(120),
+              windows: [
+                { name: "five_hour", used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
+                { name: "seven_day", used: 0.62, resets_at: iso(-(3 * 86_400)) },
+              ],
+            },
+          },
+          run_settings: { model: "gpt-6-sol", effort: "high" },
           status_text: "正在审查 multihub 分支", status_at: iso(180),
           labels: ["machine=studio-mac", "group=官网改版", "role=pm", "review", "release"], capabilities: ["review", "release"],
           skills: [
@@ -414,7 +426,18 @@ const state = {
         makeAgent({
           name: "docs-claude", owner: "laohu", owner_id: "mem_laohu", description: "保持 README 和 docs/ 与代码同步。", visibility: "private",
           kind: "agent", machine_id: "m_studio",
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed", access: "readonly", provider: "DeepSeek", provider_source: "machine" },
+          runtime: {
+            cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
+            effort: "low", effort_source: "app", access: "readonly", provider: "DeepSeek", provider_source: "machine",
+            quota: {
+              source: "claude", at: iso(600),
+              windows: [
+                { name: "five_hour", used: 0.4, resets_at: iso(-(2 * 3600)) },
+                { name: "seven_day", used: 0.18, resets_at: iso(-(2 * 86_400)) },
+              ],
+            },
+          },
+          run_settings: { model: "", effort: "low" },
           labels: ["machine=studio-mac", "group=docs"], capabilities: ["docs"],
           online: false, last_seen_at: iso(5400), status_at: iso(5400),
           binding: { harness: "claude", environment: "macOS 26.1", workdir: "~/code/myco" },
@@ -447,7 +470,15 @@ const state = {
         }),
         makeAgent({
           name: "review-cloud", owner: "matthew", owner_id: "mem_matthew", display_name: "Review (Codex 云端)", description: "在 Codex 云端做代码审查。",
-          kind: "agent", runtime: { cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly" },
+          kind: "agent",
+          runtime: {
+            cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly",
+            // Out of quota two hours ago: red, and the numbers are stale.
+            quota: {
+              source: "codex", at: iso(2 * 3600),
+              windows: [{ name: "five_hour", used: 1, resets_at: iso(-(40 * 60)), status: "rejected" }],
+            },
+          },
           labels: ["group=release"], binding: { harness: "codex-cloud", environment: "Codex 云端" },
         }),
         makeAgent({
@@ -461,6 +492,8 @@ const state = {
         makeAgent({
           name: "grok-agent-7c2e", owner: "glenn", owner_id: "mem_glenn", display_name: "Myco (Grok)", description: "在 Grok 会话里用 inbox wait 接收消息。",
           kind: "agent", machine_id: "m_studio", receiving: "session",
+          // It runs its CLI in its own session and reports the model itself.
+          runtime: { cli: "inbox", model: "grok-4", model_source: "self" },
           // Pulled from the inbox but not acked: queued, so not working.
           delivered: [grokPulledTask],
           labels: ["machine=studio-mac", "group=release"],
@@ -772,6 +805,17 @@ for (const h of state.hubs) {
     if (a.resume) resumeAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify(a.resume)));
   }
 }
+
+// Run settings (and what runtime says about the model and effort) the smoke
+// test changes; put the demo ones back between widths and themes. It also
+// reads back the last body the App sent there.
+const runSettingsAtStart = new Map();
+for (const h of state.hubs) {
+  for (const a of h.agents || []) {
+    runSettingsAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify({ run_settings: a.run_settings, runtime: a.runtime })));
+  }
+}
+let lastRunSettings = null;
 
 const local = {
   hostname: "Studio.local",
@@ -1091,6 +1135,26 @@ const server = http.createServer(async (req, res) => {
         if (was) a.resume = JSON.parse(JSON.stringify(was)); else delete a.resume;
       }
     }
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/run-settings — the smoke test changes a node's model and
+  // effort; put the demo ones back between widths and themes. GET returns
+  // the last body the App sent there.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-settings" && parts.length === 3) {
+    if (method === "GET") return send(res, 200, { last: lastRunSettings });
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    for (const h of state.hubs) {
+      for (const a of h.agents || []) {
+        const was = runSettingsAtStart.get(`${h.id}/${a.name}`);
+        if (!was) continue;
+        if (was.run_settings) a.run_settings = JSON.parse(JSON.stringify(was.run_settings));
+        else delete a.run_settings;
+        if (was.runtime) a.runtime = JSON.parse(JSON.stringify(was.runtime));
+        else delete a.runtime;
+      }
+    }
+    lastRunSettings = null;
     return send(res, 200, { ok: true });
   }
 
@@ -2107,6 +2171,44 @@ const server = http.createServer(async (req, res) => {
         }
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
+        return send(res, 200, agent);
+      }
+      // /app/hubs/{id}/agents/{name}/run-settings — the model and effort this
+      // node is woken with; "" follows the computer's setting.
+      if (parts.length === 6 && parts[5] === "run-settings" && method === "PUT") {
+        if (process.env.MOCK_OLD_HUB) {
+          return fail(res, 404, "not_found", `no route for ${method} /app/hubs/${hub.id}/agents/${agent.name}/run-settings`);
+        }
+        const body = await readBody(req);
+        if (!body || typeof body.model !== "string" || typeof body.effort !== "string") {
+          return fail(res, 400, "invalid_argument", 'model and effort are required ("" follows the computer)');
+        }
+        const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
+        const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });
+        agent.run_settings = {};
+        if (body.model) agent.run_settings.model = body.model;
+        if (body.effort) agent.run_settings.effort = body.effort;
+        // What the runtime now reports, as a real hub's runner would.
+        if (body.model) {
+          rt.model = body.model;
+          rt.model_source = "app";
+        } else if (was?.runtime) {
+          if (was.runtime.model) rt.model = was.runtime.model;
+          else delete rt.model;
+          // Following the computer again: what it was before the App chose.
+          rt.model_source = was.run_settings?.model ? "configured" : was.runtime.model_source;
+          if (!rt.model_source) delete rt.model_source;
+        }
+        if (body.effort) {
+          rt.effort = body.effort;
+          rt.effort_source = "app";
+        } else if (was?.runtime) {
+          if (was.runtime.effort) rt.effort = was.runtime.effort;
+          else delete rt.effort;
+          rt.effort_source = was.run_settings?.effort ? "configured" : was.runtime.effort_source;
+          if (!rt.effort_source) delete rt.effort_source;
+        }
+        lastRunSettings = { hub: hub.id, agent: agent.name, body };
         return send(res, 200, agent);
       }
       // /app/hubs/{id}/agents/{name}/resume — the line that brings the same

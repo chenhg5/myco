@@ -1670,6 +1670,13 @@
 .pc-row-sub .mono {
   font-size: 11px;
 }
+/* Its agent's plan is nearly (or fully) used. */
+.pc-quota {
+  color: var(--amber);
+}
+.pc-quota.is-spent {
+  color: var(--red);
+}
 .pc-remove {
   opacity: 0;
 }

@@ -351,6 +351,9 @@ async function runMatrix(browser, size, scheme) {
   // The resume step makes and revokes a line; put the demo one back.
   const resetResume = await fetch(`http://${HOST}:${mockPort()}/app/mock/resume`, { method: "POST" });
   if (!resetResume.ok) throw new Error(`重置重新接入链接失败：HTTP ${resetResume.status}`);
+  // The run step changes a node's model and effort; put the demo ones back.
+  const resetRun = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`, { method: "POST" });
+  if (!resetRun.ok) throw new Error(`重置模型设置失败：HTTP ${resetRun.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -1251,9 +1254,117 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    await step("成员 · 模型和额度", async () => {
+      // A manager picks a model and an effort: each goes to the App backend
+      // at once with both fields. The quota rows say how much each window
+      // used and when it resets; a nearly-used one is amber.
+      const lastBody = async (pred, what) => {
+        for (let i = 0; i < 50; i++) {
+          const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`);
+          if (r.ok) {
+            const { last } = await r.json();
+            if (last && pred(last)) return last;
+          }
+          await sleep(100);
+        }
+        throw new Error(`App 后端没有收到${what}`);
+      };
+      const color = (name) => page.evaluate((n) => {
+        // Inside the App: its colour tokens are set on .app-shell, not body.
+        const el = document.createElement("span");
+        el.style.color = `var(${n})`;
+        (document.querySelector(".app-shell") || document.body).appendChild(el);
+        const c = getComputedStyle(el).color;
+        el.remove();
+        return c;
+      }, name);
+
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const body = page.locator(".ms .ms-fold-body");
+      await body.locator(".app-kv", { hasText: "模型" }).first().waitFor({ timeout: 5_000 });
+
+      const modelSelect = body.locator(".app-kv", { hasText: "模型" }).first().locator("select");
+      const effortSelect = body.locator(".app-kv", { hasText: "推理强度" }).first().locator("select");
+      await modelSelect.waitFor({ timeout: 5_000 });
+      await effortSelect.waitFor({ timeout: 5_000 });
+      await modelSelect.selectOption("gpt-6");
+      await lastBody((x) => x.agent === "pm-codex" && x.body.model === "gpt-6", "模型的修改");
+      await page.waitForFunction(() => (document.querySelector(".ms .ms-fold-body")?.textContent || "").includes("现在是：gpt-6（"), null, { timeout: 5_000 });
+      await effortSelect.selectOption("low");
+      const effortBody = await lastBody((x) => x.agent === "pm-codex" && x.body.effort === "low", "推理强度的修改");
+      if (effortBody.body.model !== "gpt-6") {
+        throw new Error(`改推理强度时应带上当前模型，实际是「${effortBody.body.model}」`);
+      }
+
+      const five = body.locator(".app-quota", { hasText: "5 小时" });
+      await five.waitFor({ timeout: 5_000 });
+      const fiveText = compactText(await five.innerText());
+      if (!fiveText.includes("95%") || !fiveText.includes("重置")) {
+        throw new Error(`5 小时窗口应写已用 95% 和重置时间，实际是「${fiveText}」`);
+      }
+      if (!(await five.getAttribute("class") || "").includes("is-tight")) {
+        throw new Error("用了 95% 的窗口应标成琥珀色");
+      }
+      const amber = await color("--amber");
+      const fiveColor = await five.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
+      if (fiveColor !== amber) throw new Error(`用了 95% 的窗口应显示成琥珀色，实际是 ${fiveColor}`);
+      const sevenText = compactText(await body.locator(".app-quota", { hasText: "7 天" }).innerText());
+      if (!sevenText.includes("62%")) throw new Error(`7 天窗口应写已用 62%，实际是「${sevenText}」`);
+      await five.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-run");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // A spent window is red, and usage two hours old says so.
+      const review = page.locator(".mb-card", { hasText: "Review (Codex 云端)" });
+      await review.scrollIntoViewIfNeeded();
+      await review.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const spent = page.locator(".ms .ms-fold-body .app-quota", { hasText: "5 小时" });
+      await spent.waitFor({ timeout: 5_000 });
+      if (!(await spent.innerText()).includes("额度用完")) throw new Error("用完的窗口应写「额度用完」");
+      if (!(await spent.getAttribute("class") || "").includes("is-over")) throw new Error("用完的窗口应标成红色");
+      const red = await color("--red");
+      const spentColor = await spent.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
+      if (spentColor !== red) throw new Error(`用完的窗口应显示成红色，实际是 ${spentColor}`);
+      await page.locator(".ms .ms-fold-body .app-quota-stale", { hasText: "的数据" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-quota-spent");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // An agent that receives in its own session: no controls, and the
+      // model is what it reported itself.
+      const grok = page.locator(".mb-card", { hasText: "Myco (Grok)" });
+      await grok.scrollIntoViewIfNeeded();
+      await grok.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const inbox = page.locator(".ms .ms-fold-body");
+      await inbox.getByText("模型和额度由它自己的会话管理，myco 拿不到也改不了。").waitFor({ timeout: 5_000 });
+      if (await inbox.locator("select").count()) throw new Error("inbox wait 的 agent 不该有可编辑控件");
+      const inboxText = compactText(await inbox.innerText());
+      if (!inboxText.includes("grok-4") || !inboxText.includes("它自己报的")) {
+        throw new Error(`inbox agent 应显示它自己报的模型，实际是「${inboxText}」`);
+      }
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-run-inbox");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     await step("电脑", async () => {
       await go(page, "电脑", narrow);
       await page.locator(".pc-row").first().waitFor({ timeout: 20_000 });
+      // An agent on that computer has nearly used its quota: the rows of
+      // that machine say so, quietly.
+      await page.locator(".pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
       // A folder's terminal opens from here.

@@ -5,19 +5,43 @@ export interface Delivery { mode: string; url?: string; has_secret?: boolean; pa
 /** What a node is. `machine` is a machine node (`xxx-machine`), not shown as a node. */
 export type AgentKind = "agent" | "shell" | "human" | "machine";
 export type RuntimeAccess = "readonly" | "workspace" | "full";
-export type ModelSource = "configured" | "cli-config" | "observed" | "default" | "provider";
+/** app: chosen for this node in the App; self: reported by the session itself. */
+export type ModelSource = "app" | "self" | "configured" | "cli-config" | "observed" | "default" | "provider";
 /** pinned: chosen for this node; machine: the machine's current setting; env_file: entered by hand; missing: the pinned one is gone. */
 export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
+/** One usage window of a plan (5 hours, 7 days, ...). */
+export interface QuotaWindow {
+  name: string;
+  label?: string;
+  /** 0..1 */
+  used: number;
+  resets_at: string;
+  /** "allowed" while there is room; anything else means the window is spent. */
+  status?: string;
+}
+/** A CLI's own usage report (Claude or Codex), as its local files hold it. */
+export interface Quota {
+  source: "claude" | "codex";
+  at: string;
+  windows: QuotaWindow[];
+}
+/** What the node runs unless told otherwise; absent on nodes reported by old runners. */
+export interface RunSettings { model?: string; effort?: string }
 /** What the node actually runs; absent on nodes reported by old runners. */
 export interface Runtime {
   cli: string;
   cli_version?: string;
   model?: string;
   model_source?: ModelSource;
+  /** reasoning effort (low/medium/high/... depends on the CLI) */
+  effort?: string;
+  effort_source?: ModelSource;
   access?: RuntimeAccess;
   /** model provider's name (never its key) */
   provider?: string;
   provider_source?: ProviderSource;
+  /** plan usage, when the CLI writes it on this computer */
+  quota?: Quota;
 }
 export interface Skill { name: string; summary?: string; examples?: string[] }
 
@@ -72,6 +96,9 @@ export interface Agent {
   binding: Binding; delivery: Delivery; allow_from: string[]; enrolled_by?: string;
   online: boolean; created_at: string; last_seen_at?: string;
   kind?: AgentKind; machine_id?: string; runtime?: Runtime;
+  /** the model and effort chosen for this node in the App ("" = follow the
+   *  computer's setting); from v0.19.5, and only those who may manage it */
+  run_settings?: RunSettings;
   /** the person who added it (member name) */
   owner?: string; owner_id?: string;
   /** its resume line's state, for those who may manage it (hubs from

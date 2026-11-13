@@ -210,4 +210,4 @@ The local App backend uses the selected Hub's console token. `GET /app/hubs/{id}
 
 `DELETE /app/hubs/{id}/machines/{mid}?dry_run=true` proxies machine removal and returns `{machine, removed, dry_run}` with the Hub's status and structured errors.
 
-`PUT /app/hubs/{id}/agents/{name}/run-settings` forwards to the Hub's run settings route (above). `POST /app/hubs/{id}/agents/{name}/resume` makes (or rotates) that agent's resume line and returns `{url, command}`; `DELETE /app/hubs/{id}/agents/{name}/resume` revokes it. Both forward to the Hub routes above and keep its structured errors; a Hub before v0.19.5 answers 404.
+`PUT /app/hubs/{id}/agents/{name}/run-settings` forwards to the Hub's run settings route (above). `POST /app/hubs/{id}/agents/{name}/resume` makes (or rotates) that agent's resume line and returns `{url, command}`; `DELETE /app/hubs/{id}/agents/{name}/resume` revokes it. Both forward to the Hub routes above and keep its structured errors; a Hub before v0.19.5 answers 404, and the App then shows the values without controls.
