@@ -62,7 +62,10 @@ final class ConversationTests: XCTestCase {
         let restingY = input.frame.minY
         input.tap()
         let keyboard = app.keyboards.firstMatch
-        try XCTSkipUnless(keyboard.waitForExistence(timeout: 5), "this simulator shows no software keyboard (a hardware keyboard is connected)")
+        // With a hardware keyboard connected (the Simulator window open on a
+        // Mac), the software keyboard stays below the screen: nothing to check.
+        let onScreen = keyboard.waitForExistence(timeout: 5) && keyboard.frame.minY < app.frame.maxY - 20
+        try XCTSkipUnless(onScreen, "this simulator shows no software keyboard (a hardware keyboard is connected)")
 
         XCTAssertLessThan(input.frame.minY, restingY, "the input rides up with the keyboard")
         XCTAssertLessThanOrEqual(input.frame.maxY, keyboard.frame.minY + 1, "and sits on top of it")
