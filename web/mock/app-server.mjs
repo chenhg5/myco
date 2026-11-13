@@ -702,11 +702,11 @@ const local = {
   myco: { path: "/Applications/myco.app/Contents/MacOS/myco", version: "0.16.9" },
   // The default workspace on this computer (older pages read only this one).
   hub: null,
-  // `myco hub up --name` runs several on one machine. "studio" is already
-  // there, stopped and not in the app: the smoke test starts it by name.
+  // `myco hub up --name` runs several on one machine. "notes" is already
+  // there, stopped and not in the app; the smoke test adds "studio".
   hubs: [
     { name: "", running: true, local_url: "http://127.0.0.1:7780", version: "0.16.8", added: true },
-    { name: "studio", running: false, local_url: "http://127.0.0.1:7790", version: "0.16.8", added: false },
+    { name: "notes", running: false, local_url: "http://127.0.0.1:7790", version: "0.16.8", added: false },
   ],
   tools: {
     cloudflared: { path: "/opt/homebrew/bin/cloudflared" },

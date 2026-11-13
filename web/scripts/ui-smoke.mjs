@@ -1157,7 +1157,7 @@ async function runMatrix(browser, size, scheme) {
       await field.fill("Studio");
       // The internal name follows what was typed: latin names become a slug.
       const note = compactText(await dialog.locator(".app-field .app-small-note").innerText());
-      if (!note.includes("studio")) throw new Error(`内部名应按工作区名生成，实际「${note}」`);
+      if (!/内部名[:：]\s*studio\b(?!-)/.test(note)) throw new Error(`内部名应按工作区名生成，实际「${note}」`);
       await settle(page, 200);
       await shot(page, size, scheme, "dialog-new-workspace");
       await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
@@ -1179,11 +1179,12 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "workspace-local-tag");
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
-      // Settings lists both, one card each, under the heading.
+      // Settings lists every workspace this computer runs, one card each,
+      // the stopped "notes" too.
       await go(page, "设置", narrow);
       await page.locator("[data-local-ws]").first().waitFor({ timeout: 20_000 });
       const localCount = await page.locator("[data-local-ws]").count();
-      if (localCount !== 2) throw new Error(`设置页应列出这台电脑上的两个工作区，实际 ${localCount} 个`);
+      if (localCount !== 3) throw new Error(`设置页应列出这台电脑上的三个工作区（含停着的 notes），实际 ${localCount} 个`);
       const heading = compactText(await page.locator(".app-setting-group").first().innerText());
       if (!heading.includes("这台电脑上的工作区")) throw new Error(`设置页应有「这台电脑上的工作区」，实际「${heading}」`);
       await settle(page, 300);
