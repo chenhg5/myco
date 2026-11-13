@@ -712,15 +712,12 @@ async function runMatrix(browser, size, scheme) {
     // file that is not one saves to Downloads.
     await step("单聊 · 图片附件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      const box = page.locator(".conv-detail .conv-compose-input");
-      // The mock's answers take turns; one in four carries a picture.
-      for (let i = 0; i < 4 && !(await page.locator(".conv-detail .conv-attach.is-image").count()); i++) {
-        await box.fill(`图片附件 ${i + 1}`);
-        await box.press("Enter");
-        await page.waitForTimeout(6800);
-      }
+      await noRound(page);
+      // The mock's answers take turns, one in four carries a picture: four
+      // tasks (as from another device, so none is a supplement to another).
+      for (let i = 0; i < 4; i++) await sendFromElsewhere("hub_studio", "review-cloud", `图片附件 ${i + 1}`);
       const thumb = page.locator(".conv-detail .conv-attach.is-image").last();
-      await thumb.waitFor({ timeout: 20_000 });
+      await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
       if (!w) throw new Error("图片附件应显示缩略图");
       await thumb.scrollIntoViewIfNeeded();
@@ -734,6 +731,12 @@ async function runMatrix(browser, size, scheme) {
       const file = page.locator(".conv-detail button.conv-attach:not(.is-image)").last();
       await file.click();
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "已存到「下载」" }).first().waitFor({ timeout: 5_000 });
+      // Every one of them answered before the next step uses this chat.
+      await page.waitForFunction(() => {
+        const d = document.querySelector(".conv-detail");
+        return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
+      }, null, { timeout: 45_000 });
+      await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
@@ -757,6 +760,8 @@ async function runMatrix(browser, size, scheme) {
       const dropText = "这条撤回";
       await box.fill(dropText);
       await box.press(NEXT_KEY);
+      // (A long conversation takes a moment to draw the second row.)
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 2, null, { timeout: 5_000 }).catch(() => undefined);
       if ((await rows.count()) !== 2) throw new Error(`连着排两条应有两行，实际 ${await rows.count()} 行`);
       const order = (await rows.allInnerTexts()).map(compactText);
       if (!order[0].includes(nextText) || !order[1].includes(dropText)) throw new Error(`排队应按先后排：${JSON.stringify(order)}`);
