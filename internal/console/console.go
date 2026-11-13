@@ -409,6 +409,11 @@ func (b *Backend) Handler() http.Handler {
 			writeErr(w, err)
 			return
 		}
+		// Kept here as well: what you sent shows in your chat without the
+		// hub giving it back (hubs too old to, a restart).
+		if err := b.Cache.PutSent(r.PathValue("id"), f.ID, f.Name, r.Header.Get("Content-Type"), data); err != nil {
+			log.Printf("app: keeping a copy of %s: %v", f.ID, err)
+		}
 		writeJSON(w, http.StatusCreated, f)
 	}))
 	// Project files: upload (the body is the file), download, and save to
@@ -417,7 +422,7 @@ func (b *Backend) Handler() http.Handler {
 	// (only plain image types; anything else is a download, never rendered
 	// in the app's page), or saved to Downloads.
 	m.HandleFunc("GET /app/hubs/{id}/files/{fid}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		f, data, err := c.ConsoleDownload(r.Context(), r.PathValue("fid"))
+		f, data, err := b.attachment(r, c)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -436,7 +441,7 @@ func (b *Backend) Handler() http.Handler {
 		_, _ = w.Write(data)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/files/{fid}/save", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		f, data, err := c.ConsoleDownload(r.Context(), r.PathValue("fid"))
+		f, data, err := b.attachment(r, c)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -1395,4 +1400,13 @@ func inlineImage(contentType string) bool {
 		return true
 	}
 	return false
+}
+
+// attachment is a message's file: this app's own copy when it sent it,
+// else from the hub (opened when it was sealed).
+func (b *Backend) attachment(r *http.Request, c *client.Client) (*api.File, []byte, error) {
+	if name, ct, data, ok := b.Cache.Sent(r.PathValue("id"), r.PathValue("fid")); ok {
+		return &api.File{ID: r.PathValue("fid"), Name: name, Size: int64(len(data)), ContentType: ct}, data, nil
+	}
+	return c.ConsoleDownload(r.Context(), r.PathValue("fid"))
 }
