@@ -70,9 +70,10 @@ final class ConversationTests: XCTestCase {
         XCTAssertLessThanOrEqual(last.frame.maxY, input.frame.minY, "above the input")
         snap("keyboard-up")
 
-        // Dragging the conversation down takes the keyboard with it.
-        let list = app.scrollViews.firstMatch
-        list.swipeDown(velocity: .slow)
+        // Dragging from the conversation down into the keyboard takes the
+        // keyboard with it.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        from.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)), withVelocity: .slow, thenHoldForDuration: 0.1)
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: keyboard)
         waitForExpectations(timeout: 5)
