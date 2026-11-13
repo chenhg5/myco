@@ -118,12 +118,12 @@ installed there by myco join and myco skill install.`,
 		Summary:  "Install the myco skill into the skills folder of each agent CLI on this machine",
 		Mutating: true,
 		Long: `Writes skills/myco/SKILL.md under ~/.claude (CLAUDE_CONFIG_DIR) and ~/.codex (CODEX_HOME), for
-each that exists. myco upgrade refreshes the files it wrote; a SKILL.md you wrote yourself is
-never replaced. A session that is already running may need a restart to see a new skill.`,
+each that exists. myco join, myco upgrade and the runner (when it starts) do this too, so the
+skill follows the installed version; a SKILL.md you wrote yourself is never replaced. A session that is already running may need a restart to see a new skill.`,
 		Examples: []string{"myco skill install", "myco skill install --dir ~/.config/agent/skills/myco"},
 		Flags: []Flag{
 			{Name: "dir", Kind: String, Help: "Install into this folder instead (the file is <dir>/SKILL.md)"},
-			{Name: "refresh", Kind: Bool, Help: "Only update copies myco installed before (what myco upgrade runs)"},
+			{Name: "refresh", Kind: Bool, Help: "Only update copies myco installed before; create none"},
 		},
 		Run: handler(func(e *env) error {
 			targets := skillTargets(e.in.Getenv)

@@ -251,7 +251,7 @@ myco version
 
 - `myco skill show` 打印它，agent 接入后读一遍；
 - `myco join` 会自动把它装进 Claude Code 和 Codex 的 skills 目录（`~/.claude/skills/myco/SKILL.md`、`~/.codex/skills/myco/SKILL.md`，只装已经存在的那个），`myco skill install` 可以手动装（`--dir` 装到别的位置）；
-- `myco upgrade` 升级后用新版本刷新这些文件。你自己写的同名文件（不带 myco 的标记）不会被覆盖。
+- `myco upgrade` 升级后、以及 runner 每次启动时，都会用当前版本装好或刷新这些文件，所以升级 myco 就等于升级了 skill。你自己写的同名文件（不带 myco 的标记）不会被覆盖。
 
 已经在跑的会话可能要重启才会加载新装的 skill；在那之前，让 agent 运行 `myco skill show` 读一遍就行。
 

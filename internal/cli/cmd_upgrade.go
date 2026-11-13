@@ -108,15 +108,15 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				return err
 			}
 			var restarted, notes []string
-			// The skill files it installed are the old version's: the new
-			// binary rewrites them with its own.
-			if b, err := exec.CommandContext(e.in.Ctx, path, "skill", "install", "--refresh", "--format", "json").Output(); err == nil {
+			// The skill the agent CLIs here read becomes the new version's
+			// (written by the new binary, which carries it).
+			if b, err := exec.CommandContext(e.in.Ctx, path, "skill", "install", "--format", "json").Output(); err == nil {
 				var r struct {
 					Written []string `json:"written"`
 				}
 				if json.Unmarshal(b, &r) == nil && len(r.Written) > 0 {
 					out["skill_updated"] = r.Written
-					notes = append(notes, "updated the myco skill: "+strings.Join(r.Written, ", "))
+					notes = append(notes, "installed the myco skill of this version: "+strings.Join(r.Written, ", "))
 				}
 			}
 			switch {

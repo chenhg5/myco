@@ -76,6 +76,15 @@ notes are never auto-answered. Logs go to stderr.`,
 				trace: e.in.String("trace"),
 			}
 			e.watchVersions(log)
+			// The agent CLIs it wakes read the skill of this version (a runner
+			// restarted by myco upgrade puts the new one in place).
+			if !e.in.Bool("once") {
+				if written, _, err := installSkill(skillTargets(e.in.Getenv), false); err != nil {
+					log.Debug("installing the myco skill failed", "err", err)
+				} else if len(written) > 0 {
+					log.Info("installed the myco skill", "version", Version, "paths", strings.Join(written, ", "))
+				}
+			}
 			if !e.in.Bool("all") {
 				r, err := e.buildRunner(e.cfgPath, e.cfg, shared, e.overrides(), log)
 				if err != nil {
