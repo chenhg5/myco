@@ -22,7 +22,7 @@ struct MycoApp: App {
         start = UserDefaults.standard.string(forKey: "myco-start") ?? ""
         let workspaces = Workspaces(records: FileWorkspaceStore(), secrets: KeychainStore(), deviceName: Self.deviceName())
         let snapshots = FileSnapshotStore()
-        @Sendable @MainActor func session(_ current: (record: WorkspaceRecord, hub: HubClient)) -> WorkspaceSession {
+        let session: @MainActor @Sendable ((record: WorkspaceRecord, hub: HubClient)) -> WorkspaceSession = { current in
             WorkspaceSession(id: current.record.id, name: Workspaces.displayName(of: current.record), hub: current.hub, snapshots: snapshots)
         }
         let doors = AppModel.Doors(
