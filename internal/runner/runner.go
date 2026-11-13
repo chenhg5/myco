@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chenhg5/myco/internal/api"
@@ -26,8 +27,12 @@ type Options struct {
 	Trace string
 	// Concurrency is the max number of messages processed in parallel.
 	Concurrency int
-	// Timeout bounds one harness invocation.
+	// Timeout stops a run after this long without any activity (no output,
+	// tool call or thinking step reported by the harness). A harness that
+	// reports nothing is stopped this long after it started.
 	Timeout time.Duration
+	// MaxRun bounds a run however busy it is (default: 6h, at least Timeout).
+	MaxRun time.Duration
 	// PollWait is the long-poll duration per pull.
 	PollWait time.Duration
 	// Workdir is where the harness runs.
@@ -90,6 +95,7 @@ type Runner struct {
 	stopEvery      time.Duration // stopCheckEvery; shorter in tests
 	finishRetryMin time.Duration // first retry after a post-run Hub failure; shorter in tests
 	finishTimeout  time.Duration // total time to deliver a run's result
+	idleCheck      time.Duration // how often a run's last activity is checked
 }
 
 // activeTask is a task between ack and completion in this runner.
@@ -98,6 +104,10 @@ type activeTask struct {
 	// cancel interrupts the harness run in progress (nil between runs).
 	cancel context.CancelCauseFunc
 }
+
+// errIdle is the cancel cause of a run that reported no activity for the
+// runner's timeout.
+var errIdle = errors.New("no activity")
 
 // errSteered is the cancel cause of a run interrupted by a steer.
 var errSteered = errors.New("interrupted by a steer from the task's sender")
@@ -119,6 +129,9 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 30 * time.Minute
+	}
+	if opts.MaxRun <= 0 {
+		opts.MaxRun = max(6*time.Hour, opts.Timeout)
 	}
 	if prompt == nil {
 		prompt = DefaultPrompt{}
@@ -149,7 +162,7 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
 		ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
 		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
-		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute}
+		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute, idleCheck: 15 * time.Second}
 }
 
 func loadState(path string) map[string]time.Time {
@@ -396,7 +409,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
-	deadline := start.Add(r.opts.Timeout)
+	deadline := start.Add(r.opts.MaxRun)
 	project := ""
 	if !executor {
 		project = r.projectContext(ctx, log, key, sessionID, m)
@@ -455,9 +468,17 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
 		}
-		if tr != nil {
-			req.OnEvent = tr.add
+		// Every step the harness reports counts as activity: a long run that
+		// keeps working is not cut off, a silent one is.
+		var lastActive atomic.Int64
+		lastActive.Store(time.Now().UnixNano())
+		req.OnEvent = func(ev harness.Event) {
+			lastActive.Store(time.Now().UnixNano())
+			if tr != nil {
+				tr.add(ev)
+			}
 		}
+		go r.watchIdle(watchCtx, &lastActive, cancelCause)
 		if r.opts.Provider != nil && !executor {
 			if p := r.opts.Provider(); p != nil {
 				if _, ok := r.harness.(harness.ProviderAware); ok {
@@ -469,6 +490,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		res, runErr = r.harness.Run(runCtx, req)
 		steered := errors.Is(context.Cause(runCtx), errSteered)
+		switch cause := context.Cause(runCtx); {
+		case runErr == nil:
+		case errors.Is(cause, errIdle):
+			runErr = fmt.Errorf("stopped after %s without any activity (runner --timeout)", r.opts.Timeout)
+		case errors.Is(cause, context.DeadlineExceeded):
+			runErr = fmt.Errorf("stopped: the run took longer than %s", r.opts.MaxRun)
+		}
 		stopWatch()
 		cancelDeadline()
 		cancelCause(nil)
@@ -728,6 +756,23 @@ func (r *Runner) routeSteer(ctx context.Context, log *slog.Logger, m api.Message
 		return done("steer for a finished task; dropped")
 	}
 	return false
+}
+
+// watchIdle ends the run when the harness reports nothing for the timeout.
+func (r *Runner) watchIdle(ctx context.Context, last *atomic.Int64, cancel context.CancelCauseFunc) {
+	t := time.NewTicker(min(r.idleCheck, r.opts.Timeout))
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if time.Since(time.Unix(0, last.Load())) >= r.opts.Timeout {
+				cancel(errIdle)
+				return
+			}
+		}
+	}
 }
 
 // watchStop ends the run when its task is closed on the hub meanwhile (the
