@@ -2,7 +2,7 @@
 
 The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, iPhone in portrait. No third-party dependencies.
 
-Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Not built yet: scanning a code, end-to-end encryption, attachments, push, more than one workspace at a time.
+Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them. Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push, more than one workspace at a time.
 
 ## Layout
 
@@ -46,10 +46,17 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 | `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation): a demo workspace. `welcome`: the welcome page |
 | `-myco-join` | an "add a device" link to join with at launch |
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
+| `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-appearance` | `system`, `light`, `dark` |
 | `-myco-lang` | `system`, `zh`, `en` |
 
 In the demo, what you send is taken on after a moment and answered about nine seconds later, so adding to a running task and stopping it can be tried by hand.
+
+## Pictures and files
+
+The input's plus button offers the photo library, the camera and Files. What is picked is uploaded at once (`POST /v1/console/files`, as the desktop app does) and waits above the words as a tile; it is sent with them, or alone. A picture goes as something every agent reads: a PNG, JPEG, GIF or WebP of sensible size as it is, anything else (a phone's HEIC, a very large photo) as a JPEG no longer than 3072 pixels (`Pictures`). A file picked in Files goes as it is, up to 50 MB.
+
+Messages show their pictures as thumbnails and other files as rows; a tap opens the system's preview (Quick Look), which zooms, shares and saves. Files are fetched once and kept in the caches folder (`FileShelf`), and forgotten when the workspace is left.
 
 ## Rules
 
