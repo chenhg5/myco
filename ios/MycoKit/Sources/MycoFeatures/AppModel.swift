@@ -136,22 +136,21 @@ struct RootView: View {
     var body: some View {
         @Bindable var router = router
         TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
+            // The system's tab bar is hidden: each tab's first page carries
+            // the app's own, one row across (`AppTabBar`).
             NavigationStack(path: $router.chatsPath) {
                 ChatsScreen().routed()
             }
-            .tabItem { Label(L("聊天", "Chats"), systemImage: "bubble.left.and.bubble.right") }
             .tag(AppTab.chats)
 
             NavigationStack(path: $router.projectsPath) {
                 ProjectsScreen().routed()
             }
-            .tabItem { Label(L("项目", "Projects"), systemImage: "square.stack.3d.up") }
             .tag(AppTab.projects)
 
             NavigationStack(path: $router.membersPath) {
                 MembersScreen().routed()
             }
-            .tabItem { Label(L("成员", "Members"), systemImage: "person.2") }
             .tag(AppTab.members)
         }
         .tint(MycoColor.fg)

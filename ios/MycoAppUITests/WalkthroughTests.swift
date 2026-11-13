@@ -28,7 +28,7 @@ final class WalkthroughTests: XCTestCase {
         let member = app.buttons["strip.studio-codex-7f3a"]
         XCTAssertTrue(member.waitForExistence(timeout: 5), "the project shows its members")
         XCTAssertTrue(app.buttons["composer.submit"].exists, "and an input")
-        XCTAssertFalse(app.tabBars.buttons["Members"].isHittable, "a pushed page hides the tab bar")
+        XCTAssertFalse(app.buttons["tab.members"].isHittable, "a pushed page hides the tab bar")
         member.tap()
 
         XCTAssertTrue(app.buttons["conversation.title"].waitForExistence(timeout: 5), "a member's page opens on top")
@@ -36,14 +36,14 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(member.waitForExistence(timeout: 5), "back leads to the project")
         back(app)
         XCTAssertTrue(project.waitForExistence(timeout: 5), "and back again to Chats")
-        XCTAssertTrue(app.tabBars.buttons["Members"].isHittable, "where the tab bar is back")
+        XCTAssertTrue(app.buttons["tab.members"].isHittable, "where the tab bar is back")
     }
 
     @MainActor
     func testFromMembersToAChatThenSendAddAndStop() {
         let app = launch()
-        XCTAssertTrue(app.tabBars.buttons["Members"].waitForExistence(timeout: 15))
-        app.tabBars.buttons["Members"].tap()
+        XCTAssertTrue(app.buttons["tab.members"].waitForExistence(timeout: 15))
+        app.buttons["tab.members"].tap()
         let row = app.buttons["member.studio-codex-e07b"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Members lists someone never talked to")
         row.tap()

@@ -26,6 +26,7 @@ struct ChatsScreen: View {
                     tone: StatusTone.of(row.state), away: row.away)
             }
             .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .contextMenu {
@@ -52,7 +53,7 @@ struct ChatsScreen: View {
             }
         }
         .workspaceChrome(title: L("聊天", "Chats"), add: true)
-        .searchable(text: $query, prompt: L("搜索名字", "Search names"))
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字", "Search names"))
     }
 }
 
@@ -91,6 +92,7 @@ struct ProjectsScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
             .listRowBackground(MycoColor.bg)
             .listRowSeparator(.hidden)
             .accessibilityIdentifier("project." + project.name)
@@ -140,6 +142,7 @@ struct MembersScreen: View {
                                 tone: StatusTone.of(member: status), away: status.state == "offline")
                         }
                         .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                         .listRowBackground(MycoColor.bg)
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("member." + status.agent.name)
@@ -158,7 +161,7 @@ struct MembersScreen: View {
             }
         }
         .workspaceChrome(title: L("成员", "Members"), add: true)
-        .searchable(text: $query, prompt: L("搜索名字和分工", "Search names and roles"))
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字和分工", "Search names and roles"))
     }
 }
 
@@ -174,16 +177,26 @@ extension View {
 private struct WorkspaceChrome: ViewModifier {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
+    @Environment(\.isSearching) private var isSearching
     let title: String
     let add: Bool
 
     func body(content: Content) -> some View {
         content
+            // Rows are compact: more of the list fits on a screen.
+            .environment(\.defaultMinListRowHeight, 0)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let problem = session.problem { StaleBanner(staleText(problem)) }
             }
+            // The app's own tab bar, one row across; the keyboard covers it
+            // while searching.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isSearching { AppTabBar() }
+            }
+            .toolbar(.hidden, for: .tabBar)
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.large)
+            // A small title in the bar: the list starts right under it.
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { WorkspaceButton() }
                 if add {
@@ -202,5 +215,30 @@ private struct WorkspaceChrome: ViewModifier {
     private func staleText(_ problem: String) -> String {
         guard let at = session.loadedAt else { return L("连不上工作区", "Cannot reach the workspace") }
         return L("连不上工作区，这是 \(RelativeTime.short(at)) 的内容", "Cannot reach the workspace. This is from \(RelativeTime.short(at)).")
+    }
+}
+
+/// The three tabs, one row across the bottom of each tab's first page.
+struct AppTabBar: View {
+    @Environment(Router.self) private var router
+    @Environment(WorkspaceSession.self) private var session
+
+    var body: some View {
+        MycoTabBar(
+            items: [
+                .init(id: AppTab.chats, title: L("聊天", "Chats"), symbol: "bubble.left.and.bubble.right", accessibilityID: "tab.chats"),
+                .init(id: AppTab.projects, title: L("项目", "Projects"), symbol: "square.stack.3d.up", tone: projectsTone, accessibilityID: "tab.projects"),
+                .init(id: AppTab.members, title: L("成员", "Members"), symbol: "person.2", accessibilityID: "tab.members"),
+            ],
+            selection: router.tab
+        ) { router.select($0) }
+    }
+
+    /// Someone in a project is at work (green), or all who are may be stuck (amber).
+    private var projectsTone: StatusTone? {
+        let inProjects = Set(session.projects.flatMap { $0.members.map(\.name) })
+        let states = session.members.filter { inProjects.contains($0.agent.name) }.map { MemberState.of($0) }
+        if states.contains(where: { if case .working = $0 { return true } else { return false } }) { return .working }
+        return states.contains(.possiblyStuck) ? .attention : nil
     }
 }

@@ -96,7 +96,7 @@ final class ConversationTests: XCTestCase {
 
         swipeBack(app)
         XCTAssertTrue(app.buttons["project.myco-ios"].waitForExistence(timeout: 5), "another: back on the list of projects")
-        XCTAssertTrue(app.tabBars.buttons["Projects"].isHittable, "with the tab bar")
+        XCTAssertTrue(app.buttons["tab.projects"].isHittable, "with the tab bar")
     }
 
     @MainActor

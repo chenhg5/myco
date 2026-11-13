@@ -25,7 +25,7 @@ public struct PersonRow: View {
 
     public var body: some View {
         HStack(spacing: 12) {
-            AvatarView(face, size: 44, badge: badge, away: away)
+            AvatarView(face, size: 40, badge: badge, away: away)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
                 if !subtitle.isEmpty {
@@ -42,7 +42,6 @@ public struct PersonRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
         .opacity(away ? 0.6 : 1)
         .contentShape(Rectangle())
     }
