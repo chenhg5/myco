@@ -218,10 +218,23 @@ struct ConversationBody: View {
                 if followKeyboard { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             .onChange(of: model.loaded, initial: true) { _, loaded in
-                guard loaded, !landed, let focus else { return }
+                // Where a conversation opens: on the task it was opened
+                // for, else at its end. The bottom anchor alone does not get
+                // a long, lazily laid out conversation there, so it is
+                // sent there, and once more when the first rows have their
+                // real heights.
+                guard loaded, !landed else { return }
                 landed = true
-                let target = model.items.first { $0.id == focus || $0.id == focus + ".dispatch" }?.id
-                if let target { proxy.scrollTo(target, anchor: .center) }
+                let target = focus.flatMap { focus in model.items.first { $0.id == focus || $0.id == focus + ".dispatch" }?.id }
+                if let target {
+                    proxy.scrollTo(target, anchor: .center)
+                    return
+                }
+                proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                Task {
+                    try? await Task.sleep(for: .milliseconds(60))
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
             }
         }
         .overlay {
