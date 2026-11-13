@@ -27,7 +27,7 @@ struct ProcessTests {
             return
         }
         #expect(first.map(\.tool) == ["Bash", "Read"])
-        #expect(first.allSatisfy(\.finished))
+        #expect(first.allSatisfy { $0.finished })
         // No result yet: still going.
         #expect(last.map(\.finished) == [false])
     }
