@@ -19,6 +19,7 @@ type ResumeRepository interface {
 	Get(ctx context.Context, agent AgentName) (*ResumeCredential, error)
 	GetByTokenHash(ctx context.Context, hash string) (*ResumeCredential, error)
 	Put(ctx context.Context, credential *ResumeCredential) error
+	PutIfAbsent(ctx context.Context, credential *ResumeCredential) (bool, error)
 	Delete(ctx context.Context, agent AgentName) error
 	// Use atomically replaces the agent's binding and login token, and records
 	// use of the recovery credential.

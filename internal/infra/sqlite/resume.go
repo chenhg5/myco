@@ -45,6 +45,16 @@ func (r *ResumeRepo) Put(ctx context.Context, c *domain.ResumeCredential) error 
 	return internal(err)
 }
 
+func (r *ResumeRepo) PutIfAbsent(ctx context.Context, c *domain.ResumeCredential) (bool, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO agent_resumes(agent, token_hash, created_at, last_used_at, last_used_env)
+		VALUES(?,?,?,?,?) ON CONFLICT(agent) DO NOTHING`, c.Agent, c.TokenHash, ms(c.CreatedAt), 0, "")
+	if err != nil {
+		return false, internal(err)
+	}
+	n, err := res.RowsAffected()
+	return n == 1, internal(err)
+}
+
 func (r *ResumeRepo) Delete(ctx context.Context, agent domain.AgentName) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM agent_resumes WHERE agent=?`, agent)
 	return internal(err)
@@ -63,7 +73,15 @@ func (r *ResumeRepo) Use(ctx context.Context, hash string, b domain.Binding, age
 		}
 		return "", internal(err)
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE agents SET harness=?, session_id=?, environment=?, workdir=?, token_hash=?, last_seen_at=? WHERE name=?`,
+	var other string
+	err = tx.QueryRowContext(ctx, `SELECT name FROM agents WHERE harness=? AND session_id=? AND name<>? LIMIT 1`, b.Harness, b.SessionID, name).Scan(&other)
+	if err == nil {
+		return "", domain.Errf(domain.CodeConflict, "session is already bound to agent %s", other)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", internal(err)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE agents SET harness=?, session_id=?, environment=?, workdir=?, token_hash=?, last_seen_at=?, machine_id='', runtime='{}' WHERE name=?`,
 		b.Harness, b.SessionID, b.Environment, b.Workdir, agentTokenHash, ms(at), name)
 	if err != nil {
 		return "", internal(err)

@@ -499,6 +499,11 @@ func (e *env) deliveryFromFlags() (api.Delivery, error) {
 
 // agentOrAdminClient prefers the agent token, falling back to the admin token.
 func (e *env) agentOrAdminClient() (*client.Client, error) {
+	if e.cfg.Token == "" && e.in.Getenv("MYCO_RESUME") != "" {
+		if err := e.autoResume(); err != nil {
+			return nil, err
+		}
+	}
 	if e.cfg.Token != "" {
 		return e.agentClient()
 	}

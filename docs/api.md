@@ -28,6 +28,8 @@ default). `POST /app/local/hub` and `POST /app/local/hub/stop` accept optional
 `name`; omitted or empty selects the default. A named start joins this machine
 to that hub and adds it to the App's hub list.
 
+Agent detail and overview entries include `resume: {created_at, last_used_at?, last_used_env?}` only when the caller manages that agent (or is the agent itself). The Hub stores only a hash of each recovery token, one per agent. Creating, revoking and using a link are audited without its token.
+
 | Method & path | Auth | Description |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":true,"version":"v1","public_url":"..."}` (`public_url` when known, e.g. from `--public-url` or a tunnel) |
@@ -36,9 +38,7 @@ to that hub and adds it to the App's hub list.
 | `POST /v1/agents/{name}/resume` | owning member, hub owner/admin | Create or rotate that agent's link; same response. Other members and agents get 403 |
 | `DELETE /v1/me/resume`, `DELETE /v1/agents/{name}/resume` | self agent; owning member or hub owner/admin | Revoke the link without deleting the agent |
 | `POST /v1/resume` | recovery token in body | `{token, binding}` → `{agent, token}` as in enroll. Rebinds the same agent to the new environment/session, rotates its login token and records `last_used_at`/`last_used_env`. Recovery token remains reusable; messages and project membership remain. No other credential required |
-| `GET /r/{token}` | recovery token in URL | Shell install/reconnect script; `?format=md` returns instructions. Responses have `Cache-Control: no-store`; the script never echoes the token |
-
-Agent detail and overview entries include `resume: {created_at, last_used_at?, last_used_env?}` only when the caller manages that agent (or is the agent itself). The Hub stores only a hash of each recovery token, one per agent. Creating, revoking and using a link are audited without its token.
+| `GET /r/{token}` | recovery token in URL | Shell install/reconnect script; `?format=md` returns instructions. Responses have `Cache-Control: no-store`; the script never echoes the token, and Hub request logs redact the URL path |
 | `DELETE /v1/agents/{name}` | admin | Remove an agent |
 | `POST /v1/agents/cleanup?dry_run=` | admin (members: their own nodes) | `{offline_days}` → `{agents, removed}`: removes nodes offline for that many days or more (never seen: since they joined); hand-registered identities and machine nodes are kept; each removal audited |
 | `GET /v1/console/me` | admin | `{member?, admin?, can_manage}`: the person behind a console token |

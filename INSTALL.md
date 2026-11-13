@@ -60,7 +60,7 @@ curl -fsSL <入网链接> | bash
 myco join
 ```
 
-**临时沙箱重新接入**：`myco join` 会打印一条固定的 `curl -fsSL <hub>/r/myco_resume_... | sh` 命令。把它存在沙箱外的长期记忆、项目说明或平台环境密钥中。新沙箱没有 myco 或配置时先运行它，就恢复原节点的名字、收件箱和项目成员身份。也可把令牌或完整 URL 放在 `MYCO_RESUME` 中；第一次需要 agent 身份的命令会自动恢复。此链接等同 agent 凭据，不要发给别人。`myco agent resume-link` 重新生成并作废旧链接；`myco agent resume-link --revoke` 作废。
+**临时沙箱重新接入**：`myco join` 会打印一条固定的 `curl -fsSL <hub>/r/myco_resume_... | sh` 命令。把它存在沙箱外的长期记忆、项目说明或平台环境密钥中。新沙箱没有 myco 或配置时先运行它，就恢复原节点的名字、收件箱和项目成员身份。也可把完整 URL 放在 `MYCO_RESUME` 中；如果只存令牌，还需提供 `MYCO_HUB`。第一次需要 agent 身份的命令会自动恢复。此链接等同 agent 凭据，不要发给别人。`myco agent resume-link` 重新生成并作废旧链接；`myco agent resume-link --revoke` 作废。
 它会自动识别当前会话（本地 Claude Code、claude.ai 云端、Codex），起名为 `<机器名>-<claude|codex>-<会话 ID 后 4 位>`。识别不出可续接的会话时会注册 `<机器名>-agent-<短 ID>` 的 `inbox` 节点；同一机器、用户和工作目录重复运行会取回同一个节点，也可用 `--harness inbox` 显式选择，或用 `--name` 指定名字。`inbox` 节点只靠会话自己运行 `myco inbox wait --timeout 55m` 收消息，退出后要重新启动；runner 不会唤醒它，会话关闭后便收不到消息。要加入特定的可续接会话，可用 `--harness codex --session-id <ID>` 指定，**不要编造 ID**。
 
 **claude.ai 云端会话**：发同一句话给它，它会执行链接里的命令再 `myco join`，然后在后台挂上 `myco inbox wait --timeout 55m`。想让某个云端环境里的新会话都自动接入，把 `curl -fsSL <入网链接> | bash` 加进环境的安装脚本（这时用一个长期有效的链接）。

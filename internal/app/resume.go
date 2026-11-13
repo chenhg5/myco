@@ -48,7 +48,16 @@ func (s *ResumeService) Create(ctx context.Context, name domain.AgentName, ifMis
 	}
 	plain = ResumeTokenPrefix + strings.TrimPrefix(plain, "myco_")
 	c := &domain.ResumeCredential{Agent: name, TokenHash: s.tokens.Hash(plain), CreatedAt: s.clock.Now()}
-	if err := s.repo.Put(ctx, c); err != nil {
+	if ifMissing {
+		inserted, err := s.repo.PutIfAbsent(ctx, c)
+		if err != nil {
+			return nil, "", err
+		}
+		if !inserted {
+			got, err := s.repo.Get(ctx, name)
+			return got, "", err
+		}
+	} else if err := s.repo.Put(ctx, c); err != nil {
 		return nil, "", err
 	}
 	return c, plain, nil
@@ -65,8 +74,8 @@ func (s *ResumeService) Use(ctx context.Context, plain string, b domain.Binding)
 	if err := b.Validate(); err != nil {
 		return nil, "", err
 	}
-	if b.Harness == "" {
-		return nil, "", domain.Errf(domain.CodeInvalidArgument, "binding harness is required")
+	if b.Harness == "" || b.SessionID == "" {
+		return nil, "", domain.Errf(domain.CodeInvalidArgument, "binding harness and session_id are required")
 	}
 	newToken, hash, err := s.tokens.Issue()
 	if err != nil {

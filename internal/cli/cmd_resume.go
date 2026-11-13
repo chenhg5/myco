@@ -109,7 +109,16 @@ func resumeCommands() []*Command {
 			if err := e.in.Require("token"); err != nil {
 				return err
 			}
-			hub := e.in.String("hub")
+			hub := ""
+			if e.in.IsSet("hub") {
+				hub = e.in.String("hub")
+			}
+			if hub == "" {
+				_, hub, _ = resumeTokenAndHub(e.in.String("token"))
+			}
+			if hub == "" {
+				hub = e.cfg.Hub
+			}
 			res, err := e.resumeIdentity(e.in.String("token"), hub, e.in.Bool("dry-run"))
 			if err != nil {
 				return err
@@ -117,8 +126,15 @@ func resumeCommands() []*Command {
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "resume", "binding": res.Agent.Binding, "hub": hub})
 			}
-			return e.p.Print(map[string]any{"agent": res.Agent, "config": e.cfgPath}, func(w io.Writer) {
+			out := map[string]any{"agent": res.Agent, "config": e.cfgPath}
+			if res.Agent.Binding.Harness == "inbox" || strings.HasSuffix(res.Agent.Binding.Harness, "-cloud") {
+				out["receive"] = "keep myco inbox wait --timeout 55m running in the background; restart it when it exits"
+			}
+			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "resumed as %s; credentials saved to %s\n", res.Agent.Name, e.cfgPath)
+				if v, ok := out["receive"].(string); ok {
+					fmt.Fprintln(w, v)
+				}
 			})
 		})}
 	link := &Command{Name: "resume-link", Summary: "Rotate or revoke your agent's recovery link", Mutating: true,
@@ -126,12 +142,12 @@ func resumeCommands() []*Command {
 		Examples: []string{"myco agent resume-link", "myco agent resume-link --revoke", "myco agent resume-link --dry-run"},
 		Flags:    []Flag{{Name: "revoke", Kind: Bool, Help: "Invalidate the current link"}},
 		Run: handler(func(e *env) error {
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "resume_link", "revoke": e.in.Bool("revoke")})
+			}
 			c, err := e.agentClient()
 			if err != nil {
 				return err
-			}
-			if e.in.Bool("dry-run") {
-				return e.dryRun(map[string]any{"action": "resume_link", "revoke": e.in.Bool("revoke")})
 			}
 			if e.in.Bool("revoke") {
 				if err := c.RevokeResume(e.in.Ctx, ""); err != nil {

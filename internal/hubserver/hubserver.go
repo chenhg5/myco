@@ -255,6 +255,9 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		h.ServeHTTP(rec, r)
 		path := r.URL.Path
+		if strings.HasPrefix(path, "/r/") {
+			path = "/r/<redacted>" // agent recovery links carry a credential
+		}
 		if strings.HasPrefix(path, "/j/") {
 			path = "/j/<redacted>" // join links carry a credential
 		}
