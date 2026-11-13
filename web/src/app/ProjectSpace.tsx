@@ -931,7 +931,6 @@ function Composer({ hubId, project, agents, onSent }: {
         <div className="sp-compose-bar">
           <div className="sp-compose-tools">
             <AttachButton onFiles={att.add} />
-            <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} />
             <button type="button" className="sp-to" onClick={(e) => menu.openUnder(e.currentTarget, [
               { header: L("发给谁", "Send to") },
               ...agents.map((r) => ({
@@ -948,6 +947,8 @@ function Composer({ hubId, project, agents, onSent }: {
             {/* How to send, beside the tools, as in a member's chat. */}
             <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
           </div>
+          {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
+          <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} disabled={busy} />
           <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
             <ArrowUp />
           </button>

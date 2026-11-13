@@ -1620,13 +1620,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 and voice input later */}
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
-              {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
             </div>
             <span className="conv-compose-hint">
               {supplementing
                 ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
                 : L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}
             </span>
+            {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
+            {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
             {openTask && !draft.trim() && !att.items.length && !sending ? (
               // Nothing to send while it works: the same button stops it.
               <button

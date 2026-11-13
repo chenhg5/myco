@@ -2225,7 +2225,20 @@ body.is-resizing {
 }
 /* Speaking instead of typing (Dictate.tsx): while the page listens the
    microphone is red and breathes; a problem shows as its tip. */
-.dictate-btn.is-listening {
+/* Beside Send, on the right of the bar. */
+.conv-compose-bar > .dictate-btn {
+  margin-left: auto;
+}
+.conv-compose-bar > .dictate-btn + .conv-send {
+  margin-left: 0;
+}
+.dictate-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+.dictate-btn.is-listening,
+.dictate-btn.is-listening:hover:not(:disabled) {
   background: var(--red-soft);
   color: var(--red);
   animation: dictate-breathe 1.4s ease-in-out infinite;

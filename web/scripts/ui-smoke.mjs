@@ -838,18 +838,33 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
-    // Speaking instead of typing: the microphone beside the files starts the
-    // system's dictation (the mock is the Mac app) with the caret in the box.
+    // Speaking instead of typing: the microphone beside Send listens in the
+    // app's language (the mock is the Mac app), the words grow into the box
+    // after what was typed, and it stops by itself at the end.
     await step("单聊 · 语音输入", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      const mic = page.locator(".conv-detail .conv-compose-tools .dictate-btn");
+      const mic = page.locator(".conv-detail .conv-compose-bar > .dictate-btn");
       await mic.waitFor({ timeout: 10_000 });
-      const before = (await (await fetch(`http://${HOST}:${mockPort()}/app/dictation`)).json()).started;
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("先说一句：");
       await mic.click();
-      await page.waitForFunction(() => document.activeElement?.classList.contains("conv-compose-input"), null, { timeout: 5_000 });
-      const after = (await (await fetch(`http://${HOST}:${mockPort()}/app/dictation`)).json()).started;
-      if (after !== before + 1) throw new Error("点麦克风应让 App 打开系统听写");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "dictation");
+      await page.waitForFunction(() => (document.querySelector(".conv-detail .conv-compose-input")?.value || "") === "先说一句：帮我看一下下载页", null, { timeout: 10_000 });
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 5_000 });
+      const st = await (await fetch(`http://${HOST}:${mockPort()}/app/dictation`)).json();
+      if (st.lang !== "zh-CN") throw new Error(`应按 App 的语言听（zh-CN），实际 ${st.lang}`);
       if (await mic.evaluate((el) => el.classList.contains("is-note"))) throw new Error(`语音输入不该报错：${await mic.getAttribute("title")}`);
+      // Typing while it listens takes over: it stops and writes nothing more.
+      await box.fill("");
+      await mic.click();
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ timeout: 5_000 });
+      await box.fill("我自己打");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForTimeout(1500);
+      if ((await box.inputValue()) !== "我自己打") throw new Error(`自己打字后语音不该再写进来，实际「${await box.inputValue()}」`);
+      await box.fill("");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 

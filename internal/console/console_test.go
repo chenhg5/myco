@@ -503,22 +503,61 @@ func TestAvatarFromTheApp(t *testing.T) {
 	}
 }
 
-// The desktop app starts the system's dictation; a browser has none.
+// Speech to text from the desktop app: the system's voice typing in the
+// app's language (Windows), or the app listening itself (macOS), whose text
+// the page asks for as it grows; a browser has neither.
 func TestDictation(t *testing.T) {
 	r := newRig(t)
 	if code, m, _ := r.do("GET", "/app/info", nil); code != 200 || m["dictation"] != false {
 		t.Fatalf("no dictation in a browser: %d %v", code, m)
 	}
-	if code, _, _ := r.do("POST", "/app/dictation", nil); code != 404 {
+	if code, _, _ := r.do("POST", "/app/dictation", map[string]string{"lang": "zh-CN"}); code != 404 {
 		t.Fatalf("dictation without one: %d", code)
 	}
-	started := 0
-	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Shell: "mac", Dictate: func() error { started++; return nil }}
+
+	// System voice typing, in the language asked for.
+	var langs []string
+	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Dictate: func(lang string) error { langs = append(langs, lang); return nil }}
 	r.app.Config.Handler = b.Handler()
 	if code, m, _ := r.do("GET", "/app/info", nil); code != 200 || m["dictation"] != true {
 		t.Fatalf("the app says it has dictation: %d %v", code, m)
 	}
-	if code, _, _ := r.do("POST", "/app/dictation", nil); code != 204 || started != 1 {
-		t.Fatalf("start dictation: %d, started %d", code, started)
+	if code, m, _ := r.do("POST", "/app/dictation", map[string]string{"lang": "en-US"}); code != 200 || m["mode"] != "system" || len(langs) != 1 || langs[0] != "en-US" {
+		t.Fatalf("voice typing: %d %v %v", code, m, langs)
+	}
+
+	// The app listening: text as it grows, then the end; stop stops.
+	var heard *console.Hearing
+	stopped := 0
+	b = &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Listen: func(lang string, h *console.Hearing) (func(), error) {
+		if lang != "zh-CN" {
+			t.Errorf("listening in %q", lang)
+		}
+		heard = h
+		return func() { stopped++ }, nil
+	}}
+	r.app.Config.Handler = b.Handler()
+	code, m, raw := r.do("POST", "/app/dictation", map[string]string{"lang": "zh-CN"})
+	id, _ := m["id"].(string)
+	if code != 200 || m["mode"] != "listen" || id == "" {
+		t.Fatalf("listen: %d %s", code, raw)
+	}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		heard.Heard("你好", false)
+	}()
+	if code, m, raw := r.do("GET", "/app/dictation/"+id+"?seq=0", nil); code != 200 || m["text"] != "你好" || m["done"] == true {
+		t.Fatalf("the first words: %d %s", code, raw)
+	}
+	if code, _, _ := r.do("DELETE", "/app/dictation/"+id, nil); code != 204 || stopped != 1 {
+		t.Fatalf("stop: %d, stopped %d", code, stopped)
+	}
+	heard.Heard("你好，世界", true)
+	heard.End("")
+	if code, m, raw := r.do("GET", "/app/dictation/"+id+"?seq=1", nil); code != 200 || m["text"] != "你好，世界" || m["done"] != true {
+		t.Fatalf("the last words and the end: %d %s", code, raw)
+	}
+	if code, _, _ := r.do("GET", "/app/dictation/nope", nil); code != 404 {
+		t.Fatalf("unknown listening: %d", code)
 	}
 }

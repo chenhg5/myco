@@ -51,8 +51,11 @@ const uploads = new Map();
 const uploadBytes = new Map();
 // Pictures agents use as faces, by "hub/name".
 const avatarPics = new Map();
-// Times the page asked the "desktop app" to start dictation.
+// Times the page asked the "desktop app" to listen, in which language, and
+// what each listening hears.
 let dictations = 0;
+let lastDictationLang = "";
+const hearings = new Map();
 
 // A real PNG (a soft diagonal gradient with a band), for pictures the mock's
 // agents send back: the app shows them as thumbnails.
@@ -1279,14 +1282,30 @@ const server = http.createServer(async (req, res) => {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
   }
-  // /app/dictation: the desktop app starts the system's dictation (counted
-  // here, for the smoke: GET says how many times).
+  // /app/dictation: the Mac app listens itself in the language asked for;
+  // the words grow, then it ends. GET (no id) says how many times and in
+  // which language, for the smoke.
   if (parts[0] === "app" && parts[1] === "dictation" && parts.length === 2) {
-    if (method === "GET") return send(res, 200, { started: dictations });
+    if (method === "GET") return send(res, 200, { started: dictations, lang: lastDictationLang });
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
     dictations += 1;
-    res.writeHead(204);
-    return res.end();
+    lastDictationLang = body?.lang || "";
+    const id = `d${dictations}`;
+    const words = lastDictationLang === "en-US" ? ["Please", "Please check the", "Please check the download page"] : ["帮我", "帮我看一下", "帮我看一下下载页"];
+    hearings.set(id, { words, at: Date.now(), stopped: false });
+    return send(res, 200, { mode: "listen", id });
+  }
+  if (parts[0] === "app" && parts[1] === "dictation" && parts.length === 3) {
+    const h = hearings.get(decodeURIComponent(parts[2]));
+    if (!h) return fail(res, 404, "not_found", "no such listening");
+    if (method === "DELETE") { h.stopped = true; res.writeHead(204); return res.end(); }
+    const seq = Number(url.searchParams.get("seq") || 0);
+    // A word every 400 ms; it ends after the last one (or when stopped).
+    await new Promise((r) => setTimeout(r, 400));
+    const n = Math.min(h.words.length, Math.floor((Date.now() - h.at) / 400));
+    const done = h.stopped || n >= h.words.length;
+    return send(res, 200, { seq: Math.max(seq + 1, n + (done ? 1 : 0)), text: n ? h.words[n - 1] : "", final: done, done });
   }
 
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")

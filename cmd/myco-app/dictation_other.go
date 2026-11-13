@@ -2,6 +2,10 @@
 
 package main
 
-// dictate: no system dictation to start here (the page uses the browser's
-// own speech recognition when it has one).
-var dictate func() error
+import "github.com/chenhg5/myco/internal/console"
+
+// No speech to text here (the page uses the browser's own when it has one).
+var (
+	listen  func(lang string, h *console.Hearing) (func(), error)
+	dictate func(lang string) error
+)

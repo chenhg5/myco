@@ -5,19 +5,25 @@ import { L, lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
- * Speaking instead of typing, with what the device already has. In the
- * desktop app the button starts the system's own dictation (macOS
- * Dictation, Windows voice typing) into the message box: the system
- * listens, shows that it does, and types; it asks to turn dictation on the
- * first time. In a browser that has speech recognition the page listens
- * itself, writing what it hears into the box as you speak; click again to
- * stop. Where there is neither, there is no button.
+ * Speaking instead of typing, in the language chosen for the app (not the
+ * system's), with what the device has:
+ *   - the Mac app listens itself (Apple's speech recognition, on this Mac
+ *     when it can) and the words grow into the box as you speak;
+ *   - the Windows app opens the system's voice typing, switched to that
+ *     language, which types into the box itself;
+ *   - a browser with speech recognition listens itself, as the Mac app.
+ * The microphone sits beside Send, as in Codex and Claude. While it
+ * listens it is red and breathes; click again to stop. Typing, or sending,
+ * stops it too (nothing late is written into a box you emptied). Where
+ * there is none of these, there is no button.
  */
 
-/** Whether the desktop app can start the system's dictation (from
- *  /app/info; the app says so once it has asked). */
-let systemDictation = false;
-export function setSystemDictation(on: boolean) { systemDictation = on; }
+/** Whether the desktop app can do it (from /app/info). */
+let appDictation = false;
+export function setSystemDictation(on: boolean) { appDictation = on; }
+
+/** The app's language as a speech tag. */
+const speechLang = () => (lang() === "zh" ? "zh-CN" : "en-US");
 
 type Recognition = {
   lang: string; continuous: boolean; interimResults: boolean;
@@ -32,8 +38,19 @@ function browserRecognition(): (new () => Recognition) | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-/** Puts the caret at the end of the box, so what is said goes after what
- *  was typed. */
+/** What a reason the app gives means, in words. */
+function reasonOf(code: string): string {
+  switch (code) {
+    case "speech-denied": return L("没有语音识别权限：在 系统设置 › 隐私与安全性 › 语音识别 里打开 myco", "No speech recognition access: allow myco in System Settings › Privacy & Security › Speech Recognition");
+    case "mic-denied":
+    case "not-allowed":
+    case "service-not-allowed": return L("没有麦克风权限：在 系统设置 › 隐私与安全性 › 麦克风 里打开 myco", "No microphone access: allow myco in System Settings › Privacy & Security › Microphone");
+    case "unavailable": return L("这台电脑现在没法识别这个语言", "This computer cannot recognise this language right now");
+    case "microphone": return L("麦克风打不开", "Could not open the microphone");
+    default: return code || L("没听清，再试一次", "Didn't catch that; try again");
+  }
+}
+
 function focusEnd(el: HTMLTextAreaElement | null) {
   if (!el) return;
   el.focus();
@@ -44,35 +61,75 @@ export function DictateButton({ input, value, onText, disabled }: {
   input: React.RefObject<HTMLTextAreaElement | null>;
   /** what is in the box now */
   value: string;
-  /** the box's new text while the page listens itself */
+  /** the box's new text as words are heard */
   onText: (text: string) => void;
   disabled?: boolean;
 }) {
   const [listening, setListening] = useState(false);
   const [note, setNote] = useState("");
-  const rec = useRef<Recognition | null>(null);
+  // The current listening: how to stop it, and the text it last wrote (any
+  // other change means you took over).
+  const live = useRef<{ stop: () => void; wrote: string } | null>(null);
   const Recog = browserRecognition();
-  useEffect(() => () => rec.current?.abort(), []);
-  if (!systemDictation && !Recog) return null;
+
+  useEffect(() => () => live.current?.stop(), []);
+  // You typed or sent: stop listening, and write nothing more.
+  useEffect(() => {
+    if (live.current && value !== live.current.wrote) {
+      live.current.stop();
+      live.current = null;
+      setListening(false);
+    }
+  }, [value]);
+  if (!appDictation && !Recog) return null;
+
+  const begin = () => {
+    const base = value && !/\s$/.test(value) ? `${value}${lang() === "zh" ? "" : " "}` : value;
+    const write = (heard: string) => {
+      if (!live.current) return;
+      live.current.wrote = base + heard;
+      onText(base + heard);
+    };
+    return { base, write };
+  };
 
   const start = async () => {
     setNote("");
     focusEnd(input.current);
-    if (systemDictation) {
+    if (listening) { live.current?.stop(); return; }
+    if (appDictation) {
       try {
-        await appApi.dictate();
+        const r = await appApi.startDictation(speechLang());
+        if (r.mode !== "listen" || !r.id) return; // the system types it in itself
+        const { write } = begin();
+        let ended = false;
+        live.current = { wrote: value, stop: () => { if (!ended) void appApi.stopDictation(r.id!).catch(() => undefined); } };
+        setListening(true);
+        let seq = 0;
+        for (;;) {
+          const st = await appApi.dictationState(r.id, seq);
+          seq = st.seq;
+          write(st.text);
+          if (st.done) {
+            ended = true;
+            if (st.error) setNote(reasonOf(st.error));
+            break;
+          }
+        }
       } catch (e) {
-        setNote((e as Error)?.message || L("没能打开听写", "Could not start dictation"));
+        setNote((e as Error)?.message || L("没能开始听", "Could not start listening"));
+      } finally {
+        live.current = null;
+        setListening(false);
       }
       return;
     }
     if (!Recog) return;
-    if (listening) { rec.current?.stop(); return; }
     const r = new Recog();
-    r.lang = lang() === "zh" ? "zh-CN" : "en-US";
+    r.lang = speechLang();
     r.continuous = true;
     r.interimResults = true;
-    const base = value && !/\s$/.test(value) ? `${value}${lang() === "zh" ? "" : " "}` : value;
+    const { write } = begin();
     let said = "";
     r.onresult = (e) => {
       let interim = "";
@@ -81,22 +138,18 @@ export function DictateButton({ input, value, onText, disabled }: {
         if (res.isFinal) said += res[0].transcript;
         else interim += res[0].transcript;
       }
-      onText(base + said + interim);
+      write(said + interim);
     };
-    r.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") setNote(L("没有麦克风权限", "No access to the microphone"));
-      else if (e.error !== "aborted" && e.error !== "no-speech") setNote(L("没听清，再试一次", "Didn't catch that; try again"));
-    };
-    r.onend = () => { setListening(false); rec.current = null; onText(base + said); };
-    rec.current = r;
+    r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") setNote(reasonOf(e.error)); };
+    r.onend = () => { write(said); live.current = null; setListening(false); };
+    live.current = { wrote: value, stop: () => r.stop() };
     setListening(true);
-    try { r.start(); } catch { setListening(false); rec.current = null; }
+    try { r.start(); } catch { live.current = null; setListening(false); }
   };
 
   const title = note
     || (listening ? L("正在听…再点一下停止", "Listening… click to stop")
-      : systemDictation ? L("语音输入（用系统的听写）", "Dictate (the system's dictation)")
-      : L("语音输入", "Dictate"));
+      : L(`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言）`, `Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language)`));
   return (
     <button type="button" className={cn("att-btn dictate-btn", listening && "is-listening", note && "is-note")} disabled={disabled}
       onMouseDown={(e) => e.preventDefault() /* keep the caret in the box */}

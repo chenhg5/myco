@@ -167,10 +167,13 @@ type Backend struct {
 	// Version and Shell answer GET /app/info; Shell is "mac" for the app
 	// window (hidden title bar) and "browser" for --serve.
 	Version, Shell string
-	// Dictate starts the system's dictation into the field that has the
-	// keyboard (macOS Dictation, Windows voice typing): set by the desktop
-	// app, nil in a browser. /app/info says whether there is one.
-	Dictate func() error
+	// Speaking instead of typing (dictation.go), set by the desktop app,
+	// nil in a browser; /app/info says whether there is either. Listen hears
+	// in lang itself and tells h what it heard (macOS); it returns how to
+	// stop. Dictate starts the system's voice typing in lang into the field
+	// that has the keyboard (Windows).
+	Listen  func(lang string, h *Hearing) (stop func(), err error)
+	Dictate func(lang string) error
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -207,7 +210,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -226,19 +229,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("GET /app/local/agents/{name}/provider", b.getAgentProvider)
 		m.HandleFunc("PUT /app/local/agents/{name}/provider", b.putAgentProvider)
 	}
-	// The system's own speech to text, typed into the box that has the
-	// caret (the page focuses it first).
-	m.HandleFunc("POST /app/dictation", func(w http.ResponseWriter, r *http.Request) {
-		if b.Dictate == nil {
-			writeErr(w, &client.Error{Code: "not_supported", Message: "dictation is only in the desktop app", Status: http.StatusNotFound})
-			return
-		}
-		if err := b.Dictate(); err != nil {
-			writeErr(w, &client.Error{Code: "unavailable", Message: err.Error(), Status: http.StatusConflict})
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+	b.dictationRoutes(m)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})

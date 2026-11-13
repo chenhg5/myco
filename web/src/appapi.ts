@@ -172,7 +172,7 @@ export interface SendMessageInput {
 export type Shell = "mac" | "browser";
 export interface AppInfo {
   version: string; shell: Shell;
-  /** the desktop app can start the system's dictation (POST app/dictation) */
+  /** the desktop app does speech to text (POST app/dictation) */
   dictation?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
@@ -341,8 +341,13 @@ export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 export const appApi = {
   cacheStats: () => request<CacheStats>("GET", "app/cache/stats"),
   info: () => request<AppInfo>("GET", "app/info"),
-  /** Starts the system's dictation into the focused field (desktop app). */
-  dictate: () => request<void>("POST", "app/dictation"),
+  /** Speech to text in lang (desktop app): "system" types into the focused
+   *  field itself; "listen" has text to ask for (dictationState). */
+  startDictation: (lang: string) => request<{ mode: "system" | "listen"; id?: string }>("POST", "app/dictation", { lang }),
+  /** What a listening heard after seq (waits a few seconds for more). */
+  dictationState: (id: string, seq: number) =>
+    request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
+  stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
   update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),

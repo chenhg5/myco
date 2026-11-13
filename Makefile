@@ -60,9 +60,9 @@ app:
 	rm -rf bin/myco.iconset
 	if [ -n "$$MYCO_SIGN_IDENTITY" ]; then \
 		codesign --force --options runtime --timestamp --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app/Contents/Resources/myco && \
-		codesign --force --options runtime --timestamp --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app; \
+		codesign --force --options runtime --timestamp --entitlements cmd/myco-app/build/darwin/entitlements.plist --sign "$$MYCO_SIGN_IDENTITY" bin/myco.app; \
 	else \
 		codesign --force --sign - bin/myco.app/Contents/Resources/myco && \
-		codesign --force --sign - bin/myco.app; \
+		codesign --force --entitlements cmd/myco-app/build/darwin/entitlements.plist --sign - bin/myco.app; \
 	fi
 	codesign --verify --strict bin/myco.app && echo "built bin/myco.app ($(APP_VERSION))"
