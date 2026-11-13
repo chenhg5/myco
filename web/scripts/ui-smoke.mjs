@@ -866,6 +866,47 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
     });
 
+    // A command another agent left on a computer: the sidebar dot turns
+    // amber (it is "working", but nothing is moving), and the terminal says
+    // so above it, with a way to stop it.
+    await step("电脑 · 可能卡住的命令", async () => {
+      await sidebar(page, true);
+      const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });
+      await pc.waitFor({ timeout: 10_000 });
+      if (!(await pc.locator(".sp-nav-busy.is-stuck").count())) {
+        throw new Error("mac-exec 的侧栏小点应表示可能卡住（琥珀色）");
+      }
+      if (await pc.locator(".sp-nav-busy:not(.is-stuck)").count()) throw new Error("mac-exec 不该同时亮绿点");
+      await clickVisible(page, pc);
+      if (narrow) await sidebar(page, false);
+      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      const bar = page.locator(".shell-stuck");
+      await bar.waitFor({ timeout: 20_000 });
+      const barText = compactText(await bar.innerText());
+      for (const want of ["这台电脑上有 1 条命令可能卡住", "PM (Codex)", "全部停止"]) {
+        if (!barText.includes(want)) throw new Error(`终端上方的提示条应写到「${want}」，实际是「${barText}」`);
+      }
+      await clickVisible(page, bar.locator(".shell-stuck-toggle"));
+      const row = bar.locator(".shell-stuck-row").first();
+      await row.waitFor({ timeout: 10_000 });
+      const rowText = compactText(await row.innerText());
+      for (const want of ["make app", "小时没有动静", "停止"]) {
+        if (!rowText.includes(want)) throw new Error(`展开后的命令应写到「${want}」，实际是「${rowText}」`);
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-stuck");
+      await clickVisible(page, bar.getByRole("button", { name: "全部停止" }));
+      await page.waitForFunction(() => !document.querySelector(".shell-stuck"), null, { timeout: 15_000 });
+      // Stopping it leaves the computer idle: no green, no amber.
+      await sidebar(page, true);
+      await page.waitForFunction(() => {
+        const r = [...document.querySelectorAll(".sp-nav-pc")].find((e) => (e.textContent || "").includes("mac-exec"));
+        return !!r && !r.querySelector(".sp-nav-busy");
+      }, null, { timeout: 15_000 });
+      await shot(page, size, scheme, "computer-stuck-stopped");
+      if (narrow) await sidebar(page, false);
+    });
+
     // Removing a whole computer: a dry run lists the agent and folder on it,
     // the online one shows the uninstall command, and both are gone after.
     await step("电脑 · 移除", async () => {

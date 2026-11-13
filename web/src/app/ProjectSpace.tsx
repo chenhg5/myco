@@ -303,6 +303,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
+            onRefresh={onRefresh}
           />
         ) : project && coordinator && view.kind === "home" ? (
           <SplitPanes
@@ -327,6 +328,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
                 onOpenTask={(agent, id) => void chatWith(agent, id)}
                 onActivity={() => setView({ kind: "activity" })}
                 onAbout={onAbout}
+                onRefresh={onRefresh}
                 onChat={(agent) => void chatWith(agent)}
                 strip={strip}
                 fullToggle={side ? full : undefined}
@@ -343,6 +345,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
                 headActions={actions}
                 onNewConversation={(_h, agent) => void chatWith(agent)}
                 onOpen={(_h, agent) => void chatWith(agent)}
+                onRefresh={onRefresh}
               />
             )}
           />
@@ -484,7 +487,7 @@ function useFeed(hubId: string, project: Project | undefined, memberNames: Set<s
  * were given, with how each is going; a card opens that member's work at
  * that task.
  */
-function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items, rowOf, nameOf, onOpenTask, onActivity, onAbout, strip, fullToggle }: {
+function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items, rowOf, nameOf, onOpenTask, onActivity, onAbout, onRefresh, strip, fullToggle }: {
   hubId: string;
   hubName: string;
   project: Project;
@@ -498,6 +501,8 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   onOpenTask: (agent: string, taskId: string) => void;
   onActivity: () => void;
   onAbout?: () => void;
+  /** a node's work changed (a command on its computer was stopped) */
+  onRefresh: () => void;
   onChat: (agent: string) => void;
   strip?: React.ReactNode;
   /** with a member open beside it: take the whole width, or give it back */
@@ -555,6 +560,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
         bare
         onBack={() => undefined}
         onNewConversation={() => undefined}
+        onRefresh={onRefresh}
       />
     </div>
   );

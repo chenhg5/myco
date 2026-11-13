@@ -180,7 +180,7 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
    *  chat asks about it */
@@ -207,6 +207,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   onNewConversation: (hubId: string, agent: string) => void;
   /** Opens your conversation with another node (a copy just made). */
   onOpen?: (hubId: string, agent: string, peer: string) => void;
+  /** The node's work changed outside this conversation (a command on its
+   *  computer was stopped): refresh the rows it came from. */
+  onRefresh?: () => void;
 }) {
   // Seen before in this window: shown from the first frame (no empty
   // flash while the cache is read in an effect).
@@ -849,6 +852,50 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // Commands other nodes sent to the computer in view. The terminal shows
+  // only your own conversation with it, so these have no row there: the
+  // overview knows what it is on, and which of it may have gone quiet.
+  const shellRow = termMode
+    ? rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === (shellMode ? target.agent : execNode))
+    : undefined;
+  const [stoppedShell, setStoppedShell] = useState<ReadonlySet<string>>(() => new Set());
+  const [moreStuck, setMoreStuck] = useState(false);
+  const [stuckError, setStuckError] = useState<unknown>(null);
+  const [stoppingStuck, setStoppingStuck] = useState(false);
+  const shellStuck = (shellRow?.st.current || []).filter((m) =>
+    m.type === "task" && m.to === shellRow?.st.agent.name && !isMe(m.from, shellRow?.hub) && !stoppedShell.has(m.id)
+    && possiblyStuck(m, { agent: shellRow?.st.agent, receiving: shellRow?.st.receiving, offline: shellRow?.st.state === "offline" }, now));
+  const canStopShell = canManage(shellRow?.hub, shellRow?.st.agent.owner_id);
+  const shellFrom = [...new Set(shellStuck.map((m) => nameOf(m.from)))];
+  const stoppedShellNow = (ids: string[]) => setStoppedShell((prev) => new Set([...prev, ...ids]));
+  const stopOnShell = async (m: Message) => {
+    setStuckError(null);
+    try {
+      const stopped = await appApi.stop(target.hubId, m.id);
+      stoppedShellNow([m.id]);
+      setMessages((prev) => prev && prev.map((x) => (x.id === stopped.id ? stopped : x)));
+      onRefresh?.();
+    } catch (e) {
+      setStuckError(e);
+    }
+  };
+  const stopAllOnShell = async () => {
+    if (stoppingStuck) return;
+    setStuckError(null);
+    setStoppingStuck(true);
+    try {
+      const all = shellStuck;
+      const results = await Promise.allSettled(all.map((m) => appApi.stop(target.hubId, m.id)));
+      stoppedShellNow(all.filter((_, i) => results[i].status === "fulfilled").map((m) => m.id));
+      // Some may be already closed or out of this app's reach: say why.
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failed) setStuckError(failed.reason);
+      onRefresh?.();
+    } finally {
+      setStoppingStuck(false);
+    }
+  };
+
   // A task that may have lost its result: stop it, then send the same message
   // to the same node again in the same conversation, as a fresh task.
   const [resending, setResending] = useState<string | null>(null);
@@ -1074,6 +1121,52 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {headActions && <span className="conv-head-actions">{headActions}</span>}
       </header>}
+
+      {/* The terminal shows only your own commands; ones other nodes sent to
+          this computer may be stuck with nothing on screen. Say so above it,
+          with what they were and a way to stop them. */}
+      {termMode && shellStuck.length > 0 && (
+        <div className={cn("shell-stuck", moreStuck && "is-open")} data-shell-stuck>
+          <div className="shell-stuck-line">
+            <span className="dot pending" aria-hidden />
+            <span className="shell-stuck-text">
+              {L(
+                `这台电脑上有 ${shellStuck.length} 条命令可能卡住（来自 ${shellFrom.join("、")}）`,
+                `${shellStuck.length} command${shellStuck.length === 1 ? "" : "s"} on this computer may be stuck (from ${shellFrom.join(", ")})`,
+              )}
+            </span>
+            <button type="button" className="shell-stuck-toggle" aria-expanded={moreStuck} onClick={() => setMoreStuck((v) => !v)}>
+              <ChevronRight />
+              {moreStuck ? L("收起", "Hide") : L("查看", "Show")}
+            </button>
+            {canStopShell && (
+              <button type="button" className="conv-steer-btn" disabled={stoppingStuck} onClick={() => void stopAllOnShell()}>
+                {stoppingStuck ? L("正在停止…", "Stopping…") : L("全部停止", "Stop all")}
+              </button>
+            )}
+          </div>
+          {moreStuck && (
+            <ul className="shell-stuck-list">
+              {shellStuck.map((m) => {
+                const cmd = (m.body || "").split("\n")[0].trim();
+                const quiet = quietFor(now, lastActivityAt(m));
+                return (
+                  <li key={m.id} className="shell-stuck-row">
+                    <span className="shell-stuck-cmd" title={m.body}>{cmd || nameOf(m.from)}</span>
+                    <span className="shell-stuck-meta">{nameOf(m.from)} · {L(`${quiet}没有动静`, `quiet for ${quiet}`)}</span>
+                    {canStopShell && (
+                      <button type="button" className="conv-steer-btn" onClick={() => void stopOnShell(m)}>
+                        {L("停止", "Stop")}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <ErrorText error={stuckError} />
+        </div>
+      )}
 
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}

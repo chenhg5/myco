@@ -60,13 +60,30 @@ func (s *MessageService) SteerFromConsole(ctx context.Context, name string, mana
 
 // StopFromConsole stops a running task sent from the console, for the
 // person who sent it (or someone who manages the hub).
-func (s *MessageService) StopFromConsole(ctx context.Context, name string, manages bool, id string) (*domain.Message, error) {
+func (s *MessageService) StopFromConsole(ctx context.Context, name string, manages bool, id string, mayCloseFor func(to domain.AgentName) error) (*domain.Message, error) {
 	m, err := s.messages.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if !IsConsoleSender(m.From) {
-		return nil, domain.Errf(domain.CodePermissionDenied, "only tasks sent from the console can be stopped here")
+		// Another agent sent it (often to a shell node): whoever may close
+		// the recipient's messages stops it. It fails as if the recipient
+		// gave up, so the sender hears about it instead of waiting forever.
+		if err := mayCloseFor(m.To); err != nil {
+			return nil, err
+		}
+		if m.Type != domain.TypeTask {
+			return nil, domain.Errf(domain.CodeInvalidState, "only tasks can be stopped")
+		}
+		to, err := s.agents.Get(ctx, m.To)
+		if err != nil {
+			to = &domain.Agent{Name: m.To}
+		}
+		who := name
+		if who == "" {
+			who = "the hub admin"
+		}
+		return s.Fail(ctx, to, id, "stopped in the app by "+who, false)
 	}
 	if !manages && m.From != ConsoleSender(name) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "only the person who sent this task can stop it")

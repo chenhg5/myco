@@ -5383,6 +5383,99 @@ body.is-resizing {
   flex: none;
 }
 
+/* Commands other nodes sent to a computer that may be stuck: the terminal
+   shows only your own, so a thin bar above it says what they were, how long
+   they have been quiet, and stops them. */
+.shell-stuck {
+  flex: none;
+  padding: 5px 12px 6px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.shell-stuck-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+.shell-stuck .dot {
+  flex: none;
+}
+.shell-stuck-text {
+  flex: 1;
+  min-width: 0;
+}
+.shell-stuck-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  height: 20px;
+  padding: 0 6px 0 3px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+.shell-stuck-toggle:hover {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+}
+.shell-stuck-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+.shell-stuck.is-open .shell-stuck-toggle svg {
+  transform: rotate(90deg);
+}
+.shell-stuck-list {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shell-stuck-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.shell-stuck-cmd {
+  flex: 1;
+  min-width: 0;
+  padding-left: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+}
+.shell-stuck-meta {
+  flex: none;
+  opacity: 0.75;
+}
+.shell-stuck .conv-steer-btn {
+  flex: none;
+  height: 20px;
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--amber);
+}
+.shell-stuck .conv-steer-btn:hover {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+}
+.shell-stuck .app-error-text {
+  margin-top: 3px;
+}
+
 /* A task the node has not picked up yet: why, the mushroom standing by. */
 .trace-head.trace-wait {
   cursor: default;
