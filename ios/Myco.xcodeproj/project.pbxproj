@@ -14,6 +14,7 @@
 		83854068EBC85383E1D126EE /* MycoStore in Frameworks */ = {isa = PBXBuildFile; productRef = 20963E2AF56CF797BFFFCF13 /* MycoStore */; };
 		A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */ = {isa = PBXBuildFile; productRef = 76BE5F4AA9E3F0885FE556CE /* MycoFake */; };
 		BF25CC0A2487CCA0CA2595B6 /* ConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 007DD7BA2A2C98B9AB1F5FDD /* ConversationTests.swift */; };
+		D9A353D01344365DA094920D /* MycoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = EDAAA6909CF8A431ECCE0A3C /* MycoAPI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,6 +46,7 @@
 				121A24BFD60DBE7DC6B9D14B /* MycoCore in Frameworks */,
 				A89039A655C885BF3E5DCDE2 /* MycoFake in Frameworks */,
 				83854068EBC85383E1D126EE /* MycoStore in Frameworks */,
+				D9A353D01344365DA094920D /* MycoAPI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -134,6 +136,7 @@
 				F0A8F987EE5174C9680E74F9 /* MycoCore */,
 				76BE5F4AA9E3F0885FE556CE /* MycoFake */,
 				20963E2AF56CF797BFFFCF13 /* MycoStore */,
+				EDAAA6909CF8A431ECCE0A3C /* MycoAPI */,
 			);
 			productName = Myco;
 			productReference = 23448C88988322580323A2D7 /* Myco.app */;
@@ -456,6 +459,10 @@
 		76BE5F4AA9E3F0885FE556CE /* MycoFake */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MycoFake;
+		};
+		EDAAA6909CF8A431ECCE0A3C /* MycoAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MycoAPI;
 		};
 		F0A8F987EE5174C9680E74F9 /* MycoCore */ = {
 			isa = XCSwiftPackageProductDependency;
