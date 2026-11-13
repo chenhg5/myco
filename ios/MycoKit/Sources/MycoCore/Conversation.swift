@@ -76,6 +76,8 @@ public enum ConversationBuilder {
         var past: [String: [Message]] = [:]
         /// My tasks that are still open, with where each stands.
         var myOpen: [(task: Message, state: RunState)] = []
+        /// Colleagues' tasks that are still open, with where each stands.
+        var theirOpen: [(task: Message, state: RunState)] = []
         /// The newest update shown for each open task, by task.
         var newestUpdate: [String: (id: String, at: Date)] = [:]
         /// The newest plan of each task: from its steps, or a checklist it reported.
@@ -113,9 +115,7 @@ public enum ConversationBuilder {
                     if mine {
                         myOpen.append((m, state))
                     } else {
-                        items.append(.init(
-                            id: m.id + ".status", at: m.createdAt.addingTimeInterval(0.002),
-                            kind: .status(state, taskID: m.id)))
+                        theirOpen.append((m, state))
                     }
                 case .failed(let reason):
                     items.append(.init(id: m.id + ".failed", at: m.updatedAt, kind: .failure(reason: reason)))
@@ -159,6 +159,12 @@ public enum ConversationBuilder {
         items = items.map { item in
             guard newest.contains(item.id), case .progress(let text, _) = item.kind else { return item }
             return ConversationItem(id: item.id, at: item.at, kind: .progress(text: text, latest: true))
+        }
+        // Where a colleague's open task stands comes under its work: after
+        // its newest update, never above it.
+        for open in theirOpen {
+            let under = max(open.task.createdAt.addingTimeInterval(0.002), (newestUpdate[open.task.id]?.at ?? .distantPast).addingTimeInterval(0.001))
+            items.append(.init(id: open.task.id + ".status", at: under, kind: .status(open.state, taskID: open.task.id)))
         }
         // One line says where my work with the agent stands, never two:
         // the task being worked on if there is one, else one that may be

@@ -163,14 +163,15 @@ struct ConversationBuilderTests {
             Message(id: "t2", from: "me", to: "coder", body: "ping me after", status: "queued", createdAt: at(-50)),
         ]
         let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], processes: ["c2"], status: { _ in nil }, now: now))
-        #expect(items.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2.process", "c2.status", "c2p", "t2", "t2.status"])
+        #expect(items.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2.process", "c2p", "c2.status", "t2", "t2.status"])
         #expect(items[0].kind == .mine(text: "design the API", steer: false, by: "lead"))
         #expect(items[1].kind == .reply(text: "designed", taskID: "c1", to: "lead"))
         #expect(items[2].kind == .mine(text: "and the docs?", steer: false, by: nil))
         #expect(items[3].kind == .reply(text: "on it", taskID: "t1", to: nil))
-        // The colleague's open task keeps its state with it; mine closes the page.
-        #expect(items[6].kind == .status(.working(since: at(-5)), taskID: "c2"))
-        #expect(items[7].kind == .progress(text: "half built", latest: true))
+        // The colleague's open task keeps its state with it, under its
+        // newest update; mine closes the page.
+        #expect(items[6].kind == .progress(text: "half built", latest: true))
+        #expect(items[7].kind == .status(.working(since: at(-5)), taskID: "c2"))
         #expect(items[9].kind == .status(.queued, taskID: "t2"))
         // The input speaks to my open task, never to a colleague's.
         #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t2")
