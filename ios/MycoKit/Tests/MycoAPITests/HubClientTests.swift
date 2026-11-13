@@ -134,12 +134,16 @@ struct HubClientTests {
     @Test func asksForMyPairsWithTheToken() async throws {
         let hub = client()
         Stub.handler = { _ in (200, try! RealAnswersTests.fixture("recent-pairs")) }
-        let items = try await hub.recent(project: nil)
+        let items = try await hub.recent(.myPairs)
         #expect(items.count == 2)
         let request = try #require(Stub.seen.first)
         #expect(request.url?.path == "/base/v1/console/recent")
         #expect(request.url?.query == "group=pair&limit=100&side=me")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer tok")
+        // A project's threads, and everything this device may read.
+        _ = try await hub.recent(.project("myco-ios"))
+        _ = try await hub.recent(.everything)
+        #expect(Stub.seen.map { $0.url?.query } == ["group=pair&limit=100&side=me", "limit=100&project=myco-ios", "limit=100"])
     }
 
     @Test func aConsoleSenderSurvivesTheQuery() async throws {
