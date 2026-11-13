@@ -146,6 +146,7 @@ type Message struct {
 	To             string `json:"to"`
 	ThreadID       string `json:"thread_id"`
 	ReplyTo        string `json:"reply_to,omitempty"`
+	After          string `json:"after,omitempty"`
 	Type           string `json:"type"`
 	Body           string `json:"body"`
 	Status         string `json:"status"`
@@ -273,6 +274,7 @@ type SendRequest struct {
 	Type           string   `json:"type,omitempty"`
 	Body           string   `json:"body"`
 	ThreadID       string   `json:"thread_id,omitempty"`
+	After          string   `json:"after,omitempty"`
 	IdempotencyKey string   `json:"idempotency_key,omitempty"`
 	Attachments    []string `json:"attachments,omitempty"`
 	// Project puts a new thread in a project (name); a message in an
@@ -763,7 +765,12 @@ type RecentList struct {
 
 // SteerRequest is the body of POST /v1/console/messages/{id}/steer.
 type SteerRequest struct {
-	Body string `json:"body"`
+	Body        string   `json:"body"`
+	Attachments []string `json:"attachments,omitempty"`
+}
+
+type SteersResponse struct {
+	Steers []Message `json:"steers"`
 }
 
 // Member is a person using the hub (GET /v1/members).

@@ -19,7 +19,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -31,8 +31,8 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 		idem = m.IdempotencyKey
 	}
 	att, _ := json.Marshal(nonNil(m.Attachments))
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.Type, m.Body, m.Status, m.Attempts,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.After, m.Type, m.Body, m.Status, m.Attempts,
 		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
@@ -52,7 +52,8 @@ func (r *MessageRepo) Create(ctx context.Context, m *domain.Message) error {
 
 func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[domain.Status]int, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, status, COUNT(*) FROM messages
-		WHERE status IN ('queued','delivered','acked','held') GROUP BY to_agent, status`)
+		WHERE status IN ('delivered','acked','held') OR (status='queued' AND `+afterReady+`)
+		GROUP BY to_agent, status`)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -118,11 +119,54 @@ func (r *MessageRepo) FindReply(ctx context.Context, messageID string) (*domain.
 	return r.one(ctx, r.db, `WHERE reply_to=? AND type IN ('reply','event') ORDER BY created_at LIMIT 1`, messageID)
 }
 
+func (r *MessageRepo) AfterRecipients(ctx context.Context, id string) ([]domain.AgentName, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT to_agent FROM messages WHERE after=? AND status='queued'`, id)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	var out []domain.AgentName
+	for rows.Next() {
+		var name domain.AgentName
+		if err := rows.Scan(&name); err != nil {
+			return nil, internal(err)
+		}
+		out = append(out, name)
+	}
+	return out, internal(rows.Err())
+}
+
+func (r *MessageRepo) ListOpenSteers(ctx context.Context, id string, consume bool, now time.Time) ([]*domain.Message, error) {
+	where := `WHERE reply_to=? AND type='steer' AND status IN ('queued','delivered','acked','held') ORDER BY created_at, id`
+	if !consume {
+		return r.many(ctx, r.db, where, id)
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer tx.Rollback()
+	steers, err := r.many(ctx, tx, where, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, steer := range steers {
+		if err := steer.Complete(steer.To, now); err != nil {
+			return nil, err
+		}
+		if err := updateMessage(ctx, tx, steer); err != nil {
+			return nil, err
+		}
+	}
+	return steers, internal(tx.Commit())
+}
+
 func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domain.Message, error) {
 	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, id`, threadID)
 }
 
-const dueWhere = `(status='queued' OR (status='delivered' AND lease_until<=?))`
+const afterReady = `(after='' OR NOT EXISTS (SELECT 1 FROM messages parent WHERE parent.id=messages.after AND parent.status NOT IN ('done','failed')))`
+const dueWhere = `((status='queued' AND ` + afterReady + `) OR (status='delivered' AND lease_until<=?))`
 
 func (r *MessageRepo) ListDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int) ([]*domain.Message, error) {
 	return r.many(ctx, r.db, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`, recipient, ms(now), limit)
@@ -244,7 +288,7 @@ func scanMessage(s scanner) (*domain.Message, error) {
 		idem                    sql.NullString
 		att                     string
 	)
-	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.Type, &m.Body, &m.Status,
+	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.After, &m.Type, &m.Body, &m.Status,
 		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project)
 	if err != nil {
 		return nil, err

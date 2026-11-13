@@ -71,6 +71,7 @@ type Message struct {
 	To             AgentName
 	ThreadID       string
 	ReplyTo        string
+	After          string // task that must finish before this message is deliverable
 	Type           MessageType
 	Body           string
 	Status         Status

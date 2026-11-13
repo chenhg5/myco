@@ -590,7 +590,7 @@ func (b *Backend) Handler() http.Handler {
 		if !decode(w, r, &in) {
 			return
 		}
-		res, err := c.ConsoleSteer(r.Context(), r.PathValue("mid"), in.Body)
+		res, err := c.ConsoleSteerWith(r.Context(), r.PathValue("mid"), in.Body, in.Attachments)
 		if err != nil {
 			writeErr(w, err)
 			return

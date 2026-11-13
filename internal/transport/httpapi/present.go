@@ -123,7 +123,7 @@ func redactURL(raw string) string {
 
 func messageDTO(m *domain.Message) api.Message {
 	out := api.Message{
-		ID: m.ID, From: string(m.From), To: string(m.To), ThreadID: m.ThreadID, ReplyTo: m.ReplyTo,
+		ID: m.ID, From: string(m.From), To: string(m.To), ThreadID: m.ThreadID, ReplyTo: m.ReplyTo, After: m.After,
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),

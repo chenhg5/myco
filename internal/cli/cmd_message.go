@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -34,6 +35,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "body-file", Kind: String, Help: "Read the message from a file ('-' = stdin)"},
 			{Name: "type", Kind: Enum, Values: []string{"task", "note"}, Default: "task", Help: "task expects a reply; note does not"},
 			{Name: "thread", Kind: String, Env: "MYCO_THREAD_ID", Help: "Continue an existing thread"},
+			{Name: "after", Kind: String, Help: "Deliver after this task from you to the same agent finishes"},
 			{Name: "project", Kind: String, Env: "MYCO_PROJECT", Help: "Put a new thread in this project (you must be a member); a message in an existing thread belongs to its project"},
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending with the same key returns the original message"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the reply (tasks only)"},
@@ -58,7 +60,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			}
 			res, err := c.Send(e.in.Ctx, api.SendRequest{
 				To: e.in.String("to"), Type: e.in.String("type"), Body: body,
-				ThreadID: e.in.String("thread"), IdempotencyKey: e.in.String("idempotency-key"), Attachments: atts,
+				ThreadID: e.in.String("thread"), After: e.in.String("after"), IdempotencyKey: e.in.String("idempotency-key"), Attachments: atts,
 				Project: e.in.String("project"),
 			}, dry)
 			if err != nil {
@@ -154,6 +156,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		Flags: []Flag{idFlag,
 			{Name: "body", Kind: String, Help: "Reply text"},
 			{Name: "body-file", Kind: String, Help: "Read the reply from a file ('-' = stdin)"},
+			{Name: "anyway", Kind: Bool, Help: "Reply even if unread corrections from the sender remain"},
 			attachFlag,
 		},
 		Run: handler(func(e *env) error {
@@ -167,6 +170,15 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			c, err := e.agentClient()
 			if err != nil {
 				return err
+			}
+			if !e.in.Bool("anyway") {
+				steers, err := pendingSteers(e.in.Ctx, c, e.in.String("id"), false)
+				if err != nil {
+					return err
+				}
+				if len(steers) > 0 {
+					return unreadSteersError(steers)
+				}
 			}
 			dry := e.in.Bool("dry-run")
 			atts, err := e.resolveAttachments(c, dry)
@@ -258,6 +270,16 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 				if dry {
 					return e.dryRun(map[string]any{"action": verb, "message": m})
 				}
+				if verb == "ack" {
+					steers, err := pendingSteers(e.in.Ctx, c, e.in.String("id"), true)
+					if err != nil {
+						return err
+					}
+					return e.p.Print(map[string]any{"message": m, "steers": steers}, func(w io.Writer) {
+						fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status)
+						printSteers(w, steers)
+					})
+				}
 				return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status) })
 			}),
 		}
@@ -291,7 +313,14 @@ status everyone can see, use myco agent status set.`,
 			if dry {
 				return e.dryRun(map[string]any{"action": "progress", "message": m})
 			}
-			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "progress sent to %s\n", m.To) })
+			steers, err := pendingSteers(e.in.Ctx, c, e.in.String("id"), true)
+			if err != nil {
+				return err
+			}
+			return e.p.Print(map[string]any{"message": m, "steers": steers}, func(w io.Writer) {
+				fmt.Fprintf(w, "progress sent to %s\n", m.To)
+				printSteers(w, steers)
+			})
 		}),
 	}
 
@@ -310,6 +339,7 @@ started, the note is added to it. Agents without a runner receive it in their in
 			{Name: "id", Kind: String, Required: true, Help: "ID of the task you sent"},
 			{Name: "body", Kind: String, Help: "Correction text"},
 			{Name: "body-file", Kind: String, Help: "Read the correction from a file (- for stdin)"},
+			attachFlag,
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
@@ -324,7 +354,11 @@ started, the note is added to it. Agents without a runner receive it in their in
 				return err
 			}
 			dry := e.in.Bool("dry-run")
-			m, err := c.Steer(e.in.Ctx, e.in.String("id"), body, dry)
+			atts, err := e.resolveAttachments(c, dry)
+			if err != nil {
+				return err
+			}
+			m, err := c.SteerWith(e.in.Ctx, e.in.String("id"), body, atts, dry)
 			if err != nil {
 				return err
 			}
@@ -434,12 +468,57 @@ type inboxResult struct {
 const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); finish with myco message reply --id <id>. Skip progress for a one-line answer.`
 
 func inboxTaskHint(msgs []api.Message) string {
+	var task, steer bool
 	for _, m := range msgs {
-		if m.Type == "task" {
-			return taskProgressHint
+		switch m.Type {
+		case "task":
+			task = true
+		case "steer":
+			steer = true
 		}
 	}
-	return ""
+	var hints []string
+	if task {
+		hints = append(hints, taskProgressHint)
+	}
+	if steer {
+		hints = append(hints, "A steer is the sender's correction to the task named by reply_to. Read it and answer that original task together; it is not a new task.")
+	}
+	return strings.Join(hints, " ")
+}
+
+// Older hubs have no steers endpoint. Keep their existing CLI behaviour.
+func pendingSteers(ctx context.Context, c *client.Client, id string, consume bool) ([]api.Message, error) {
+	steers, err := c.Steers(ctx, id, consume)
+	if e, ok := client.AsError(err); ok && e.Status == 404 {
+		return []api.Message{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if steers == nil {
+		steers = []api.Message{}
+	}
+	return steers, nil
+}
+
+func printSteers(w io.Writer, steers []api.Message) {
+	for _, steer := range steers {
+		fmt.Fprintf(w, "%s 补充了：%s（这是对当前任务的补充，不是新任务）\n", steer.From, steer.Body)
+		for _, a := range steer.Attachments {
+			fmt.Fprintf(w, "  附件：%s (%s)\n", a.Name, a.FileID)
+		}
+	}
+}
+
+func unreadSteersError(steers []api.Message) *Error {
+	var details []string
+	for _, steer := range steers {
+		details = append(details, fmt.Sprintf("%s: %s", steer.ID, steer.Body))
+	}
+	return &Error{Code: "conflict", Exit: ExitConflict,
+		Message:    "sender added unread corrections: " + strings.Join(details, "\n"),
+		Suggestion: "读完再回答；确定要忽略就加 --anyway"}
 }
 
 func threadCommands() *Command {

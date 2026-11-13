@@ -701,12 +701,31 @@ func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.
 
 // Steer sends a correction for open task id (as its sender).
 func (c *Client) Steer(ctx context.Context, id, body string, dry bool) (*api.Message, error) {
-	body, err := c.sealAbout(ctx, id, true, "steer", body, nil)
+	return c.SteerWith(ctx, id, body, nil, dry)
+}
+
+func (c *Client) SteerWith(ctx context.Context, id, body string, attachments []string, dry bool) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, true, "steer", body, attachments)
 	if err != nil {
 		return nil, err
 	}
 	var out api.MessageResult
-	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/steer", dryQuery(dry), api.ReplyRequest{Body: body}, &out)
+	return &out.Message, c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/steer", dryQuery(dry), api.SteerRequest{Body: body, Attachments: attachments}, &out)
+}
+
+func (c *Client) Steers(ctx context.Context, id string, consume bool) ([]api.Message, error) {
+	q := url.Values{}
+	if consume {
+		q.Set("consume", "true")
+	}
+	var out api.SteersResponse
+	if err := c.do(ctx, http.MethodGet, "/v1/messages/"+esc(id)+"/steers", q, nil, &out); err != nil {
+		return nil, err
+	}
+	for i := range out.Steers {
+		c.open(ctx, &out.Steers[i])
+	}
+	return out.Steers, nil
 }
 
 // WaitReplyProgress waits like WaitReply and calls onProgress for each of the
@@ -823,12 +842,16 @@ func (c *Client) ConsoleSend(ctx context.Context, req api.SendRequest) (*api.Sen
 
 // ConsoleSteer corrects a task sent from the console.
 func (c *Client) ConsoleSteer(ctx context.Context, id, body string) (*api.Message, error) {
-	body, err := c.sealAbout(ctx, id, true, "steer", body, nil)
+	return c.ConsoleSteerWith(ctx, id, body, nil)
+}
+
+func (c *Client) ConsoleSteerWith(ctx context.Context, id, body string, attachments []string) (*api.Message, error) {
+	body, err := c.sealAbout(ctx, id, true, "steer", body, attachments)
 	if err != nil {
 		return nil, err
 	}
 	var out api.Message
-	if err := c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/console/messages/"+esc(id)+"/steer", nil, api.SteerRequest{Body: body, Attachments: attachments}, &out); err != nil {
 		return &out, err
 	}
 	c.open(ctx, &out)

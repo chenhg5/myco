@@ -47,6 +47,11 @@ type MessageRepository interface {
 	FindByIdempotencyKey(ctx context.Context, from AgentName, key string) (*Message, error)
 	// FindReply returns the reply or failure event answering messageID.
 	FindReply(ctx context.Context, messageID string) (*Message, error)
+	// AfterRecipients lists recipients of queued messages waiting for task id.
+	AfterRecipients(ctx context.Context, id string) ([]AgentName, error)
+	// ListOpenSteers returns pending corrections for task id; consume closes
+	// exactly the returned steers in the same transaction.
+	ListOpenSteers(ctx context.Context, id string, consume bool, now time.Time) ([]*Message, error)
 	ListThread(ctx context.Context, threadID string) ([]*Message, error)
 	// ListBroadcast returns the messages of a broadcast, oldest first.
 	ListBroadcast(ctx context.Context, broadcastID string) ([]*Message, error)
