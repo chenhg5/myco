@@ -3715,8 +3715,14 @@ button.conv-attach:hover .conv-attach-go {
   gap: 6px;
   margin-bottom: 3px;
 }
+/* The tag's own space under it would lift it above the time beside it. */
+.conv-supplement-head .conv-tag {
+  margin-bottom: 0;
+  line-height: 16px;
+}
 .conv-supplement-time {
   font-size: 10.5px;
+  line-height: 16px;
   color: var(--faint);
 }
 .conv-compose-box {

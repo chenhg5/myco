@@ -556,10 +556,13 @@
   width: 15px;
   height: 15px;
 }
-.sp-compose-hint {
-  padding: 6px 4px 0;
-  font-size: 11px;
-  color: var(--faint);
+/* How to send: beside the tools while the box has the caret, as in a
+   member's chat (.conv-compose-hint). */
+.sp-compose-tools .conv-compose-hint {
+  margin-left: 6px;
+}
+.sp-compose-box:focus-within .conv-compose-hint {
+  visibility: visible;
 }
 
 /* The members and workspaces on the right. */

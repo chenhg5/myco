@@ -21,6 +21,7 @@ import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { VersionsContext, versionsOf } from "@/app/preview";
+import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast } from "@/app/hubVersion";
@@ -675,6 +676,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
   const histPos = useRef(-1);
   const histDraft = useRef("");
+  // In a chat, ↑ / ↓ from an empty box: what you sent here (tasks and
+  // what you added to them).
+  const chatHistory = useInputHistory(
+    sentTexts((messages || []).filter((m) => (m.type === "task" || m.type === "steer") && isMe(m.from, row?.hub) && !hiddenMessage(m) && !m.unreadable).map((m) => m.body)),
+    draft, (v) => writeDraft(v));
 
   const alsoSet = new Set(target.also || []);
   const nameOf = (from: string): string => {
@@ -898,7 +904,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           });
       } else if (queuedNext) {
         if (queueOnHub) {
-          m = await sendNew(threadId, openTask!.id);
+          // Behind the last one already waiting: they go one after another.
+          m = await sendNew(threadId, hubQueue[hubQueue.length - 1]?.id || openTask!.id);
         } else {
           // This hub cannot hold it: keep it here and send it when the
           // round ends (queued.ts).
@@ -907,6 +914,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           writeDraft("");
           att.clear();
           histPos.current = -1;
+          chatHistory.reset();
           inputRef.current?.focus();
           return;
         }
@@ -925,6 +933,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       writeDraft("");
       att.clear();
       histPos.current = -1;
+      chatHistory.reset();
       atBottom.current = true;
       inputRef.current?.focus();
     } catch (e) {
@@ -935,6 +944,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!shellMode && chatHistory.onKeyDown(e)) return;
     if (shellMode && (e.key === "ArrowUp" || e.key === "ArrowDown") && !e.nativeEvent.isComposing && !draft.includes("\n") && history.length > 0) {
       e.preventDefault();
       let pos = histPos.current;
@@ -1057,14 +1067,39 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     writeQueue(localQueue.filter((x) => x.id !== id));
     setFlushStalled(false);
   };
+  // Taking one out of the queue on the hub: the ones waiting behind it go
+  // back behind what it waited on, in order (they are stopped last first,
+  // so none is let go on the way, then sent again).
+  const unqueue = async (gone: Message) => {
+    const chain: Message[] = [];
+    for (let cur = gone.id; ;) {
+      const next = hubQueue.find((x) => x.after === cur);
+      if (!next || chain.includes(next)) break;
+      chain.push(next);
+      cur = next.id;
+    }
+    for (const x of [...chain].reverse()) await appApi.stop(target.hubId, x.id);
+    await appApi.stop(target.hubId, gone.id);
+    setWithdrawn((prev) => new Set([...prev, gone.id, ...chain.map((x) => x.id)]));
+    let after = gone.after;
+    const resent: Message[] = [];
+    for (const x of chain) {
+      const re = await appApi.sendMessage(target.hubId, {
+        to: x.to, body: x.body, thread_id: x.thread_id, ...(after ? { after } : {}),
+        ...(x.attachments?.length ? { attachments: x.attachments.map((a) => a.file_id) } : {}),
+      });
+      resent.push(re);
+      after = re.id;
+    }
+    if (resent.length) setMessages((prev) => (prev ? [...prev, ...resent] : resent));
+  };
   const withdrawQueueItem = async (item: QueueItem) => {
     setQueueError(null);
     if (item.local) { dropLocal(item.local.id); return; }
     if (!item.server || queueBusy) return;
     setQueueBusy(item.key);
     try {
-      await appApi.stop(target.hubId, item.server.id);
-      setWithdrawn((prev) => new Set([...prev, item.key]));
+      await unqueue(item.server);
     } catch (e) {
       setQueueError(e);
     } finally {
@@ -1082,8 +1117,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setQueueError(null);
     setQueueBusy(item.key);
     try {
-      await appApi.stop(target.hubId, item.server.id);
-      setWithdrawn((prev) => new Set([...prev, item.key]));
+      await unqueue(item.server);
       writeDraft(item.body);
       inputRef.current?.focus();
     } catch (e) {
@@ -1123,6 +1157,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setMessages((prev) => (prev ? [...prev, m] : [m]));
     atBottom.current = true;
   };
+  // A message queued behind a task joins the conversation when that task
+  // ends (its answer), not when it was written: it goes after that answer.
+  const sinceAt = (m: Message): number => {
+    const t = new Date(m.created_at).getTime();
+    const prev = m.after ? byId.get(m.after) : undefined;
+    if (!prev) return t;
+    const end = answerOf.get(prev.id);
+    return Math.max(t, end ? new Date(end.created_at).getTime() + 1 : !isOpen(prev.status) ? new Date(prev.updated_at).getTime() : t);
+  };
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
     if (m.type === "steer" && m.reply_to && steersOf.has(m.reply_to)) return false;
@@ -1133,6 +1176,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const all = progressOf.get(task);
     return !all || all[all.length - 1] === m;
   });
+  if (visible.some((m) => m.after)) {
+    const at = new Map(visible.map((m) => [m.id, sinceAt(m)]));
+    // What answers a released message comes after it too (stable sort).
+    visible.sort((a, b) => Math.max(at.get(a.id)!, a.reply_to && at.has(a.reply_to) ? at.get(a.reply_to)! : 0)
+      - Math.max(at.get(b.id)!, b.reply_to && at.has(b.reply_to) ? at.get(b.reply_to)! : 0));
+  }
   // Inserts by time: each goes before the first message newer than it.
   const placed = new Map<string, React.ReactNode[]>();
   const trailing: React.ReactNode[] = [];
@@ -1524,7 +1573,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ref={inputRef}
             className="conv-compose-input"
             value={draft}
-            onChange={(e) => writeDraft(e.target.value)}
+            onChange={(e) => { writeDraft(e.target.value); chatHistory.reset(); }}
             onPaste={(e) => {
               const files = pastedFiles(e);
               if (!files.length) return;

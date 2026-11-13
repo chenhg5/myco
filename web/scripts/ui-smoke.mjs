@@ -295,7 +295,8 @@ async function noRound(page) {
   await page.waitForFunction(() => {
     const d = document.querySelector(".conv-detail");
     const el = d?.querySelector(".conv-compose-input");
-    return !!d && !!el && d.querySelectorAll(".conv-msg").length > 0
+    // Loaded (some messages, or the empty chat when a step runs alone).
+    return !!d && !!el && (d.querySelectorAll(".conv-msg").length > 0 || !!d.querySelector(".conv-empty"))
       && !(el.getAttribute("placeholder") || "").includes("补充");
   }, null, { timeout: 30_000 });
 }
@@ -918,6 +919,61 @@ async function runMatrix(browser, size, scheme) {
       if (await page.locator(".conv-msg.is-me", { hasText: dropText }).count()) throw new Error("撤回的消息不该发出去");
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-queue-sent");
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // Two queued behind a round go out one after another, each after the
+    // answer before it (not both at once, not in the middle); taking out
+    // the first does not let the second go early. ↑ / ↓ from an empty box
+    // go through what was sent.
+    await step("单聊 · 排队依次发", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      const rows = page.locator(".conv-detail .conv-queue-row");
+      const t = "先列一下要改的页面";
+      await box.fill(t);
+      await box.press("Enter");
+      await page.locator(".conv-msg.is-me", { hasText: t }).last().waitFor({ timeout: 20_000 });
+      const gone = "这条先撤掉";
+      const a = "第一条排队：改首页标题";
+      const b = "第二条排队：改下载页按钮";
+      for (const text of [gone, a, b]) {
+        await box.fill(text);
+        await box.press(NEXT_KEY);
+        await page.waitForFunction((n) => document.querySelectorAll(".conv-detail .conv-queue-row").length === n, [gone, a, b].indexOf(text) + 1, { timeout: 10_000 });
+      }
+      await clickVisible(page, rows.first().getByRole("button", { name: "撤回" }));
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 2, null, { timeout: 10_000 });
+      await page.waitForTimeout(1500);
+      if (await page.locator(".conv-msg.is-me", { hasText: a }).count()) throw new Error("撤回第一条后，后面的不该提前发出");
+      // The round ends: only the first goes; the second still waits.
+      await page.locator(".conv-msg.is-me", { hasText: a }).last().waitFor({ timeout: 30_000 });
+      if (await page.locator(".conv-msg.is-me", { hasText: b }).count()) throw new Error("排的第二条应等第一条做完再发，不能同时发出");
+      if ((await rows.count()) !== 1) throw new Error(`第一条发出后应还剩一条在排队，实际 ${await rows.count()} 条`);
+      await page.locator(".conv-msg.is-me", { hasText: b }).last().waitFor({ timeout: 30_000 });
+      const placed = await page.evaluate(({ t, a, b }) => {
+        const els = [...document.querySelectorAll(".conv-detail .conv-msg")];
+        const at = (text) => els.findIndex((e) => e.classList.contains("is-me") && (e.textContent || "").includes(text));
+        const answerAfter = (i) => els.findIndex((e, k) => k > i && e.classList.contains("is-agent"));
+        const it = at(t), ia = at(a), ib = at(b);
+        return { ok: ia > answerAfter(it) && answerAfter(it) > it && ib > answerAfter(ia) && answerAfter(ia) > ia, it, ia, ib };
+      }, { t, a, b });
+      if (!placed.ok) throw new Error(`排队的消息应接在前一条的回复后面：${JSON.stringify(placed)}`);
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .trace.is-live, .conv-detail .trace.is-waiting"), null, { timeout: 30_000 });
+      // ↑ / ↓: newest first, back down to the empty box.
+      await box.fill("");
+      await box.press("ArrowUp");
+      if ((await box.inputValue()) !== b) throw new Error(`↑ 应拿出最后发的一条，实际「${await box.inputValue()}」`);
+      await box.press("ArrowUp");
+      if ((await box.inputValue()) !== a) throw new Error(`再 ↑ 应是前一条，实际「${await box.inputValue()}」`);
+      await box.press("ArrowDown");
+      await box.press("ArrowDown");
+      if ((await box.inputValue()) !== "") throw new Error(`↓ 到底应回到空的输入框，实际「${await box.inputValue()}」`);
+      await box.fill("正在写的字");
+      await box.press("ArrowUp");
+      if ((await box.inputValue()) !== "正在写的字") throw new Error("有字时 ↑ 不该换掉正在写的内容");
+      await box.fill("");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
