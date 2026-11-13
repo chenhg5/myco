@@ -21,15 +21,6 @@ extension AvatarView.Face {
     }
 }
 
-extension AvatarView.Badge {
-    static func of(_ agent: Agent) -> AvatarView.Badge? {
-        let cli = Naming.cli(of: agent)
-        if cli.hasPrefix("claude") { return .claude }
-        if cli.hasPrefix("codex") { return .codex }
-        return nil
-    }
-}
-
 extension MushroomLook {
     static func of(_ agent: Agent?) -> MushroomLook {
         guard let agent else { return MushroomLook(seed: "?") }

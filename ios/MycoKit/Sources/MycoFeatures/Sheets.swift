@@ -15,7 +15,7 @@ struct MemberCardSheet: View {
                 let agent = status.agent
                 VStack(spacing: 18) {
                     VStack(spacing: 8) {
-                        AvatarView(.of(agent), size: 84, badge: AvatarView.Badge.of(agent), away: status.state == "offline")
+                        AvatarView(.of(agent), size: 84, away: status.state == "offline")
                         Text(session.displayName(of: name)).font(.title2.weight(.semibold)).foregroundStyle(MycoColor.fg)
                         if !agent.description.isEmpty {
                             Text(agent.description).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)

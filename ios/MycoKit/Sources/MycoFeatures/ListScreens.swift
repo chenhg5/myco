@@ -20,7 +20,6 @@ struct ChatsScreen: View {
             } label: {
                 PersonRow(
                     face: row.face.map(AvatarView.Face.of) ?? .computer,
-                    badge: row.face.flatMap(AvatarView.Badge.of),
                     title: row.title, subtitle: row.subtitle,
                     trailing: row.updatedAt.map { RelativeTime.short($0) },
                     tone: StatusTone.of(row.state), away: row.away)
@@ -136,7 +135,7 @@ struct MembersScreen: View {
                             router.sheet = .memberCard(status.agent.name)
                         } label: {
                             PersonRow(
-                                face: AvatarView.Face.of(status.agent), badge: AvatarView.Badge.of(status.agent),
+                                face: AvatarView.Face.of(status.agent),
                                 title: session.displayName(of: status.agent.name),
                                 subtitle: status.state == "working" ? Words.member(status) : status.agent.description,
                                 tone: StatusTone.of(member: status), away: status.state == "offline")
