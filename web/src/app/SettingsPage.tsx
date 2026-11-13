@@ -1,7 +1,7 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, ScrollText, Server, Terminal, Users,
+  AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -9,6 +9,9 @@ import {
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
+import { setHubLook, useHubLooks, type HubLook } from "@/app/hubLooks";
+import { colorIndex, HubFace } from "@/app/HubSwitcher";
+import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
@@ -241,6 +244,9 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [busy, setBusy] = useState<null | "start" | "stop">(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [renameTarget, setRenameTarget] = useState<Hub | null>(null);
+  const hubLooks = useHubLooks();
+  const [renameLook, setRenameLook] = useState<HubLook>({});
+  const [lookError, setLookError] = useState<unknown>(null);
   const [renameValue, setRenameValue] = useState("");
   const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
   const [stopOpen, setStopOpen] = useState(false);
@@ -279,7 +285,14 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const saveRename = () => {
     if (!renameTarget) return;
     renameHub(renameTarget.id, renameValue);
+    setHubLook(renameTarget.id, renameLook);
     setRenameTarget(null);
+  };
+  const openRename = (h: Hub) => {
+    setRenameTarget(h);
+    setRenameValue(h.name);
+    setRenameLook(hubLooks[h.id] || {});
+    setLookError(null);
   };
 
   const startLocal = async () => {
@@ -356,7 +369,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
               return (
                 <section className="app-setting-card" key={h.id}>
                   <div className="app-setting-head">
-                    <span className={cn("dot", h.ok ? "working" : "offline")} style={h.ok ? undefined : { background: "var(--red)" }} />
+                    <HubFace name={h.name} id={h.id} size={32} />
                     <div className="titles">
                       <h3>{h.name}</h3>
                       <p className="mono">{host(h.url)}</p>
@@ -364,9 +377,9 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     <button
                       type="button"
                       className="app-btn app-btn-plain"
-                      onClick={() => { setRenameTarget(h); setRenameValue(h.name); }}
-                      aria-label={L("重命名", "Rename")}
-                      title={L("重命名", "Rename")}
+                      onClick={() => openRename(h)}
+                      aria-label={L("改名字和头像", "Name and face")}
+                      title={L("改名字和头像", "Name and face")}
                     >
                       <Pencil />
                     </button>
@@ -527,9 +540,32 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <Modal
         open={!!renameTarget}
         onOpenChange={(o) => { if (!o) setRenameTarget(null); }}
-        title={L("重命名工作区", "Rename Hub")}
+        title={L("工作区的名字和头像", "The workspace's name and face")}
         description={L("只在这个 App 里显示，不会改到工作区上。", "Shows only in this app and doesn’t change the Hub.")}
       >
+        <div className="av-top">
+          <HubFace name={renameValue || renameTarget?.name} id={renameTarget?.id} look={renameLook} size={56} />
+          <div className="av-top-actions">
+            <PictureButton onPicture={(pic) => setRenameLook({ ...renameLook, pic })} onError={setLookError} />
+            {(renameLook.pic || renameLook.color !== undefined) && (
+              <button type="button" className="app-btn app-btn-quiet" onClick={() => setRenameLook({})}>
+                <RotateCcw />{L("用回原来的", "Back to the original")}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="av-colors is-hub" role="radiogroup" aria-label={L("颜色", "Colour")}>
+          {Array.from({ length: 8 }, (_, i) => {
+            const on = !renameLook.pic && (renameLook.color ?? colorIndex(renameTarget?.id || "")) === i;
+            return (
+              <button key={i} type="button" role="radio" aria-checked={on} className={cn("av-color app-hub-avatar", `c${i}`, on && "is-on")}
+                aria-label={L(`颜色 ${i + 1}`, `Colour ${i + 1}`)} onClick={() => setRenameLook({ color: i })}>
+                {on && <Check />}
+              </button>
+            );
+          })}
+        </div>
+        <ErrorText error={lookError} />
         <label className="app-field">
           <span className="app-field-label">{L("名称", "Name")}</span>
           <input
@@ -542,7 +578,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         </label>
         <div className="app-modal-actions">
           <button type="button" className="app-btn" onClick={() => setRenameTarget(null)}>{L("取消", "Cancel")}</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={saveRename} disabled={!renameValue.trim()}>{L("保存", "Save")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={saveRename}>{L("保存", "Save")}</button>
         </div>
       </Modal>
 

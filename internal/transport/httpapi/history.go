@@ -21,12 +21,13 @@ import (
 // cardOf is the part of an agent that agent.edit tracks.
 type card struct {
 	displayName, description string
+	avatar                   string
 	labels                   []string
 	skills                   []domain.Skill
 }
 
 func cardOf(a *domain.Agent) card {
-	return card{displayName: a.DisplayName, description: a.Description,
+	return card{displayName: a.DisplayName, description: a.Description, avatar: a.Avatar,
 		labels: slices.Clone(a.Labels), skills: slices.Clone(a.Skills)}
 }
 
@@ -38,6 +39,9 @@ func cardChanges(was, now card) []string {
 	}
 	if was.description != now.description {
 		out = append(out, "description: "+orDash(clip(now.description, 120)))
+	}
+	if was.avatar != now.avatar {
+		out = append(out, "avatar: "+orDash(now.avatar))
 	}
 	if d := setDiff(was.labels, now.labels); d != "" {
 		out = append(out, "labels: "+d)

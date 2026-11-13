@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LocalSession, LocalState, RecentItem } from "@/appapi";
-import { MessageCircle, Plus, Search, X } from "lucide-react";
+import { Camera, MessageCircle, Plus, Search, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -9,6 +9,7 @@ import { shortDir } from "@/app/AddToProject";
 import { Avatar, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { shareWorkspaces } from "@/app/AddToProject";
 import { ErrorText } from "@/app/dialogs";
+import { AvatarDialog } from "@/app/AvatarPicker";
 import { Inspector, OfflineCard } from "@/app/Inspector";
 import { useContextMenu } from "@/app/ContextMenu";
 import { L } from "@/lib/i18n";
@@ -133,6 +134,7 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
+  const [faceOpen, setFaceOpen] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const menu = useContextMenu();
   useEffect(() => {
@@ -179,7 +181,13 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
       <div className="ms-scrim" onClick={onClose} />
       <aside className="ms" role="dialog" aria-label={nodeName(a, row.hub)}>
         <button type="button" className="ms-close app-btn app-btn-plain" onClick={onClose} aria-label={L("关闭", "Close")}><X /></button>
-        <div className="ms-face"><Avatar agent={a} size={72} state={row.st.state} /></div>
+        <div className="ms-face">
+          <button type="button" className="ms-face-btn" onClick={() => setFaceOpen(true)} title={L("换个头像", "Change the face")} aria-label={L("换个头像", "Change the face")}>
+            <Avatar agent={a} size={72} state={row.st.state} />
+            <span className="ms-face-edit"><Camera /></span>
+          </button>
+        </div>
+        <AvatarDialog open={faceOpen} onOpenChange={setFaceOpen} hubId={row.hub.id} agent={a} onSaved={onChanged} />
         <input className="ms-name" value={name} onChange={(e) => setName(e.target.value)} aria-label={L("名字", "Name")} />
         <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />

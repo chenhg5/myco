@@ -84,6 +84,7 @@ func Build(o Options) (*Hub, error) {
 	ids, clock := security.IDs{}, app.SystemClock{}
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
+	agents.SetAvatarStore(agentsRepo)
 	messages := app.NewMessageService(agentsRepo, msgRepo, notify.NewMemory(), ids, clock, o.Policy)
 	// A session that waited in the last 30 minutes is most likely still open
 	// in front of someone (a desktop app or a terminal) between two waits:

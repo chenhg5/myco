@@ -43,6 +43,22 @@
   font-weight: 600;
   box-shadow: none;
 }
+/* A face that is a picture people chose: the picture fills the tile. */
+.pa.has-pic {
+  background: var(--pill);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.pa-pic {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.pa.is-away .pa-pic {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+}
 .pa.is-away .pa-sprite {
   opacity: 0.5;
   filter: grayscale(0.7);
@@ -1131,6 +1147,131 @@
   top: 10px;
   right: 10px;
 }
+/* The face on a member's card: click to choose another. */
+.ms-face-btn {
+  position: relative;
+  display: grid;
+  padding: 0;
+  border: 0;
+  border-radius: 26px;
+  background: none;
+  cursor: pointer;
+}
+.ms-face-edit {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.08);
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.ms-face-edit svg {
+  width: 13px;
+  height: 13px;
+}
+.ms-face-btn:hover .ms-face-edit,
+.ms-face-btn:focus-visible .ms-face-edit {
+  opacity: 1;
+}
+.ms-face-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ---------- choosing a face ---------- */
+.av-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+.av-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 0 14px;
+}
+.av-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.av-draw {
+  padding-top: 12px;
+  border-top: 1px solid var(--line-2);
+}
+.av-label {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.av-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.av-color {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.av-color svg {
+  width: 13px;
+  height: 13px;
+}
+.av-color.is-on {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--fg-2);
+}
+.av-colors.is-hub .av-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: inherit;
+}
+.av-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.av-cell {
+  display: grid;
+  place-items: center;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.av-cell .pa {
+  transition: transform 0.12s ease;
+}
+.av-cell:hover .pa {
+  transform: scale(1.06);
+}
+.av-cell.is-on .pa {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--fg-2);
+}
+.av-sprout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
 .ms-name {
   width: 100%;
   margin-top: 14px;

@@ -45,7 +45,11 @@ export interface MachineRemoval {
   removed: string[];
   dry_run: boolean;
 }
-export interface ProfileInput { display_name?: string; description?: string }
+export interface ProfileInput {
+  display_name?: string; description?: string;
+  /** "" (the default face), "look:..." or a picture as a data: URL */
+  avatar?: string;
+}
 
 /** CLIs that a machine can be asked to start a new session with. */
 /** An agent CLI to start a session with, or "exec": a shell node that runs the commands it is sent. */
@@ -415,6 +419,9 @@ export const appApi = {
   /** Closes an open message for its recipient without replying (owner or admin). */
   dismissMessage: (hubId: string, messageId: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/dismiss`),
+  /** An agent's picture face; v (its avatar word) changes with the picture. */
+  avatarUrl: (hubId: string, name: string, v: string) =>
+    `app/hubs/${enc(hubId)}/agents/${enc(name)}/avatar?v=${encodeURIComponent(v)}`,
   updateProfile: (hubId: string, name: string, input: ProfileInput) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/profile`, input),
   // Projects

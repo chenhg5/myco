@@ -4,6 +4,7 @@ package httpapi
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -194,6 +195,7 @@ func (s *Server) routes() {
 	}))
 	m.HandleFunc("PUT /v1/agents/{name}/visibility", s.admin(s.setVisibility))
 	m.HandleFunc("GET /v1/agents/{name}/history", s.admin(s.agentHistory))
+	m.HandleFunc("GET /v1/agents/{name}/avatar", s.adminOrAgent(s.agentAvatar))
 	m.HandleFunc("PUT /v1/agents/{name}/profile", s.cardEditor("edit", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
 		s.updateProfile(w, r, r.PathValue("name"), by)
 	}))
@@ -863,7 +865,12 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	if !ok {
 		return
 	}
-	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk)
+	av, err := avatarOf(req.Avatar)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk, av)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -875,6 +882,55 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	dto := s.agentDTO(a)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
+}
+
+// avatarOf reads a profile's avatar: a drawn face's word, or a picture sent
+// as a data: URL (its type is read from the bytes later, not from the URL).
+func avatarOf(v *string) (*app.Avatar, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rest, ok := strings.CutPrefix(*v, "data:")
+	if !ok {
+		return &app.Avatar{Look: *v}, nil
+	}
+	meta, body, ok := strings.Cut(rest, ",")
+	if !ok || !strings.HasSuffix(meta, ";base64") || base64.StdEncoding.DecodedLen(len(body)) > domain.MaxAvatarPicture+3 {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "avatar picture must be a base64 data: URL of at most %d bytes", domain.MaxAvatarPicture)
+	}
+	data, err := base64.StdEncoding.DecodeString(body)
+	if err != nil {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "avatar picture is not valid base64")
+	}
+	if data == nil {
+		data = []byte{}
+	}
+	return &app.Avatar{Picture: data}, nil
+}
+
+// agentAvatar serves the picture an agent uses as its face, to whoever may
+// see the agent.
+func (s *Server) agentAvatar(w http.ResponseWriter, r *http.Request) {
+	a, err := s.agents.Get(r.Context(), r.PathValue("name"))
+	if err == nil && !s.viewerOf(r).Sees(a) {
+		err = domain.Errf(domain.CodeNotFound, "agent %s not found", r.PathValue("name"))
+	}
+	var ct string
+	var data []byte
+	if err == nil {
+		ct, data, err = s.agents.AvatarPicture(r.Context(), a)
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("ETag", `"`+a.Avatar+`"`)
+	_, _ = w.Write(data)
 }
 
 func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agent) {

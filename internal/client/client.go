@@ -1102,3 +1102,28 @@ func (c *Client) Devices(ctx context.Context) ([]api.ConsoleToken, error) {
 func (c *Client) RemoveDevice(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/console/me/devices/"+esc(id), nil, nil, nil)
 }
+
+// AgentAvatar returns the picture an agent uses as its face and its type.
+func (c *Client) AgentAvatar(ctx context.Context, name string) (string, []byte, error) {
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/v1/agents/" + url.PathEscape(name) + "/avatar"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", nil, err
+	}
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return "", nil, decodeError(resp.StatusCode, data)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	return resp.Header.Get("Content-Type"), data, nil
+}

@@ -49,6 +49,8 @@ let msgSeq = 0;
 const uploads = new Map();
 // What was uploaded, by file id (served back to the app).
 const uploadBytes = new Map();
+// Pictures agents use as faces, by "hub/name".
+const avatarPics = new Map();
 
 // A real PNG (a soft diagonal gradient with a band), for pictures the mock's
 // agents send back: the app shows them as thumbnails.
@@ -1910,8 +1912,27 @@ const server = http.createServer(async (req, res) => {
         hub.recent = hub.recent.filter((m) => m.from !== agent.name && m.to !== agent.name);
         return send(res, 204);
       }
+      if (parts.length === 6 && parts[5] === "avatar" && method === "GET") {
+        const pic = avatarPics.get(`${hub.id}/${agent.name}`);
+        if (!pic || !String(agent.avatar || "").startsWith("pic:")) return fail(res, 404, "not_found", `${agent.name} has no picture`);
+        res.writeHead(200, { "Content-Type": pic.type, "Content-Length": pic.data.length, "Cache-Control": "private, max-age=86400, immutable" });
+        return res.end(pic.data);
+      }
       if (parts.length === 6 && parts[5] === "profile" && method === "PUT") {
         const body = await readBody(req);
+        if (body?.avatar !== undefined) {
+          // A hub before faces refuses the field, as a real one does.
+          if (process.env.MOCK_OLD_HUB) return fail(res, 400, "invalid_argument", 'invalid JSON body: json: unknown field "avatar"');
+          const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,(.+)$/.exec(body.avatar);
+          if (m) {
+            avatarPics.set(`${hub.id}/${agent.name}`, { type: m[1], data: Buffer.from(m[2], "base64") });
+            agent.avatar = `pic:${(state.counter += 1).toString(16)}`;
+          } else if (body.avatar === "" || /^look:[a-z0-9-]{1,48}$/.test(body.avatar)) {
+            agent.avatar = body.avatar || undefined;
+          } else {
+            return fail(res, 400, "invalid_argument", "avatar must be empty, look:<parts> or a picture");
+          }
+        }
         if (body?.display_name !== undefined) agent.display_name = body.display_name || undefined;
         if (body?.description !== undefined) agent.description = body.description;
         return send(res, 200, agent);

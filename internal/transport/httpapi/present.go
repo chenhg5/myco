@@ -34,7 +34,7 @@ func skillsFromAPI(in []api.Skill) []domain.Skill {
 
 func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	out := api.Agent{
-		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Description: a.Description,
+		ID: a.ID, Name: string(a.Name), DisplayName: a.DisplayName, Avatar: a.Avatar, Description: a.Description,
 		Capabilities: nonNil(a.Capabilities),
 		Skills:       skillsDTO(a.Skills),
 		Visibility:   string(domain.VisibilityTeam),

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -19,7 +20,12 @@ type AgentService struct {
 	aliases      domain.AliasRepository
 	visibility   func(ctx context.Context, owner string) domain.Visibility
 	projects     domain.ProjectRepository
+	avatars      domain.AvatarStore
 }
+
+// SetAvatarStore keeps the pictures agents use as faces (without one, only
+// drawn faces can be chosen).
+func (s *AgentService) SetAvatarStore(st domain.AvatarStore) { s.avatars = st }
 
 // SetDefaultVisibility decides the visibility of new agents from their
 // owner (see DefaultVisibility).
@@ -388,13 +394,18 @@ func (s *AgentService) SetStatus(ctx context.Context, name string, text string) 
 
 // UpdateProfile changes cosmetic fields and, for the admin, allow_from
 // (nil = unchanged). The agent's token is not touched.
-func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string, allowFrom *[]string, acceptExecRisk bool) (*domain.Agent, error) {
+func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string, allowFrom *[]string, acceptExecRisk bool, avatar *Avatar) (*domain.Agent, error) {
 	a, err := s.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if err := a.SetProfile(displayName, description); err != nil {
 		return nil, err
+	}
+	if avatar != nil {
+		if err := s.setAvatar(ctx, a, *avatar); err != nil {
+			return nil, err
+		}
 	}
 	if allowFrom != nil {
 		names, err := domain.ParseAgentNames(*allowFrom)
@@ -406,6 +417,44 @@ func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayNa
 		}
 	}
 	return a, s.agents.Save(ctx, a)
+}
+
+// Avatar is a face chosen for an agent: a drawn one (Look, "" for the
+// default) or a picture.
+type Avatar struct {
+	Look    string
+	Picture []byte
+}
+
+func (s *AgentService) setAvatar(ctx context.Context, a *domain.Agent, av Avatar) error {
+	if av.Picture == nil {
+		look, err := domain.ParseAvatarLook(av.Look)
+		if err != nil {
+			return err
+		}
+		a.Avatar = look
+		return nil
+	}
+	if s.avatars == nil {
+		return domain.Errf(domain.CodeInvalidArgument, "this hub does not keep pictures as faces")
+	}
+	ct, word, err := domain.CheckAvatarPicture(av.Picture)
+	if err != nil {
+		return err
+	}
+	if err := s.avatars.PutAvatar(ctx, a.Name, ct, av.Picture); err != nil {
+		return err
+	}
+	a.Avatar = word
+	return nil
+}
+
+// AvatarPicture returns the picture an agent uses as its face.
+func (s *AgentService) AvatarPicture(ctx context.Context, a *domain.Agent) (string, []byte, error) {
+	if s.avatars == nil || !strings.HasPrefix(a.Avatar, "pic:") {
+		return "", nil, domain.Errf(domain.CodeNotFound, "agent %s has no picture", a.Name)
+	}
+	return s.avatars.GetAvatar(ctx, a.Name)
 }
 
 // SetOwner gives an agent to a member.

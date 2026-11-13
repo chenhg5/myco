@@ -20,15 +20,15 @@ var _ domain.AgentRepository = (*AgentRepo)(nil)
 
 const agentCols = `id, name, description, capabilities, delivery, allow_from, token_hash, created_at, last_seen_at,
   harness, session_id, environment, workdir, delivery_url, delivery_secret, delivery_params, enrolled_by, labels, display_name, status_text, status_at,
-  machine_id, runtime, owner, skills, visibility`
+  machine_id, runtime, owner, skills, visibility, avatar`
 
 func (r *AgentRepo) Create(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
-	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Description, caps, d.Mode, allow, a.TokenHash, ms(a.CreatedAt), ms(a.LastSeenAt),
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, a.EnrolledBy, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility))
+		a.StatusText, ms(a.StatusAt), a.MachineID, runtimeJSON(a.Runtime), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "agent %s already exists", a.Name)
 	}
@@ -39,10 +39,10 @@ func (r *AgentRepo) Save(ctx context.Context, a *domain.Agent) error {
 	caps, allow, params := encodeLists(a)
 	b, d := a.Binding, a.Delivery
 	res, err := r.db.ExecContext(ctx, `UPDATE agents SET description=?, capabilities=?, delivery=?, allow_from=?, token_hash=?,
-		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=?, display_name=?, status_text=?, status_at=?, owner=?, skills=?, visibility=? WHERE name=?`,
+		harness=?, session_id=?, environment=?, workdir=?, delivery_url=?, delivery_secret=?, delivery_params=?, labels=?, display_name=?, status_text=?, status_at=?, owner=?, skills=?, visibility=?, avatar=? WHERE name=?`,
 		a.Description, caps, d.Mode, allow, a.TokenHash,
 		b.Harness, b.SessionID, b.Environment, b.Workdir, d.URL, d.Secret, params, labelsJSON(a.Labels), a.DisplayName,
-		a.StatusText, ms(a.StatusAt), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Name)
+		a.StatusText, ms(a.StatusAt), a.Owner, skillsJSON(a.Skills), string(a.Visibility), a.Avatar, a.Name)
 	if err != nil {
 		return internal(err)
 	}
@@ -122,7 +122,7 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	b, d := &a.Binding, &a.Delivery
 	if err := s.Scan(&a.ID, &a.Name, &a.Description, &caps, &d.Mode, &allow, &a.TokenHash, &created, &lastSeen,
 		&b.Harness, &b.SessionID, &b.Environment, &b.Workdir, &d.URL, &d.Secret, &params, &a.EnrolledBy, &labels, &a.DisplayName, &a.StatusText, &statusAt,
-		&a.MachineID, &runtime, &a.Owner, &skills, &visibility); err != nil {
+		&a.MachineID, &runtime, &a.Owner, &skills, &visibility, &a.Avatar); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(caps), &a.Capabilities)
@@ -179,6 +179,35 @@ func (r *AgentRepo) SetMachine(ctx context.Context, name domain.AgentName, machi
 
 func (r *AgentRepo) SetRuntime(ctx context.Context, name domain.AgentName, rt domain.Runtime) error {
 	return r.setColumn(ctx, name, "runtime", runtimeJSON(rt))
+}
+
+var _ domain.AvatarStore = (*AgentRepo)(nil)
+
+// PutAvatar keeps the picture an agent uses as its face (in its row, read
+// only when asked for, so lists stay light).
+func (r *AgentRepo) PutAvatar(ctx context.Context, name domain.AgentName, contentType string, data []byte) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE agents SET avatar_type=?, avatar_data=? WHERE name=?`, contentType, data, name)
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeNotFound, "agent %s not found", name)
+	}
+	return nil
+}
+
+// GetAvatar returns the agent's picture, NotFound if it has none.
+func (r *AgentRepo) GetAvatar(ctx context.Context, name domain.AgentName) (string, []byte, error) {
+	var ct string
+	var data []byte
+	err := r.db.QueryRowContext(ctx, `SELECT avatar_type, avatar_data FROM agents WHERE name=?`, name).Scan(&ct, &data)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && len(data) == 0) {
+		return "", nil, domain.Errf(domain.CodeNotFound, "agent %s has no picture", name)
+	}
+	if err != nil {
+		return "", nil, internal(err)
+	}
+	return ct, data, nil
 }
 
 // setColumn updates one of the runner-reported columns (fixed names only).

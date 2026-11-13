@@ -3,6 +3,7 @@ package console_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -448,5 +449,47 @@ func TestAttachFromTheApp(t *testing.T) {
 	}
 	if resp2, _ = get("f_nope", ""); resp2.StatusCode != 404 {
 		t.Fatalf("unknown file: %d", resp2.StatusCode)
+	}
+}
+
+func TestAvatarFromTheApp(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	if _, err := r.admin.Register(ctx, api.RegisterRequest{Name: "lead", Binding: api.Binding{Harness: "claude", SessionID: "s-lead"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	code, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("test-mac")})
+	if code != 201 {
+		t.Fatalf("add hub: %d %v", code, h)
+	}
+	id := h["id"].(string)
+
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	code, a, raw := r.do("PUT", "/app/hubs/"+id+"/agents/lead/profile", map[string]any{"avatar": "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)})
+	word, _ := a["avatar"].(string)
+	if code != 200 || !strings.HasPrefix(word, "pic:") {
+		t.Fatalf("set picture: %d %s", code, raw)
+	}
+	resp, err := http.Get(r.app.URL + "/app/hubs/" + id + "/agents/lead/avatar?v=" + word)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(got, png) || resp.Header.Get("Content-Type") != "image/png" ||
+		!strings.Contains(resp.Header.Get("Cache-Control"), "immutable") {
+		t.Fatalf("avatar: %d %v", resp.StatusCode, resp.Header)
+	}
+
+	if code, a, raw = r.do("PUT", "/app/hubs/"+id+"/agents/lead/profile", map[string]any{"avatar": "look:c2-p0-f1-s0"}); code != 200 || a["avatar"] != "look:c2-p0-f1-s0" {
+		t.Fatalf("set look: %d %s", code, raw)
+	}
+	resp, err = http.Get(r.app.URL + "/app/hubs/" + id + "/agents/lead/avatar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("no picture: %d", resp.StatusCode)
 	}
 }

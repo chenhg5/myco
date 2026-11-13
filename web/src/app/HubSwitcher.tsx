@@ -3,6 +3,7 @@ import {
   Check, ChevronDown, ChevronUp, Plus, Settings,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
+import { useHubLooks, type HubLook } from "@/app/hubLooks";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -21,19 +22,29 @@ function initial(name: string): string {
 }
 
 /** Stable, soft colour per hub id. */
-function colorIndex(id: string): number {
+export function colorIndex(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return h % 8;
 }
 
-function Avatar({ name, id }: { name?: string; id?: string }) {
+/** A workspace's face: the picture or colour chosen in this App, else a
+ *  colour from its id; the first letter of its name on the colour. */
+export function HubFace({ name, id, look, size }: { name?: string; id?: string; look?: HubLook; size?: number }) {
+  const looks = useHubLooks();
+  const l = look ?? (id ? looks[id] : undefined);
+  const box = size ? { width: size, height: size, fontSize: Math.round(size * 0.43), borderRadius: Math.round(size * 0.29) } : undefined;
+  if (l?.pic) {
+    return <span className="app-hub-avatar has-pic" style={box}><img src={l.pic} alt="" draggable={false} /></span>;
+  }
   return (
-    <span className={cn("app-hub-avatar", `c${colorIndex(id || name || "")}`)}>
+    <span className={cn("app-hub-avatar", `c${l?.color ?? colorIndex(id || name || "")}`)} style={box}>
       {initial(name || "")}
     </span>
   );
 }
+
+const Avatar = HubFace;
 
 function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | undefined {
   const o = hubsOv?.find((h) => h.id === id)?.overview;

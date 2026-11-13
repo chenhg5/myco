@@ -19,7 +19,7 @@ import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { ComputersPage } from "@/app/Computers";
-import { Avatar, AvatarStack, isWorkspace, rememberMachines, whereOf } from "@/app/persona";
+import { Avatar, AvatarStack, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -183,7 +183,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
     rememberMachines(namedOv.hubs.flatMap((h) => h.overview?.machines || []));
-    return namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
+    const out = namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
+    rememberAgentHubs(out.map((r) => ({ hubId: r.hub.id, agentId: r.st.agent.id })));
+    return out;
   }, [namedOv]);
 
   // A workspace removed from the app is not chosen any more: the first one

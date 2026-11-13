@@ -256,11 +256,12 @@ func (b *Backend) Handler() http.Handler {
 		var in struct {
 			DisplayName *string `json:"display_name"`
 			Description *string `json:"description"`
+			Avatar      *string `json:"avatar"`
 		}
 		if !decode(w, r, &in) {
 			return
 		}
-		a, err := c.UpdateProfile(r.Context(), r.PathValue("name"), api.ProfileRequest{DisplayName: in.DisplayName, Description: in.Description})
+		a, err := c.UpdateProfile(r.Context(), r.PathValue("name"), api.ProfileRequest{DisplayName: in.DisplayName, Description: in.Description, Avatar: in.Avatar})
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -438,6 +439,29 @@ func (b *Backend) Handler() http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; sandbox")
 		// A file id never names other content: the app may keep it.
 		w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+		_, _ = w.Write(data)
+	}))
+	// An agent's picture face. The app asks with ?v=<its avatar word>, which
+	// changes with the picture, so the answer may be kept.
+	m.HandleFunc("GET /app/hubs/{id}/agents/{name}/avatar", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		ct, data, err := c.AgentAvatar(r.Context(), r.PathValue("name"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if !inlineImage(ct) {
+			writeErr(w, &client.Error{Code: "not_found", Message: "not a picture", Status: http.StatusNotFound})
+			return
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		_, _ = w.Write(data)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/files/{fid}/save", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {

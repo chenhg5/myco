@@ -138,6 +138,10 @@ type Agent struct {
 	// the immutable address.
 	DisplayName string
 	Description string
+	// Avatar is the face people chose for it (see avatar.go): "" for the
+	// one drawn from its id, "look:..." for a drawn one they picked, or
+	// "pic:<hash>" for a picture kept in the AvatarStore.
+	Avatar string
 	// Capabilities are the names of Skills (kept for clients and filters
 	// that predate skills).
 	Capabilities []string

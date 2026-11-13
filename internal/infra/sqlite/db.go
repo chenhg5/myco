@@ -273,6 +273,11 @@ var agentColumnsV2 = [][2]string{
 	{"runtime", "TEXT NOT NULL DEFAULT '{}'"},
 	// Members (v0.18): the person who added the agent.
 	{"owner", "TEXT NOT NULL DEFAULT ''"},
+	// Faces people chose: the avatar word, and the picture
+	// when it is one.
+	{"avatar", "TEXT NOT NULL DEFAULT ''"},
+	{"avatar_type", "TEXT NOT NULL DEFAULT ''"},
+	{"avatar_data", "BLOB"},
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).

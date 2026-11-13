@@ -31,10 +31,14 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	DisplayName string   `json:"display_name,omitempty"`
-	Aliases     []string `json:"aliases,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	// Avatar is the face people chose: "look:<parts>" (drawn by clients)
+	// or "pic:<hash>" (GET /v1/agents/{name}/avatar; the hash changes with
+	// the picture). Empty: draw the default one from the id.
+	Avatar  string   `json:"avatar,omitempty"`
+	Aliases []string `json:"aliases,omitempty"`
 	// State is working (has a task in progress or held), pending (tasks
 	// queued, none started), idle or offline; Queued/InProgress/Held count
 	// open messages addressed to it.
@@ -323,6 +327,11 @@ type StatusRequest struct {
 type ProfileRequest struct {
 	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
+	// Avatar sets the face: "" for the default one drawn from the id,
+	// "look:<parts>" for a drawn one chosen in a client, or a picture as a
+	// data: URL (PNG, JPEG, WebP or GIF, at most 192 KiB). Hubs before
+	// avatars refuse it as an unknown field.
+	Avatar *string `json:"avatar,omitempty"`
 	// AllowFrom replaces who may send tasks/notes (admin only; [] = anyone,
 	// refused for exec nodes). The agent's token is not changed.
 	AllowFrom *[]string `json:"allow_from,omitempty"`

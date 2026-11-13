@@ -58,6 +58,9 @@ export interface ProjectDoc {
 }
 export interface Agent {
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
+  /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
+   *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */
+  avatar?: string;
   status_text?: string; status_at?: string;
   /** names of skills (hubs before skills: the only list) */
   capabilities: string[];

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { Agent } from "@/api";
+import { appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, cliIcon } from "@/app/nodes";
 import { cn } from "@/lib/utils";
@@ -37,15 +39,42 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-export function looksOf(seed: string) {
+/** A drawn face's parts, as indexes: cap colour, spots, face, a sprout. */
+export type Look = { cap: number; pattern: number; face: number; sprout: boolean };
+
+/** How many of each part there are (for a picker). */
+export const LOOK_PARTS = { caps: CAPS, patterns: CAP_PATTERNS.length, faces: FACES.length };
+
+/** The parts drawn from a seed (an agent's id): its default face. */
+export function lookOfSeed(seed: string): Look {
   const h = hash(seed || "?");
   return {
-    cap: CAPS[h % CAPS.length],
-    pattern: CAP_PATTERNS[(h >>> 8) % CAP_PATTERNS.length],
-    face: FACES[(h >>> 12) % FACES.length],
+    cap: h % CAPS.length,
+    pattern: (h >>> 8) % CAP_PATTERNS.length,
+    face: (h >>> 12) % FACES.length,
     // a sprout on top, now and then
     sprout: ((h >>> 16) % 4) === 0,
   };
+}
+
+/** The parts of a chosen drawn face ("look:c3-p1-f2-s1"), or null. */
+export function parseLook(avatar?: string): Look | null {
+  const m = /^look:c(\d+)-p(\d+)-f(\d+)-s([01])$/.exec(avatar || "");
+  if (!m) return null;
+  const [cap, pattern, face] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (cap >= CAPS.length || pattern >= CAP_PATTERNS.length || face >= FACES.length) return null;
+  return { cap, pattern, face, sprout: m[4] === "1" };
+}
+
+/** The avatar word a hub keeps for a drawn face. */
+export function lookWord(l: Look): string {
+  return `look:c${l.cap}-p${l.pattern}-f${l.face}-s${l.sprout ? 1 : 0}`;
+}
+
+/** What a face looks like: the chosen parts, else the ones from its seed. */
+export function looksOf(seed: string, avatar?: string) {
+  const l = parseLook(avatar) || lookOfSeed(seed);
+  return { cap: CAPS[l.cap], pattern: CAP_PATTERNS[l.pattern], face: FACES[l.face], sprout: l.sprout };
 }
 
 const FILL: Record<string, string> = {
@@ -53,8 +82,8 @@ const FILL: Record<string, string> = {
   g: "var(--av-eye)", b: "rgba(232,110,110,0.55)",
 };
 
-function MushroomFace({ seed }: { seed: string }) {
-  const l = looksOf(seed);
+export function MushroomFace({ seed, avatar }: { seed: string; avatar?: string }) {
+  const l = looksOf(seed, avatar);
   const rows = [...l.pattern, ...l.face];
   return (
     <svg className="pa-sprite" viewBox="0 -2 12 14" shapeRendering="crispEdges" aria-hidden="true">
@@ -154,6 +183,20 @@ function WorkspaceFace({ os }: { os?: string }) {
   );
 }
 
+/** Which workspace each agent is on (by agent id), so a face that is a
+ *  picture can be asked for: the app tells it here once per refresh. */
+const agentHub = new Map<string, string>();
+export function rememberAgentHubs(rows: { hubId: string; agentId: string }[]) {
+  for (const r of rows) agentHub.set(r.agentId, r.hubId);
+}
+
+/** Where the picture an agent chose as its face is, if it chose one. */
+export function pictureOf(agent: Agent): string | null {
+  if (!agent.avatar?.startsWith("pic:")) return null;
+  const hub = agentHub.get(agent.id);
+  return hub ? appApi.avatarUrl(hub, agent.name, agent.avatar) : null;
+}
+
 /** Whether a node is a workspace (a place agents run commands in). */
 export function isWorkspace(a: Agent): boolean {
   return agentKind(a) === "shell";
@@ -172,13 +215,17 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
   className?: string;
 }) {
   const ws = isWorkspace(agent);
-  const l = looksOf(agent.id || agent.name);
+  const l = looksOf(agent.id || agent.name, agent.avatar);
+  const pic = pictureOf(agent);
+  // A picture that will not load (an older workspace, gone) falls back.
+  const [broken, setBroken] = useState<string | null>(null);
+  const picture = pic && broken !== pic ? <img className="pa-pic" src={pic} alt="" draggable={false} onError={() => setBroken(pic)} /> : null;
   // A person is a person: the first letter of their name, in a circle.
   if (agent.kind === "human" || agent.binding.harness === "human") {
     const name = agent.display_name || agent.name;
     return (
-      <span className={cn("pa is-person", className)} style={{ width: size, height: size, fontSize: Math.round(size * 0.45), ["--av-cap" as string]: l.cap }} aria-hidden="true">
-        {[...name.trim()][0]?.toUpperCase() || "?"}
+      <span className={cn("pa is-person", picture && "has-pic", className)} style={{ width: size, height: size, fontSize: Math.round(size * 0.45), ["--av-cap" as string]: l.cap }} aria-hidden="true">
+        {picture || [...name.trim()][0]?.toUpperCase() || "?"}
         {state && state !== "idle" && <span className={cn("pa-state", `is-${state}`)} />}
       </span>
     );
@@ -187,11 +234,11 @@ export function Avatar({ agent, size = 32, state, badge = true, className }: {
   const cli = agent.runtime?.cli || agent.binding.harness || "";
   return (
     <span
-      className={cn("pa", ws && "is-workspace", state === "offline" && "is-away", className)}
+      className={cn("pa", ws && "is-workspace", picture && "has-pic", state === "offline" && "is-away", className)}
       style={{ width: size, height: size, ["--av-cap" as string]: l.cap }}
       aria-hidden="true"
     >
-      {ws ? <WorkspaceFace os={agent.machine_id ? machineOs.get(agent.machine_id) : undefined} /> : <MushroomFace seed={agent.id || agent.name} />}
+      {picture || (ws ? <WorkspaceFace os={agent.machine_id ? machineOs.get(agent.machine_id) : undefined} /> : <MushroomFace seed={agent.id || agent.name} avatar={agent.avatar} />)}
       {badge && !ws && size >= 28 && (
         <span className={cn("pa-badge", cli.startsWith("claude") && "is-claude", cli.startsWith("codex") && "is-codex")}>
           {cli.startsWith("codex") ? <CodexMark /> : <Badge />}

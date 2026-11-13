@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/app"
+	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/hubserver"
 )
 
@@ -771,4 +773,57 @@ func TestConsoleFiles(t *testing.T) {
 	// An agent cannot use the console's door, and an unknown file is not found.
 	h.doReq("GET", "/v1/console/files/"+bid, alice, nil, nil).wantErr(t, 403, "permission_denied")
 	h.doReq("GET", "/v1/console/files/f_nope", adminToken, nil, nil).wantErr(t, 404, "not_found")
+}
+
+func TestAgentAvatar(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	h.register("bob", nil)
+
+	// A drawn face chosen in a client: kept as its word.
+	r := h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": "look:c3-p1-f2-s1"}).want(t, 200)
+	if r.body["avatar"] != "look:c3-p1-f2-s1" {
+		t.Fatalf("look: %s", r.raw)
+	}
+	h.doReq("GET", "/v1/agents/bob/avatar", alice, nil, nil).wantErr(t, 404, "not_found")
+	h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": "look:<script>"}).wantErr(t, 400, "invalid_argument")
+
+	// A picture: its type is read from the bytes; the word changes with it.
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)
+	url := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	r = h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": url}).want(t, 200)
+	word, _ := r.body["avatar"].(string)
+	if !strings.HasPrefix(word, "pic:") {
+		t.Fatalf("picture: %s", r.raw)
+	}
+	r = h.doReq("GET", "/v1/agents/bob/avatar", alice, nil, nil).want(t, 200)
+	if !bytes.Equal(r.raw, png) || r.header.Get("Content-Type") != "image/png" || r.header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("avatar: %v %d bytes", r.header, len(r.raw))
+	}
+	r = h.doReq("GET", "/v1/agents/bob", alice, nil, nil).want(t, 200)
+	if r.body["avatar"] != word {
+		t.Fatalf("agent shows its avatar: %s", r.raw)
+	}
+
+	// Not a picture, whatever the URL says; too large; not base64.
+	svg := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`))
+	h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": svg}).wantErr(t, 400, "invalid_argument")
+	big := "data:image/png;base64," + base64.StdEncoding.EncodeToString(append(png, make([]byte, domain.MaxAvatarPicture)...))
+	h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": big}).wantErr(t, 400, "invalid_argument")
+	h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": "data:image/png;base64,%%%"}).wantErr(t, 400, "invalid_argument")
+
+	// Another agent may not change bob's face; bob may change its own.
+	h.do("PUT", "/v1/agents/bob/profile", alice, map[string]any{"avatar": ""}).wantErr(t, 403, "permission_denied")
+	r = h.do("PUT", "/v1/me/profile", alice, map[string]any{"avatar": "look:c1-p0-f0-s0"}).want(t, 200)
+	if r.body["avatar"] != "look:c1-p0-f0-s0" {
+		t.Fatalf("own avatar: %s", r.raw)
+	}
+
+	// Back to the default face: no picture any more.
+	r = h.do("PUT", "/v1/agents/bob/profile", adminToken, map[string]any{"avatar": ""}).want(t, 200)
+	if _, ok := r.body["avatar"]; ok {
+		t.Fatalf("cleared: %s", r.raw)
+	}
+	h.doReq("GET", "/v1/agents/bob/avatar", alice, nil, nil).wantErr(t, 404, "not_found")
+	h.doReq("GET", "/v1/agents/nobody/avatar", alice, nil, nil).wantErr(t, 404, "not_found")
 }

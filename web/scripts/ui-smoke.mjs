@@ -24,6 +24,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
+// A 1x1 PNG, for choosing a picture as a face.
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const VITE_PORT = Number(process.env.UI_SMOKE_PORT || 5173);
 // vite.config.ts proxies /app to this port, so it is not configurable.
 const MOCK_PORT = 7781;
@@ -1007,6 +1009,38 @@ async function runMatrix(browser, size, scheme) {
         await dlg.getByRole("button", { name: "取消" }).click();
         await dlg.waitFor({ state: "hidden" });
       }
+      // A face of its own: a mushroom picked from the grid, then a picture,
+      // then back to the original.
+      await page.locator(".ms").evaluate((el) => el.scrollTo(0, 0));
+      await clickVisible(page, page.locator(".ms .ms-face-btn"));
+      const face = page.locator(".app-modal.av-modal");
+      await face.waitFor({ timeout: 5_000 });
+      await face.locator(".av-color").nth(2).click();
+      await face.locator(".av-cell").nth(5).click();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-face");
+      await face.getByRole("button", { name: "用这个头像" }).click();
+      await face.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForFunction(() => {
+        const cap = document.querySelector(".ms .ms-face .pa")?.style.getPropertyValue("--av-cap");
+        return cap && cap.toLowerCase() === "#e7a33e";
+      }, null, { timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-face-btn"));
+      await face.waitFor({ timeout: 5_000 });
+      await face.locator("input[type=file]").setInputFiles({ name: "me.png", mimeType: "image/png", buffer: Buffer.from(TINY_PNG, "base64") });
+      await face.locator(".av-top .pa-pic").waitFor({ timeout: 5_000 });
+      await face.getByRole("button", { name: "用这个头像" }).click();
+      await face.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.waitForFunction(() => {
+        const img = document.querySelector(".ms .ms-face .pa-pic");
+        return img && img.complete && img.naturalWidth > 0;
+      }, null, { timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-face-btn"));
+      await face.waitFor({ timeout: 5_000 });
+      await face.getByRole("button", { name: "用回原来的" }).click();
+      await face.getByRole("button", { name: "用这个头像" }).click();
+      await face.waitFor({ state: "hidden", timeout: 5_000 });
+      await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 10_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
