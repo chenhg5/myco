@@ -2883,6 +2883,14 @@ textarea.app-input {
   color: var(--faint);
   opacity: 0;
 }
+/* A finished run's time, tokens and cost, with its answer's time. */
+.conv-usage {
+  font-variant-numeric: tabular-nums;
+}
+.conv-usage::after {
+  content: "·";
+  margin-left: 6px;
+}
 .conv-msg:hover .conv-msg-meta,
 .conv-msg:focus-within .conv-msg-meta,
 .conv-msg-meta.is-shown {

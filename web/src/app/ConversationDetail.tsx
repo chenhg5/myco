@@ -60,6 +60,9 @@ function dayTime(iso: string): string {
   return d.toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+// A pause this long between two messages gets a divider with the time.
+const GAP_MS = 30 * 60 * 1000;
+
 // A task open longer than this is not being worked on any more.
 const OPEN_FOR_MS = 12 * 3600 * 1000;
 
@@ -403,6 +406,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // makes the conversation taller above the bottom: at the bottom, it
   // stays at the bottom instead of the last lines being pushed down.
   const timelineRef = useRef<HTMLDivElement>(null);
+  // Each finished run's time, tokens and cost (from its trace), shown next
+  // to its answer's time and copy instead of under the steps.
+  const [usageOf, setUsageOf] = useState<Record<string, string>>({});
+  const onUsage = (taskId: string, line: string) =>
+    setUsageOf((u) => (u[taskId] === line ? u : { ...u, [taskId]: line }));
   useEffect(() => {
     const el = timelineRef.current;
     const sc = scrollRef.current;
@@ -948,13 +956,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const fromOther = !observed && alsoSet.has(m.from);
       const toOther = !observed && m.from === target.agent && alsoSet.has(m.to);
       const mine = observed ? m.from === target.agent : isMe(m.from, row?.hub) || fromOther;
-      // Watching two nodes: an answer that does not come right after what it
-      // answers quotes it, as chat apps do; its progress folds under it.
-      const answers = observed ? taskOfAnswer.get(m.id) : undefined;
+      // An answer that does not come right after what it answers (several
+      // answered at once, others in between) quotes it, as chat apps do, so
+      // it is never an answer to nothing. Watching two nodes, its progress
+      // folds under it (in your own chats it is in the run).
+      const answers = taskOfAnswer.get(m.id);
       const asked = answers ? shown?.find((x) => x.id === answers) : undefined;
       // (an answer naming a message not loaded here quotes "an earlier one")
       const quote = !!answers && prevShown.get(m.id) !== answers && (!!asked || !!m.reply_to);
-      const steps = answers ? progressOf.get(answers) : undefined;
+      const steps = observed && answers ? progressOf.get(answers) : undefined;
+      const usage = answers ? usageOf[answers] : undefined;
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
@@ -996,6 +1007,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <div className={cn("conv-msg-meta", failedNote && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
+            {usage && <span className="conv-usage">{usage}</span>}
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && <CopyMessage text={m.body} />}
           </div>
@@ -1017,10 +1029,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} />)}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} />
         )}
         </Fragment>
       );
@@ -1133,8 +1145,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : execNode ? <Terminal messages={shown} execNode={execNode} nameOf={nameOf} hubE2E={!!row?.hub.e2e} hubId={target.hubId} onGrow={followBottom} /> : visible.map((m, i) => {
               // Inserts that come before this message (by time).
               const before = placed.get(m.id);
-              // Exchange view: a new thread starts with a divider.
-              const divider = exchange && i > 0 && visible[i - 1].thread_id !== m.thread_id
+              // A divider with the time only where the conversation picks up
+              // again after a while, not between every two threads.
+              const divider = i > 0 && new Date(m.created_at).getTime() - new Date(visible[i - 1].created_at).getTime() > GAP_MS
                 ? <div className="conv-thread-divider" key={"d" + m.id}><span>{dayTime(m.created_at)}</span></div>
                 : null;
               const prev = visible[i - 1];

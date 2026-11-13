@@ -105,8 +105,11 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage }: {
   hubId: string; task: Message; onGrow?: () => void;
+  /** where the finished run's time, tokens and cost go (next to the
+   *  answer's time and copy); without it they end the run */
+  onUsage?: (taskId: string, line: string) => void;
   /** what the agent reported on this task (myco message progress): part of
    *  the run, in time order, as it says things between its steps */
   said?: Message[];
@@ -169,6 +172,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
   // While nothing says what it is doing: a playful verb (the pixel mushroom
   // is at work).
   const verb = useVerb(running);
+  // A finished run's time, tokens and cost go with its answer.
+  useEffect(() => {
+    if (!onUsage || running || !events) return;
+    const u = rowsOf(events).usage;
+    if (u) onUsage(task.id, usageLine(u));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, running, task.id]);
 
 // Not started yet (queued or delivered but not acknowledged: the node is
   // offline, its session is busy, or it has only pulled the task): a quiet
@@ -196,6 +206,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
     </div>
   );
   const { rows, usage } = gone ? { rows: [] as Row[], usage: undefined } : rowsOf(events || []);
+  const usageText = !running && usage ? usageLine(usage) : "";
   // The process is thinking, tool calls and errors. What the agent says is
   // the reply (shown as the message); text between steps stays as context,
   // text after the last step is the reply itself and is left out.
@@ -281,7 +292,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said }: {
           <Elapsed since={task.created_at} className="trace-usage" />
         </div>
       )}
-      {!running && usage && <div className="trace-foot">{usageLine(usage)}</div>}
+      {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
   );
 }

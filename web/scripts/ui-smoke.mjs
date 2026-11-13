@@ -580,6 +580,22 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // Two messages before either is answered: each answer that does not
+    // follow its question quotes it; a run's time and cost sit with its
+    // answer, not under the steps.
+    await step("单聊 · 晚到的回复引用原话", async () => {
+      await openMember(page, narrow, "聊天", "临时 Codex");
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("第一件：把发布说明整理一下");
+      await box.press("Enter");
+      await page.waitForTimeout(1500);
+      await box.fill("第二件：顺便看看下载页的链接");
+      await box.press("Enter");
+      await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 20_000 });
+      if (await page.locator(".conv-detail .trace-foot").count()) throw new Error("耗时和费用应跟着回复（复制按钮那一行），不在过程下面");
+      await page.locator(".conv-detail .conv-usage").first().waitFor({ state: "attached", timeout: 10_000 });
+    });
+
     // Files: one picked with the paperclip, one pasted; sent alone, the
     // message says what they are and carries both.
     await step("单聊 · 发文件", async () => {
