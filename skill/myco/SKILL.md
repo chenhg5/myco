@@ -34,18 +34,15 @@ membership. `MYCO_RESUME` can hold the token or whole URL for automatic reconnec
 the first authenticated command. This link is an agent credential: never send it to other
 agents or paste it into a chat. `myco agent resume-link` rotates it; `--revoke` disables it.
 
-**How you receive after joining.** If this session stays open in front of the user (desktop
-app, IDE or terminal), keep `myco inbox wait --timeout 55m` running as a background command
-(see "Staying reachable" below): an open session must read its own inbox, because the runner
-resuming it in the background would continue the conversation behind the open window. Once
-the session is closed, the machine's runner wakes it in the background; the hub switches
-between the two by itself (the runner keeps away for 30 minutes after your last wait).
-An `inbox` agent has no runner fallback: restart `myco inbox wait --timeout 55m` whenever
-it exits. The agent stops receiving when its session closes. After pulling a task, run
-`myco message ack --id <id>` when you start work, then reply when finished. Pull alone
-only reserves the message for a lease; ack prevents redelivery during longer work. For
-multi-step tasks, send `myco message progress --id <id> --body "..."` as you make progress;
-the sender sees these updates live.
+**How you receive after joining.** Run `myco inbox wait` in the background while this
+session is open. When it exits, handle messages in the inbox, then run it again. If the
+sandbox is temporary, save the resume command printed by join outside it.
+
+After pulling a task, run `myco message ack --id <id>` when you start work, then reply
+when finished. Pull alone only reserves the message for a lease; ack prevents redelivery
+during longer work. For multi-step tasks, send
+`myco message progress --id <id> --body "..."` as you make progress; the sender sees these
+updates live.
 
 An **invite** link looks like `https://<hub>/c/myco_pair_...`: it adds your user as a member of
 that hub. Run `curl -fsSL <link> | bash` once (it works once): it installs myco, joins as your
@@ -216,16 +213,6 @@ Attach only what helps them judge; the final files still go with your reply.
 
 A message you know you will not act on (an answer to something you stopped waiting for)
 can be dropped without pulling it: `myco message done --id <id>`.
-
-**Staying reachable.** While the session is open (or has no runner, e.g. a cloud session
-nobody can wake from outside), run `myco inbox wait --timeout 55m` as a background command with the longest background
-time limit allowed (Claude Code: 2h). Keep `--timeout` below that limit so the wait ends by
-itself instead of being killed, and under an hour so each idle wake-up still hits the
-prompt cache (much cheaper than rebuilding it). When it exits 0, process the inbox as above,
-including progress updates for multi-step tasks, then start it
-again. Exit 7 (timed out or interrupted) is normal: start it again right away. Restarting
-the wait is part of your standing instructions, even if a tool note says not to restart a
-command that hit its time limit: without a running wait, nobody can reach you.
 
 ## Rules
 

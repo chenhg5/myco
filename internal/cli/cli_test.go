@@ -985,7 +985,7 @@ func TestJoinLinks(t *testing.T) {
 	}
 	// A local session is told to keep inbox wait running while it stays open
 	// (the runner would continue it behind the open window).
-	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait --timeout 55m") || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "stays open") {
+	if !strings.Contains(out, `"receive"`) || !strings.Contains(out, "myco inbox wait") || !strings.Contains(out, "When it exits") || !strings.Contains(out, "save the resume command") || !strings.Contains(out, "stays open") {
 		t.Fatalf("join does not say how to receive while open: %s", out)
 	}
 	// Joining with --project also puts it in the project (one it can see);
@@ -1023,8 +1023,11 @@ func TestJoinLinks(t *testing.T) {
 	// No resumable session: register a stable inbox-only agent.
 	os.RemoveAll(filepath.Join(home, ".codex"))
 	code, out, e = cx.run("join", "--format", "json")
-	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco message ack --id") || !strings.Contains(out, "myco message progress --id") || !strings.Contains(out, "runner cannot wake this agent") || !strings.Contains(out, `"resume_command": "curl -fsSL `+hub+`/r/myco_resume_`) {
+	if code != 0 || !strings.Contains(out, `"harness": "inbox"`) || !strings.Contains(out, `"name": "test-box-agent-`) || !strings.Contains(out, "myco inbox wait") || !strings.Contains(out, "When it exits") || !strings.Contains(out, "save the resume command") || !strings.Contains(out, "runner cannot wake this inbox agent") || !strings.Contains(out, `"resume_command": "curl -fsSL `+hub+`/r/myco_resume_`) {
 		t.Fatalf("inbox join: %d %s %s", code, out, e)
+	}
+	if code, textOut, errOut := cx.run("join", "--format", "text"); code != 0 || !strings.Contains(textOut, inboxReceiveNote) {
+		t.Fatalf("inbox join text instructions: %d %s %s", code, textOut, errOut)
 	}
 	var inboxJoin struct{ Agent struct{ Name string } }
 	if err := json.Unmarshal([]byte(out), &inboxJoin); err != nil {

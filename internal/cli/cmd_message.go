@@ -427,41 +427,47 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 	wait := &Command{
 		Name:    "wait",
 		Summary: "Block until your inbox has messages (does not lease them)",
-		Long: `Exit 0 with the pending messages, or exit 7 when the timeout passes. Lets an agent that
-cannot be woken from outside sleep cheaply, e.g. a cloud session running it as a background
-command and resuming when it exits. Keep --timeout below the harness's background-command limit
-(Claude Code: 2h) so the wait ends on its own with exit 7 instead of being killed, and under an
-hour (55m) so idle wake-ups still hit the agent's prompt cache. Start it again after every exit:
-an agent with no wait running cannot be woken.`,
+		Long: `Run this as a background command while your session is open. Myco picks 55m for
+Claude Code (claude or claude-cloud) and 10m for other or unknown harnesses; use
+MYCO_WAIT_TIMEOUT or --timeout to override. Claude Code's background command limit is 2h,
+and its prompt cache lasts about 1h, so 55m lets the wait end on its own while the cache is
+warm. Exit 0 means messages are pending; exit 7 means the wait timed out or was interrupted.
+After every exit, process the inbox and run myco inbox wait again.`,
 		Examples: []string{
-			"myco inbox wait --timeout 55m && myco inbox pull",
+			"myco inbox wait",
 			"myco inbox wait --timeout 30m --format json",
 		},
-		Flags: []Flag{{Name: "timeout", Kind: Duration, Default: "60s", Help: "Give up after this long (exit 7)"}},
+		Flags: []Flag{{Name: "timeout", Kind: Duration, Env: "MYCO_WAIT_TIMEOUT", Help: "Override the automatic wait duration (55m for Claude Code, 10m otherwise); exit 7 on timeout"}},
 		Run: handler(func(e *env) error {
 			c, err := e.agentClient()
 			if err != nil {
 				return err
 			}
-			msgs, err := c.WaitPending(e.in.Ctx, e.in.Duration("timeout"))
+			duration, raw, label, err := inboxWaitTimeout(e, c)
+			if err != nil {
+				return err
+			}
+			if e.p.Format == FormatText {
+				fmt.Fprintf(e.in.Stderr, "waiting up to %s (%s)\n", raw, label)
+			}
+			msgs, err := c.WaitPending(e.in.Ctx, duration)
 			if err != nil {
 				if e.in.Ctx.Err() != nil {
 					return &Error{Code: "interrupted", Message: "the wait was stopped before it finished (e.g. a background-command time limit)",
-						Retryable: true, Exit: ExitTimeout,
-						Suggestion: "this is expected; start it again right away with a timeout below that limit: myco inbox wait --timeout 55m"}
+						Retryable: true, Exit: ExitTimeout}
 				}
 				return err
 			}
 			if len(msgs) == 0 {
-				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout,
-					Suggestion: "this is expected; start it again right away so you stay reachable: myco inbox wait --timeout " + e.in.String("timeout")}
+				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout}
 			}
-			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxTaskHint(msgs)}
+			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxWaitHint(inboxTaskHint(msgs)), Timeout: raw}
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "%d message(s) waiting; run: myco inbox pull\n", len(msgs))
-				if out.Hint != "" {
-					fmt.Fprintln(w, out.Hint)
+				if taskHint := inboxTaskHint(msgs); taskHint != "" {
+					fmt.Fprintln(w, taskHint)
 				}
+				fmt.Fprintln(w, waitAgainHint)
 			})
 		}),
 	}
@@ -472,6 +478,7 @@ an agent with no wait running cannot be woken.`,
 type inboxResult struct {
 	Messages []api.Message `json:"messages"`
 	Hint     string        `json:"hint,omitempty"`
+	Timeout  string        `json:"timeout,omitempty"`
 }
 
 const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); finish with myco message reply --id <id>. Skip progress for a one-line answer.`

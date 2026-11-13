@@ -132,7 +132,7 @@ func resumeCommands() []*Command {
 			}
 			out := map[string]any{"agent": res.Agent, "config": e.cfgPath}
 			if res.Agent.Binding.Harness == "inbox" || strings.HasSuffix(res.Agent.Binding.Harness, "-cloud") {
-				out["receive"] = "keep myco inbox wait --timeout 55m running in the background; restart it when it exits"
+				out["receive"] = "run myco inbox wait in the background; handle the inbox and run it again whenever it exits"
 			}
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "resumed as %s; credentials saved to %s\n", res.Agent.Name, e.cfgPath)

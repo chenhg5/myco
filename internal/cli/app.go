@@ -59,6 +59,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	if err != nil {
 		e := toError(err, cmd.Path())
+		if cmd.Path() == "myco inbox wait" {
+			appendInboxWaitHint(e)
+		}
 		var usage *cmdkit.UsageError
 		if errors.As(err, &usage) && strings.HasPrefix(usage.Message, "unknown command ") {
 			if hint := unknownCommandUpgradeHint(ctx, args, getenv); hint != "" {
@@ -86,6 +89,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return int(status)
 	}
 	e := toError(err, cmd.Path())
+	if cmd.Path() == "myco inbox wait" {
+		appendInboxWaitHint(e)
+	}
 	p.PrintError(e)
 	return e.Exit
 }

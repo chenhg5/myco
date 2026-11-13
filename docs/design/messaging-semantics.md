@@ -8,7 +8,7 @@
 
 ### 1.1 `inbox wait`：对调用者阻塞，对 agent 是异步唤醒
 
-- `myco inbox wait --timeout 55m` 是长轮询：Hub 每次请求最多挂 60 秒（`MessagePolicy.MaxWait`），CLI 在本地循环到有消息或超时（退出码 7）。Hub 内部在消息写入时立即通知（`notifier`），不是按间隔查询。
+- `myco inbox wait` 是长轮询：Hub 每次请求最多挂 60 秒（`MessagePolicy.MaxWait`），CLI 在本地循环到有消息或超时（退出码 7）。Hub 内部在消息写入时立即通知（`notifier`），不是按间隔查询。
 - 它**只看不取**：不租约，返回后由 agent 自己 `myco inbox pull`。
 - 只有云端会话这样用（作为后台命令跑，退出时 Claude Code 被唤醒）。本地节点由 runner 长轮询 `pull`，再在后台唤醒对应的会话。
 - `message send` 本身是异步的：写进 Hub 即返回；加 `--wait` 才会等回复。
