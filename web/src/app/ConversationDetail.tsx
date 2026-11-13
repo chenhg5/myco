@@ -22,6 +22,12 @@ import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
+import { drafted, Reveal } from "@/app/Reveal";
+
+/** Answers already grown in (once each, even if the view is drawn again),
+ *  and when this App first had each message. */
+const revealed = new Set<string>();
+const firstSeen = new Map<string, number>();
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
 import { hubAtLeast } from "@/app/hubVersion";
@@ -249,6 +255,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setLocalQueue(items);
     keepQueue(queueKeyRef.current, items);
   };
+  // Which answers came while you were looking (they grow in, Reveal.tsx):
+  // not the ones there when the conversation opened, nor ones loaded in its
+  // first moments.
+  const arrived = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   /** Queued messages withdrawn here (a stopped one may still be polled back). */
   const [withdrawn, setWithdrawn] = useState<ReadonlySet<string>>(() => new Set());
   const [queueError, setQueueError] = useState<unknown>(null);
@@ -523,6 +533,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const toStuck = () => {
     const el = firstStuck && scrollRef.current?.querySelector<HTMLElement>(`[data-stuck="${firstStuck.id}"]`);
     if (!el) return;
+    // Taken up there on purpose: what grows at the bottom must not pull
+    // the view back down.
+    atBottom.current = false;
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.remove("is-flash");
     void el.offsetWidth; // restart the highlight
@@ -783,6 +796,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const jumpTo = (id: string, smooth = true) => {
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
     if (!el) return false;
+    atBottom.current = false;
     el.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
     el.classList.remove("is-flash");
     void el.offsetWidth;
@@ -1166,6 +1180,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const end = answerOf.get(prev.id);
     return Math.max(t, end ? new Date(end.created_at).getTime() + 1 : !isOpen(prev.status) ? new Date(prev.updated_at).getTime() : t);
   };
+  if (arrived.current.key !== cacheKey(target)) arrived.current = { key: cacheKey(target), at: Date.now() };
+  const now0 = Date.now();
+  for (const m of messages || []) if (!firstSeen.has(m.id)) firstSeen.set(m.id, now0);
+  const growsIn = (m: Message) => m.type === "reply" && !isMe(m.from, row?.hub) && !m.unreadable && !revealed.has(m.id)
+    && !(m.reply_to && drafted.has(m.reply_to))
+    && (firstSeen.get(m.id) ?? 0) - arrived.current.at > 2000;
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
     if (m.type === "steer" && m.reply_to && steersOf.has(m.reply_to)) return false;
@@ -1276,6 +1296,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+              : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
               : <MessageContent body={m.body} />}
             {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
             {(steersOf.get(m.id) || []).map((s) => (

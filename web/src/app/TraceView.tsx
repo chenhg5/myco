@@ -9,6 +9,10 @@ import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
 import { AskCard } from "@/app/AskCard";
+import { drafted, grown, Reveal } from "@/app/Reveal";
+
+/** When this App first had each thing an agent said in a run. */
+const sayFirstSeen = new Map<string, number>();
 
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
@@ -144,6 +148,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   answered?: boolean;
 }) {
   const running = isOpen(task.status) && !answered;
+  // What it says that arrives after this run was first drawn grows in.
+  const openedAt = useRef(Date.now());
+  const sayGrows = (key: string) => {
+    if (grown.has(key)) return false;
+    if (!sayFirstSeen.has(key)) sayFirstSeen.set(key, Date.now());
+    return running && sayFirstSeen.get(key)! - openedAt.current > 2000;
+  };
   // Waiting on a question to its sender: not at work, no loading.
   const asking = running && !!task.asking;
   // A finished run does not change: kept (and saved with the page data).
@@ -240,6 +251,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   const steps = rows.filter((x) => x.kind !== "text").length;
   let end = rows.length;
   while (end > 0 && rows[end - 1].kind === "text") end--;
+  // While it works, what it is writing now shows at once (it may be the
+  // start of the answer); once the answer is in, it is the message.
+  const writing = running && !asking && end < rows.length && steps > 0;
+  if (writing) {
+    end = rows.length;
+    drafted.add(task.id);
+  }
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
   if (!reports.length) {
@@ -326,7 +344,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
       {plan && <PlanCard items={plan.items} live={running} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
-          <MessageContent body={seg.text} />
+          {/* What it says while you watch grows in; what was there, is. */}
+          {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <MessageContent body={seg.text} />}
         </div>
       ) : seg.kind === "think" ? (
         <Thought key={seg.key} text={seg.text} />
