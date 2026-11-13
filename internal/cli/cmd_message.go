@@ -278,10 +278,14 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 					out := map[string]any{"message": m, "steers": steers}
 					following := ""
 					if m.Type == "task" {
-						out["hint"] = strings.ReplaceAll(ackHint, "<id>", m.ID)
 						if !m.E2E {
 							following = e.startFollower(m.ID)
 						}
+						hint := ackHint
+						if following != "" {
+							hint = ackHintLive
+						}
+						out["hint"] = strings.ReplaceAll(hint, "<id>", m.ID)
 					}
 					if following != "" {
 						out["steps_shown"] = true
@@ -291,9 +295,6 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 						printSteers(w, steers)
 						if h, ok := out["hint"].(string); ok {
 							fmt.Fprintln(w, h)
-						}
-						if following != "" {
-							fmt.Fprintln(w, "Your steps (thoughts, commands, results) now show to the sender as you work, read from this session's file.")
 						}
 					})
 				}
@@ -613,10 +614,14 @@ type inboxResult struct {
 	Timeout  string        `json:"timeout,omitempty"`
 }
 
-// ackHint: said when work starts, the moment it is likeliest to be done.
+// ackHint: said when work starts, the moment it is likeliest to be done:
+// for a session whose steps nothing else shows.
 const ackHint = `Now send your plan as a checklist: myco message progress --id <id> --body $'- [~] first step\n- [ ] next step'. Then send progress at least every 2 minutes of work and after each step (what you found, what is next); the sender sees it live.`
 
-const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); for work with several steps, send your plan as a checklist the same way ("- [x] done", "- [~] doing", "- [ ] next") and again as items get done; if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; finish with myco message reply --id <id>. Skip progress for a one-line answer. More: myco skill show.`
+// ackHintLive: for a session whose steps already show live (trace follow).
+const ackHintLive = `Your steps (thoughts, commands, results) show to the sender live, read from this session's file, and your own todo list shows as the plan. At milestones (cause found, change of direction, blocked, a big step done) send one line of progress: myco message progress --id <id> --body "found X; next Y".`
+
+const taskProgressHint = `For each task: start with myco message ack --id <id>; while working, share findings and next steps with myco message progress --id <id> --body "..." (the sender sees updates live); for work with several steps, keep a plan (your CLI's own todo list shows as the plan in Claude Code and Codex; elsewhere send it as a checklist the same way: "- [x] done", "- [~] doing", "- [ ] next"); if the sender has to decide something, ask with myco message ask --id <id> --question "..." --option "..."; finish with myco message reply --id <id>. Skip progress for a one-line answer. More: myco skill show.`
 
 func inboxTaskHint(msgs []api.Message) string {
 	var task, steer bool

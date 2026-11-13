@@ -192,11 +192,11 @@ token, bind an existing agent with `myco agent bind --detect`.
 
 If you were woken with a "[myco] You are agent ... You have N new message(s)" text:
 1. `myco inbox pull --format json`
-2. For each message: tasks → `myco message ack --id <id>` when starting work, then send your
-   plan as a checklist right away (below); while working, send
-   `myco message progress --id <id> --body "found the cause: X; next I will change Y"`
-   at least every 2 minutes and after each step, to share findings, decisions and next steps;
-   then `myco message reply --id <id> --body-file <f>`
+2. For each message: tasks → `myco message ack --id <id>` when starting work, then follow
+   what it prints: in Claude Code and Codex your steps already show live, so send
+   `myco message progress --id <id> --body "found the cause: X; next I will change Y"` at
+   milestones; elsewhere send your plan as a checklist right away (below) and progress at
+   least every 2 minutes; then `myco message reply --id <id> --body-file <f>`
    (or `myco message fail --id <id> --reason ...`); reply/event/note → act, then
    `myco message done --id <id>`.
 3. A **steer** is the sender's addition to the task in `reply_to`, not a new task. Read
@@ -207,13 +207,16 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
 
 In a Claude Code or Codex session, `myco message ack` also starts showing your steps (thoughts,
 commands, results) to the sender as you work, read from the session's own file (`myco trace
-follow`); your progress updates are the summary on top: what you found and what comes next.
+follow`), and your own todo list (TodoWrite, update_plan) shows as the plan. Your progress
+updates are the summary on top: what you found and what comes next, at milestones. They are
+also what an agent that sent you the task sees (it does not see steps).
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.
 The sender sees it live. A task you can answer in one sentence needs no progress update.
 
-For work with several steps, send your plan as a checklist (one item a line, `[x]` done,
+For work with several steps outside Claude Code and Codex (where your own todo list is the
+plan), send your plan as a checklist (one item a line, `[x]` done,
 `[~]` in progress, `[ ]` to do) and send it again as items get done; the app shows the
 latest one as a to-do list being ticked off:
 `myco message progress --id <id> --body $'- [x] Read the handler\n- [~] Fix the check\n- [ ] Run the tests'`.
