@@ -514,6 +514,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
+				out["resume_command"] = cmd
+			}
 			if project != "" && projectErr == "" {
 				out["project"] = project
 			} else if projectErr != "" {
@@ -534,6 +537,9 @@ Safe to re-run: the same session gets the same agent back.`,
 					verb = "already joined as"
 				}
 				fmt.Fprintf(w, "%s %s (%s)\n", verb, res.Agent.Name, how)
+				if cmd, ok := out["resume_command"].(string); ok {
+					fmt.Fprintln(w, "If this sandbox is temporary, save this credential outside it (memory, project instructions or an environment variable). Run it first if myco or its config is missing; keep it private:\n  "+cmd)
+				}
 				if project != "" && projectErr == "" {
 					fmt.Fprintf(w, "joined project %s\n", project)
 				} else if projectErr != "" {

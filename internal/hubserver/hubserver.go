@@ -126,6 +126,7 @@ func Build(o Options) (*Hub, error) {
 	files := app.NewFileService(fileRepo, blob.FS{Dir: filesDir}, ids, clock, policy, o.Log)
 	messages.SetFiles(fileRepo)
 	srv := httpapi.New(agents, messages, enroll, o.AdminToken, o.Log, ing...)
+	srv.SetResume(app.NewResumeService(sqlite.NewResumeRepo(db), agentsRepo, security.Tokens{}, clock))
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	var latest func() string

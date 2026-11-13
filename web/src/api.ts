@@ -57,6 +57,7 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
+	resume?: { created_at: string; last_used_at?: string; last_used_env?: string };
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */

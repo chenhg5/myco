@@ -31,9 +31,10 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name,omitempty"`
+	ID          string      `json:"id"`
+	Resume      *ResumeInfo `json:"resume,omitempty"`
+	Name        string      `json:"name"`
+	DisplayName string      `json:"display_name,omitempty"`
 	// Avatar is the face people chose: "look:<parts>" (drawn by clients)
 	// or "pic:<hash>" (GET /v1/agents/{name}/avatar; the hash changes with
 	// the picture). Empty: draw the default one from the id.
@@ -77,6 +78,24 @@ type Agent struct {
 	MachineID string `json:"machine_id,omitempty"`
 	// Runtime is its CLI and model, as its runner reports them.
 	Runtime *Runtime `json:"runtime,omitempty"`
+}
+
+type ResumeInfo struct {
+	CreatedAt   time.Time  `json:"created_at"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	LastUsedEnv string     `json:"last_used_env,omitempty"`
+}
+
+type ResumeLink struct {
+	Token   string     `json:"token,omitempty"`
+	URL     string     `json:"url,omitempty"`
+	Command string     `json:"command,omitempty"`
+	Resume  ResumeInfo `json:"resume"`
+}
+
+type ResumeRequest struct {
+	Token   string  `json:"token"`
+	Binding Binding `json:"binding"`
 }
 
 // Runtime is what an agent runs on.

@@ -211,12 +211,18 @@ when MYCO_ENROLL_TOKEN is set and no agent token is configured.`,
 				return e.dryRun(map[string]any{"action": "enroll", "agent": res.Agent, "would_create": res.Created})
 			}
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "config": e.cfgPath}
+			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
+				out["resume_command"] = cmd
+			}
 			return e.p.Print(out, func(w io.Writer) {
 				verb := "enrolled"
 				if !res.Created {
 					verb = "recovered (new token issued)"
 				}
 				fmt.Fprintf(w, "agent %s %s; credentials saved to %s\n", res.Agent.Name, verb, e.cfgPath)
+				if cmd, ok := out["resume_command"].(string); ok {
+					fmt.Fprintln(w, "If this sandbox is temporary, save this credential outside it. Run it first if myco or its config is missing; keep it private:\n  "+cmd)
+				}
 				if exec {
 					fmt.Fprintf(w, "exec node: commands from %s will run here as %s in %s\n",
 						strings.Join(res.Agent.AllowFrom, ", "), orDefault(osutil.UserName(e.in.Getenv), "this user"), res.Agent.Binding.Workdir)
