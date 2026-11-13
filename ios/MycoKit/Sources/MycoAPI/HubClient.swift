@@ -29,15 +29,16 @@ public struct HubClient: HubAPI {
         return envelope.projects
     }
 
-    public func recent(project: String?) async throws -> [RecentItem] {
-        // No project: what I talk to, one row per party. A project: all of
-        // its threads, to see what its coordinator gave out.
+    public func recent(_ scope: RecentScope) async throws -> [RecentItem] {
         var query = ["limit": "100"]
-        if let project {
-            query["project"] = project
-        } else {
+        switch scope {
+        case .myPairs:
             query["group"] = "pair"
             query["side"] = "me"
+        case .project(let name):
+            query["project"] = name
+        case .everything:
+            break
         }
         let envelope: RecentEnvelope = try await get("/v1/console/recent", query)
         return envelope.items

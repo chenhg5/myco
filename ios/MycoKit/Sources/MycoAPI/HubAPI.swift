@@ -17,6 +17,16 @@ public struct SendRequest: Codable, Sendable, Hashable {
     }
 }
 
+/// Which recent list to ask the hub for.
+public enum RecentScope: Sendable, Hashable {
+    /// What I talk to, one row per party (`group=pair&side=me`).
+    case myPairs
+    /// One project's threads.
+    case project(String)
+    /// Every thread this device may read, newest first.
+    case everything
+}
+
 /// One page of a conversation, newest first; `more`: older ones exist.
 public struct MessagePage: Sendable, Hashable {
     public var messages: [Message]
@@ -51,8 +61,8 @@ public protocol HubAPI: Sendable {
     func overview() async throws -> Overview
     /// `GET /v1/projects`
     func projects() async throws -> [Project]
-    /// `GET /v1/console/recent`: newest first; `project` narrows it.
-    func recent(project: String?) async throws -> [RecentItem]
+    /// `GET /v1/console/recent`: newest first.
+    func recent(_ scope: RecentScope) async throws -> [RecentItem]
     /// `GET /v1/console/exchanges`: the messages between two parties in
     /// every thread, newest first, a page at a time. `before`: only those
     /// older than this (to page back); nil is the newest page.

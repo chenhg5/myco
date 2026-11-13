@@ -31,6 +31,15 @@ public final class ConversationModel {
     /// page, refreshed all the time, and the older pages scrolled back to.
     private var known: [String: Message] = [:]
     private var others: [Message] = []
+    /// On a member's page: its exchanges with its colleagues, by id.
+    private var colleagueMessages: [String: Message] = [:]
+    private var reloads = 0
+
+    /// A member's colleagues' exchanges are asked for again every this many
+    /// refreshes (mine with it: every time).
+    static let colleaguesEvery = 5
+    /// At most this many colleagues' exchanges make up a member's page.
+    static let maxColleagues = 6
     private var loadingEarlier = false
     /// Older pages were loaded: the newest page no longer says whether
     /// there is more.
@@ -76,6 +85,7 @@ public final class ConversationModel {
         var messages: [Message]
         var others: [Message]
         var traces: [String: [TraceEvent]]
+        var colleagues: [Message]?
     }
 
     private var snapshotName: String { "conversation-" + agent + "-" + (project ?? "") }
@@ -90,11 +100,12 @@ public final class ConversationModel {
               let snapshot = try? HubJSON.decoder().decode(Snapshot.self, from: data), !loaded
         else { return }
         for message in snapshot.messages { known[message.id] = message }
+        for message in snapshot.colleagues ?? [] { colleagueMessages[message.id] = message }
         traces = snapshot.traces
         processes = snapshot.traces.mapValues { RunProcess(events: $0) }
         // Closed tasks' steps are complete: no need to fetch them again.
-        settled = Set(snapshot.messages.filter { !$0.isOpen }.map(\.id)).intersection(snapshot.traces.keys)
-        show(messages: snapshot.messages, others: snapshot.others)
+        settled = Set((snapshot.messages + (snapshot.colleagues ?? [])).filter { !$0.isOpen }.map(\.id)).intersection(snapshot.traces.keys)
+        show(others: snapshot.others)
     }
 
     public func run() async {
@@ -118,11 +129,17 @@ public final class ConversationModel {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
             for message in page.messages { known[message.id] = message }
             if !wentBack { hasEarlier = page.more }
-            let others = try await othersWork()
-            await loadSteps(of: page.messages.filter { $0.from == me && $0.type == "task" && $0.status != "queued" })
-            show(messages: Array(known.values), others: others)
-            // Only the newest page is kept between launches.
-            await save(Snapshot(messages: page.messages, others: others, traces: traces))
+            // Mine with it comes first and shows at once; the rest of its
+            // work (asked for less often) is merged in when it comes.
+            if !loaded { show(others: others) }
+            var others = self.others
+            if reloads % Self.colleaguesEvery == 0 { others = await loadSurroundings() }
+            reloads += 1
+            let everything = Array(known.values) + Array(colleagueMessages.values)
+            await loadSteps(of: everything.filter { $0.to == agent && $0.type == "task" && $0.status != "queued" })
+            show(others: others)
+            // Only the newest pages are kept between launches.
+            await save(Snapshot(messages: page.messages, others: others, traces: traces, colleagues: Array(colleagueMessages.values)))
         } catch is CancellationError {
             return
         } catch {
@@ -141,20 +158,24 @@ public final class ConversationModel {
         wentBack = true
         hasEarlier = page.more && !page.messages.isEmpty
         for message in page.messages { known[message.id] = message }
-        show(messages: Array(known.values), others: others)
+        show(others: others)
         return !page.messages.isEmpty
     }
 
-    private func show(messages: [Message], others: [Message]) {
+    private func show(others: [Message]) {
         self.others = others
         let me = session.me
+        // Mine with the agent, and on a member's page the agent's with its
+        // colleagues, as one conversation.
+        var all = known
+        for (id, message) in colleagueMessages where all[id] == nil { all[id] = message }
         let built = ConversationBuilder.items(
-            me: me, messages: messages, others: others, incomingTo: project == nil ? agent : nil,
+            me: me, agent: agent, messages: Array(all.values), others: others,
             processes: Set(processes.filter { !$0.value.isEmpty }.keys),
             status: { self.session.status(of: $0) }, now: Date())
         // Nothing new: leave the list alone, so the page does not redraw.
         if built != items { items = built }
-        openTask = ConversationBuilder.openTask(me: me, messages: messages)
+        openTask = ConversationBuilder.openTask(me: me, messages: Array(known.values))
         loaded = true
     }
 
@@ -164,28 +185,38 @@ public final class ConversationModel {
         await store.setSnapshot(data, of: session.id, name: snapshotName)
     }
 
-    /// On a project's page: what its coordinator gave the other members.
-    /// On an agent's own page: what others gave it.
-    private func othersWork() async throws -> [Message] {
-        if let project {
-            let tasks = try await session.hub.recent(project: project).compactMap(\.task)
+    /// What surrounds my own exchange with the agent, as the desktop app
+    /// gathers it. On a project's page (the agent is its coordinator): the
+    /// work it gave the other members, returned to show as capsules. On a
+    /// member's own page: its exchanges with its colleagues in its
+    /// projects, merged into the conversation.
+    private func loadSurroundings() async -> [Message] {
+        let everything = (try? await session.hub.recent(.everything)) ?? []
+        func feed(_ project: Project) async -> [RecentItem] {
+            let own = (try? await session.hub.recent(.project(project.name))) ?? []
+            return ProjectFeed.items(of: project, own: own, everything: everything)
+        }
+        if let project, let found = session.project(project) {
+            let tasks = await feed(found).compactMap(\.task)
             return tasks.filter { $0.from == agent && $0.to != session.me }
         }
-        // Its own page: what was given to it in the projects it is in (the
-        // list of my own chats holds none of that).
-        var tasks: [Message] = []
+        var colleagues: [String] = []
         for project in session.projects(of: agent).prefix(Self.projectsScanned) {
-            let recent = (try? await session.hub.recent(project: project.name)) ?? []
-            tasks += recent.compactMap(\.task).filter { $0.to == agent && $0.from != session.me }
+            let names = ProjectFeed.colleagues(of: agent, in: await feed(project), coordinator: session.coordinator(of: project))
+            for name in names where !colleagues.contains(name) { colleagues.append(name) }
         }
-        return tasks
+        for colleague in colleagues.prefix(Self.maxColleagues) {
+            guard let page = try? await session.hub.exchanges(between: colleague, and: agent, before: nil) else { continue }
+            for message in page.messages { colleagueMessages[message.id] = message }
+        }
+        return []
     }
 
-    /// How many of an agent's projects are looked through for work given to it.
+    /// How many of an agent's projects are looked through for its colleagues.
     static let projectsScanned = 3
 
-    /// Fetches the steps of my newest tasks: all of them once for a closed
-    /// task, the new ones each time for one still being worked on.
+    /// Fetches the steps of the agent's newest tasks: all of them once for a
+    /// closed task, the new ones each time for one still being worked on.
     private func loadSteps(of tasks: [Message]) async {
         let newest = tasks.sorted { $0.createdAt > $1.createdAt }.prefix(Self.tracedTasks)
         for task in newest where !settled.contains(task.id) {

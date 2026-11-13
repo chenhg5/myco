@@ -52,9 +52,11 @@ public actor FakeHub: HubAPI {
         return projectList
     }
 
-    public func recent(project: String?) throws -> [RecentItem] {
+    public func recent(_ scope: RecentScope) throws -> [RecentItem] {
         try check()
         advance()
+        var project: String?
+        if case .project(let name) = scope { project = name }
         let threads = Dictionary(grouping: messages.filter { project == nil || $0.project == project }, by: \.threadId)
         return threads.compactMap { id, all -> RecentItem? in
             let sorted = all.sorted { $0.createdAt < $1.createdAt }

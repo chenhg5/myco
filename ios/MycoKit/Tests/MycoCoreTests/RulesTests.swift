@@ -113,12 +113,12 @@ struct ConversationBuilderTests {
             Message(id: "r1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "done", status: "done", createdAt: at(-7_100)),
             Message(id: "t2", from: "me", to: "coder", body: "second", status: "acked", createdAt: at(-60), updatedAt: at(-5)),
         ]
-        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        let items = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now)
         // At the top, and again after nearly two quiet hours; never before
         // the open task's status, which has no time of its own.
         #expect(items.map(\.id) == ["t1.time", "t1", "r1", "t2.time", "t2", "t2.status"])
         #expect(items[3].kind == .time(at(-60)))
-        #expect(items[2].kind == .reply(text: "done", taskID: "t1"))
+        #expect(items[2].kind == .reply(text: "done", taskID: "t1", to: nil))
     }
 
     @Test func aRoundReadsInOrderWithItsOpenTaskLast() {
@@ -129,17 +129,17 @@ struct ConversationBuilderTests {
             Message(id: "s1", from: "me", to: "coder", threadId: "t2", type: "steer", body: "also this", status: "done", createdAt: at(-30)),
             Message(id: "p1", from: "coder", to: "me", threadId: "t2", type: "progress", body: "halfway", status: "done", createdAt: at(-20)),
         ]
-        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
         #expect(items.map(\.id) == ["t1", "r1", "t2", "s1", "p1", "t2.status"])
-        #expect(items[3].kind == .mine(text: "also this", steer: true))
+        #expect(items[3].kind == .mine(text: "also this", steer: true, by: nil))
         #expect(items[5].kind == .status(.working(since: at(-5)), taskID: "t2"))
         #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t2")
     }
 
-    @Test func othersWorkShowsAsCapsulesInTime() {
+    @Test func aCoordinatorsHandOutsShowAsCapsulesInTime() {
         let mine = [Message(id: "t1", from: "me", to: "lead", body: "plan it", status: "done", createdAt: at(-100))]
         let others = [Message(id: "d1", from: "lead", to: "coder", body: "write the API\\nwith tests", status: "queued", createdAt: at(-50))]
-        let items = said(ConversationBuilder.items(me: "me", messages: mine, others: others, status: { _ in nil }, now: now))
+        let items = said(ConversationBuilder.items(me: "me", agent: "lead", messages: mine, others: others, status: { _ in nil }, now: now))
         #expect(items.map(\.id) == ["t1", "d1.dispatch"])
         guard case .dispatch(let dispatch) = items[1].kind else {
             Issue.record("the coordinator's task is a capsule")
@@ -147,6 +147,54 @@ struct ConversationBuilderTests {
         }
         #expect(dispatch.to == "coder")
         #expect(dispatch.state == .queued)
+    }
+
+    @Test func aMembersPageIsAllItsWorkWhoeverAsked() {
+        // As on the desktop: what I asked and what its colleagues asked, in
+        // one conversation; a colleague's task names them, an answer to a
+        // colleague says whom it answers, and each task has its own state.
+        let messages = [
+            Message(id: "c1", from: "lead", to: "coder", body: "design the API", status: "done", createdAt: at(-500)),
+            Message(id: "c1r", from: "coder", to: "lead", threadId: "c1", replyTo: "c1", type: "reply", body: "designed", status: "done", createdAt: at(-400)),
+            Message(id: "t1", from: "me", to: "coder", body: "and the docs?", status: "done", createdAt: at(-300)),
+            Message(id: "t1r", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "on it", status: "done", createdAt: at(-290)),
+            Message(id: "c2", from: "lead", to: "coder", body: "now build it", status: "acked", createdAt: at(-200), updatedAt: at(-5)),
+            Message(id: "c2p", from: "coder", to: "lead", threadId: "c2", replyTo: "c2", type: "progress", body: "half built", status: "done", createdAt: at(-100)),
+            Message(id: "t2", from: "me", to: "coder", body: "ping me after", status: "queued", createdAt: at(-50)),
+        ]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], processes: ["c2"], status: { _ in nil }, now: now))
+        #expect(items.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2.process", "c2.status", "c2p", "t2", "t2.status"])
+        #expect(items[0].kind == .mine(text: "design the API", steer: false, by: "lead"))
+        #expect(items[1].kind == .reply(text: "designed", taskID: "c1", to: "lead"))
+        #expect(items[2].kind == .mine(text: "and the docs?", steer: false, by: nil))
+        #expect(items[3].kind == .reply(text: "on it", taskID: "t1", to: nil))
+        // The colleague's open task keeps its state with it; mine closes the page.
+        #expect(items[6].kind == .status(.working(since: at(-5)), taskID: "c2"))
+        #expect(items[7].kind == .progress(text: "half built"))
+        #expect(items[9].kind == .status(.queued, taskID: "t2"))
+        // The input speaks to my open task, never to a colleague's.
+        #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t2")
+    }
+
+    @Test func aProjectsFeedTakesInItsMembersLooseThreads() {
+        func item(_ id: String, _ parties: [String], project: String? = nil) -> RecentItem {
+            let m = Message(id: id, from: parties[0], to: parties[1], body: "x", project: project, createdAt: at(-10))
+            return RecentItem(threadId: id, participants: parties, updatedAt: at(-10), last: m, task: m, project: project)
+        }
+        let project = Project(name: "p", title: "P", members: [ProjectMember(name: "lead", role: "coordinator"), ProjectMember(name: "coder"), ProjectMember(name: "tester")])
+        let own = [item("a", ["lead", "coder"], project: "p")]
+        let everything = [
+            item("a", ["lead", "coder"], project: "p"),      // already in
+            item("b", ["lead", "tester"]),                    // among members, in no project: in
+            item("c", ["@console:glenn", "coder"]),           // a person and a member: in
+            item("d", ["lead", "outsider"]),                  // someone outside: out
+            item("e", ["lead", "coder"], project: "other"),   // another project's: out
+        ]
+        let feed = ProjectFeed.items(of: project, own: own, everything: everything)
+        #expect(feed.map(\.threadId) == ["a", "b", "c"])
+        #expect(ProjectFeed.colleagues(of: "coder", in: feed, coordinator: "lead") == ["lead"])
+        #expect(ProjectFeed.colleagues(of: "tester", in: feed, coordinator: "lead") == ["lead"])
+        #expect(ProjectFeed.colleagues(of: "lead", in: feed, coordinator: "lead") == ["coder", "tester"])
     }
 
     @Test func updatesFoldOnceTheTaskIsAnswered() {
@@ -158,7 +206,7 @@ struct ConversationBuilderTests {
             Message(id: "t2", from: "me", to: "coder", body: "second", status: "acked", createdAt: at(-60), updatedAt: at(-5)),
             Message(id: "p3", from: "coder", to: "me", threadId: "t2", replyTo: "t2", type: "progress", body: "halfway", status: "done", createdAt: at(-20)),
         ]
-        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
         // The answered task: one line above its answer. The open one: each update.
         #expect(items.map(\.id) == ["t1", "t1.progress", "r1", "t2", "p3", "t2.status"])
         #expect(items[1].kind == .pastProgress(texts: ["one", "two"]))
@@ -173,8 +221,8 @@ struct ConversationBuilderTests {
 
     @Test func aStoppedTaskSaysSo() {
         let messages = [Message(id: "t1", from: "me", to: "coder", body: "x", status: "failed", error: RunState.stoppedBySender, createdAt: at(-10))]
-        let items = said(ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now))
-        #expect(items.map(\.kind) == [.mine(text: "x", steer: false), .stopped])
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        #expect(items.map(\.kind) == [.mine(text: "x", steer: false, by: nil), .stopped])
         #expect(ConversationBuilder.openTask(me: "me", messages: messages) == nil)
     }
 }

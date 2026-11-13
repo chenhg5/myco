@@ -124,17 +124,43 @@ struct ConversationProcessTests {
         #expect(other.items.isEmpty)
     }
 
-    @Test func workOthersGaveAnAgentShowsOnItsPage() async {
+    @Test func aMembersPageShowsTheWorkItsCoordinatorGaveIt() async {
         let session = WorkspaceSession(id: "demo", name: "Demo", hub: FakeHub())
         await session.refresh()
         let model = ConversationModel(session: session, agent: "studio-codex-7f3a")
         await model.reload()
-        let incoming = model.items.compactMap { item -> Dispatch? in
-            if case .dispatch(let d) = item.kind { return d }
+        // The coordinator's task is part of the conversation, named, with
+        // how it is being worked on and where it stands.
+        let asked = model.items.first { $0.id == "d1" }
+        guard case .mine(let text, false, "cloud-lead")? = asked?.kind else {
+            Issue.record("the coordinator's task shows as something asked, by the coordinator")
+            return
+        }
+        #expect(text.hasPrefix("设计 Hub 的推送接口"))
+        #expect(model.items.contains { $0.id == "d1.process" })
+        guard case .status(.working, "d1")? = model.items.first(where: { $0.id == "d1.status" })?.kind else {
+            Issue.record("and says it is being worked on")
+            return
+        }
+        // What I said to it myself is there too; nothing is a capsule.
+        #expect(model.items.contains { $0.kind == .mine(text: "推送中转先别定用哪家，等我回来再说。", steer: false, by: nil) })
+        #expect(!model.items.contains { if case .dispatch = $0.kind { return true } else { return false } })
+        // The input speaks to my own open task only: there is none.
+        #expect(model.openTask == nil)
+        #expect(model.action == .send)
+    }
+
+    @Test func aProjectsPageShowsWhatItsCoordinatorHandedOut() async {
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: FakeHub())
+        await session.refresh()
+        let model = ConversationModel(session: session, agent: "cloud-lead", project: "myco-ios")
+        await model.reload()
+        let handedOut = model.items.compactMap { item -> String? in
+            if case .dispatch(let d) = item.kind { return d.to }
             return nil
         }
-        #expect(incoming.map(\.taskID) == ["d1"])
-        #expect(incoming.first?.incoming == true)
-        #expect(incoming.first?.from == "cloud-lead")
+        #expect(Set(handedOut) == ["studio-codex-7f3a", "studio-claude-2b9c", "studio-claude-55d0", "laptop-claude-a1e2"])
+        // Its page is my conversation with it: the members' work is not mixed in.
+        #expect(!model.items.contains { if case .mine(_, _, let by) = $0.kind { return by != nil } else { return false } })
     }
 }

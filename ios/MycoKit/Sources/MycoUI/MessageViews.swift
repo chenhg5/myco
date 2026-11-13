@@ -1,21 +1,32 @@
 import SwiftUI
 import UIKit
 
-/// What I said: a small bubble on the right. A message added to a running
-/// task carries a small label above it.
+/// Something asked of the agent: a bubble on the right. Mine is filled;
+/// one a colleague asked is outlined and carries their name, so whose
+/// words they are is never in doubt. A message added to a running task
+/// carries a small label.
 public struct MyBubble: View {
     let text: String
     let label: String?
+    let name: String?
 
-    public init(_ text: String, label: String? = nil) {
+    /// - Parameters:
+    ///   - label: a small mark above it ("Added").
+    ///   - name: who asked, when it was not me.
+    public init(_ text: String, label: String? = nil, name: String? = nil) {
         self.text = text
         self.label = label
+        self.name = name
     }
 
     public var body: some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            if let label {
-                Text(label).font(.caption2).foregroundStyle(MycoColor.muted)
+        VStack(alignment: .trailing, spacing: 4) {
+            if name != nil || label != nil {
+                HStack(spacing: 6) {
+                    if let name { Text(name).font(.footnote.weight(.medium)).foregroundStyle(MycoColor.fg2) }
+                    if let label { Text(label).font(.caption2).foregroundStyle(MycoColor.muted) }
+                }
+                .padding(.trailing, 6)
             }
             Text(text)
                 .font(.body)
@@ -23,7 +34,12 @@ public struct MyBubble: View {
                 .foregroundStyle(MycoColor.fg)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
-                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(name == nil ? MycoColor.pill : MycoColor.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    if name != nil {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(MycoColor.line, lineWidth: 1)
+                    }
+                }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.leading, 56)

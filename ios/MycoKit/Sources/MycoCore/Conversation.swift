@@ -5,10 +5,13 @@ import MycoCrypto
 /// One thing shown in a conversation, in the order people read it.
 public struct ConversationItem: Identifiable, Hashable, Sendable {
     public enum Kind: Hashable, Sendable {
-        /// What I said. `steer`: it was added to a task already running.
-        case mine(text: String, steer: Bool)
+        /// Something asked of the agent whose page this is. `steer`: it was
+        /// added to a task already running. `by`: who asked, when it was
+        /// not me (a coordinator, another member).
+        case mine(text: String, steer: Bool, by: String?)
         /// The agent's answer (Markdown). `taskID`: the task it answers.
-        case reply(text: String, taskID: String?)
+        /// `to`: whom it answers, when it is not me.
+        case reply(text: String, taskID: String?, to: String?)
         /// Half an hour or more passed since the message above.
         case time(Date)
         /// An interim update from the agent, on a task still being worked on.
@@ -41,23 +44,20 @@ public struct Dispatch: Hashable, Sendable {
     public var to: String
     public var firstLine: String
     public var state: RunState
-    /// Given to the agent whose page this is (by someone else), not given
-    /// out by it.
-    public var incoming = false
 }
 
 /// Builds what a conversation page shows. Pure: same input, same list.
 public enum ConversationBuilder {
     /// - Parameters:
-    ///   - messages: every message between me and the agent, any order.
-    ///   - others: tasks between other parties to show as capsules (a
-    ///     coordinator's dispatches, or work others gave this agent).
-    ///   - incomingTo: the agent whose page this is, when `others` holds
-    ///     work given to it rather than given out by it.
+    ///   - agent: whose page this is.
+    ///   - messages: every message to show, any order: mine with the agent
+    ///     and, on a member's page, the agent's with its colleagues.
+    ///   - others: tasks the agent gave out, to show as one-line capsules
+    ///     (a coordinator's hand-outs on its project's page).
     ///   - processes: tasks whose steps are known and worth a row.
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
-        me: String, messages: [Message], others: [Message], incomingTo: String? = nil, processes: Set<String> = [],
+        me: String, agent: String, messages: [Message], others: [Message], processes: Set<String> = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -66,25 +66,33 @@ public enum ConversationBuilder {
         var past: [String: [Message]] = [:]
         for m in messages {
             let mine = m.from == me
+            // Whoever gives the agent work is on the asking side: me, or a
+            // colleague (named). What the agent says is on the other side.
+            let asked = m.from != agent
+            let by: String? = mine ? nil : m.from
             switch m.type {
             case "task", "note":
-                guard mine else {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: nil)))
+                guard asked else {
+                    // The agent speaking first, or giving work to someone.
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: nil, to: m.to == me ? nil : m.to)))
                     continue
                 }
-                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false)))
+                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by)))
                 guard m.type == "task" else { continue }
                 let state = RunState.of(m, recipient: status(m.to), now: now)
                 if processes.contains(m.id) {
-                    // Right under what I asked, before anything said later.
+                    // Right under what was asked, before anything said later.
                     items.append(.init(
                         id: m.id + ".process", at: m.createdAt.addingTimeInterval(0.001),
                         kind: .process(taskID: m.id, live: state.isOpen)))
                 }
                 switch state {
                 case .queued, .working, .maybeStuck:
-                    // Open tasks sort after everything said so far.
-                    items.append(.init(id: m.id + ".status", at: .distantFuture, kind: .status(state, taskID: m.id)))
+                    // My open task's status closes the page; a colleague's
+                    // stays with its task, so two never stack at the end.
+                    items.append(.init(
+                        id: m.id + ".status", at: mine ? .distantFuture : m.createdAt.addingTimeInterval(0.002),
+                        kind: .status(state, taskID: m.id)))
                 case .failed(let reason):
                     items.append(.init(id: m.id + ".failed", at: m.updatedAt, kind: .failure(reason: reason)))
                 case .stopped:
@@ -93,11 +101,15 @@ public enum ConversationBuilder {
                     break
                 }
             case "steer":
-                if mine { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true))) }
+                if asked { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by))) }
             case "reply":
-                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m), taskID: m.replyTo))) }
+                if !asked {
+                    items.append(.init(
+                        id: m.id, at: m.createdAt,
+                        kind: .reply(text: text(of: m), taskID: m.replyTo, to: m.to == me ? nil : m.to)))
+                }
             case "progress":
-                guard !mine else { continue }
+                guard !asked else { continue }
                 // Its task: the one it answers, else the one its thread began with.
                 let taskID = m.replyTo ?? m.threadId
                 // A task that is not on this page counts as open: when in
@@ -120,7 +132,7 @@ public enum ConversationBuilder {
         for task in others where task.type == "task" {
             let dispatch = Dispatch(
                 taskID: task.id, from: task.from, to: task.to, firstLine: firstLine(of: task.body),
-                state: RunState.of(task, recipient: status(task.to), now: now), incoming: task.to == incomingTo)
+                state: RunState.of(task, recipient: status(task.to), now: now))
             items.append(.init(id: task.id + ".dispatch", at: task.createdAt, kind: .dispatch(dispatch)))
         }
         return withTimeBreaks(items.sorted { ($0.at, $0.id) < ($1.at, $1.id) })

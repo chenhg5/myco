@@ -143,10 +143,12 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkOthersGaveAnAgentIsOnItsPage() {
+    func testAMembersPageShowsTheWorkItsCoordinatorGaveIt() {
         let app = launch(["-myco-route", "agent:studio-codex-7f3a"])
-        let capsule = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "From 协调者")).firstMatch
-        XCTAssertTrue(capsule.waitForExistence(timeout: 20), "the coordinator's task shows as one line")
-        snap("agent-incoming")
+        let task = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "设计 Hub 的推送接口")).firstMatch
+        XCTAssertTrue(task.waitForExistence(timeout: 20), "the coordinator's task is part of the conversation")
+        XCTAssertTrue(app.staticTexts["协调者"].exists, "and says who asked")
+        XCTAssertTrue(app.descendants(matching: .any)["plan.card"].exists, "with how it is being worked on")
+        snap("member-all-work")
     }
 }

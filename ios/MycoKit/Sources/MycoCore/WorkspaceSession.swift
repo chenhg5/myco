@@ -128,7 +128,7 @@ public final class WorkspaceSession {
             if me.isEmpty { me = try await hub.whoami().consoleSender }
             async let overview = hub.overview()
             async let projects = hub.projects()
-            async let recent = hub.recent(project: nil)
+            async let recent = hub.recent(.myPairs)
             let (o, p, r) = try await (overview, projects, recent)
             statuses = o.agents
             machines = o.machines
@@ -205,5 +205,33 @@ public final class WorkspaceSession {
 
     public func projects(of agentName: String) -> [Project] {
         projects.filter { p in p.members.contains { $0.name == agentName } }
+    }
+}
+
+/// A project's activity, as the desktop app gathers it: its own threads,
+/// and the threads in no project between its members. An agent that is not
+/// woken by a runner (it waits on its inbox) starts threads without a
+/// project, a coordinator's hand-outs among them.
+public enum ProjectFeed {
+    public static func items(of project: Project, own: [RecentItem], everything: [RecentItem]) -> [RecentItem] {
+        let members = Set(project.members.map(\.name))
+        let have = Set(own.map(\.threadId))
+        let among = everything.filter { item in
+            guard item.project == nil, item.kind == "thread", !have.contains(item.threadId) else { return false }
+            let agents = item.participants.filter { !$0.hasPrefix("@") }
+            return !agents.isEmpty && agents.allSatisfy(members.contains)
+        }
+        return own + among
+    }
+
+    /// Everyone a member has worked with in the project (from its feed),
+    /// and its coordinator: whose exchanges with it make up its page.
+    public static func colleagues(of agent: String, in feed: [RecentItem], coordinator: String?) -> [String] {
+        var names: Set<String> = []
+        for item in feed where item.kind == "thread" && item.participants.contains(agent) {
+            for other in item.participants where other != agent && !other.hasPrefix("@") { names.insert(other) }
+        }
+        if let coordinator, coordinator != agent { names.insert(coordinator) }
+        return names.sorted()
     }
 }

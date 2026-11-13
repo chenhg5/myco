@@ -163,7 +163,7 @@ struct ConversationBody: View {
 
     /// The newest thing I said: saying something new brings it into view.
     private var newestMine: String? {
-        model.items.last { if case .mine = $0.kind { return true } else { return false } }?.id
+        model.items.last { if case .mine(_, _, nil) = $0.kind { return true } else { return false } }?.id
     }
 
     /// The newest answer: the one that carries the row of actions.
@@ -240,7 +240,7 @@ struct ConversationBody: View {
                 // real heights.
                 guard loaded, !landed else { return }
                 landed = true
-                let target = focus.flatMap { focus in model.items.first { $0.id == focus || $0.id == focus + ".dispatch" }?.id }
+                let target = focus.flatMap { focus in model.items.first { $0.id == focus }?.id }
                 if let target {
                     proxy.scrollTo(target, anchor: .center)
                     settled = true
@@ -305,11 +305,17 @@ struct ConversationBody: View {
         switch item.kind {
         case .time(let date):
             TimeBreak(Self.timeText(date))
-        case .mine(let text, let steer):
-            MyBubble(text, label: steer ? L("补充", "Added") : nil)
+        case .mine(let text, let steer, let by):
+            // A colleague's task carries their name; mine needs none.
+            MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
                 .contextMenu { copyButton(text) }
-        case .reply(let text, let taskID):
+        case .reply(let text, let taskID, let to):
             VStack(alignment: .leading, spacing: Space.s) {
+                if let to {
+                    // An answer to a colleague says whom it answers.
+                    Text(L("回复 \(session.displayName(of: to))", "To \(session.displayName(of: to))"))
+                        .font(.footnote.weight(.medium)).foregroundStyle(MycoColor.muted)
+                }
                 ReplyText(text)
                 // The newest answer carries what can be done with it; the
                 // others keep the page quiet (a long press copies any).
@@ -335,19 +341,16 @@ struct ConversationBody: View {
         case .process(let taskID, let live):
             if let process = model.process(of: taskID) { ProcessView(process: process, live: live) }
         case .dispatch(let dispatch):
-            // Whose face: who gave it (on an agent's own page), or who it
-            // was given to (on a project's page).
-            let other = dispatch.incoming ? dispatch.from : dispatch.to
-            let name = session.displayName(of: other)
+            // Work the coordinator gave a member: one line, leading to
+            // that member's page.
+            let name = session.displayName(of: dispatch.to)
             let stateText = Words.state(dispatch.state)
             DispatchCapsule(
-                face: session.agent(other).map(AvatarView.Face.of) ?? .computer,
+                face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
                 name: name, text: dispatch.firstLine, stateText: stateText,
                 tone: StatusTone.of(dispatch.state) ?? .idle,
-                spoken: dispatch.incoming
-                    ? L("\(name) 派的：\(dispatch.firstLine)，\(stateText)", "From \(name): \(dispatch.firstLine), \(stateText)")
-                    : L("派给 \(name)：\(dispatch.firstLine)，\(stateText)", "To \(name): \(dispatch.firstLine), \(stateText)"),
-                action: dispatch.incoming ? nil : { router.push(.agent(dispatch.to, focus: dispatch.taskID)) })
+                spoken: L("派给 \(name)：\(dispatch.firstLine)，\(stateText)", "To \(name): \(dispatch.firstLine), \(stateText)"),
+                action: { router.push(.agent(dispatch.to, focus: dispatch.taskID)) })
         }
     }
 
