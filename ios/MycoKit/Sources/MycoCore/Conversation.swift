@@ -1,5 +1,6 @@
 import Foundation
 import MycoAPI
+import MycoCrypto
 
 /// One thing shown in a conversation, in the order people read it.
 public struct ConversationItem: Identifiable, Hashable, Sendable {
@@ -60,10 +61,10 @@ public enum ConversationBuilder {
             switch m.type {
             case "task", "note":
                 guard mine else {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: m.body)))
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m))))
                     continue
                 }
-                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: m.body, steer: false)))
+                items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false)))
                 guard m.type == "task" else { continue }
                 let state = RunState.of(m, recipient: status(m.to), now: now)
                 if processes.contains(m.id) {
@@ -84,11 +85,11 @@ public enum ConversationBuilder {
                     break
                 }
             case "steer":
-                if mine { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: m.body, steer: true))) }
+                if mine { items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true))) }
             case "reply":
-                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: m.body))) }
+                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m)))) }
             case "progress":
-                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: m.body))) }
+                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m)))) }
             default:
                 break // events repeat what a failed task already says
             }
@@ -107,7 +108,17 @@ public enum ConversationBuilder {
         messages.filter { $0.from == me && $0.isOpen }.max { $0.createdAt < $1.createdAt }
     }
 
+    /// What a message says, as shown: its body, or a note that it is
+    /// encrypted and this device cannot open it (opening comes later).
+    public static func text(of message: Message) -> String {
+        if !(message.unreadable ?? "").isEmpty || Envelope.isSealed(message.body) {
+            return L("🔒 已加密，这台设备还读不了", "🔒 Encrypted: this device cannot read it yet")
+        }
+        return message.body
+    }
+
     public static func firstLine(of body: String) -> String {
+        if Envelope.isSealed(body) { return L("🔒 已加密", "🔒 Encrypted") }
         let line = body.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
         return line.trimmingCharacters(in: .whitespaces)
     }

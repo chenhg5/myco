@@ -7,7 +7,7 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-myco-lang", "en", "-myco-appearance", "light"] + extra
+        app.launchArguments = ["-myco-lang", "en", "-myco-appearance", "light"] + (extra.contains("-myco-start") ? extra : ["-myco-start", "demo"] + extra)
         app.launch()
         return app
     }
@@ -86,9 +86,24 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testTheWelcomePageLeadsIntoTheDemo() {
         let app = launch(["-myco-start", "welcome"])
-        XCTAssertTrue(app.buttons["welcome.scan"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["welcome.join"].waitForExistence(timeout: 15))
         app.buttons["welcome.demo"].tap()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 10), "the demo workspace opens on Chats")
+    }
+
+    @MainActor
+    func testALinkThatIsNotOneSaysSo() {
+        let app = launch(["-myco-start", "welcome"])
+        XCTAssertTrue(app.buttons["welcome.join"].waitForExistence(timeout: 15))
+        app.buttons["welcome.join"].tap()
+        let field = app.descendants(matching: .any)["join.link"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "the join sheet opens")
+        XCTAssertFalse(app.buttons["join.submit"].isEnabled, "nothing pasted: nothing to join with")
+        field.tap()
+        field.typeText("https://example.com/not-a-link")
+        app.buttons["join.submit"].tap()
+        XCTAssertTrue(app.staticTexts["join.problem"].waitForExistence(timeout: 5), "it says the text is not a link")
+        XCTAssertTrue(field.exists, "and stays on the sheet")
     }
 
     @MainActor

@@ -15,6 +15,21 @@ targets:
     platform: iOS
     sources:
       - Myco
+    info:
+      path: Myco/Info.plist
+      properties:
+        CFBundleDisplayName: myco
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # A workspace on the same Wi-Fi is plain HTTP at an address on the
+        # local network (myco hub up --tunnel none). Everything else is HTTPS.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.myco.ios
+            CFBundleURLSchemes: [myco]
     dependencies:
       - package: MycoKit
         product: MycoFeatures
@@ -22,6 +37,8 @@ targets:
         product: MycoCore
       - package: MycoKit
         product: MycoFake
+      - package: MycoKit
+        product: MycoStore
     settings:
       base:
         # A placeholder until the real bundle id is chosen.
@@ -31,10 +48,6 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: myco
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         CODE_SIGN_STYLE: Automatic
   # Walks the app in a simulator, on the demo workspace.
   MycoAppUITests:

@@ -16,6 +16,7 @@ let package = Package(
     products: [
         .library(name: "MycoFeatures", targets: ["MycoFeatures"]),
         .library(name: "MycoCore", targets: ["MycoCore"]),
+        .library(name: "MycoStore", targets: ["MycoStore"]),
         .library(name: "MycoFake", targets: ["MycoFake"]),
     ],
     targets: [
@@ -26,7 +27,7 @@ let package = Package(
         .target(name: "MycoFake", dependencies: ["MycoAPI"]),
         .target(name: "MycoUI"),
         .target(name: "MycoFeatures", dependencies: ["MycoCore", "MycoUI", "MycoAPI"]),
-        .testTarget(name: "MycoAPITests", dependencies: ["MycoAPI"]),
+        .testTarget(name: "MycoAPITests", dependencies: ["MycoAPI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "MycoCoreTests", dependencies: ["MycoCore", "MycoFake"]),
         .testTarget(name: "MycoUITests", dependencies: ["MycoUI"], resources: [.copy("Fixtures")]),
     ]

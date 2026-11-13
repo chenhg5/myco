@@ -9,7 +9,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     private func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-myco-lang", "en", "-myco-appearance", "light"] + arguments
+        app.launchArguments = ["-myco-lang", "en", "-myco-appearance", "light"] + (arguments.contains("-myco-start") ? arguments : ["-myco-start", "demo"] + arguments)
         app.launch()
         return app
     }

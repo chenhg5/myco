@@ -208,7 +208,7 @@ struct WorkspaceSheet: View {
                         Spacer()
                         Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.fg2)
                     }
-                    Button(L("加入另一个工作区", "Join another workspace"), systemImage: "qrcode.viewfinder") { joinNotice = true }
+                    Button(L("加入另一个工作区", "Join another workspace"), systemImage: "plus") { joinNotice = true }
                 }
                 Section {
                     NavigationLink {
@@ -218,7 +218,7 @@ struct WorkspaceSheet: View {
                     }
                     Button(L("离开这个工作区", "Leave this workspace"), systemImage: "rectangle.portrait.and.arrow.right") {
                         dismiss()
-                        app.leaveWorkspace()
+                        Task { await app.leaveWorkspace() }
                     }
                 }
             }
@@ -230,7 +230,7 @@ struct WorkspaceSheet: View {
                     Button(L("完成", "Done")) { dismiss() }
                 }
             }
-            .alert(L("扫码加入还没做好", "Joining by code is not built yet"), isPresented: $joinNotice) {
+            .alert(L("现在一次只能加入一个工作区。要换一个，先离开这个。", "One workspace at a time for now. To switch, leave this one first."), isPresented: $joinNotice) {
                 Button(L("好", "OK"), role: .cancel) {}
             }
         }
@@ -324,7 +324,7 @@ struct AddAgentSheet: View {
 /// a workspace is set up on a computer.
 struct WelcomeScreen: View {
     @Environment(AppModel.self) private var app
-    @State private var notice = false
+    @State private var joining = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -334,10 +334,10 @@ struct WelcomeScreen: View {
             Text(L("在手机上跟进和指挥你的 agent。", "Follow and direct your agents from your phone."))
                 .font(.body).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
             Spacer()
-            Button(L("扫码加入工作区", "Scan to join a workspace")) { notice = true }
+            Button(L("用链接加入工作区", "Join a workspace with a link")) { joining = true }
                 .buttonStyle(PrimaryButtonStyle())
-                .accessibilityIdentifier("welcome.scan")
-            Text(L("二维码在电脑上的 myco 里：设置 → 添加设备。", "The code is in myco on your computer: Settings → Add a device."))
+                .accessibilityIdentifier("welcome.join")
+            Text(L("链接在电脑上的 myco 里：设置 → 成员 → 添加设备。", "The link is in myco on your computer: Settings → Members → Add a device."))
                 .font(.footnote).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
             Button(L("先看看演示工作区", "Look around a demo workspace")) { app.enterDemo() }
                 .font(.subheadline.weight(.medium))
@@ -348,8 +348,75 @@ struct WelcomeScreen: View {
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MycoColor.bg)
-        .alert(L("扫码加入还没做好", "Joining by code is not built yet"), isPresented: $notice) {
-            Button(L("好", "OK"), role: .cancel) {}
+        .sheet(isPresented: $joining) { JoinSheet() }
+    }
+}
+
+/// Joining with a link: paste it, and this device signs in as you.
+struct JoinSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var link = ""
+    @State private var working = false
+    @State private var problem: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L("把「添加设备」给的链接粘贴到这里。链接只能用一次，24 小时内有效。", "Paste the link that \"Add a device\" gave you. It works once, within 24 hours."))
+                    .font(.subheadline).foregroundStyle(MycoColor.fg2)
+                HStack(spacing: 8) {
+                    TextField("https://…/c/myco_pair_…", text: $link, axis: .vertical)
+                        .lineLimit(1...4)
+                        .font(.callout.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .padding(12)
+                        .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .accessibilityIdentifier("join.link")
+                    PasteButton(payloadType: String.self) { strings in
+                        if let first = strings.first { link = first }
+                    }
+                    .labelStyle(.iconOnly)
+                    .tint(MycoColor.button)
+                }
+                if let problem {
+                    Text(problem).font(.footnote).foregroundStyle(MycoColor.red).accessibilityIdentifier("join.problem")
+                }
+                Button(working ? L("正在加入…", "Joining…") : L("加入", "Join")) { join() }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(working || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                    .accessibilityIdentifier("join.submit")
+                Spacer()
+            }
+            .padding(20)
+            .background(MycoColor.bg)
+            .navigationTitle(L("加入工作区", "Join a workspace"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("取消", "Cancel")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func join() {
+        working = true
+        problem = nil
+        Task {
+            do {
+                try await app.join(link: link)
+                dismiss()
+            } catch let failure as AppModel.JoinFailure {
+                problem = failure.message
+            } catch {
+                problem = L("没能加入，请再试一次。", "Could not join. Try again.")
+            }
+            working = false
         }
     }
 }

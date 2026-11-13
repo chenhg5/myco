@@ -37,9 +37,15 @@ extension WorkspaceSession {
         var byProject: [String: [RecentItem]] = [:]
         var byAgent: [String: [RecentItem]] = [:]
         let leads = Dictionary(uniqueKeysWithValues: projects.compactMap { p in coordinator(of: p).map { (p.name, $0) } })
+        // An agent that coordinates a project is reached through that
+        // project's row, whichever thread the words were said in.
+        var projectOfLead: [String: String] = [:]
+        for project in projects {
+            if let lead = leads[project.name], projectOfLead[lead] == nil { projectOfLead[lead] = project.name }
+        }
         for item in recent where item.participants.contains(me) {
             for other in item.participants where other != me {
-                if let project = item.project, leads[project] == other {
+                if let project = projectOfLead[other] {
                     byProject[project, default: []].append(item)
                 } else {
                     byAgent[other, default: []].append(item)

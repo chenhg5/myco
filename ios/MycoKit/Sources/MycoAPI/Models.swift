@@ -362,10 +362,13 @@ public struct Member: Codable, Sendable, Hashable, Identifiable {
 /// The person behind this device's token.
 public struct Whoami: Codable, Sendable, Hashable {
     public var member: Member?
+    /// This app on this device.
+    public var device: Device?
     public var canManage: Bool
 
-    public init(member: Member?, canManage: Bool = true) {
+    public init(member: Member?, device: Device? = nil, canManage: Bool = true) {
         self.member = member
+        self.device = device
         self.canManage = canManage
     }
 
