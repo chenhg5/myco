@@ -35,6 +35,10 @@ const md = new Marked({
   gfm: true,
   breaks: true,
   renderer: {
+    // A checklist's boxes, drawn as the plan card's (no form control).
+    checkbox({ checked }) {
+      return `<span class="md-check ${checked ? "is-done" : "is-todo"}"></span>`;
+    },
     code({ text, lang }) {
       const langClass = lang ? ` class="language-${escapeAttr(lang)}"` : "";
       return (
@@ -83,10 +87,21 @@ function onCopyClick(e: React.MouseEvent<HTMLDivElement>) {
   });
 }
 
+/** "- [~] step" (being done) is not a Markdown task: it gets the box of a
+ *  step in hand, outside code blocks. */
+function doingItems(text: string): string {
+  if (!text.includes("[~]") && !text.includes("[-]")) return text;
+  let fence = false;
+  return text.split("\n").map((l) => {
+    if (/^\s*(```|~~~)/.test(l)) fence = !fence;
+    return fence ? l : l.replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[(~|-)\]\s+/, '$1<span class="md-check is-doing"></span> ');
+  }).join("\n");
+}
+
 /** Rendered, sanitized markdown. Raw HTML is allowed through marked but
  *  DOMPurify removes scripts, event handlers and unsafe URLs. */
 export function Markdown({ text }: { text: string }) {
-  const html = useMemo(() => sanitize(md.parse(text, { async: false }) as string), [text]);
+  const html = useMemo(() => sanitize(md.parse(doingItems(text), { async: false }) as string), [text]);
   const ref = useRef<HTMLDivElement>(null);
   // An image's error event does not bubble, so it is caught on the way down.
   useEffect(() => {

@@ -98,16 +98,37 @@ export type PlanItem = { text: string; state: "done" | "doing" | "todo" };
 /** A plan written as a checklist: lines like "[x] done", "[~] doing",
  *  "[ ] to do", or a markdown task list ("- [x] …"). At least two items,
  *  every line one of them; otherwise it is not a plan. */
-export function parsePlan(text: string): PlanItem[] | null {
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return null;
-  const items: PlanItem[] = [];
-  for (const l of lines) {
-    const m = /^(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)$/.exec(l);
-    if (!m) return null;
-    items.push({ text: m[2].trim(), state: m[1] === " " ? "todo" : m[1] === "~" || m[1] === "-" ? "doing" : "done" });
+const PLAN_ITEM = /^(?:[-*+]\s+)?\[( |x|X|~|-)\]\s+(.+)$/;
+
+function itemOf(line: string): PlanItem | null {
+  const m = PLAN_ITEM.exec(line.trim());
+  return m ? { text: m[2].trim(), state: m[1] === " " ? "todo" : m[1] === "~" || m[1] === "-" ? "doing" : "done" } : null;
+}
+
+/** A checklist (two items or more), and what was said around it: an agent
+ *  often writes a line before its plan ("好，计划：") or after it. */
+export function splitPlan(text: string): { items: PlanItem[]; rest: string } | null {
+  const lines = text.split("\n");
+  let best: { from: number; to: number } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!itemOf(lines[i])) continue;
+    let j = i;
+    while (j + 1 < lines.length && (itemOf(lines[j + 1]) || !lines[j + 1].trim())) j++;
+    while (j > i && !lines[j].trim()) j--;
+    if (!best || j - i > best.to - best.from) best = { from: i, to: j };
+    i = j;
   }
-  return items;
+  if (!best) return null;
+  const items = lines.slice(best.from, best.to + 1).map(itemOf).filter((x): x is PlanItem => !!x);
+  if (items.length < 2) return null;
+  const rest = [...lines.slice(0, best.from), ...lines.slice(best.to + 1)].join("\n").trim();
+  return { items, rest };
+}
+
+/** A message that is only a checklist. */
+export function parsePlan(text: string): PlanItem[] | null {
+  const p = splitPlan(text);
+  return p && !p.rest ? p.items : null;
 }
 
 function usageLine(u?: TraceStep): string {
@@ -272,17 +293,18 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   // ticked off as it goes. A report that is only the plan is not repeated
   // in the timeline.
   let plan: { items: PlanItem[]; at: string } | null = null;
-  const planReports = new Set<string>();
+  // Reports that carried the plan: what else they said, if anything.
+  const planReports = new Map<string, string>();
   for (const r of rows) {
     if (r.kind !== "tool" || r.call.tool !== "TodoWrite") continue;
     const items = parsePlan(r.call.input || "");
     if (items && (!plan || (r.at || "") >= plan.at)) plan = { items, at: r.at || "" };
   }
   for (const p of reports) {
-    const items = parsePlan(p.body);
-    if (!items) continue;
-    planReports.add(p.id);
-    if (!plan || p.created_at >= plan.at) plan = { items, at: p.created_at };
+    const split = splitPlan(p.body);
+    if (!split) continue;
+    planReports.set(p.id, split.rest);
+    if (!plan || p.created_at >= plan.at) plan = { items: split.items, at: p.created_at };
   }
 
   // As Claude Code and Codex show a run: what it says between steps is
@@ -293,9 +315,11 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; row?: Row };
   const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
-    if (planReports.has(p.id)) continue;
+    // The plan is the card at the top; what was said with it stays here.
+    if (planReports.has(p.id) && !planReports.get(p.id)) continue;
+    const body = planReports.get(p.id) || p.body;
     const it: Item = p.ask ? { at: p.created_at, ask: p }
-      : { at: p.created_at, say: { key: p.id, text: p.body, report: true, when: p.created_at, files: p.attachments } };
+      : { at: p.created_at, say: { key: p.id, text: body, report: true, when: p.created_at, files: p.attachments } };
     // after the last step made before it (steps without a time: at the end)
     let i = items.length;
     if (items.every((x) => x.at)) {

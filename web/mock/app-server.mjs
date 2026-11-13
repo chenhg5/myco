@@ -628,7 +628,7 @@ function consoleReply() {
   }
   if (form === 2) {
     return {
-      body: "处理好了。改动集中在 console 的 session 读取和 App 的对话页面，类型检查和构建都已经通过。\n\n需要我继续把发布说明也写好吗？",
+      body: "处理好了。改动集中在 console 的 session 读取和 App 的对话页面，类型检查和构建都已经通过。\n\n- [x] 改 session 读取\n- [x] 改对话页面\n- [~] 写发布说明\n- [ ] 发版\n\n需要我继续把发布说明也写好吗？",
     };
   }
   return {
@@ -665,7 +665,7 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (!msgs) return;
     msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
   };
-  later(1500, plan("- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
+  later(1500, plan("好，先这样做：\n- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
   later(4500, plan("- [x] 读一下相关代码\n- [x] 动手改\n- [~] 跑测试，看有没有破坏别的"));
   later(3000, () => {
     const msgs = hub.threads[threadId];

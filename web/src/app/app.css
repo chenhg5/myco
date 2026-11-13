@@ -6160,3 +6160,41 @@ body.is-resizing {
 @media (prefers-reduced-motion: reduce) {
   .reveal.is-growing .md > * { animation: none; }
 }
+
+/* A checklist in a message (Markdown.tsx): boxes like the plan card's,
+   black, white and grey; a ticked item's text fades and is struck. */
+.md li:has(> .md-check) {
+  list-style: none;
+  margin-left: -1.1em;
+}
+.md-check {
+  display: inline-block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  margin-right: 7px;
+  vertical-align: -2px;
+  border: 1.5px solid var(--faint);
+  border-radius: 3.5px;
+}
+.md-check.is-doing {
+  border-color: var(--fg-2);
+}
+.md-check.is-done {
+  border-color: var(--muted);
+  background: var(--muted);
+}
+.md-check.is-done::after {
+  content: "";
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 3px;
+  height: 7px;
+  border: solid var(--card);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+.md li:has(> .md-check.is-done) {
+  color: var(--muted);
+}
