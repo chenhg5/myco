@@ -12,6 +12,8 @@ public struct ComposerView: View {
     let placeholder: String
     let mode: Mode
     let enabled: Bool
+    /// What the button is called for VoiceOver ("Send", "Add", "Stop").
+    let submitLabel: String
     /// The title of "send after this one" in the long-press menu.
     let queueTitle: String
     let onSubmit: () -> Void
@@ -19,13 +21,14 @@ public struct ComposerView: View {
     let onAttach: () -> Void
 
     public init(
-        text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, queueTitle: String,
+        text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
         onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void, onAttach: @escaping () -> Void
     ) {
         _text = text
         self.placeholder = placeholder
         self.mode = mode
         self.enabled = enabled
+        self.submitLabel = submitLabel
         self.queueTitle = queueTitle
         self.onSubmit = onSubmit
         self.onQueue = onQueue
@@ -70,11 +73,13 @@ public struct ComposerView: View {
                 onSubmit()
             }
             .disabled(!enabled)
+            .accessibilityLabel(submitLabel)
             .accessibilityIdentifier("composer.submit")
         } else {
             Button(action: onSubmit) { icon }
                 .buttonStyle(.plain)
                 .disabled(!enabled)
+                .accessibilityLabel(submitLabel)
                 .accessibilityIdentifier("composer.submit")
         }
     }

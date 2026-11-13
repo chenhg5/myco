@@ -237,13 +237,21 @@ struct ConversationBody: View {
             ComposerView(
                 text: $model.draft,
                 placeholder: model.openTask == nil ? L("发给 \(name)", "Message \(name)") : L("补充给 \(name)", "Add to what \(name) is doing"),
-                mode: mode, enabled: model.canSubmit,
+                mode: mode, enabled: model.canSubmit, submitLabel: submitLabel,
                 queueTitle: L("排到下一条", "Send after this one"),
                 onSubmit: { Task { await model.submit() } },
                 onQueue: { model.queueNext() },
                 onAttach: { attachNotice = true })
         }
         .background(.bar)
+    }
+
+    private var submitLabel: String {
+        switch model.action {
+        case .send: return L("发送", "Send")
+        case .steer: return L("补充", "Add")
+        case .stop: return L("停止", "Stop")
+        }
     }
 
     private var mode: ComposerView.Mode {

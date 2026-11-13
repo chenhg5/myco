@@ -36,6 +36,20 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         CODE_SIGN_STYLE: Automatic
+  # Walks the app in a simulator, on the demo workspace.
+  MycoAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - MycoAppUITests
+    dependencies:
+      - target: Myco
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.myco.ios.uitests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Myco
 schemes:
   Myco:
     build:
@@ -43,3 +57,7 @@ schemes:
         Myco: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MycoAppUITests
