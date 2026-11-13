@@ -2373,7 +2373,7 @@ body.is-sorting * {
   width: 15px;
   height: 15px;
   margin-top: 2px;
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--faint);
   border-radius: 4px;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
@@ -2381,11 +2381,13 @@ body.is-sorting * {
   width: 11px;
   height: 11px;
   stroke-width: 3;
-  color: #fff;
+  color: var(--card);
 }
+/* Black, white and grey: a ticked box is a quiet grey, the step in hand
+   has a darker outline. No colour, so it reads as the answer's notes. */
 .trace-plan-item.is-done .trace-plan-box {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: var(--muted);
+  background: var(--muted);
 }
 .trace-plan-item.is-done .trace-plan-text {
   color: var(--muted);
@@ -2393,7 +2395,7 @@ body.is-sorting * {
   text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent);
 }
 .trace-plan-item.is-doing .trace-plan-box {
-  border-color: var(--green);
+  border-color: var(--fg-2);
 }
 .trace-plan-item.is-doing .trace-plan-text {
   font-weight: 500;
@@ -2402,7 +2404,7 @@ body.is-sorting * {
   animation: plan-pulse 1.4s ease-in-out infinite;
 }
 @keyframes plan-pulse {
-  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
   .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
