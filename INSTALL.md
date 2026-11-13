@@ -404,8 +404,10 @@ runner:
   access: workspace
   env_file: ~/.config/myco-codex.env     # 可选：只传给这个 agent 的 CLI 的环境变量（KEY=VALUE，权限 600）
   args: ["-c", "model_reasoning_effort=medium"]
-  timeout: 30m
+  timeout: 30m   # 可选：agent 这么久没有任何动静（输出、工具调用、思考）就停掉这一轮，默认 30m
 ```
+
+`timeout` 从 v0.19.2 起按「多久没有动静」算：agent 一直在跑命令、改文件、思考，就不会被打断；一轮最长 6 小时。会话这么久没有任何输出时，任务以「stopped after 30m0s without any activity」失败，发送方会收到通知。不上报过程的 harness（`shell`）仍从开始算起。
 
 **权限级别**：`runner.access`（或 `--access`），各 harness 会自动翻译成对应的参数：
 

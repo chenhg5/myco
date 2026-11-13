@@ -17,6 +17,8 @@ export interface HubOverview {
   name: string;
   ok: boolean;
   error?: string;
+  /** the hub's version, from the App's hub list (not its overview) */
+  hub_version?: string;
   overview?: Overview;
   /** who this app is on the hub (absent on hubs without members) */
   me?: Whoami;
@@ -406,7 +408,8 @@ export const appApi = {
   /** Stops a running task the console sent (hubs from v0.18.32). */
   stop: (hubId: string, messageId: string) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/stop`),
-  /** Corrects an unfinished task the console sent. */
+  /** Corrects an unfinished task the console sent. Files go with it on hubs
+   *  from v0.19.2; older hubs take the text only. */
   steer: (hubId: string, messageId: string, body: string, attachments?: string[]) =>
     request<Message>("POST", `app/hubs/${enc(hubId)}/messages/${enc(messageId)}/steer`, { body, attachments }),
   /** Closes an open message for its recipient without replying (owner or admin). */

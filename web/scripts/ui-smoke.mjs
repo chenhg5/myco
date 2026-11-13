@@ -241,6 +241,33 @@ function compactText(s) {
   return (s || "").replace(/\s+/g, " ").trim();
 }
 
+// ⌘ on a Mac, Ctrl elsewhere: the key that puts the next message behind the
+// running one.
+const NEXT_KEY = process.platform === "darwin" ? "Meta+Enter" : "Control+Enter";
+
+/** A message written from "another device": straight to the mock, so two
+ *  tasks can be on their way at once (the box adds to the running one now). */
+async function sendFromElsewhere(hubId, agent, body) {
+  const r = await fetch(`http://${HOST}:${MOCK_PORT}/app/hubs/${hubId}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ to: agent, body }),
+  });
+  if (!r.ok) throw new Error(`直接发一条失败：HTTP ${r.status}`);
+  return r.json();
+}
+
+/** Waits until no round is running: what was said is on screen and the box
+ *  says "发给" again, not "补充给". */
+async function noRound(page) {
+  await page.waitForFunction(() => {
+    const d = document.querySelector(".conv-detail");
+    const el = d?.querySelector(".conv-compose-input");
+    return !!d && !!el && d.querySelectorAll(".conv-msg").length > 0
+      && !(el.getAttribute("placeholder") || "").includes("补充");
+  }, null, { timeout: 30_000 });
+}
+
 /** Opens your chat with a member of a space (a project, or the agents in
  *  none): from the members column, or the row of faces in a narrow window. */
 async function openMember(page, narrow, space, name) {
@@ -665,13 +692,17 @@ async function runMatrix(browser, size, scheme) {
     // answer, not under the steps.
     await step("单聊 · 晚到的回复引用原话", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      // The file task of the previous step may still be running: Enter would
+      // add to it, so wait for it to end.
+      await noRound(page);
       const box = page.locator(".conv-detail .conv-compose-input");
       await box.fill("第一件：把发布说明整理一下");
       await box.press("Enter");
-      await page.waitForTimeout(1500);
-      await box.fill("第二件：顺便看看下载页的链接");
-      await box.press("Enter");
-      await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 20_000 });
+      await page.locator(".conv-msg", { hasText: "第一件" }).last().waitFor({ timeout: 20_000 });
+      // The second task arrives from "another device" while the first runs:
+      // in the box it would now be a supplement, not a second task.
+      await sendFromElsewhere("hub_studio", "review-cloud", "第二件：顺便看看下载页的链接");
+      await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 25_000 });
       if (await page.locator(".conv-detail .trace-foot").count()) throw new Error("耗时和费用应跟着回复（复制按钮那一行），不在过程下面");
       await page.locator(".conv-detail .conv-usage").first().waitFor({ state: "attached", timeout: 10_000 });
       await clickVisible(page, page.locator(".conv-head button").first());
@@ -706,6 +737,74 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // While a round is running the box speaks for that round: Enter adds to
+    // it (one run, one loading) and ⌘/Ctrl+Enter puts the next message
+    // behind it, listed above the box until the round ends.
+    await step("单聊 · 补充和排队", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      const task = "整理发布说明，按模块分组";
+      await box.fill(task);
+      await box.press("Enter");
+      await page.locator(".conv-msg.is-me", { hasText: task }).last().waitFor({ timeout: 20_000 });
+      // Queued first, while there is time before this round ends.
+      const nextText = "然后写个标题";
+      await box.fill(nextText);
+      await box.press(NEXT_KEY);
+      const rows = page.locator(".conv-detail .conv-queue-row");
+      await rows.first().waitFor({ timeout: 10_000 });
+      const dropText = "这条撤回";
+      await box.fill(dropText);
+      await box.press(NEXT_KEY);
+      if ((await rows.count()) !== 2) throw new Error(`连着排两条应有两行，实际 ${await rows.count()} 行`);
+      const order = (await rows.allInnerTexts()).map(compactText);
+      if (!order[0].includes(nextText) || !order[1].includes(dropText)) throw new Error(`排队应按先后排：${JSON.stringify(order)}`);
+      if (!order[0].includes("排队中")) throw new Error(`排队条应写「排队中：」，实际「${order[0]}」`);
+      // Enter now adds to the running task: drawn inside it, not a second one.
+      const addText = "补充：下载页的链接也顺带检查";
+      await box.fill(addText);
+      await box.press("Enter");
+      const add = page.locator(".conv-detail .conv-supplement", { hasText: "下载页的链接" });
+      await add.waitFor({ timeout: 20_000 });
+      const oneBubble = await page.evaluate(({ task, addText }) => {
+        const mine = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")];
+        const said = mine.filter((el) => (el.textContent || "").includes(addText));
+        return said.length === 1 && (said[0].textContent || "").includes(task);
+      }, { task, addText });
+      if (!oneBubble) throw new Error("补充应贴在那条任务里，不是单独一条消息");
+      await page.waitForFunction(() => {
+        const d = document.querySelector(".conv-detail");
+        return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting, .trace-group.is-live").length === 1;
+      }, null, { timeout: 10_000 }).catch(() => undefined);
+      const live = await page.locator(".conv-detail .trace.is-live, .conv-detail .trace.is-waiting, .conv-detail .trace-group.is-live").count();
+      if (live !== 1) throw new Error(`补充之后应只有这一轮在转，实际 ${live} 处`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-supplement");
+      // Edit takes a queued message back into the box (it is withdrawn first).
+      await clickVisible(page, rows.nth(1).getByRole("button", { name: "编辑" }));
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 1, null, { timeout: 10_000 });
+      if ((await rows.count()) !== 1) throw new Error("编辑之后那一行应消失");
+      const back = await box.inputValue();
+      if (back !== dropText) throw new Error(`编辑应把内容放回输入框，实际「${back}」`);
+      // Put it back in the queue, then withdraw it for good.
+      await box.press(NEXT_KEY);
+      await rows.nth(1).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "conversation-queue");
+      await clickVisible(page, rows.nth(1).getByRole("button", { name: "撤回" }));
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 1, null, { timeout: 10_000 });
+      if ((await rows.count()) !== 1) throw new Error("撤回之后排队条应只剩一条");
+      // This round's answer ends it: the message queued behind goes out.
+      await page.locator(".conv-msg.is-me", { hasText: nextText }).last().waitFor({ timeout: 30_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .conv-queue"), null, { timeout: 10_000 });
+      await page.waitForTimeout(1500);
+      if (await page.locator(".conv-msg.is-me", { hasText: dropText }).count()) throw new Error("撤回的消息不该发出去");
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-queue-sent");
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // Without a project, the group has a box that says whom a task goes to.
     await step("聊天 · 派活", async () => {
       const to = compactText(await page.locator(".sp-to-name").innerText());
@@ -734,12 +833,9 @@ async function runMatrix(browser, size, scheme) {
       if (!/legacy-codex/.test(headText)) throw new Error(`点成员 legacy-codex 进入的不是它的对话：「${headText}」`);
 
       const body = "你好，收到请回复 收到";
-      // The mock keeps its state across window combinations, so this
-      // conversation may already hold earlier tasks with process blocks:
-      // only blocks after this message count.
-      const input = page.locator(".conv-compose-input");
-      await input.fill(body);
-      await input.press("Enter");
+      // This chat holds the stuck demo task, so Enter would add to that one
+      // instead of sending: the task arrives from "another device" here.
+      await sendFromElsewhere("hub_studio", "legacy-codex", body);
       await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
       // The header speaks for the whole conversation (it can say 可能卡住 for
       // an older task here), so wait for this task's own answer instead (the
@@ -770,9 +866,8 @@ async function runMatrix(browser, size, scheme) {
 
     await step("单聊 · 有工具调用", async () => {
       const body = "整理一下这次发布的主要变化，列成要点。";
-      const input = page.locator(".conv-compose-input");
-      await input.fill(body);
-      await input.press("Enter");
+      // As above: the stuck demo task keeps the box in "add" mode here.
+      await sendFromElsewhere("hub_studio", "legacy-codex", body);
       await page.locator(".conv-msg", { hasText: body }).last().waitFor({ timeout: 20_000 });
       // As above: the mock finishes this task 6 s after it is sent.
       await page.waitForTimeout(7_500);

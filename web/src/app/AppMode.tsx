@@ -137,7 +137,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
     try {
       const [h, o, pending] = await Promise.all([appApi.hubs(), appApi.overview(), readPendingLink()]);
       setHubs(h);
-      setOv(remember("overview", keepOffline(o, recall<AppOverview>("overview"))));
+      // The overview says what is on each hub; the hub list says which
+      // version it is. The conversation needs both (what the hub can do).
+      const versionOf = new Map(h.map((x) => [x.id, x.hub_version]));
+      const withVersions = { ...o, hubs: o.hubs.map((x) => ({ ...x, hub_version: versionOf.get(x.id) ?? x.hub_version })) };
+      setOv(remember("overview", keepOffline(withVersions, recall<AppOverview>("overview"))));
       await loadProjects(o.hubs.filter((x) => x.ok).map((x) => x.id), o.hubs.map((x) => x.id));
       setError(null);
       setNow(Date.now());

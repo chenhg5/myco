@@ -3304,7 +3304,7 @@ button.conv-attach:hover .conv-attach-go {
 /* Everything in the composer area shares the conversation's column, so a
    notice above the box lines up with the box in a wide window. */
 .conv-working,
-.conv-steer-hint,
+.conv-queue,
 .conv-busy,
 .conv-compose > .app-error-text,
 .conv-compose-box {
@@ -3487,14 +3487,72 @@ button.conv-attach:hover .conv-attach-go {
 .conv-steer-btn + .conv-steer-btn {
   margin-left: 0;
 }
-.conv-steer-btn.active {
-  background: var(--amber-soft);
-  color: var(--amber);
+
+/* What waits behind the running task (⌘/Ctrl+Enter): a line above the box,
+   with the first line of the message and a way to change or drop it. */
+.conv-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
 }
-.conv-steer-hint {
-  margin-bottom: 8px;
+.conv-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px 3px 9px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 11.5px;
+}
+.conv-queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.conv-queue-label {
+  color: var(--faint);
+}
+.conv-queue-btn {
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
   font-size: 11px;
-  color: var(--amber);
+  cursor: default;
+}
+.conv-queue-btn:hover {
+  background: var(--pill-hover);
+  color: var(--fg);
+}
+.conv-queue-btn:disabled {
+  opacity: 0.5;
+}
+
+/* A supplement (Enter while it works) belongs to the task above it: shown
+   inside that bubble, after what you first asked, not as another turn. */
+.conv-supplement {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.conv-supplement-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.conv-supplement-time {
+  font-size: 10.5px;
+  color: var(--faint);
 }
 .conv-compose-box {
   display: flex;
@@ -3508,11 +3566,6 @@ button.conv-attach:hover .conv-attach-go {
 }
 .conv-compose-box:focus-within {
   border-color: var(--focus);
-}
-.conv-compose-box.is-steer,
-.conv-compose-box.is-steer:focus-within {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-soft);
 }
 .conv-compose-input {
   display: block;
@@ -3606,9 +3659,6 @@ button.conv-attach:hover .conv-attach-go {
 .conv-send.is-stop {
   background: var(--fg);
   color: var(--card);
-}
-.conv-compose-box.is-steer .conv-send:not(:disabled) {
-  background: var(--amber);
 }
 .conv-send .spin {
   animation: conv-spin 0.9s linear infinite;
