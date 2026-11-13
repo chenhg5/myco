@@ -187,16 +187,16 @@ struct ConversationBody: View {
                         row(item)
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
                     }
-                    // Marks the end: on screen means "at the bottom".
-                    Color.clear.frame(height: 1)
+                    // Marks the end: on screen means "at the bottom". It is
+                    // also the room between the last thing said and the
+                    // input, so scrolling "to the end" brings that room too.
+                    Color.clear.frame(height: Space.xl)
                         .id(Self.bottomID)
                         .onAppear { atBottom = true }
                         .onDisappear { atBottom = false }
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
-                // Room between the last thing said and the input.
-                .padding(.bottom, Space.xl)
             }
             // Opens at the bottom, and stays there as content grows while
             // the newest message is in view.
