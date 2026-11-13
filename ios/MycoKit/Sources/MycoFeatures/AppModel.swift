@@ -111,7 +111,7 @@ extension View {
             Group {
                 switch route {
                 case .project(let name): ProjectScreen(name: name)
-                case .agent(let name, _): AgentScreen(name: name)
+                case .agent(let name, let focus): AgentScreen(name: name, focus: focus)
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 }
             }

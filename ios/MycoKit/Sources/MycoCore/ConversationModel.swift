@@ -24,6 +24,14 @@ public final class ConversationModel {
 
     private let session: WorkspaceSession
     private var sending = false
+    /// The steps of my tasks, by task id.
+    private var traces: [String: [TraceEvent]] = [:]
+    /// Tasks that are closed and whose steps are all here.
+    private var settled: Set<String> = []
+    private var processes: [String: RunProcess] = [:]
+
+    /// How many of my newest tasks show their steps.
+    static let tracedTasks = 6
 
     /// How often an open conversation refreshes.
     public static let pollInterval: Duration = .seconds(2)
@@ -32,6 +40,11 @@ public final class ConversationModel {
         self.session = session
         self.agent = agent
         self.project = project
+    }
+
+    /// How a task of mine was worked on, when its steps are known.
+    public func process(of taskID: String) -> RunProcess? {
+        processes[taskID]
     }
 
     public var action: ComposerAction {
@@ -65,9 +78,12 @@ public final class ConversationModel {
         guard !me.isEmpty else { return }
         do {
             let messages = try await session.hub.exchanges(between: me, and: agent)
-            let others = try await dispatches()
+            let others = try await othersWork()
+            await loadSteps(of: messages.filter { $0.from == me && $0.type == "task" && $0.status != "queued" })
             let built = ConversationBuilder.items(
-                me: me, messages: messages, others: others, status: { self.session.status(of: $0) }, now: Date())
+                me: me, messages: messages, others: others, incomingTo: project == nil ? agent : nil,
+                processes: Set(processes.filter { !$0.value.isEmpty }.keys),
+                status: { self.session.status(of: $0) }, now: Date())
             // Nothing new: leave the list alone, so the page does not redraw.
             if built != items { items = built }
             openTask = ConversationBuilder.openTask(me: me, messages: messages)
@@ -81,10 +97,29 @@ public final class ConversationModel {
     }
 
     /// On a project's page: what its coordinator gave the other members.
-    private func dispatches() async throws -> [Message] {
-        guard let project else { return [] }
-        let recent = try await session.hub.recent(project: project)
-        return recent.compactMap(\.task).filter { $0.from == agent && $0.to != session.me }
+    /// On an agent's own page: what others gave it.
+    private func othersWork() async throws -> [Message] {
+        let tasks = try await session.hub.recent(project: project).compactMap(\.task)
+        if project != nil {
+            return tasks.filter { $0.from == agent && $0.to != session.me }
+        }
+        return tasks.filter { $0.to == agent && $0.from != session.me }
+    }
+
+    /// Fetches the steps of my newest tasks: all of them once for a closed
+    /// task, the new ones each time for one still being worked on.
+    private func loadSteps(of tasks: [Message]) async {
+        let newest = tasks.sorted { $0.createdAt > $1.createdAt }.prefix(Self.tracedTasks)
+        for task in newest where !settled.contains(task.id) {
+            let known = traces[task.id] ?? []
+            guard let trace = try? await session.hub.trace(of: task.id, after: known.last?.seq ?? 0) else { continue }
+            if !trace.events.isEmpty || processes[task.id] == nil {
+                let events = known + trace.events
+                traces[task.id] = events
+                processes[task.id] = RunProcess(events: events)
+            }
+            if !task.isOpen { settled.insert(task.id) }
+        }
     }
 
     /// The send button: a new message, an addition to the open task, or stop.

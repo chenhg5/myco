@@ -6,6 +6,8 @@ public enum Scenario: Sendable {
     /// A project with a coordinator and members in every state, and two
     /// agents talked to directly.
     case team
+    /// The team, plus one very long conversation: for scrolling.
+    case long
     /// Joined, but nobody is here yet.
     case empty
 
@@ -17,7 +19,7 @@ public enum Scenario: Sendable {
     }
 
     func build(now: Date) -> World {
-        guard self == .team else { return World() }
+        guard self != .empty else { return World() }
         let me = FakeHub.me
         func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
         func agent(_ id: String, _ name: String, _ display: String?, _ role: String, cli: String, dir: String, days: Double) -> Agent {
@@ -94,6 +96,23 @@ public enum Scenario: Sendable {
             Message(id: "b1", from: me, to: backend.name, type: "note", body: "推送中转先别定用哪家，等我回来再说。", status: "done", project: project, createdAt: ago(2_400)),
             Message(id: "b2", from: backend.name, to: me, threadId: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),
         ]
+        if self == .long {
+            // Four hundred messages with the notes helper, oldest first,
+            // with the kinds of answers agents give.
+            let answers = [
+                "好的，记下了。",
+                "整理成三条：\n\n1. 先跑通关键路径\n2. 再接真实数据\n3. 每一步都在模拟器里看",
+                "这段代码可以这样写：\n\n```swift\nlet rows = session.chatRows.filter { $0.state != nil }\nprint(rows.count)\n```\n\n跑一下就知道了。",
+                "## 结论\n\n| 方案 | 好处 | 问题 |\n|---|---|---|\n| 原生 | 手感好 | 两套界面 |\n| 套壳 | 快 | 滚动难做顺 |\n\n> 我建议原生。",
+            ]
+            for i in 0..<200 {
+                let at = ago(Double(86_000 - i * 400))
+                world.messages.append(Message(id: "L\(i)q", from: me, to: helper.name, body: "第 \(i + 1) 个问题：这件事接下来怎么做？", status: "done", createdAt: at))
+                world.messages.append(Message(
+                    id: "L\(i)a", from: helper.name, to: me, threadId: "L\(i)q", replyTo: "L\(i)q", type: "reply",
+                    body: i == 199 ? "这是最后一条回复。" : answers[i % answers.count], status: "done", createdAt: at.addingTimeInterval(60)))
+            }
+        }
         return world
     }
 }

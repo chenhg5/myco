@@ -29,30 +29,6 @@ public struct MyBubble: View {
     }
 }
 
-/// The agent's answer: no bubble, the full width, Markdown. Only inline
-/// Markdown for now (bold, code, links); blocks keep their line breaks.
-public struct ReplyText: View {
-    let text: String
-
-    public init(_ text: String) {
-        self.text = text
-    }
-
-    public var body: some View {
-        Text(Self.attributed(text))
-            .font(.body)
-            .foregroundStyle(MycoColor.fg)
-            .tint(MycoColor.accent)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    static func attributed(_ text: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-    }
-}
-
 /// An interim update from the agent: one quiet line.
 public struct ProgressLine: View {
     let text: String
@@ -146,9 +122,10 @@ public struct DispatchCapsule: View {
     let text: String
     let stateText: String
     let tone: StatusTone
-    let action: () -> Void
+    /// Where a tap leads; nil for a capsule that only reports.
+    let action: (() -> Void)?
 
-    public init(face: AvatarView.Face, text: String, stateText: String, tone: StatusTone, action: @escaping () -> Void) {
+    public init(face: AvatarView.Face, text: String, stateText: String, tone: StatusTone, action: (() -> Void)? = nil) {
         self.face = face
         self.text = text
         self.stateText = stateText
@@ -157,21 +134,28 @@ public struct DispatchCapsule: View {
     }
 
     public var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                AvatarView(face, size: 22)
-                Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(1)
-                Spacer(minLength: 6)
-                StatusDot(tone, size: 6)
-                Text(stateText).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
+        if let action {
+            Button(action: action) { capsule }.buttonStyle(.plain)
+        } else {
+            capsule
+        }
+    }
+
+    private var capsule: some View {
+        HStack(spacing: 8) {
+            AvatarView(face, size: 22)
+            Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(1)
+            Spacer(minLength: 6)
+            StatusDot(tone, size: 6)
+            Text(stateText).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
+            if action != nil {
                 Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(MycoColor.faint)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(MycoColor.line, lineWidth: 0.5))
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(MycoColor.line, lineWidth: 0.5))
     }
 }
 

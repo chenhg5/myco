@@ -95,13 +95,38 @@ public actor FakeHub: HubAPI {
         guard let task = messages.first(where: { $0.id == messageID }) else {
             throw HubError(error: "not_found", message: "message \(messageID) not found")
         }
-        let steps: [TraceEvent] = task.status == "queued" ? [] : [
-            TraceEvent(seq: 1, kind: "text", data: TraceStep(text: "我先看一下现在的代码。")),
-            TraceEvent(seq: 2, kind: "tool", data: TraceStep(tool: "Bash", input: "git status --short")),
-            TraceEvent(seq: 3, kind: "tool", data: TraceStep(tool: "Read", input: "internal/api/types.go")),
-        ]
-        return Trace(message: messageID, status: task.status, events: steps.filter { $0.seq > seq })
+        // A task still being worked on shows its steps one by one.
+        var shown = Self.script.count
+        if task.status == "queued" {
+            shown = 0
+        } else if task.isOpen, let sentAt = simulated[messageID] {
+            shown = min(shown, Int(max(0, Date().timeIntervalSince(sentAt) - Self.ackAfter) / 0.8))
+        } else if task.isOpen {
+            shown = 5
+        }
+        return Trace(message: messageID, status: task.status, events: Self.script.prefix(shown).filter { $0.seq > seq })
     }
+
+    /// What a run looks like: it says something, runs and reads, keeps a
+    /// plan, edits, and says what it found.
+    static let script: [TraceEvent] = [
+        TraceEvent(seq: 1, kind: "thinking", data: TraceStep(text: "先看现在的代码怎么组织的，再决定改哪里。")),
+        TraceEvent(seq: 2, kind: "text", data: TraceStep(text: "我先看一下现在的代码。")),
+        TraceEvent(seq: 3, kind: "tool", data: TraceStep(id: "c1", tool: "Bash", input: "git status --short")),
+        TraceEvent(seq: 4, kind: "tool_result", data: TraceStep(id: "c1", output: "")),
+        TraceEvent(seq: 5, kind: "tool", data: TraceStep(id: "c2", tool: "Read", input: "internal/api/types.go")),
+        TraceEvent(seq: 6, kind: "tool_result", data: TraceStep(id: "c2", output: "…")),
+        TraceEvent(seq: 7, kind: "tool", data: TraceStep(id: "c3", tool: "TodoWrite", input: "[x] 看现有的接口\n[~] 写设备登记\n[ ] 补测试\n[ ] 更新文档")),
+        TraceEvent(seq: 8, kind: "tool", data: TraceStep(id: "c4", tool: "Read", input: "docs/api.md")),
+        TraceEvent(seq: 9, kind: "tool_result", data: TraceStep(id: "c4", output: "…")),
+        TraceEvent(seq: 10, kind: "text", data: TraceStep(text: "接口的形状清楚了，开始改。")),
+        TraceEvent(seq: 11, kind: "tool", data: TraceStep(id: "c5", tool: "Edit", input: "internal/api/types.go")),
+        TraceEvent(seq: 12, kind: "tool_result", data: TraceStep(id: "c5", output: "ok")),
+        TraceEvent(seq: 13, kind: "tool", data: TraceStep(id: "c6", tool: "Bash", input: "go test ./internal/api/...")),
+        TraceEvent(seq: 14, kind: "tool_result", data: TraceStep(id: "c6", output: "FAIL", failed: true)),
+        TraceEvent(seq: 15, kind: "tool", data: TraceStep(id: "c7", tool: "Bash", input: "go test ./internal/api/...")),
+        TraceEvent(seq: 16, kind: "tool_result", data: TraceStep(id: "c7", output: "ok")),
+    ]
 
     public func send(_ request: SendRequest) throws -> Message {
         try check()

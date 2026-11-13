@@ -297,13 +297,16 @@ public struct RecentItem: Codable, Sendable, Hashable, Identifiable {
 
 /// One step of the run that handled a task.
 public struct TraceStep: Codable, Sendable, Hashable {
+    /// Pairs a tool call with its result.
+    public var id: String?
     public var text: String?
     public var tool: String?
     public var input: String?
     public var output: String?
     public var failed: Bool?
 
-    public init(text: String? = nil, tool: String? = nil, input: String? = nil, output: String? = nil, failed: Bool? = nil) {
+    public init(id: String? = nil, text: String? = nil, tool: String? = nil, input: String? = nil, output: String? = nil, failed: Bool? = nil) {
+        self.id = id
         self.text = text
         self.tool = tool
         self.input = input

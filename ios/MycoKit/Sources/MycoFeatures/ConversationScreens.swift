@@ -6,11 +6,13 @@ import MycoUI
 /// An agent's conversation, as its own page.
 struct AgentScreen: View {
     let name: String
+    /// A task to land on (from a capsule on a project's page).
+    var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
 
     var body: some View {
-        ConversationHost(agent: name, project: nil)
+        ConversationHost(agent: name, project: nil, focus: focus)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -117,13 +119,14 @@ private struct MemberStrip: View {
 struct ConversationHost: View {
     let agent: String
     let project: String?
+    var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @State private var model: ConversationModel?
 
     var body: some View {
         ZStack {
             MycoColor.bg.ignoresSafeArea()
-            if let model { ConversationBody(model: model) }
+            if let model { ConversationBody(model: model, focus: focus) }
         }
         // Starts once the workspace has said who this device is.
         .task(id: session.me) {
@@ -137,24 +140,47 @@ struct ConversationHost: View {
 /// stands, and the input. It draws the model and passes taps on.
 struct ConversationBody: View {
     @Bindable var model: ConversationModel
+    /// A task to land on once the conversation has loaded.
+    var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
     @State private var attachNotice = false
+    @State private var landed = false
 
     private var name: String { session.displayName(of: model.agent) }
 
+    /// The newest thing I said: saying something new brings it into view.
+    private var newestMine: String? {
+        model.items.last { if case .mine = $0.kind { return true } else { return false } }?.id
+    }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
-                ForEach(model.items) { item in
-                    row(item)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(model.items) { item in
+                        row(item)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            // Opens at the bottom, and stays there as content grows while
+            // the newest message is in view.
+            .defaultScrollAnchor(.bottom)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: newestMine) { old, new in
+                // What I just said comes into view even if I had scrolled up.
+                guard old != nil, let new else { return }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(model.items.last?.id ?? new, anchor: .bottom) }
+            }
+            .onChange(of: model.loaded, initial: true) { _, loaded in
+                guard loaded, !landed, let focus else { return }
+                landed = true
+                let target = model.items.first { $0.id == focus || $0.id == focus + ".dispatch" }?.id
+                if let target { proxy.scrollTo(target, anchor: .center) }
+            }
         }
-        .defaultScrollAnchor(.bottom)
-        .scrollDismissesKeyboard(.interactively)
         .overlay {
             if model.loaded, model.items.isEmpty {
                 EmptyState(
@@ -185,13 +211,25 @@ struct ConversationBody: View {
             NoticeLine(.idle, L("已停止", "Stopped"))
         case .status(let state, _):
             status(state)
+        case .process(let taskID, let live):
+            if let process = model.process(of: taskID) { ProcessView(process: process, live: live) }
         case .dispatch(let dispatch):
-            DispatchCapsule(
-                face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
-                text: L("派给 \(session.displayName(of: dispatch.to))：\(dispatch.firstLine)", "To \(session.displayName(of: dispatch.to)): \(dispatch.firstLine)"),
-                stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle
-            ) {
-                router.push(.agent(dispatch.to, focus: dispatch.taskID))
+            if dispatch.incoming {
+                // Work someone else gave this agent: one line, in its place.
+                let from = session.displayName(of: dispatch.from)
+                DispatchCapsule(
+                    face: session.agent(dispatch.from).map(AvatarView.Face.of) ?? .computer,
+                    text: L("\(from) 派的：\(dispatch.firstLine)", "From \(from): \(dispatch.firstLine)"),
+                    stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle)
+            } else {
+                let to = session.displayName(of: dispatch.to)
+                DispatchCapsule(
+                    face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
+                    text: L("派给 \(to)：\(dispatch.firstLine)", "To \(to): \(dispatch.firstLine)"),
+                    stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle
+                ) {
+                    router.push(.agent(dispatch.to, focus: dispatch.taskID))
+                }
             }
         }
     }
@@ -259,6 +297,54 @@ struct ConversationBody: View {
         case .send: return .send
         case .steer: return .steer
         case .stop: return .stop
+        }
+    }
+}
+
+/// How a task was worked on: the plan on top, then what the agent said,
+/// thought and did, with each run of steps folded into one line.
+struct ProcessView: View {
+    let process: RunProcess
+    /// Still being worked on: a step without a result is still going.
+    let live: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let plan = process.plan {
+                let done = plan.filter { $0.state == .done }.count
+                PlanCard(
+                    title: L("计划", "Plan"), count: L("\(done) / \(plan.count) 完成", "\(done) of \(plan.count) done"),
+                    lines: plan.map { .init(text: $0.text, mark: $0.state == .done ? .done : ($0.state == .doing ? .doing : .todo)) })
+            }
+            ForEach(process.segments) { segment in
+                switch segment {
+                case .said(_, let text):
+                    ReplyText(text)
+                case .thought(_, let text):
+                    ThoughtText(text)
+                case .steps(_, let steps):
+                    StepGroupView(summary: RunProcess.summary(of: steps), steps: steps.map(line))
+                case .failure(_, let text):
+                    NoticeLine(.failed, text)
+                }
+            }
+        }
+    }
+
+    private func line(_ step: ToolStep) -> StepLine {
+        StepLine(
+            id: step.id, symbol: symbol(for: step.tool), label: RunProcess.label(for: step.tool),
+            detail: step.input, failed: step.failed, running: live && !step.finished)
+    }
+
+    private func symbol(for tool: String) -> String {
+        switch tool {
+        case "Bash": return "terminal"
+        case "Read", "NotebookRead": return "doc.text"
+        case "Edit", "Write", "MultiEdit", "NotebookEdit": return "pencil"
+        case "Grep", "Glob", "LS": return "magnifyingglass"
+        case "WebFetch", "WebSearch": return "globe"
+        default: return "wrench.and.screwdriver"
         }
     }
 }

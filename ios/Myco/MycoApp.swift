@@ -6,7 +6,8 @@ import MycoFeatures
 /// The app's entry: the only place where the pieces are put together.
 /// Until pairing exists, the workspace on screen is the demo one (an
 /// in-memory hub); `-myco-start welcome` shows the welcome page instead,
-/// and `-myco-start empty` a workspace with nobody in it.
+/// `-myco-start empty` a workspace with nobody in it, and `-myco-start
+/// long` one with a very long conversation.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -16,7 +17,8 @@ struct MycoApp: App {
         func demo(_ scenario: Scenario) -> WorkspaceSession {
             WorkspaceSession(id: "demo", name: "演示工作区", hub: FakeHub(scenario: scenario))
         }
-        let session: WorkspaceSession? = start == "welcome" ? nil : demo(start == "empty" ? .empty : .team)
+        let scenarios: [String: Scenario] = ["empty": .empty, "long": .long]
+        let session: WorkspaceSession? = start == "welcome" ? nil : demo(scenarios[start] ?? .team)
         _model = State(initialValue: AppModel(session: session, demo: { demo(.team) }))
     }
 

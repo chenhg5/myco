@@ -14,6 +14,9 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         case failure(reason: String)
         /// A task I stopped.
         case stopped
+        /// How a task of mine was worked on: what the agent said and did.
+        /// `live`: it is still being worked on.
+        case process(taskID: String, live: Bool)
         /// An open task of mine: where it stands now.
         case status(RunState, taskID: String)
         /// Work someone else gave, as one line: who, to whom, what, state.
@@ -32,6 +35,9 @@ public struct Dispatch: Hashable, Sendable {
     public var to: String
     public var firstLine: String
     public var state: RunState
+    /// Given to the agent whose page this is (by someone else), not given
+    /// out by it.
+    public var incoming = false
 }
 
 /// Builds what a conversation page shows. Pure: same input, same list.
@@ -40,9 +46,12 @@ public enum ConversationBuilder {
     ///   - messages: every message between me and the agent, any order.
     ///   - others: tasks between other parties to show as capsules (a
     ///     coordinator's dispatches, or work others gave this agent).
+    ///   - incomingTo: the agent whose page this is, when `others` holds
+    ///     work given to it rather than given out by it.
+    ///   - processes: tasks whose steps are known and worth a row.
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
-        me: String, messages: [Message], others: [Message],
+        me: String, messages: [Message], others: [Message], incomingTo: String? = nil, processes: Set<String> = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -57,6 +66,12 @@ public enum ConversationBuilder {
                 items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: m.body, steer: false)))
                 guard m.type == "task" else { continue }
                 let state = RunState.of(m, recipient: status(m.to), now: now)
+                if processes.contains(m.id) {
+                    // Right under what I asked, before anything said later.
+                    items.append(.init(
+                        id: m.id + ".process", at: m.createdAt.addingTimeInterval(0.001),
+                        kind: .process(taskID: m.id, live: state.isOpen)))
+                }
                 switch state {
                 case .queued, .working, .maybeStuck:
                     // Open tasks sort after everything said so far.
@@ -81,7 +96,7 @@ public enum ConversationBuilder {
         for task in others where task.type == "task" {
             let dispatch = Dispatch(
                 taskID: task.id, from: task.from, to: task.to, firstLine: firstLine(of: task.body),
-                state: RunState.of(task, recipient: status(task.to), now: now))
+                state: RunState.of(task, recipient: status(task.to), now: now), incoming: task.to == incomingTo)
             items.append(.init(id: task.id + ".dispatch", at: task.createdAt, kind: .dispatch(dispatch)))
         }
         return items.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
