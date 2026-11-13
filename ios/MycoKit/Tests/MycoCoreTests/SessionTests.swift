@@ -200,7 +200,7 @@ struct SessionTests {
         model.draft = "British spelling"
         #expect(model.action == .steer)
         await model.submit()
-        #expect(model.items.contains { $0.kind == .mine(text: "British spelling", steer: true) })
+        #expect(model.items.contains { $0.kind == .mine(text: "British spelling", steer: true, by: nil) })
 
         model.draft = "then the changelog"
         model.queueNext()
