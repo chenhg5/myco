@@ -20,6 +20,7 @@ MycoKit/              a local Swift package with everything else
     MycoFeatures/     pages and navigation (Router)
   Tests/
 project.yml           the Xcode project's source (XcodeGen); Myco.xcodeproj is generated and committed
+design/app-icon.svg   the app icon's source: the desktop icon's mark, on a full square (iOS cuts the corners)
 scripts/              gen-look-fixtures.mjs: avatar fixtures made from web/src/app/persona.tsx
 ```
 

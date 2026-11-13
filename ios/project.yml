@@ -46,6 +46,7 @@ targets:
         # A placeholder until the real bundle id is chosen.
         PRODUCT_BUNDLE_IDENTIFIER: dev.myco.ios
         PRODUCT_NAME: Myco
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
