@@ -809,6 +809,17 @@ async function runMatrix(browser, size, scheme) {
       await doc.getByRole("button", { name: "已存到「下载」" }).waitFor({ timeout: 5_000 });
       await doc.getByRole("button", { name: "关闭" }).click();
       await doc.waitFor({ state: "hidden", timeout: 5_000 });
+      // An HTML file shows as a page, in a frame that runs nothing; its
+      // source is a click away.
+      await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "首页.html" }).last().click();
+      const frame = doc.locator(".fp-body.is-page iframe.fp-frame");
+      await frame.waitFor({ timeout: 5_000 });
+      if ((await frame.getAttribute("sandbox")) !== "") throw new Error("HTML 预览的框不该允许运行脚本");
+      if (!((await frame.getAttribute("srcdoc")) || "").includes("新版首页")) throw new Error("HTML 预览应显示这个页面");
+      await doc.getByRole("tab", { name: "源码" }).click();
+      await doc.locator(".fp-code", { hasText: "<h1>新版首页</h1>" }).waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await doc.waitFor({ state: "hidden", timeout: 5_000 });
       // A log reads as plain text.
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "build.log" }).last().click();
       await doc.locator(".fp-code", { hasText: "BUILD SUCCESSFUL" }).waitFor({ timeout: 5_000 });

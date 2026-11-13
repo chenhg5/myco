@@ -3420,6 +3420,18 @@ button.conv-attach:hover .conv-attach-go {
 .fp-body.is-doc {
   padding: 18px 22px;
 }
+/* An HTML file as a page: white like a page, in its own frame. */
+.fp-body.is-page {
+  overflow: hidden;
+  background: #fff;
+}
+.fp-frame {
+  display: block;
+  width: 100%;
+  height: min(64vh, 640px);
+  border: 0;
+  background: #fff;
+}
 .fp-body.is-doc .md {
   font-size: 13.5px;
   line-height: 1.7;

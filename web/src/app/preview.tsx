@@ -26,6 +26,20 @@ export function isText(a: Attachment): boolean {
   return TEXT_TYPE.test(t) || TEXT_EXT.test(a.name);
 }
 
+export function isHtml(a: Attachment): boolean {
+  return /\.html?$/i.test(a.name) || /^text\/html\b/i.test(a.content_type || "");
+}
+
+/** A page from a file, for a sandboxed frame: no scripts (the frame's
+ *  sandbox), and nothing it may load but pictures, styles and fonts. */
+function pageDoc(html: string): string {
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline' https: http:; font-src data: https: http:; media-src data: https:">`;
+  // Its scripts could not run in the frame anyway: left out, so the frame
+  // does not report each one it refused.
+  const quiet = html.replace(/<script\b[\s\S]*?(<\/script\s*>|$)/gi, "");
+  return `<!doctype html><html><head><meta charset="utf-8">${csp}<base target="_blank"></head><body>${quiet}</body></html>`;
+}
+
 export function isMarkdown(a: Attachment): boolean {
   return MARKDOWN.test(a.name) || /markdown/i.test(a.content_type || "");
 }
@@ -125,7 +139,7 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const [text, setText] = useState<string | null>(null);
   const [prevText, setPrevText] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [view, setView] = useState<"file" | "changes">("file");
+  const [view, setView] = useState<"file" | "source" | "changes">("file");
   const [saved, setSaved] = useState(false);
   const prev = version?.prev;
 
@@ -140,6 +154,14 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
 
   const changes = useMemo(() => (view === "changes" && text !== null && prevText !== null ? diffLines(prevText, text) : null), [view, text, prevText]);
   const md = isMarkdown(file);
+  const html = isHtml(file);
+  // What it can be seen as: a page and its source, and the changes since
+  // the version before.
+  const views: { key: "file" | "source" | "changes"; label: string }[] = [
+    { key: "file", label: html ? L("页面", "Page") : prev ? L("这一版", "This version") : "" },
+    ...(html ? [{ key: "source" as const, label: L("源码", "Source") }] : []),
+    ...(prev && prevText !== null ? [{ key: "changes" as const, label: L("和上一版比", "Changes since the last") }] : []),
+  ];
   const save = async () => {
     try { await appApi.saveAttachment(hubId, file.file_id); setSaved(true); } catch (e) { setError((e as Error).message); }
   };
@@ -148,24 +170,25 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     <Modal open={open} onOpenChange={onOpenChange} wide className="fp-modal"
       title={file.name}
       description={[bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ")}>
-      {prev && prevText !== null && text !== null && (
+      {views.length > 1 && text !== null && (
         <div className="seg seg-sm fp-views" role="tablist" aria-label={L("看什么", "Show")}>
-          <button type="button" role="tab" aria-selected={view === "file"} className={cn("seg-btn", view === "file" && "active")} onClick={() => setView("file")}>
-            {L("这一版", "This version")}
-          </button>
-          <button type="button" role="tab" aria-selected={view === "changes"} className={cn("seg-btn", view === "changes" && "active")} onClick={() => setView("changes")}>
-            {L("和上一版比", "Changes since the last")}
-          </button>
+          {views.map((v) => (
+            <button key={v.key} type="button" role="tab" aria-selected={view === v.key} className={cn("seg-btn", view === v.key && "active")} onClick={() => setView(v.key)}>
+              {v.label}
+            </button>
+          ))}
         </div>
       )}
-      <div className={cn("fp-body", md && view === "file" && "is-doc")}>
+      <div className={cn("fp-body", md && view === "file" && "is-doc", html && view === "file" && "is-page")}>
         {error ? <p className="fp-note">{error}</p>
           : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
           : changes ? (
             <pre className="fp-diff">{changes.map((l, k) => (
               <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
             ))}</pre>
-          ) : md ? <Markdown text={text} />
+          ) : md && view === "file" ? <Markdown text={text} />
+          // A page as a page, in a frame of its own that runs nothing.
+          : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="" referrerPolicy="no-referrer" srcDoc={pageDoc(text)} />
           : <pre className="fp-code">{text}</pre>}
       </div>
       <div className="app-modal-actions">
