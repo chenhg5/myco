@@ -247,6 +247,11 @@ func Open(path string) (*sql.DB, error) {
 		// Messages an agent sent (its inbox is idx_messages_inbox): peers and
 		// exchanges between two nodes.
 		`CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent, to_agent, created_at)`,
+		// Open messages only (see openStatus in messages.go): inboxes, due
+		// scans and counters read this instead of the whole history.
+		`CREATE INDEX IF NOT EXISTS idx_messages_open ON messages(to_agent, status, created_at) WHERE status IN ('queued','delivered','acked','held')`,
+		// The newest messages (the overview's recent list).
+		`CREATE INDEX IF NOT EXISTS idx_messages_updated ON messages(updated_at DESC, id)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
 			db.Close()
