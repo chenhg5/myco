@@ -74,6 +74,7 @@ const FIELD_LABEL: Record<string, () => string> = {
   description: () => L("介绍", "Description"),
   labels: () => L("分组和标签", "Group and tags"),
   skills: () => L("技能", "Skills"),
+  avatar: () => L("头像", "Face"),
 };
 
 /** One audit entry about a node, as lines a person reads. */
@@ -84,6 +85,8 @@ function historyLines(e: AuditEntry): string[] {
       const key = i > 0 ? line.slice(0, i) : "";
       if (!FIELD_LABEL[key]) return line;
       let text = line.slice(i + 2);
+      // The avatar word means nothing to a person: say what happened.
+      if (key === "avatar") text = text === "—" ? L("用回原来的", "back to the original") : text.startsWith("pic:") ? L("换成一张照片", "a picture") : L("换了一个蘑菇", "another mushroom");
       // "+a −b ~c" (labels, skills) in words.
       if (key === "labels" || key === "skills") {
         const groups: Record<string, string[]> = { "+": [], "−": [], "~": [] };
