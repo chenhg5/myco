@@ -46,6 +46,48 @@ public struct ProgressLine: View {
     }
 }
 
+/// The updates of a task that has ended, as one quiet line; a tap opens them.
+public struct PastProgress: View {
+    let title: String
+    let texts: [String]
+    @State private var open = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    public init(title: String, texts: [String]) {
+        self.title = title
+        self.texts = texts
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) { open.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(title).font(.subheadline).foregroundStyle(MycoColor.muted)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(MycoColor.faint)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("progress.fold")
+
+            if open {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(texts.enumerated()), id: \.offset) { _, text in
+                        ProgressLine(text)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// Where an open task stands, at the end of the conversation: a little
 /// mushroom, what is happening, and for how long.
 public struct WorkingLine: View {
@@ -116,17 +158,26 @@ public struct NoticeLine: View {
     }
 }
 
-/// Work given to someone, as one line: whose face, what, and where it stands.
+/// Work given to someone, as one line: whose face and name, what, and
+/// where it stands. The name gives way first: the task is what is read.
 public struct DispatchCapsule: View {
     let face: AvatarView.Face
+    let name: String
     let text: String
     let stateText: String
     let tone: StatusTone
+    /// The whole line in words, for VoiceOver ("To X: …, Working").
+    let spoken: String
     /// Where a tap leads; nil for a capsule that only reports.
     let action: (() -> Void)?
 
-    public init(face: AvatarView.Face, text: String, stateText: String, tone: StatusTone, action: (() -> Void)? = nil) {
+    public init(
+        face: AvatarView.Face, name: String, text: String, stateText: String, tone: StatusTone, spoken: String,
+        action: (() -> Void)? = nil
+    ) {
         self.face = face
+        self.name = name
+        self.spoken = spoken
         self.text = text
         self.stateText = stateText
         self.tone = tone
@@ -144,7 +195,10 @@ public struct DispatchCapsule: View {
     private var capsule: some View {
         HStack(spacing: 8) {
             AvatarView(face, size: 22)
-            Text(text).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(1)
+            Text(name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg2).lineLimit(1)
+                .frame(maxWidth: 84, alignment: .leading).fixedSize(horizontal: true, vertical: false)
+            Text(text).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)
+                .layoutPriority(1)
             Spacer(minLength: 6)
             StatusDot(tone, size: 6)
             Text(stateText).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
@@ -156,6 +210,8 @@ public struct DispatchCapsule: View {
         .padding(.vertical, 8)
         .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(MycoColor.line, lineWidth: 0.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
     }
 }
 

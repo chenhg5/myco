@@ -119,7 +119,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testWorkOthersGaveAnAgentIsOnItsPage() {
         let app = launch(["-myco-route", "agent:studio-codex-7f3a"])
-        let capsule = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "From 协调者")).firstMatch
+        let capsule = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "From 协调者")).firstMatch
         XCTAssertTrue(capsule.waitForExistence(timeout: 20), "the coordinator's task shows as one line")
         snap("agent-incoming")
     }

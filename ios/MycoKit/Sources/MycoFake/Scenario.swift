@@ -94,7 +94,7 @@ public enum Scenario: Sendable {
                     status: "done", createdAt: ago(89_800)),
             // Me and the backend engineer, directly, inside the project.
             Message(id: "b1", from: me, to: backend.name, type: "note", body: "推送中转先别定用哪家，等我回来再说。", status: "done", project: project, createdAt: ago(2_400)),
-            Message(id: "b2", from: backend.name, to: me, threadId: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),
+            Message(id: "b2", from: backend.name, to: me, threadId: "d1", replyTo: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),
         ]
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

@@ -231,6 +231,8 @@ struct ConversationBody: View {
             ReplyText(text)
         case .progress(let text):
             ProgressLine(text)
+        case .pastProgress(let texts):
+            PastProgress(title: L("\(texts.count) 条进展", texts.count == 1 ? "1 update" : "\(texts.count) updates"), texts: texts)
         case .failure(let reason):
             NoticeLine(.failed, reason.isEmpty ? L("没做成", "Did not finish") : L("没做成：\(reason)", "Did not finish: \(reason)"))
         case .stopped:
@@ -240,23 +242,19 @@ struct ConversationBody: View {
         case .process(let taskID, let live):
             if let process = model.process(of: taskID) { ProcessView(process: process, live: live) }
         case .dispatch(let dispatch):
-            if dispatch.incoming {
-                // Work someone else gave this agent: one line, in its place.
-                let from = session.displayName(of: dispatch.from)
-                DispatchCapsule(
-                    face: session.agent(dispatch.from).map(AvatarView.Face.of) ?? .computer,
-                    text: L("\(from) 派的：\(dispatch.firstLine)", "From \(from): \(dispatch.firstLine)"),
-                    stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle)
-            } else {
-                let to = session.displayName(of: dispatch.to)
-                DispatchCapsule(
-                    face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
-                    text: L("派给 \(to)：\(dispatch.firstLine)", "To \(to): \(dispatch.firstLine)"),
-                    stateText: Words.state(dispatch.state), tone: StatusTone.of(dispatch.state) ?? .idle
-                ) {
-                    router.push(.agent(dispatch.to, focus: dispatch.taskID))
-                }
-            }
+            // Whose face: who gave it (on an agent's own page), or who it
+            // was given to (on a project's page).
+            let other = dispatch.incoming ? dispatch.from : dispatch.to
+            let name = session.displayName(of: other)
+            let stateText = Words.state(dispatch.state)
+            DispatchCapsule(
+                face: session.agent(other).map(AvatarView.Face.of) ?? .computer,
+                name: name, text: dispatch.firstLine, stateText: stateText,
+                tone: StatusTone.of(dispatch.state) ?? .idle,
+                spoken: dispatch.incoming
+                    ? L("\(name) 派的：\(dispatch.firstLine)，\(stateText)", "From \(name): \(dispatch.firstLine), \(stateText)")
+                    : L("派给 \(name)：\(dispatch.firstLine)，\(stateText)", "To \(name): \(dispatch.firstLine), \(stateText)"),
+                action: dispatch.incoming ? nil : { router.push(.agent(dispatch.to, focus: dispatch.taskID)) })
         }
     }
 

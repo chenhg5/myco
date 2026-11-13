@@ -9,8 +9,11 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         case mine(text: String, steer: Bool)
         /// The agent's answer (Markdown).
         case reply(text: String)
-        /// An interim update from the agent.
+        /// An interim update from the agent, on a task still being worked on.
         case progress(text: String)
+        /// The updates of a task that has ended, folded into one line that
+        /// opens ("3 条进展"): the answer is what matters now.
+        case pastProgress(texts: [String])
         /// A task that did not get done, and why.
         case failure(reason: String)
         /// A task I stopped.
@@ -56,6 +59,9 @@ public enum ConversationBuilder {
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
+        let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        /// Updates of tasks that have ended, by task, oldest first.
+        var past: [String: [Message]] = [:]
         for m in messages {
             let mine = m.from == me
             switch m.type {
@@ -89,10 +95,25 @@ public enum ConversationBuilder {
             case "reply":
                 if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .reply(text: text(of: m)))) }
             case "progress":
-                if !mine { items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m)))) }
+                guard !mine else { continue }
+                // Its task: the one it answers, else the one its thread began with.
+                let taskID = m.replyTo ?? m.threadId
+                // A task that is not on this page counts as open: when in
+                // doubt, an update is shown, not tucked away.
+                if byID[taskID].map(\.isOpen) ?? true {
+                    items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: text(of: m))))
+                } else {
+                    past[taskID, default: []].append(m)
+                }
             default:
                 break // events repeat what a failed task already says
             }
+        }
+        for (taskID, updates) in past {
+            let ordered = updates.sorted { $0.createdAt < $1.createdAt }
+            guard let last = ordered.last else { continue }
+            // Where the last update was: right above the answer.
+            items.append(.init(id: taskID + ".progress", at: last.createdAt, kind: .pastProgress(texts: ordered.map { text(of: $0) })))
         }
         for task in others where task.type == "task" {
             let dispatch = Dispatch(

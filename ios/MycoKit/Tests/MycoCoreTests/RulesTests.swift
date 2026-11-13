@@ -130,6 +130,22 @@ struct ConversationBuilderTests {
         #expect(dispatch.state == .queued)
     }
 
+    @Test func updatesFoldOnceTheTaskIsAnswered() {
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "first", status: "done", createdAt: at(-100)),
+            Message(id: "p1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "one", status: "done", createdAt: at(-90)),
+            Message(id: "p2", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "two", status: "done", createdAt: at(-80)),
+            Message(id: "r1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "done", status: "done", createdAt: at(-70)),
+            Message(id: "t2", from: "me", to: "coder", body: "second", status: "acked", createdAt: at(-60), updatedAt: at(-5)),
+            Message(id: "p3", from: "coder", to: "me", threadId: "t2", replyTo: "t2", type: "progress", body: "halfway", status: "done", createdAt: at(-20)),
+        ]
+        let items = ConversationBuilder.items(me: "me", messages: messages, others: [], status: { _ in nil }, now: now)
+        // The answered task: one line above its answer. The open one: each update.
+        #expect(items.map(\.id) == ["t1", "t1.progress", "r1", "t2", "p3", "t2.status"])
+        #expect(items[1].kind == .pastProgress(texts: ["one", "two"]))
+        #expect(items[4].kind == .progress(text: "halfway"))
+    }
+
     @Test func aFirstLineIsPlainText() {
         #expect(ConversationBuilder.firstLine(of: "定了：**三个 Tab**。\n\n1. 聊天") == "定了：三个 Tab。")
         #expect(ConversationBuilder.firstLine(of: "## Result  `ok`") == "Result ok")
