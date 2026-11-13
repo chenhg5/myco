@@ -272,6 +272,24 @@ public enum ConversationBuilder {
         return message.attachments
     }
 
+    /// What a message of files alone says, in each language the app
+    /// speaks: only what they are, in the desktop app's words.
+    static func filesOnlyBodies(_ names: [String]) -> [AppLanguage: String] {
+        guard let first = names.first else { return [:] }
+        if names.count == 1 { return [.zh: "发来一个文件：\(first)", .en: "Sent a file: \(first)"] }
+        return [
+            .zh: "发来 \(names.count) 个文件：\(names.joined(separator: "、"))",
+            .en: "Sent \(names.count) files: \(names.joined(separator: ", "))",
+        ]
+    }
+
+    /// The words of this message only name its files (it was sent with
+    /// none of the sender's own): the files say it better, so a page
+    /// shows them alone.
+    public static func saysOnlyItsFiles(_ text: String, files: [Attachment]) -> Bool {
+        filesOnlyBodies(files.map(\.name)).values.contains(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     /// A message's first line as plain text, for lists and capsules:
     /// Markdown marks are dropped, as the desktop app's summaries do.
     public static func firstLine(of body: String) -> String {

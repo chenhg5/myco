@@ -44,6 +44,16 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.buttons["Photo Library"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Choose Files"].exists)
         snap("files-menu")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+
+        // A tap on a file opens it in the system's preview, under its own name.
+        XCTAssertTrue(file.waitForExistence(timeout: 5))
+        file.tap()
+        XCTAssertTrue(
+            app.staticTexts["会议结论.md"].waitForExistence(timeout: 10) || app.navigationBars["会议结论.md"].exists
+                || app.staticTexts["会议结论"].exists,
+            "the file opens")
+        snap("files-preview")
     }
 
     @MainActor

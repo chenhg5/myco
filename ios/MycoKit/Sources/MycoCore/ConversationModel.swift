@@ -144,9 +144,7 @@ public final class ConversationModel {
     /// are, in the desktop app's words.
     static func body(_ text: String, files: [PendingFile]) -> String {
         if !text.isEmpty || files.isEmpty { return text }
-        if files.count == 1 { return L("发来一个文件：\(files[0].name)", "Sent a file: \(files[0].name)") }
-        let names = files.map(\.name)
-        return L("发来 \(files.count) 个文件：\(names.joined(separator: "、"))", "Sent \(files.count) files: \(names.joined(separator: ", "))")
+        return ConversationBuilder.filesOnlyBodies(files.map(\.name))[AppLanguage.current] ?? text
     }
 
     // MARK: Files

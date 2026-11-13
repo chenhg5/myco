@@ -506,8 +506,12 @@ struct ConversationBody: View {
         case .mine(let text, let steer, let by):
             // A colleague's task carries their name; mine needs none.
             VStack(alignment: .trailing, spacing: Space.s) {
-                MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
-                    .contextMenu { copyButton(text) }
+                // Files sent with no words of my own: they are shown alone,
+                // without the line that only names them.
+                if steer || by != nil || !ConversationBuilder.saysOnlyItsFiles(text, files: item.files) {
+                    MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
+                        .contextMenu { copyButton(text) }
+                }
                 files(of: item, trailing: true)
             }
         case .reply(let text, let taskID, let to):

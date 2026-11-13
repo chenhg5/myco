@@ -69,6 +69,16 @@ struct FilesTests {
             #expect(ConversationModel.body("", files: model.pending) == "Sent 2 files: b.txt, c.txt")
         }
         #expect(ConversationModel.body("说明", files: model.pending) == "说明")
+
+        // A page can tell such a message from words of the sender's own,
+        // whichever language it was sent in.
+        let files = [Attachment(fileId: "f1", name: "b.txt", size: 1), Attachment(fileId: "f2", name: "c.txt", size: 1)]
+        #expect(ConversationBuilder.saysOnlyItsFiles("发来 2 个文件：b.txt、c.txt", files: files))
+        #expect(ConversationBuilder.saysOnlyItsFiles("Sent 2 files: b.txt, c.txt\n", files: files))
+        #expect(ConversationBuilder.saysOnlyItsFiles("Sent a file: b.txt", files: [files[0]]))
+        #expect(!ConversationBuilder.saysOnlyItsFiles("看看这两个", files: files))
+        #expect(!ConversationBuilder.saysOnlyItsFiles("Sent a file: b.txt", files: files))
+        #expect(!ConversationBuilder.saysOnlyItsFiles("", files: []))
     }
 
     @Test func filesAddToATaskBeingWorkedOn() async throws {
