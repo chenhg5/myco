@@ -555,7 +555,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     (m.reply_to ? m.reply_to === task.id
       : m.thread_id === task.thread_id && new Date(m.created_at).getTime() >= new Date(task.created_at).getTime()),
   );
-  const openTask = [...consoleTasks].reverse().find((task) => isOpen(task.status) && !hasAnswer(task)) || null;
+  // A task it set aside (held: waiting on someone else, it answers later)
+  // does not take what you type: that is a new task, as it is free. One
+  // held on a question to you does: what you type answers it.
+  const openTask = [...consoleTasks].reverse().find((task) =>
+    isOpen(task.status) && ((traceStatuses.get(task.id) || task.status) !== "held" || !!task.asking) && !hasAnswer(task)) || null;
 
   // Only an event after the newest task says something about this task; an
   // old failure should not paint a later, healthy conversation red.

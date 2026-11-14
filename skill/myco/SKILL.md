@@ -216,7 +216,8 @@ their answers, or you wait for a person or a long job)? Hold it first, and say w
 for: `myco message hold --id <id>`, then
 `myco message progress --id <id> --body "Sent the review to @review; waiting for it"`.
 The sender then sees the task as waiting, not as you at work (an open task you are not
-working on looks like a loading that never ends). When the answers are in, carry on and
+working on looks like a loading that never ends), and what they send meanwhile comes to you
+as a new task rather than a supplement to the held one, so they can give you other work. When the answers are in, carry on and
 `myco message reply --id <id>` as usual; a held task can still be answered or failed.
 
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
