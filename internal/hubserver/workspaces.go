@@ -252,7 +252,11 @@ func (ws *workspaces) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		if ws.base.Log != nil {
 			ws.base.Log.Info("workspace created", "workspace", in.Name)
 		}
-		writeJSON(w, http.StatusCreated, ws.info(r, in.Name, h.created))
+		out := ws.info(r, in.Name, h.created)
+		if link, err := h.hub.Server.OwnerLink(r); err == nil {
+			out.OwnerLink = link
+		}
+		writeJSON(w, http.StatusCreated, out)
 	case name != "" && r.Method == http.MethodDelete:
 		ws.mu.Lock()
 		h := ws.hubs[name]

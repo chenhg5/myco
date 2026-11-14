@@ -73,7 +73,7 @@ func TestWorkspacesOnOneHub(t *testing.T) {
 		t.Fatal("a dry run must not create it")
 	}
 	created, err := admin.CreateWorkspace(c, "team-b", false)
-	if err != nil || created.URL != url+"/w/team-b" {
+	if err != nil || created.URL != url+"/w/team-b" || created.OwnerLink == nil || !strings.HasPrefix(created.OwnerLink.Link, url+"/w/team-b/c/") {
 		t.Fatalf("create: %v %+v", err, created)
 	}
 	if _, err := admin.CreateWorkspace(c, "team-b", false); err == nil {
@@ -86,10 +86,7 @@ func TestWorkspacesOnOneHub(t *testing.T) {
 	if err != nil || h.Workspace != "team-b" {
 		t.Fatalf("health: %v %+v", err, h)
 	}
-	link, err := b.CreatePairing(c)
-	if err != nil || !strings.HasPrefix(link.Link, url+"/w/team-b/c/") {
-		t.Fatalf("app link: %v %+v", err, link)
-	}
+	link := created.OwnerLink
 	paired, err := mk(created.URL, "").Pair(c, link.Link[strings.LastIndex(link.Link, "/c/")+3:], "laptop")
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +129,22 @@ func TestWorkspacesOnOneHub(t *testing.T) {
 	}
 	if _, err := mk(url+"/w/nope", adminToken).Health(c); err == nil {
 		t.Fatal("an unknown workspace must answer not found")
+	}
+
+	// The default workspace's owner (in the app) manages them too.
+	homeLink, err := admin.CreatePairing(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	homeOwner, err := mk(url, "").Pair(c, homeLink.Link[strings.LastIndex(homeLink.Link, "/c/")+3:], "desk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w, err := mk(url, homeOwner.Token).CreateWorkspace(c, "team-c", false); err != nil || w.OwnerLink == nil {
+		t.Fatalf("owner in the app creates a workspace: %v %+v", err, w)
+	}
+	if err := mk(url, homeOwner.Token).RemoveWorkspace(c, "team-c"); err != nil {
+		t.Fatal(err)
 	}
 
 	// A restart brings it back as it was.
