@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Headphones, Plus, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, Plus, Search, WifiOff } from "lucide-react";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
@@ -12,7 +12,6 @@ import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
-import { VoiceCall } from "@/app/VoiceCall";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
@@ -34,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { CommandPalette } from "@/app/CommandPalette";
-import { setVoiceEntry } from "@/app/voiceEntry";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 
@@ -118,17 +116,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
-  // Voice calls (the Mac app): whether this App can, and the call on show.
-  const [voiceOK, setVoiceOK] = useState<{ available: boolean; ready: boolean } | null>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {
-    appApi.voice().then((v) => setVoiceOK({ available: v.available, ready: v.has_llm_key && v.has_tts_key }), () => setVoiceOK(null));
-  }, [page]);
-  const openVoiceSettings = () => {
-    setVoiceOpen(false);
-    openSettingsSection("voice");
-    setPage("settings");
-  };
+    const on = (e: Event) => {
+      if ((e as CustomEvent<{ section?: string }>).detail?.section === "voice") openSettingsSection("voice");
+      setPage("settings");
+    };
+    window.addEventListener("myco-open-settings", on);
+    return () => window.removeEventListener("myco-open-settings", on);
+  }, []);
   // The workspaces of the shown workspace's server (hubs v0.19.9+): whether
   // this App may add one there.
   const [serverWs, setServerWs] = useState<WorkspaceState | null>(null);
@@ -226,16 +222,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const hubId = hubs.some((h) => h.id === hubPick) ? hubPick
     : namedOv?.hubs.find((h) => h.ok && hubs.some((x) => x.id === h.id))?.id || hubs[0]?.id || "";
   const hub = namedHubs.find((h) => h.id === hubId);
-  // The boxes you type in start a call too, with nothing typed.
-  const voiceRef = useRef({ ready: false, settings: openVoiceSettings });
-  voiceRef.current = { ready: !!voiceOK?.ready, settings: openVoiceSettings };
-  const canCall = !!voiceOK?.available && !!hub;
-  useEffect(() => {
-    setVoiceEntry(canCall ? {
-      ready: !!voiceOK?.ready,
-      open: () => (voiceRef.current.ready ? setVoiceOpen(true) : voiceRef.current.settings()),
-    } : null);
-  }, [canCall, voiceOK?.ready]);
   // Whether this App may add workspaces on the shown one's server (not for
   // a hub on this computer: that has its own way, NewWorkspaceDialog).
   const hubUrl = hub?.url || "";
@@ -614,13 +600,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
             </button>
           )}
           <h1 className="app-title">{title}</h1>
-          {voiceOK?.available && hub && (
-            <button type="button" className="app-btn app-btn-plain vc-entry" style={{ marginLeft: "auto" }}
-              onClick={() => (voiceOK.ready ? setVoiceOpen(true) : openVoiceSettings())}
-              aria-label={L("语音聊天", "Voice call")} title={voiceOK.ready ? L("和 agent 们语音聊天", "Talk with your agents") : L("语音聊天：先填写语音设置", "Voice call: set it up first")}>
-              <Headphones />
-            </button>
-          )}
         </header>
 
         {error !== null && (
@@ -733,7 +712,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}
         taken={(serverWs?.workspaces || []).map((w) => w.name)} onStart={createOnServer} />
 
-      {voiceOpen && hub && <VoiceCall hubId={hub.id} hubName={hub.name} onClose={() => setVoiceOpen(false)} onSettings={openVoiceSettings} />}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}

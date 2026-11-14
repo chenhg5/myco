@@ -121,31 +121,27 @@ func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 }
 
 type fakeHub struct {
-	mu    sync.Mutex
-	sent  []string
-	news  taskNews
-	steer []string
+	mu      sync.Mutex
+	told    []string
+	working bool // a task at work: what is told is added to it
+	news    taskNews
 }
 
-func (h *fakeHub) Name() string { return "Studio" }
-func (h *fakeHub) Members(context.Context) (string, error) {
-	return "- backend（后端）：修 bug", nil
+func (h *fakeHub) Name() string { return "后端" }
+func (h *fakeHub) Context(context.Context) (string, error) {
+	return "这个 agent：backend（后端），修 bug\n- 10:00 你（任务）：看看登录页", nil
 }
-func (h *fakeHub) Send(_ context.Context, to, body string) (VoiceTaskRef, error) {
+func (h *fakeHub) Tell(_ context.Context, body string) (VoiceTaskRef, bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sent = append(h.sent, to+": "+body)
-	return VoiceTaskRef{ID: "msg_1", Agent: to, Thread: "th_1"}, nil
+	h.told = append(h.told, body)
+	return VoiceTaskRef{ID: "msg_1", Agent: "backend", Thread: "th_1"}, h.working, nil
 }
-func (h *fakeHub) Steer(_ context.Context, id, body string) error {
-	h.mu.Lock()
-	h.steer = append(h.steer, id+": "+body)
-	h.mu.Unlock()
-	return nil
+func (h *fakeHub) StopCurrent(context.Context) (VoiceTaskRef, error) {
+	return VoiceTaskRef{ID: "msg_1"}, nil
 }
-func (h *fakeHub) Stop(context.Context, string) error             { return nil }
-func (h *fakeHub) Status(context.Context, string) (string, error) { return "在做", nil }
-func (h *fakeHub) TaskNews(context.Context, string) (taskNews, error) {
+func (h *fakeHub) Current(context.Context) (*VoiceTaskRef, error) { return nil, nil }
+func (h *fakeHub) TaskNews(context.Context, VoiceTaskRef) (taskNews, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.news, nil
@@ -190,10 +186,10 @@ func has(v *voice, kind, sub string) bool {
 	return false
 }
 
-func TestVoiceCallHandsOutWorkAndSaysSo(t *testing.T) {
+func TestVoiceCallPassesWorkOnAndSaysSo(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "send_task"
-	send.Function.Arguments = `{"to":"backend","task":"修好登录页的 bug，修完跑一遍测试","what":"修登录 bug","their_words":"让后端把登录那个 bug 修了"}`
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"修好登录页的 bug，修完跑一遍测试","what":"修登录 bug","their_words":"把登录那个 bug 修了"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{send}},
 		{Role: "assistant", Content: "好，交给后端了，修好我告诉你。"},
@@ -201,16 +197,16 @@ func TestVoiceCallHandsOutWorkAndSaysSo(t *testing.T) {
 	h := &fakeHub{}
 	v, c, a := newTestCall(t, m, h)
 
-	c.Heard("让后端把登录那个", false)
-	c.Heard("让后端把登录那个 bug 修了", true)
+	c.Heard("把登录那个", false)
+	c.Heard("把登录那个 bug 修了", true)
 	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "交给后端了") })
 	h.mu.Lock()
-	sent := append([]string(nil), h.sent...)
+	told := append([]string(nil), h.told...)
 	h.mu.Unlock()
-	if len(sent) != 1 || !strings.Contains(sent[0], "backend: 修好登录页的 bug") || !strings.Contains(sent[0], "经语音转述") || !strings.Contains(sent[0], "原话：让后端把登录那个 bug 修了") {
-		t.Fatalf("sent: %v", sent)
+	if len(told) != 1 || !strings.HasPrefix(told[0], "修好登录页的 bug") || !strings.Contains(told[0], "经语音转述") || !strings.Contains(told[0], "原话：把登录那个 bug 修了") {
+		t.Fatalf("told: %v", told)
 	}
-	if !has(v, vUser, "让后端把登录那个 bug 修了") || !has(v, vAction, "交给 backend") {
+	if !has(v, vUser, "把登录那个 bug 修了") || !has(v, vAction, "交给 后端：修登录 bug") {
 		t.Fatalf("lines: %+v", lines(v))
 	}
 	for _, e := range lines(v) {
@@ -224,8 +220,8 @@ func TestVoiceCallHandsOutWorkAndSaysSo(t *testing.T) {
 	if played == 0 {
 		t.Fatal("nothing was said out loud")
 	}
-	// The system prompt names the workspace's members.
-	if !strings.Contains(m.seen[0][0].Content, "backend（后端）") {
+	// The model reads the conversation with the agent.
+	if p := m.seen[0][0].Content; !strings.Contains(p, "后端") || !strings.Contains(p, "看看登录页") {
 		t.Fatalf("system prompt: %s", m.seen[0][0].Content)
 	}
 	c.Played()
@@ -267,10 +263,27 @@ func TestVoiceCallStopsWhenThePersonSpeaks(t *testing.T) {
 	}
 }
 
+func TestVoiceCallAddsToTheTaskAtWork(t *testing.T) {
+	add := toolCall{ID: "c1", Type: "function"}
+	add.Function.Name = "tell_agent"
+	add.Function.Arguments = `{"text":"顺便把注册页也看一下","what":"也看注册页"}`
+	m := &scriptModel{replies: []chatMsg{
+		{Role: "assistant", ToolCalls: []toolCall{add}},
+		{Role: "assistant", Content: "好，跟它说了。"},
+	}}
+	h := &fakeHub{working: true}
+	v, c, _ := newTestCall(t, m, h)
+	c.Heard("顺便把注册页也看一下", true)
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "跟它说了") })
+	if !has(v, vAction, "补充给 后端：也看注册页") {
+		t.Fatalf("lines: %+v", lines(v))
+	}
+}
+
 func TestVoiceCallTellsNewsInAPause(t *testing.T) {
 	send := toolCall{ID: "c1", Type: "function"}
-	send.Function.Name = "send_task"
-	send.Function.Arguments = `{"to":"backend","task":"跑测试","what":"跑测试"}`
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"跑测试","what":"跑测试"}`
 	m := &scriptModel{replies: []chatMsg{
 		{Role: "assistant", ToolCalls: []toolCall{send}},
 		{Role: "assistant", Content: "交给后端了。"},
@@ -278,7 +291,7 @@ func TestVoiceCallTellsNewsInAPause(t *testing.T) {
 	}}
 	h := &fakeHub{}
 	v, c, _ := newTestCall(t, m, h)
-	c.Heard("让后端跑一下测试", true)
+	c.Heard("跑一下测试", true)
 	waitFor(t, "handed out", func() bool { return has(v, vAssistant, "交给后端了") })
 	c.Played()
 	h.mu.Lock()
@@ -327,8 +340,12 @@ func TestVoiceSettingsKeepKeysOutOfSight(t *testing.T) {
 	if code != 200 || strings.Contains(body, "secret") || !strings.Contains(body, `"tts_speaker":"zh_male_x"`) || !strings.Contains(body, `"available":false`) {
 		t.Fatalf("get: %d %s", code, body)
 	}
+	// A call is with one agent.
+	if code, body := srv("POST", "/app/voice/start", `{"hub_id":"x"}`); code != 400 || !strings.Contains(body, "agent is required") {
+		t.Fatalf("start without an agent: %d %s", code, body)
+	}
 	// No microphone here (a browser): starting says so.
-	if code, body := srv("POST", "/app/voice/start", `{"hub_id":"x"}`); code != 409 || !strings.Contains(body, "unsupported") {
+	if code, body := srv("POST", "/app/voice/start", `{"hub_id":"x","agent":"backend"}`); code != 409 || !strings.Contains(body, "unsupported") {
 		t.Fatalf("start without audio: %d %s", code, body)
 	}
 	if code, _ := srv("PUT", "/app/voice/config", `{"tts_rate":500}`); code != 400 {

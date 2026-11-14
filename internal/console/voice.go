@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,12 +16,13 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// Talking with the agents by voice (docs/design/voice.md): a voice
-// assistant in the App hears the person (speech recognition), talks with a
-// fast text model that acts in myco as them (send, add to, stop, look up
-// tasks), and answers out loud (Doubao speech synthesis), all streaming. It
+// Talking with an agent by voice (docs/design/voice.md), in the person's
+// chat with it: the App hears the person (speech recognition), a fast text
+// model reads the chat and talks with them, passing what they want done to
+// the agent as they would type it (a new task, or an addition to the one at
+// work), and answers out loud (Doubao speech synthesis), all streaming. It
 // stops talking as soon as the person speaks, and tells them, in a pause,
-// when an agent it gave work to has answered or is asking something.
+// when the agent has answered or is asking something.
 //
 // The microphone and the speaker are the platform's (VoiceAudio, the Mac
 // app's: one audio engine with the system's voice processing, so its own
@@ -28,7 +30,7 @@ import (
 //
 //	GET  /app/voice                 {available, config, has_llm_key, has_tts_key, session}
 //	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_speaker, tts_key?, clear_*}
-//	POST /app/voice/start           {hub_id, lang}  starts listening
+//	POST /app/voice/start           {hub_id, agent, peer?, lang}  starts a call with one agent
 //	POST /app/voice/stop            hangs up
 //	POST /app/voice/mute            {muted}
 //	GET  /app/voice/events?after=N  long-poll: {state, events, seq}
@@ -105,6 +107,12 @@ type VoiceTaskRef struct {
 	Thread string `json:"thread_id,omitempty"`
 }
 
+// voiceWith: the chat a call belongs to.
+type voiceWith struct {
+	HubID string `json:"hub_id"`
+	Agent string `json:"agent"`
+}
+
 // Voice call states.
 const (
 	stIdle      = "idle"      // no call
@@ -119,6 +127,7 @@ type voice struct {
 	path    string // settings file
 	logPath string // what was said, kept on this computer
 	call    *voiceCall
+	with    voiceWith // whom the call is with (while on)
 	events  []VoiceEvent
 	seq     int
 	state   string
@@ -300,10 +309,14 @@ func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	v.mu.Lock()
 	state, on := v.state, v.call != nil
 	muted := on && v.call.muted
+	session := map[string]any{"on": on, "state": state, "muted": muted}
+	if on {
+		session["hub_id"], session["agent"] = v.with.HubID, v.with.Agent
+	}
 	v.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": b.Voice != nil, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
-		"session": map[string]any{"on": on, "state": state, "muted": muted},
+		"session": session,
 	})
 }
 
@@ -351,9 +364,16 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		HubID string `json:"hub_id"`
+		Agent string `json:"agent"`
+		Peer  string `json:"peer"`
 		Lang  string `json:"lang"`
 	}
 	if !decode(w, r, &in) {
+		return
+	}
+	in.Agent = strings.TrimSpace(in.Agent)
+	if in.Agent == "" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "agent is required: a voice call is with one agent"})
 		return
 	}
 	if b.Voice == nil {
@@ -386,6 +406,13 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	if lang == "" {
 		lang = "zh-CN"
 	}
+	peer := strings.TrimSpace(in.Peer)
+	if peer == "" {
+		if peer, err = consoleAddress(r.Context(), hc); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	v := b.voiceState()
 	v.mu.Lock()
 	if v.call != nil {
@@ -397,10 +424,11 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		audio: b.Voice,
 		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey},
 		tts:   &doubaoTTS{key: ttsKey, speaker: c.TTSSpeaker, rate: c.TTSRate},
-		hub:   &hubActions{hubID: hub.ID, hubName: hub.Name, c: hc},
+		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
 		lang:  lang,
 	})
 	v.call = call
+	v.with = voiceWith{HubID: hub.ID, Agent: in.Agent}
 	v.mu.Unlock()
 	if err := b.Voice.Start(lang, call); err != nil {
 		v.mu.Lock()
@@ -411,6 +439,22 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	}
 	call.begin()
 	b.getVoice(w, r)
+}
+
+// consoleAddress: the person's own address in a workspace (what their
+// messages from the App are from).
+func consoleAddress(ctx context.Context, c *client.Client) (string, error) {
+	who, err := c.Whoami(ctx)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case who.Member != nil:
+		return "@console:" + who.Member.Name, nil
+	case who.Device != nil:
+		return "@console:" + who.Device.Name, nil
+	}
+	return "@console:admin", nil
 }
 
 func (b *Backend) stopVoice(w http.ResponseWriter, r *http.Request) {

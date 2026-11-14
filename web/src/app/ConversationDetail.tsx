@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Headphones, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -24,11 +24,11 @@ import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
+import { openVoiceSettings, takePendingCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
-import { useVoiceEntry } from "@/app/voiceEntry";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -245,6 +245,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
+  // A voice chat with this agent (VoiceBar); another chat hangs it up.
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => { setVoiceOn(takePendingCall(target.hubId, target.agent)); }, [target.hubId, target.agent, target.peer]);
   const draftKeyRef = useRef(draftKey);
   draftKeyRef.current = draftKey;
   const writeDraft = (v: string) => {
@@ -516,8 +519,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Messages taken out of your own view (删除), and the last one taken,
   // for a moment, to take back (撤销).
   const hiddenIds = useHidden(target.hubId);
-  // With nothing typed, the round button starts a voice call (the Mac app).
-  const voice = useVoiceEntry();
+  // With nothing typed, the round button starts a voice chat with this
+  // agent (the Mac app; VoiceBar).
+  const voice = useVoiceReady();
   const [undo, setUndo] = useState<{ ids: string[]; n: number } | null>(null);
   useEffect(() => {
     if (!undo) return;
@@ -1515,6 +1519,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const quote = !!quoted && prevShown.get(m.id) !== quoted && (!!asked || !!m.reply_to);
       const steps = observed && answers ? progressOf.get(answers) : undefined;
       const usage = answers ? usageOf[answers] : undefined;
+      const voiced = m.unreadable ? null : viaVoice(m.body);
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
@@ -1535,8 +1540,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
             ))}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
+            {mine && voiced && <VoiceMark heard={voiced.heard} />}
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+              : mine && voiced ? <MessageContent body={voiced.text} />
               : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
@@ -1549,7 +1556,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 </div>
                 {s.unreadable
                   ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
-                  : <MessageContent body={s.body} />}
+                  : (() => {
+                    const v = viaVoice(s.body);
+                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} />;
+                  })()}
                 {s.attachments && s.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={s.attachments} />}
               </div>
             ))}
@@ -1889,6 +1899,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {queueRows.length > 0 && <ErrorText error={queueError} />}
+        {voiceOn && !shellMode && (
+          <VoiceBar hubId={target.hubId} agent={target.agent} peer={target.peer} agentName={agentName} onClose={() => setVoiceOn(false)} />
+        )}
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea
@@ -1939,16 +1952,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               >
                 <Square size={11} strokeWidth={0} fill="currentColor" />
               </button>
-            ) : !shellMode && voice && !draft.trim() && !att.items.length && !sending ? (
-              // Nothing typed: the same place starts a voice call (as in ChatGPT).
+            ) : !shellMode && !voiceOn && voice?.available && !draft.trim() && !att.items.length && !sending ? (
+              // Nothing typed: the same place starts a voice chat with it (as in ChatGPT).
               <button
                 type="button"
                 className="conv-send is-call"
-                onClick={(e) => { e.stopPropagation(); voice.open(); }}
-                title={voice.ready ? L("和 agent 们语音聊天", "Talk with your agents") : L("语音聊天：先填写语音设置", "Voice call: set it up first")}
-                aria-label={L("语音聊天", "Voice call")}
+                onClick={(e) => { e.stopPropagation(); if (voice.ready) setVoiceOn(true); else openVoiceSettings(); }}
+                title={voice.ready ? L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`) : L("语音聊天：先填写语音设置", "Voice chat: set it up first")}
+                aria-label={L("语音聊天", "Voice chat")}
+                disabled={busy}
               >
-                <Headphones size={15} strokeWidth={2.2} />
+                <AudioLines size={16} strokeWidth={2.2} />
               </button>
             ) : (
               <button

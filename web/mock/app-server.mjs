@@ -1357,17 +1357,19 @@ const server = http.createServer(async (req, res) => {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
   }
-  // /app/voice: a voice call with a scripted assistant. Starting it plays
-  // a short call (it hears you, hands a task to the backend, answers), so a
-  // test can watch the lines and states change.
+  // /app/voice: a voice chat with one agent, scripted. Starting it plays a
+  // short call (it hears you, passes a task to that agent, which shows in
+  // the chat marked as said by voice, and answers), so a test can watch the
+  // lines and states change.
   if (parts[0] === "app" && parts[1] === "voice") {
     const v = (state.voice ||= { cfg: { tts_speaker: "zh_male_wennuanahu_uranus_bigtts" }, llmKey: true, ttsKey: true, on: false, muted: false, st: "idle", seq: 0, lines: [], timers: [] });
-    const info = () => ({ available: true, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey, session: { on: v.on, state: v.on ? v.st : "idle", muted: v.muted } });
+    const info = () => ({ available: true, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
+      session: { on: v.on, state: v.on ? v.st : "idle", muted: v.muted, ...(v.on ? { hub_id: v.hubId, agent: v.agent } : {}) } });
     const line = (kind, text, extra = {}) => {
       v.seq += 1;
       const id = extra.id || v.seq;
       v.lines = v.lines.filter((l) => l.id !== id && (kind === "hearing" || l.kind !== "hearing"));
-      v.lines.push({ seq: v.seq, id, kind, text, at: iso(0), ...extra, ...(extra.id ? {} : {}) });
+      v.lines.push({ seq: v.seq, id, kind, text, at: iso(0), ...extra });
       return id;
     };
     const stopAll = () => { v.timers.forEach(clearTimeout); v.timers = []; };
@@ -1382,18 +1384,34 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, info());
     }
     if (parts[2] === "start" && method === "POST") {
+      const b = await readBody(req);
+      if (!b?.agent) return fail(res, 400, "invalid_argument", "agent is required: a voice call is with one agent");
       if (!v.llmKey || !v.ttsKey) return fail(res, 400, "not_configured", "add a Doubao speech key", "设置 › 语音");
+      const hub = state.hubs.find((h) => h.id === b.hub_id);
+      const agent = (hub?.agents || []).find((a) => a.name === b.agent);
+      if (!hub || !agent) return fail(res, 404, "not_found", `没有 ${b.agent}`);
       stopAll();
-      v.on = true; v.st = "listening"; v.muted = false;
+      v.on = true; v.st = "listening"; v.muted = false; v.hubId = hub.id; v.agent = agent.name;
+      const name = agent.display_name || agent.name;
       const at = (ms, f) => v.timers.push(setTimeout(f, ms));
-      at(600, () => line("hearing", "让后端把登录"));
-      at(1100, () => line("hearing", "让后端把登录那个 bug 修了"));
-      at(1500, () => { line("user", "让后端把登录那个 bug 修了"); v.st = "thinking"; });
-      at(2100, () => line("action", "交给 backend：修登录 bug", { task: { hub_id: "hub_studio", id: "msg_voice_1", agent: "backend" } }));
+      at(600, () => line("hearing", "帮我看一下"));
+      at(1100, () => line("hearing", "帮我看一下下载页的链接对不对"));
+      at(1500, () => { line("user", "帮我看一下下载页的链接对不对"); v.st = "thinking"; });
+      at(2100, () => {
+        // What it passed on is in the chat, as if typed, with the mark.
+        const threadId = `th_c_${state.counter += 1}`;
+        const msg = makeMessage({ thread_id: threadId, from: CONSOLE, to: agent.name, type: "task", status: "queued",
+          body: "核对下载页上的每个下载链接，确认都能下到对的文件；有问题列出来。\n\n——\n（经语音转述。原话：帮我看一下下载页的链接对不对）",
+          created_at: iso(0), updated_at: iso(0) });
+        (hub.threads ||= {})[threadId] = [msg];
+        hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
+        scheduleReply(hub, threadId, agent.name, msg.id);
+        line("action", `交给 ${name}：核对下载页链接`, { task: { hub_id: hub.id, id: msg.id, agent: agent.name, thread_id: threadId } });
+      });
       let said = "";
       const a = { id: 0 };
-      at(2400, () => { v.st = "speaking"; a.id = line("assistant", "好，交给后端了，"); said = "好，交给后端了，"; });
-      at(2900, () => { said += "修好了我告诉你。"; line("assistant", said, { id: a.id }); });
+      at(2400, () => { v.st = "speaking"; a.id = line("assistant", "好，交给它了，"); said = "好，交给它了，"; });
+      at(2900, () => { said += "核对完我告诉你。"; line("assistant", said, { id: a.id }); });
       at(3600, () => { v.st = "listening"; });
       return send(res, 200, info());
     }

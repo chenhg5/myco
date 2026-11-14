@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Headphones, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, FileText, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
-import { useVoiceEntry } from "@/app/voiceEntry";
+import { callWhenOpened, openVoiceSettings, useVoiceReady } from "@/app/VoiceBar";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -219,6 +219,13 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     }
     setView({ kind: "chat", agent, peer: await peerFor(agent), focus, also: project ? othersOf(agent) : undefined });
   };
+  // A voice chat from the project's box: the chat with that agent, the
+  // call on (the coordinator's too, not the home view).
+  const callWith = async (agent: string) => {
+    callWhenOpened(hubId, agent);
+    if (agent === coordinator) setView({ kind: "chat", agent, peer: await peerFor(agent), also: project ? othersOf(agent) : undefined });
+    else void chatWith(agent);
+  };
   // A workspace opens its terminal: your exchange with it.
   const open = (r: AgentRow) => {
     const name = r.st.agent.name;
@@ -362,6 +369,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
           />
         ) : (
           <GroupView
+            onCall={(agent) => void callWith(agent)}
             hubId={hubId}
             project={project}
             loose={loose}
@@ -659,7 +667,7 @@ function dispatchWord(state: string): string {
     : state === "working" ? L("在做", "Working") : state === "queued" ? L("排队中", "Queued") : L("已发出", "Sent");
 }
 
-function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onNewProject, onAbout, onSent, strip, feed, activity, onBack }: {
+function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onNewProject, onAbout, onSent, onCall, strip, feed, activity, onBack }: {
   hubId: string;
   project?: Project;
   loose: boolean;
@@ -675,6 +683,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
   onNewProject?: () => void;
   onAbout?: () => void;
   onSent: () => void;
+  onCall?: (agent: string) => void;
   strip?: React.ReactNode;
   feed: Feed;
   /** All activity: read-only, with a way back */
@@ -745,7 +754,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
         </div>
       </div>
 
-      {agents.length > 0 && !activity && <Composer hubId={hubId} project={project} agents={agents} onSent={sent} />}
+      {agents.length > 0 && !activity && <Composer hubId={hubId} project={project} agents={agents} onSent={sent} onCall={onCall} />}
     </div>
   );
 }
@@ -849,14 +858,17 @@ const RECIPIENT_KEY = "myco-space-to";
 // The composer grows to this height, then scrolls.
 const COMPOSE_MAX = 220;
 
-function Composer({ hubId, project, agents, onSent }: {
+function Composer({ hubId, project, agents, onSent, onCall }: {
   hubId: string;
   project?: Project;
   agents: AgentRow[];
   onSent: () => void;
+  /** a voice chat with this agent: its chat opens with the call on */
+  onCall?: (agent: string) => void;
 }) {
-  // With nothing typed, the round button starts a voice call (the Mac app).
-  const voice = useVoiceEntry();
+  // With nothing typed, the round button starts a voice chat with whoever
+  // it is addressed to (the Mac app; VoiceBar).
+  const voice = useVoiceReady();
   const key = `${RECIPIENT_KEY}:${hubId}/${project?.name || "*"}`;
   const coordinator = project?.members.find((m) => m.role === "coordinator")?.name;
   const [to, setTo] = useState(() => {
@@ -961,11 +973,11 @@ function Composer({ hubId, project, agents, onSent }: {
           </div>
           {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
           <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} disabled={busy} />
-          {voice && !draft.trim() && !att.items.length && !busy ? (
-            // Nothing typed: the same place starts a voice call.
-            <button type="button" className="sp-send is-call" onClick={voice.open} aria-label={L("语音聊天", "Voice call")}
-              title={voice.ready ? L("和 agent 们语音聊天", "Talk with your agents") : L("语音聊天：先填写语音设置", "Voice call: set it up first")}>
-              <Headphones />
+          {voice?.available && onCall && recipient && !draft.trim() && !att.items.length && !busy ? (
+            // Nothing typed: the same place starts a voice chat with them.
+            <button type="button" className="sp-send is-call" onClick={() => (voice.ready ? onCall(recipient) : openVoiceSettings())} aria-label={L("语音聊天", "Voice chat")}
+              title={voice.ready ? L(`和 ${rec ? nodeName(rec.st.agent, rec.hub) : recipient} 语音聊天`, `Voice chat with ${rec ? nodeName(rec.st.agent, rec.hub) : recipient}`) : L("语音聊天：先填写语音设置", "Voice chat: set it up first")}>
+              <AudioLines />
             </button>
           ) : (
             <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>

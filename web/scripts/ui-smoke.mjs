@@ -2007,25 +2007,47 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
-    // A voice call: the headset at the top right opens it; it hears you,
-    // hands a task to an agent (a line saying so) and answers; Settings ›
-    // 语音 holds its model and voice; hanging up closes it.
-    await step("语音 · 一通电话", async () => {
-      if (narrow) await sidebar(page, false);
-      await clickVisible(page, page.getByRole("button", { name: "语音聊天" }));
-      const call = page.locator(".vc-overlay");
+    // Voice chat with one agent, in its chat (as in ChatGPT and Claude): the
+    // round button, with nothing typed, docks a bar above the box; what it passes on
+    // is in the chat as a task marked 经语音 (the trailer hidden); mute and
+    // hang up are on the bar. No voice button at the top any more.
+    await step("语音 · 和一个 agent 语音聊天", async () => {
+      if (await page.locator(".app-topbar .vc-entry, .vc-overlay").count()) throw new Error("顶栏不该再有全局语音入口");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await page.locator(".conv-detail .conv-compose-input").fill("");
+      const voiceBtn = page.locator(".conv-detail .conv-send.is-call");
+      await voiceBtn.waitFor({ timeout: 10_000 });
+      await voiceBtn.hover();
+      await settle(page, 200);
+      await shot(page, size, scheme, "voice-button");
+      await clickVisible(page, voiceBtn);
+      const call = page.locator(".conv-detail .vc-bar");
       await call.waitFor({ timeout: 10_000 });
-      await call.locator(".vc-line.is-me", { hasText: "让后端把登录那个 bug 修了" }).waitFor({ timeout: 10_000 });
-      await call.locator(".vc-action", { hasText: "交给 backend" }).waitFor({ timeout: 10_000 });
-      await call.locator(".vc-line.is-them", { hasText: "修好了我告诉你" }).waitFor({ timeout: 10_000 });
+      if (!compactText(await call.innerText()).includes("和 Review")) throw new Error(`语音条应写明和谁聊，实际「${compactText(await call.innerText())}」`);
+      await call.locator(".vc-line.is-me", { hasText: "帮我看一下下载页的链接对不对" }).waitFor({ timeout: 10_000 });
+      await call.locator(".vc-line.is-them", { hasText: "核对完我告诉你" }).waitFor({ timeout: 10_000 });
       if (await call.locator(".vc-line.is-hearing").count() > 1) throw new Error("听到一半的字应该只有一行");
+      const sent = page.locator(".conv-detail .conv-msg.is-me", { hasText: "核对下载页上的每个下载链接" }).last();
+      await sent.waitFor({ timeout: 10_000 });
+      await sent.locator(".conv-voice-tag").waitFor({ timeout: 5_000 });
+      if (compactText(await sent.innerText()).includes("经语音转述")) throw new Error("经语音转述那行应收成一个小标记");
       await settle(page, 300);
-      await shot(page, size, scheme, "voice-call");
+      await shot(page, size, scheme, "voice-chat");
       // Mute, then hang up.
       await clickVisible(page, call.getByRole("button", { name: "静音" }));
       await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
       await clickVisible(page, call.getByRole("button", { name: "挂断" }));
-      await call.waitFor({ state: "hidden", timeout: 5_000 });
+      await call.waitFor({ state: "detached", timeout: 5_000 });
+      // From the space's box: the chat with whoever it is addressed to opens
+      // with the call on.
+      await go(page, "聊天", narrow);
+      if (narrow) await sidebar(page, false);
+      await clickVisible(page, page.locator(".sp-send.is-call"));
+      const call2 = page.locator(".conv-detail .vc-bar");
+      await call2.waitFor({ timeout: 10_000 });
+      await clickVisible(page, call2.getByRole("button", { name: "挂断" }));
+      await call2.waitFor({ state: "detached", timeout: 5_000 });
       // Its settings.
       await go(page, "设置", narrow);
       if (narrow) await sidebar(page, true);

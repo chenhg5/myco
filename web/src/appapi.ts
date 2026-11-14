@@ -27,7 +27,7 @@ export interface VoiceInfo {
   config: VoiceConfig;
   has_llm_key: boolean;
   has_tts_key: boolean;
-  session: { on: boolean; state: VoiceState; muted: boolean };
+  session: { on: boolean; state: VoiceState; muted: boolean; hub_id?: string; agent?: string };
 }
 /** One line of a call: id stays the line's own; seq orders its changes. */
 export interface VoiceLine {
@@ -619,11 +619,13 @@ export const appApi = {
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
-  // Voice calls with the agents (the Mac app; voice.go)
+  // Voice chat with an agent (the Mac app; voice.go)
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
-  voiceStart: (hubId: string, lang: string) => request<VoiceInfo>("POST", "app/voice/start", { hub_id: hubId, lang }),
+  /** A call with one agent, in the person's chat with it (peer: their address there). */
+  voiceStart: (hubId: string, agent: string, peer: string | undefined, lang: string) =>
+    request<VoiceInfo>("POST", "app/voice/start", { hub_id: hubId, agent, peer, lang }),
   voiceStop: () => request<VoiceInfo>("POST", "app/voice/stop", {}),
   voiceMute: (muted: boolean) => request<VoiceInfo>("POST", "app/voice/mute", { muted }),
   voiceEvents: (after: number) => request<VoiceEvents>("GET", `app/voice/events?after=${after}`),
