@@ -36,7 +36,10 @@ type Server struct {
 	publicURL  atomic.Value // string
 	// lan: the hub listens on every interface without a public URL, so
 	// links made over localhost use this machine's LAN address instead.
-	lan       atomic.Bool
+	lan atomic.Bool
+	// prefix is this workspace's path under the hub ("/w/<name>"), or ""
+	// for the default one: links it makes carry it.
+	prefix    string
 	e2e       *app.E2EService
 	version   string        // this hub's myco build
 	latest    func() string // newest known release ("" = unknown)
@@ -122,7 +125,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
-		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version}
+		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version, Workspace: strings.TrimPrefix(s.prefix, "/w/")}
+		if h.PublicURL != "" {
+			h.PublicURL += s.prefix
+		}
 		if s.latest != nil {
 			h.LatestVersion = s.latest()
 			h.UpdateAvailable = release.Newer(h.LatestVersion, s.version)
@@ -693,6 +699,23 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 // publicBase is the hub URL as clients see it: --public-url, else derived
 // from the request (behind a TLS proxy, X-Forwarded-Proto says https).
 func (s *Server) publicBase(r *http.Request) string {
+	return s.hostBase(r) + s.prefix
+}
+
+// SetPathPrefix makes this the workspace served under prefix ("/w/<name>")
+// of a hub that serves several. Call before serving.
+func (s *Server) SetPathPrefix(prefix string) { s.prefix = strings.TrimRight(prefix, "/") }
+
+// OwnsHub says the request comes from this hub's owner: its admin token or
+// a console token of its owner.
+func (s *Server) OwnsHub(r *http.Request) bool { return s.actorOf(r).IsOwner() }
+
+// RootURL is the hub's own address (without a workspace prefix).
+func (s *Server) RootURL(r *http.Request) string { return s.hostBase(r) }
+
+// hostBase is the hub's root URL: --public-url, else derived from the
+// request.
+func (s *Server) hostBase(r *http.Request) string {
 	if u, _ := s.publicURL.Load().(string); u != "" {
 		return strings.TrimRight(u, "/")
 	}

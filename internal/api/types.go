@@ -512,6 +512,9 @@ type Health struct {
 	// UpdateAvailable says it is newer than ServerVersion.
 	LatestVersion   string `json:"latest_version,omitempty"`
 	UpdateAvailable bool   `json:"update_available,omitempty"`
+	// Workspace names this workspace on a hub that serves several (its
+	// address ends in /w/<name>); empty for the hub's default workspace.
+	Workspace string `json:"workspace,omitempty"`
 }
 
 // Enrollment is the public view of an enrollment (the token is never shown
@@ -1092,4 +1095,24 @@ type HiddenList struct {
 type HiddenUpdate struct {
 	Hide []string `json:"hide,omitempty"`
 	Show []string `json:"show,omitempty"`
+}
+
+// Workspace is one workspace of a hub that serves several: its own members,
+// agents, projects and messages, at URL (<hub>/w/<name>). The hub itself is
+// the default workspace and is not listed.
+type Workspace struct {
+	Name      string    `json:"name"`
+	URL       string    `json:"url"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// WorkspaceList answers GET /v1/server/workspaces.
+type WorkspaceList struct {
+	Workspaces []Workspace `json:"workspaces"`
+}
+
+// CreateWorkspaceRequest is POST /v1/server/workspaces.
+type CreateWorkspaceRequest struct {
+	Name   string `json:"name"`
+	DryRun bool   `json:"dry_run,omitempty"`
 }
