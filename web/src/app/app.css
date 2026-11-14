@@ -3429,22 +3429,22 @@ button.conv-attach:hover {
 button.conv-attach:hover .conv-attach-go {
   opacity: 1;
 }
-/* Pictures in a message: thumbnails that open full size (one larger,
-   several in a grid of squares). */
+/* Pictures in a message: thumbnails that open full size, each at its own
+   shape, never cropped or padded: several in a wrapping row, each within
+   260 by 120; one larger, within 320 by 240. */
 .conv-shots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 132px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 6px;
   margin-top: 8px;
 }
-.conv-shots.is-one {
-  grid-template-columns: minmax(0, 320px);
-}
 .conv-attach.is-image {
   display: block;
-  width: 100%;
-  max-width: none;
-  aspect-ratio: 1;
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  height: auto;
   padding: 0;
   overflow: hidden;
   border-radius: 10px;
@@ -3452,21 +3452,24 @@ button.conv-attach:hover .conv-attach-go {
   box-shadow: inset 0 0 0 1px var(--line-2);
   cursor: zoom-in;
 }
-.conv-shots.is-one .conv-attach.is-image {
-  aspect-ratio: auto;
-  max-height: 240px;
-}
 .conv-attach.is-image img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: 260px;
+  max-height: 120px;
   transition: transform 0.2s ease;
 }
 .conv-shots.is-one .conv-attach.is-image img {
-  height: auto;
+  max-width: 320px;
   max-height: 240px;
-  object-fit: contain;
+}
+/* A narrow window: never wider than the message. */
+@media (max-width: 520px) {
+  .conv-attach.is-image img,
+  .conv-shots.is-one .conv-attach.is-image img {
+    max-width: calc(100vw - 96px);
+  }
 }
 .conv-attach.is-image:hover img {
   transform: scale(1.02);

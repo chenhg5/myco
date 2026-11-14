@@ -910,6 +910,12 @@ async function runMatrix(browser, size, scheme) {
       await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
       if (!w) throw new Error("图片附件应显示缩略图");
+      // At its own shape: not cropped to a square, not stretched.
+      const ratio = await thumb.locator("img").evaluate((img) => {
+        const r = img.getBoundingClientRect();
+        return { shown: r.width / r.height, own: img.naturalWidth / img.naturalHeight };
+      });
+      if (Math.abs(ratio.shown / ratio.own - 1) > 0.05) throw new Error(`缩略图应按原图比例，实际 ${ratio.shown.toFixed(2)}，原图 ${ratio.own.toFixed(2)}`);
       await thumb.scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "message-picture");
