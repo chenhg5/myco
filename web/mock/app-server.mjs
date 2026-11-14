@@ -54,6 +54,9 @@ const avatarPics = new Map();
 // Times the page asked the "desktop app" to listen, in which language, and
 // what each listening hears.
 let dictations = 0;
+let translateCfg = { provider: "mymemory", base_url: "", model: "" };
+const translateKeys = {};
+let translations = 0;
 let lastDictationLang = "";
 const hearings = new Map();
 
@@ -1322,6 +1325,26 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
+  }
+  // /app/translate: settings (keys only said to exist) and a stand-in
+  // translation: 〔译〕 and the text, so a test can tell it was translated.
+  if (parts[0] === "app" && parts[1] === "translate") {
+    if (parts[2] === "config" && method === "GET") return send(res, 200, { ...translateCfg, keys: { ...translateKeys } });
+    if (parts[2] === "config" && method === "PUT") {
+      const body = await readBody(req);
+      if (!["mymemory", "deepl", "google", "openai"].includes(body?.provider)) return fail(res, 400, "invalid_argument", "unknown translation service");
+      translateCfg = { provider: body.provider, base_url: body.base_url || "", model: body.model || "" };
+      if (body.clear_key) delete translateKeys[body.provider];
+      else if (body.key) translateKeys[body.provider] = true;
+      return send(res, 200, { ...translateCfg, keys: { ...translateKeys } });
+    }
+    if (parts.length === 2 && method === "POST") {
+      const body = await readBody(req);
+      if (translateCfg.provider !== "mymemory" && !translateKeys[translateCfg.provider]) return fail(res, 409, "not_configured", "this translation service needs a key");
+      translations += 1;
+      return send(res, 200, { text: `〔译〕${body.text}`, provider: translateCfg.provider });
+    }
+    if (parts[2] === "count" && method === "GET") return send(res, 200, { translations });
   }
   // /app/dictation: the Mac app listens itself in the language asked for;
   // the words grow, then it ends. GET (no id) says how many times and in

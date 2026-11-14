@@ -51,6 +51,14 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		},
 	})
 
+	// A face is chosen with the system's own panel, pictures only: the web
+	// view's panel for <input type=file> shows every file.
+	pickImage = func() (string, error) {
+		return app.Dialog.OpenFile().CanChooseFiles(true).
+			AddFilter("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif").
+			PromptForSingleSelection()
+	}
+
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:  "main",
 		Title: "myco",

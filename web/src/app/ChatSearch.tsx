@@ -53,26 +53,30 @@ function mark(root: HTMLElement | null, q: string, currentId: string) {
   hl.set("conv-search-current", new Highlight(...cur));
 }
 
-export function ChatSearch({ items, root, onJump, onClose, onLoadMore, loading }: {
+export function ChatSearch({ items, root, initial, onJump, onClose, onLoadMore, loading }: {
   /** what can be found, in the order shown (id: the message's data-msg) */
   items: SearchItem[];
   /** the chat's timeline, where the places are marked */
   root: React.RefObject<HTMLElement | null>;
+  /** what to look for at once (found by ⌘K), staying at the message
+   *  already shown */
+  initial?: string;
   onJump: (id: string) => void;
   onClose: () => void;
   /** there are older messages not loaded yet: load them */
   onLoadMore?: () => void;
   loading?: boolean;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initial || "");
   const [at, setAt] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
   const hits = useMemo(() => {
     const needle = norm(q.trim());
     return needle ? items.filter((x) => norm(x.text).includes(needle)) : [];
   }, [items, q]);
-  // A new query starts at the newest.
-  const last = useRef("");
+  // A new query starts at the newest (one given at once stays where the
+  // chat already is).
+  const last = useRef((initial || "").trim());
   useEffect(() => {
     if (q.trim() === last.current) return;
     last.current = q.trim();
@@ -80,6 +84,8 @@ export function ChatSearch({ items, root, onJump, onClose, onLoadMore, loading }
     if (hits.length) onJump(hits[hits.length - 1].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, hits.length]);
+  // (a query given at once counts from the newest, without moving)
+  useEffect(() => { if (at < 0 && hits.length) setAt(hits.length - 1); }, [at, hits.length]);
   const current = at >= 0 && at < hits.length ? hits[at] : undefined;
   useEffect(() => {
     // After the chat drew (a jump, new messages): mark again.

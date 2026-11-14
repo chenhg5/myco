@@ -1,7 +1,7 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Cloud, Globe, Info, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
+  AlertTriangle, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -17,10 +17,12 @@ import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } f
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
+import { appTo, setAutoTranslate, useAutoTranslate } from "@/app/translate";
+import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 
-type Section = "hubs" | "members" | "audit" | "appearance" | "about";
+type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -160,6 +162,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
+  { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
@@ -580,6 +583,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
           </>
         )}
 
+        {section === "translate" && <TranslateSection />}
         {section === "about" && <AboutSection info={info} local={local} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
@@ -901,5 +905,107 @@ function ReportsOnlyLine() {
         ))}
       </div>
     </div>
+  );
+}
+
+const SERVICES: { key: TranslateConfig["provider"]; label: string; note: string }[] = [
+  { key: "mymemory", get label() { return L("MyMemory（免费）", "MyMemory (free)"); }, get note() { return L("不用注册，不用密钥；每天大约能翻 5000 字。", "No account or key; about 5,000 characters a day."); } },
+  { key: "deepl", label: "DeepL", get note() { return L("在 DeepL 官网申请 API 密钥，免费版每月 50 万字（密钥以 :fx 结尾）。", "An API key from DeepL; the free plan has 500,000 characters a month (its key ends in :fx)."); } },
+  { key: "google", get label() { return L("Google 翻译", "Google Translate"); }, get note() { return L("Google Cloud 的 Translation API 密钥，按字数收费。", "A Google Cloud Translation API key, paid by the character."); } },
+  { key: "openai", get label() { return L("OpenAI 兼容", "OpenAI-compatible"); }, get note() { return L("OpenAI、DeepSeek、OpenRouter 等兼容 OpenAI 接口的服务：填地址、模型和密钥。", "OpenAI, DeepSeek, OpenRouter and others with an OpenAI-style API: an address, a model and a key."); } },
+];
+
+/** Translating what agents write: on or off, and with which service. Keys
+ *  go to the system keychain through the console and never come back. */
+function TranslateSection() {
+  const autoOn = useAutoTranslate();
+  const [cfg, setCfg] = useState<TranslateConfig | null>(null);
+  const [provider, setProvider] = useState<TranslateConfig["provider"]>("mymemory");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [tried, setTried] = useState("");
+  useEffect(() => {
+    appApi.translateConfig().then((c) => {
+      setCfg(c); setProvider(c.provider); setBaseUrl(c.base_url || ""); setModel(c.model || "");
+    }, setError);
+  }, []);
+  const save = async (extra: { key?: string; clear_key?: boolean } = {}) => {
+    setBusy(true); setError(null); setTried("");
+    try {
+      const c = await appApi.putTranslateConfig({ provider, base_url: provider === "openai" ? baseUrl.trim() : undefined, model: provider === "openai" ? model.trim() : undefined, ...extra });
+      setCfg(c);
+      setKey("");
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const tryIt = async () => {
+    setBusy(true); setError(null); setTried("");
+    try {
+      const to = appTo();
+      const r = await appApi.translate(to === "zh" ? "The tests pass and the release notes are ready." : "测试都过了，发布说明也写好了。", to);
+      setTried(r.text);
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const svc = SERVICES.find((x) => x.key === provider)!;
+  const needsKey = provider !== "mymemory";
+  const hasKey = !!cfg?.keys?.[provider];
+  const dirty = !!cfg && (provider !== cfg.provider || (provider === "openai" && (baseUrl.trim() !== (cfg.base_url || "") || model.trim() !== (cfg.model || ""))));
+  return (
+    <>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line">
+          <div className="app-setting-line-text">
+            <b>{L("自动翻译", "Translate automatically")}</b>
+            <span>{L("agent 的回复和进展跟 App 的语言不一样时，自动翻成 App 的语言（每条下面能看原文）。打开后，这些消息会发给下面选的翻译服务。每条消息时间旁的「翻译」随时可以手动翻。",
+              "When what an agent says is in another language, show it in the app's language (each with its original a click away). With this on, those messages are sent to the service below. 「Translate」 by any message's time works either way.")}</span>
+          </div>
+          <div className="seg" role="tablist" aria-label={L("自动翻译", "Translate automatically")}>
+            {[false, true].map((on) => (
+              <button key={String(on)} type="button" role="tab" aria-selected={autoOn === on} className={cn("seg-btn", autoOn === on && "active")} onClick={() => setAutoTranslate(on)}>
+                {on ? L("开", "On") : L("关", "Off")}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+      <h4 className="app-setting-group">{L("翻译服务", "Service")}</h4>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line tr-services">
+          <div className="seg" role="tablist" aria-label={L("翻译服务", "Service")}>
+            {SERVICES.map((x) => (
+              <button key={x.key} type="button" role="tab" aria-selected={provider === x.key} className={cn("seg-btn", provider === x.key && "active")} onClick={() => { setProvider(x.key); setTried(""); setError(null); }}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+          <p className="tr-note">{svc.note}</p>
+        </div>
+        {provider === "openai" && (
+          <div className="app-setting-line tr-fields">
+            <label>{L("地址", "Address")}<input className="app-input mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" spellCheck={false} /></label>
+            <label>{L("模型", "Model")}<input className="app-input mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o-mini" spellCheck={false} /></label>
+          </div>
+        )}
+        {needsKey && (
+          <div className="app-setting-line tr-fields">
+            <label>{L("密钥", "Key")}
+              <input className="app-input mono" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false}
+                placeholder={hasKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L("粘贴 API 密钥", "Paste the API key")} />
+            </label>
+            {hasKey && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
+          </div>
+        )}
+        <div className="app-setting-line tr-actions">
+          <button type="button" className="app-btn app-btn-primary" disabled={busy || (!dirty && !key.trim())} onClick={() => void save(key.trim() ? { key: key.trim() } : {})}>
+            {L("保存", "Save")}
+          </button>
+          <button type="button" className="app-btn" disabled={busy || dirty || (needsKey && !hasKey)} onClick={() => void tryIt()}>{L("试一下", "Try it")}</button>
+          {tried && <span className="tr-tried"><Check />{tried}</span>}
+        </div>
+        <ErrorText error={error} />
+      </section>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { recall, remember } from "@/lib/memo";
 import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { useReportsOnly } from "@/app/quietRuns";
+import { TranslatableBody } from "@/app/translate";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
 import { AskCard } from "@/app/AskCard";
@@ -457,7 +458,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
           {/* What it says while you watch grows in; what was there, is. */}
-          {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <MessageContent body={seg.text} />}
+          {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
         </div>
       ) : seg.kind === "steer" ? (
         <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
@@ -472,7 +473,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
             <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
               <span className="trace-report-dot" aria-hidden />
               <div className="trace-report-text">
-                <MessageContent body={r.text} />
+                <TranslatableBody id={r.key} body={r.text} />
                 {/* What it showed along the way: a screenshot, a draft. */}
                 {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
               </div>

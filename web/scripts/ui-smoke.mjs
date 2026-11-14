@@ -1009,6 +1009,68 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    // ⌘K: find a member and open its chat; find words in your messages and
+    // open the chat there, with the words marked.
+    await step("全局搜索", async () => {
+      await page.keyboard.press("Control+k");
+      const cp = page.locator(".cp");
+      await cp.waitFor({ timeout: 5_000 });
+      await cp.locator("input").fill("Review");
+      await cp.locator(".cp-item", { hasText: "Review (Codex 云端)" }).first().waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "search-anything");
+      await cp.locator("input").press("Enter");
+      await cp.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("全局搜索用：芒果布丁");
+      await box.press("Enter");
+      await page.locator(".conv-detail .conv-msg", { hasText: "芒果布丁" }).waitFor({ timeout: 10_000 });
+      await noRound(page);
+      if (narrow) await sidebar(page, false);
+      await page.keyboard.press("Control+k");
+      await cp.waitFor({ timeout: 5_000 });
+      await cp.locator("input").fill("芒果布丁");
+      const msg = cp.locator(".cp-item", { hasText: "芒果布丁" }).first();
+      await msg.waitFor({ timeout: 8_000 });
+      await msg.click();
+      await page.locator(".conv-detail .conv-search input").first().waitFor({ timeout: 10_000 });
+      const v = await page.locator(".conv-detail .conv-search input").first().inputValue();
+      if (v !== "芒果布丁") throw new Error(`从搜索打开的对话应标出搜的词，实际「${v}」`);
+      await page.locator(".conv-detail .conv-search input").first().press("Escape");
+    });
+
+    // Translating what an agent wrote: by hand from its time, with the
+    // original a click away; the service and its key in Settings.
+    await step("翻译", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const reply = page.locator(".conv-detail .conv-msg.is-agent").last();
+      await reply.waitFor({ timeout: 10_000 });
+      await reply.hover();
+      await reply.locator(".conv-translate-btn").click();
+      await reply.getByText("〔译〕").first().waitFor({ timeout: 5_000 });
+      await reply.locator(".conv-translated", { hasText: "已翻译" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-translated");
+      await reply.locator(".conv-translated button", { hasText: "显示原文" }).click();
+      await reply.locator(".conv-translated").waitFor({ state: "detached", timeout: 5_000 });
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "翻译" }));
+      await page.getByRole("tab", { name: "DeepL" }).click();
+      await page.locator(".tr-fields input[type=password]").fill("demo-key:fx");
+      await page.getByRole("button", { name: "保存" }).click();
+      await page.locator('.tr-fields input[placeholder*="钥匙串"]').waitFor({ timeout: 5_000 });
+      await page.getByRole("button", { name: "试一下" }).click();
+      await page.locator(".tr-tried", { hasText: "〔译〕" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-translate");
+      await page.getByRole("tab", { name: "MyMemory（免费）" }).click();
+      await page.getByRole("button", { name: "保存" }).click();
+      if (narrow) await sidebar(page, false);
+    });
+
     // 只看进度: runs show what the agent reported, not its steps.
     await step("设置 · 只看进度", async () => {
       await go(page, "设置", narrow);
@@ -1393,6 +1455,9 @@ async function runMatrix(browser, size, scheme) {
       }, null, { timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
       await face.waitFor({ timeout: 5_000 });
+      // Only a picture: anything else is turned away with a word.
+      await face.locator("input[type=file]").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a picture") });
+      await face.getByText("只能用图片").waitFor({ timeout: 5_000 });
       await face.locator("input[type=file]").setInputFiles({ name: "me.png", mimeType: "image/png", buffer: Buffer.from(TINY_PNG, "base64") });
       await face.locator(".av-top .pa-pic").waitFor({ timeout: 5_000 });
       await face.getByRole("button", { name: "用这个头像" }).click();

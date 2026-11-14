@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Plus, WifiOff } from "lucide-react";
+import { ArrowLeft, Plus, Search, WifiOff } from "lucide-react";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState } from "@/appapi";
@@ -31,6 +31,9 @@ import { useTextSize, useThemeMode } from "@/lib/theme";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
+import { setSystemPicker } from "@/app/AvatarPicker";
+import { CommandPalette } from "@/app/CommandPalette";
+import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 
 const POLL_MS = 5000;
@@ -84,6 +87,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   setSystemDictation(!!info?.dictation);
+  setSystemPicker(!!info?.pick_image);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
   // What the hubs showed last (also from before a restart) until they answer.
@@ -116,7 +120,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
-  const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number } | null>(null);
+  const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string } | null>(null);
+  // ⌘K / Ctrl+K: find anything (CommandPalette).
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [projectReload, setProjectReload] = useState(0);
   // This computer's workspaces (the switcher tags them, the dialog names them).
   const [local, setLocal] = useState<LocalState | null>(() => recall<LocalState | null>("local") ?? null);
@@ -326,6 +332,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         void refreshRef.current();
+      } else if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -425,6 +434,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
           <div className="app-sidebar-head" style={dragStyle}>
             <div className="brand"><LogoWordmark className="app-brand-wordmark" /></div>
           </div>
+          <button type="button" className="app-nav-search" onClick={() => setPaletteOpen(true)} style={{ ["--wails-draggable" as string]: "no-drag" }}>
+            <Search /><span>{L("搜索", "Search")}</span><kbd>{modKey()}K</kbd>
+          </button>
 
           <nav className="app-nav">
             {/* Chat first: talk to your agents straight away; a project is
@@ -572,7 +584,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             rows={rows}
             now={now}
             me={meOn(shown.hubId)}
-            openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n } : undefined}
+            openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n, focus: chatWith.focus } : undefined}
             home={spaceTap}
             onAddAgent={() => setAddAgent(shown)}
             onAddWorkspace={() => setAddWorkspace(shown)}
@@ -661,6 +673,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
 
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
+        projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
+        onPick={(t) => {
+          setProfile(null);
+          if (t.kind === "page") { setPage(t.page); return; }
+          if (t.kind === "project") { setHubPick(t.hubId); openSpace({ hubId: t.hubId, name: t.name }); return; }
+          setHubPick(t.row.hub.id);
+          if (t.kind === "member") { chatWithMember(t.row); return; }
+          // A message: its conversation, at that message.
+          const r = t.row;
+          const p = (projects || []).find((x) => !x.p.archived && x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
+          const s: SpaceRef = p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true };
+          setSpace(s);
+          setPage("space");
+          setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), focus: t.message });
+        }} />
       <MemberSheet row={profileRow} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
         onChat={chatWithMember} onChanged={() => void refresh()} onRefresh={refresh}
         onOpenProject={(ref) => { setProfile(null); openSpace(ref); }}

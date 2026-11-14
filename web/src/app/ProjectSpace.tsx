@@ -30,6 +30,9 @@ export function isLoose(s: SpaceRef): s is { hubId: string; loose: true } {
 /** What the right pane shows: a member's work, or a computer's terminal. */
 type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
 
+/** The last request to open a chat (AppMode's openChat.n) that was done. */
+let openedChatN = 0;
+
 const SPLIT_KEY = "myco-space-split";
 // Per project: the pane open beside the coordinator and full width, for
 // this run of the app (see ProjectSpace).
@@ -71,7 +74,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   /** your name as a sender on this hub (@console:you), when known */
   me?: string;
   /** open the chat with this member (n: each request anew) */
-  openChat?: { agent: string; n: number };
+  openChat?: { agent: string; n: number; focus?: string };
   /** bumped when the space is picked again: back to its group */
   home?: number;
   onAddAgent: () => void;
@@ -244,7 +247,12 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coordinator, hubId]);
   useEffect(() => {
-    if (!openChat) return;
+    // Each request once: coming back to the space later (from Settings)
+    // shows its home, not the chat asked for back then.
+    if (!openChat || openChat.n <= openedChatN) return;
+    openedChatN = openChat.n;
+    // At a message (found by search): that conversation, there.
+    if (openChat.focus) { void chatWith(openChat.agent, openChat.focus); return; }
     const r = hubRows.find((x) => x.st.agent.name === openChat.agent);
     if (r) open(r);
     else void chatWith(openChat.agent);

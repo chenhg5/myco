@@ -174,6 +174,10 @@ type Backend struct {
 	// that has the keyboard (Windows).
 	Listen  func(lang string, h *Hearing) (stop func(), err error)
 	Dictate func(lang string) error
+	// PickImage asks for a picture with the system's own panel, pictures
+	// only (the desktop app on macOS, whose web view shows every file for
+	// an <input accept="image/*">); "" when cancelled. Nil elsewhere.
+	PickImage func() (path string, err error)
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -183,6 +187,10 @@ type Backend struct {
 	pending pendingLink
 	sealers sealers
 	steady  steady
+
+	// translating messages (translate.go): settings, keys in Secrets
+	translateOnce sync.Once
+	translate     *translator
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -210,7 +218,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -230,6 +238,8 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("PUT /app/local/agents/{name}/provider", b.putAgentProvider)
 	}
 	b.dictationRoutes(m)
+	b.translateRoutes(m)
+	m.HandleFunc("POST /app/pick-image", b.pickImage)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})

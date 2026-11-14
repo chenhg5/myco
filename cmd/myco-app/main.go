@@ -73,11 +73,23 @@ func main() {
 	}
 	b.Shell = guiShell
 	b.Listen, b.Dictate = listen, dictate
+	if runtime.GOOS == "darwin" {
+		b.PickImage = func() (string, error) {
+			if pickImage == nil { // not yet: the app is starting
+				return "", nil
+			}
+			return pickImage()
+		}
+	}
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
 	}
 }
+
+// pickImage opens the system's panel for a picture (set by runGUI where
+// the web view's own panel cannot keep to pictures).
+var pickImage func() (string, error)
 
 // bundledCLI is the myco CLI inside the app bundle
 // (myco.app/Contents/Resources/myco), or "" when not running from one.

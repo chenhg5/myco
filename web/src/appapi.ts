@@ -174,6 +174,8 @@ export interface AppInfo {
   version: string; shell: Shell;
   /** the desktop app does speech to text (POST app/dictation) */
   dictation?: boolean;
+  /** the desktop app asks for a face's picture with its own panel (macOS) */
+  pick_image?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -348,6 +350,12 @@ export const appApi = {
   dictationState: (id: string, seq: number) =>
     request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
   stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
+  // Translating messages (console translate.go): keys stay in the keychain.
+  pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
+  translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
+  translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
+  putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>
+    request<TranslateConfig>("PUT", "app/translate/config", c),
   update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),
@@ -568,3 +576,6 @@ export interface ProviderList { cc_switch: boolean; providers: ProviderInfo[]; e
 /** provider: "" follows this computer; "cc-switch:<id>" is pinned; "env_file" was entered by hand. */
 export interface AgentProvider { local: boolean; provider: string; harness?: string; env_host?: string }
 export interface ManualProvider { base_url: string; api_key: string; model?: string }
+
+/** How messages are translated: the service, and which ones have a key. */
+export type TranslateConfig = { provider: "mymemory" | "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };

@@ -51,23 +51,47 @@ export async function squarePicture(file: Blob, size = 256): Promise<string> {
   }
 }
 
-/** A button that asks for a picture and hands it back made small. */
+/** The desktop app (macOS) has its own panel that shows pictures only:
+ *  its web view's panel for a file input lets any file be chosen. */
+let systemPicker = false;
+export function setSystemPicker(on: boolean) { systemPicker = on; }
+
+const PICTURE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const PICTURE_EXT = /\.(png|jpe?g|webp|gif)$/i;
+const notPicture = () => new Error(L("只能用图片：PNG、JPEG、WebP 或 GIF", "Only a picture can be used: PNG, JPEG, WebP or GIF"));
+
+/** A button that asks for a picture and hands it back made small. Only
+ *  pictures can be chosen; anything else is turned away with a word. */
 export function PictureButton({ onPicture, onError, label }: {
   onPicture: (dataUrl: string) => void;
   onError: (e: unknown) => void;
   label?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const pick = async () => {
+    if (!systemPicker) { input.current?.click(); return; }
+    try {
+      const r = await appApi.pickImage();
+      if (r.cancelled || !r.data) return;
+      const bytes = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
+      onPicture(await squarePicture(new Blob([bytes], { type: r.type })));
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === "not_supported") { systemPicker = false; input.current?.click(); return; }
+      onError(code === "not_image" ? notPicture() : e);
+    }
+  };
   return (
     <>
-      <button type="button" className="app-btn" onClick={() => input.current?.click()}>
+      <button type="button" className="app-btn" onClick={() => void pick()}>
         <ImagePlus />{label || L("用一张照片", "Use a picture")}
       </button>
-      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden
+      <input ref={input} type="file" accept={[...PICTURE_TYPES, ".png", ".jpg", ".jpeg", ".webp", ".gif"].join(",")} hidden
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
           if (!f) return;
+          if (!PICTURE_TYPES.includes(f.type) && !PICTURE_EXT.test(f.name)) { onError(notPicture()); return; }
           squarePicture(f).then(onPicture, onError);
         }} />
     </>

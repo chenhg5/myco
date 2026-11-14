@@ -25,6 +25,8 @@ import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
+import { TranslatableBody, TranslateToggle } from "@/app/translate";
+import { takePendingFind } from "@/app/CommandPalette";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -103,7 +105,7 @@ function isOpen(status: string): boolean {
 }
 
 /** ⌘ on a Mac, Ctrl elsewhere (the same key the input listens for). */
-function modKey(): string {
+export function modKey(): string {
   const p = typeof navigator === "undefined" ? "" : navigator.platform || "";
   return /Mac|iPhone|iPad/.test(p) ? "⌘" : "Ctrl+";
 }
@@ -480,6 +482,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
   const rootRef = useRef<HTMLDivElement>(null);
   const [searching, setSearching] = useState(false);
+  const [findFirst, setFindFirst] = useState("");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "f") return;
@@ -912,7 +915,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const id = target.focus;
     const t = requestAnimationFrame(() => {
       if (focusDone.current) return;
-      if (jumpTo(id, false)) { focusDone.current = true; return; }
+      if (jumpTo(id, false)) {
+        focusDone.current = true;
+        // Found by search (⌘K): the words it was found by are marked here.
+        const q = takePendingFind(id);
+        if (q) { setFindFirst(q); setSearching(true); }
+        return;
+      }
       if (exchange && more && !loadingOlder && focusTries.current < 10) {
         focusTries.current++;
         void loadOlder();
@@ -1413,6 +1422,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
+              // What an agent wrote can be read in the App's language.
+              : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
               : <MessageContent body={m.body} />}
             {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
             {(steersOf.get(m.id) || []).map((s) => (
@@ -1435,6 +1446,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
             {failedNote || clockTime(m.created_at)}
+            {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
           </div>
         </div>
@@ -1579,7 +1591,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
       {searching && !termMode && (
-        <ChatSearch items={searchItems} root={timelineRef} onJump={(id) => jumpTo(id)} onClose={() => setSearching(false)}
+        <ChatSearch items={searchItems} root={timelineRef} initial={findFirst} onJump={(id) => jumpTo(id)} onClose={() => { setSearching(false); setFindFirst(""); }}
           onLoadMore={exchange && more ? () => void loadOlder() : undefined} loading={loadingOlder} />
       )}
       {away && (() => {
