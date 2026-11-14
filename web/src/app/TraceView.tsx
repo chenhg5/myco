@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L, locale } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
+import { useReportsOnly } from "@/app/quietRuns";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
 import { AskCard } from "@/app/AskCard";
@@ -274,6 +275,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const paused = running && !asking && !gone && pausedRun(events || [], task, said || [], now);
   useEffect(() => { onPaused?.(task.id, paused); }, [onPaused, task.id, paused]);
   const verb = useVerb(running && !quiet && !paused && !footed);
+  // 只看进度 (Settings): only what it reported, not its steps.
+  const onlyReports = useReportsOnly();
   // Still open, but not the newest at work: no loading, a quiet line.
   const moving = running && !quiet && !paused;
   // At work, with its loading here (not at the foot of the chat).
@@ -339,7 +342,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   while (end > 0 && rows[end - 1].kind === "text") end--;
   // While it works, what it is writing now shows at once (it may be the
   // start of the answer); once the answer is in, it is the message.
-  const writing = running && !asking && end < rows.length && steps > 0;
+  // (Not while messages sit under this run: its answer comes down there.)
+  const writing = running && !asking && !footed && !onlyReports && end < rows.length && steps > 0;
   if (writing) {
     end = rows.length;
     drafted.add(task.id);
@@ -347,6 +351,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
   if (!reports.length) {
+    if (onlyReports) return running ? atWork : null;
     if (gone) return running ? atWork : null;
     if (!running && (events === null || steps === 0)) return null;
     if (running && steps === 0) return atWork;
@@ -360,7 +365,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   let plan: { items: PlanItem[]; at: string } | null = null;
   // Reports that carried the plan: what else they said, if anything.
   const planReports = new Map<string, string>();
-  for (const r of rows) {
+  for (const r of onlyReports ? [] : rows) {
     if (r.kind !== "tool" || r.call.tool !== "TodoWrite") continue;
     const items = parsePlan(r.call.input || "");
     if (items && (!plan || (r.at || "") >= plan.at)) plan = { items, at: r.at || "" };
@@ -378,7 +383,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
   // say what it is doing now; at the very end, while it works, the mushroom.
   type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; row?: Row };
-  const items: Item[] = shown.map((r) => ({ at: r.at, row: r }));
+  const items: Item[] = onlyReports ? [] : shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
     // The plan is the card at the top; what was said with it stays here.
     if (planReports.has(p.id) && !planReports.get(p.id)) continue;

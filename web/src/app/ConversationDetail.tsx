@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Square } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Search, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -24,6 +24,7 @@ import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
+import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -476,10 +477,43 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return () => ro.disconnect();
   }, [messages === null]);
 
+  // Finding a message (ChatSearch): ⌘F in the chat last clicked in.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "f") return;
+      if (document.querySelector(".app-modal, .fp-panel, .lightbox") || !ownsFind(rootRef.current)) return;
+      e.preventDefault();
+      setSearching(true);
+      // Already open: back to its box.
+      window.setTimeout(() => rootRef.current?.querySelector<HTMLInputElement>(".conv-search input")?.select(), 0);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => { setSearching(false); }, [target.hubId, target.agent, target.peer, target.threadId]);
+
+  // Scrolled well up: a button back to the bottom, with how many new
+  // messages came since you left it.
+  const [away, setAway] = useState(false);
+  const awaySince = useRef(0);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottom.current = below < 80;
+    const far = below > 400;
+    if (far !== away) {
+      if (far) awaySince.current = Date.now();
+      setAway(far);
+    }
+  };
+  const toBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottom.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
   // A message put after a task that is still open waits on the hub: it is
@@ -1226,9 +1260,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const steersOf = new Map<string, Message[]>();
   // What answered a question an agent asked: shown on its card.
   const answerTo = new Map<string, Message>();
+  // Only while nothing came between the task and it: in time order, a
+  // supplement sent after other messages (an answer to another task, work
+  // handed out) is drawn where it was sent, quoting its task.
+  const at = (m: { created_at: string }) => new Date(m.created_at).getTime();
+  const between = (task: Message, s: Message) => (shown || []).some((m) =>
+    at(m) > at(task) && at(m) < at(s) && m.id !== task.id && m.type !== "progress"
+      && !(m.type === "steer" && (m.reply_to === task.id || m.answers)))
+    || (inserts || []).some((x) => new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
   for (const m of shown || []) {
     if (m.type === "steer" && m.answers && byId.get(m.answers)) { answerTo.set(m.answers, m); continue; }
     if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
+    if (between(byId.get(m.reply_to)!, m)) continue;
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
   const answerAsk = (task: Message) => async (text: string) => {
@@ -1253,7 +1296,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     && (firstSeen.get(m.id) ?? 0) - arrived.current.at > 2000;
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
-    if (m.type === "steer" && m.reply_to && steersOf.has(m.reply_to)) return false;
+    if (m.type === "steer" && m.reply_to && steersOf.get(m.reply_to)?.includes(m)) return false;
     if (m.type !== "progress") return true;
     if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
     const task = taskOfProgress.get(m.id) || "";
@@ -1333,9 +1376,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // it is never an answer to nothing. Watching two nodes, its progress
       // folds under it (in your own chats it is in the run).
       const answers = taskOfAnswer.get(m.id);
-      const asked = answers ? shown?.find((x) => x.id === answers) : undefined;
+      // A supplement drawn where it was sent quotes its task the same way.
+      const quoted = answers || (m.type === "steer" && !m.answers ? m.reply_to : undefined);
+      const asked = quoted ? shown?.find((x) => x.id === quoted) : undefined;
       // (an answer naming a message not loaded here quotes "an earlier one")
-      const quote = !!answers && prevShown.get(m.id) !== answers && (!!asked || !!m.reply_to);
+      const quote = !!quoted && prevShown.get(m.id) !== quoted && (!!asked || !!m.reply_to);
       const steps = observed && answers ? progressOf.get(answers) : undefined;
       const usage = answers ? usageOf[answers] : undefined;
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
@@ -1414,12 +1459,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       );
   };
 
+  // What search looks in: the messages shown, and supplements drawn inside
+  // their task (found as that task).
+  const searchItems: SearchItem[] = [];
+  if (searching) {
+    for (const m of visible) {
+      if (m.unreadable) continue;
+      searchItems.push({ id: m.id, text: m.body });
+      for (const st of steersOf.get(m.id) || []) if (!st.unreadable) searchItems.push({ id: m.id, text: st.body });
+    }
+  }
+
   // A file sent again under the same name is its next version.
   const versions = versionsOf(shown || []);
 
   return (
     <VersionsContext.Provider value={versions}>
-    <div className={cn("conv-detail", hasRail && "has-rail")}>
+    <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
@@ -1450,6 +1506,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <button type="button" className="conv-head-state is-link" onClick={toStuck} title={L("跳到可能卡住的任务", "Go to the task that may be stuck")}>
             <span className={cn("dot", state.dot)} />
             {state.label}
+          </button>
+        )}
+        {!termMode && (
+          <button type="button" className={cn("app-btn app-btn-plain conv-head-find", searching && "is-on")} onClick={() => setSearching((v) => !v)}
+            title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
+            <Search />
           </button>
         )}
         {headActions && <span className="conv-head-actions">{headActions}</span>}
@@ -1503,6 +1565,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
       <div className={cn("conv-body", hasRail && "has-rail", termMode && "is-shell")}>
       {hasRail && <TurnRail turns={turns} scroller={scrollRef} />}
+      {searching && !termMode && (
+        <ChatSearch items={searchItems} root={timelineRef} onJump={(id) => jumpTo(id)} onClose={() => setSearching(false)}
+          onLoadMore={exchange && more ? () => void loadOlder() : undefined} loading={loadingOlder} />
+      )}
+      {away && (() => {
+        const fresh = (visible || []).filter((m) => !isMe(m.from, row?.hub) && m.type !== "progress" && (firstSeen.get(m.id) ?? 0) > awaySince.current).length;
+        const label = fresh ? L(`${fresh} 条新消息`, `${fresh} new`) : L("回到底部", "Back to the bottom");
+        return (
+          <button type="button" className={cn("conv-to-bottom", fresh > 0 && "has-new")} onClick={toBottom} title={L("回到底部", "Back to the bottom")} aria-label={label}>
+            <ArrowDown />{fresh > 0 && <span>{label}</span>}
+          </button>
+        );
+      })()}
       <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
         <div ref={timelineRef} className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (

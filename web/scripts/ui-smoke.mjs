@@ -924,6 +924,96 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // In time order: a supplement to a task still running, sent after the
+    // answer to another one, is drawn where it was sent, quoting its task,
+    // not inside that task far above.
+    await step("单聊 · 补充按时间排", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      // (sent from the box: a chat with nothing in it yet starts from it)
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("按时间排：派出去核对链接");
+      await box.press("Enter");
+      const aMsg = page.locator(".conv-detail .conv-msg.is-me", { hasText: "按时间排：派出去核对链接" });
+      await aMsg.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => [...document.querySelectorAll(".conv-detail .conv-msg.is-me[data-msg]")]
+        .some((el) => el.textContent?.includes("按时间排：派出去核对链接") && !el.getAttribute("data-msg")?.startsWith("local")), null, { timeout: 10_000 });
+      const a = { id: await aMsg.evaluate((el) => el.getAttribute("data-msg")) };
+      await sendFromElsewhere("hub_studio", "review-cloud", "收到就好");
+      await page.waitForTimeout(7_000); // the second is answered; the first still runs
+      const r = await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${a.id}/steer`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: "补充：顺便看看 Windows 的包" }),
+      });
+      if (!r.ok) throw new Error(`补充没发出去：HTTP ${r.status}`);
+      const added = page.locator(".conv-detail .conv-msg.is-me", { hasText: "顺便看看 Windows 的包" });
+      await added.waitFor({ timeout: 10_000 });
+      if (await page.locator(".conv-detail .conv-supplement", { hasText: "顺便看看 Windows 的包" }).count()) throw new Error("隔了别的消息的补充不该画回上面那个任务里");
+      if (!(await added.locator(".conv-quote", { hasText: "按时间排" }).count())) throw new Error("按时间排的补充应引用它补充的任务");
+      const last = await page.locator(".conv-detail .conv-msg.is-me").last().innerText();
+      if (!last.includes("顺便看看 Windows 的包")) throw new Error("补充应排在最下面（按发出的时间）");
+      await added.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-supplement-in-order");
+      await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).last().waitFor({ timeout: 25_000 });
+      await noRound(page);
+    });
+
+    // Finding a message (⌘F), and back to the bottom after reading above.
+    await step("单聊 · 搜索和回到底部", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("搜索用的一句：蓝莓派");
+      await box.press("Enter");
+      await page.locator(".conv-detail .conv-msg", { hasText: "蓝莓派" }).waitFor({ timeout: 10_000 });
+      // (⌘F goes to the chat last clicked in)
+      await page.locator(".conv-detail .conv-msg", { hasText: "蓝莓派" }).first().click();
+      await page.keyboard.press("Control+f");
+      const bar = page.locator(".conv-detail .conv-search");
+      await bar.waitFor({ timeout: 5_000 });
+      await bar.locator("input").fill("蓝莓派");
+      await bar.locator(".conv-search-count", { hasText: /^\d+\/\d+$/ }).waitFor({ timeout: 5_000 });
+      await page.locator(".conv-detail .conv-msg.is-flash", { hasText: "蓝莓派" }).first().waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-search");
+      await bar.locator("input").fill("这句话不会有");
+      await bar.locator(".conv-search-count.is-none").waitFor({ timeout: 5_000 });
+      await bar.locator("input").press("Escape");
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await noRound(page);
+      const scroller = page.locator(".conv-detail .conv-scroll");
+      if (await scroller.evaluate((el) => el.scrollHeight - el.clientHeight > 600)) {
+        await scroller.evaluate((el) => { el.scrollTop = 0; });
+        const btn = page.locator(".conv-detail .conv-to-bottom");
+        await btn.waitFor({ timeout: 5_000 });
+        await shot(page, size, scheme, "chat-to-bottom");
+        await btn.click();
+        await page.waitForFunction(() => {
+          const el = document.querySelector(".conv-detail .conv-scroll");
+          return !!el && el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }, null, { timeout: 5_000 });
+        await btn.waitFor({ state: "detached", timeout: 5_000 });
+      }
+    });
+
+    // 只看进度: runs show what the agent reported, not its steps.
+    await step("设置 · 只看进度", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await page.getByRole("tab", { name: "只看进度" }).click();
+      if (narrow) await sidebar(page, false);
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await settle(page, 600);
+      const steps = await page.locator(".conv-detail .trace-group, .conv-detail .trace-think").count();
+      if (steps) throw new Error(`只看进度时不该显示思考和命令，还有 ${steps} 处`);
+      await shot(page, size, scheme, "chat-progress-only");
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await page.getByRole("tab", { name: "全部" }).click();
+      if (narrow) await sidebar(page, false);
+    });
+
     await step("单聊 · 点选卡", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-detail .conv-compose-input");

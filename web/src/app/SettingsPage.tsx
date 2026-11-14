@@ -16,6 +16,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
+import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 
@@ -553,6 +554,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   ))}
                 </div>
               </div>
+              <ReportsOnlyLine />
               {info?.shell === "mac" && <IslandLine />}
               <div className="app-setting-line">
                 <div className="app-setting-line-text">
@@ -871,6 +873,32 @@ function IslandLine() {
       <div className="seg" role="tablist" aria-label={L("灵动岛", "Notch island")}>
         <button type="button" role="tab" aria-selected={on} className={cn("seg-btn", on && "active")} onClick={() => set(true)}>{L("开", "On")}</button>
         <button type="button" role="tab" aria-selected={!on} className={cn("seg-btn", !on && "active")} onClick={() => set(false)}>{L("关", "Off")}</button>
+      </div>
+    </div>
+  );
+}
+
+/** 过程只看进度: runs in chats show only what agents reported. */
+function ReportsOnlyLine() {
+  const only = useReportsOnly();
+  const opts: { on: boolean; label: string }[] = [
+    { on: false, label: L("全部", "Everything") },
+    { on: true, label: L("只看进度", "Progress only") },
+  ];
+  return (
+    <div className="app-setting-line">
+      <div className="app-setting-line-text">
+        <b>{L("对话里的过程", "Steps in chats")}</b>
+        <span>{L("只看进度时，只显示 agent 自己报的进度和计划，不显示它的思考和跑的命令；在不在干活照样看得到。",
+          "With progress only, chats show what agents report and their plans, not their thinking or commands; whether they are at work still shows.")}</span>
+      </div>
+      <div className="seg" role="tablist" aria-label={L("对话里的过程", "Steps in chats")}>
+        {opts.map((t) => (
+          <button key={String(t.on)} type="button" role="tab" aria-selected={only === t.on}
+            className={cn("seg-btn", only === t.on && "active")} onClick={() => setReportsOnly(t.on)}>
+            {t.label}
+          </button>
+        ))}
       </div>
     </div>
   );
