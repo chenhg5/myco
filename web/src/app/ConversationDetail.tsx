@@ -1734,7 +1734,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!shellMode && !execNode && trailing}
             {/* The run at work, when messages sit under it. */}
             {liveFoot && liveRun && (
-              <WorkingLine key={liveRun.id} name={nameOf(liveRun.to)} since={liveRun.created_at}
+              <WorkingLine key={liveRun.id} name={nameOf(liveRun.to)}
+                since={[liveRun.created_at, ...(runSteers.get(liveRun.id) || []).map((x) => x.created_at)]
+                  .reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a))}
                 status={progressOf.get(liveRun.id)?.slice(-1)[0]?.body.split("\n")[0]} side="left" />
             )}
             {working && (

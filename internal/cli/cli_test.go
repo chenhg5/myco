@@ -1004,6 +1004,14 @@ func TestJoinLinks(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `"project_error"`) || !strings.Contains(out, "myco project add") {
 		t.Fatalf("join --project with a missing project: %d %s %s", code, out, e)
 	}
+	// A cloud environment's MYCO_HUB and MYCO_ENROLL_TOKEN for another hub
+	// (or workspace) do not override --hub naming one this machine joined.
+	elsewhere := &harnessT{t, map[string]string{"CLAUDE_CODE_SESSION_ID": "abcd-1234-ef56",
+		"MYCO_HUB": "http://127.0.0.1:1", "MYCO_ENROLL_TOKEN": "myco_enroll_for_another_hub"}}
+	code, out, e = elsewhere.run("join", "--hub", hub, "--project", "web", "--format", "json")
+	if code != 0 || !strings.Contains(out, `"name": "test-box-claude-ef56"`) || !strings.Contains(out, `"project": "web"`) {
+		t.Fatalf("join --hub with another hub in the environment: %d %s %s", code, out, e)
+	}
 
 	// ...and Codex, found from its active rollout in this directory.
 	wd, _ := os.Getwd()

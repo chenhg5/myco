@@ -3429,22 +3429,22 @@ button.conv-attach:hover {
 button.conv-attach:hover .conv-attach-go {
   opacity: 1;
 }
-/* Pictures in a message: thumbnails that open full size (one larger,
-   several in a grid of squares). */
+/* Pictures in a message: thumbnails that open full size, each at its own
+   shape, never cropped or padded: several in a wrapping row, each within
+   260 by 120; one larger, within 320 by 240. */
 .conv-shots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 132px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 6px;
   margin-top: 8px;
 }
-.conv-shots.is-one {
-  grid-template-columns: minmax(0, 320px);
-}
 .conv-attach.is-image {
   display: block;
-  width: 100%;
-  max-width: none;
-  aspect-ratio: 1;
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  height: auto;
   padding: 0;
   overflow: hidden;
   border-radius: 10px;
@@ -3452,21 +3452,24 @@ button.conv-attach:hover .conv-attach-go {
   box-shadow: inset 0 0 0 1px var(--line-2);
   cursor: zoom-in;
 }
-.conv-shots.is-one .conv-attach.is-image {
-  aspect-ratio: auto;
-  max-height: 240px;
-}
 .conv-attach.is-image img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: 260px;
+  max-height: 120px;
   transition: transform 0.2s ease;
 }
 .conv-shots.is-one .conv-attach.is-image img {
-  height: auto;
+  max-width: 320px;
   max-height: 240px;
-  object-fit: contain;
+}
+/* A narrow window: never wider than the message. */
+@media (max-width: 520px) {
+  .conv-attach.is-image img,
+  .conv-shots.is-one .conv-attach.is-image img {
+    max-width: calc(100vw - 96px);
+  }
 }
 .conv-attach.is-image:hover img {
   transform: scale(1.02);
@@ -4847,6 +4850,11 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-picker-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-picker-kind { margin-left: auto; font-size: 11px; color: var(--muted); }
 .app-picker-empty { padding: 10px; font-size: 12px; color: var(--muted); }
+/* AddMachineDialog: computers of the server's other workspaces */
+.app-picker-nearby { margin-top: 12px; }
+.app-picker-nearby > .app-small-note { display: block; margin-top: 6px; }
+.app-picker-done { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.app-picker-done svg { width: 12px; height: 12px; }
 
 /* 接收方式: the mode on the right, a short explanation under it */
 /* the in-use notice's copyable sentence wraps instead of scrolling */

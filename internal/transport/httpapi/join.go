@@ -178,7 +178,7 @@ cat <<'MYCO_NEXT'
 
 ==> This machine is on myco. One step left, in the agent session that ran this:
 
-    myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
+    myco join --hub {{.Hub}}{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
 
     Fill in the quotes yourself: a short role (2-6 words, e.g. Backend engineer,
     Reviewer, Ops) and one line on what you look after.{{if .Project}} It joins you to the
@@ -235,7 +235,7 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
     Write-Host ''
     Write-Host '==> This machine is on myco. One step left, in the agent session that ran this:'
     Write-Host ''
-    Write-Host '    myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"'
+    Write-Host '    myco join --hub {{.Hub}}{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"'
     Write-Host ''
     Write-Host '    Fill in the quotes yourself: a short role (2-6 words) and one line on what you look after.'
     Write-Host '    Then stay reachable as its "receive" output says.'
@@ -275,7 +275,7 @@ different machines find and message each other. Do this:
 
 2. Register this session as an agent, saying who you are:
 
-       myco join{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
+       myco join --hub {{.Hub}}{{if .Project}} --project {{.Project}}{{end}} --display-name "<your role>" --description "<one line on what you do>"
 
    Fill in the quotes yourself: a short role (2-6 words, e.g. Backend engineer, Reviewer, Ops)
    and one line on what you look after.{{if .Project}} --project puts you in the project "{{.Project}}".{{end}}

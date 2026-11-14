@@ -910,6 +910,12 @@ async function runMatrix(browser, size, scheme) {
       await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
       if (!w) throw new Error("图片附件应显示缩略图");
+      // At its own shape: not cropped to a square, not stretched.
+      const ratio = await thumb.locator("img").evaluate((img) => {
+        const r = img.getBoundingClientRect();
+        return { shown: r.width / r.height, own: img.naturalWidth / img.naturalHeight };
+      });
+      if (Math.abs(ratio.shown / ratio.own - 1) > 0.05) throw new Error(`缩略图应按原图比例，实际 ${ratio.shown.toFixed(2)}，原图 ${ratio.own.toFixed(2)}`);
       await thumb.scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "message-picture");
@@ -1134,18 +1140,18 @@ async function runMatrix(browser, size, scheme) {
       const mine = page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).last();
       await mine.waitFor({ timeout: 10_000 });
       await noRound(page);
-      await mine.hover();
-      // (the chat may still move as the answer comes: the button shows on hover)
-      await mine.locator(".conv-msg-del").click({ force: true });
+      // (clicked on the button itself, not at a spot on screen: the chat may
+      // still move as the answer comes, and the button only shows on hover)
+      await mine.locator(".conv-msg-del").evaluate((b) => b.click());
       await page.locator(".conv-detail .conv-undo").waitFor({ timeout: 5_000 });
       if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删除后这条应从对话里消失");
       await settle(page, 200);
       await shot(page, size, scheme, "chat-deleted");
       await page.locator(".conv-detail .conv-undo button", { hasText: "撤销" }).click();
       await mine.waitFor({ timeout: 5_000 });
-      await mine.hover();
-      // (the chat may still move as the answer comes: the button shows on hover)
-      await mine.locator(".conv-msg-del").click({ force: true });
+      // (clicked on the button itself, not at a spot on screen: the chat may
+      // still move as the answer comes, and the button only shows on hover)
+      await mine.locator(".conv-msg-del").evaluate((b) => b.click());
       await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).waitFor({ state: "detached", timeout: 5_000 });
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(".app-shell").waitFor();
@@ -1952,6 +1958,44 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
       if (await page.locator(".app-hub-menu").isVisible().catch(() => false)) await page.locator(".sp-switch .app-hub-trigger").click();
+      if (narrow) await sidebar(page, false);
+    });
+
+    // On a hub server this App owns, the switcher adds a workspace there
+    // (same address, kept apart) and switches to it; its add-computer dialog
+    // offers the server's other computers, one click each.
+    await step("工作区 · 在服务器上再开一个", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const entry = page.locator(".app-hub-menu-item", { hasText: "上新建工作区" }).filter({ hasNotText: "这台电脑" });
+      await entry.waitFor({ timeout: 10_000 });
+      await clickVisible(page, entry);
+      const dialog = page.locator(".app-modal");
+      await dialog.waitFor({ timeout: 10_000 });
+      const title = compactText(await dialog.locator("h3").first().innerText());
+      if (!title.includes("192.168.1.20")) throw new Error(`应说明建在哪台服务器上，实际「${title}」`);
+      await dialog.locator(".app-field .app-input").fill("team-b");
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-new-workspace-server");
+      await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".sp-switch .app-hub-name", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      // The new workspace offers the server's computers.
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.getByRole("button", { name: "连上另一台电脑" }));
+      const add = page.locator(".app-modal");
+      await add.locator(".app-picker-row").first().waitFor({ timeout: 10_000 });
+      const offered = add.locator(".app-picker-row", { has: page.getByRole("button", { name: "加进来" }) }).first();
+      await offered.waitFor({ timeout: 10_000 });
+      const machineName = (await offered.locator(".app-picker-name").innerText()).trim();
+      const row = add.locator(".app-picker-row", { has: page.locator(".app-picker-name", { hasText: machineName }) }).first();
+      await clickVisible(page, row.getByRole("button", { name: "加进来" }));
+      await row.locator(".app-picker-done", { hasText: "已加进来" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-add-computer-same-server");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
       if (narrow) await sidebar(page, false);
     });
 

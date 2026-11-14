@@ -436,13 +436,20 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			hub, tok := "", e.in.Getenv(config.EnvEnrollToken)
 			prefix := ""
+			// --hub naming one of this machine's hubs is that membership,
+			// whatever the environment says (a cloud environment may carry
+			// another hub's MYCO_HUB and MYCO_ENROLL_TOKEN).
+			chosen := m != nil && e.in.String("hub") != ""
+			if chosen {
+				tok = m.EnrollToken
+			}
 			if m != nil {
 				hub, prefix = m.Hub, m.NamePrefix
 				if tok == "" {
 					tok = m.EnrollToken
 				}
 			}
-			if h := e.in.Getenv(config.EnvHub); h != "" && (m == nil || tok != m.EnrollToken) {
+			if h := e.in.Getenv(config.EnvHub); h != "" && !chosen && (m == nil || tok != m.EnrollToken) {
 				hub = h
 			}
 			if hub == "" || tok == "" {
