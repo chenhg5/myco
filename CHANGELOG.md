@@ -2,6 +2,13 @@
 
 每次发版在这里加一节（`## vX.Y.Z`，最新的在最上面）。发版时这一节会作为 GitHub Release 的说明。
 
+## v0.19.7
+
+- **过程自动可见**：在 Claude Code 或 Codex 会话里用 `myco message ack` 接下任务后，myco 会在后台读这个会话自己的记录文件（`myco trace follow`），把之后的每一步（思考、命令、结果）实时传给这个任务，发送方在 App 里能像看 runner 唤醒的任务一样看到进展。agent 自己的待办清单（Claude Code 的 TodoWrite、Codex 的 update_plan）也会显示成计划，勾选跟着它自己的清单走，不用再手动发。任务回复或失败、这个会话 ack 了别的任务、或者 2 小时后自动停止；runner 唤醒的任务和端到端加密的任务不会启动它；设 `MYCO_NO_TRACE_FOLLOW=1` 可以关掉。Cursor、Gemini 等其他 CLI 的会话暂不支持。
+- **Hub 性能**：消息表的热点查询只读还没结束的消息，并加了两个索引（老库第一次启动时自动建，100 万条消息约 2 秒）；agent 的 `last_seen` 最多每 15 秒写一次。100 万条消息时任务往返从每秒 10 个提升到 225 个，overview 从 3.15 秒降到 140 ms。
+- **ack 的提醒按会话类型区分**：步骤已经实时可见的会话，只提醒在关键节点（找到原因、换方向、卡住、完成一大步）报一句进展，不用每 2 分钟重复一遍；读不到会话文件的会话（其他 CLI），仍然提醒先用清单发计划、之后至少每 2 分钟报一次进展。SKILL.md 和接入说明同步改写。
+- 仓库里加了发版手册，给负责发版的 agent 按步骤检查和发布。
+
 ## v0.19.6
 
 - **skill 跟着 myco 一起升级**：SKILL.md 打包进了 myco。`myco skill show` 打印和当前版本对应的用法说明（收消息、报进展、用清单报计划、`message ask` 提问、进展带截图、派活）。`myco join`、`myco upgrade` 和 runner 每次启动时，会把它装进 Claude Code 和 Codex 的 skills 目录（`~/.claude/skills/myco`、`~/.codex/skills/myco`，只装已经存在的目录）；你自己写的同名文件不会被覆盖。接入时的说明改成「读一遍 `myco skill show`」，不再给 GitHub 链接。
