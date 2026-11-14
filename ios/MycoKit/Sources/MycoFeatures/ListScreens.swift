@@ -186,8 +186,10 @@ private struct WorkspaceChrome: ViewModifier {
             .environment(\.defaultMinListRowHeight, 0)
             // Waiting for the first answer: rows in the shape of what comes.
             .overlay {
-                if session.loadedAt == nil, session.problem == nil { SkeletonRows() }
+                if session.loadedAt == nil, session.problem == nil { SkeletonRows().transition(.opacity) }
             }
+            // The list fades in over them when it comes.
+            .animation(.easeOut(duration: 0.22), value: session.loadedAt == nil)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let problem = session.problem { StaleBanner(staleText(problem)) }
             }

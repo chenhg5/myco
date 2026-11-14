@@ -57,6 +57,9 @@ struct ProjectScreen: View {
                 }
             } else if session.loadedAt != nil {
                 EmptyState(symbol: "questionmark.folder", title: L("找不到这个项目", "This project is gone"))
+            } else {
+                // The workspace has not answered yet.
+                ConversationSkeleton(label: L("正在加载", "Loading"))
             }
         }
         .background(MycoColor.bg)
@@ -176,6 +179,12 @@ struct ConversationBody: View {
     /// The conversation has opened where it should and settled: from now
     /// on, reaching its top asks for older messages.
     @State private var settled = false
+    /// The conversation is where it opens and can be seen. Until then it
+    /// is laid out and scrolled out of sight, so opening never shows it
+    /// jump into place.
+    @State private var revealed = false
+    /// Opening is taking long enough to say so: its shape is drawn meanwhile.
+    @State private var waiting = false
 
     private static let bottomID = "conversation.bottom"
 
@@ -214,6 +223,9 @@ struct ConversationBody: View {
                     }
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item, at: index)
+                            // What comes once the page is open arrives; what
+                            // it opened with is simply there.
+                            .modifier(Arrival(animated: settled))
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
                     }
                     // Marks the end. It is also the room between the last
@@ -236,6 +248,7 @@ struct ConversationBody: View {
                 }
                 .padding(.horizontal, Space.page)
                 .padding(.top, Space.l)
+                .opacity(revealed ? 1 : 0)
             }
             .coordinateSpace(.named(Self.space))
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -280,7 +293,15 @@ struct ConversationBody: View {
             .onChange(of: model.revision) {
                 guard landed, pinned else { return }
                 Task {
-                    for pause in [0, 80, 300] {
+                    // Once the page is open, what comes at its end is
+                    // followed with a glide, then set right as rows take
+                    // their heights; while it opens, at once.
+                    var pauses = [0, 80, 300]
+                    if settled {
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                        pauses = [320, 300]
+                    }
+                    for pause in pauses {
                         try? await Task.sleep(for: .milliseconds(pause))
                         guard pinned else { return }
                         proxy.scrollTo(Self.bottomID, anchor: .bottom)
@@ -315,6 +336,7 @@ struct ConversationBody: View {
                 let target = focus.flatMap { focus in model.items.first { $0.id == focus }?.id }
                 if let target {
                     proxy.scrollTo(target, anchor: .center)
+                    withAnimation(.easeOut(duration: 0.22)) { revealed = true }
                     settled = true
                     return
                 }
@@ -322,10 +344,24 @@ struct ConversationBody: View {
                 Task {
                     try? await Task.sleep(for: .milliseconds(60))
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                    // In place: now it fades in, whole.
+                    withAnimation(.easeOut(duration: 0.22)) { revealed = true }
                     try? await Task.sleep(for: .milliseconds(400))
                     settled = true
                 }
             }
+        }
+        // Still on its way after a moment: the shape of a conversation
+        // stands in, breathing, until the real one fades in over it. One
+        // kept on this device opens before that moment is up.
+        .overlay {
+            if !revealed, waiting {
+                ConversationSkeleton(label: L("正在加载", "Loading")).transition(.opacity)
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(160))
+            if !revealed { withAnimation(.easeOut(duration: 0.15)) { waiting = true } }
         }
         .overlay {
             if model.loaded, model.items.isEmpty {

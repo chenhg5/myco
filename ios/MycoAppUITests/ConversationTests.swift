@@ -114,6 +114,22 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testASlowConversationShowsItsShapeThenFadesIn() {
+        // Every answer of the demo takes a while, as on a bad connection.
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "1500"])
+        let skeleton = app.descendants(matching: .any)["conversation.skeleton"]
+        XCTAssertTrue(skeleton.waitForExistence(timeout: 20), "while it loads, the page shows the shape of a conversation")
+        snap("loading-skeleton")
+        let answer = app.buttons["attachment.file"].firstMatch
+        XCTAssertTrue(answer.waitForExistence(timeout: 30), "then the conversation is there")
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: skeleton)
+        waitForExpectations(timeout: 5)
+        // Whole at once: how the task was worked on came with it.
+        XCTAssertTrue(app.descendants(matching: .any)["plan.card"].firstMatch.exists, "with its plan and steps, not filled in later")
+        snap("loading-done")
+    }
+
+    @MainActor
     func testALongConversationOpensAtItsEndAndScrolls() {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

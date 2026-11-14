@@ -13,8 +13,9 @@ import MycoStore
 /// `-myco-start demo|empty|long` shows a demo workspace (an in-memory
 /// hub), `-myco-start welcome` the welcome page, `-myco-join <link>`
 /// joins with a link at launch, `-myco-attach <agent>` starts the demo
-/// with files picked for that agent, and `-myco-dictation scripted|denied`
-/// replaces the microphone with a script.
+/// with files picked for that agent, `-myco-dictation scripted|denied`
+/// replaces the microphone with a script, and `-myco-latency <ms>` makes
+/// the demo answer as slowly as a bad connection.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -72,7 +73,10 @@ struct MycoApp: App {
     }
 
     private static func demo(_ scenario: Scenario) -> WorkspaceSession {
-        let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: FakeHub(scenario: scenario))
+        // `-myco-latency <ms>`: every answer of the demo takes this long,
+        // to see what loading looks like on a slow connection.
+        let latency = Duration.milliseconds(UserDefaults.standard.integer(forKey: "myco-latency"))
+        let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: FakeHub(scenario: scenario, latency: latency))
         // `-myco-attach <agent>`: the demo starts with a picture and a
         // file picked for that agent, to see and test the input with files
         // without going through the system's pickers.

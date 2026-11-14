@@ -48,6 +48,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-dictation` | `scripted`: the microphone hears a script (nobody speaks to a simulator); `denied`: it is not allowed to listen |
+| `-myco-latency` | milliseconds every answer of the demo takes: a slow connection, to see what loading looks like |
 | `-myco-appearance` | `system`, `light`, `dark` |
 | `-myco-lang` | `system`, `zh`, `en` |
 
@@ -62,6 +63,10 @@ Messages show their pictures as thumbnails and other files as rows; a tap opens 
 ## Speaking instead of typing
 
 The microphone sits beside Send, as on the desktop. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. After a pause the recognizer starts over with the next sentence: `Utterances` keeps what came before (the desktop's rule, `internal/console/dictation.go`). The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
+
+## Loading
+
+Nothing pops in. A list that waits for its first answer shows rows in its shape (`SkeletonRows`), breathing, and the list fades in over them. A conversation is laid out and scrolled to where it opens before it is shown, then fades in whole; one that takes longer than a moment shows `ConversationSkeleton` meanwhile, and one kept on the device opens before that. Its parts (what was asked, how it was worked on, the agent's other work) are asked for together and shown together; only after 1.5 seconds is the part that is here shown first. What comes once a page is open (a new message, an older page) arrives with `Arrival`: it fades in and rises a little, and the page glides to follow it.
 
 ## Rules
 

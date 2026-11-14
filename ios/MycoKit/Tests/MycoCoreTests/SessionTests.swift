@@ -66,6 +66,31 @@ struct SessionTests {
         #expect(session.problem == nil)
     }
 
+    @Test func aConversationsFirstLookIsWhole() async throws {
+        // A slow workspace: every answer takes a moment.
+        let hub = FakeHub(latency: .milliseconds(40))
+        let session = WorkspaceSession(id: "slow", name: "Demo", hub: hub)
+        await session.refresh()
+        let model = session.conversation(with: "studio-claude-c41f")
+        #expect(!model.loaded)
+        let loading = Task { await model.reload() }
+        // Nothing shows until all of it is here: no page that fills in by jumps.
+        while !model.loaded { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(model.items.contains { if case .process = $0.kind { return true } else { return false } })
+        #expect(model.process(of: "h1") == RunProcess(events: FakeHub.scriptForTests))
+        await loading.value
+
+        // Two refreshes at once (the timer's and one after sending) do not
+        // bring a task's steps twice.
+        let again = session.conversation(with: "vps-codex-90aa")
+        async let first: Void = again.reload()
+        async let second: Void = again.reload()
+        _ = await (first, second)
+        let steps = try #require(again.process(of: "o1"))
+        let once = RunProcess(events: Array(FakeHub.scriptForTests.prefix(5)))
+        #expect(steps == once)
+    }
+
     @Test func opensOnWhatItShowedLast() async {
         let store = MemoryStore()
         let first = WorkspaceSession(id: "w1", name: "Demo", hub: FakeHub(), snapshots: store)
