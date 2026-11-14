@@ -99,7 +99,14 @@ struct SessionTests {
         let model = session.conversation(with: "studio-codex-7f3a")
         await model.reload()
         #expect(model.items.contains { $0.id == "d1" })
-        #expect(model.items.contains { $0.id == "d1p3" })
+        // Its updates are part of its run.
+        func reported(_ id: String) -> Bool {
+            model.run(of: "d1").contains { part in
+                if case .reports(_, let reports) = part { return reports.contains { $0.id == id } } else { return false }
+            }
+        }
+        #expect(reported("d1p3"))
+        #expect(!model.items.contains { $0.id == "d1p3" })
 
         // The task goes, and its updates with it; nothing is deleted.
         await model.setHidden(["d1"])
@@ -118,7 +125,7 @@ struct SessionTests {
         // Taken back within a moment: all of it is there again.
         await model.setHidden(["d1"], hidden: false)
         #expect(model.items.contains { $0.id == "d1" })
-        #expect(model.items.contains { $0.id == "d1p3" })
+        #expect(reported("d1p3"))
     }
 
     @Test func anOlderWorkspaceKeepsWhatIHidOnThisDevice() async throws {

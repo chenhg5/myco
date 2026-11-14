@@ -9,6 +9,56 @@ public struct ToolStep: Identifiable, Hashable, Sendable {
     public var failed: Bool
     /// Its result has come back.
     public var finished: Bool
+    /// When it was made, when the steps say.
+    public var at: Date?
+
+    public init(id: Int, tool: String, input: String, failed: Bool, finished: Bool, at: Date? = nil) {
+        self.id = id
+        self.tool = tool
+        self.input = input
+        self.failed = failed
+        self.finished = finished
+        self.at = at
+    }
+}
+
+/// Something that belongs in a run at the time it was said: an update
+/// the agent reported (`myco message progress`), or what its sender added
+/// to the task.
+public struct RunReport: Identifiable, Hashable, Sendable {
+    public var id: String
+    public var text: String
+    public var at: Date
+    public var files: [Attachment]
+
+    public init(id: String, text: String, at: Date, files: [Attachment] = []) {
+        self.id = id
+        self.text = text
+        self.at = at
+        self.files = files
+    }
+}
+
+/// A stretch of a run as a page shows it, in the order it happened: what
+/// the agent said and did, with what it reported and what was added to
+/// the task where each came.
+public enum RunPart: Identifiable, Hashable, Sendable {
+    /// What it said along the way (Markdown).
+    case said(id: String, text: String)
+    /// What it did and thought between two things said: one line that opens.
+    case steps(id: String, [ToolStep])
+    case failure(id: String, text: String)
+    /// Updates it reported one after another: a small timeline.
+    case reports(id: String, [RunReport])
+    /// Something its sender added to the task while it ran.
+    case added(RunReport)
+
+    public var id: String {
+        switch self {
+        case .said(let id, _), .steps(let id, _), .failure(let id, _), .reports(let id, _): return id
+        case .added(let report): return "added-" + report.id
+        }
+    }
 }
 
 /// One item of a plan the agent is working through.
@@ -48,6 +98,8 @@ public struct RunProcess: Hashable, Sendable {
     public var planAt: Date?
     /// What the run took, once it reported it: "12 秒 · 1500 tokens · $0.02".
     public var usage: String?
+    /// When each thing said (or failed) happened, by its segment's id.
+    public var times: [Int: Date] = [:]
 
     public var isEmpty: Bool { segments.isEmpty && plan == nil }
     /// It has something to show under its task besides a plan.
@@ -67,7 +119,7 @@ public struct RunProcess: Hashable, Sendable {
                     }
                     continue
                 }
-                let tool = ToolStep(id: event.seq, tool: step.tool ?? "", input: step.input ?? "", failed: false, finished: false)
+                let tool = ToolStep(id: event.seq, tool: step.tool ?? "", input: step.input ?? "", failed: false, finished: false, at: event.at)
                 if case .steps(let id, var steps) = segments.last {
                     steps.append(tool)
                     segments[segments.count - 1] = .steps(id: id, steps)
@@ -83,12 +135,15 @@ public struct RunProcess: Hashable, Sendable {
                 steps[at.step].failed = step.failed ?? false
                 segments[at.segment] = .steps(id: id, steps)
             case "text":
-                if let text = step.text, !text.isEmpty { segments.append(.said(id: event.seq, text: text)) }
+                if let text = step.text, !text.isEmpty {
+                    segments.append(.said(id: event.seq, text: text))
+                    times[event.seq] = event.at
+                }
             case "thinking":
                 // Thinking is part of the process: folded into the line of
                 // steps, there on a tap, not grey prose between what it says.
                 guard let text = step.text, !text.isEmpty else { continue }
-                let thought = ToolStep(id: event.seq, tool: Self.thinking, input: text, failed: false, finished: true)
+                let thought = ToolStep(id: event.seq, tool: Self.thinking, input: text, failed: false, finished: true, at: event.at)
                 if case .steps(let id, var steps) = segments.last {
                     steps.append(thought)
                     segments[segments.count - 1] = .steps(id: id, steps)
@@ -97,6 +152,7 @@ public struct RunProcess: Hashable, Sendable {
                 }
             case "error":
                 segments.append(.failure(id: event.seq, text: step.text ?? step.output ?? ""))
+                times[event.seq] = event.at
             case "usage":
                 usage = Self.usageLine(step)
             default:
@@ -120,6 +176,65 @@ public struct RunProcess: Hashable, Sendable {
         }
         if let cost = step.costUsd, cost > 0 { parts.append(String(format: "$%.2f", cost)) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The run as a page shows it: its words and steps in order, with what
+    /// it reported and what was added to the task put in where each came
+    /// (after the last step made before it), as the desktop app does.
+    ///
+    /// What it wrote after its last step is its answer: once the answer is
+    /// in (`live` false) that text is the message under the run, and is not
+    /// said twice. While it works, it shows: it may be the answer's start.
+    /// When some steps carry no time, reports go at the end.
+    public func parts(reports: [RunReport], added: [RunReport] = [], live: Bool) -> [RunPart] {
+        enum Row {
+            case said(Int, String), step(ToolStep), failure(Int, String), report(RunReport), added(RunReport)
+        }
+        var rows: [(at: Date?, row: Row)] = []
+        for segment in segments {
+            switch segment {
+            case .said(let id, let text): rows.append((times[id], .said(id, text)))
+            case .steps(_, let steps):
+                for step in steps { rows.append((step.at, .step(step))) }
+            case .failure(let id, let text): rows.append((times[id], .failure(id, text)))
+            }
+        }
+        if !live {
+            while let last = rows.last, case .said = last.row { rows.removeLast() }
+        }
+        let timed = rows.allSatisfy { $0.at != nil }
+        let extras = (reports.map { ($0.at, Row.report($0)) } + added.map { ($0.at, Row.added($0)) }).sorted { $0.0 < $1.0 }
+        for (at, row) in extras {
+            var index = rows.count
+            if timed, let later = rows.firstIndex(where: { ($0.at ?? .distantPast) > at }) { index = later }
+            rows.insert((at, row), at: index)
+        }
+        var parts: [RunPart] = []
+        for (_, row) in rows {
+            switch row {
+            case .said(let id, let text):
+                parts.append(.said(id: "said-\(id)", text: text))
+            case .failure(let id, let text):
+                parts.append(.failure(id: "failure-\(id)", text: text))
+            case .added(let report):
+                parts.append(.added(report))
+            case .step(let step):
+                if case .steps(let id, var steps) = parts.last {
+                    steps.append(step)
+                    parts[parts.count - 1] = .steps(id: id, steps)
+                } else {
+                    parts.append(.steps(id: "steps-\(step.id)", [step]))
+                }
+            case .report(let report):
+                if case .reports(let id, var group) = parts.last {
+                    group.append(report)
+                    parts[parts.count - 1] = .reports(id: id, group)
+                } else {
+                    parts.append(.reports(id: "reports-" + report.id, [report]))
+                }
+            }
+        }
+        return parts
     }
 
     /// How a thought stands among the steps: a step of this "tool", its

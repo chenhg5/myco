@@ -121,6 +121,14 @@ public final class ConversationModel {
         processes[taskID]
     }
 
+    /// A task's run as the page shows it: its words and steps, with what
+    /// it reported and what was added to it where each came.
+    public func run(of taskID: String) -> [RunPart] {
+        runs[taskID] ?? []
+    }
+
+    private var runs: [String: [RunPart]] = [:]
+
     public var action: ComposerAction {
         ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
@@ -360,6 +368,16 @@ public final class ConversationModel {
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
         for (taskID, process) in processes {
             if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
+        }
+        // Each run with its updates and additions put in where they came.
+        var runs: [String: [RunPart]] = [:]
+        for (taskID, process) in processes where process.hasSteps {
+            let extras = ConversationBuilder.runExtras(of: taskID, agent: agent, messages: Array(all.values))
+            runs[taskID] = process.parts(reports: extras.reports, added: extras.added, live: all[taskID]?.isOpen ?? false)
+        }
+        if runs != self.runs {
+            self.runs = runs
+            revision += 1
         }
         let built = ConversationBuilder.items(
             me: me, agent: agent, messages: Array(all.values), others: others,

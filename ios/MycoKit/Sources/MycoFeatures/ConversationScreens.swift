@@ -516,9 +516,12 @@ struct ConversationBody: View {
     }
 
     /// The files a message came with, under it.
-    @ViewBuilder private func files(of item: ConversationItem, trailing: Bool) -> some View {
-        if !item.files.isEmpty {
-            let attachments = item.files
+    private func files(of item: ConversationItem, trailing: Bool) -> some View {
+        files(item.files, trailing: trailing)
+    }
+
+    @ViewBuilder private func files(_ attachments: [Attachment], trailing: Bool) -> some View {
+        if !attachments.isEmpty {
             MessageFiles(
                 attachments.map { MessageFile(id: $0.fileId, name: $0.name, detail: byteCount($0.size), isPicture: $0.isPicture) },
                 trailing: trailing,
@@ -642,7 +645,9 @@ struct ConversationBody: View {
             WorkingLine(look: MushroomLook.of(session.agent(model.agent)), text: Self.words(for: pause) { session.displayName(of: $0) }, since: nil)
                 .accessibilityIdentifier("run.paused")
         case .process(let taskID, let live):
-            if let process = model.process(of: taskID) { ProcessView(process: process, live: live) }
+            ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
+                AnyView(files(attachments, trailing: trailing))
+            }
         case .dispatch(let dispatch):
             // Work the coordinator gave a member: one line, leading to
             // that member's page.
@@ -822,23 +827,55 @@ struct ConversationBody: View {
     }
 }
 
-/// How a task was worked on: the plan on top, then what the agent said,
-/// thought and did, with each run of steps folded into one line.
+/// How a task was worked on, in the order it happened: what the agent
+/// said, each run of steps and thoughts folded into one line, the updates
+/// it reported and what was added to the task where each came.
 struct ProcessView: View {
-    let process: RunProcess
-    /// Still being worked on: a step without a result is still going.
+    let parts: [RunPart]
+    /// Still being worked on: a step without a result is still going, and
+    /// its updates stay open as a timeline.
     let live: Bool
+    /// Draws the files that came with an update or an addition.
+    let files: ([Attachment], Bool) -> AnyView
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            ForEach(process.segments) { segment in
-                switch segment {
+            ForEach(Array(parts.enumerated()), id: \.element.id) { index, part in
+                switch part {
                 case .said(_, let text):
                     ReplyText(text)
                 case .steps(_, let steps):
                     StepGroupView(summary: RunProcess.summary(of: steps), steps: steps.map(line))
                 case .failure(_, let text):
                     NoticeLine(.failed, text)
+                case .reports(_, let reports):
+                    if live {
+                        // While it works, each update shows in full, joined
+                        // by a line; the newest of the run has the green dot.
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(reports.enumerated()), id: \.element.id) { at, report in
+                                VStack(alignment: .leading, spacing: Space.s) {
+                                    ProgressLine(
+                                        report.text, time: report.at.formatted(date: .omitted, time: .shortened),
+                                        position: ProgressLine.position(at, of: reports.count),
+                                        latest: index == parts.count - 1 && at == reports.count - 1)
+                                    if !report.files.isEmpty { files(report.files, false).padding(.leading, 22) }
+                                }
+                            }
+                        }
+                    } else {
+                        // Once it is answered, they fold into a line that opens.
+                        PastProgress(
+                            title: L("\(reports.count) 条进展", reports.count == 1 ? "1 update" : "\(reports.count) updates"),
+                            texts: reports.map(\.text))
+                    }
+                case .added(let report):
+                    // What I added, where I sent it: what it did before is
+                    // above, what it did about it below.
+                    VStack(alignment: .trailing, spacing: Space.s) {
+                        MyBubble(report.text)
+                        if !report.files.isEmpty { files(report.files, true) }
+                    }
                 }
             }
         }
