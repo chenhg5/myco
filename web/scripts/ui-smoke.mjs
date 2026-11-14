@@ -1241,7 +1241,11 @@ async function runMatrix(browser, size, scheme) {
       await rows.first().waitFor({ timeout: 10_000 });
       const dropText = "这条撤回";
       await box.fill(dropText);
+      // (with a picture: editing it gives the picture back too)
+      await page.locator(".conv-detail .conv-compose input[type=file]").setInputFiles({ name: "排队配图.png", mimeType: "image/png", buffer: Buffer.from(TINY_PNG, "base64") });
+      await page.locator(".conv-detail .conv-compose .att-chip:not(.is-busy)").first().waitFor({ timeout: 10_000 });
       await box.press(NEXT_KEY);
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .conv-compose .att-chip"), null, { timeout: 10_000 });
       // (A long conversation takes a moment to draw the second row.)
       await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 2, null, { timeout: 5_000 }).catch(() => undefined);
       if ((await rows.count()) !== 2) throw new Error(`连着排两条应有两行，实际 ${await rows.count()} 行`);
@@ -1274,6 +1278,7 @@ async function runMatrix(browser, size, scheme) {
       if ((await rows.count()) !== 1) throw new Error("编辑之后那一行应消失");
       const back = await box.inputValue();
       if (back !== dropText) throw new Error(`编辑应把内容放回输入框，实际「${back}」`);
+      if (!(await page.locator(".conv-detail .conv-compose .att-chip").count())) throw new Error("编辑应把图片附件也放回输入框");
       // Put it back in the queue, then withdraw it for good.
       await box.press(NEXT_KEY);
       await rows.nth(1).waitFor({ timeout: 10_000 });
@@ -1287,6 +1292,13 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForFunction(() => !document.querySelector(".conv-detail .conv-queue"), null, { timeout: 10_000 });
       await page.waitForTimeout(1500);
       if (await page.locator(".conv-msg.is-me", { hasText: dropText }).count()) throw new Error("撤回的消息不该发出去");
+      // Never sent: not in the conversation as 已停止 either, even after a reload.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".app-shell").waitFor();
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: nextText }).last().waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(800);
+      if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: dropText }).count()) throw new Error("没发出去的排队消息不该出现在对话里（已停止）");
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-queue-sent");
       await clickVisible(page, page.locator(".conv-head button").first());

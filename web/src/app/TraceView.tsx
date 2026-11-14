@@ -244,7 +244,12 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const asking = running && !!task.asking;
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
-  const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
+  const [events, setEvents] = useState<TraceEvent[] | null>(() => {
+    if (running) return null;
+    // (one kept before steps were taken once each may hold some twice)
+    const kept = recall<TraceEvent[]>(memoKey);
+    return kept ? kept.filter((e, i, all) => all.findIndex((x) => x.seq === e.seq) === i) : null;
+  });
   const [gone, setGone] = useState(false);
   const [traceStatus, setTraceStatus] = useState<string>();
   const last = useRef(events?.length ? events[events.length - 1].seq : 0);
@@ -277,9 +282,14 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
         }
         if (!running) finalLoaded.current = true;
         if (r.events.length) {
-          last.current = r.events[r.events.length - 1].seq;
+          last.current = Math.max(last.current, r.events[r.events.length - 1].seq);
           setEvents((prev) => {
-            const next = [...(prev || []), ...r.events];
+            // Each step once, in order: a page that comes twice (two
+            // requests for the same steps) adds nothing the second time.
+            const have = new Set((prev || []).map((e) => e.seq));
+            const fresh = r.events.filter((e) => !have.has(e.seq));
+            if (!fresh.length && prev) return prev;
+            const next = [...(prev || []), ...fresh].sort((a, b) => a.seq - b.seq);
             if (!running) remember(memoKey, next);
             return next;
           });
@@ -551,7 +561,6 @@ function SteerBubble({ hubId, msg }: { hubId: string; msg: Message }) {
   return (
     <div className="conv-msg is-me trace-steer" data-msg={msg.id}>
       <div className="conv-bubble">
-        <span className="conv-tag">{L("补充", "Added")}</span>
         {msg.unreadable
           ? <span className="conv-unreadable">{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
           : <MessageContent body={msg.body} />}

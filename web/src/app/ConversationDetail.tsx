@@ -532,7 +532,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const task = known.get(m.after);
     return !!task && task.type === "task" && isOpen(task.status);
   };
-  const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m);
+  // A message put behind another (⌘↩) and stopped before it went out was
+  // never sent: it is not in the conversation (not 已停止 there).
+  const answeredIds = new Set((messages || []).map((m) => m.reply_to).filter(Boolean) as string[]);
+  const neverSent = (m: Message): boolean => m.type === "task" && !!m.after && m.status === "failed"
+    && m.error === STOPPED && isMe(m.from, row?.hub) && !answeredIds.has(m.id);
+  const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m) || neverSent(m);
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
 
   // Everything shown: in the exchange view, older pages before the newest.
@@ -1231,10 +1236,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setQueueBusy(null);
     }
   };
+  // Taking a queued message back to edit: its words and its files go back
+  // into the box (files sent alone had words made for them: not those).
+  const filesOnly = (body: string, n: number) => n > 0
+    && /^(发来一个文件：|发来 \d+ 个文件：|Sent a file: |Sent \d+ files: )/.test(body);
   const editQueueItem = async (item: QueueItem) => {
     if (item.local) {
       dropLocal(item.local.id);
-      writeDraft(item.body);
+      const ids = item.local.attachments || [];
+      writeDraft(filesOnly(item.body, ids.length) ? "" : item.body);
+      att.restore(ids.map((id, i) => ({ id, name: L(`附件 ${i + 1}`, `File ${i + 1}`) })));
       inputRef.current?.focus();
       return;
     }
@@ -1243,7 +1254,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setQueueBusy(item.key);
     try {
       await unqueue(item.server);
-      writeDraft(item.body);
+      const files = item.server.attachments || [];
+      writeDraft(filesOnly(item.body, files.length) ? "" : item.body);
+      att.restore(files.map((a) => ({
+        id: a.file_id, name: a.name, size: a.size,
+        preview: /^image\//.test(a.content_type || "") ? appApi.attachmentUrl(target.hubId, a.file_id) : undefined,
+      })));
       inputRef.current?.focus();
     } catch (e) {
       setQueueError(e);
@@ -1420,7 +1436,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : (
               <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
             ))}
-            {m.type === "steer" && <span className="conv-tag">{L("补充", "Added")}</span>}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
@@ -1432,7 +1447,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">
-                  <span className="conv-tag">{L("补充", "Added")}</span>
                   <span className="conv-supplement-time">{clockTime(s.created_at)}</span>
                 </div>
                 {s.unreadable

@@ -65,19 +65,28 @@ export function useAttachments(hubId: string) {
         }));
     }
   };
+  /** Files already on the workspace (a queued message taken back to edit):
+   *  in the box again as they were, nothing uploaded twice. */
+  const restore = (files: { id: string; name: string; size?: number; preview?: string }[]) => {
+    setItems((all) => [...all, ...files.map((f) => ({
+      key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: f.name, size: f.size ?? 0, preview: f.preview, state: "done" as const, id: f.id,
+    }))]);
+  };
   const remove = (key: string) => setItems((all) => {
     const gone = all.find((x) => x.key === key);
-    if (gone?.preview) URL.revokeObjectURL(gone.preview);
+    if (gone?.preview?.startsWith("blob:")) URL.revokeObjectURL(gone.preview);
     return all.filter((x) => x.key !== key);
   });
   const clear = () => setItems((all) => {
-    all.forEach((x) => x.preview && URL.revokeObjectURL(x.preview));
+    all.forEach((x) => x.preview?.startsWith("blob:") && URL.revokeObjectURL(x.preview));
     return [];
   });
   const ready = items.filter((x) => x.state === "done" && x.id);
   return {
     items,
     add,
+    restore,
     remove,
     clear,
     ids: ready.map((x) => x.id!),
