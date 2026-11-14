@@ -374,6 +374,19 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     : L("已接手，正在启动", "Picked up, starting");
   // At work with no steps to show yet (none so far, or a hub that does not
   // keep them): the mushroom at work, startup or a playful verb, and time.
+  // This round's clock: from the latest of when the task came, what you
+  // added to it last, and its first step after it last stopped (turn_end);
+  // not from the first message of a long task.
+  const turnSince = (() => {
+    let t = new Date(task.created_at).getTime() || 0;
+    const later = (iso?: string) => { const v = iso ? new Date(iso).getTime() : 0; if (v > t) t = v; };
+    for (const m of steers || []) later(m.created_at);
+    const evs = events || [];
+    for (let k = evs.length - 1; k >= 0; k--) {
+      if (evs[k].data.kind === "turn_end") { later(evs[k + 1]?.at); break; }
+    }
+    return new Date(t).toISOString();
+  })();
   const atWork = paused ? (
     <div className="trace is-waiting is-paused">{pausedLine}</div>
   ) : footed && moving ? null : moving ? (
@@ -381,7 +394,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       <div className="trace-head trace-wait">
         <Mushroom />
         <span key={verb} className="trace-title is-shimmer is-verb">{starting ? startup : verb}</span>
-        <Elapsed since={task.created_at} className="trace-usage" />
+        <Elapsed since={turnSince} className="trace-usage" />
       </div>
     </div>
   ) : (
@@ -531,14 +544,14 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
           ))}
         </ol>
       ) : (
-        <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={task.created_at} />
+        <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
       ))}
       {pausedLine}
       {movingHere && !asking && endsWithSay && (
         <div className="trace-head trace-wait">
           <Mushroom />
           <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
-          <Elapsed since={task.created_at} className="trace-usage" />
+          <Elapsed since={turnSince} className="trace-usage" />
         </div>
       )}
       {/* still open, but a newer run is the one moving: said, not shown */}
