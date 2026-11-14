@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
  *     language, which types into the box itself;
  *   - a browser with speech recognition listens itself, as the Mac app.
  * The microphone sits beside Send, as in Codex and Claude. While it
- * listens it is red and breathes; click again to stop. Typing, or sending,
+ * listens it is red and breathes; click again to stop. A pause does not
+ * stop it (the recognizer starts its next sentence); a long silence does. Typing, or sending,
  * stops it too (nothing late is written into a box you emptied). Where
  * there is none of these, there is no button.
  */
@@ -69,13 +70,15 @@ export function DictateButton({ input, value, onText, disabled }: {
   const [note, setNote] = useState("");
   // The current listening: how to stop it, and the text it last wrote (any
   // other change means you took over).
-  const live = useRef<{ stop: () => void; wrote: string } | null>(null);
+  // (the last few texts it wrote: two can be written before the box shows
+  // the first, and that is not you typing)
+  const live = useRef<{ stop: () => void; wrote: string[] } | null>(null);
   const Recog = browserRecognition();
 
   useEffect(() => () => live.current?.stop(), []);
   // You typed or sent: stop listening, and write nothing more.
   useEffect(() => {
-    if (live.current && value !== live.current.wrote) {
+    if (live.current && !live.current.wrote.includes(value)) {
       live.current.stop();
       live.current = null;
       setListening(false);
@@ -87,7 +90,7 @@ export function DictateButton({ input, value, onText, disabled }: {
     const base = value && !/\s$/.test(value) ? `${value}${lang() === "zh" ? "" : " "}` : value;
     const write = (heard: string) => {
       if (!live.current) return;
-      live.current.wrote = base + heard;
+      live.current.wrote = [...live.current.wrote.slice(-7), base + heard];
       onText(base + heard);
     };
     return { base, write };
@@ -103,7 +106,7 @@ export function DictateButton({ input, value, onText, disabled }: {
         if (r.mode !== "listen" || !r.id) return; // the system types it in itself
         const { write } = begin();
         let ended = false;
-        live.current = { wrote: value, stop: () => { if (!ended) void appApi.stopDictation(r.id!).catch(() => undefined); } };
+        live.current = { wrote: [value], stop: () => { if (!ended) void appApi.stopDictation(r.id!).catch(() => undefined); } };
         setListening(true);
         let seq = 0;
         for (;;) {
@@ -140,9 +143,29 @@ export function DictateButton({ input, value, onText, disabled }: {
       }
       write(said + interim);
     };
-    r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") setNote(reasonOf(e.error)); };
-    r.onend = () => { write(said); live.current = null; setListening(false); };
-    live.current = { wrote: value, stop: () => r.stop() };
+    // The browser ends a session after a pause; while you have not stopped,
+    // the next one starts (what was said stays), a few silent ones at most.
+    let stopped = false;
+    let quiet = 0;
+    let heardSince = false;
+    const onresult = r.onresult;
+    r.onresult = (e) => { heardSince = true; onresult?.(e); };
+    r.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      stopped = true;
+      setNote(reasonOf(e.error));
+    };
+    r.onend = () => {
+      quiet = heardSince ? 0 : quiet + 1;
+      heardSince = false;
+      if (!stopped && live.current && quiet < 4) {
+        try { r.start(); return; } catch { /* ends below */ }
+      }
+      write(said);
+      live.current = null;
+      setListening(false);
+    };
+    live.current = { wrote: [value], stop: () => { stopped = true; r.stop(); } };
     setListening(true);
     try { r.start(); } catch { live.current = null; setListening(false); }
   };

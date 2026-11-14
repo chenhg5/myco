@@ -32,3 +32,23 @@ func TestUtterances(t *testing.T) {
 		}
 	}
 }
+
+// A session that ended (a pause) keeps its words, even when the next one
+// starts the same way.
+func TestUtterancesCommit(t *testing.T) {
+	var u Utterances
+	u.Add("我们先看")
+	u.Add("我们先看一下日志")
+	u.Commit()
+	if got := u.Add("我们"); got != "我们先看一下日志我们" {
+		t.Fatalf("after a pause: %q", got)
+	}
+	if got := u.Add("我们再跑测试"); got != "我们先看一下日志我们再跑测试" {
+		t.Fatalf("growing: %q", got)
+	}
+	u.Commit()
+	u.Commit() // nothing new: no change
+	if got := u.Add("ok"); got != "我们先看一下日志我们再跑测试ok" {
+		t.Fatalf("again: %q", got)
+	}
+}

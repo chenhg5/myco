@@ -30,3 +30,10 @@ func mycoHeardDone(sid C.int, err *C.char) {
 	}
 	h.End(msg)
 }
+
+// A session of the recognizer ended (a pause) while listening goes on.
+//
+//export mycoHeardBreak
+func mycoHeardBreak(sid C.int) {
+	heardBreak(int(sid))
+}

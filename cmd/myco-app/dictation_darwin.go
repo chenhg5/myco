@@ -19,12 +19,19 @@ package main
 
 extern void mycoHeard(int sid, char *text, int final);
 extern void mycoHeardDone(int sid, char *err);
+extern void mycoHeardBreak(int sid);
 
 static AVAudioEngine *mycoEngine;
 static SFSpeechAudioBufferRecognitionRequest *mycoRequest;
 static SFSpeechRecognitionTask *mycoTask;
 static SFSpeechRecognizer *mycoRecognizer;
 static int mycoSid;
+// The person clicked to stop: the session's end is the listening's end.
+static BOOL mycoStopping;
+// Sessions in a row that heard nothing (silence): after a few, it stops.
+static int mycoQuiet;
+// Guards mycoRequest between the audio thread and the main queue.
+static NSObject *mycoLock;
 
 // Stops the microphone; the recognizer then gives its last words. (Main queue.)
 static void mycoEndAudio(void) {
@@ -34,44 +41,77 @@ static void mycoEndAudio(void) {
 		[mycoEngine release];
 		mycoEngine = nil;
 	}
-	if (mycoRequest) [mycoRequest endAudio];
+	@synchronized(mycoLock) {
+		if (mycoRequest) [mycoRequest endAudio];
+	}
 }
 
 // Lets go of the last listening's objects. (Main queue.)
 static void mycoForget(void) {
 	mycoEndAudio();
 	if (mycoTask) { [mycoTask cancel]; [mycoTask release]; mycoTask = nil; }
-	if (mycoRequest) { [mycoRequest release]; mycoRequest = nil; }
+	@synchronized(mycoLock) {
+		if (mycoRequest) { [mycoRequest release]; mycoRequest = nil; }
+	}
 	if (mycoRecognizer) { [mycoRecognizer release]; mycoRecognizer = nil; }
 }
 
+// One recognition session on the running microphone. The recognizer ends a
+// session when you pause (on this Mac it finalises the sentence), so while
+// you have not stopped, the next one starts at once: a pause does not end
+// the listening. (Main queue.)
+static void mycoSession(int sid) {
+	SFSpeechAudioBufferRecognitionRequest *req = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
+	req.shouldReportPartialResults = YES;
+	if (@available(macOS 10.15, *)) {
+		if (mycoRecognizer.supportsOnDeviceRecognition) req.requiresOnDeviceRecognition = YES;
+	}
+	@synchronized(mycoLock) {
+		if (mycoRequest) { [mycoRequest endAudio]; [mycoRequest release]; }
+		mycoRequest = req;
+	}
+	if (mycoTask) { [mycoTask release]; mycoTask = nil; }
+	mycoTask = [[mycoRecognizer recognitionTaskWithRequest:req resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
+		BOOL final = result && [result isFinal];
+		NSString *text = result ? [[result bestTranscription] formattedString] : nil;
+		if ([text length]) mycoHeard(sid, (char *)[text UTF8String], final ? 1 : 0);
+		if (!error && !final) return;
+		BOOL any = [text length] > 0;
+		NSString *msg = (error && !final) ? [[error localizedDescription] copy] : nil;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (mycoSid != sid) { [msg release]; return; }
+			// What it said in this session stays; the next goes after it.
+			mycoHeardBreak(sid);
+			if (mycoEngine && !mycoStopping) {
+				mycoQuiet = any ? 0 : mycoQuiet + 1;
+				if (mycoQuiet < 6) { mycoSession(sid); [msg release]; return; }
+			}
+			mycoHeardDone(sid, (msg && !mycoStopping && !any && mycoQuiet == 0) ? (char *)[msg UTF8String] : NULL);
+			[msg release];
+			mycoEndAudio();
+		});
+	}] retain];
+}
+
 static void mycoStart(int sid, NSString *loc) {
+	if (!mycoLock) mycoLock = [[NSObject alloc] init];
 	mycoForget();
+	mycoStopping = NO;
+	mycoQuiet = 0;
 	mycoRecognizer = [[SFSpeechRecognizer alloc] initWithLocale:[NSLocale localeWithLocaleIdentifier:loc]];
 	if (!mycoRecognizer || ![mycoRecognizer isAvailable]) { mycoHeardDone(sid, "unavailable"); return; }
-	mycoRequest = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
-	mycoRequest.shouldReportPartialResults = YES;
-	if (@available(macOS 10.15, *)) {
-		if (mycoRecognizer.supportsOnDeviceRecognition) mycoRequest.requiresOnDeviceRecognition = YES;
-	}
 	mycoEngine = [[AVAudioEngine alloc] init];
 	AVAudioInputNode *input = [mycoEngine inputNode];
 	AVAudioFormat *format = [input outputFormatForBus:0];
-	SFSpeechAudioBufferRecognitionRequest *request = mycoRequest;
 	[input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-		[request appendAudioPCMBuffer:buffer];
+		@synchronized(mycoLock) {
+			if (mycoRequest) [mycoRequest appendAudioPCMBuffer:buffer];
+		}
 	}];
+	mycoSession(sid);
 	[mycoEngine prepare];
 	NSError *err = nil;
 	if (![mycoEngine startAndReturnError:&err]) { mycoEndAudio(); mycoHeardDone(sid, "microphone"); return; }
-	mycoTask = [[mycoRecognizer recognitionTaskWithRequest:mycoRequest resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
-		BOOL final = result && [result isFinal];
-		if (result) mycoHeard(sid, (char *)[[[result bestTranscription] formattedString] UTF8String], final ? 1 : 0);
-		if (error || final) {
-			mycoHeardDone(sid, (error && !final) ? (char *)[[error localizedDescription] UTF8String] : NULL);
-			dispatch_async(dispatch_get_main_queue(), ^{ if (mycoSid == sid) mycoEndAudio(); });
-		}
-	}] retain];
 }
 
 static void mycoListen(int sid, const char *locale) {
@@ -93,7 +133,11 @@ static void mycoListen(int sid, const char *locale) {
 }
 
 static void mycoStopListening(int sid) {
-	dispatch_async(dispatch_get_main_queue(), ^{ if (mycoSid == sid) mycoEndAudio(); });
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (mycoSid != sid) return;
+		mycoStopping = YES;
+		mycoEndAudio();
+	});
 }
 */
 import "C"
@@ -148,6 +192,16 @@ func heard(sid int, text string, final bool) {
 	hearingsMu.Unlock()
 	if l != nil {
 		l.h.Heard(all, final)
+	}
+}
+
+// heardBreak: a session of the recognizer ended (a pause); what it heard
+// stays, and the next session's words go after it.
+func heardBreak(sid int) {
+	hearingsMu.Lock()
+	defer hearingsMu.Unlock()
+	if l := hearingsBy[sid]; l != nil {
+		l.u.Commit()
 	}
 }
 

@@ -214,6 +214,13 @@ func (u *Utterances) Add(text string) string {
 	return joinText(u.done, text)
 }
 
+// Commit ends the current sentence (the recognizer's session ended): what
+// comes next goes after it, even if it starts the same way.
+func (u *Utterances) Commit() {
+	u.done = joinText(u.done, u.last)
+	u.last = ""
+}
+
 // startsOver: next is a new sentence, not prev revised or carried on. A
 // revision keeps the start (at least two letters, or all of a short
 // beginning); a new sentence shares nothing with it.
