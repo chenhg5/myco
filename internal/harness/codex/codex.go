@@ -93,7 +93,7 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	if model != "" {
 		args = append(args, "-m", model)
 	}
-	args = append(args, accessArgs[c.opts.Access]...)
+	args = append(args, accessArgs[req.AccessOr(c.opts.Access)]...)
 	env := req.Env
 	if p := req.Provider; p != nil {
 		// -c overrides beat ~/.codex/config.toml for this run only; the key

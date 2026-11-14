@@ -35,7 +35,7 @@ func TestRunUsesTheAgentsRunSettingsAndReportsQuota(t *testing.T) {
 		return harness.Result{Output: "done"}, nil
 	}}
 	r := New(hub, h, NewMemorySessions(), nil, Options{
-		OnRunSettings: func(model, effort string) { toldModel, toldEffort = model, effort },
+		OnRunSettings: func(model, effort, _ string) { toldModel, toldEffort = model, effort },
 		OnQuota:       func(q harness.Quota) { quotas = append(quotas, q) },
 	}, quiet())
 	r.Handle(context.Background(), m)
@@ -62,5 +62,36 @@ func TestRunUsesTheAgentsRunSettingsAndReportsQuota(t *testing.T) {
 	r.Handle(context.Background(), m2)
 	if gotModel != "app-model" {
 		t.Fatalf("a failed read should keep the last settings, got %q", gotModel)
+	}
+}
+
+func TestRunAccessIsCappedByTheMachine(t *testing.T) {
+	cases := []struct {
+		chosen, local, max, want string
+	}{
+		{"full", "workspace", "workspace", "workspace"}, // above the machine's limit
+		{"full", "workspace", "full", "full"},           // the machine allows it
+		{"full", "full", "workspace", "full"},           // given locally already
+		{"readonly", "full", "workspace", "readonly"},   // lowering is always allowed
+		{"", "workspace", "full", ""},                   // not chosen: the local setting
+		{"bogus", "workspace", "full", ""},
+	}
+	for _, c := range cases {
+		m := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
+		hub := &settingsHub{traceHub: &traceHub{fakeHub: newFakeHub(m)}, settings: &api.RunSettings{Access: c.chosen}}
+		var got harness.Access
+		var told string
+		h := fakeHarness{fn: func(req harness.Request) (harness.Result, error) {
+			got = req.Access
+			return harness.Result{Output: "done"}, nil
+		}}
+		r := New(hub, h, NewMemorySessions(), nil, Options{
+			Access: harness.Access(c.local), MaxAccess: harness.Access(c.max),
+			OnRunSettings: func(_, _, access string) { told = access },
+		}, quiet())
+		r.Handle(context.Background(), m)
+		if string(got) != c.want || told != c.want {
+			t.Errorf("chosen %q, local %q, max %q: ran with %q, reported %q, want %q", c.chosen, c.local, c.max, got, told, c.want)
+		}
 	}
 }

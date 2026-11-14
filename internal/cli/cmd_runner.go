@@ -154,6 +154,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if err != nil {
 		return nil, errorf("invalid_config", ExitUsage, "use readonly, workspace or full", "%s: %v", cfgPath, err)
 	}
+	maxAccess := e.machineMaxAccess()
 	if cfg.Hub == "" || cfg.Token == "" {
 		return nil, errorf("not_configured", ExitUsage, "enroll or register this agent first", "%s has no hub/token", cfgPath)
 	}
@@ -211,7 +212,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	initial := currentProvider()
 	var rep *runtimeReporter
 	if !sh.once {
-		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, initial, log)
+		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, log)
 	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
@@ -325,6 +326,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		},
 		OnRunSettings: rep.RunSettings,
 		OnQuota:       rep.Quota,
+		Access:        access,
+		MaxAccess:     maxAccess,
 	}, alog), nil
 }
 
@@ -444,4 +447,16 @@ func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) f
 		}
 		return last, nil
 	}
+}
+
+// machineMaxAccess is the highest access this machine lets an agent's owner
+// choose from the app: spawn.max_access in ~/.myco/machine.yaml, default
+// workspace.
+func (e *env) machineMaxAccess() harness.Access {
+	if mf, err := config.LoadMachine(e.defaultPath); err == nil && mf != nil {
+		if a, err := harness.ParseAccess(mf.Spawn.MaxAccess); err == nil && a != harness.AccessDefault {
+			return a
+		}
+	}
+	return harness.AccessWorkspace
 }

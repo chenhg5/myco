@@ -45,9 +45,14 @@ type Options struct {
 	// Provider, when set, is called before every invocation and returns the
 	// pinned model provider (nil = the machine's own setting).
 	Provider func() *harness.ProviderSettings
-	// OnRunSettings hears the model and effort each run is started with
-	// (the agent's run settings from the hub; "" = the machine's own).
-	OnRunSettings func(model, effort string)
+	// OnRunSettings hears the model, effort and access each run is started
+	// with (the agent's run settings from the hub; "" = the machine's own).
+	OnRunSettings func(model, effort, access string)
+	// Access is the access this agent is configured with on this machine,
+	// and MaxAccess the highest its owner may choose from the app
+	// (spawn.max_access); the higher of the two caps the hub's choice.
+	Access    harness.Access
+	MaxAccess harness.Access
 	// OnQuota hears the account's usage limits whenever a run reports them.
 	OnQuota func(harness.Quota)
 	// Once processes at most one pull batch and returns.
@@ -437,9 +442,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		res    harness.Result
 		runErr error
 	)
-	runModel, runEffort := "", ""
+	var run api.RunSettings
 	if !executor {
-		runModel, runEffort = r.runSettings(ctx, log)
+		run = r.runSettings(ctx, log)
 	}
 	for first := true; ; first = false {
 		// Steers that arrived before this run (task still queued, or the
@@ -482,7 +487,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		// keeps working is not cut off, a silent one is.
 		var lastActive atomic.Int64
 		lastActive.Store(time.Now().UnixNano())
-		req.Model, req.Effort = runModel, runEffort
+		req.Model, req.Effort, req.Access = run.Model, run.Effort, harness.Access(run.Access)
 		req.OnEvent = func(ev harness.Event) {
 			lastActive.Store(time.Now().UnixNano())
 			if ev.Kind == "quota" { // not a step of the run: it goes with the runtime
@@ -780,10 +785,11 @@ type meReader interface {
 	Me(ctx context.Context) (*api.Agent, error)
 }
 
-// runSettings are the model and effort chosen for this agent on the hub
-// ("" = the machine's own). A hub that cannot answer keeps the last ones
-// known: a run is never held up by it.
-func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) (string, string) {
+// runSettings are the model, effort and access chosen for this agent on
+// the hub ("" = the machine's own). A hub that cannot answer keeps the last
+// ones known: a run is never held up by it. Access above what this machine
+// allows is lowered to it.
+func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSettings {
 	if hub, ok := r.hub.(meReader); ok {
 		c, cancel := context.WithTimeout(ctx, 5*time.Second)
 		me, err := hub.Me(c)
@@ -802,10 +808,27 @@ func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) (string, str
 	r.mu.Lock()
 	rs := r.settings
 	r.mu.Unlock()
-	if r.opts.OnRunSettings != nil {
-		r.opts.OnRunSettings(rs.Model, rs.Effort)
+	if a, err := harness.ParseAccess(rs.Access); err != nil {
+		rs.Access = ""
+	} else if limit := r.accessLimit(); a.Rank() > limit.Rank() {
+		log.Warn("access chosen in the app is above what this machine allows; using the machine's limit",
+			"chosen", a, "limit", limit, "raise it with", "spawn.max_access in ~/.myco/machine.yaml")
+		rs.Access = string(limit)
 	}
-	return rs.Model, rs.Effort
+	if r.opts.OnRunSettings != nil {
+		r.opts.OnRunSettings(rs.Model, rs.Effort, rs.Access)
+	}
+	return rs
+}
+
+// accessLimit is the highest access the hub may choose for this agent: the
+// machine's spawn.max_access, or the agent's own configured access if that
+// is higher (it was given locally).
+func (r *Runner) accessLimit() harness.Access {
+	if r.opts.Access.Rank() > r.opts.MaxAccess.Rank() {
+		return r.opts.Access
+	}
+	return r.opts.MaxAccess
 }
 
 // watchIdle ends the run when the harness reports nothing for the timeout.

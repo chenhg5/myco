@@ -26,7 +26,12 @@ export interface Quota {
   windows: QuotaWindow[];
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
-export interface RunSettings { model?: string; effort?: string }
+export interface RunSettings {
+  model?: string;
+  effort?: string;
+  /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
+  access?: RuntimeAccess | "";
+}
 /** What the node actually runs; absent on nodes reported by old runners. */
 export interface Runtime {
   cli: string;
@@ -37,6 +42,8 @@ export interface Runtime {
   effort?: string;
   effort_source?: ModelSource;
   access?: RuntimeAccess;
+  /** the highest access its machine lets the owner choose (spawn.max_access); absent from older runners */
+  max_access?: RuntimeAccess;
   /** model provider's name (never its key) */
   provider?: string;
   provider_source?: ProviderSource;

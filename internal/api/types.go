@@ -121,6 +121,9 @@ type Runtime struct {
 	// (the agent's run settings) or self (the agent reported it). From v0.19.5.
 	Effort       string `json:"effort,omitempty"`
 	EffortSource string `json:"effort_source,omitempty"`
+	// MaxAccess is the highest access the agent's machine lets its owner set
+	// from the app (run settings); a runner that predates it leaves it empty.
+	MaxAccess string `json:"max_access,omitempty"`
 	// Quota is the account's usage limits as the CLI last reported them.
 	Quota *Quota `json:"quota,omitempty"`
 }
@@ -149,6 +152,9 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model"`
 	Effort string `json:"effort"`
+	// Access: readonly, workspace or full ("" follows the machine). Only the
+	// agent's owner may change it; left out of a request, it stays as it is.
+	Access string `json:"access,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
