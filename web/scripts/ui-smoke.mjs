@@ -1140,18 +1140,18 @@ async function runMatrix(browser, size, scheme) {
       const mine = page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).last();
       await mine.waitFor({ timeout: 10_000 });
       await noRound(page);
-      await mine.hover();
-      // (the chat may still move as the answer comes: the button shows on hover)
-      await mine.locator(".conv-msg-del").click({ force: true });
+      // (clicked on the button itself, not at a spot on screen: the chat may
+      // still move as the answer comes, and the button only shows on hover)
+      await mine.locator(".conv-msg-del").evaluate((b) => b.click());
       await page.locator(".conv-detail .conv-undo").waitFor({ timeout: 5_000 });
       if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删除后这条应从对话里消失");
       await settle(page, 200);
       await shot(page, size, scheme, "chat-deleted");
       await page.locator(".conv-detail .conv-undo button", { hasText: "撤销" }).click();
       await mine.waitFor({ timeout: 5_000 });
-      await mine.hover();
-      // (the chat may still move as the answer comes: the button shows on hover)
-      await mine.locator(".conv-msg-del").click({ force: true });
+      // (clicked on the button itself, not at a spot on screen: the chat may
+      // still move as the answer comes, and the button only shows on hover)
+      await mine.locator(".conv-msg-del").evaluate((b) => b.click());
       await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).waitFor({ state: "detached", timeout: 5_000 });
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(".app-shell").waitFor();
