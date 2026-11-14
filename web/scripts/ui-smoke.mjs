@@ -1041,23 +1041,18 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-search input").first().press("Escape");
     });
 
-    // Translating what an agent wrote: by hand from its time, with the
-    // original a click away; the service and its key in Settings.
+    // Translating what an agent wrote: nothing until a service has a key
+    // (Settings › 翻译); then by hand from its time, the original a click away.
     await step("翻译", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       const reply = page.locator(".conv-detail .conv-msg.is-agent").last();
       await reply.waitFor({ timeout: 10_000 });
       await reply.hover();
-      await reply.locator(".conv-translate-btn").click();
-      await reply.getByText("〔译〕").first().waitFor({ timeout: 5_000 });
-      await reply.locator(".conv-translated", { hasText: "已翻译" }).waitFor({ timeout: 5_000 });
-      await settle(page, 200);
-      await shot(page, size, scheme, "chat-translated");
-      await reply.locator(".conv-translated button", { hasText: "显示原文" }).click();
-      await reply.locator(".conv-translated").waitFor({ state: "detached", timeout: 5_000 });
+      if (await reply.locator(".conv-translate-btn").count()) throw new Error("还没填翻译服务的密钥时，消息旁不该有「翻译」");
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "翻译" }));
+      if (await page.getByRole("tab", { name: /MyMemory/ }).count()) throw new Error("不该再有 MyMemory");
       await page.getByRole("tab", { name: "DeepL" }).click();
       await page.locator(".tr-fields input[type=password]").fill("demo-key:fx");
       await page.getByRole("button", { name: "保存" }).click();
@@ -1066,8 +1061,23 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".tr-tried", { hasText: "〔译〕" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "settings-translate");
-      await page.getByRole("tab", { name: "MyMemory（免费）" }).click();
-      await page.getByRole("button", { name: "保存" }).click();
+      if (narrow) await sidebar(page, false);
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const again = page.locator(".conv-detail .conv-msg.is-agent").last();
+      await again.hover();
+      await again.locator(".conv-translate-btn").click();
+      await again.getByText("〔译〕").first().waitFor({ timeout: 5_000 });
+      await again.locator(".conv-translated", { hasText: "已翻译" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-translated");
+      await again.locator(".conv-translated button", { hasText: "显示原文" }).click();
+      await again.locator(".conv-translated").waitFor({ state: "detached", timeout: 5_000 });
+      // The key goes again, for the next pass.
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "翻译" }));
+      await page.getByRole("button", { name: "删掉密钥" }).click();
+      await page.locator('.tr-fields input[placeholder="粘贴 API 密钥"]').waitFor({ timeout: 5_000 });
       if (narrow) await sidebar(page, false);
     });
 

@@ -578,4 +578,4 @@ export interface AgentProvider { local: boolean; provider: string; harness?: str
 export interface ManualProvider { base_url: string; api_key: string; model?: string }
 
 /** How messages are translated: the service, and which ones have a key. */
-export type TranslateConfig = { provider: "mymemory" | "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };
+export type TranslateConfig = { provider: "deepl" | "google" | "openai"; base_url?: string; model?: string; keys: Record<string, boolean> };

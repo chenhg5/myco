@@ -24,15 +24,15 @@ import (
 // Translating what agents write into the language the person reads, with
 // a service they choose (the App's settings):
 //
-//   - mymemory: MyMemory's free public API, no account (about 5,000
-//     characters a day without one); the default;
-//   - deepl: DeepL with the person's key (a free key ends in ":fx");
+//   - deepl: DeepL with the person's key (a free key ends in ":fx"); the
+//     default;
 //   - google: Google Cloud Translation with an API key;
 //   - openai: any OpenAI-compatible chat API (OpenAI, DeepSeek,
 //     OpenRouter, ...) with a key, a base URL and a model.
 //
-// Keys are kept in the system keychain (Secrets), never in the settings
-// file, never sent back to the page, never logged. Code blocks are left as
+// Every one needs a key: until one is saved nothing is translated. Keys are
+// kept in the system keychain (Secrets), never in the settings file, never
+// sent back to the page, never logged. Code blocks are left as
 // they are. Translations are cached in memory.
 //
 // GET /app/translate/config → the settings, and which services have a key.
@@ -46,13 +46,14 @@ type TranslateConfig struct {
 	Model    string `json:"model,omitempty"`
 }
 
-var translateProviders = map[string]bool{"mymemory": true, "deepl": true, "google": true, "openai": true}
+var translateProviders = map[string]bool{"deepl": true, "google": true, "openai": true}
+
+const defaultTranslateProvider = "deepl"
 
 // Where the services are (tests point them elsewhere).
 var translateEndpoints = struct {
-	mymemory, deeplFree, deeplPro, google string
+	deeplFree, deeplPro, google string
 }{
-	mymemory:  "https://api.mymemory.translated.net/get",
 	deeplFree: "https://api-free.deepl.com/v2/translate",
 	deeplPro:  "https://api.deepl.com/v2/translate",
 	google:    "https://translation.googleapis.com/language/translate/v2",
@@ -79,15 +80,15 @@ func (b *Backend) translatorState() *translator {
 }
 
 func (t *translator) config() TranslateConfig {
-	c := TranslateConfig{Provider: "mymemory"}
+	c := TranslateConfig{Provider: defaultTranslateProvider}
 	if t.path == "" {
 		return c
 	}
 	if raw, err := os.ReadFile(t.path); err == nil {
 		_ = json.Unmarshal(raw, &c)
 	}
-	if !translateProviders[c.Provider] {
-		c.Provider = "mymemory"
+	if !translateProviders[c.Provider] { // (MyMemory, no longer offered)
+		c.Provider = defaultTranslateProvider
 	}
 	return c
 }
@@ -107,7 +108,7 @@ func (b *Backend) translateRoutes(m *http.ServeMux) {
 	keyed := func() map[string]bool {
 		out := map[string]bool{}
 		for p := range translateProviders {
-			if p == "mymemory" || b.Secrets == nil {
+			if b.Secrets == nil {
 				continue
 			}
 			if k, err := b.Secrets.Get(secretName(p)); err == nil && k != "" {
@@ -144,7 +145,7 @@ func (b *Backend) translateRoutes(m *http.ServeMux) {
 			writeErr(w, err)
 			return
 		}
-		if in.Provider != "mymemory" && b.Secrets != nil {
+		if b.Secrets != nil {
 			var err error
 			switch {
 			case in.ClearKey:
@@ -181,14 +182,12 @@ func (b *Backend) translateRoutes(m *http.ServeMux) {
 		t := b.translatorState()
 		c := t.config()
 		key := ""
-		if c.Provider != "mymemory" {
-			if b.Secrets != nil {
-				key, _ = b.Secrets.Get(secretName(c.Provider))
-			}
-			if key == "" {
-				writeErr(w, &client.Error{Code: "not_configured", Message: "this translation service needs a key (Settings)", Status: http.StatusConflict})
-				return
-			}
+		if b.Secrets != nil {
+			key, _ = b.Secrets.Get(secretName(c.Provider))
+		}
+		if key == "" {
+			writeErr(w, &client.Error{Code: "not_configured", Message: "this translation service needs a key (Settings)", Status: http.StatusConflict})
+			return
 		}
 		sum := sha256.Sum256([]byte(c.Provider + "\x00" + c.BaseURL + "\x00" + c.Model + "\x00" + in.To + "\x00" + in.Text))
 		ck := hex.EncodeToString(sum[:])
@@ -268,35 +267,6 @@ func blocks(text string) (parts []string, code []bool) {
 	return parts, code
 }
 
-// pieces cuts a paragraph into parts of at most max bytes, at the end of a
-// sentence or a line where it can.
-func pieces(s string, max int) []string {
-	var out []string
-	for len(s) > max {
-		cut := -1
-		for i, r := range s {
-			if i > max {
-				break
-			}
-			if strings.ContainsRune(".!?。！？；;\n", r) {
-				cut = i + len(string(r))
-			}
-		}
-		if cut <= 0 {
-			cut = max
-			for cut > 0 && (s[cut]&0xC0) == 0x80 { // not inside a character
-				cut--
-			}
-		}
-		out = append(out, s[:cut])
-		s = strings.TrimLeft(s[cut:], " ")
-	}
-	if s != "" {
-		out = append(out, s)
-	}
-	return out
-}
-
 func (t *translator) translate(ctx context.Context, c TranslateConfig, key, text, to string) (string, error) {
 	if c.Provider == "openai" {
 		return t.openAI(ctx, c, key, text, to)
@@ -310,13 +280,10 @@ func (t *translator) translate(ctx context.Context, c TranslateConfig, key, text
 	}
 	var done []string
 	var err error
-	switch c.Provider {
-	case "deepl":
-		done, err = t.deepL(ctx, key, todo, to)
-	case "google":
+	if c.Provider == "google" {
 		done, err = t.google(ctx, key, todo, to)
-	default:
-		done, err = t.myMemory(ctx, todo, to)
+	} else {
+		done, err = t.deepL(ctx, key, todo, to)
 	}
 	if err != nil {
 		return "", err
@@ -356,45 +323,6 @@ func (t *translator) do(req *http.Request, v any) error {
 		return translateErr("failed", "the translation service answered something else")
 	}
 	return nil
-}
-
-func (t *translator) myMemory(ctx context.Context, todo []string, to string) ([]string, error) {
-	pair := "en|zh-CN"
-	if to == "en" {
-		pair = "zh-CN|en"
-	}
-	out := make([]string, 0, len(todo))
-	for _, p := range todo {
-		var got []string
-		for _, piece := range pieces(p, 450) { // it takes 500 bytes at a time
-			q := url.Values{"q": {piece}, "langpair": {pair}}
-			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, translateEndpoints.mymemory+"?"+q.Encode(), nil)
-			var r struct {
-				ResponseData struct {
-					TranslatedText string `json:"translatedText"`
-				} `json:"responseData"`
-				ResponseStatus any  `json:"responseStatus"`
-				QuotaFinished  bool `json:"quotaFinished"`
-			}
-			if err := t.do(req, &r); err != nil {
-				return nil, err
-			}
-			text := r.ResponseData.TranslatedText
-			if r.QuotaFinished || strings.HasPrefix(text, "MYMEMORY WARNING") {
-				return nil, translateErr("quota", "the free translation limit for today is used up")
-			}
-			if s := fmt.Sprint(r.ResponseStatus); s != "200" {
-				return nil, translateErr("failed", "the translation service could not translate this")
-			}
-			got = append(got, text)
-		}
-		sep := " "
-		if to == "zh" {
-			sep = ""
-		}
-		out = append(out, strings.Join(got, sep))
-	}
-	return out, nil
 }
 
 func (t *translator) deepL(ctx context.Context, key string, todo []string, to string) ([]string, error) {

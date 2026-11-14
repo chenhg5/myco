@@ -48,65 +48,6 @@ func TestBlocksKeepCode(t *testing.T) {
 	}
 }
 
-func TestPiecesCutAtSentences(t *testing.T) {
-	s := strings.Repeat("一句话。", 60) // 720 bytes
-	ps := pieces(s, 450)
-	if len(ps) != 2 || strings.Join(ps, "") != s {
-		t.Fatalf("pieces: %d %q", len(ps), ps)
-	}
-	for _, p := range ps {
-		if len(p) > 450 || !strings.HasSuffix(p, "。") {
-			t.Fatalf("piece %q", p)
-		}
-	}
-}
-
-func TestTranslateMyMemoryByDefault(t *testing.T) {
-	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.URL.Query().Get("langpair") != "en|zh-CN" {
-			t.Errorf("langpair %q", r.URL.Query().Get("langpair"))
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"responseData": map[string]any{"translatedText": "【" + r.URL.Query().Get("q") + "】"}, "responseStatus": 200})
-	}))
-	defer srv.Close()
-	old := translateEndpoints.mymemory
-	translateEndpoints.mymemory = srv.URL
-	defer func() { translateEndpoints.mymemory = old }()
-
-	_, h, _ := translateBackend(t)
-	code, out := call(t, h, "POST", "/app/translate", `{"text":"Tests pass.\n\n`+"```\\nmake check\\n```"+`\n\nShip it.","to":"zh"}`)
-	if code != 200 || out["provider"] != "mymemory" {
-		t.Fatalf("%d %v", code, out)
-	}
-	want := "【Tests pass.】\n\n```\nmake check\n```\n\n【Ship it.】"
-	if out["text"] != want {
-		t.Fatalf("got %q", out["text"])
-	}
-	// The same again comes from the cache.
-	n := calls.Load()
-	call(t, h, "POST", "/app/translate", `{"text":"Tests pass.\n\n`+"```\\nmake check\\n```"+`\n\nShip it.","to":"zh"}`)
-	if calls.Load() != n {
-		t.Fatal("a second translation of the same text should be cached")
-	}
-}
-
-func TestTranslateMyMemoryQuota(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"responseData": map[string]any{"translatedText": "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY"}, "responseStatus": 429, "quotaFinished": true})
-	}))
-	defer srv.Close()
-	old := translateEndpoints.mymemory
-	translateEndpoints.mymemory = srv.URL
-	defer func() { translateEndpoints.mymemory = old }()
-	_, h, _ := translateBackend(t)
-	code, out := call(t, h, "POST", "/app/translate", `{"text":"hello","to":"zh"}`)
-	if code != http.StatusTooManyRequests || out["error"] != "quota" {
-		t.Fatalf("%d %v", code, out)
-	}
-}
-
 func TestTranslateDeepLKeyStaysInKeychain(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "DeepL-Auth-Key k-123:fx" {
@@ -234,5 +175,57 @@ func TestPickImageOnlyPictures(t *testing.T) {
 	next = txt
 	if code, out := call(t, h, "POST", "/app/pick-image", ""); code != http.StatusUnsupportedMediaType || out["error"] != "not_image" {
 		t.Fatalf("not a picture: %d %v", code, out)
+	}
+}
+
+func TestTranslateNeedsAKey(t *testing.T) {
+	_, h, _ := translateBackend(t)
+	code, out := call(t, h, "GET", "/app/translate/config", "")
+	if code != 200 || out["provider"] != "deepl" {
+		t.Fatalf("default: %d %v", code, out)
+	}
+	if code, out := call(t, h, "POST", "/app/translate", `{"text":"hello","to":"zh"}`); code != http.StatusConflict || out["error"] != "not_configured" {
+		t.Fatalf("without a key: %d %v", code, out)
+	}
+	if code, _ := call(t, h, "PUT", "/app/translate/config", `{"provider":"mymemory"}`); code != http.StatusBadRequest {
+		t.Fatalf("mymemory is no longer offered: %d", code)
+	}
+}
+
+func TestTranslateGoogleKeepsCode(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("X-Goog-Api-Key") != "g-1" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		var in struct {
+			Q      []string `json:"q"`
+			Target string   `json:"target"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		tr := []map[string]string{}
+		for _, q := range in.Q {
+			tr = append(tr, map[string]string{"translatedText": "【" + q + "】"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"translations": tr}})
+	}))
+	defer srv.Close()
+	old := translateEndpoints.google
+	translateEndpoints.google = srv.URL
+	defer func() { translateEndpoints.google = old }()
+	_, h, _ := translateBackend(t)
+	call(t, h, "PUT", "/app/translate/config", `{"provider":"google","key":"g-1"}`)
+	text := "Tests pass.\n\n```\nmake check\n```\n\nShip it."
+	body, _ := json.Marshal(map[string]string{"text": text, "to": "zh"})
+	code, out := call(t, h, "POST", "/app/translate", string(body))
+	if code != 200 || out["text"] != "【Tests pass.】\n\n```\nmake check\n```\n\n【Ship it.】" {
+		t.Fatalf("%d %q", code, out["text"])
+	}
+	n := calls.Load()
+	call(t, h, "POST", "/app/translate", string(body))
+	if calls.Load() != n {
+		t.Fatal("the same text again should come from the cache")
 	}
 }

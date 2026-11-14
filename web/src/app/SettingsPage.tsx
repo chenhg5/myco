@@ -17,7 +17,7 @@ import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } f
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
-import { appTo, setAutoTranslate, useAutoTranslate } from "@/app/translate";
+import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
 import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
@@ -909,7 +909,6 @@ function ReportsOnlyLine() {
 }
 
 const SERVICES: { key: TranslateConfig["provider"]; label: string; note: string }[] = [
-  { key: "mymemory", get label() { return L("MyMemory（免费）", "MyMemory (free)"); }, get note() { return L("不用注册，不用密钥；每天大约能翻 5000 字。", "No account or key; about 5,000 characters a day."); } },
   { key: "deepl", label: "DeepL", get note() { return L("在 DeepL 官网申请 API 密钥，免费版每月 50 万字（密钥以 :fx 结尾）。", "An API key from DeepL; the free plan has 500,000 characters a month (its key ends in :fx)."); } },
   { key: "google", get label() { return L("Google 翻译", "Google Translate"); }, get note() { return L("Google Cloud 的 Translation API 密钥，按字数收费。", "A Google Cloud Translation API key, paid by the character."); } },
   { key: "openai", get label() { return L("OpenAI 兼容", "OpenAI-compatible"); }, get note() { return L("OpenAI、DeepSeek、OpenRouter 等兼容 OpenAI 接口的服务：填地址、模型和密钥。", "OpenAI, DeepSeek, OpenRouter and others with an OpenAI-style API: an address, a model and a key."); } },
@@ -920,7 +919,8 @@ const SERVICES: { key: TranslateConfig["provider"]; label: string; note: string 
 function TranslateSection() {
   const autoOn = useAutoTranslate();
   const [cfg, setCfg] = useState<TranslateConfig | null>(null);
-  const [provider, setProvider] = useState<TranslateConfig["provider"]>("mymemory");
+  const [provider, setProvider] = useState<TranslateConfig["provider"]>("deepl");
+  const isReady = useTranslateReady();
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
@@ -938,6 +938,7 @@ function TranslateSection() {
       const c = await appApi.putTranslateConfig({ provider, base_url: provider === "openai" ? baseUrl.trim() : undefined, model: provider === "openai" ? model.trim() : undefined, ...extra });
       setCfg(c);
       setKey("");
+      setTranslateReady(!!c.keys?.[c.provider]);
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
   const tryIt = async () => {
@@ -949,7 +950,7 @@ function TranslateSection() {
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
   const svc = SERVICES.find((x) => x.key === provider)!;
-  const needsKey = provider !== "mymemory";
+  const needsKey = true;
   const hasKey = !!cfg?.keys?.[provider];
   const dirty = !!cfg && (provider !== cfg.provider || (provider === "openai" && (baseUrl.trim() !== (cfg.base_url || "") || model.trim() !== (cfg.model || ""))));
   return (
@@ -958,8 +959,11 @@ function TranslateSection() {
         <div className="app-setting-line">
           <div className="app-setting-line-text">
             <b>{L("自动翻译", "Translate automatically")}</b>
-            <span>{L("agent 的回复和进展跟 App 的语言不一样时，自动翻成 App 的语言（每条下面能看原文）。打开后，这些消息会发给下面选的翻译服务。每条消息时间旁的「翻译」随时可以手动翻。",
-              "When what an agent says is in another language, show it in the app's language (each with its original a click away). With this on, those messages are sent to the service below. 「Translate」 by any message's time works either way.")}</span>
+            <span>{isReady
+              ? L("agent 的回复和进展跟 App 的语言不一样时，自动翻成 App 的语言（每条下面能看原文）。打开后，这些消息会发给下面选的翻译服务。每条消息时间旁的「翻译」随时可以手动翻。",
+                "When what an agent says is in another language, show it in the app's language (each with its original a click away). With this on, those messages are sent to the service below. 「Translate」 by any message's time works either way.")
+              : L("先在下面选一个翻译服务，填好密钥并保存；之后消息时间旁才有「翻译」，这里也才会生效。",
+                "First choose a service below and save its key; then messages get 「Translate」 and this takes effect.")}</span>
           </div>
           <div className="seg" role="tablist" aria-label={L("自动翻译", "Translate automatically")}>
             {[false, true].map((on) => (

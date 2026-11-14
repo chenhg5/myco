@@ -9,8 +9,8 @@ import { L, lang } from "@/lib/i18n";
  * of them that are in another language, when 自动翻译 is on (Settings ›
  * 翻译). The translation shows in place of the words, with a line under it
  * to see the original again. The service is the console's (translate.go):
- * MyMemory for free, or DeepL, Google or an OpenAI-compatible API with a
- * key kept in the keychain.
+ * DeepL, Google or an OpenAI-compatible API, with a key kept in the
+ * keychain. Until one has a key there is no 翻译 and nothing is translated.
  */
 
 type To = "zh" | "en";
@@ -30,6 +30,24 @@ export function setAutoTranslate(on: boolean) {
   emit();
 }
 export const useAutoTranslate = () => useSyncExternalStore(subscribe, () => auto, () => auto);
+
+/** Whether a service with a key is set up (asked of the console once;
+ *  Settings says when it changes). Null until known. */
+let ready: boolean | null = null;
+let readyAsked = false;
+export function setTranslateReady(on: boolean) {
+  ready = on;
+  version++;
+  emit();
+}
+export function useTranslateReady(): boolean {
+  useEffect(() => {
+    if (readyAsked) return;
+    readyAsked = true;
+    appApi.translateConfig().then((c) => setTranslateReady(!!c.keys?.[c.provider]), () => setTranslateReady(false));
+  }, []);
+  return useSyncExternalStore(subscribe, () => ready, () => ready) === true;
+}
 
 /** Messages you asked to translate, or to see in the original. */
 const chosen = new Map<string, boolean>();
@@ -77,7 +95,7 @@ function translated(text: string, to: To): Promise<string> {
 function failure(e: unknown): string {
   const code = (e as { code?: string })?.code;
   switch (code) {
-    case "quota": return L("今天免费翻译的额度用完了，可以在 设置 › 翻译 换一个服务", "Today's free translations are used up; another service can be chosen in Settings › Translation");
+    case "quota": return L("翻译服务的额度用完了（设置 › 翻译 可以换一个）", "The translation service's quota is used up (another can be chosen in Settings › Translation)");
     case "unauthorized": return L("翻译服务不认这个密钥（设置 › 翻译）", "The translation service did not accept the key (Settings › Translation)");
     case "not_configured": return L("这个翻译服务还没填密钥（设置 › 翻译）", "This translation service has no key yet (Settings › Translation)");
     case "unreachable": return L("连不上翻译服务", "Could not reach the translation service");
@@ -90,9 +108,10 @@ function failure(e: unknown): string {
  *  another language; a line under it switches to the original and back. */
 export function TranslatableBody({ id, body }: { id: string; body: string }) {
   const autoOn = useAutoTranslate();
+  const isReady = useTranslateReady();
   const choice = useChoice(id);
   const to = appTo();
-  const want = choice ?? (autoOn && inOtherLanguage(body, to));
+  const want = isReady && (choice ?? (autoOn && inOtherLanguage(body, to)));
   const [st, setSt] = useState<{ text?: string; error?: string }>({});
   useEffect(() => {
     if (!want) return;
@@ -118,7 +137,9 @@ export function TranslatableBody({ id, body }: { id: string; body: string }) {
 /** The 翻译 / 原文 switch by a message's time. */
 export function TranslateToggle({ id, body }: { id: string; body: string }) {
   const autoOn = useAutoTranslate();
+  const isReady = useTranslateReady();
   const choice = useChoice(id);
+  if (!isReady) return null;
   const on = choice ?? (autoOn && inOtherLanguage(body));
   return (
     <button type="button" className="conv-translate-btn" onClick={() => chooseTranslation(id, !on)}

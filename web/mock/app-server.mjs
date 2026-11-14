@@ -54,7 +54,7 @@ const avatarPics = new Map();
 // Times the page asked the "desktop app" to listen, in which language, and
 // what each listening hears.
 let dictations = 0;
-let translateCfg = { provider: "mymemory", base_url: "", model: "" };
+let translateCfg = { provider: "deepl", base_url: "", model: "" };
 const translateKeys = {};
 let translations = 0;
 let lastDictationLang = "";
@@ -1332,7 +1332,7 @@ const server = http.createServer(async (req, res) => {
     if (parts[2] === "config" && method === "GET") return send(res, 200, { ...translateCfg, keys: { ...translateKeys } });
     if (parts[2] === "config" && method === "PUT") {
       const body = await readBody(req);
-      if (!["mymemory", "deepl", "google", "openai"].includes(body?.provider)) return fail(res, 400, "invalid_argument", "unknown translation service");
+      if (!["deepl", "google", "openai"].includes(body?.provider)) return fail(res, 400, "invalid_argument", "unknown translation service");
       translateCfg = { provider: body.provider, base_url: body.base_url || "", model: body.model || "" };
       if (body.clear_key) delete translateKeys[body.provider];
       else if (body.key) translateKeys[body.provider] = true;
@@ -1340,7 +1340,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 2 && method === "POST") {
       const body = await readBody(req);
-      if (translateCfg.provider !== "mymemory" && !translateKeys[translateCfg.provider]) return fail(res, 409, "not_configured", "this translation service needs a key");
+      if (!translateKeys[translateCfg.provider]) return fail(res, 409, "not_configured", "this translation service needs a key");
       translations += 1;
       return send(res, 200, { text: `〔译〕${body.text}`, provider: translateCfg.provider });
     }
