@@ -312,6 +312,17 @@ final class ConversationTests: XCTestCase {
         let task = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "设计 Hub 的推送接口")).firstMatch
         XCTAssertTrue(task.waitForExistence(timeout: 20), "the coordinator's task is part of the conversation")
         XCTAssertTrue(app.staticTexts["协调者"].exists, "and says who asked")
+        // What it reported sits in its run where it came: after the step
+        // made before it, never under what it did later.
+        let first = app.staticTexts["看了现有的唤醒方式：webhook、GitHub、Claude 三种。"]
+        let newest = app.staticTexts["正在写中转服务的设计。"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "its updates show while it works")
+        XCTAssertTrue(newest.exists)
+        let summaries = app.buttons.matching(identifier: "steps.summary")
+        XCTAssertGreaterThanOrEqual(summaries.count, 2, "its steps are in more than one run of steps")
+        XCTAssertLessThan(summaries.element(boundBy: 0).frame.minY, first.frame.minY, "the first steps are above its first update")
+        XCTAssertGreaterThan(summaries.element(boundBy: summaries.count - 1).frame.minY, first.frame.minY, "and later steps are below it")
+        snap("run-member")
         XCTAssertTrue(app.buttons["steps.summary"].firstMatch.exists, "with how it is being worked on")
         snap("member-all-work")
     }
