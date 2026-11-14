@@ -40,6 +40,23 @@ struct DictationTests {
         }
     }
 
+    @Test func aSessionThatEndedKeepsItsWords() {
+        // The recognizer's session ended at a pause; the next one starts
+        // from nothing, even with the same first words.
+        var heard = Utterances()
+        #expect(heard.add("Check the page") == "Check the page")
+        heard.commit()
+        #expect(heard.add("Check") == "Check the page Check")
+        #expect(heard.add("Check the title") == "Check the page Check the title")
+        heard.commit()
+        heard.commit()
+        #expect(heard.add("好") == "Check the page Check the title好")
+        var chinese = Utterances()
+        _ = chinese.add("帮我看一下")
+        chinese.commit()
+        #expect(chinese.add("帮我改一下") == "帮我看一下帮我改一下")
+    }
+
     @Test func heardWordsGoAfterWhatWasTyped() async {
         let listener = ScriptedSpeechListener(
             ["帮", "帮我看一下下载页", "然后", "然后改一下标题"], pause: .milliseconds(15), endsItself: true)

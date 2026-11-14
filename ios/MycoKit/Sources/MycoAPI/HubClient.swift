@@ -91,6 +91,21 @@ public struct HubClient: HubAPI {
         _ = try await call("POST", "/v1/console/messages/\(messageID)/stop")
     }
 
+    public func hidden() async throws -> [String] {
+        let list: HiddenEnvelope = try await get("/v1/console/hidden")
+        return list.ids
+    }
+
+    public func setHidden(hide: [String], show: [String]) async throws -> [String] {
+        struct Request: Encodable {
+            var hide: [String]?
+            var show: [String]?
+        }
+        let request = Request(hide: hide.isEmpty ? nil : hide, show: show.isEmpty ? nil : show)
+        let data = try await call("POST", "/v1/console/hidden", body: HubJSON.encoder().encode(request))
+        return try Self.decode(HiddenEnvelope.self, from: data).ids
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -179,6 +194,7 @@ struct ExchangeEnvelope: Decodable {
     var more: Bool?
 }
 struct SendEnvelope: Decodable { var message: Message }
+struct HiddenEnvelope: Decodable { @LossyList var ids: [String] }
 
 private extension String {
     func trimmingSuffix(_ suffix: String) -> String {

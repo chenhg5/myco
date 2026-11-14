@@ -45,6 +45,8 @@ public final class ConversationModel {
         /// Held by the workspace (true), or kept here because the
         /// workspace is too old to hold it.
         public var onHub: Bool
+        /// The files it carries.
+        public var files: [Attachment] = []
     }
 
     /// Messages waiting behind the open task, in the order they will go:
@@ -55,7 +57,7 @@ public final class ConversationModel {
 
     private struct Queued {
         var body: String
-        var attachments: [String]
+        var files: [PendingFile]
     }
 
     /// The files that go with the next message, in the order they were added.
@@ -337,19 +339,35 @@ public final class ConversationModel {
         let me = session.me
         // Mine with the agent, and on a member's page the agent's with its
         // colleagues, as one conversation.
-        var all = known.filter { !withdrawn.contains($0.key) }
-        for (id, message) in colleagueMessages where all[id] == nil { all[id] = message }
+        // Not what I took back, and not what I took out of my view (on any
+        // of my devices): a task taken out takes its updates and what was
+        // added to it along; its answer stays until taken out too.
+        let hidden = session.hidden
+        func shown(_ message: Message) -> Bool {
+            if withdrawn.contains(message.id) || hidden.contains(message.id) { return false }
+            if message.type == "progress" || message.type == "steer", let task = message.replyTo, hidden.contains(task) { return false }
+            return true
+        }
+        var all = known.filter { shown($0.value) }
+        for (id, message) in colleagueMessages where all[id] == nil && shown(message) { all[id] = message }
+        // Which open runs have stopped for now: not at work.
+        let reports = Dictionary(grouping: all.values.filter { $0.type == "progress" }, by: { $0.replyTo ?? $0.threadId })
+        var paused: Set<String> = []
+        for task in all.values where task.to == agent && task.isOpen {
+            let said = (reports[task.id] ?? []).sorted { $0.createdAt < $1.createdAt }
+            if RunProcess.isPaused(events: traces[task.id] ?? [], task: task, reports: said, now: Date()) { paused.insert(task.id) }
+        }
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
         for (taskID, process) in processes {
             if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
         }
         let built = ConversationBuilder.items(
             me: me, agent: agent, messages: Array(all.values), others: others,
-            processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans,
+            processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
             status: { self.session.status(of: $0) }, now: Date())
-        let mine = Array(known.values).filter { !withdrawn.contains($0.id) }
+        let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
-            .map { Waiting(id: $0.id, body: $0.body, onHub: true) }
+            .map { Waiting(id: $0.id, body: $0.body, onHub: true, files: ConversationBuilder.files(of: $0)) }
         let local = queued.enumerated().map { Waiting(id: "local-\($0.offset)", body: $0.element.body, onHub: false) }
         if waiting != held + local { waiting = held + local }
         // Nothing new: leave the list alone, so the page does not redraw.
@@ -541,7 +559,7 @@ public final class ConversationModel {
             problem = nil
             dropSentPayloads()
         } catch let error as HubError where error.error == "invalid_argument" {
-            queued.append(Queued(body: body, attachments: attachments))
+            queued.append(Queued(body: body, files: files.filter { if case .ready = $0.state { return true } else { return false } }))
             dropSentPayloads()
         } catch {
             giveBack(text, files)
@@ -554,6 +572,7 @@ public final class ConversationModel {
     /// Takes a waiting message back: it will not be sent. `edit` puts its
     /// words back in the input.
     public func withdraw(_ item: Waiting, edit: Bool) async {
+        var names = item.files.map(\.name)
         if item.onHub {
             do {
                 try await session.hub.stop(item.id)
@@ -563,10 +582,49 @@ public final class ConversationModel {
                 problem = (error as? HubError)?.message ?? error.localizedDescription
                 return
             }
+            if edit { restore(item.files) }
         } else if let index = waiting.filter({ !$0.onHub }).firstIndex(of: item), queued.indices.contains(index) {
-            queued.remove(at: index)
+            let taken = queued.remove(at: index)
+            names = taken.files.map(\.name)
+            if edit { pending = taken.files + pending }
         }
-        if edit { draft = item.body }
+        // Its words go back in the box; the sentence written for files
+        // sent alone does not, the files say it.
+        if edit {
+            let madeUp = ConversationBuilder.filesOnlyBodies(names).values.contains(item.body)
+            draft = madeUp ? "" : item.body
+        }
+        show(others: others)
+    }
+
+    /// Puts the files of a message taken back into the box again. They are
+    /// in the workspace already: nothing is uploaded a second time.
+    private func restore(_ files: [Attachment]) {
+        for file in files {
+            pendingCount += 1
+            let id = "pending-\(pendingCount)"
+            pending.append(PendingFile(
+                id: id, name: file.name, size: Int(file.size), contentType: file.contentType ?? "", preview: nil,
+                state: .ready(fileID: file.fileId)))
+            guard file.isPicture else { continue }
+            // A picture gets its small preview back once it is here.
+            Task {
+                guard let url = try? await session.shelf.url(of: file) else { return }
+                let preview = await Task.detached { (try? Data(contentsOf: url)).flatMap { Pictures.thumbnail($0) } }.value
+                if let index = pending.firstIndex(where: { $0.id == id }) { pending[index].preview = preview }
+            }
+        }
+    }
+
+    /// Takes a message out of my view of this conversation (nothing is
+    /// deleted), or with `hidden: false` puts it back.
+    public func setHidden(_ ids: [String], hidden: Bool = true) async {
+        do {
+            try await session.setHidden(ids, hidden: hidden)
+            problem = nil
+        } catch {
+            problem = (error as? HubError)?.message ?? error.localizedDescription
+        }
         show(others: others)
     }
 
@@ -576,7 +634,7 @@ public final class ConversationModel {
         sending = true
         defer { sending = false }
         do {
-            _ = try await session.hub.send(request(next.body, attachments: next.attachments))
+            _ = try await session.hub.send(request(next.body, attachments: Self.ids(of: next.files)))
             queued.removeFirst()
             return true
         } catch {

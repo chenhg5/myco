@@ -62,7 +62,18 @@ Messages show their pictures as thumbnails and other files as rows; a tap opens 
 
 ## Speaking instead of typing
 
-The microphone sits beside Send, as on the desktop. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. After a pause the recognizer starts over with the next sentence: `Utterances` keeps what came before (the desktop's rule, `internal/console/dictation.go`). The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
+The microphone sits beside Send, as on the desktop. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. A pause does not end it: the recognizer ends its session at each pause, and the next one starts at once on the running microphone, its words after what was said (`Utterances`, the desktop's rule in `internal/console/dictation.go`); six silent sessions in a row end the listening. The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
+
+## A conversation, as the desktop app shows it
+
+The rules are the desktop's (`web/src/app/ConversationDetail.tsx`, `TraceView.tsx`); when one changes there, it changes here.
+
+- What is added to a running task is a plain bubble: no label.
+- A message put behind another and taken back before its turn (edited or withdrawn) was never sent: it is not in the conversation. Editing one puts its words and its files back in the box; the files are not uploaded again.
+- A task the agent set aside (held) does not take what is typed: that is a new task, unless it was set aside to ask a question.
+- A run that is open but not at work does not look at work: its turn ended, it was set aside, or it said something and has been silent for two minutes. The mushroom stands and the line says what it waits for ("Waiting for the tester", "Set aside; it answers later", "Waiting; no answer yet").
+- Thinking is part of the steps ("thought, ran 2 commands"), there on a tap.
+- A long press on a message offers Delete: it leaves this person's view on all their devices (`/v1/console/hidden`; on this device only with a workspace before v0.19.9), with Undo for a few seconds. Nothing is deleted for anyone else.
 
 ## Loading
 

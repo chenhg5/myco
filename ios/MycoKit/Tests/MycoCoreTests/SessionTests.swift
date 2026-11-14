@@ -91,6 +91,53 @@ struct SessionTests {
         #expect(steps == once)
     }
 
+    @Test func aMessageTakenOutOfMyViewIsGoneOnEveryDevice() async throws {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "hide", name: "Demo", hub: hub)
+        await session.refresh()
+        // The backend engineer reported on its task to the coordinator.
+        let model = session.conversation(with: "studio-codex-7f3a")
+        await model.reload()
+        #expect(model.items.contains { $0.id == "d1" })
+        #expect(model.items.contains { $0.id == "d1p3" })
+
+        // The task goes, and its updates with it; nothing is deleted.
+        await model.setHidden(["d1"])
+        #expect(!model.items.contains { $0.id.hasPrefix("d1") })
+        #expect(await hub.allMessages().contains { $0.id == "d1" })
+        #expect(try await hub.hidden() == ["d1"])
+
+        // Another device of mine sees the same.
+        let phone = WorkspaceSession(id: "hide-2", name: "Demo", hub: hub)
+        await phone.refresh()
+        #expect(phone.hidden == ["d1"])
+        let there = phone.conversation(with: "studio-codex-7f3a")
+        await there.reload()
+        #expect(!there.items.contains { $0.id.hasPrefix("d1") })
+
+        // Taken back within a moment: all of it is there again.
+        await model.setHidden(["d1"], hidden: false)
+        #expect(model.items.contains { $0.id == "d1" })
+        #expect(model.items.contains { $0.id == "d1p3" })
+    }
+
+    @Test func anOlderWorkspaceKeepsWhatIHidOnThisDevice() async throws {
+        let hub = FakeHub()
+        await hub.setTooOldForHidden(true)
+        let store = MemoryStore()
+        let session = WorkspaceSession(id: "old", name: "Demo", hub: hub, snapshots: store)
+        await session.refresh()
+        let model = session.conversation(with: "studio-claude-c41f")
+        await model.reload()
+        await model.setHidden(["h2"])
+        #expect(model.problem == nil)
+        #expect(!model.items.contains { $0.id == "h2" })
+        // The next launch still knows.
+        let again = WorkspaceSession(id: "old", name: "Demo", hub: hub, snapshots: store)
+        await again.refresh()
+        #expect(again.hidden == ["h2"])
+    }
+
     @Test func opensOnWhatItShowedLast() async {
         let store = MemoryStore()
         let first = WorkspaceSession(id: "w1", name: "Demo", hub: FakeHub(), snapshots: store)

@@ -108,6 +108,13 @@ public protocol HubAPI: Sendable {
     func file(_ id: String) async throws -> Data
     /// `POST /v1/console/messages/{id}/stop`
     func stop(_ messageID: String) async throws
+    /// `GET /v1/console/hidden`: the messages this person took out of
+    /// their own view, on any of their devices. Nothing is deleted. A
+    /// workspace from before v0.19.9 answers `not_found`.
+    func hidden() async throws -> [String]
+    /// `POST /v1/console/hidden`: takes messages out of this person's
+    /// view, or puts them back; answers the list as it is then.
+    func setHidden(hide: [String], show: [String]) async throws -> [String]
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink

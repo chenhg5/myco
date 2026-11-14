@@ -19,9 +19,10 @@ public enum DictationProblem: Error, Hashable, Sendable {
 /// recognition in the app, a script in the demo and in tests.
 @MainActor
 public protocol SpeechListener: AnyObject {
-    /// Starts listening in a language. The stream gives the recognizer's
-    /// text each time it changes, and ends when listening does; it throws
-    /// a `DictationProblem` when listening could not start.
+    /// Starts listening in a language. The stream gives the text heard so
+    /// far each time it changes, and ends when listening does; it throws
+    /// a `DictationProblem` when listening could not start. A pause in
+    /// speech does not end it: only `stop`, or a long silence.
     func start(language: AppLanguage) -> AsyncThrowingStream<String, Error>
     /// Stops the microphone. The last words still come, then the stream ends.
     func stop()
@@ -42,6 +43,13 @@ public struct Utterances: Sendable {
         if !last.isEmpty, Self.startsOver(last, text) { done = Self.join(done, last) }
         last = text
         return Self.join(done, text)
+    }
+
+    /// Ends the current sentence (the recognizer's session ended): what
+    /// comes next goes after it, even if it starts the same way.
+    public mutating func commit() {
+        done = Self.join(done, last)
+        last = ""
     }
 
     /// `next` is a new sentence, not `previous` revised or carried on. A

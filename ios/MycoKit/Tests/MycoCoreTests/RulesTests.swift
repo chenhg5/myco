@@ -231,6 +231,62 @@ struct ConversationBuilderTests {
         #expect(items[2].kind == .progress(text: "好，计划：", latest: true))
     }
 
+    @Test func whatWasTakenBackBeforeItsTurnWasNeverSent() {
+        var withdrawn = Message(id: "q1", from: "me", to: "coder", after: "t1", body: "next thing", status: "failed", createdAt: at(-50))
+        withdrawn.error = RunState.stoppedBySender
+        var stopped = Message(id: "t0", from: "me", to: "coder", body: "an old one", status: "failed", createdAt: at(-500))
+        stopped.error = RunState.stoppedBySender
+        let messages = [
+            stopped,
+            Message(id: "t1", from: "me", to: "coder", body: "first", status: "acked", createdAt: at(-100), updatedAt: at(-5)),
+            withdrawn,
+        ]
+        let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
+        // Put behind the first and taken back: not here, not even as "stopped".
+        // One that had begun and was stopped still says so.
+        #expect(items.map(\.id) == ["t0", "t0.stopped", "t1", "t1.status"])
+        #expect(ConversationBuilder.neverSent(messages, me: "me") == ["q1"])
+    }
+
+    @Test func aTaskSetAsideDoesNotTakeWhatIType() {
+        let held = Message(id: "t1", from: "me", to: "coder", body: "wait for the build", status: "held", createdAt: at(-100))
+        // Set aside: the agent is free, so what I type is a new task.
+        #expect(ConversationBuilder.openTask(me: "me", messages: [held]) == nil)
+        // Set aside to ask me something: what I type is the answer.
+        var asking = held
+        asking.asking = "p9"
+        #expect(ConversationBuilder.openTask(me: "me", messages: [asking])?.id == "t1")
+        // Another one still open takes it.
+        let open = Message(id: "t2", from: "me", to: "coder", body: "and this", status: "acked", createdAt: at(-50))
+        #expect(ConversationBuilder.openTask(me: "me", messages: [held, open])?.id == "t2")
+    }
+
+    @Test func aRunThatWaitsDoesNotLookAtWork() {
+        // Mine, taken on; it handed work to the tester, whose task is open.
+        let mine = Message(id: "t1", from: "me", to: "lead", body: "ship it", status: "acked", createdAt: at(-300), updatedAt: at(-200), activeAt: at(-200))
+        let handed = Message(id: "d1", from: "lead", to: "tester", body: "run the suite", status: "acked", createdAt: at(-250))
+        func kinds(_ messages: [Message], others: [Message] = [], paused: Set<String>) -> [ConversationItem.Kind] {
+            ConversationBuilder.items(me: "me", agent: "lead", messages: messages, others: others, paused: paused, status: { _ in nil }, now: now)
+                .filter { $0.id.hasSuffix(".status") }.map(\.kind)
+        }
+        // Still at it: the usual line.
+        #expect(kinds([mine, handed], paused: []) == [.status(.working(since: at(-200)), taskID: "t1")])
+        // Its turn ended: it waits for whom it handed work to.
+        #expect(kinds([mine, handed], paused: ["t1"]) == [.paused(.waitingFor(["tester"]), taskID: "t1")])
+        // The work it handed out shows as a capsule on a project's page: the same.
+        #expect(kinds([mine], others: [handed], paused: ["t1"]) == [.paused(.waitingFor(["tester"]), taskID: "t1")])
+        // That work is done: it just has not answered yet.
+        var finished = handed
+        finished.status = "done"
+        #expect(kinds([mine, finished], paused: ["t1"]) == [.paused(.quiet, taskID: "t1")])
+        // Set aside, and nothing since.
+        var held = mine
+        held.status = "held"
+        #expect(kinds([held], paused: ["t1"]) == [.paused(.held, taskID: "t1")])
+        // Set aside, then at it again: at work, not "waiting its turn".
+        #expect(kinds([held], paused: []) == [.status(.working(since: at(-200)), taskID: "t1")])
+    }
+
     @Test func whatWaitsBehindAnOpenTaskIsNotInTheConversation() {
         let messages = [
             Message(id: "t1", from: "me", to: "coder", body: "first", status: "acked", createdAt: at(-100), updatedAt: at(-5)),

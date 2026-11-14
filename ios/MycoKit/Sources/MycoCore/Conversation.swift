@@ -32,6 +32,9 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         case process(taskID: String, live: Bool)
         /// An open task of mine: where it stands now.
         case status(RunState, taskID: String)
+        /// An open task whose run has stopped for now: not at work, and
+        /// what it waits for.
+        case paused(RunPause, taskID: String)
         /// Work someone else gave, as one line: who, to whom, what, state.
         case dispatch(Dispatch)
     }
@@ -41,6 +44,16 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public var kind: Kind
     /// The files that came with it (what was asked, or an answer).
     public var files: [Attachment] = []
+}
+
+/// Why a run that is still open is not at work.
+public enum RunPause: Hashable, Sendable {
+    /// It handed work out and waits for these agents to finish.
+    case waitingFor([String])
+    /// It set the task aside (held); it answers later.
+    case held
+    /// Its turn ended, or it went quiet after it spoke: no answer yet.
+    case quiet
 }
 
 /// A task between two others, shown as a one-line capsule.
@@ -62,18 +75,27 @@ public enum ConversationBuilder {
     ///     (a coordinator's hand-outs on its project's page).
     ///   - processes: tasks whose steps are known and worth a row.
     ///   - tracedPlans: the plan each task's steps hold, and when it was written.
+    ///   - paused: open tasks whose run has stopped for now (`RunProcess.isPaused`).
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
         me: String, agent: String, messages all: [Message], others: [Message], processes: Set<String> = [],
-        tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:],
+        tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
         // What waits behind an open task is not part of the conversation
-        // yet: it shows above the input until its turn comes.
-        let waiting = Set(queuedBehind(all).map(\.id))
+        // yet: it shows above the input until its turn comes. What was
+        // taken back before its turn came was never sent: not here at all.
+        let waiting = Set(queuedBehind(all).map(\.id)).union(neverSent(all, me: me))
         let messages = all.filter { !waiting.contains($0.id) }
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let waitsFor = waitingOn(agent: agent, messages: messages, others: others)
+        /// Why an open task is not at work, when its run has stopped.
+        func pause(of task: Message) -> RunPause? {
+            guard paused.contains(task.id) else { return nil }
+            if let names = waitsFor[task.id], !names.isEmpty { return .waitingFor(names) }
+            return task.status == "held" ? .held : .quiet
+        }
         /// Updates of tasks that have ended, by task, oldest first.
         var past: [String: [(message: Message, said: String)]] = [:]
         /// My tasks that are still open, with where each stands.
@@ -170,27 +192,40 @@ public enum ConversationBuilder {
             guard newest.contains(item.id), case .progress(let text, _) = item.kind else { return item }
             return ConversationItem(id: item.id, at: item.at, kind: .progress(text: text, latest: true))
         }
+        /// The line for an open task: at work, or stopped and why.
+        func standing(_ open: (task: Message, state: RunState)) -> ConversationItem.Kind {
+            // One that may be stuck says so: that needs a look.
+            if case .maybeStuck = open.state, open.task.status != "held" { return .status(open.state, taskID: open.task.id) }
+            if let pause = pause(of: open.task) { return .paused(pause, taskID: open.task.id) }
+            // Set aside, then at it again (new steps since): at work.
+            if open.task.status == "held" {
+                return .status(.working(since: open.task.activeAt ?? open.task.updatedAt), taskID: open.task.id)
+            }
+            return .status(open.state, taskID: open.task.id)
+        }
         // Where a colleague's open task stands comes under its work: after
         // its newest update, never above it.
         for open in theirOpen {
             let under = max(open.task.createdAt.addingTimeInterval(0.002), (newestUpdate[open.task.id]?.at ?? .distantPast).addingTimeInterval(0.001))
-            items.append(.init(id: open.task.id + ".status", at: under, kind: .status(open.state, taskID: open.task.id)))
+            items.append(.init(id: open.task.id + ".status", at: under, kind: standing(open)))
         }
         // One line says where my work with the agent stands, never two:
         // the task being worked on if there is one, else one that may be
-        // stuck, else the newest still waiting.
-        func rank(_ state: RunState) -> Int {
-            switch state {
-            case .working: return 0
-            case .maybeStuck: return 1
-            default: return 2
+        // stuck, else one whose run has stopped, else the newest still
+        // waiting.
+        func rank(_ open: (task: Message, state: RunState)) -> Int {
+            switch standing(open) {
+            case .status(.working, _): return 0
+            case .status(.maybeStuck, _): return 1
+            case .paused: return 2
+            default: return 3
             }
         }
         let leading = myOpen.min { a, b in
-            (rank(a.state), b.task.createdAt) < (rank(b.state), a.task.createdAt)
+            (rank(a), b.task.createdAt) < (rank(b), a.task.createdAt)
         }
         if let leading {
-            items.append(.init(id: leading.task.id + ".status", at: .distantFuture, kind: .status(leading.state, taskID: leading.task.id)))
+            items.append(.init(id: leading.task.id + ".status", at: .distantFuture, kind: standing(leading)))
         }
         for (taskID, plan) in plans {
             guard let task = byID[taskID] else { continue }
@@ -247,10 +282,45 @@ public enum ConversationBuilder {
     }
 
     /// The newest task of mine that is still open: what the input speaks
-    /// to. Not one that waits behind another: that one has not begun.
+    /// to. Not one that waits behind another: that one has not begun. And
+    /// not one the agent set aside (held): it is free meanwhile, so what
+    /// I type is a new task, unless it set the task aside to ask me
+    /// something, when what I type is the answer.
     public static func openTask(me: String, messages: [Message]) -> Message? {
         let waiting = Set(queuedBehind(messages).map(\.id))
-        return messages.filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }.max { $0.createdAt < $1.createdAt }
+        return messages
+            .filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }
+            .filter { $0.status != "held" || !($0.asking ?? "").isEmpty }
+            .max { $0.createdAt < $1.createdAt }
+    }
+
+    /// Messages put behind another and stopped before their turn came
+    /// (edited or withdrawn): never sent, so not part of the conversation
+    /// (not "stopped" there). The desktop app's rule.
+    public static func neverSent(_ messages: [Message], me: String) -> Set<String> {
+        let answered = Set(messages.compactMap(\.replyTo))
+        return Set(messages.filter { m in
+            m.type == "task" && !(m.after ?? "").isEmpty && m.status == "failed" && m.error == RunState.stoppedBySender
+                && m.from == me && !answered.contains(m.id)
+        }.map(\.id))
+    }
+
+    /// Whom each task given to the agent waits for: the agents it handed
+    /// work to after that task began (and before the next one) whose work
+    /// is still open. `others`: work it handed out that shows as capsules.
+    static func waitingOn(agent: String, messages: [Message], others: [Message]) -> [String: [String]] {
+        let answered = Set(messages.filter { $0.type == "reply" }.compactMap(\.replyTo))
+        var result: [String: [String]] = [:]
+        var current: Message?
+        let tasks = (messages + others).filter { $0.type == "task" }.sorted { $0.createdAt < $1.createdAt }
+        for task in tasks {
+            if task.to == agent {
+                current = task
+            } else if let current, task.from == agent, task.isOpen, !answered.contains(task.id), !(result[current.id] ?? []).contains(task.to) {
+                result[current.id, default: []].append(task.to)
+            }
+        }
+        return result
     }
 
     /// The thread a new message of mine continues: the one my last exchange
