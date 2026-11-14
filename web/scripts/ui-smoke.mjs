@@ -464,8 +464,20 @@ async function runMatrix(browser, size, scheme) {
         }));
         if (hs.includes(-1) || Math.abs(hs[0] - hs[1]) > 1) throw new Error(`左右两栏的标题栏应一样高，底边在 ${hs.join(" / ")}`);
       }
+      // Its head's buttons (find, full width, close) are one group: even
+      // gaps, one icon size.
+      const btns = await right.locator(".conv-head button:visible").evaluateAll((els) => els
+        .filter((b) => b.closest(".conv-head-actions"))
+        .map((b) => ({ l: b.getBoundingClientRect().left, r: b.getBoundingClientRect().right, icon: Math.round(b.querySelector("svg")?.getBoundingClientRect().width || 0) })));
+      if (btns.length >= 2) {
+        const gaps = btns.slice(1).map((b, i) => Math.round(b.l - btns[i].r));
+        if (Math.max(...gaps) - Math.min(...gaps) > 1) throw new Error(`右栏标题栏的按钮间距应一样，实际 ${gaps.join(" / ")}px`);
+        if (new Set(btns.map((b) => b.icon)).size > 1) throw new Error(`右栏标题栏的图标应一样大，实际 ${btns.map((b) => b.icon).join(" / ")}px`);
+      }
       await settle(page, 300);
       await shot(page, size, scheme, "project-member-work");
+      const hb = await right.locator(".conv-head").boundingBox();
+      if (hb) await page.screenshot({ path: path.join(OUT, `${size.width}x${size.height}-${scheme}-project-member-head.png`), clip: { x: hb.x + hb.width - 220, y: hb.y, width: 220, height: hb.height } });
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
@@ -1681,6 +1693,8 @@ async function runMatrix(browser, size, scheme) {
       // the stopped "notes" too.
       await go(page, "设置", narrow);
       await page.locator("[data-local-ws]").first().waitFor({ timeout: 20_000 });
+      // (they come in as each answers: give the last one a moment)
+      await page.waitForFunction(() => document.querySelectorAll("[data-local-ws]").length >= 3, null, { timeout: 5_000 }).catch(() => undefined);
       const localCount = await page.locator("[data-local-ws]").count();
       if (localCount !== 3) throw new Error(`设置页应列出这台电脑上的三个工作区（含停着的 notes），实际 ${localCount} 个`);
       const heading = compactText(await page.locator(".app-setting-group").first().innerText());

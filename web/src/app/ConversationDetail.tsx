@@ -1508,13 +1508,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {state.label}
           </button>
         )}
-        {!termMode && (
-          <button type="button" className={cn("app-btn app-btn-plain conv-head-find", searching && "is-on")} onClick={() => setSearching((v) => !v)}
-            title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
-            <Search />
-          </button>
+        {/* Find, and the pane's own buttons (full width, close): one group,
+            one spacing, one icon size. */}
+        {(!termMode || headActions) && (
+          <span className="conv-head-actions">
+            {!termMode && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
+                title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
+                <Search />
+              </button>
+            )}
+            {headActions}
+          </span>
         )}
-        {headActions && <span className="conv-head-actions">{headActions}</span>}
       </header>}
 
       {/* The terminal shows only your own commands; ones other nodes sent to
