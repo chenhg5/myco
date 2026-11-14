@@ -1449,13 +1449,21 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       return;
     }
   }
+  // The node picks it up at once (as a runner would): acknowledged before it
+  // writes anything, so the App can say it is starting the CLI.
+  later(600, () => {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    if (task && ["queued", "delivered"].includes(task.status)) Object.assign(task, { status: "acked", updated_at: iso(0) });
+  });
   // A plan, reported as a checklist, ticked off as it goes.
   const plan = (body) => () => {
     const msgs = hub.threads[threadId];
     if (!msgs) return;
     msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body, created_at: iso(0), updated_at: iso(0) }));
   };
-  later(1500, plan("好，先这样做：\n- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
+  // (after it is acknowledged and before its first step: the App says which
+  // CLI it is starting in between)
+  later(2000, plan("好，先这样做：\n- [~] 读一下相关代码\n- [ ] 动手改\n- [ ] 跑测试，看有没有破坏别的"));
   later(4500, plan("- [x] 读一下相关代码\n- [x] 动手改\n- [~] 跑测试，看有没有破坏别的"));
   later(3000, () => {
     const msgs = hub.threads[threadId];
@@ -3922,11 +3930,17 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { message: m.id, status: m.status, events });
       }
       const steps = m.trace ? [...m.trace] : [
-        { kind: "thinking", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组。" },
+        // Claude Code writing: thinking and text arrive a piece at a time
+        // (delta), then the finished block follows and replaces them.
+        { kind: "delta", stream: "thinking", id: "b1", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组，" },
+        { kind: "delta", stream: "thinking", id: "b1", text: "而不是按提交顺序罗列；内部重构、测试调整和日志清理不写进去。" },
+        { kind: "thinking", text: "先看看 git log 和 CHANGELOG，确认这次改了哪些东西，再按用户能感知的变化分组，而不是按提交顺序罗列；内部重构、测试调整和日志清理不写进去。" },
         { kind: "tool", tool: "Bash", id: "c1", input: "git log --oneline v0.16.7..HEAD" },
         { kind: "tool_result", id: "c1", output: "a1b2c3d App: 对话页支持 Markdown 表格\n9f8e7d6 Hub: 修复 runner 重连\n5c4b3a2 App: 本机会话一键接入" },
         { kind: "tool", tool: "Read", id: "c2", input: "CHANGELOG.md" },
         { kind: "tool_result", id: "c2", output: "## Unreleased\n- ..." },
+        { kind: "delta", stream: "text", id: "b2", text: "改动不多，主要是 App 的两项新功能" },
+        { kind: "delta", stream: "text", id: "b2", text: "和一个 Hub 修复。我按这个写发布说明。" },
         { kind: "text", text: "改动不多，主要是 App 的两项新功能和一个 Hub 修复。我按这个写发布说明。" },
         { kind: "tool", tool: "Edit", id: "c3", input: "CHANGELOG.md" },
         { kind: "tool_result", id: "c3", output: "The file CHANGELOG.md has been updated." },

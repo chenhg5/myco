@@ -335,6 +335,17 @@ async function noRound(page) {
   }, null, { timeout: 30_000 });
 }
 
+/** Opens every run's process in the chat: answered ones fold to one line,
+ *  and a long one keeps its earlier parts behind a line. */
+async function revealRuns(page) {
+  for (const b of await page.locator(".conv-detail .trace-fold").all()) {
+    if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
+  }
+  for (const b of await page.locator(".conv-detail .trace-more").all()) {
+    if (await b.isVisible().catch(() => false)) await b.click();
+  }
+}
+
 /** Opens your chat with a member of a space (a project, or the agents in
  *  none): from the members column, or the row of faces in a narrow window. */
 async function openMember(page, narrow, space, name) {
@@ -2164,6 +2175,29 @@ async function runMatrix(browser, size, scheme) {
       // Opening the existing step line exposes the completed thinking once.
       await run.locator(".trace-group").first().locator("button.trace-head").click();
       if (await run.locator(".trace-row.is-thinking").count() !== 1) throw new Error("完整思考应替换增量思考");
+      // The answer is in (20 s after it was sent): the whole process folds
+      // to one line, steps and time, and opening that line shows the steps.
+      await page.locator(".conv-detail .conv-msg", { hasText: "预览检查完成。" }).last().waitFor({ timeout: 25_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .trace.is-live, .conv-detail .trace.is-waiting"), null, { timeout: 10_000 });
+      const folded = await run.evaluate((el) => {
+        const btn = el.querySelector(".trace-fold");
+        return { has: !!btn, open: btn?.getAttribute("aria-expanded"),
+          head: btn?.querySelector(".trace-title")?.textContent || "" };
+      });
+      if (!folded.has) throw new Error("回复到了之后，过程应有可折叠的一行");
+      if (folded.open !== "false") throw new Error("回复到了之后，过程应默认收起");
+      if (!/^(过程 · \d+ 步 · |Steps · \d+ · )/.test(folded.head)) throw new Error(`收起的过程应写明步数和用时，实际是「${folded.head}」`);
+      await shot(page, size, scheme, "conversation-process-folded");
+      await run.locator(".trace-fold").click();
+      await page.waitForFunction(() => [...document.querySelectorAll(".conv-detail .trace")].pop()
+        ?.querySelector(".trace-fold")?.getAttribute("aria-expanded") === "true", null, { timeout: 5_000 });
+      const inside = await run.evaluate((el) => ({
+        steps: el.querySelectorAll(".trace-group, .trace-row, .trace-say").length,
+        live: el.classList.contains("is-live"),
+      }));
+      if (inside.steps === 0) throw new Error("点开收起的过程后应能看到里面的步骤");
+      if (inside.live) throw new Error("回复到了之后不该还有在动的过程");
+      await shot(page, size, scheme, "conversation-process-opened");
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
     });
@@ -2525,7 +2559,9 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 45_000 });
-      // A screenshot sent with a progress update shows under that update.
+      // A screenshot sent with a progress update shows under that update
+      // (in the run's process: answered, it is folded to one line first).
+      await revealRuns(page);
       const along = page.locator(".conv-detail .trace-report-files .conv-attach.is-image img").last();
       await along.waitFor({ timeout: 5_000 });
       if (!await along.evaluate((img) => img.complete && img.naturalWidth > 0)) throw new Error("进展里的截图应显示缩略图");

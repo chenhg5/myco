@@ -796,7 +796,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
       if (nh > h && Date.now() - openedAt.current < 1000) {
-        atBottom.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+        // (a jump up the conversation is not over yet: what arrives at the
+        // bottom must not pull the view back down)
+        atBottom.current = Date.now() >= jumpUntil.current
+          && sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
         restoreBelow.current = 0;
       } else if (nh !== h && restoring()) putBack(sc);
       else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
@@ -849,11 +852,26 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     const below = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const yours = pointerHeld.current || Date.now() - userScrollAt.current <= 300 || Date.now() < jumpUntil.current;
+    const mine = pointerHeld.current || Date.now() - userScrollAt.current <= 300;
+    if (mine) jumpUntil.current = 0; // you took over
+    const yours = mine || Date.now() < jumpUntil.current;
     if (yours) restoreBelow.current = 0; // you took over
     else if (restoring()) {
       putBack(el);
       const far0 = restoreBelow.current > 400;
+      if (far0 !== away) {
+        if (far0) awaySince.current = Date.now();
+        setAway(far0);
+      }
+      return;
+    }
+    if (Date.now() < jumpUntil.current) {
+      // A jump you made is on its way: where it takes the view is up to it,
+      // not to the scrolls on the way there (its own, or what grows at the
+      // bottom meanwhile).
+      atBottom.current = false;
+      belowNow.current = below;
+      const far0 = below > 400;
       if (far0 !== away) {
         if (far0) awaySince.current = Date.now();
         setAway(far0);

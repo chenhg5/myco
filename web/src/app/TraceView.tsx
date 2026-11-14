@@ -30,6 +30,20 @@ function keepLive(key: string, events: TraceEvent[]) {
 const POLL_MS = 1500;
 const isOpen = (s: string) => s === "queued" || s === "pending" || s === "delivered" || s === "acked" || s === "held";
 
+/** Whether you opened a run's whole process: kept while the page is open,
+ *  so a run you opened does not fold again when its answer arrives. */
+const processOpen = new Map<string, boolean>();
+
+/** "12 分钟": how long the run took, from its own report or the clock. */
+function tookLine(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  const m = Math.floor(s / 60);
+  if (m < 60) return L(`${m} 分钟`, `${m} min`);
+  return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
+}
+
 /** A tool call with its result, or another step. */
 type Row =
   | { kind: "tool"; key: string; at?: string; call: TraceStep; result?: TraceStep }
@@ -340,6 +354,10 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     return kept ? kept.filter((e, i, all) => all.findIndex((x) => x.seq === e.seq) === i) : null;
   });
   const [gone, setGone] = useState(false);
+  // The whole process in one line: open while it works, folded once the
+  // answer is in; once you click, your choice holds for this run.
+  const [chosen, setChosen] = useState<boolean | undefined>(() => processOpen.get(task.id));
+  const [showAll, setShowAll] = useState(false);
   const [traceStatus, setTraceStatus] = useState<string>();
   const last = useRef(rawEvents?.length ? rawEvents[rawEvents.length - 1].seq : 0);
   const finalLoaded = useRef(!running && rawEvents !== null);
@@ -645,53 +663,132 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // Not started on this one yet: what is here goes on with the one before
   // (shown after your message, in time), and says so.
   const carryOn = !!borrow?.label && !ownEvents?.length && extra.length > 0;
+
+  // The whole process folds into one line: "过程 · 6 步 · 1 分钟". Open
+  // while it works (the newest few things, the rest behind one line),
+  // folded once the answer is in. A click either way holds for this run.
+  const foldable = !onlyReports && steps > 0;
+  const open = !foldable || (chosen ?? running);
+  const toggleOpen = () => {
+    const next = !open;
+    processOpen.set(task.id, next);
+    setChosen(next);
+  };
+  // Steps and thoughts, once each; what it is still writing is not a step.
+  const stepCount = rows.filter((r) => r.kind !== "text").length;
+  // The time: what it reported, or how long it has been at it.
+  const began = new Date(turnSince).getTime() || 0;
+  let ended: number;
+  if (usage?.duration_ms) ended = began + usage.duration_ms;
+  else if (!running && events?.length) ended = msOf(events[events.length - 1].at) || new Date(task.updated_at).getTime();
+  else ended = running ? Date.now() : new Date(task.updated_at).getTime();
+  const took = tookLine(ended - began);
+  // While it runs, only the newest few things show; earlier ones fold into
+  // one line above them. A question it waits on is never behind that line.
+  const KEEP = 3;
+  let keep: Set<number> | null = null;
+  if (foldable && open && running && !showAll && segments.length > KEEP) {
+    keep = new Set<number>();
+    for (let i = Math.max(0, segments.length - KEEP); i < segments.length; i++) keep.add(i);
+    segments.forEach((s, i) => {
+      if (asking && s.kind === "ask" && task.asking === s.msg.id) keep!.add(i);
+    });
+  }
+  const hidden = keep ? segments.length - keep.size : 0;
+  // Waiting on you: the card stays out even if the rest is folded.
+  const waitAsk = asking
+    ? segments.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && task.asking === s.msg.id)
+    : [];
+
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
       {carryOn && <div className="trace-carry">{L(`接着做上一件：${borrow!.label}`, `Still on the one before: ${borrow!.label}`)}</div>}
+      {/* The plan is not part of the process: it stays at the top, always
+          out, whether the steps below it are folded or not. */}
       {plan && <PlanCard items={plan.items} live={moving} />}
-      {segments.map((seg, i) => seg.kind === "say" ? (
-        <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>
-          {/* What it says while you watch grows in; what was there, is. */}
-          {/* (something newer after it: all of it at once) */}
-          {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
-        </div>
-      ) : seg.kind === "steer" ? (
-        <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
-      ) : seg.kind === "ask" ? (
+      {foldable && (
+        <button type="button" className="trace-head trace-fold" onClick={toggleOpen} aria-expanded={open}>
+          {/* Folded, its own line shows it is still working; open, the steps do. */}
+          {movingHere && !asking && !open ? <Mushroom /> : <ChevronRight className="trace-chev" />}
+          <span className="trace-title">{stepCount > 0
+            ? L(`过程 · ${stepCount} 步 · ${took}`, `Steps · ${stepCount} · ${took}`)
+            : L(`过程 · ${took}`, `Steps · ${took}`)}</span>
+        </button>
+      )}
+      {!open && waitAsk.map((seg) => (
         <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
-          open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
-      ) : seg.kind === "reports" ? (
-        // What it reported (myco message progress): a small timeline of its
-        // own, quieter than the answer, each with when.
-        <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
-          {seg.items.map((r, j) => (
-            <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
-              <span className="trace-report-dot" aria-hidden />
-              <div className="trace-report-text">
-                <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
-                {/* What it showed along the way: a screenshot, a draft
-                    (less those its text already shows). */}
-                {(() => {
-                  const rest = filesBelow(r.text, filesFor(hubId, r.files));
-                  return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
-                })()}
-                <PageCards body={r.text} />
-              </div>
-              {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
+          open canAnswer={!!canAnswer} onAnswer={onAnswer} />
       ))}
-      {movingHere && !asking && endsWithSay && (
-        <div className="trace-head trace-wait">
-          <Mushroom />
-          <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
-          <Elapsed since={turnSince} className="trace-usage" />
-        </div>
+      {open && (
+        <>
+          {hidden > 0 && (
+            <button type="button" className="trace-head trace-more" onClick={() => setShowAll(true)} aria-expanded={false}>
+              <ChevronRight className="trace-chev" />
+              <span className="trace-title">{L(`更早的 ${hidden} 段`, `${hidden} earlier`)}</span>
+            </button>
+          )}
+          {segments.map((seg, i) => (!keep || keep.has(i)) && (seg.kind === "say" ? (
+            <Said key={seg.key} text={seg.text} delta={!!seg.delta} live={!!seg.delta && movingHere}>
+              {/* What it says while you watch grows in; what was there, is. */}
+              {/* (something newer after it: all of it at once) */}
+              {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+            </Said>
+          ) : seg.kind === "steer" ? (
+            <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
+          ) : seg.kind === "ask" ? (
+            <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
+              open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
+          ) : seg.kind === "reports" ? (
+            // What it reported (myco message progress): a small timeline of its
+            // own, quieter than the answer, each with when.
+            <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
+              {seg.items.map((r, j) => (
+                <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
+                  <span className="trace-report-dot" aria-hidden />
+                  <div className="trace-report-text">
+                    <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
+                    {/* What it showed along the way: a screenshot, a draft
+                        (less those its text already shows). */}
+                    {(() => {
+                      const rest = filesBelow(r.text, filesFor(hubId, r.files));
+                      return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
+                    })()}
+                    <PageCards body={r.text} />
+                  </div>
+                  {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
+          )))}
+          {movingHere && !asking && endsWithSay && (
+            <div className="trace-head trace-wait">
+              <Mushroom />
+              <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
+              <Elapsed since={turnSince} className="trace-usage" />
+            </div>
+          )}
+        </>
       )}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
+    </div>
+  );
+}
+
+/** What it said between its steps: markdown, and past six lines only the
+ *  first six until clicked (thinking reads the same way). */
+function Said({ text, delta, live, children }: {
+  text: string; delta: boolean; live: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const long = text.trim().split("\n").length > 6;
+  const clamp = long && !live && !open;
+  return (
+    <div className={cn("trace-say", delta && "trace-delta", clamp && "is-long is-clamped")}
+      title={clamp ? L("点开看全文", "Show all of it") : undefined}
+      onClick={clamp ? () => setOpen(true) : undefined}>
+      {children}
     </div>
   );
 }

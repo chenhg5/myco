@@ -2406,6 +2406,33 @@ body.is-resizing {
 .trace-group.is-open .trace-chev {
   transform: rotate(90deg);
 }
+/* A long thing it said between steps: the first six lines until clicked,
+   as thinking reads (the markdown's own block layout stays). */
+.trace-say.is-long {
+  cursor: pointer;
+}
+.trace-say.is-clamped {
+  max-height: 10em;
+  overflow: hidden;
+}
+/* The whole process in one line (steps and time); a click opens it. The
+   newest few things while it works, all of them once opened. */
+.trace .trace-fold,
+.trace .trace-more {
+  cursor: pointer;
+}
+.trace-fold {
+  color: var(--muted);
+}
+.trace-fold:hover .trace-title {
+  color: var(--fg-2);
+}
+.trace-fold[aria-expanded="true"] .trace-chev {
+  transform: rotate(90deg);
+}
+.trace-more {
+  color: var(--faint, var(--muted));
+}
 .trace-foot {
   padding: 2px 4px;
   font-size: 11px;
