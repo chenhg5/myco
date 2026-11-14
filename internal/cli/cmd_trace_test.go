@@ -125,7 +125,8 @@ func invocationWithEnv(env map[string]string) *cmdkit.Invocation {
 
 func TestStepsOfPicksTheCLIByFile(t *testing.T) {
 	codexLine := []byte(`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}}`)
-	if evs := stepsOf("/x/.codex/sessions/2026/11/14/rollout-2026-11-14T08-00-00-t.jsonl")(codexLine); len(evs) != 1 || evs[0].Text != "hi" {
+	if evs := stepsOf("/x/.codex/sessions/2026/11/14/rollout-2026-11-14T08-00-00-t.jsonl")(codexLine); len(evs) != 1 || evs[0].Text != "hi" || evs[0].Kind != "thinking" {
+		// What the session says is process: its answer is myco message reply.
 		t.Fatalf("codex: %+v", evs)
 	}
 	if evs := stepsOf("/x/.claude/projects/p/s.jsonl")([]byte(sessionThinking)); len(evs) != 1 || evs[0].Kind != "thinking" {
