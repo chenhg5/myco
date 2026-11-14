@@ -94,7 +94,8 @@ sudo bash install-hub.sh --domain auto
 - 如果 80 端口已经被别的程序占用，脚本会自动改成只用 443 申请证书，不会动那个程序。
 - 成功时会输出 `==> hub is healthy` 和 `==> HTTPS is up`，并打印 Hub URL。
 - 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。
-- 一台 VPS 可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
+- **一个 Hub 里开多个工作区**（v0.19.9 起，推荐）：`sudo myco workspace create --name team-b`。新工作区和原来的完全隔离（自己的成员、agent、项目、消息、文件，数据在 `/var/lib/myco/workspaces/team-b/`），但用同一个地址、端口、证书和服务，地址是 `https://<你的域名>/w/team-b`。命令会打印新工作区主人的一次性 App 链接；电脑和 agent 用在那个工作区里生成的入网链接加入，和加入任何 Hub 一样。原来的 Hub 就是「默认工作区」，地址、数据、链接都不变。`myco workspace list` 列出，`myco workspace remove --name team-b` 移除（数据不删，挪到 `workspaces/.removed/`）。只有服务器的主人（hub.env 里的管理令牌，或默认工作区的主人）能建和删。
+- 一台 VPS 也可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
 - 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。
 - **升级**：在这台服务器上执行 `sudo myco upgrade`（v0.16.6 起），或者重新执行同一条安装命令。两种方式都会下载最新版本，令牌和数据库都会保留，数据库结构会自动迁移。详见[第 8 节](#8-升级与版本)。
 
@@ -132,7 +133,8 @@ myco hub up --tunnel none                                    # 不穿透：只�
 
 - 执行时会先在前台检查隧道（没装、没登录、Funnel 没开都会直接告诉你怎么处理），然后安装后台服务（macOS 用 launchd，Linux 用 systemd --user），等 Hub 通过隧道能访问后，打印入网链接。可以重复执行。
 - 数据和管理员令牌在 `~/.myco/hub/`（`hub.env` 权限 600）。在这台机器上执行 `myco link create` 等管理命令不需要任何参数。
-- 同一台电脑上可用 `myco hub up --name work --tunnel none` 再开一个 Hub。它的数据在 `~/.myco/hubs/work/`，服务名为 `ai.myco.hub.work`（macOS）或 `myco-hub-work.service`（Linux）；默认从 7778 起选未占用端口，Cloudflare 命名隧道默认叫 `myco-work`。`myco hub list` 查看所有本机 Hub，`myco hub down --name work` 只停止它；`MYCO_HUB_NAME=work myco link create` 管理它。省略 `--name` 时，原目录、服务和 7777 端口不变。
+- 同一台电脑上要隔离的第二个工作区，可以直接在这个 Hub 里建：`myco workspace create --name work`（地址是 `<Hub 地址>/w/work`，不用新端口、新服务）。
+- 同一台电脑上也可用 `myco hub up --name work --tunnel none` 再开一个 Hub。它的数据在 `~/.myco/hubs/work/`，服务名为 `ai.myco.hub.work`（macOS）或 `myco-hub-work.service`（Linux）；默认从 7778 起选未占用端口，Cloudflare 命名隧道默认叫 `myco-work`。`myco hub list` 查看所有本机 Hub，`myco hub down --name work` 只停止它；`MYCO_HUB_NAME=work myco link create` 管理它。省略 `--name` 时，原目录、服务和 7777 端口不变。
 - 快速隧道的地址重启就变：入网链接、已登记机器保存的 Hub 地址都会失效，只适合试用。长期使用请用命名隧道或 Tailscale。
 - **这台电脑要一直开着、不能睡眠**，否则整个网络就断了。Mac 上在"系统设置 → 电池/能源"里关闭自动睡眠。
 - claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。

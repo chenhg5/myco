@@ -123,6 +123,18 @@ grep -q "$ADDR" <<<"$SCRIPT" || fail "join script does not point at the hub"
 grep -q "$ADMIN" <<<"$SCRIPT" && fail "join script leaks the admin token"
 ok
 
+step "workspace: create, use, remove"
+OUT="$(MYCO_ADMIN_TOKEN="$ADMIN" myco workspace create --name smoke-b --format json)" || fail "workspace create"
+grep -q "\"url\": *\"$MYCO_HUB/w/smoke-b\"" <<<"$OUT" || fail "workspace URL: $OUT"
+grep -q "/w/smoke-b/c/" <<<"$OUT" || fail "owner app link should name the workspace: $OUT"
+curl -fsS "$MYCO_HUB/w/smoke-b/v1/health" | grep -q '"workspace":"smoke-b"' || fail "workspace health"
+MYCO_ADMIN_TOKEN="$ADMIN" MYCO_HUB="$MYCO_HUB/w/smoke-b" myco agent register --name b-bot --config "$T/b-bot.yaml" >/dev/null || fail "register in workspace"
+MYCO_ADMIN_TOKEN="$ADMIN" myco agent list --format json | grep -q '"b-bot"' && fail "workspace agent leaked into the default workspace"
+MYCO_ADMIN_TOKEN="$ADMIN" myco workspace list --format json | grep -q '"smoke-b"' || fail "workspace list"
+MYCO_ADMIN_TOKEN="$ADMIN" myco workspace remove --name smoke-b >/dev/null || fail "workspace remove"
+curl -fsS "$MYCO_HUB/w/smoke-b/v1/health" >/dev/null 2>&1 && fail "removed workspace still answers"
+ok
+
 step "dashboard (myco ui)"
 UI_PORT=$(( 20000 + RANDOM % 20000 ))
 myco ui --port "$UI_PORT" >"$T/ui.log" 2>&1 &

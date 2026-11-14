@@ -1201,3 +1201,25 @@ func (c *Client) SetRunSettings(ctx context.Context, name string, rs api.RunSett
 	var out api.Agent
 	return &out, c.do(ctx, http.MethodPut, path, nil, rs, &out)
 }
+
+// Workspaces lists the other workspaces this hub serves (its server's
+// owner only; the client's URL must be the hub itself, not a workspace).
+func (c *Client) Workspaces(ctx context.Context) ([]api.Workspace, error) {
+	var out api.WorkspaceList
+	if err := c.do(ctx, http.MethodGet, "/v1/server/workspaces", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Workspaces, nil
+}
+
+// CreateWorkspace adds a workspace to this hub, served at <hub>/w/<name>.
+func (c *Client) CreateWorkspace(ctx context.Context, name string, dryRun bool) (*api.Workspace, error) {
+	var out api.Workspace
+	return &out, c.do(ctx, http.MethodPost, "/v1/server/workspaces", nil, api.CreateWorkspaceRequest{Name: name, DryRun: dryRun}, &out)
+}
+
+// RemoveWorkspace takes a workspace off this hub (its data is kept aside on
+// the server).
+func (c *Client) RemoveWorkspace(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/server/workspaces/"+esc(name), nil, nil, nil)
+}

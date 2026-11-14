@@ -53,11 +53,16 @@ type Options struct {
 	// UpdateCheck, if set, looks for newer releases in the background
 	// (Run starts it); the result is reported at /v1/health.
 	UpdateCheck *release.Checker
+	// PathPrefix is where this hub is served under another's address
+	// ("/w/<name>": one workspace of several); "" for the hub itself.
+	PathPrefix string
 }
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
-	Handler    http.Handler
+	Handler http.Handler
+	// Server is the HTTP adapter (Handler), for the workspace router.
+	Server     *httpapi.Server
 	Dispatcher *app.Dispatcher
 	Files      *app.FileService
 	Traces     *app.TraceService
@@ -129,6 +134,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetResume(app.NewResumeService(sqlite.NewResumeRepo(db), agentsRepo, security.Tokens{}, clock))
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
+	srv.SetPathPrefix(o.PathPrefix)
 	var latest func() string
 	if o.UpdateCheck != nil {
 		latest = o.UpdateCheck.Latest
@@ -179,7 +185,7 @@ func Build(o Options) (*Hub, error) {
 	})
 	traces := app.NewTraceService(sqlite.NewTraceRepo(db), msgRepo, agentsRepo, clock, o.Log)
 	srv.SetTraces(traces)
-	return &Hub{Handler: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
+	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -198,7 +204,18 @@ func Run(ctx context.Context, o Options) error {
 	}
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
-	h := hub.Handler
+	// The other workspaces this hub serves (under /w/<name>).
+	ws := newWorkspaces(ctx, o, hub)
+	if err := ws.load(); err != nil {
+		return err
+	}
+	defer ws.close()
+	if n := len(ws.hubs); n > 0 {
+		o.Log.Info("serving workspaces", "count", n, "dir", ws.dir)
+	}
+	setPublicURL := func(u string) { hub.SetPublicURL(u); ws.setPublicURL(u) }
+	setLAN := func(on bool) { hub.SetLAN(on); ws.setLAN(on) }
+	var h http.Handler = ws
 	ln, err := net.Listen("tcp", o.Addr)
 	if err != nil {
 		return err
@@ -208,7 +225,7 @@ func Run(ctx context.Context, o Options) error {
 	if ta, ok := ln.Addr().(*net.TCPAddr); ok && ta.IP.IsUnspecified() && o.Tunnel == nil {
 		// Reachable on the LAN: links made over localhost get the LAN address
 		// (unless --public-url names another).
-		hub.SetLAN(true)
+		setLAN(true)
 	}
 	if o.Tunnel != nil {
 		local := "http://" + ln.Addr().String()
@@ -218,11 +235,11 @@ func Run(ctx context.Context, o Options) error {
 			return err
 		}
 		if public != "" {
-			hub.SetPublicURL(public)
+			setPublicURL(public)
 			o.Log.Info("published through tunnel", "tunnel", o.Tunnel.Name(), "url", public)
 		}
 		go func() {
-			if err := o.Tunnel.Run(ctx, local, hub.SetPublicURL); err != nil {
+			if err := o.Tunnel.Run(ctx, local, setPublicURL); err != nil {
 				o.Log.Error("tunnel stopped", "tunnel", o.Tunnel.Name(), "err", err)
 			}
 		}()

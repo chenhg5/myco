@@ -321,15 +321,25 @@ func (e *env) cardClient() (*client.Client, error) {
 }
 
 func (e *env) adminClient() (*client.Client, error) {
-	hub, err := e.hubURL()
+	hub, tok, err := e.adminCredentials()
 	if err != nil {
 		return nil, err
+	}
+	return client.New(hub, tok)
+}
+
+// adminCredentials are the hub URL and the admin (or member) token that
+// adminClient uses.
+func (e *env) adminCredentials() (string, string, error) {
+	hub, err := e.hubURL()
+	if err != nil {
+		return "", "", err
 	}
 	tok := e.in.Getenv(config.EnvAdminToken)
 	if f := e.in.String("admin-token-file"); f != "" {
 		b, err := os.ReadFile(f)
 		if err != nil {
-			return nil, errorf("invalid_argument", ExitUsage, "", "cannot read --admin-token-file: %v", err)
+			return "", "", errorf("invalid_argument", ExitUsage, "", "cannot read --admin-token-file: %v", err)
 		}
 		tok = strings.TrimSpace(string(b))
 	}
@@ -340,11 +350,11 @@ func (e *env) adminClient() (*client.Client, error) {
 		tok = e.memberToken(hub) // a person who accepted an invite here
 	}
 	if tok == "" {
-		return nil, errorf("not_configured", ExitUsage,
+		return "", "", errorf("not_configured", ExitUsage,
 			"set MYCO_ADMIN_TOKEN or pass --admin-token-file <path> (on the hub's own server: sudo /usr/local/bin/myco ...); a member joins with their invite link: curl -fsSL <link> | bash",
 			"admin or member credentials required for this command")
 	}
-	return client.New(hub, tok)
+	return hub, tok, nil
 }
 
 // memberToken is the person's own credential for hub stored by `myco member
