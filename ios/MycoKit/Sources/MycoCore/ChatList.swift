@@ -22,6 +22,8 @@ public struct ChatRow: Identifiable, Hashable, Sendable {
     public var party: String = ""
     /// Something came from the other side since this conversation was last looked at.
     public var unread = false
+    /// The newest message from the other side, of any kind.
+    public var incoming: Message?
 
     public var id: String {
         switch target {
@@ -71,7 +73,7 @@ extension WorkspaceSession {
                 target: .project(project.name), title: project.title.isEmpty ? project.name : project.title,
                 subtitle: subtitle, updatedAt: newest?.updatedAt ?? project.updatedAt,
                 state: working > 0 ? .working(since: now) : openState(in: mine, now: now),
-                face: agent(lead), away: false, party: lead, unread: isUnread(lead, in: mine)))
+                face: agent(lead), away: false, party: lead, unread: isUnread(lead, in: mine), incoming: incoming(in: mine)))
         }
         for (name, items) in byAgent {
             guard let status = status(of: name), Naming.kind(of: status.agent) == .agent else { continue }
@@ -82,9 +84,14 @@ extension WorkspaceSession {
             rows.append(ChatRow(
                 target: .agent(name), title: displayName(of: name), subtitle: subtitle,
                 updatedAt: newest?.updatedAt, state: open, face: status.agent, away: status.state == "offline",
-                party: name, unread: isUnread(name, in: items)))
+                party: name, unread: isUnread(name, in: items), incoming: incoming(in: items)))
         }
         return rows.sorted { ($0.updatedAt ?? .distantPast, $0.id) > ($1.updatedAt ?? .distantPast, $1.id) }
+    }
+
+    /// The newest message from the other side in these threads.
+    private func incoming(in items: [RecentItem]) -> Message? {
+        items.map(\.last).filter { $0.from != me }.max { $0.createdAt < $1.createdAt }
     }
 
     /// Unread: the newest thing in the conversation came from the other

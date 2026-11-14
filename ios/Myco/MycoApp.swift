@@ -1,3 +1,4 @@
+import BackgroundTasks
 import SwiftUI
 import UIKit
 import MycoAPI
@@ -15,8 +16,9 @@ import MycoStore
 /// `-myco-start welcome` the welcome page, `-myco-join <link>`
 /// joins with a link at launch, `-myco-attach <agent>` starts the demo
 /// with files picked for that agent, `-myco-dictation scripted|denied`
-/// replaces the microphone with a script, and `-myco-latency <ms>` makes
-/// the demo answer as slowly as a bad connection.
+/// replaces the microphone with a script, `-myco-latency <ms>` makes the
+/// demo answer as slowly as a bad connection, and `-myco-notifier
+/// recorded` keeps notifications from reaching the system.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -47,7 +49,11 @@ struct MycoApp: App {
                 // What its messages carried goes with it.
                 FileShelf.forget(id)
             },
-            speech: Self.speech)
+            speech: Self.speech,
+            // `-myco-notifier recorded`: nothing is shown and the system
+            // is not asked, to see the settings in a test.
+            notifier: { UserDefaults.standard.string(forKey: "myco-notifier") == "recorded" ? RecordingNotifier() : SystemNotifier() },
+            leftFront: { Self.askForBackgroundRefresh() })
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
@@ -90,6 +96,24 @@ struct MycoApp: App {
                 model: model, initialRoute: UserDefaults.standard.string(forKey: "myco-route"),
                 restoring: start != "welcome", joinLink: UserDefaults.standard.string(forKey: "myco-join"))
         }
+        // Now and then the system gives the app a moment while it is not in
+        // front: it looks at every workspace and announces what is new.
+        .backgroundTask(.appRefresh(Self.refreshTask)) { [model] in
+            await Self.askForBackgroundRefresh()
+            await model.refreshInBackground()
+        }
+    }
+
+    /// The background refresh's name (also in Info.plist).
+    static let refreshTask = "dev.myco.ios.refresh"
+
+    /// Asks the system for a moment in the background, a quarter of an
+    /// hour from now at the earliest. When it comes is the system's choice.
+    @MainActor
+    static func askForBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: refreshTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
     }
 
     /// This device's name in the member's device list: "iphone-17-pro".

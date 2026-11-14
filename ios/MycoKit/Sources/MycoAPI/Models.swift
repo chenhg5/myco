@@ -139,6 +139,8 @@ public struct Message: Codable, Sendable, Hashable, Identifiable {
     /// On a task: the id of its question to its sender that still waits
     /// for an answer (the agent set the task aside to ask).
     public var asking: String?
+    /// On an update: it asks the task's sender to decide.
+    public var ask: Bool?
     @LossyList public var attachments: [Attachment]
 
     public init(

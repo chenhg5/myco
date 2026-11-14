@@ -11,12 +11,15 @@ public struct PersonRow: View {
     let away: Bool
     /// Something new is in it: a blue dot, and its words stand out more.
     let unread: Bool
+    /// Nothing from it is announced: a small crossed bell by its name.
+    let muted: Bool
 
     public init(
         face: AvatarView.Face, badge: AvatarView.Badge? = nil, title: String, subtitle: String,
-        trailing: String? = nil, tone: StatusTone? = nil, away: Bool = false, unread: Bool = false
+        trailing: String? = nil, tone: StatusTone? = nil, away: Bool = false, unread: Bool = false, muted: Bool = false
     ) {
         self.unread = unread
+        self.muted = muted
         self.face = face
         self.badge = badge
         self.title = title
@@ -30,7 +33,13 @@ public struct PersonRow: View {
         HStack(spacing: 13) {
             AvatarView(face, size: 50, badge: badge, away: away)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(title).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                    if muted {
+                        Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(MycoColor.faint)
+                            .accessibilityIdentifier("row.muted")
+                    }
+                }
                 if !subtitle.isEmpty {
                     Text(subtitle).font(.subheadline.weight(unread ? .medium : .regular))
                         .foregroundStyle(unread ? MycoColor.fg : MycoColor.muted).lineLimit(1)

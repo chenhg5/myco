@@ -336,9 +336,62 @@ struct SettingsScreen: View {
     @AppStorage("myco-appearance") private var appearance = "system"
     @AppStorage(AppLanguage.defaultsKey) private var language = "system"
     @AppStorage("myco-return-sends") private var returnSends = false
+    @Environment(AppModel.self) private var app
+
+    /// A time of day (minutes from midnight) as the date a picker edits.
+    private func time(_ minutes: Int) -> Date {
+        Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
+    }
+
+    private func minutes(_ date: Date) -> Int {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
 
     var body: some View {
         Form {
+            Section {
+                Toggle(L("新消息通知", "Notify me of new messages"), isOn: Binding(
+                    get: { app.notifications.enabled },
+                    set: { on in Task { await app.setNotificationsEnabled(on) } }))
+                    .tint(MycoColor.green)
+                    .accessibilityIdentifier("settings.notifications")
+                if app.notificationsRefused {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(L("系统没有允许 myco 发通知。", "The system does not let myco send notifications."))
+                            .font(.footnote).foregroundStyle(MycoColor.amber)
+                        Spacer(minLength: 8)
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            Button(L("去设置", "Settings")) { UIApplication.shared.open(url) }
+                                .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+                        }
+                    }
+                }
+                if app.notifications.enabled {
+                    Toggle(L("进展也通知", "Interim updates too"), isOn: Binding(
+                        get: { app.notifications.progressToo },
+                        set: { on in app.setNotifications { $0.progressToo = on } }))
+                        .tint(MycoColor.green)
+                    Toggle(L("免打扰时段", "Quiet hours"), isOn: Binding(
+                        get: { app.notifications.quietHours },
+                        set: { on in app.setNotifications { $0.quietHours = on } }))
+                        .tint(MycoColor.green)
+                        .accessibilityIdentifier("settings.quietHours")
+                    if app.notifications.quietHours {
+                        DatePicker(L("从", "From"), selection: Binding(
+                            get: { time(app.notifications.quietFrom) },
+                            set: { date in app.setNotifications { $0.quietFrom = minutes(date) } }), displayedComponents: .hourAndMinute)
+                        DatePicker(L("到", "To"), selection: Binding(
+                            get: { time(app.notifications.quietTo) },
+                            set: { date in app.setNotifications { $0.quietTo = minutes(date) } }), displayedComponents: .hourAndMinute)
+                    }
+                }
+            } header: {
+                Text(L("通知", "Notifications"))
+            } footer: {
+                Text(L("回复、没做成、agent 问你问题时通知；正在看的那个对话不通知。App 开着时马上通知；不在前台时由系统不定时唤醒它检查，可能迟到。单个对话可以在聊天列表里长按设为免打扰。",
+                       "For answers, failures and questions from an agent; never for the conversation on screen. At once while the app is open; when it is not in front the system wakes it now and then to check, so it can be late. A long press on a chat mutes that one."))
+            }
             Section(L("外观", "Appearance")) {
                 Picker(L("主题", "Theme"), selection: $appearance) {
                     Text(L("跟随系统", "System")).tag("system")

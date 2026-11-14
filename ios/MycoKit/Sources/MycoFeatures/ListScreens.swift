@@ -7,6 +7,7 @@ import MycoUI
 struct ChatsScreen: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
+    @Environment(AppModel.self) private var app
     @State private var query = ""
 
     var body: some View {
@@ -22,7 +23,8 @@ struct ChatsScreen: View {
                     face: row.face.map(AvatarView.Face.of) ?? .computer,
                     title: row.title, subtitle: row.subtitle,
                     trailing: row.updatedAt.map { RelativeTime.short($0) },
-                    tone: StatusTone.of(row.state), away: row.away, unread: row.unread)
+                    tone: StatusTone.of(row.state), away: row.away, unread: row.unread,
+                    muted: app.isMuted(row.party, in: session.id))
             }
             .buttonStyle(RowButtonStyle())
             .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
@@ -31,6 +33,12 @@ struct ChatsScreen: View {
             .contextMenu {
                 if case .agent(let name) = row.target {
                     Button(L("看资料", "About"), systemImage: "person.crop.circle") { router.sheet = .memberCard(name) }
+                }
+                // Nothing from this one is announced; its dot still shows.
+                if app.isMuted(row.party, in: session.id) {
+                    Button(L("恢复通知", "Unmute"), systemImage: "bell") { app.setMuted(false, row.party, in: session.id) }
+                } else {
+                    Button(L("免打扰", "Mute"), systemImage: "bell.slash") { app.setMuted(true, row.party, in: session.id) }
                 }
                 Button(L("复制名字", "Copy name"), systemImage: "doc.on.doc") { UIPasteboard.general.string = row.title }
             }

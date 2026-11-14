@@ -142,6 +142,34 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testNotificationsCanBeSetAndAChatMuted() {
+        // Nothing reaches the system here: the test only sets what the person chooses.
+        let app = launch(["-myco-notifier", "recorded"])
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        // A long press on a chat mutes it: a crossed bell by its name.
+        let chat = app.buttons["chat.agent:studio-claude-c41f"]
+        chat.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["Mute"].waitForExistence(timeout: 5), "a chat can be muted")
+        app.buttons["Mute"].tap()
+        XCTAssertTrue(app.images["row.muted"].waitForExistence(timeout: 5), "and shows that it is")
+        shot("notifications-muted")
+
+        // Settings: on, with quiet hours.
+        app.buttons["workspace.button"].tap()
+        app.buttons["Settings"].tap()
+        let notify = app.switches["settings.notifications"]
+        XCTAssertTrue(notify.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.switches["settings.quietHours"].exists, "quiet hours only matter once notifications are on")
+        notify.switches.firstMatch.tap()
+        let quiet = app.switches["settings.quietHours"]
+        XCTAssertTrue(quiet.waitForExistence(timeout: 5), "turned on, the rest shows")
+        quiet.switches.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["From"].waitForExistence(timeout: 5), "quiet hours have a start and an end")
+        XCTAssertTrue(app.staticTexts["To"].exists)
+        shot("notifications-settings")
+    }
+
+    @MainActor
     func testSeveralWorkspacesSideBySide() {
         // Two workspaces are joined; a few seconds in, something new comes in the second.
         let app = launch(["-myco-start", "two"])

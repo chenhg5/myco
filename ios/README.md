@@ -2,7 +2,7 @@
 
 The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, iPhone in portrait. No third-party dependencies.
 
-Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Several workspaces can be joined at once. Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push.
+Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Several workspaces can be joined at once. New messages are announced by local notifications (late while the app is not open). Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push through Apple's service.
 
 ## Layout
 
@@ -49,6 +49,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-dictation` | `scripted`: the microphone hears a script (nobody speaks to a simulator); `denied`: it is not allowed to listen |
 | `-myco-latency` | milliseconds every answer of the demo takes: a slow connection, to see what loading looks like |
+| `-myco-notifier` | `recorded`: notifications are kept in memory and the system is never asked for permission |
 | `-myco-appearance` | `system`, `light`, `dark` |
 | `-myco-lang` | `system`, `zh`, `en` |
 
@@ -84,6 +85,12 @@ The rules are the desktop's (`web/src/app/ConversationDetail.tsx`, `TraceView.ts
 ## Several workspaces
 
 A link adds a workspace; the ones joined before stay (`Workspaces`, behind `WorkspaceBook`). Each keeps its own token in the keychain and its own cache; joining one already joined signs this device in again in the same row. The app opens on the one that was on screen last. The workspace panel (the badge at the top left) lists them: a tap switches, a swipe or a long press renames or leaves one, and leaving asks first. The ones off screen are looked at once a minute and when the panel opens: something new there is a blue dot on the badge and on its row. A workspace is called what its address says (the name after `/w/` on a hub that serves several, else its host; an address reads "My workspace"), numbered when two would read the same, until the person renames it; the name is only for this device.
+
+## Notifications
+
+Local ones, for now: the phone has to learn of a message itself, so they are prompt while the app is open and late while it is not. A message from the other side of a conversation is announced once (`NotificationDesk`): an answer, a failure, a question from an agent, something it says on its own; interim updates only on request; never the conversation on screen while the app is in front, never a chat the person muted (a long press on it), never during quiet hours. A tap leads to the conversation, switching workspace if it must. The icon's number is the count of conversations with something unread. While the app is not in front, the system gives it a moment now and then (`BGAppRefreshTask`, `MycoApp.refreshTask`) to look at every workspace; when is the system's choice, minutes to hours.
+
+Push that arrives the moment a task is done needs Apple's push service: the hub has to know the phone's push token and send through APNs. That is not built.
 
 ## Loading
 

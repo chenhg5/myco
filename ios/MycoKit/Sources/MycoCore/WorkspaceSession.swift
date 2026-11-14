@@ -35,6 +35,9 @@ public final class WorkspaceSession {
     public private(set) var hidden: Set<String> = []
     private var hiddenKeptHere = false
 
+    /// Told each time the workspace answered a refresh (to announce what is new).
+    @ObservationIgnored public var refreshed: (@MainActor (WorkspaceSession) -> Void)?
+
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
 
@@ -154,6 +157,7 @@ public final class WorkspaceSession {
             loadedAt = Date()
             problem = nil
             await loadHidden()
+            refreshed?(self)
             if readBaseline == nil {
                 // The first look at this workspace: all of it counts as seen.
                 readBaseline = Date()

@@ -36,6 +36,11 @@ public final class AppModel {
         /// Something to hear speech with: the system's recognition, or a
         /// script in tests.
         public var speech: @MainActor @Sendable () -> any SpeechListener
+        /// What shows notifications: the system, or a list in tests.
+        public var notifier: @MainActor @Sendable () -> any Notifier
+        /// The app left the front: the place to ask the system for a
+        /// moment in the background later.
+        public var leftFront: @MainActor @Sendable () -> Void
 
         public init(
             demo: @escaping @MainActor @Sendable () -> WorkspaceSession,
@@ -44,13 +49,17 @@ public final class AppModel {
                 WorkspaceSession(id: record.id, name: Workspaces.displayName(of: record), hub: hub)
             },
             forget: @escaping @MainActor @Sendable (String) async -> Void = { _ in },
-            speech: @escaping @MainActor @Sendable () -> any SpeechListener = { AppleSpeechListener() }
+            speech: @escaping @MainActor @Sendable () -> any SpeechListener = { AppleSpeechListener() },
+            notifier: @escaping @MainActor @Sendable () -> any Notifier = { SystemNotifier() },
+            leftFront: @escaping @MainActor @Sendable () -> Void = {}
         ) {
             self.demo = demo
             self.book = book
             self.session = session
             self.forget = forget
             self.speech = speech
+            self.notifier = notifier
+            self.leftFront = leftFront
         }
     }
 
@@ -78,6 +87,129 @@ public final class AppModel {
         self.session = session
         self.doors = doors
         started = session != nil
+        let notifier = doors.notifier()
+        self.notifier = notifier
+        let settings = Self.savedNotifications()
+        notifications = settings
+        desk = NotificationDesk(notifier: notifier, settings: settings)
+        (notifier as? SystemNotifier)?.onOpen = { [weak self] workspace, page in
+            Task { await self?.open(workspace: workspace, page: page) }
+        }
+        if let session { watch(session) }
+    }
+
+    // MARK: Notifications
+
+    private let notifier: any Notifier
+    private let desk: NotificationDesk
+    /// What the person chose about being told of new messages.
+    public private(set) var notifications: NotificationSettings
+    /// The person turned notifications on here, but the system does not
+    /// allow them: Settings is where that is changed.
+    public private(set) var notificationsRefused = false
+    /// The app is in front.
+    public var active = true {
+        didSet { if !active, oldValue { doors.leftFront() } }
+    }
+    /// A notification tapped before the workspaces were read.
+    private var pendingOpen: (workspace: String, page: String)?
+
+    private static let notificationsKey = "myco-notifications"
+
+    private static func savedNotifications() -> NotificationSettings {
+        guard let data = UserDefaults.standard.data(forKey: notificationsKey),
+              let settings = try? JSONDecoder().decode(NotificationSettings.self, from: data)
+        else { return NotificationSettings() }
+        return settings
+    }
+
+    /// Changes what the person chose, and keeps it.
+    public func setNotifications(_ change: (inout NotificationSettings) -> Void) {
+        change(&notifications)
+        desk.settings = notifications
+        UserDefaults.standard.set(try? JSONEncoder().encode(notifications), forKey: Self.notificationsKey)
+    }
+
+    /// Turns notifications on (the system asks the person the first time)
+    /// or off.
+    public func setNotificationsEnabled(_ on: Bool) async {
+        guard on else {
+            notificationsRefused = false
+            setNotifications { $0.enabled = false }
+            return
+        }
+        let allowed = await notifier.authorized(asking: true)
+        notificationsRefused = !allowed
+        setNotifications { $0.enabled = allowed }
+    }
+
+    public func isMuted(_ party: String, in workspace: String) -> Bool {
+        notifications.muted.contains(NotificationSettings.muteKey(workspace: workspace, party: party))
+    }
+
+    public func setMuted(_ muted: Bool, _ party: String, in workspace: String) {
+        let key = NotificationSettings.muteKey(workspace: workspace, party: party)
+        setNotifications { if muted { $0.muted.insert(key) } else { $0.muted.remove(key) } }
+    }
+
+    /// Has a session tell when it refreshed, to announce what is new there.
+    private func watch(_ session: WorkspaceSession) {
+        session.refreshed = { [weak self] session in
+            Task { await self?.announce(session) }
+        }
+    }
+
+    /// The conversation on screen now: nothing in it needs announcing.
+    private var onScreen: (workspace: String, party: String)? {
+        guard let session, router.sheet == nil else { return nil }
+        let path: [Route]
+        switch router.tab {
+        case .chats: path = router.chatsPath
+        case .projects: path = router.projectsPath
+        case .members: path = router.membersPath
+        }
+        switch path.last {
+        case .agent(let name, _):
+            return (session.id, name)
+        case .project(let name):
+            return session.project(name).flatMap { session.coordinator(of: $0) }.map { (session.id, $0) }
+        default:
+            return nil
+        }
+    }
+
+    private func announce(_ session: WorkspaceSession) async {
+        desk.onScreen = onScreen
+        desk.severalWorkspaces = workspaces.count > 1
+        await desk.check(session, active: active)
+        var unread = sessions.values.reduce(0) { $0 + $1.unreadCount }
+        if let current = self.session, sessions[current.id] == nil { unread += current.unreadCount }
+        await notifier.setBadge(notifications.enabled ? unread : 0)
+    }
+
+    /// A notification was tapped: its workspace comes on screen, on the
+    /// conversation it was about.
+    public func open(workspace: String, page: String) async {
+        guard started else {
+            pendingOpen = (workspace, page)
+            return
+        }
+        if session?.id != workspace { await switchTo(workspace) }
+        guard session?.id == workspace else { return }
+        _ = router.open(spec: page)
+    }
+
+    /// What the system lets the app do now and then while it is not in
+    /// front: look at every workspace once, and announce what is new.
+    public func refreshInBackground() async {
+        if !started { await loadWorkspaces() }
+        var all = Array(sessions.values)
+        if let current = session, sessions[current.id] == nil { all.append(current) }
+        for one in all {
+            await one.restore()
+            await one.refresh()
+            await announce(one)
+        }
     }
 
     /// Opens the workspace that was on screen last, or leaves the welcome
@@ -86,6 +218,10 @@ public final class AppModel {
         guard !started else { return }
         if restoring { await loadWorkspaces() }
         started = true
+        if let pending = pendingOpen {
+            pendingOpen = nil
+            await open(workspace: pending.workspace, page: pending.page)
+        }
     }
 
     /// Reads the workspaces joined and shows the one chosen last.
@@ -94,7 +230,9 @@ public final class AppModel {
         workspaces = await book.all()
         for record in workspaces where sessions[record.id] == nil {
             guard let hub = await book.hub(of: record.id) else { continue }
-            sessions[record.id] = doors.session(record, hub)
+            let session = doors.session(record, hub)
+            sessions[record.id] = session
+            watch(session)
         }
         // One whose token is gone cannot be opened: it is not listed.
         workspaces = workspaces.filter { sessions[$0.id] != nil }
@@ -104,7 +242,9 @@ public final class AppModel {
 
     public func enterDemo() {
         router.reset()
-        session = doors.demo()
+        let demo = doors.demo()
+        watch(demo)
+        session = demo
     }
 
     /// Joins the workspace a link leads to and shows it. The ones joined
@@ -125,7 +265,9 @@ public final class AppModel {
             throw JoinFailure(message: L("加入了，但没能保存在这台设备上。", "Joined, but it could not be saved on this device."))
         }
         // Joined again: a new session, with the new sign-in.
-        sessions[record.id] = doors.session(record, hub)
+        let joined = doors.session(record, hub)
+        sessions[record.id] = joined
+        watch(joined)
         workspaces = await book.all().filter { sessions[$0.id] != nil }
         await show(record.id)
     }
@@ -162,6 +304,7 @@ public final class AppModel {
         }
         await doors.book?.leave(id)
         await doors.forget(id)
+        desk.forget(id)
         sessions[id] = nil
         workspaces.removeAll { $0.id == id }
         guard session?.id == id else { return }
@@ -312,6 +455,10 @@ struct RootView: View {
         // when something new came there.
         .task(id: scenePhase) {
             if scenePhase == .active { await app.watchOthers() }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            // In front, what is on screen is seen and is not announced.
+            app.active = phase == .active
         }
     }
 }

@@ -27,6 +27,10 @@ targets:
         # local network (myco hub up --tunnel none). Everything else is HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # Now and then the system lets the app look for new messages while
+        # it is not in front, to announce them (MycoApp.refreshTask).
+        BGTaskSchedulerPermittedIdentifiers: [dev.myco.ios.refresh]
+        UIBackgroundModes: [fetch]
         # Asked the first time the camera is opened from the input, and the
         # first time a picture is saved from a preview.
         NSCameraUsageDescription: "拍照片发给你的 agent。 Take photos to send to your agents."
