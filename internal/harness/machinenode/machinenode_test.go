@@ -334,3 +334,37 @@ func TestSpawnForksASession(t *testing.T) {
 		t.Fatalf("copy of a copy: %+v", res2)
 	}
 }
+
+func TestJoinAnotherWorkspaceOfTheSameServer(t *testing.T) {
+	r := newRig(t)
+	r.node.Hub = "https://hub.example.com"
+	var joined []string
+	r.node.Deps.JoinHub = func(_ context.Context, hub, tok string) (string, error) {
+		joined = append(joined, hub+" "+tok)
+		return "wsl-machine", nil
+	}
+	res := r.run(t, "lead", api.SpawnRequest{JoinLink: "https://hub.example.com/w/team-b/j/myco_enroll_x/proj"})
+	if res.Denied || res.Error != "" || res.Joined != "https://hub.example.com/w/team-b" || res.MachineNode != "wsl-machine" {
+		t.Fatalf("join: %+v", res)
+	}
+	if len(joined) != 1 || joined[0] != "https://hub.example.com/w/team-b myco_enroll_x" {
+		t.Fatalf("joined %v", joined)
+	}
+	// Another server, or someone not allowed to start sessions here: no.
+	for _, link := range []string{"https://evil.example.com/j/t", "http://hub.example.com/j/t", "https://hub.example.com:8443/j/t", "not a link"} {
+		if res := r.run(t, "lead", api.SpawnRequest{JoinLink: link}); !res.Denied {
+			t.Errorf("%s: should be refused, got %+v", link, res)
+		}
+	}
+	if res := r.run(t, "stranger", api.SpawnRequest{JoinLink: "https://hub.example.com/w/team-b/j/t"}); !res.Denied {
+		t.Errorf("a sender outside allow_from joined the machine elsewhere: %+v", res)
+	}
+	if len(joined) != 1 {
+		t.Fatalf("refused links must not join: %v", joined)
+	}
+	// An older myco on the machine: the request says so.
+	r.node.Deps.JoinHub = nil
+	if res := r.run(t, "lead", api.SpawnRequest{JoinLink: "https://hub.example.com/w/team-b/j/t"}); !res.Denied {
+		t.Errorf("without JoinHub: %+v", res)
+	}
+}

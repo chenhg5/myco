@@ -250,31 +250,20 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 			name = "cloud"
 		}
 	}
-	c, err := client.New(hub, tok)
-	if err != nil {
-		return err
-	}
 	dry := e.in.Bool("dry-run")
-	res, err := c.Join(e.in.Ctx, name, dry)
-	if err != nil {
-		return err
-	}
 	if dry {
+		c, err := client.New(hub, tok)
+		if err != nil {
+			return err
+		}
+		res, err := c.Join(e.in.Ctx, name, true)
+		if err != nil {
+			return err
+		}
 		return e.dryRun(map[string]any{"action": "machine_join", "hub": hub, "machine": res})
 	}
-	// Another hub's link adds a membership; this machine stays in the
-	// hubs it already joined. Local policy (spawn) is kept.
-	m := config.MachineHub{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
-		Harness: res.Harness, AllowFrom: res.AllowFrom}
-	mf, err := config.LoadMachine(e.defaultPath)
+	m, res, err := e.joinHubAs(e.in.Ctx, hub, tok, name)
 	if err != nil {
-		return err
-	}
-	if mf == nil {
-		mf = &config.Machine{}
-	}
-	mf.Put(m)
-	if err := config.SaveMachine(e.defaultPath, mf); err != nil {
 		return err
 	}
 	out := map[string]any{"machine": m.Machine, "hub": hub, "created": res.Created, "labels": res.Labels,
@@ -760,4 +749,30 @@ func forkSession(e *env, b api.Binding, name string) (string, error) {
 		return "", errorf("fork_failed", ExitError, "join without --fork", "%s did not report a new session id for the copy", b.Harness)
 	}
 	return out.SessionID, nil
+}
+
+// joinHubAs trades join token tok of hub for machine name's credentials
+// there and records them in machine.yaml. Another hub's link adds a
+// membership; this machine stays in the hubs it already joined, and its
+// local policy (spawn) is kept.
+func (e *env) joinHubAs(ctx context.Context, hub, tok, name string) (config.MachineHub, *api.JoinResponse, error) {
+	c, err := client.New(hub, tok)
+	if err != nil {
+		return config.MachineHub{}, nil, err
+	}
+	res, err := c.Join(ctx, name, false)
+	if err != nil {
+		return config.MachineHub{}, nil, err
+	}
+	m := config.MachineHub{Hub: hub, Machine: res.Machine, EnrollToken: res.Token, NamePrefix: res.NamePrefix,
+		Harness: res.Harness, AllowFrom: res.AllowFrom}
+	mf, err := config.LoadMachine(e.defaultPath)
+	if err != nil {
+		return m, res, err
+	}
+	if mf == nil {
+		mf = &config.Machine{}
+	}
+	mf.Put(m)
+	return m, res, config.SaveMachine(e.defaultPath, mf)
 }

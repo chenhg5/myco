@@ -677,6 +677,12 @@ type SpawnRequest struct {
 	// into the new agent instead of starting an empty one: it keeps the
 	// original's context, and the original is left untouched.
 	ForkFrom string `json:"fork_from,omitempty"`
+	// JoinLink, instead of starting a session, adds this machine to another
+	// workspace of the same hub server with that workspace's join link
+	// (<hub>/w/<name>/j/<token>): it reuses the machine's way to the server,
+	// so nothing is run by hand there. The machine only follows links to
+	// the server it is already connected to through this node.
+	JoinLink string `json:"join_link,omitempty"`
 }
 
 // SpawnResult is a machine node's answer to a SpawnRequest.
@@ -691,6 +697,10 @@ type SpawnResult struct {
 	// Denied: the machine refused the request (policy); Error says why.
 	Denied bool   `json:"denied,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// Joined is the workspace URL a join_link request added the machine to,
+	// and MachineNode its machine node there.
+	Joined      string `json:"joined,omitempty"`
+	MachineNode string `json:"machine_node,omitempty"`
 }
 
 // ExecResult is the reply body of an exec node (harness "exec").

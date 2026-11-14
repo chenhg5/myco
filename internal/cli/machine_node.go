@@ -184,7 +184,7 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 	}
 	host := hostname()
 	return &machinenode.Node{
-		Machine: m.Machine, Prefix: m.NamePrefix,
+		Hub: m.Hub, Machine: m.Machine, Prefix: m.NamePrefix,
 		Policy: machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: maxAccess},
 		LoadPolicy: func() (machinenode.Policy, error) {
 			mf, err := config.LoadMachine(e.defaultPath)
@@ -240,6 +240,34 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 					default:
 					}
 				}
+			},
+			// Another workspace of this server: the same machine joins it
+			// (its machine node there is served at the runner's next scan,
+			// asked for right away).
+			JoinHub: func(ctx context.Context, hub, tok string) (string, error) {
+				// Look before joining: a shell node link is not for this.
+				if c, err := client.New(hub, tok); err != nil {
+					return "", err
+				} else if peek, err := c.Join(ctx, m.Machine, true); err != nil {
+					return "", err
+				} else if peek.Harness == machinenode.ExecCLI {
+					return "", errors.New("that is a shell node link; add shell nodes from the app instead")
+				}
+				nm, _, err := e.joinHubAs(ctx, hub, tok, m.Machine)
+				if err != nil {
+					return "", err
+				}
+				node := ""
+				if a, err := e.ensureMachineNode(nm); err == nil && a != nil {
+					node = string(a.Name)
+				}
+				if sh.rescan != nil {
+					select {
+					case sh.rescan <- struct{}{}:
+					default:
+					}
+				}
+				return node, nil
 			},
 		},
 	}, nil
