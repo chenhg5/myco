@@ -160,7 +160,19 @@ public actor FakeHub: HubAPI {
         } else if task.isOpen {
             shown = 5
         }
-        return Trace(message: messageID, status: task.status, events: Self.script.prefix(shown).filter { $0.seq > seq })
+        // Each step has its time, as a real run's do: one sent from the app
+        // steps along as it is watched; one that was already there spread
+        // its steps from when it was asked to when it last moved.
+        let began = simulated[messageID].map { $0.addingTimeInterval(Self.ackAfter) } ?? task.createdAt
+        let pace = simulated[messageID] != nil
+            ? 0.8
+            : max(0, (task.activeAt ?? task.updatedAt).timeIntervalSince(task.createdAt)) / Double(max(1, shown))
+        let events = Self.script.prefix(shown).filter { $0.seq > seq }.map { event -> TraceEvent in
+            var timed = event
+            timed.at = began.addingTimeInterval(Double(event.seq) * pace)
+            return timed
+        }
+        return Trace(message: messageID, status: task.status, events: events)
     }
 
     /// The fake run, for tests that read a whole one.
