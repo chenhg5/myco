@@ -169,6 +169,7 @@ func Build(o Options) (*Hub, error) {
 	projectSvc.SetBlobs(blob.FS{Dir: filesDir})
 	srv.SetProjects(projectSvc)
 	enroll.SetDefaultVisibility(defaultVisibility)
+	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
 	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {

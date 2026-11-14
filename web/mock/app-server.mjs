@@ -2078,6 +2078,19 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
+    // /app/hubs/{id}/hidden — messages taken out of your own view.
+    if (parts.length === 4 && parts[3] === "hidden") {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      hub.hidden = hub.hidden || [];
+      if (method === "GET") return send(res, 200, { ids: hub.hidden });
+      if (method === "POST") {
+        const body = await readBody(req);
+        const show = new Set(body?.show || []);
+        hub.hidden = [...new Set([...hub.hidden.filter((id) => !show.has(id)), ...(body?.hide || [])])];
+        return send(res, 200, { ids: hub.hidden });
+      }
+    }
+
     // /app/hubs/{id}/links — a one-off enrollment link for adding a machine.
     if (parts.length === 4 && parts[3] === "links" && method === "POST") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");

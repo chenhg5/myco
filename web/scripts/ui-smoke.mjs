@@ -1106,6 +1106,36 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    // 删除 takes a message out of your own view (kept on the workspace):
+    // 撤销 brings it back; gone again, it stays gone after a reload.
+    await step("单聊 · 删除消息", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("删除用的一句：不要了");
+      await box.press("Enter");
+      const mine = page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).last();
+      await mine.waitFor({ timeout: 10_000 });
+      await noRound(page);
+      await mine.hover();
+      await mine.locator(".conv-msg-del").click();
+      await page.locator(".conv-detail .conv-undo").waitFor({ timeout: 5_000 });
+      if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删除后这条应从对话里消失");
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-deleted");
+      await page.locator(".conv-detail .conv-undo button", { hasText: "撤销" }).click();
+      await mine.waitFor({ timeout: 5_000 });
+      await mine.hover();
+      await mine.locator(".conv-msg-del").click();
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).waitFor({ state: "detached", timeout: 5_000 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".app-shell").waitFor();
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await page.waitForTimeout(800);
+      if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删掉的消息刷新后不该回来");
+    });
+
     // ⌘K: find a member and open its chat; find words in your messages and
     // open the chat there, with the words marked.
     await step("全局搜索", async () => {

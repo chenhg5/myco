@@ -351,6 +351,9 @@ export const appApi = {
     request<{ seq: number; text: string; final?: boolean; done?: boolean; error?: string }>("GET", `app/dictation/${enc(id)}?seq=${seq}`),
   stopDictation: (id: string) => request<void>("DELETE", `app/dictation/${enc(id)}`),
   // Translating messages (console translate.go): keys stay in the keychain.
+  /** Messages taken out of your own view (删除), kept on the workspace. */
+  hiddenMessages: (hubId: string) => request<{ ids: string[] }>("GET", `app/hubs/${enc(hubId)}/hidden`),
+  updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
   translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),

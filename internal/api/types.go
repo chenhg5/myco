@@ -1080,3 +1080,16 @@ type ProjectMemberRequest struct {
 type ProjectDocRequest struct {
 	Body string `json:"body"`
 }
+
+// HiddenList is GET /v1/console/hidden: the messages the caller took out of
+// their own view (oldest first). Nothing is deleted.
+type HiddenList struct {
+	IDs []string `json:"ids"`
+}
+
+// HiddenUpdate is POST /v1/console/hidden: messages to hide and to show
+// again (500 at most in all); the answer is the HiddenList.
+type HiddenUpdate struct {
+	Hide []string `json:"hide,omitempty"`
+	Show []string `json:"show,omitempty"`
+}

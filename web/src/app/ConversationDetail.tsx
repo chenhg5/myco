@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Search, Square } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -27,6 +27,7 @@ import { DictateButton } from "@/app/Dictate";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
+import { setHidden, useHidden } from "@/app/hidden";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -460,6 +461,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [traceStatuses, setTraceStatuses] = useState<ReadonlyMap<string, string>>(() => new Map());
   const onTraceStatus = useCallback((taskId: string, status: string) =>
     setTraceStatuses((prev) => prev.get(taskId) === status ? prev : new Map(prev).set(taskId, status)), []);
+  // Messages taken out of your own view (删除), and the last one taken,
+  // for a moment, to take back (撤销).
+  const hiddenIds = useHidden(target.hubId);
+  const [undo, setUndo] = useState<{ ids: string[]; n: number } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo((u) => (u?.n === undo.n ? null : u)), 6000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
+  const removeMessage = (m: Message) => {
+    setUndo({ ids: [m.id], n: Date.now() });
+    void setHidden(target.hubId, [m.id], true).catch((e) => { setUndo(null); setSendError(e); });
+  };
   // Runs that stopped (turn over, held, silent): no moving loading.
   const [pausedRuns, setPausedRuns] = useState<ReadonlySet<string>>(() => new Set());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
@@ -537,7 +551,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const answeredIds = new Set((messages || []).map((m) => m.reply_to).filter(Boolean) as string[]);
   const neverSent = (m: Message): boolean => m.type === "task" && !!m.after && m.status === "failed"
     && m.error === STOPPED && isMe(m.from, row?.hub) && !answeredIds.has(m.id);
-  const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m) || neverSent(m);
+  // (a task taken out of view takes its progress and supplements with it;
+  // its answer stays until taken out too)
+  const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m) || neverSent(m) || hiddenIds.has(m.id)
+    || ((m.type === "progress" || m.type === "steer") && !!m.reply_to && hiddenIds.has(m.reply_to));
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
 
   // Everything shown: in the exchange view, older pages before the newest.
@@ -1469,6 +1486,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
+            <button type="button" className="conv-msg-copy conv-msg-del" onClick={() => removeMessage(m)}
+              title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
         </div>
         {/* What the agent did for a task you gave it (its runner reports it):
@@ -1614,6 +1633,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       {searching && !termMode && (
         <ChatSearch items={searchItems} root={timelineRef} initial={findFirst} onJump={(id) => jumpTo(id)} onClose={() => { setSearching(false); setFindFirst(""); }}
           onLoadMore={exchange && more ? () => void loadOlder() : undefined} loading={loadingOlder} />
+      )}
+      {undo && (
+        <div className="conv-undo" role="status">
+          <span>{L("已删除", "Deleted")}</span>
+          <button type="button" onClick={() => {
+            const ids = undo.ids;
+            setUndo(null);
+            void setHidden(target.hubId, ids, false).catch(setSendError);
+          }}>{L("撤销", "Undo")}</button>
+        </div>
       )}
       {away && (() => {
         const fresh = (visible || []).filter((m) => !isMe(m.from, row?.hub) && m.type !== "progress" && (firstSeen.get(m.id) ?? 0) > awaySince.current).length;

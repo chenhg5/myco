@@ -51,6 +51,7 @@ type Server struct {
 	projects  *app.ProjectService
 	resume    *app.ResumeService
 	traces    *app.TraceService
+	hidden    *app.HiddenService
 	activity  sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu sync.Mutex // serialize alias permission checks with writes
 	namesMu   sync.Mutex
@@ -74,6 +75,10 @@ func (s *Server) SetConsole(c *app.ConsoleService) { s.console = c }
 
 // SetOverview enables GET /v1/overview.
 func (s *Server) SetOverview(o *app.OverviewService) { s.overview = o }
+
+// SetHidden enables /v1/console/hidden (messages a person took out of
+// their own view).
+func (s *Server) SetHidden(h *app.HiddenService) { s.hidden = h }
 
 // SetFiles enables the file endpoints.
 func (s *Server) SetFiles(f *app.FileService) { s.files = f }
@@ -153,6 +158,8 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/agents/{name}/peers", s.admin(s.consolePeers))
 	m.HandleFunc("GET /v1/console/exchanges", s.admin(s.consoleExchanges))
 	m.HandleFunc("GET /v1/console/recent", s.admin(s.consoleRecent))
+	m.HandleFunc("GET /v1/console/hidden", s.admin(s.consoleHidden))
+	m.HandleFunc("POST /v1/console/hidden", s.admin(s.consoleHide))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	// Members (people) and the audit log. Console tokens act as their member;
 	// handlers check what that member may do.
@@ -2048,4 +2055,44 @@ func readable(sc app.Scope, ms []*domain.Message) []*domain.Message {
 		}
 	}
 	return out
+}
+
+// hiddenViewer is whose hidden messages these are: the person (by member
+// id), else the console device on a hub without members.
+func (s *Server) hiddenViewer(r *http.Request) string {
+	name, memberID := s.consoleIdentity(r)
+	if memberID != "" {
+		return "m:" + memberID
+	}
+	return "d:" + name
+}
+
+func (s *Server) consoleHidden(w http.ResponseWriter, r *http.Request) {
+	if s.hidden == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep hidden messages"))
+		return
+	}
+	ids, err := s.hidden.Hidden(r.Context(), s.hiddenViewer(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.HiddenList{IDs: ids})
+}
+
+func (s *Server) consoleHide(w http.ResponseWriter, r *http.Request) {
+	if s.hidden == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep hidden messages"))
+		return
+	}
+	var in api.HiddenUpdate
+	if !decode(w, r, &in) {
+		return
+	}
+	ids, err := s.hidden.Update(r.Context(), s.hiddenViewer(r), in.Hide, in.Show)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.HiddenList{IDs: ids})
 }

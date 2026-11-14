@@ -247,6 +247,27 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)
+	// Messages taken out of your own view (删除), kept on the hub.
+	m.HandleFunc("GET /app/hubs/{id}/hidden", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		l, err := c.Hidden(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, l)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/hidden", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.HiddenUpdate
+		if !decode(w, r, &in) {
+			return
+		}
+		l, err := c.UpdateHidden(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, l)
+	}))
 	m.HandleFunc("GET /app/hubs/{id}/threads/{tid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		if since, _ := strconv.ParseInt(r.URL.Query().Get("updated_since"), 10, 64); since > 0 {
 			// Only what changed (the hub says since when it could).
