@@ -593,7 +593,7 @@ myco agent status clear
 ```bash
 myco message progress --body "测试已通过，正在更新文档（2/3）"     # runner 里 --id 默认是当前任务
 ```
-派任务的一方在 `myco message send --wait` 或 `myco message wait` 里会实时看到这些进展（打印到 stderr，JSON 结果里有 `progress` 列表）；进展不会唤醒它，也会出现在线程和面板里。
+进展不会唤醒派任务的一方，也都留在线程和 App 里（人能看到每一步，方便审计）。派任务的一方用 `myco message send --wait` 或 `myco message wait` 等结果时：在终端里会实时看到每条进展（打印到 stderr）；agent 拿到的 JSON 默认只有回复、进展条数（`progress_count`）和最后一条（`last_progress`），不把对方的过程笔记都塞进自己的上下文；要全部就加 `--progress all`（结果里有 `progress` 列表，也打印到 stderr）。
 
 **中途调整（steer）**：任务还没做完时，派任务的一方可以发修正：
 ```bash

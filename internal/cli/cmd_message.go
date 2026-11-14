@@ -39,6 +39,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "project", Kind: String, Env: "MYCO_PROJECT", Help: "Put a new thread in this project (you must be a member); a message in an existing thread belongs to its project"},
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending with the same key returns the original message"},
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Wait this long for the reply (tasks only)"},
+			{Name: "progress", Kind: Enum, Values: []string{"last", "all"}, Default: "last", Help: "While waiting: last = the reply, how many progress updates came and the latest; all = every update too (the person sees them all in the app either way)"},
 			attachFlag,
 		},
 		Run: handler(func(e *env) error {
@@ -84,7 +85,8 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			if err != nil {
 				return err
 			}
-			out := map[string]any{"message": res.Message, "reply": reply, "timed_out": reply == nil, "progress": progress}
+			out := e.waited(reply, progress)
+			out["message"], out["timed_out"] = res.Message, reply == nil
 			if reply == nil {
 				_ = e.p.Print(out, nil)
 				return &Error{Code: "timeout", Message: fmt.Sprintf("no reply to %s within %s", res.Message.ID, wait),
@@ -123,6 +125,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		Flags: []Flag{
 			{Name: "id", Kind: String, Required: true, Help: "ID of the task you sent"},
 			{Name: "timeout", Kind: Duration, Default: "60s", Help: "Give up after this long (exit 7)"},
+			{Name: "progress", Kind: Enum, Values: []string{"last", "all"}, Default: "last", Help: "While waiting: last = the reply, how many progress updates came and the latest; all = every update too (the person sees them all in the app either way)"},
 		},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
@@ -136,12 +139,14 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			if err != nil {
 				return err
 			}
+			out := e.waited(reply, progress)
 			if reply == nil {
-				_ = e.p.Print(map[string]any{"reply": nil, "timed_out": true, "progress": progress}, nil)
+				out["timed_out"] = true
+				_ = e.p.Print(out, nil)
 				return &Error{Code: "timeout", Message: "no reply yet", Retryable: true, Exit: ExitTimeout,
 					Suggestion: "wait again, or check status with: myco message get --id " + e.in.String("id")}
 			}
-			return e.p.Print(map[string]any{"reply": reply, "progress": progress}, func(w io.Writer) { printReply(w, reply) })
+			return e.p.Print(out, func(w io.Writer) { printReply(w, reply) })
 		}),
 	}
 
@@ -728,12 +733,32 @@ func printMessage(w io.Writer, m *api.Message) {
 // update to stderr as it arrives.
 func (e *env) waitWithProgress(c *client.Client, id string, d time.Duration) (*api.Message, []api.Message, error) {
 	progress := []api.Message{}
+	// A person at a terminal sees every update as it comes; an agent
+	// waiting (JSON) gets them in the result as --progress says, so the
+	// other's working notes do not fill its context.
+	stream := e.p.Format == FormatText || e.in.String("progress") == "all"
 	reply, err := c.WaitReplyProgress(e.in.Ctx, id, d, func(p api.Message) {
 		progress = append(progress, p)
-		fmt.Fprintf(e.in.Stderr, "[progress %s from %s] %s\n", p.CreatedAt.Local().Format("15:04:05"), p.From, strings.TrimSpace(p.Body))
-		printAttachments(e.in.Stderr, p.Attachments)
+		if stream {
+			fmt.Fprintf(e.in.Stderr, "[progress %s from %s] %s\n", p.CreatedAt.Local().Format("15:04:05"), p.From, strings.TrimSpace(p.Body))
+			printAttachments(e.in.Stderr, p.Attachments)
+		}
 	})
 	return reply, progress, err
+}
+
+// waited is what a wait gives back: the reply, and of the progress updates
+// on the way, how many and the latest (--progress all: every one). What
+// agents hand each other is the result; the person sees every step in the
+// app.
+func (e *env) waited(reply *api.Message, progress []api.Message) map[string]any {
+	out := map[string]any{"reply": reply, "progress_count": len(progress)}
+	if e.in.String("progress") == "all" {
+		out["progress"] = progress
+	} else if n := len(progress); n > 0 {
+		out["last_progress"] = progress[n-1]
+	}
+	return out
 }
 
 func printReply(w io.Writer, m *api.Message) {
