@@ -259,14 +259,30 @@ public final class ConversationModel {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
             for message in page.messages { known[message.id] = message }
             if !wentBack { hasEarlier = page.more }
-            // Mine with it comes first and shows at once; the rest of its
-            // work (asked for less often) is merged in when it comes.
-            if !loaded { show(others: others) }
+            // The first look shows the page whole: what was asked, how it
+            // was worked on and the rest of the agent's work arrive
+            // together, not in three jumps. Only when that takes long is
+            // what is already here shown meanwhile.
+            var early: Task<Void, Never>?
+            if !loaded {
+                early = Task {
+                    try? await Task.sleep(for: Self.patience)
+                    if !Task.isCancelled, !self.loaded { self.show(others: self.others) }
+                }
+            }
+            defer { early?.cancel() }
             var others = self.others
-            if reloads % Self.colleaguesEvery == 0 { others = await loadSurroundings() }
+            let around = reloads % Self.colleaguesEvery == 0
             reloads += 1
-            let everything = Array(known.values) + Array(colleagueMessages.values)
-            await loadSteps(of: everything.filter { $0.to == agent && $0.type == "task" && $0.status != "queued" })
+            // My tasks' steps come while the agent's other work is asked for.
+            let myTasks = Self.traceable(Array(known.values), for: agent)
+            async let mine: Void = loadSteps(of: myTasks)
+            if around { others = await loadSurroundings() }
+            await mine
+            if !colleagueMessages.isEmpty {
+                await loadSteps(of: Self.traceable(Array(known.values) + Array(colleagueMessages.values), for: agent))
+            }
+            early?.cancel()
             show(others: others)
             // Only the newest pages are kept between launches.
             await save(Snapshot(messages: page.messages, others: others, traces: traces, colleagues: Array(colleagueMessages.values)))
@@ -275,6 +291,30 @@ public final class ConversationModel {
         } catch {
             // The workspace's own banner says it cannot be reached.
             loaded = true
+        }
+    }
+
+    /// How long the first look at a conversation waits for all of it
+    /// before showing the part that is here.
+    static let patience: Duration = .milliseconds(1500)
+
+    /// The agent's tasks whose steps can be asked for.
+    private static func traceable(_ messages: [Message], for agent: String) -> [Message] {
+        messages.filter { $0.to == agent && $0.type == "task" && $0.status != "queued" }
+    }
+
+    /// Asks the workspace for several things at once: the answers by key,
+    /// without those that failed.
+    private static func gather<Key: Hashable & Sendable, Value: Sendable>(
+        _ keys: [Key], _ fetch: @escaping @Sendable (Key) async -> Value?
+    ) async -> [Key: Value] {
+        await withTaskGroup(of: (Key, Value?).self) { group in
+            for key in keys { group.addTask { (key, await fetch(key)) } }
+            var answers: [Key: Value] = [:]
+            for await (key, value) in group {
+                if let value { answers[key] = value }
+            }
+            return answers
         }
     }
 
@@ -346,22 +386,36 @@ public final class ConversationModel {
     /// member's own page: its exchanges with its colleagues in its
     /// projects, merged into the conversation.
     private func loadSurroundings() async -> [Message] {
-        let everything = (try? await session.hub.recent(.everything)) ?? []
-        func feed(_ project: Project) async -> [RecentItem] {
-            let own = (try? await session.hub.recent(.project(project.name))) ?? []
-            return ProjectFeed.items(of: project, own: own, everything: everything)
+        let hub = session.hub
+        let agent = agent
+        // Which projects to look through: this page's, or the agent's.
+        var scanned: [Project] = []
+        if let project {
+            if let found = session.project(project) { scanned = [found] }
+        } else {
+            scanned = Array(session.projects(of: agent).prefix(Self.projectsScanned))
         }
-        if let project, let found = session.project(project) {
-            let tasks = await feed(found).compactMap(\.task)
-            return tasks.filter { $0.from == agent && $0.to != session.me }
+        // Everything recent and each project's threads are asked for together.
+        async let recent = try? await hub.recent(.everything)
+        let own = await Self.gather(scanned.map(\.name)) { name in try? await hub.recent(.project(name)) }
+        let everything = await recent ?? []
+        func feed(_ project: Project) -> [RecentItem] {
+            ProjectFeed.items(of: project, own: own[project.name] ?? [], everything: everything)
+        }
+        if project != nil {
+            guard let found = scanned.first else { return [] }
+            return feed(found).compactMap(\.task).filter { $0.from == agent && $0.to != session.me }
         }
         var colleagues: [String] = []
-        for project in session.projects(of: agent).prefix(Self.projectsScanned) {
-            let names = ProjectFeed.colleagues(of: agent, in: await feed(project), coordinator: session.coordinator(of: project))
+        for project in scanned {
+            let names = ProjectFeed.colleagues(of: agent, in: feed(project), coordinator: session.coordinator(of: project))
             for name in names where !colleagues.contains(name) { colleagues.append(name) }
         }
-        for colleague in colleagues.prefix(Self.maxColleagues) {
-            guard let page = try? await session.hub.exchanges(between: colleague, and: agent, before: nil) else { continue }
+        // And its exchanges with each colleague, together too.
+        let pages = await Self.gather(Array(colleagues.prefix(Self.maxColleagues))) { colleague in
+            try? await hub.exchanges(between: colleague, and: agent, before: nil)
+        }
+        for page in pages.values {
             for message in page.messages { colleagueMessages[message.id] = message }
         }
         return []
@@ -373,12 +427,20 @@ public final class ConversationModel {
     /// Fetches the steps of the agent's newest tasks: all of them once for a
     /// closed task, the new ones each time for one still being worked on.
     private func loadSteps(of tasks: [Message]) async {
-        let newest = tasks.sorted { $0.createdAt > $1.createdAt }.prefix(Self.tracedTasks)
-        for task in newest where !settled.contains(task.id) {
+        let newest = tasks.sorted { $0.createdAt > $1.createdAt }.prefix(Self.tracedTasks).filter { !settled.contains($0.id) }
+        guard !newest.isEmpty else { return }
+        let hub = session.hub
+        let from = Dictionary(newest.map { ($0.id, traces[$0.id]?.last?.seq ?? 0) }, uniquingKeysWith: { first, _ in first })
+        // All of them at once: a page of six tasks is one wait, not six.
+        let fetched = await Self.gather(Array(from.keys)) { id in try? await hub.trace(of: id, after: from[id] ?? 0) }
+        for task in newest {
+            guard let trace = fetched[task.id] else { continue }
+            // What is known now, not when asked: another refresh may have
+            // brought some of these steps meanwhile.
             let known = traces[task.id] ?? []
-            guard let trace = try? await session.hub.trace(of: task.id, after: known.last?.seq ?? 0) else { continue }
-            if !trace.events.isEmpty || processes[task.id] == nil {
-                let events = known + trace.events
+            let fresh = trace.events.filter { $0.seq > (known.last?.seq ?? 0) }
+            if !fresh.isEmpty || processes[task.id] == nil {
+                let events = known + fresh
                 traces[task.id] = events
                 let process = RunProcess(events: events)
                 if processes[task.id] != process {

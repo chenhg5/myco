@@ -19,18 +19,26 @@ public actor FakeHub: HubAPI {
     private var simulated: [String: Date] = [:]
     /// Makes every call fail, to see the app without its workspace.
     private var unreachable = false
+    /// How long every answer takes: a slow connection, to see what
+    /// loading looks like.
+    private var latency: Duration
     /// The files kept here, by id.
     private var files: [String: (file: HubFile, data: Data)] = [:]
     /// Acts like a hub from before files could be sent from the app.
     private var tooOldForFiles = false
 
-    public init(scenario: Scenario = .team, now: Date = Date()) {
+    public init(scenario: Scenario = .team, now: Date = Date(), latency: Duration = .zero) {
+        self.latency = latency
         let world = scenario.build(now: now)
         agents = world.agents
         machines = world.machines
         projectList = world.projects
         messages = world.messages
         files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    public func setLatency(_ value: Duration) {
+        latency = value
     }
 
     public func setTooOldForFiles(_ value: Bool) {
@@ -46,28 +54,31 @@ public actor FakeHub: HubAPI {
         unreachable = value
     }
 
-    private func check() throws {
+    /// Every call: the wait of a slow connection, then whether the
+    /// workspace answers at all.
+    private func check() async throws {
+        if latency > .zero { try? await Task.sleep(for: latency) }
         if unreachable { throw HubError.unreachable("The workspace did not answer.") }
     }
 
-    public func whoami() throws -> Whoami {
-        try check()
+    public func whoami() async throws -> Whoami {
+        try await check()
         return Whoami(member: Member(id: "mem_demo", name: "glenn", displayName: "Glenn"))
     }
 
-    public func overview() throws -> Overview {
-        try check()
+    public func overview() async throws -> Overview {
+        try await check()
         advance()
         return Overview(generatedAt: Date(), machines: machines, agents: agents.map(withLoad))
     }
 
-    public func projects() throws -> [Project] {
-        try check()
+    public func projects() async throws -> [Project] {
+        try await check()
         return projectList
     }
 
-    public func recent(_ scope: RecentScope) throws -> [RecentItem] {
-        try check()
+    public func recent(_ scope: RecentScope) async throws -> [RecentItem] {
+        try await check()
         advance()
         var project: String?
         if case .project(let name) = scope { project = name }
@@ -100,8 +111,8 @@ public actor FakeHub: HubAPI {
     /// How many messages one page of a conversation holds here.
     public static let pageSize = 60
 
-    public func exchanges(between a: String, and b: String, before: Date?) throws -> MessagePage {
-        try check()
+    public func exchanges(between a: String, and b: String, before: Date?) async throws -> MessagePage {
+        try await check()
         advance()
         let all = messages
             .filter { ($0.from == a && $0.to == b) || ($0.from == b && $0.to == a) }
@@ -115,8 +126,8 @@ public actor FakeHub: HubAPI {
         messages.append(Message(id: nextID(), from: agent, to: Self.me, type: "note", body: body, status: "done", createdAt: Date()))
     }
 
-    public func trace(of messageID: String, after seq: Int) throws -> Trace {
-        try check()
+    public func trace(of messageID: String, after seq: Int) async throws -> Trace {
+        try await check()
         advance()
         guard let task = messages.first(where: { $0.id == messageID }) else {
             throw HubError(error: "not_found", message: "message \(messageID) not found")
@@ -165,8 +176,8 @@ public actor FakeHub: HubAPI {
         }()),
     ]
 
-    public func send(_ request: SendRequest) throws -> Message {
-        try check()
+    public func send(_ request: SendRequest) async throws -> Message {
+        try await check()
         let now = Date()
         let message = Message(
             id: nextID(), from: Self.me, to: request.to, threadId: request.threadId, after: request.after, body: request.body,
@@ -176,8 +187,8 @@ public actor FakeHub: HubAPI {
         return message
     }
 
-    public func steer(_ messageID: String, body: String, attachments: [String]) throws {
-        try check()
+    public func steer(_ messageID: String, body: String, attachments: [String]) async throws {
+        try await check()
         guard let task = messages.first(where: { $0.id == messageID }), task.isOpen else {
             throw HubError(error: "invalid_state", message: "the task is not open")
         }
@@ -188,8 +199,8 @@ public actor FakeHub: HubAPI {
         if simulated[messageID] != nil { simulated[messageID] = Date().addingTimeInterval(-Self.ackAfter) }
     }
 
-    public func stop(_ messageID: String) throws {
-        try check()
+    public func stop(_ messageID: String) async throws {
+        try await check()
         guard let i = messages.firstIndex(where: { $0.id == messageID }), messages[i].isOpen else {
             throw HubError(error: "invalid_state", message: "the task is not open")
         }
@@ -200,7 +211,7 @@ public actor FakeHub: HubAPI {
     }
 
     public func upload(_ data: Data, name: String, contentType: String) async throws -> HubFile {
-        try check()
+        try await check()
         if tooOldForFiles { throw HubError(error: "not_found", message: "not found") }
         // A moment on the way up, as on a real connection.
         try? await Task.sleep(for: .milliseconds(400))
@@ -210,8 +221,8 @@ public actor FakeHub: HubAPI {
         return file
     }
 
-    public func file(_ id: String) throws -> Data {
-        try check()
+    public func file(_ id: String) async throws -> Data {
+        try await check()
         guard let stored = files[id] else { throw HubError(error: "not_found", message: "file \(id) not found") }
         return stored.data
     }
@@ -224,8 +235,8 @@ public actor FakeHub: HubAPI {
         }
     }
 
-    public func joinLink() throws -> JoinLink {
-        try check()
+    public func joinLink() async throws -> JoinLink {
+        try await check()
         return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
     }
 
