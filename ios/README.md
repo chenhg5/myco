@@ -60,9 +60,15 @@ The input's plus button offers the photo library, the camera and Files. What is 
 
 Messages show their pictures as thumbnails and other files as rows; a tap opens the system's preview (Quick Look), which zooms, shares and saves. Files are fetched once and kept in the caches folder (`FileShelf`), and forgotten when the workspace is left.
 
+## The input
+
+One card, two rows: the words get the whole width, and the controls sit under them. What adds to a message is on the left (the plus for pictures and files, the microphone); the one button that sends it, adds it to the running task, or stops the run is alone at the lower right, under the thumb. The microphone and Send are a whole card apart, so one is never hit for the other, and the microphone stays while there are words, so speaking can go on where it stopped (an input that swaps the microphone for Send, as Messages does, cannot do that). Every control is at least 44 points to the finger. A tap anywhere else on the card is a tap in the text.
+
+Return breaks the line. What is said to an agent often takes several lines, sending wakes it or interrupts what it is doing, and a phone's keyboard has no Shift+Return, so sending stays on a button; "Return sends" in Settings is there for those who want a chat app's way, off by default. With a keyboard attached, ⌘Return sends.
+
 ## Speaking instead of typing
 
-The microphone sits beside Send, as on the desktop. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. A pause does not end it: the recognizer ends its session at each pause, and the next one starts at once on the running microphone, its words after what was said (`Utterances`, the desktop's rule in `internal/console/dictation.go`); six silent sessions in a row end the listening. The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
+The microphone is in the input's lower left, beside the plus. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. A pause does not end it: the recognizer ends its session at each pause, and the next one starts at once on the running microphone, its words after what was said (`Utterances`, the desktop's rule in `internal/console/dictation.go`); six silent sessions in a row end the listening. The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
 
 ## A conversation, as the desktop app shows it
 

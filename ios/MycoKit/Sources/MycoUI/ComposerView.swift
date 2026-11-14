@@ -24,10 +24,11 @@ public enum MicState: Sendable, Hashable {
     case blocked
 }
 
-/// The input at the bottom of a conversation: attach, type, and one button
-/// that sends, adds to the running task, or stops it. What the button does
-/// is decided outside (`mode`); this view only draws it. The files about
-/// to go sit above the words, inside the same shape.
+/// The input at the bottom of a conversation: a card with the words on
+/// top and the controls under them. Attach and speak on the left; on the
+/// right, alone, the one button that sends, adds to the running task, or
+/// stops it. What that button does is decided outside (`mode`); this view
+/// only draws it. The files about to go sit above the words.
 public struct ComposerView: View {
     public enum Mode: Sendable, Hashable {
         case send, steer, stop
@@ -60,11 +61,14 @@ public struct ComposerView: View {
     let mic: MicState?
     let micLabel: String
     let onMic: () -> Void
+    /// The keyboard's Return sends instead of breaking the line (a
+    /// setting, off unless the person chose it).
+    let returnSends: Bool
 
     public init(
         text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
         files: [TrayFile] = [], fileNote: String? = nil, attachLabel: String, removeLabel: String, retryLabel: String,
-        attachChoices: [AttachChoice], mic: MicState? = nil, micLabel: String = "",
+        attachChoices: [AttachChoice], mic: MicState? = nil, micLabel: String = "", returnSends: Bool = false,
         onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void,
         onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in },
         onMic: @escaping () -> Void = {}
@@ -88,63 +92,99 @@ public struct ComposerView: View {
         self.mic = mic
         self.micLabel = micLabel
         self.onMic = onMic
+        self.returnSends = returnSends
     }
 
-    public var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            // A tap opens the ways to add something, right at the finger.
-            Menu {
-                ForEach(attachChoices) { choice in
-                    Button(choice.title, systemImage: choice.systemImage, action: choice.action)
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(MycoColor.fg2)
-                    .frame(width: 42, height: 42)
-                    .background(MycoColor.pill, in: Circle())
-            }
-            .menuOrder(.fixed)
-            .accessibilityLabel(attachLabel)
-            .accessibilityIdentifier("composer.attach")
+    @FocusState private var focused: Bool
 
-            // The files, the field and its button are one shape: the
-            // button sits inside the field's trailing edge and stays at
-            // the bottom as it grows.
-            VStack(alignment: .leading, spacing: 0) {
-                if !files.isEmpty {
-                    AttachmentTray(files: files, removeLabel: removeLabel, retryLabel: retryLabel, onRemove: onRemoveFile, onRetry: onRetryFile)
-                        .padding(.top, 6)
-                    if let fileNote {
-                        Text(fileNote).font(.caption).foregroundStyle(MycoColor.red)
-                            .padding(.horizontal, 14).padding(.top, 6)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+    /// Every control can be hit without aiming: Apple asks for 44 points.
+    static let target: CGFloat = 44
+
+    public var body: some View {
+        // One card, two rows. The words get the whole width; the controls
+        // sit under them: what adds to a message (files, speech) on the
+        // left, the one button that sends it (or stops the run) alone at
+        // the right, under the thumb. The microphone and Send are a whole
+        // card apart, so one is never hit for the other, and the
+        // microphone stays there while there are words: speaking can go on
+        // where it stopped.
+        VStack(alignment: .leading, spacing: 0) {
+            if !files.isEmpty {
+                AttachmentTray(files: files, removeLabel: removeLabel, retryLabel: retryLabel, onRemove: onRemoveFile, onRetry: onRetryFile)
+                    .padding(.top, 8)
+                if let fileNote {
+                    Text(fileNote).font(.caption).foregroundStyle(MycoColor.red)
+                        .padding(.horizontal, 16).padding(.top, 6)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                HStack(alignment: .bottom, spacing: 4) {
-                    TextField(placeholder, text: $text, axis: .vertical)
-                        .lineLimit(1...8)
-                        .font(.body)
-                        .padding(.leading, 16)
-                        .padding(.vertical, 10)
-                        .accessibilityIdentifier("composer.input")
-                    // The microphone beside Send, as in Codex and Claude.
-                    if let mic {
-                        MicButton(state: mic, label: micLabel, action: onMic)
-                            .padding(.bottom, 5)
-                    }
-                    submitButton
-                        .padding(.trailing, 5)
-                        .padding(.bottom, 5)
-                }
-                .frame(minHeight: 42)
             }
-            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .animation(.snappy(duration: 0.2), value: files.isEmpty)
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(1...8)
+                .font(.body)
+                .focused($focused)
+                .submitLabel(returnSends ? .send : .return)
+                .padding(.horizontal, 16)
+                .padding(.top, 13)
+                .padding(.bottom, 4)
+                .accessibilityIdentifier("composer.input")
+                // With a keyboard attached, ⌘Return sends.
+                .onKeyPress(.return, phases: .down) { press in
+                    guard press.modifiers.contains(.command), enabled, mode != .stop else { return .ignored }
+                    onSubmit()
+                    return .handled
+                }
+                .onChange(of: text) { old, new in
+                    // For those who chose it: Return sends, as in a chat
+                    // app. The line break it typed is taken back out.
+                    guard returnSends, let typed = Self.withoutTypedReturn(old: old, new: new) else { return }
+                    text = typed
+                    if enabled, mode != .stop { onSubmit() }
+                }
+            HStack(spacing: 0) {
+                // A tap opens the ways to add something, right at the finger.
+                Menu {
+                    ForEach(attachChoices) { choice in
+                        Button(choice.title, systemImage: choice.systemImage, action: choice.action)
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(MycoColor.fg2)
+                        .frame(width: Self.target, height: Self.target)
+                        .contentShape(Rectangle())
+                }
+                .menuOrder(.fixed)
+                .accessibilityLabel(attachLabel)
+                .accessibilityIdentifier("composer.attach")
+                if let mic {
+                    MicButton(state: mic, label: micLabel, action: onMic)
+                }
+                Spacer(minLength: Space.l)
+                submitButton
+            }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 3)
         }
-        .padding(.horizontal, 14)
+        .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        // Anywhere on the card that is not a control is the text field.
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .onTapGesture { focused = true }
+        .animation(.snappy(duration: 0.2), value: files.isEmpty)
+        .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 8)
+    }
+
+    /// The text before a Return was typed into it: `new` is `old` with
+    /// one line break more, anywhere. Nil for any other change (typing,
+    /// pasting several lines, dictation).
+    static func withoutTypedReturn(old: String, new: String) -> String? {
+        guard new.count == old.count + 1 else { return nil }
+        let before = Array(old), after = Array(new)
+        var index = 0
+        while index < before.count, before[index] == after[index] { index += 1 }
+        guard after[index] == "\n", Array(after[(index + 1)...]) == Array(before[index...]) else { return nil }
+        return old
     }
 
     @ViewBuilder private var submitButton: some View {
@@ -172,10 +212,13 @@ public struct ComposerView: View {
 
     private var icon: some View {
         Image(systemName: mode == .stop ? "stop.fill" : "arrow.up")
-            .font(.system(size: mode == .stop ? 12 : 15, weight: .bold))
+            .font(.system(size: mode == .stop ? 13 : 17, weight: .bold))
             .foregroundStyle(MycoColor.buttonText)
-            .frame(width: 32, height: 32)
+            .frame(width: 36, height: 36)
             .background(MycoColor.button.opacity(enabled ? 1 : 0.3), in: Circle())
+            // The circle is what is seen; the whole corner is what is hit.
+            .frame(width: Self.target, height: Self.target)
+            .contentShape(Rectangle())
     }
 }
 
@@ -199,9 +242,9 @@ private struct MicButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: state == .listening ? "mic.fill" : "mic")
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(color)
-                .frame(width: 32, height: 32)
+                .frame(width: 34, height: 34)
                 .background {
                     if state == .listening {
                         Circle().fill(MycoColor.red.opacity(0.14))
@@ -209,7 +252,8 @@ private struct MicButton: View {
                             .opacity(breathing && !reduceMotion ? 0.55 : 1)
                     }
                 }
-                .contentShape(Circle())
+                .frame(width: ComposerView.target, height: ComposerView.target)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityLabel(label)

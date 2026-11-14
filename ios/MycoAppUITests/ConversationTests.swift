@@ -86,14 +86,31 @@ final class ConversationTests: XCTestCase {
         // The microphone hears a script here: nobody speaks to a simulator.
         let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-dictation", "scripted"])
         let mic = app.buttons["composer.mic"]
-        XCTAssertTrue(mic.waitForExistence(timeout: 20), "the microphone is beside Send")
+        XCTAssertTrue(mic.waitForExistence(timeout: 20), "the microphone is in the input")
         let input = app.descendants(matching: .any)["composer.input"]
+        // The controls sit under the words: what adds to a message on the
+        // left, the button that sends it alone on the right, far enough
+        // from the microphone that one is never hit for the other, and
+        // each large enough to hit without aiming.
+        let send = app.descendants(matching: .any)["composer.submit"]
+        let attach = app.descendants(matching: .any)["composer.attach"]
+        XCTAssertLessThan(mic.frame.midX, app.frame.midX, "the microphone is on the left")
+        XCTAssertGreaterThan(send.frame.midX, app.frame.width * 0.8, "the send button is at the right edge")
+        XCTAssertGreaterThan(send.frame.minX - mic.frame.maxX, 150, "a whole card apart")
+        for control in [mic, send, attach] {
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, "wide enough to hit")
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, "tall enough to hit")
+        }
+        XCTAssertGreaterThanOrEqual(input.frame.width, app.frame.width * 0.8, "the words get the whole width")
+        XCTAssertGreaterThan(send.frame.minY, input.frame.maxY - 1, "the controls are under the words")
+        snap("composer-empty")
         mic.tap()
         // The words grow into the box, a new sentence after the one before.
         expectation(for: NSPredicate(format: "value CONTAINS %@", "帮我看一下下载页然后改一下标题"), evaluatedWith: input)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(mic.isSelected, "it shows that it is listening")
         snap("dictation-listening")
+        XCTAssertTrue(mic.isHittable, "the microphone stays there while there are words: speaking can go on")
         mic.tap()
         expectation(for: NSPredicate(format: "selected == false"), evaluatedWith: mic)
         waitForExpectations(timeout: 5)

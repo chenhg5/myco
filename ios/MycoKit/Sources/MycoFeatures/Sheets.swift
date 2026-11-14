@@ -335,6 +335,7 @@ struct WorkspaceSheet: View {
 struct SettingsScreen: View {
     @AppStorage("myco-appearance") private var appearance = "system"
     @AppStorage(AppLanguage.defaultsKey) private var language = "system"
+    @AppStorage("myco-return-sends") private var returnSends = false
 
     var body: some View {
         Form {
@@ -349,6 +350,16 @@ struct SettingsScreen: View {
                     Text("中文").tag("zh")
                     Text("English").tag("en")
                 }
+            }
+            Section {
+                Toggle(L("回车键发送", "Return sends"), isOn: $returnSends)
+                    .tint(MycoColor.green)
+                    .accessibilityIdentifier("settings.returnSends")
+            } header: {
+                Text(L("输入", "Typing"))
+            } footer: {
+                Text(L("关着时回车是换行，用右下角的按钮发送：给 agent 的话常常要分段，发出去就会叫醒它或打断正在做的事。打开后回车直接发送，像聊天软件那样，但就不能用回车换行了。",
+                       "Off: Return breaks the line and the button at the lower right sends. What you tell an agent often takes several lines, and sending wakes it or interrupts what it is doing. On: Return sends, as in a chat app, and can no longer break a line."))
             }
             Section(L("关于", "About")) {
                 LabeledContent(L("版本", "Version"), value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")

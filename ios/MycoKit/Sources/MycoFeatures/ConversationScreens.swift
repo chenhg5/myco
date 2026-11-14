@@ -155,6 +155,8 @@ struct ConversationBody: View {
     @Environment(AppModel.self) private var app
     /// Speaking instead of typing: made the first time the microphone is tapped.
     @State private var dictation: Dictation?
+    /// A setting: the keyboard's Return sends instead of breaking the line.
+    @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
     @State private var deleted: [String]?
     /// Which way of adding a file is open.
@@ -785,6 +787,7 @@ struct ConversationBody: View {
                 attachLabel: L("加图片或文件", "Add pictures or files"), removeLabel: L("不发这个", "Remove"), retryLabel: L("再传一次", "Try again"),
                 attachChoices: attachChoices,
                 mic: micState, micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
+                returnSends: returnSends,
                 onSubmit: {
                     commits += 1
                     Task { await model.submit() }
