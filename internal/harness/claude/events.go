@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 type streamLine struct {
 	Type    string `json:"type"`
 	Message struct {
+		ID      string `json:"id"`
 		Content []struct {
 			Type      string          `json:"type"`
 			Text      string          `json:"text"`
@@ -39,6 +41,58 @@ type streamLine struct {
 		CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
 		CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 	} `json:"usage"`
+}
+
+// streamEvent is the payload of a stream_event line
+// (--include-partial-messages): the API's own streaming events.
+type streamEvent struct {
+	Type  string `json:"type"`
+	Event struct {
+		Type    string `json:"type"`
+		Index   int    `json:"index"`
+		Message struct {
+			ID string `json:"id"`
+		} `json:"message"`
+		Delta struct {
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Thinking string `json:"thinking"`
+		} `json:"delta"`
+	} `json:"event"`
+}
+
+// liveParser turns stream-json lines into steps, including the text and
+// thinking of a block while it is being written (Kind "delta", Stream
+// "text" or "thinking", ID "<message>/<block>"). The finished block still
+// arrives as its own text or thinking step and replaces the deltas.
+type liveParser struct{ msg string }
+
+func (p *liveParser) events(line []byte) []harness.Event {
+	var l streamEvent
+	if json.Unmarshal(line, &l) != nil {
+		return nil
+	}
+	if l.Type != "stream_event" {
+		return lineEvents(line)
+	}
+	e := l.Event
+	switch e.Type {
+	case "message_start":
+		p.msg = e.Message.ID
+	case "content_block_delta":
+		id := p.msg + "/" + strconv.Itoa(e.Index)
+		switch e.Delta.Type {
+		case "text_delta":
+			if e.Delta.Text != "" {
+				return []harness.Event{{Kind: "delta", Stream: "text", ID: id, Text: e.Delta.Text}}
+			}
+		case "thinking_delta":
+			if e.Delta.Thinking != "" {
+				return []harness.Event{{Kind: "delta", Stream: "thinking", ID: id, Text: e.Delta.Thinking}}
+			}
+		}
+	}
+	return nil
 }
 
 // lineEvents turns one stream-json line into steps.
