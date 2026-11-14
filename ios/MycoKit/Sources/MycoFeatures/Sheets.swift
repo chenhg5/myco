@@ -1,6 +1,7 @@
 import SwiftUI
 import MycoAPI
 import MycoCore
+import MycoStore
 import MycoUI
 
 /// A member's card: who it is first, then what it has been doing.
@@ -192,23 +193,42 @@ struct WorkspaceSheet: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var joinNotice = false
+    @State private var joining = false
+    /// The workspace being renamed, and the name being typed.
+    @State private var renaming: WorkspaceRecord?
+    @State private var newName = ""
+    /// The workspace about to be left: asked once more first.
+    @State private var leaving: WorkspaceRecord?
+
+    private var inDemo: Bool { session.id == AppModel.demoID }
 
     var body: some View {
         NavigationStack {
             List {
                 Section(L("工作区", "Workspaces")) {
-                    HStack(spacing: 12) {
-                        WorkspaceBadge(name: session.name, size: 34)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(session.name).font(.body.weight(.medium))
-                            Text(session.problem != nil ? L("连不上", "Unreachable") : (session.loadedAt == nil ? L("正在连接…", "Connecting…") : L("已连接", "Connected")))
-                                .font(.footnote).foregroundStyle(session.problem == nil ? MycoColor.muted : MycoColor.red)
+                    if inDemo { row(id: session.id, name: session.name, detail: status(of: session.id), current: true) }
+                    ForEach(app.workspaces) { record in
+                        let current = record.id == session.id
+                        Button {
+                            guard !current else { return }
+                            dismiss()
+                            Task { await app.switchTo(record.id) }
+                        } label: {
+                            row(id: record.id, name: app.name(of: record), detail: current ? status(of: record.id) : host(of: record), current: current)
                         }
-                        Spacer()
-                        Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.fg2)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("workspace.row")
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(L("离开", "Leave"), role: .destructive) { leaving = record }
+                            Button(L("改名", "Rename")) { rename(record) }.tint(MycoColor.muted)
+                        }
+                        .contextMenu {
+                            Button(L("改名", "Rename"), systemImage: "pencil") { rename(record) }
+                            Button(L("离开", "Leave"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { leaving = record }
+                        }
                     }
-                    Button(L("加入另一个工作区", "Join another workspace"), systemImage: "plus") { joinNotice = true }
+                    Button(L("加入另一个工作区", "Join another workspace"), systemImage: "plus") { joining = true }
+                        .accessibilityIdentifier("workspace.join")
                 }
                 Section {
                     NavigationLink {
@@ -216,25 +236,97 @@ struct WorkspaceSheet: View {
                     } label: {
                         Label(L("设置", "Settings"), systemImage: "gearshape")
                     }
-                    Button(L("离开这个工作区", "Leave this workspace"), systemImage: "rectangle.portrait.and.arrow.right") {
-                        dismiss()
-                        Task { await app.leaveWorkspace() }
+                    if let current = app.workspaces.first(where: { $0.id == session.id }) {
+                        Button(L("给这个工作区改名", "Rename this workspace"), systemImage: "pencil") { rename(current) }
+                        Button(L("离开这个工作区", "Leave this workspace"), systemImage: "rectangle.portrait.and.arrow.right") { leaving = current }
+                    } else {
+                        Button(L("离开演示工作区", "Leave the demo workspace"), systemImage: "rectangle.portrait.and.arrow.right") {
+                            dismiss()
+                            Task { await app.leaveWorkspace() }
+                        }
                     }
                 }
             }
             .tint(MycoColor.fg)
-            .navigationTitle(session.name)
+            .navigationTitle(L("工作区", "Workspaces"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("完成", "Done")) { dismiss() }
                 }
             }
-            .alert(L("现在一次只能加入一个工作区。要换一个，先离开这个。", "One workspace at a time for now. To switch, leave this one first."), isPresented: $joinNotice) {
-                Button(L("好", "OK"), role: .cancel) {}
+            // What is new in the others is asked for when the list opens,
+            // not only once a minute.
+            .task { await app.refreshOthers() }
+            .sheet(isPresented: $joining) { JoinSheet() }
+            .alert(L("给工作区改名", "Rename the workspace"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField(L("名字", "Name"), text: $newName)
+                Button(L("取消", "Cancel"), role: .cancel) { renaming = nil }
+                Button(L("好", "OK")) {
+                    if let record = renaming { Task { await app.rename(record.id, to: newName) } }
+                    renaming = nil
+                }
+            } message: {
+                Text(L("只改这台设备上显示的名字。", "Only what it is called on this device."))
+            }
+            .confirmationDialog(
+                leaving.map { L("离开「\(app.name(of: $0))」？", "Leave \"\(app.name(of: $0))\"?") } ?? "",
+                isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } }), titleVisibility: .visible
+            ) {
+                Button(L("离开", "Leave"), role: .destructive) {
+                    guard let record = leaving else { return }
+                    leaving = nil
+                    // Leaving the one on screen puts another there: this list goes with it.
+                    if record.id == session.id { dismiss() }
+                    Task { await app.leave(record.id) }
+                }
+                Button(L("取消", "Cancel"), role: .cancel) { leaving = nil }
+            } message: {
+                Text(L("这台设备会从它的设备列表里移除，要再用得重新加入。别的工作区不受影响。", "This device is removed from its list of devices; to use it again, join again. Your other workspaces stay."))
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func rename(_ record: WorkspaceRecord) {
+        newName = app.name(of: record)
+        renaming = record
+    }
+
+    /// Where a workspace is: its host, and the workspace's name in the
+    /// address when the hub serves several.
+    private func host(of record: WorkspaceRecord) -> String {
+        let host = record.url.host() ?? record.url.absoluteString
+        let path = record.url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return path.isEmpty ? host : host + "/" + path
+    }
+
+    private func status(of id: String) -> String {
+        if session.problem != nil { return L("连不上", "Unreachable") }
+        return session.loadedAt == nil ? L("正在连接…", "Connecting…") : L("已连接", "Connected")
+    }
+
+    /// One workspace: its face, its name, where it is or how it is doing,
+    /// a dot when something new came there, a tick on the one on screen.
+    private func row(id: String, name: String, detail: String, current: Bool) -> some View {
+        HStack(spacing: 12) {
+            WorkspaceBadge(name: name, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(1)
+                Text(!current && app.problem(in: id) != nil ? L("连不上", "Unreachable") : detail)
+                    .font(.footnote).lineLimit(1)
+                    .foregroundStyle((current ? session.problem : app.problem(in: id)) == nil ? MycoColor.muted : MycoColor.red)
+            }
+            Spacer(minLength: 8)
+            if current {
+                Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.fg2)
+            } else if app.unread(in: id) > 0 {
+                Circle().fill(MycoColor.unread).frame(width: 9, height: 9)
+                    .accessibilityLabel(L("有新消息", "Something new"))
+                    .accessibilityIdentifier("workspace.unread")
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

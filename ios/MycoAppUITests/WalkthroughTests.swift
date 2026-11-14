@@ -142,6 +142,61 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testSeveralWorkspacesSideBySide() {
+        // Two workspaces are joined; a few seconds in, something new comes in the second.
+        let app = launch(["-myco-start", "two"])
+        let button = app.buttons["workspace.button"]
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15), "it opens on the first one")
+        XCTAssertTrue(button.label.contains("团队"))
+        sleep(6)
+        button.tap()
+        let rows = app.buttons.matching(identifier: "workspace.row")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5), "the panel lists them")
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertTrue(app.descendants(matching: .any)["workspace.unread"].waitForExistence(timeout: 10), "the other one shows that something new came")
+        shot("workspaces-list")
+
+        // A tap switches.
+        rows.element(boundBy: 1).tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "个人项目"), evaluatedWith: button)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["tab.chats"].exists, "on its own first page")
+
+        // Joining another keeps both.
+        button.tap()
+        app.buttons["workspace.join"].tap()
+        let field = app.descendants(matching: .any)["join.link"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("https://third.myco.example/c/myco_pair_demo")
+        app.buttons["join.submit"].tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "third.myco.example"), evaluatedWith: button)
+        waitForExpectations(timeout: 10)
+        button.tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(rows.count, 3, "the new one is added, the others stay")
+        shot("workspaces-three")
+
+        // Leaving the one on screen asks first, then shows another.
+        app.buttons["Leave this workspace"].tap()
+        let leave = app.buttons["Leave"]
+        XCTAssertTrue(leave.waitForExistence(timeout: 5), "leaving asks once more")
+        leave.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "团队"), evaluatedWith: button)
+        waitForExpectations(timeout: 10)
+        button.tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(rows.count, 2)
+    }
+
+    /// Saves what is on screen to $MYCO_SHOTS_DIR, when set (to look at it).
+    @MainActor
+    private func shot(_ name: String) {
+        guard let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty else { return }
+        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
+    }
+
+    @MainActor
     func testAddingAnAgentGivesASentenceWithARealLink() {
         let app = launch()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))

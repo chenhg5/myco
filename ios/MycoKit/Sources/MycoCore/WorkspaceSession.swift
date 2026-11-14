@@ -10,7 +10,12 @@ import MycoStore
 @Observable
 public final class WorkspaceSession {
     public let id: String
-    public let name: String
+    /// What it is called on this device; the person can rename it.
+    public private(set) var name: String
+
+    public func rename(_ name: String) {
+        self.name = name
+    }
     public let hub: any HubAPI
 
     /// How messages from this app are signed (`@console:<member>`).

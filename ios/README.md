@@ -2,7 +2,7 @@
 
 The phone app: follow and direct your agents. Native SwiftUI, iOS 17 and later, iPhone in portrait. No third-party dependencies.
 
-Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push, more than one workspace at a time.
+Status: the pages and the conversation, and joining a real workspace with a link (read and send). Checked in a simulator only, against a demo workspace and a throwaway local hub. Pictures and files go with a message and show in the ones that carry them; the microphone turns speech into text. Several workspaces can be joined at once. Not built yet: scanning a code, end-to-end encryption (sealed messages and their files show as encrypted), push.
 
 ## Layout
 
@@ -43,7 +43,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 
 | Argument | Values |
 |---|---|
-| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation), `waiting` (the demo plus runs that are open but not at work): a demo workspace. `welcome`: the welcome page |
+| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation), `waiting` (the demo plus runs that are open but not at work): a demo workspace. `two`: two demo workspaces joined side by side (any well-formed link joins a third). `welcome`: the welcome page |
 | `-myco-join` | an "add a device" link to join with at launch |
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
@@ -74,6 +74,10 @@ The rules are the desktop's (`web/src/app/ConversationDetail.tsx`, `TraceView.ts
 - A run that is open but not at work does not look at work: its turn ended, it was set aside, or it said something and has been silent for two minutes. The mushroom stands and the line says what it waits for ("Waiting for the tester", "Set aside; it answers later", "Waiting; no answer yet").
 - Thinking is part of the steps ("thought, ran 2 commands"), there on a tap.
 - A long press on a message offers Delete: it leaves this person's view on all their devices (`/v1/console/hidden`; on this device only with a workspace before v0.19.9), with Undo for a few seconds. Nothing is deleted for anyone else.
+
+## Several workspaces
+
+A link adds a workspace; the ones joined before stay (`Workspaces`, behind `WorkspaceBook`). Each keeps its own token in the keychain and its own cache; joining one already joined signs this device in again in the same row. The app opens on the one that was on screen last. The workspace panel (the badge at the top left) lists them: a tap switches, a swipe or a long press renames or leaves one, and leaving asks first. The ones off screen are looked at once a minute and when the panel opens: something new there is a blue dot on the badge and on its row. A workspace is called what its address says (the name after `/w/` on a hub that serves several, else its host; an address reads "My workspace"), numbered when two would read the same, until the person renames it; the name is only for this device.
 
 ## Loading
 
