@@ -51,6 +51,19 @@ func TestTranscriptEvents(t *testing.T) {
 	}
 }
 
+// A finished or interrupted turn is a turn_end step: the session waits.
+func TestTranscriptTurnEnd(t *testing.T) {
+	for _, line := range []string{
+		`{"type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Done."}}`,
+		`{"type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}`,
+	} {
+		evs := TranscriptEvents([]byte(line))
+		if len(evs) != 1 || evs[0].Kind != "turn_end" {
+			t.Fatalf("%s: %+v", line, evs)
+		}
+	}
+}
+
 func TestTranscriptPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODEX_HOME", home)

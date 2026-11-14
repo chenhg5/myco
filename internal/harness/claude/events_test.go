@@ -82,3 +82,20 @@ func TestLiveParserDeltas(t *testing.T) {
 		}
 	}
 }
+
+// In a session file, the assistant message that ends a turn is followed by
+// a turn_end step; one that calls a tool is not.
+func TestTranscriptTurnEnd(t *testing.T) {
+	end := TranscriptEvents([]byte(`{"type":"assistant","message":{"id":"m1","stop_reason":"end_turn","content":[{"type":"text","text":"Waiting for the review."}]}}`))
+	if len(end) != 2 || end[0].Kind != "text" || end[1].Kind != "turn_end" {
+		t.Fatalf("end of turn: %+v", end)
+	}
+	mid := TranscriptEvents([]byte(`{"type":"assistant","message":{"id":"m2","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}`))
+	if len(mid) != 1 || mid[0].Kind != "tool" {
+		t.Fatalf("a tool call is not the end: %+v", mid)
+	}
+	// stream-json (a runner) has its own end: the result line.
+	if evs := lineEvents([]byte(`{"type":"assistant","message":{"stop_reason":"end_turn","content":[{"type":"text","text":"x"}]}}`)); len(evs) != 1 {
+		t.Fatalf("lineEvents adds no turn_end: %+v", evs)
+	}
+}

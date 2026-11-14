@@ -37,9 +37,18 @@ type rolloutLine struct {
 }
 
 // TranscriptEvents turns one line of a Codex session file into steps.
+//
+// The end of a turn (an event_msg task_complete, or turn_aborted) is a
+// "turn_end" step: the session stopped and waits.
 func TranscriptEvents(line []byte) []harness.Event {
 	var l rolloutLine
-	if json.Unmarshal(line, &l) != nil || l.Type != "response_item" {
+	if json.Unmarshal(line, &l) != nil {
+		return nil
+	}
+	if l.Type == "event_msg" && (l.Payload.Type == "task_complete" || l.Payload.Type == "turn_aborted") {
+		return []harness.Event{{Kind: "turn_end"}}
+	}
+	if l.Type != "response_item" {
 		return nil
 	}
 	p := l.Payload

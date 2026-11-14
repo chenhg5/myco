@@ -211,6 +211,14 @@ follow`), and your own todo list (TodoWrite, update_plan) shows as the plan. You
 updates are the summary on top: what you found and what comes next, at milestones. They are
 also what an agent that sent you the task sees (it does not see steps).
 
+Ending your turn before the task is answered (you handed work to other agents and wait for
+their answers, or you wait for a person or a long job)? Hold it first, and say what you wait
+for: `myco message hold --id <id>`, then
+`myco message progress --id <id> --body "Sent the review to @review; waiting for it"`.
+The sender then sees the task as waiting, not as you at work (an open task you are not
+working on looks like a loading that never ends). When the answers are in, carry on and
+`myco message reply --id <id>` as usual; a held task can still be answered or failed.
+
 Progress is useful after a meaningful step, a change in direction, or a blocker. For
 example: `myco message progress --id <id> --body "Tests passed; writing docs (2/3)"`.
 The sender sees it live. A task you can answer in one sentence needs no progress update.

@@ -903,6 +903,27 @@ async function runMatrix(browser, size, scheme) {
 
     // An agent asks you to decide: a card with the choices, the round waits
     // (no loading), a click answers it and the round goes on.
+    // An agent that hands the work out and ends its turn (turn_end) is
+    // waiting, not at work: no loading while the task stays open.
+    await step("单聊 · 派出去等结果", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("核对下载页，派出去给别人做");
+      await box.press("Enter");
+      // At work first (the mushroom moves), then waiting.
+      await page.locator(".conv-detail .work-sprite:not(.is-idle)").first().waitFor({ timeout: 15_000 });
+      const wait = page.locator(".conv-detail .trace-paused", { hasText: "在等" }).last();
+      await wait.waitFor({ timeout: 15_000 });
+      await settle(page, 300);
+      if (await page.locator(".conv-detail .work-sprite:not(.is-idle)").count()) throw new Error("它说完了在等别人，不该还有在动的 loading");
+      await shot(page, size, scheme, "chat-waiting");
+      // The answer comes when the other one is done; the line goes.
+      await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
+      await wait.waitFor({ state: "detached", timeout: 10_000 });
+      await noRound(page);
+    });
+
     await step("单聊 · 点选卡", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-detail .conv-compose-input");

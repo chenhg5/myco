@@ -276,12 +276,25 @@ func unix(s int64) time.Time {
 // TranscriptEvents turns one line of a Claude Code session file
 // (~/.claude/projects/<project>/<session>.jsonl) into steps. Those lines
 // carry the same assistant and user messages as stream-json.
+//
+// An assistant message that ends its turn (stop_reason end_turn) is
+// followed by a "turn_end" step: the session stopped and waits (for its
+// inbox, a reply, the person), so whoever watches does not see it at work.
 func TranscriptEvents(line []byte) []harness.Event {
 	var out []harness.Event
 	for _, ev := range lineEvents(line) {
 		if ev.Kind != "quota" && ev.Kind != "usage" {
 			out = append(out, ev)
 		}
+	}
+	var end struct {
+		Type    string `json:"type"`
+		Message struct {
+			StopReason string `json:"stop_reason"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &end) == nil && end.Type == "assistant" && end.Message.StopReason == "end_turn" {
+		out = append(out, harness.Event{Kind: "turn_end"})
 	}
 	return out
 }

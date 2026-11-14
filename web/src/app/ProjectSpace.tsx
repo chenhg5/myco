@@ -519,6 +519,8 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
     return [{
       id: task.id,
       at: task.created_at,
+      // still being done: the coordinator's run waits for it
+      ...(state !== "done" && state !== "failed" ? { waitsFor: nameOf(to) } : {}),
       node: (
         <button type="button" className="sp-dispatch" onClick={() => onOpenTask(to, task.id)} title={L("看它怎么做的", "See how it goes")}>
           <span className="sp-dispatch-label">{L("派给", "To")}</span>
