@@ -122,3 +122,30 @@ func TestTracerJoinsOutputLines(t *testing.T) {
 		t.Fatalf("live output not capped: %d bytes", n)
 	}
 }
+
+func TestTracerJoinsDeltas(t *testing.T) {
+	hub := &traceHub{fakeHub: newFakeHub()}
+	tr := newTracer(context.Background(), hub, "t1", TraceFull, quiet())
+	tr.add(harness.Event{Kind: "delta", Stream: "thinking", ID: "m/0", Text: "a"})
+	tr.add(harness.Event{Kind: "delta", Stream: "thinking", ID: "m/0", Text: "b"})
+	tr.add(harness.Event{Kind: "delta", Stream: "text", ID: "m/1", Text: "c"})
+	tr.add(harness.Event{Kind: "text", Text: "c!"})
+	tr.close()
+	var got []harness.Event
+	for _, e := range hub.events {
+		var ev harness.Event
+		json.Unmarshal(e.Data, &ev)
+		got = append(got, ev)
+	}
+	if len(got) != 3 || got[0].Text != "ab" || got[0].Stream != "thinking" || got[1].ID != "m/1" || got[2].Kind != "text" {
+		t.Fatalf("deltas not joined per block: %+v", got)
+	}
+
+	hub = &traceHub{fakeHub: newFakeHub()}
+	tr = newTracer(context.Background(), hub, "t1", TraceSummary, quiet())
+	tr.add(harness.Event{Kind: "delta", Stream: "text", ID: "m/1", Text: "secret"})
+	tr.close()
+	if len(hub.events) != 0 {
+		t.Fatalf("summary mode uploaded deltas: %+v", hub.events)
+	}
+}

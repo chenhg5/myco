@@ -186,6 +186,10 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	for _, d := range req.ExtraDirs {
 		args = append(args, "--add-dir", d)
 	}
+	if req.OnEvent != nil {
+		// Text and thinking as they are written, for the live view.
+		args = append(args, "--include-partial-messages")
+	}
 	args = append(args, c.opts.Args...)
 	if req.Provider != nil {
 		file, err := providerSettingsFile(req.Provider, configDir(req.Env))
@@ -200,8 +204,9 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 		Env: req.Env, UnsetEnv: inheritedSessionEnv(os.Environ()),
 	}
 	if req.OnEvent != nil {
+		var live liveParser
 		proc.OnStdoutLine = func(line []byte) {
-			for _, ev := range lineEvents(line) {
+			for _, ev := range live.events(line) {
 				req.OnEvent(ev)
 			}
 		}
