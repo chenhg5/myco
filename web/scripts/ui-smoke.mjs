@@ -915,6 +915,11 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "message-picture");
       await thumb.click();
       await page.locator(".lightbox .lightbox-img").waitFor({ timeout: 5_000 });
+      // In the Mac app its name keeps clear of the traffic lights (to x≈80).
+      if (await page.evaluate(() => document.documentElement.classList.contains("shell-mac"))) {
+        const x = await page.locator(".lightbox-bar").evaluate((el) => el.getBoundingClientRect().left);
+        if (x < 80) throw new Error(`看大图时左上角的名字会压到红绿灯（从 ${Math.round(x)}px 开始）`);
+      }
       await shot(page, size, scheme, "message-picture-open");
       await page.keyboard.press("Escape");
       await page.locator(".lightbox").waitFor({ state: "hidden", timeout: 5_000 });
@@ -946,6 +951,18 @@ async function runMatrix(browser, size, scheme) {
         await shot(page, size, scheme, "file-preview-full");
         await doc.getByRole("button", { name: "退出全屏" }).click();
         await page.locator(".fp-panel:not(.is-full)").waitFor({ timeout: 5_000 });
+        await settle(page, 250);
+        // Its left edge drags it wider; a double-click puts it back.
+        const before = await doc.evaluate((el) => el.getBoundingClientRect().width);
+        const e = await doc.locator(".fp-edge").boundingBox();
+        await page.mouse.move(e.x + e.width / 2, e.y + e.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(e.x - 150, e.y + e.height / 2, { steps: 6 });
+        await page.mouse.up();
+        const wider = await doc.evaluate((el) => el.getBoundingClientRect().width);
+        if (Math.abs(wider - before - 150) > 12) throw new Error(`拖左边应变宽 150px 左右，实际 ${Math.round(before)} → ${Math.round(wider)}`);
+        await doc.locator(".fp-edge").dblclick();
+        await page.waitForFunction((w) => Math.abs(document.querySelector(".fp-panel").getBoundingClientRect().width - w) < 2, before, { timeout: 5_000 });
       }
       await doc.getByRole("button", { name: "存到「下载」" }).click();
       await doc.getByRole("button", { name: "已存到「下载」" }).waitFor({ timeout: 5_000 });
@@ -1118,7 +1135,8 @@ async function runMatrix(browser, size, scheme) {
       await mine.waitFor({ timeout: 10_000 });
       await noRound(page);
       await mine.hover();
-      await mine.locator(".conv-msg-del").click();
+      // (the chat may still move as the answer comes: the button shows on hover)
+      await mine.locator(".conv-msg-del").click({ force: true });
       await page.locator(".conv-detail .conv-undo").waitFor({ timeout: 5_000 });
       if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删除后这条应从对话里消失");
       await settle(page, 200);
@@ -1126,7 +1144,8 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-undo button", { hasText: "撤销" }).click();
       await mine.waitFor({ timeout: 5_000 });
       await mine.hover();
-      await mine.locator(".conv-msg-del").click();
+      // (the chat may still move as the answer comes: the button shows on hover)
+      await mine.locator(".conv-msg-del").click({ force: true });
       await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).waitFor({ state: "detached", timeout: 5_000 });
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(".app-shell").waitFor();
@@ -1282,6 +1301,9 @@ async function runMatrix(browser, size, scheme) {
       const order = (await rows.allInnerTexts()).map(compactText);
       if (!order[0].includes(nextText) || !order[1].includes(dropText)) throw new Error(`排队应按先后排：${JSON.stringify(order)}`);
       if (!order[0].includes("排队中")) throw new Error(`排队条应写「排队中：」，实际「${order[0]}」`);
+      // Big enough to hit: the row and its buttons.
+      const sizes = await rows.first().evaluate((el) => ({ row: el.getBoundingClientRect().height, btn: Math.min(...[...el.querySelectorAll("button")].map((b) => b.getBoundingClientRect().height)) }));
+      if (sizes.row < 32 || sizes.btn < 24) throw new Error(`排队条太小，不好点：行 ${sizes.row}px，按钮 ${sizes.btn}px`);
       // Enter now adds to the running task: in its run, where you sent it,
       // not a second task.
       const addText = "补充：下载页的链接也顺带检查";

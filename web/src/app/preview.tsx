@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Download, Maximize2, Minimize2, X } from "lucide-react";
 import { appApi } from "@/appapi";
@@ -134,6 +134,11 @@ function diffLines(before: string, after: string): Line[] {
 }
 
 const FULL_KEY = "myco-preview-full";
+const WIDTH_KEY = "myco-preview-width";
+/** The panel's width (CSS px), as dragged last; 0 = the usual. */
+const keptWidth = () => { try { return Number(localStorage.getItem(WIDTH_KEY)) || 0; } catch { return 0; } };
+const keepWidth = (w: number) => { try { localStorage.setItem(WIDTH_KEY, String(Math.round(w))); } catch { /* not kept */ } };
+const MIN_WIDTH = 380;
 const keptFull = () => { try { return localStorage.getItem(FULL_KEY) === "1"; } catch { return false; } };
 const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1" : "0"); } catch { /* not kept */ } };
 
@@ -152,6 +157,36 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const [view, setView] = useState<"file" | "source" | "changes">("file");
   const [saved, setSaved] = useState(false);
   const [full, setFull] = useState(keptFull);
+  // Its left edge: drag to make it wider or narrower (double-click: back
+  // to the usual). Measured in the panel's own scale (text size zooms it).
+  const [width, setWidth] = useState(keptWidth);
+  const [dragging, setDragging] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; w: number; scale: number } | null>(null);
+  const edge = {
+    onPointerDown: (e: React.PointerEvent) => {
+      const el = panel.current;
+      if (!el || e.button !== 0) return;
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      const rect = el.getBoundingClientRect();
+      drag.current = { x: e.clientX, w: el.offsetWidth, scale: rect.width / (el.offsetWidth || 1) || 1 };
+      setDragging(true);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const max = (window.innerWidth / d.scale) - 32;
+      setWidth(Math.round(Math.min(max, Math.max(MIN_WIDTH, d.w + (d.x - e.clientX) / d.scale))));
+    },
+    onPointerUp: () => {
+      if (!drag.current) return;
+      drag.current = null;
+      setDragging(false);
+      setWidth((w) => { keepWidth(w); return w; });
+    },
+    onDoubleClick: () => { setWidth(0); keepWidth(0); },
+  };
   const prev = version?.prev;
   const toggleFull = () => setFull((f) => { keepFull(!f); return !f; });
 
@@ -184,7 +219,12 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="app-portal fp-scrim" />
-        <Dialog.Content className={cn("app-portal fp-panel", full && "is-full")}>
+        <Dialog.Content ref={panel} className={cn("app-portal fp-panel", full && "is-full", dragging && "is-dragging")}
+          style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : undefined}>
+          {!full && (
+            <div className="fp-edge" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
+              title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} {...edge} onPointerCancel={edge.onPointerUp} />
+          )}
           <div className="fp-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) toggleFull(); }}>
             <div className="fp-titles">
               <Dialog.Title asChild><h3 title={file.name}>{file.name}</h3></Dialog.Title>

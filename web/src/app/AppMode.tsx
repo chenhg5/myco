@@ -370,6 +370,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
   });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
+  // On the page's root too: what opens over the window (a picture, a file in
+  // full screen) keeps clear of the traffic lights.
+  useEffect(() => { document.documentElement.classList.toggle("shell-mac", isMac); }, [isMac]);
   const navMenu = useContextMenu();
 
   useEffect(() => {
