@@ -12,6 +12,29 @@ export interface Hub {
   update_available?: boolean;
 }
 
+/** The workspaces of a hub's server: whether it serves several (v0.19.9+),
+ *  and whether this App may make more there (it signs in as the owner of
+ *  the server's default workspace). */
+export interface WorkspaceState {
+  supported: boolean;
+  allowed: boolean;
+  /** the server's own address */
+  server: string;
+  workspaces: { name: string; url: string; created_at: string }[];
+}
+
+/** A computer already on this hub's server, in another of its workspaces. */
+export interface ServerMachine {
+  hub_id: string;
+  hub_name: string;
+  machine_id: string;
+  name: string;
+  hostname?: string;
+  os?: string;
+  online: boolean;
+  can_spawn: boolean;
+}
+
 export interface HubOverview {
   id: string;
   name: string;
@@ -567,6 +590,15 @@ export const appApi = {
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
+  // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
+  workspaces: (hubId: string) =>
+    request<WorkspaceState>("GET", `app/hubs/${enc(hubId)}/workspaces`),
+  createWorkspace: (hubId: string, name: string, displayName: string) =>
+    request<Hub>("POST", `app/hubs/${enc(hubId)}/workspaces`, { name, display_name: displayName }),
+  serverMachines: (hubId: string) =>
+    request<{ machines: ServerMachine[] }>("GET", `app/hubs/${enc(hubId)}/server-machines`),
+  addMachineFrom: (hubId: string, fromHub: string, machineId: string) =>
+    request<{ joined: string; machine_node?: string }>("POST", `app/hubs/${enc(hubId)}/machines/add-from`, { from_hub: fromHub, machine_id: machineId }),
   startLocalHub: (input: StartLocalHubInput) =>
     request<StartLocalHubResult>("POST", "app/local/hub", input),
   stopLocalHub: (name?: string) =>

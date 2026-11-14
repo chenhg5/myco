@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Plus, Search, WifiOff } from "lucide-react";
 import "@/app/app.css";
 import "@/app/space.css";
-import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState } from "@/appapi";
+import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
 import { AddMachineDialog } from "@/app/AddMachineDialog";
@@ -115,6 +115,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [connectPrefill, setConnectPrefill] = useState("");
   const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
+  const [newServerOpen, setNewServerOpen] = useState(false);
+  // The workspaces of the shown workspace's server (hubs v0.19.9+): whether
+  // this App may add one there.
+  const [serverWs, setServerWs] = useState<WorkspaceState | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
@@ -209,6 +213,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const hubId = hubs.some((h) => h.id === hubPick) ? hubPick
     : namedOv?.hubs.find((h) => h.ok && hubs.some((x) => x.id === h.id))?.id || hubs[0]?.id || "";
   const hub = namedHubs.find((h) => h.id === hubId);
+  // Whether this App may add workspaces on the shown one's server (not for
+  // a hub on this computer: that has its own way, NewWorkspaceDialog).
+  const hubUrl = hub?.url || "";
+  const hubIsLocal = !!hub && isLocalUrl(local, hub.url);
+  useEffect(() => {
+    setServerWs(null);
+    if (!hubId || !hubUrl || hubIsLocal) return;
+    let off = false;
+    appApi.workspaces(hubId).then((s) => { if (!off) setServerWs(s); }).catch(() => { /* older App backend or hub */ });
+    return () => { off = true; };
+  }, [hubId, hubUrl, hubIsLocal]);
   const rows = useMemo(() => allRows.filter((r) => r.hub.id === hubId), [allRows, hubId]);
   const hubProjects = useMemo(() => (projects || []).filter((x) => x.hubId === hubId), [projects, hubId]);
   // A project's computers are for every agent in it: one that joined by
@@ -348,6 +363,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   // Another workspace on this computer: start it, show it under the name
   // that was typed, and switch to it.
+  const createOnServer = async (name: string, display: string) => {
+    const h = await appApi.createWorkspace(hubId, name, display);
+    await refresh();
+    setHubPick(h.id);
+    setPage("space");
+    setChatWith(null);
+  };
+
   const startAnotherLocal = async (name: string, display: string) => {
     const r = await appApi.startLocalHub({ tunnel: "none", name });
     if (display) renameHub(r.hub.id, display);
@@ -546,6 +569,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubId}
                 onChange={(v) => { setHubPick(v); setPage("space"); setChatWith(null); }}
                 onAdd={() => setConnectOpen(true)} onNewLocal={() => setNewLocalOpen(true)}
+                onNewOnServer={serverWs?.allowed ? () => setNewServerOpen(true) : undefined}
+                serverName={serverWs ? hostName(serverWs.server) : undefined}
                 isLocal={(h) => isLocalUrl(local, h.url)}
                 onSettings={() => setPage("settings")} />
             </div>
@@ -672,9 +697,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
         onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
-      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} />
+      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()} />
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
+      <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}
+        taken={(serverWs?.workspaces || []).map((w) => w.name)} onStart={createOnServer} />
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
@@ -730,4 +757,9 @@ export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): 
       return { ...before, name: h.name, stale: { at: before.stale?.at ?? prev.generated_at, error: h.error } };
     }),
   };
+}
+
+/** A server's address as people say it: its host name. */
+function hostName(u: string): string {
+  try { return new URL(u).host; } catch { return u; }
 }

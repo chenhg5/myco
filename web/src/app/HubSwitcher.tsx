@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, ChevronDown, ChevronUp, Laptop, Plus, Settings,
+  Check, ChevronDown, ChevronUp, Laptop, Plus, Server, Settings,
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { useHubLooks, type HubLook } from "@/app/hubLooks";
@@ -15,6 +15,7 @@ type Entry =
   | { key: string; kind: "hub"; hub: Hub }
   | { key: string; kind: "add" }
   | { key: string; kind: "newLocal" }
+  | { key: string; kind: "newOnServer" }
   | { key: string; kind: "settings" };
 
 function initial(name: string): string {
@@ -54,7 +55,7 @@ function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | unde
 
 /** Workspace picker: one at a time (they are kept apart), add another, or
  *  open their settings. */
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onSettings, isLocal, variant = "sidebar", down = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, isLocal, variant = "sidebar", down = false }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
   /** the workspace on show */
@@ -63,6 +64,10 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
   onAdd: () => void;
   /** starts another workspace on this computer */
   onNewLocal: () => void;
+  /** adds a workspace on the server of the one on show (when this App
+   *  may: it owns that server); serverName names the server */
+  onNewOnServer?: () => void;
+  serverName?: string;
   onSettings: () => void;
   /** whether a hub runs on this computer (it gets a tag) */
   isLocal?: (hub: Hub) => boolean;
@@ -82,9 +87,10 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
   const entries = useMemo<Entry[]>(() => [
     ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
     { key: "add", kind: "add" },
+    ...(onNewOnServer ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
     { key: "newLocal", kind: "newLocal" },
     { key: "settings", kind: "settings" },
-  ], [hubs]);
+  ], [hubs, onNewOnServer]);
 
   const selectedIndex = (): number => {
     const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);
@@ -104,6 +110,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
     if (e.kind === "hub") pick(e.hub.id);
     else if (e.kind === "add") { close(); onAdd(); }
     else if (e.kind === "newLocal") { close(); onNewLocal(); }
+    else if (e.kind === "newOnServer") { close(); onNewOnServer?.(); }
     else if (e.kind === "settings") { close(); onSettings(); }
   };
 
@@ -236,7 +243,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                 </button>
               );
             }
-            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : Settings;
+            const Icon = e.kind === "add" ? Plus : e.kind === "newLocal" ? Laptop : e.kind === "newOnServer" ? Server : Settings;
             return (
               <Fragment key={e.key}>
                 {e.kind === "add" && <div className="app-hub-menu-sep" />}
@@ -254,7 +261,9 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                       ? L("加入或新建工作区", "Join or start a workspace")
                       : e.kind === "newLocal"
                         ? L("在这台电脑上新建工作区", "New workspace on this computer")
-                        : L("设置", "Settings")}
+                        : e.kind === "newOnServer"
+                          ? (serverName ? L(`在 ${serverName} 上新建工作区`, `New workspace on ${serverName}`) : L("在这台服务器上新建工作区", "New workspace on this server"))
+                          : L("设置", "Settings")}
                   </span>
                 </button>
               </Fragment>

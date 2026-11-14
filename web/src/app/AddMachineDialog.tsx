@@ -1,20 +1,51 @@
 import { useEffect, useState } from "react";
-import { Link2 } from "lucide-react";
-import { appApi, type Hub, type JoinLink } from "@/appapi";
+import { Check, Link2, Monitor } from "lucide-react";
+import { appApi, type Hub, type JoinLink, type ServerMachine } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
 
-/** Pick a hub, create a one-off join link, show the command. */
-export function AddMachineDialog({ open, onOpenChange, hubs }: {
+/** Pick a hub, create a one-off join link, show the command. A computer
+ *  already on the same server (in another workspace there) is added with
+ *  one click instead, through its existing connection. */
+export function AddMachineDialog({ open, onOpenChange, hubs, onAdded }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hubs: Hub[];
+  /** a computer was added (from another workspace of the server) */
+  onAdded?: () => void;
 }) {
   const [hubId, setHubId] = useState("");
   const [link, setLink] = useState<JoinLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [nearby, setNearby] = useState<ServerMachine[]>([]);
+  const [adding, setAdding] = useState("");
+  const [added, setAdded] = useState<string[]>([]);
+
+  // Computers of the server's other workspaces (hubs from v0.19.9).
+  useEffect(() => {
+    setNearby([]);
+    setAdded([]);
+    if (!open || !hubId) return;
+    let off = false;
+    appApi.serverMachines(hubId).then((r) => { if (!off) setNearby(r.machines || []); }).catch(() => { /* older App backend or hub */ });
+    return () => { off = true; };
+  }, [open, hubId]);
+
+  const addNearby = async (m: ServerMachine) => {
+    setAdding(m.machine_id);
+    setError(null);
+    try {
+      await appApi.addMachineFrom(hubId, m.hub_id, m.machine_id);
+      setAdded((a) => [...a, m.machine_id]);
+      onAdded?.();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setAdding("");
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +113,34 @@ export function AddMachineDialog({ open, onOpenChange, hubs }: {
               ))}
             </select>
           </label>}
+
+          {nearby.length > 0 && !link && (
+            <div className="app-picker app-picker-nearby">
+              <span className="app-field-label">{L("已经连着这台服务器的电脑", "Computers already on this server")}</span>
+              <div className="app-picker-list">
+                {nearby.map((m) => {
+                  const done = added.includes(m.machine_id);
+                  return (
+                    <div key={`${m.hub_id}/${m.machine_id}`} className="app-picker-row">
+                      <Monitor />
+                      <span className="app-picker-name">{m.name}</span>
+                      <span className="app-picker-sub">{L(`在「${m.hub_name}」`, `in ${m.hub_name}`)}{!m.online && L(" · 离线", " · offline")}</span>
+                      <span className="app-picker-kind">
+                        {done ? <span className="app-picker-done"><Check />{L("已加进来", "Added")}</span> : (
+                          <button type="button" className="app-btn app-btn-small" disabled={!!adding || !m.can_spawn}
+                            title={m.can_spawn ? undefined : L("它现在不在线，或者上面的 myco 太旧（要 v0.19.9 以上）", "It is offline, or its myco is older than v0.19.9")}
+                            onClick={() => void addNearby(m)}>
+                            {adding === m.machine_id ? <><span className="app-spinner" />{L("正在加…", "Adding…")}</> : L("加进来", "Add")}
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="app-small-note">{L("它们已经在同一台服务器的其他工作区里，点一下就能加进这个工作区，不用在那台电脑上运行命令。别的电脑用下面的链接。", "They are in other workspaces of this server: one click adds them here, nothing to run on them. Other computers join with the link below.")}</div>
+            </div>
+          )}
 
           {!link ? (
             <>

@@ -1961,6 +1961,44 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // On a hub server this App owns, the switcher adds a workspace there
+    // (same address, kept apart) and switches to it; its add-computer dialog
+    // offers the server's other computers, one click each.
+    await step("工作区 · 在服务器上再开一个", async () => {
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
+      await page.locator(".app-hub-menu").waitFor();
+      const entry = page.locator(".app-hub-menu-item", { hasText: "上新建工作区" }).filter({ hasNotText: "这台电脑" });
+      await entry.waitFor({ timeout: 10_000 });
+      await clickVisible(page, entry);
+      const dialog = page.locator(".app-modal");
+      await dialog.waitFor({ timeout: 10_000 });
+      const title = compactText(await dialog.locator("h3").first().innerText());
+      if (!title.includes("192.168.1.20")) throw new Error(`应说明建在哪台服务器上，实际「${title}」`);
+      await dialog.locator(".app-field .app-input").fill("team-b");
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-new-workspace-server");
+      await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
+      await page.locator(".sp-switch .app-hub-name", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      // The new workspace offers the server's computers.
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.getByRole("button", { name: "连上另一台电脑" }));
+      const add = page.locator(".app-modal");
+      await add.locator(".app-picker-row").first().waitFor({ timeout: 10_000 });
+      const offered = add.locator(".app-picker-row", { has: page.getByRole("button", { name: "加进来" }) }).first();
+      await offered.waitFor({ timeout: 10_000 });
+      const machineName = (await offered.locator(".app-picker-name").innerText()).trim();
+      const row = add.locator(".app-picker-row", { has: page.locator(".app-picker-name", { hasText: machineName }) }).first();
+      await clickVisible(page, row.getByRole("button", { name: "加进来" }));
+      await row.locator(".app-picker-done", { hasText: "已加进来" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-add-computer-same-server");
+      await page.keyboard.press("Escape");
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+      if (narrow) await sidebar(page, false);
+    });
+
     // A computer can run more than one workspace: the switcher starts
     // another by name, tags the ones on this computer, and Settings lists
     // them under one heading.
