@@ -231,7 +231,7 @@ const deletableAgents = () => [
   makeAgent({
     name: "temp-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Codex",
     description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
-    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace" },
+    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full" },
     binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
@@ -408,7 +408,7 @@ const state = {
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
-            effort: "high", effort_source: "app", access: "workspace",
+            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace",
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -436,7 +436,7 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", provider: "DeepSeek", provider_source: "machine",
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
             quota: {
               source: "claude", at: iso(600),
               windows: [
@@ -2317,7 +2317,20 @@ const server = http.createServer(async (req, res) => {
         }
         const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
         const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });
+        // Omission preserves access: managers may still change the model,
+        // but only the owner can change permissions (including to "").
+        const access = body.access === undefined ? agent.run_settings?.access || "" : body.access;
+        if (body.access !== undefined) {
+          const me = whoami(hub)?.member;
+          const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
+          if (!owns) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改权限。");
+          const levels = ["readonly", "workspace", "full"];
+          if (!["", ...levels].includes(access)) return fail(res, 400, "invalid_argument", "权限必须是 readonly、workspace 或 full。");
+          const cap = Math.max(levels.indexOf(rt.max_access), levels.indexOf(rt.access));
+          if (access && levels.indexOf(access) > cap) return fail(res, 403, "permission_denied", "这台电脑不允许更高的权限，请在那台电脑上修改 spawn.max_access。");
+        }
         agent.run_settings = {};
+        if (access) agent.run_settings.access = access;
         if (body.model) agent.run_settings.model = body.model;
         if (body.effort) agent.run_settings.effort = body.effort;
         // What the runtime now reports, as a real hub's runner would.
