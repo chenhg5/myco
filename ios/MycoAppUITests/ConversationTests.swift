@@ -275,12 +275,17 @@ final class ConversationTests: XCTestCase {
         let app = launch(["-myco-route", "project:myco-ios"])
         XCTAssertTrue(app.descendants(matching: .any)["plan.card"].waitForExistence(timeout: 20), "the plan is a card")
         XCTAssertTrue(app.staticTexts["1 of 4 done"].exists, "that counts what is done")
-        let summary = app.buttons["steps.summary"].firstMatch
-        XCTAssertTrue(summary.exists, "steps fold into one line")
+        let summaries = app.buttons.matching(identifier: "steps.summary")
+        XCTAssertTrue(summaries.firstMatch.exists, "steps fold into one line")
         XCTAssertFalse(app.staticTexts["git status --short"].exists, "and never open by themselves")
+        // What it thought is part of the steps, not prose on the page.
+        let thought = app.staticTexts["先看现在的代码怎么组织的，再决定改哪里。"]
+        XCTAssertFalse(thought.exists, "thinking is folded away too")
         snap("process-folded")
-        summary.tap()
-        XCTAssertTrue(app.staticTexts["git status --short"].waitForExistence(timeout: 3), "a tap opens them")
+        summaries.element(boundBy: 0).tap()
+        XCTAssertTrue(thought.waitForExistence(timeout: 3), "a tap shows what it thought")
+        summaries.element(boundBy: 1).tap()
+        XCTAssertTrue(app.staticTexts["git status --short"].waitForExistence(timeout: 3), "and a tap opens the commands it ran")
         snap("process-open")
     }
 
