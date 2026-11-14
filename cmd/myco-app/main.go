@@ -73,6 +73,9 @@ func main() {
 	}
 	b.Shell = guiShell
 	b.Listen, b.Dictate = listen, dictate
+	if voiceAudio != nil {
+		b.Voice = voiceAudio
+	}
 	if runtime.GOOS == "darwin" {
 		b.PickImage = func() (string, error) {
 			if pickImage == nil { // not yet: the app is starting
