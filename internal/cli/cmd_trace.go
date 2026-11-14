@@ -96,11 +96,24 @@ func sessionFile(getenv func(string) string) string {
 
 // stepsOf picks how to read a session file's lines: a Codex rollout file,
 // else Claude Code's.
+//
+// What the session says is process, not its answer: the answer goes out
+// with myco message reply, and the rest is the session talking to its own
+// terminal. So its text is shown as thinking (faded, folded when long).
 func stepsOf(file string) func([]byte) []harness.Event {
+	parse := claude.TranscriptEvents
 	if strings.HasPrefix(filepath.Base(file), "rollout-") {
-		return codex.TranscriptEvents
+		parse = codex.TranscriptEvents
 	}
-	return claude.TranscriptEvents
+	return func(line []byte) []harness.Event {
+		evs := parse(line)
+		for i := range evs {
+			if evs[i].Kind == "text" {
+				evs[i].Kind = "thinking"
+			}
+		}
+		return evs
+	}
 }
 
 // tracePoster is what a follower needs from the hub.
