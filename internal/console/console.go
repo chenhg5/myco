@@ -244,6 +244,7 @@ func (b *Backend) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})
 	m.HandleFunc("GET /app/hubs", b.listHubs)
+	b.workspaceRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)
@@ -1182,8 +1183,20 @@ func (b *Backend) addHub(w http.ResponseWriter, r *http.Request) {
 			Suggestion: "on the hub machine run: myco console token create --name <device>"})
 		return
 	}
-	if in.Name == "" {
-		in.Name = hostOf(u)
+	st, code, err := b.addHubWith(r.Context(), in.Name, u, in.Token)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, code, st)
+}
+
+// addHubWith adds hub u to this app with token (a console token, or a
+// one-time pairing code it trades for one), under name ("" = its host). An
+// app that has it already keeps one entry and takes the new token.
+func (b *Backend) addHubWith(ctx context.Context, name, u, token string) (HubStatus, int, error) {
+	if name == "" {
+		name = hostOf(u)
 	}
 	nc := b.NewClient
 	if nc == nil {
@@ -1191,65 +1204,56 @@ func (b *Backend) addHub(w http.ResponseWriter, r *http.Request) {
 	}
 	// A one-time link: trade its code for this device's own token, so the
 	// link is worthless afterwards.
-	if strings.HasPrefix(in.Token, app.PairingCodePrefix) {
+	if strings.HasPrefix(token, app.PairingCodePrefix) {
 		pc, err := nc(u, "")
 		if err != nil {
-			writeErr(w, err)
-			return
+			return HubStatus{}, 0, err
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 3*b.timeout())
-		res, err := pc.Pair(ctx, in.Token, b.deviceName())
+		pctx, cancel := context.WithTimeout(ctx, 3*b.timeout())
+		res, err := pc.Pair(pctx, token, b.deviceName())
 		cancel()
 		if err != nil {
-			writeErr(w, err)
-			return
+			return HubStatus{}, 0, err
 		}
-		in.Token = res.Token
+		token = res.Token
 	}
-	c, err := nc(u, in.Token)
+	c, err := nc(u, token)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return HubStatus{}, 0, err
 	}
 	// The token must work, and as an admin (an agent token also reads the
 	// overview, but only its own view).
-	ctx, cancel := context.WithTimeout(r.Context(), 3*b.timeout())
+	octx, cancel := context.WithTimeout(ctx, 3*b.timeout())
 	defer cancel()
-	ov, err := c.Overview(ctx, 1)
+	ov, err := c.Overview(octx, 1)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return HubStatus{}, 0, err
 	}
 	if ov.Viewer.Kind != "admin" {
-		writeErr(w, &client.Error{Status: http.StatusForbidden, Code: "permission_denied",
+		return HubStatus{}, 0, &client.Error{Status: http.StatusForbidden, Code: "permission_denied",
 			Message:    "this is an agent token, not a console token",
-			Suggestion: "on the hub machine run: myco console token create --name <device>"})
-		return
+			Suggestion: "on the hub machine run: myco console token create --name <device>"}
 	}
 	// The same hub again (say, a new link): keep one entry, new token.
 	if hubs, err := b.Store.List(); err == nil {
 		for _, h := range hubs {
 			if h.URL == u {
-				if err := b.Secrets.Set(h.ID, in.Token); err != nil {
-					writeErr(w, fmt.Errorf("cannot save the token in the keychain: %w", err))
-					return
+				if err := b.Secrets.Set(h.ID, token); err != nil {
+					return HubStatus{}, 0, fmt.Errorf("cannot save the token in the keychain: %w", err)
 				}
-				writeJSON(w, http.StatusOK, HubStatus{Hub: h, OK: true})
-				return
+				return HubStatus{Hub: h, OK: true}, http.StatusOK, nil
 			}
 		}
 	}
-	h, err := b.Store.Add(in.Name, u)
+	h, err := b.Store.Add(name, u)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return HubStatus{}, 0, err
 	}
-	if err := b.Secrets.Set(h.ID, in.Token); err != nil {
+	if err := b.Secrets.Set(h.ID, token); err != nil {
 		_, _ = b.Store.Remove(h.ID)
-		writeErr(w, fmt.Errorf("cannot save the token in the keychain: %w", err))
-		return
+		return HubStatus{}, 0, fmt.Errorf("cannot save the token in the keychain: %w", err)
 	}
-	writeJSON(w, http.StatusCreated, HubStatus{Hub: h, OK: true})
+	return HubStatus{Hub: h, OK: true}, http.StatusCreated, nil
 }
 
 func (b *Backend) removeHub(w http.ResponseWriter, r *http.Request) {

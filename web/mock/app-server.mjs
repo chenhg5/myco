@@ -2091,6 +2091,51 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // Workspaces of the hub's server (v0.19.9 hubs serve several at
+    // /w/<name>). The studio hub's server: this App owns it.
+    const origin = (u) => { try { return new URL(u).origin; } catch { return u; } };
+    if (parts.length === 4 && parts[3] === "workspaces" && method === "GET") {
+      const root = state.hubs.find((h) => !h.url.includes("/w/") && origin(h.url) === origin(hub.url));
+      const owns = root?.id === "hub_studio";
+      return send(res, 200, { supported: owns, allowed: owns, server: origin(hub.url), workspaces: (root?.workspaces || []) });
+    }
+    if (parts.length === 4 && parts[3] === "workspaces" && method === "POST") {
+      const body = await readBody(req);
+      const name = String(body?.name || "").trim();
+      if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)) return fail(res, 400, "invalid_argument", `invalid workspace name "${name}"`);
+      const root = state.hubs.find((h) => !h.url.includes("/w/") && origin(h.url) === origin(hub.url));
+      root.workspaces = root.workspaces || [];
+      if (root.workspaces.some((w) => w.name === name)) return fail(res, 409, "conflict", `workspace "${name}" already exists`);
+      const url = `${origin(hub.url)}/w/${name}`;
+      root.workspaces.push({ name, url, created_at: iso(0) });
+      const h = { id: `hub_ws_${name}`, name: String(body?.display_name || "").trim() || name, url, token: `myco_console_ws_${name}`,
+        ok: true, hub_version: hub.hub_version, update_available: false, agents: [], threads: {}, recent: [], machines: [] };
+      state.hubs.push(h);
+      return send(res, 201, { id: h.id, name: h.name, url: h.url, ok: true });
+    }
+    // Computers of the server's other workspaces, not in this one yet.
+    if (parts.length === 4 && parts[3] === "server-machines" && method === "GET") {
+      const mine = new Set((hub.machines || []).map((m) => m.name));
+      const out = [];
+      for (const h of state.hubs) {
+        if (h.id === hub.id || origin(h.url) !== origin(hub.url)) continue;
+        for (const m of h.machines || []) {
+          if (mine.has(m.name) || m.legacy || out.some((x) => x.name === m.name)) continue;
+          out.push({ hub_id: h.id, hub_name: h.name, machine_id: m.id, name: m.name, hostname: m.hostname, os: m.os, online: !!m.online, can_spawn: !!m.can_spawn });
+        }
+      }
+      return send(res, 200, { machines: out });
+    }
+    if (parts.length === 5 && parts[3] === "machines" && parts[4] === "add-from" && method === "POST") {
+      const body = await readBody(req);
+      const from = state.hubs.find((h) => h.id === body?.from_hub);
+      const m = (from?.machines || []).find((x) => x.id === body?.machine_id);
+      if (!m) return fail(res, 404, "not_found", "没有这台电脑");
+      hub.machines = hub.machines || [];
+      hub.machines.push({ ...m, id: `${m.id}_${hub.id}`, agents: [] });
+      return send(res, 200, { joined: hub.url, machine_node: `${m.name}-machine` });
+    }
+
     // /app/hubs/{id}/links — a one-off enrollment link for adding a machine.
     if (parts.length === 4 && parts[3] === "links" && method === "POST") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
