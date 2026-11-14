@@ -793,6 +793,27 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     };
   })();
 
+  // One loading in the chat, the newest: of the runs at work (acknowledged,
+  // or reporting progress), only the newest one moves; an older one still
+  // open says quietly that it is not finished. Someone else's task at the
+  // foot counts too.
+  const liveRun = (() => {
+    if (termMode || !shown) return null;
+    let newest: Message | null = null;
+    for (const m of shown) {
+      if (m.type !== "task" || m.e2e || !isOpen(m.status) || answerOf.has(m.id) || m.asking) continue;
+      if (m.status !== "acked" && !progressOf.get(m.id)?.length) continue;
+      const ours = isMe(m.from, row?.hub) && !isStuck(m);
+      const theirs = !observed && alsoSet.has(m.from) && m.to === target.agent;
+      if (!ours && !theirs) continue;
+      if (!newest || new Date(m.created_at).getTime() >= new Date(newest.created_at).getTime()) newest = m;
+    }
+    return newest;
+  })();
+  const footLive = !!working && !working.queued
+    && (!liveRun || new Date(working.task.created_at).getTime() > new Date(liveRun.created_at).getTime());
+  const liveId = footLive ? "" : liveRun?.id || "";
+
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
@@ -1340,11 +1361,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -1520,7 +1541,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {!shellMode && !execNode && trailing}
             {working && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
-                status={working.status} queued={working.queued} behind={working.behind}
+                status={working.status} queued={working.queued} quiet={!footLive} behind={working.behind}
                 side={observed && working.task.to === target.agent ? "right" : "left"} />
             )}
             </>

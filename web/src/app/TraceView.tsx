@@ -150,7 +150,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsage, answers, canAnswer, onAnswer }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, said, onUsage, answers, canAnswer, onAnswer }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -167,6 +167,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   waiting?: string;
   /** its answer is in the conversation: done, even if its status lags */
   answered?: boolean;
+  /** a newer run in the chat is the one at work on screen: this one, still
+   *  open, does not move (one loading at a time) */
+  quiet?: boolean;
 }) {
   const running = isOpen(task.status) && !answered;
   // What it says that arrives after this run was first drawn grows in.
@@ -230,7 +233,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   }, [hubId, task.id, running, gone]);
   // While nothing says what it is doing: a playful verb (the pixel mushroom
   // is at work).
-  const verb = useVerb(running);
+  const verb = useVerb(running && !quiet);
+  // Still open, but not the newest at work: no loading, a quiet line.
+  const moving = running && !quiet;
   // A finished run's time, tokens and cost go with its answer.
   useEffect(() => {
     if (!onUsage || running || !events) return;
@@ -255,12 +260,19 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   }
   // At work with no steps to show yet (none so far, or a hub that does not
   // keep them): the mushroom at work, a playful verb, and the time.
-  const atWork = (
+  const atWork = moving ? (
     <div className="trace is-live">
       <div className="trace-head trace-wait">
         <Mushroom />
         <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
         <Elapsed since={task.created_at} className="trace-usage" />
+      </div>
+    </div>
+  ) : (
+    <div className="trace is-waiting is-quiet">
+      <div className="trace-head trace-wait">
+        <Mushroom idle />
+        <span className="trace-title">{L("还没做完", "Not finished yet")}</span>
       </div>
     </div>
   );
@@ -364,8 +376,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
   const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
 
   return (
-    <div className={cn("trace is-flow", running && !asking && "is-live")} ref={body}>
-      {plan && <PlanCard items={plan.items} live={running} />}
+    <div className={cn("trace is-flow", moving && !asking && "is-live")} ref={body}>
+      {plan && <PlanCard items={plan.items} live={moving} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className="trace-say">
           {/* What it says while you watch grows in; what was there, is. */}
@@ -381,7 +393,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
         // own, quieter than the answer, each with when.
         <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
           {seg.items.map((r, j) => (
-            <li key={r.key} className={cn("trace-report", running && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
+            <li key={r.key} className={cn("trace-report", moving && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
               <span className="trace-report-dot" aria-hidden />
               <div className="trace-report-text">
                 <MessageContent body={r.text} />
@@ -393,15 +405,17 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, said, onUsag
           ))}
         </ol>
       ) : (
-        <StepGroup key={seg.rows[0].key} rows={seg.rows} live={running && i === segments.length - 1} since={task.created_at} />
+        <StepGroup key={seg.rows[0].key} rows={seg.rows} live={moving && i === segments.length - 1} since={task.created_at} />
       ))}
-      {running && !asking && endsWithSay && (
+      {moving && !asking && endsWithSay && (
         <div className="trace-head trace-wait">
           <Mushroom />
           <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
           <Elapsed since={task.created_at} className="trace-usage" />
         </div>
       )}
+      {/* still open, but a newer run is the one moving: said, not shown */}
+      {running && quiet && !asking && <div className="trace-foot">{L("还没做完", "Not finished yet")}</div>}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
   );

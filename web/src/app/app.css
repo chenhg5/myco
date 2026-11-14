@@ -3404,21 +3404,94 @@ button.conv-attach:hover .conv-attach-go {
 }
 
 /* ---------- a file read in the App (preview.tsx) ---------- */
-.fp-modal {
-  width: min(760px, calc(100vw - 32px));
+/* A panel from the right, floating over the page like a member's card
+   (space.css .ms): its full height from the start, so nothing grows as the
+   file arrives. Full screen gives it the window, with the same inset. */
+.fp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.12);
+  animation: app-fade 0.12s ease-out;
+}
+.fp-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100% - 32px));
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  color: var(--fg);
+  overflow: hidden;
+  outline: none;
+  transition: width 0.18s ease-out;
+  animation: ms-in 0.18s ease-out;
+}
+.fp-panel.is-full {
+  width: calc(100% - 32px);
+}
+/* In a narrow window the panel already has it all: no full screen. */
+@media (max-width: 840px) {
+  .fp-full-btn { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-panel, .fp-scrim { animation: none; transition: none; }
+}
+.fp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 12px 10px 12px 18px;
+  border-bottom: 1px solid var(--line-2);
+}
+.fp-titles {
+  flex: 1;
+  min-width: 0;
+}
+.fp-titles h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fp-titles p {
+  margin: 1px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 .fp-views {
-  margin: 2px 0 10px;
+  flex: none;
+}
+.fp-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
 .fp-body {
-  max-height: min(64vh, 640px);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line-2);
 }
-.fp-body.is-doc {
-  padding: 18px 22px;
+/* A document reads at a line length of its own, also in full screen. */
+.fp-doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 22px 28px 32px;
+}
+.fp-doc .md {
+  font-size: 13.5px;
+  line-height: 1.7;
 }
 /* An HTML file as a page: white like a page, in its own frame. */
 .fp-body.is-page {
@@ -3428,13 +3501,9 @@ button.conv-attach:hover .conv-attach-go {
 .fp-frame {
   display: block;
   width: 100%;
-  height: min(64vh, 640px);
+  height: 100%;
   border: 0;
   background: #fff;
-}
-.fp-body.is-doc .md {
-  font-size: 13.5px;
-  line-height: 1.7;
 }
 .fp-note {
   margin: 0;
@@ -3445,7 +3514,7 @@ button.conv-attach:hover .conv-attach-go {
 .fp-code,
 .fp-diff {
   margin: 0;
-  padding: 12px 14px;
+  padding: 14px 18px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
   line-height: 1.55;
@@ -3455,8 +3524,8 @@ button.conv-attach:hover .conv-attach-go {
 }
 .fp-line {
   display: block;
-  margin: 0 -14px;
-  padding: 0 14px;
+  margin: 0 -18px;
+  padding: 0 18px;
 }
 .fp-line.is-add {
   background: var(--green-soft);
