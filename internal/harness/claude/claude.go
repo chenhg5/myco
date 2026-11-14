@@ -178,7 +178,7 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 	if req.Effort != "" {
 		args = append(args, "--effort", req.Effort)
 	}
-	args = append(args, accessArgs[c.opts.Access]...)
+	args = append(args, accessArgs[req.AccessOr(c.opts.Access)]...)
 	// myco is the agent's own messaging channel (reply, hold, delegate):
 	// headless runs cannot ask for approval, so allow it explicitly. Other
 	// commands stay governed by the access level.

@@ -129,7 +129,7 @@ func (t *tmpl) argv(req harness.Request) (args []string, stdin string, resumed b
 	if t.opts.Model != "" {
 		pre = append(pre, t.spec.ModelArgs...)
 	}
-	pre = append(pre, t.spec.AccessArgs[t.opts.Access]...)
+	pre = append(pre, t.spec.AccessArgs[req.AccessOr(t.opts.Access)]...)
 	pre = append(pre, t.opts.Args...)
 	if n := len(base); n > 0 && strings.Contains(base[n-1], "{prompt}") {
 		expand(base[:n-1])

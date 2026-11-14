@@ -32,6 +32,7 @@ type runtimeReporter struct {
 	choice  providerChoice
 	model   string // the agent's run settings from the hub ("" = none)
 	effort  string
+	access  string
 	quota   *api.Quota // the account's limits, as the CLI last reported them
 	last    api.Runtime
 	sending bool
@@ -39,7 +40,7 @@ type runtimeReporter struct {
 
 // reportToHub reports this machine (once) and the agent's runtime, and
 // returns the reporter for later provider changes.
-func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
+func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc config.Runner, access, maxAccess harness.Access, choice providerChoice, log *slog.Logger) *runtimeReporter {
 	rep := &runtimeReporter{c: c, log: log, cfg: rc.Model, choice: choice}
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -55,7 +56,7 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 				log.Debug("machine report failed (older hub?)", "err", err)
 			}
 		}
-		rt := api.Runtime{CLI: h.Name(), Access: string(access)}
+		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess)}
 		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
 			rt.Model, rt.ModelSource = m, "cli-config"
 		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
@@ -74,14 +75,14 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 	return rep
 }
 
-// RunSettings records the model and effort the next run starts with.
-func (r *runtimeReporter) RunSettings(model, effort string) {
+// RunSettings records the model, effort and access the next run starts with.
+func (r *runtimeReporter) RunSettings(model, effort, access string) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
-	changed := r.model != model || r.effort != effort
-	r.model, r.effort = model, effort
+	changed := r.model != model || r.effort != effort || r.access != access
+	r.model, r.effort, r.access = model, effort, access
 	r.mu.Unlock()
 	if changed {
 		r.flushLater()
@@ -152,6 +153,9 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	}
 	if r.effort != "" {
 		rt.Effort, rt.EffortSource = r.effort, "app"
+	}
+	if r.access != "" {
+		rt.Access = r.access
 	}
 	rt.Quota = r.quota
 	if rt == r.last {

@@ -57,6 +57,9 @@ type Request struct {
 	// and the CLI's reasoning effort for this run (the agent's run settings).
 	Model  string
 	Effort string
+	// Access, when set, replaces the harness's configured access for this
+	// run (the owner's choice in the app, already capped by the machine).
+	Access Access
 	// OnEvent, when set, gets the run's steps as they happen (what the
 	// agent says, thinks and does), for the live view in the app. Harnesses
 	// that cannot tell leave it uncalled. It may be called from several goroutines.
@@ -218,6 +221,27 @@ const (
 	// AccessFull: no approvals and no sandbox. Only for isolated machines.
 	AccessFull Access = "full"
 )
+
+// AccessOr is the run's access: req.Access when set, else def.
+func (r Request) AccessOr(def Access) Access {
+	if r.Access != AccessDefault {
+		return r.Access
+	}
+	return def
+}
+
+// Rank orders access levels: default 0, readonly 1, workspace 2, full 3.
+func (a Access) Rank() int {
+	switch a {
+	case AccessReadonly:
+		return 1
+	case AccessWorkspace:
+		return 2
+	case AccessFull:
+		return 3
+	}
+	return 0
+}
 
 // ParseAccess validates an access level.
 func ParseAccess(s string) (Access, error) {

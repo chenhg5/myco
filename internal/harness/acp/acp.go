@@ -101,7 +101,7 @@ func (a *agent) args(req harness.Request) []string {
 			args = append(args, strings.ReplaceAll(s, "{model}", a.opts.Model))
 		}
 	}
-	args = append(args, a.spec.AccessArgs[a.opts.Access]...)
+	args = append(args, a.spec.AccessArgs[req.AccessOr(a.opts.Access)]...)
 	for _, d := range req.ExtraDirs {
 		for _, s := range a.spec.DirArgs {
 			args = append(args, strings.ReplaceAll(s, "{dir}", d))
@@ -133,7 +133,7 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	// over the protocol first, so the agent can save its session.
 	procCtx, kill := context.WithCancel(context.WithoutCancel(ctx))
 	defer kill()
-	env := append(append([]string{}, a.spec.AccessEnv[a.opts.Access]...), req.Env...)
+	env := append(append([]string{}, a.spec.AccessEnv[req.AccessOr(a.opts.Access)]...), req.Env...)
 	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: env})
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

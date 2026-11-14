@@ -74,6 +74,8 @@ type Runtime struct {
 	// app (the agent's run settings), self (the agent reported it) or "".
 	Effort       string `json:"effort,omitempty"`
 	EffortSource string `json:"effort_source,omitempty"`
+	// MaxAccess is the highest access its machine lets the hub set.
+	MaxAccess string `json:"max_access,omitempty"`
 	// Quota is the account's usage limits as the CLI last reported them
 	// (nil until a run reported any).
 	Quota *Quota `json:"quota,omitempty"`
@@ -104,7 +106,13 @@ type QuotaWindow struct {
 type RunSettings struct {
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	// Access is the permission level (readonly, workspace or full). Only the
+	// agent's owner sets it, and its machine caps it (spawn.max_access).
+	Access string `json:"access,omitempty"`
 }
+
+// Accesses are the permission levels, lowest first.
+var Accesses = []string{"readonly", "workspace", "full"}
 
 // Efforts are the reasoning efforts each CLI takes.
 var Efforts = map[string][]string{
@@ -118,6 +126,9 @@ func (rs RunSettings) Validate(h string) error {
 		if len(s) > 80 || strings.ContainsAny(s, "\x00\n\r \t") {
 			return Errf(CodeInvalidArgument, "model and effort must be single words under 80 characters")
 		}
+	}
+	if rs.Access != "" && !slices.Contains(Accesses, rs.Access) {
+		return Errf(CodeInvalidArgument, "access %q is not one of %s", rs.Access, strings.Join(Accesses, ", "))
 	}
 	if rs.Effort == "" {
 		return nil
@@ -142,7 +153,7 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}
