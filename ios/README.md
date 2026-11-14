@@ -43,7 +43,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 
 | Argument | Values |
 |---|---|
-| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation): a demo workspace. `welcome`: the welcome page |
+| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation), `waiting` (the demo plus runs that are open but not at work): a demo workspace. `welcome`: the welcome page |
 | `-myco-join` | an "add a device" link to join with at launch |
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |

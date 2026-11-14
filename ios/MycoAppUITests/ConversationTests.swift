@@ -114,6 +114,47 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testARunThatWaitsStandsStillAndSaysWhatFor() {
+        // The notes helper set my task aside: it answers later.
+        var app = launch(["-myco-start", "waiting", "-myco-route", "agent:studio-claude-c41f"])
+        var paused = app.descendants(matching: .any)["run.paused"]
+        XCTAssertTrue(paused.waitForExistence(timeout: 20), "an open run that is not at work says so")
+        XCTAssertTrue(app.staticTexts["Set aside; it answers later"].exists)
+        // It is free meanwhile: what I type is a new message, not an addition.
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertEqual(submit.label, "Send")
+        snap("waiting-held")
+        app.terminate()
+
+        // The coordinator handed work out and waits for it.
+        app = launch(["-myco-start", "waiting", "-myco-route", "project:myco-ios"])
+        paused = app.descendants(matching: .any)["run.paused"]
+        XCTAssertTrue(paused.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Waiting for 测试"].exists, "it names whom it waits for")
+        snap("waiting-for")
+    }
+
+    @MainActor
+    func testAMessageCanBeTakenOutOfMyViewAndBack() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let mine = app.staticTexts["帮我把昨天的会议记录整理成三条结论。"]
+        XCTAssertTrue(mine.waitForExistence(timeout: 20))
+        mine.press(forDuration: 1.0)
+        let delete = app.buttons["Delete (from your view only)"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5), "a long press offers to delete it")
+        snap("delete-menu")
+        delete.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: mine)
+        waitForExpectations(timeout: 5)
+        // For a moment it can be taken back.
+        let undo = app.buttons["delete.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        snap("delete-undo")
+        undo.tap()
+        XCTAssertTrue(mine.waitForExistence(timeout: 5), "undo brings it back")
+    }
+
+    @MainActor
     func testASlowConversationShowsItsShapeThenFadesIn() {
         // Every answer of the demo takes a while, as on a bad connection.
         let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "1500"])

@@ -54,7 +54,7 @@ struct MycoApp: App {
                 FileShelf.forget(id)
             },
             speech: Self.speech)
-        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long]
+        let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
 
