@@ -1961,6 +1961,36 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // A voice call: the headset at the top right opens it; it hears you,
+    // hands a task to an agent (a line saying so) and answers; Settings ›
+    // 语音 holds its model and voice; hanging up closes it.
+    await step("语音 · 一通电话", async () => {
+      if (narrow) await sidebar(page, false);
+      await clickVisible(page, page.getByRole("button", { name: "语音聊天" }));
+      const call = page.locator(".vc-overlay");
+      await call.waitFor({ timeout: 10_000 });
+      await call.locator(".vc-line.is-me", { hasText: "让后端把登录那个 bug 修了" }).waitFor({ timeout: 10_000 });
+      await call.locator(".vc-action", { hasText: "交给 backend" }).waitFor({ timeout: 10_000 });
+      await call.locator(".vc-line.is-them", { hasText: "修好了我告诉你" }).waitFor({ timeout: 10_000 });
+      if (await call.locator(".vc-line.is-hearing").count() > 1) throw new Error("听到一半的字应该只有一行");
+      await settle(page, 300);
+      await shot(page, size, scheme, "voice-call");
+      // Mute, then hang up.
+      await clickVisible(page, call.getByRole("button", { name: "静音" }));
+      await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, call.getByRole("button", { name: "挂断" }));
+      await call.waitFor({ state: "hidden", timeout: 5_000 });
+      // Its settings.
+      await go(page, "设置", narrow);
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
+      await page.locator(".app-setting-group", { hasText: "豆包" }).waitFor({ timeout: 10_000 });
+      if (await page.locator("input[type=password]").evaluateAll((els) => els.some((e) => e.value))) throw new Error("密钥不应显示出来");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-voice");
+      if (narrow) await sidebar(page, false);
+    });
+
     // On a hub server this App owns, the switcher adds a workspace there
     // (same address, kept apart) and switches to it; its add-computer dialog
     // offers the server's other computers, one click each.

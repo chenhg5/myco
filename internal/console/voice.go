@@ -68,7 +68,7 @@ type VoiceConfig struct {
 }
 
 const (
-	defaultVoiceSpeaker = "zh_female_vv_uranus_bigtts"
+	defaultVoiceSpeaker = "zh_male_wennuanahu_uranus_bigtts"
 	voiceLLMSecret      = "voice:llm"
 	voiceTTSSecret      = "voice:tts"
 )
