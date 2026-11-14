@@ -108,6 +108,7 @@ function summaryOf(rows: Row[]): string {
     else other++;
   }
   const parts: string[] = [];
+  if (rows.some((r) => r.kind === "thinking")) parts.push(L("想了一下", "thought"));
   if (read) parts.push(L(`读了 ${read} 个文件`, `read ${read} file${read > 1 ? "s" : ""}`));
   if (run) parts.push(L(`跑了 ${run} 条命令`, `ran ${run} command${run > 1 ? "s" : ""}`));
   if (edit) parts.push(L(`改了 ${files.size || edit} 个文件`, `edited ${files.size || edit} file${(files.size || edit) > 1 ? "s" : ""}`));
@@ -174,7 +175,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, footed, waitingOn, onPaused, said, onUsage, answers, canAnswer, onAnswer }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, footed, waitingOn, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -201,6 +202,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   waitingOn?: string[];
   /** told whenever it stops or goes back to work (pausedRun) */
   onPaused?: (taskId: string, paused: boolean) => void;
+  /** what you added to the task (steer): in the run at the time you sent
+   *  it, so what it did after is under it */
+  steers?: Message[];
 }) {
   const running = isOpen(task.status) && !answered;
   // What it says that arrives after this run was first drawn grows in.
@@ -302,8 +306,14 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   // offline, its session is busy, or it has only pulled the task): a quiet
   // line saying why, not a spinner. Once it reports progress it is at it.
   const reports = said || [];
+  const steerList = steers || [];
+  // Where the run has nothing else to show, what you added still shows,
+  // before its state.
+  const withSteers = (node: React.ReactNode) => (steerList.length
+    ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
+    : node);
   if (running && task.status !== "acked" && task.status !== "held" && !reports.length) {
-    return (
+    return withSteers(
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">
           <Mushroom idle />
@@ -351,10 +361,10 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const shown = rows.slice(0, end);
   // Nothing but a reply (or no record at all): no process to show.
   if (!reports.length) {
-    if (onlyReports) return running ? atWork : null;
-    if (gone) return running ? atWork : null;
-    if (!running && (events === null || steps === 0)) return null;
-    if (running && steps === 0) return atWork;
+    if (onlyReports) return withSteers(running ? atWork : null);
+    if (gone) return withSteers(running ? atWork : null);
+    if (!running && (events === null || steps === 0)) return withSteers(null);
+    if (running && steps === 0) return withSteers(atWork);
   }
 
   // The plan it is working through, as Claude Code's to-do list and
@@ -382,7 +392,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   // time); each run of steps in between folds into one line ("跑了 3 条命令、
   // 改了 1 个文件") that opens to show them. The newest steps, while it runs,
   // say what it is doing now; at the very end, while it works, the mushroom.
-  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; row?: Row };
+  type Item = { at?: string; say?: { key: string; text: string; report?: boolean; when?: string; files?: Attachment[] }; ask?: Message; steer?: Message; row?: Row };
   const items: Item[] = onlyReports ? [] : shown.map((r) => ({ at: r.at, row: r }));
   for (const p of reports) {
     // The plan is the card at the top; what was said with it stays here.
@@ -399,15 +409,26 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     }
     items.splice(i, 0, it);
   }
+  for (const m of steerList) {
+    const it: Item = { at: m.created_at, steer: m };
+    let i = items.length;
+    if (items.every((x) => x.at)) {
+      const t = new Date(m.created_at).getTime();
+      i = items.findIndex((x) => new Date(x.at!).getTime() > t);
+      if (i < 0) i = items.length;
+    }
+    items.splice(i, 0, it);
+  }
   type Report = { key: string; text: string; when: string; files?: Attachment[] };
   type Segment = { kind: "say"; key: string; text: string }
     | { kind: "ask"; msg: Message }
-    | { kind: "think"; key: string; text: string }
+    | { kind: "steer"; msg: Message }
     | { kind: "reports"; items: Report[] }
     | { kind: "steps"; rows: Row[] };
   const segments: Segment[] = [];
   for (const it of items) {
     if (it.ask) { segments.push({ kind: "ask", msg: it.ask }); continue; }
+    if (it.steer) { segments.push({ kind: "steer", msg: it.steer }); continue; }
     if (it.say?.report) {
       const lastSeg = segments[segments.length - 1];
       const r = { key: it.say.key, text: it.say.text, when: it.say.when || "", files: it.say.files };
@@ -421,12 +442,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text });
       continue;
     }
-    // Some models (DeepSeek, for one) say what they are doing only as
-    // thinking: read as faded prose between the steps, not folded away.
-    if (r.kind === "thinking") {
-      if (r.step.text?.trim()) segments.push({ kind: "think", key: r.key, text: r.step.text });
-      continue;
-    }
+    // Thinking is part of the process: folded into the line of steps
+    // ("想了一下、跑了 2 条命令"), there on a click, not grey prose in between.
+    if (r.kind === "thinking" && !r.step.text?.trim()) continue;
     const lastSeg = segments[segments.length - 1];
     if (lastSeg?.kind === "steps") lastSeg.rows.push(r);
     else segments.push({ kind: "steps", rows: [r] });
@@ -441,8 +459,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
           {/* What it says while you watch grows in; what was there, is. */}
           {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <MessageContent body={seg.text} />}
         </div>
-      ) : seg.kind === "think" ? (
-        <Thought key={seg.key} text={seg.text} />
+      ) : seg.kind === "steer" ? (
+        <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
       ) : seg.kind === "ask" ? (
         <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
           open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
@@ -488,16 +506,17 @@ function clock(iso: string): string {
 
 /** A run of steps between two things it said: one line, open to see them.
  *  The newest, while it runs, says what it is doing now. */
-/** A thinking step as faded prose: the first lines, all of it on a click. */
-function Thought({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  const body = text.trim();
-  const long = body.length > 280 || body.split("\n").length > 4;
+/** Something you added to the task, where you sent it in the run. */
+function SteerBubble({ hubId, msg }: { hubId: string; msg: Message }) {
   return (
-    <div className={cn("trace-say trace-think", long && !open && "is-clamped", long && "is-long")}
-      title={long && !open ? L("点开看完整的思考", "Show the whole thought") : undefined}
-      onClick={long ? () => setOpen((o) => !o) : undefined}>
-      {body}
+    <div className="conv-msg is-me trace-steer" data-msg={msg.id}>
+      <div className="conv-bubble">
+        <span className="conv-tag">{L("补充", "Added")}</span>
+        {msg.unreadable
+          ? <span className="conv-unreadable">{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+          : <MessageContent body={msg.body} />}
+        {msg.attachments && msg.attachments.length > 0 && <MessageAttachments hubId={hubId} items={msg.attachments} />}
+      </div>
     </div>
   );
 }
@@ -509,7 +528,7 @@ function StepGroup({ rows, live, since }: { rows: Row[]; live: boolean; since: s
     : last.kind === "tool" ? `${toolLabel(last.call.tool)} ${(last.call.input || "").split("\n")[0]}`.trim()
     : last.kind === "thinking" ? L("正在思考", "Thinking")
     : L("正在处理", "Working");
-  const head = live ? doing : summaryOf(rows) || (last?.kind === "thinking" ? L("思考了一下", "Thought it over") : L("过程", "Steps"));
+  const head = live ? doing : summaryOf(rows) || L("过程", "Steps");
   return (
     <div className={cn("trace-group", open && "is-open", live && "is-live")}>
       <button type="button" className="trace-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>

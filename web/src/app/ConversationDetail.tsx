@@ -861,7 +861,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
   const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
-    m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event")))
+    m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
     || (inserts || []).some((x) => x.at > shown![liveIndex].created_at));
   // What each run of yours waits for: the tasks the node handed out after
   // it began (before your next one) that are still open.
@@ -1268,10 +1268,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     at(m) > at(task) && at(m) < at(s) && m.id !== task.id && m.type !== "progress"
       && !(m.type === "steer" && (m.reply_to === task.id || m.answers)))
     || (inserts || []).some((x) => new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
+  // A task whose run is shown: what you added goes into the run at the time
+  // you sent it, so what the agent did after it is under it (as in Claude
+  // Code and Codex), and the loading stays last.
+  const runSteers = new Map<string, Message[]>();
   for (const m of shown || []) {
     if (m.type === "steer" && m.answers && byId.get(m.answers)) { answerTo.set(m.answers, m); continue; }
     if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
-    if (between(byId.get(m.reply_to)!, m)) continue;
+    const task = byId.get(m.reply_to)!;
+    if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
+    if (between(task, m)) continue;
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
   const answerAsk = (task: Message) => async (text: string) => {
@@ -1296,7 +1302,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     && (firstSeen.get(m.id) ?? 0) - arrived.current.at > 2000;
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
-    if (m.type === "steer" && m.reply_to && steersOf.get(m.reply_to)?.includes(m)) return false;
+    if (m.type === "steer" && m.reply_to && (steersOf.get(m.reply_to)?.includes(m) || runSteers.get(m.reply_to)?.includes(m))) return false;
     if (m.type !== "progress") return true;
     if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
     const task = taskOfProgress.get(m.id) || "";
@@ -1449,11 +1455,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -1467,6 +1473,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       if (m.unreadable) continue;
       searchItems.push({ id: m.id, text: m.body });
       for (const st of steersOf.get(m.id) || []) if (!st.unreadable) searchItems.push({ id: m.id, text: st.body });
+      for (const st of runSteers.get(m.id) || []) if (!st.unreadable) searchItems.push({ id: st.id, text: st.body });
     }
   }
 

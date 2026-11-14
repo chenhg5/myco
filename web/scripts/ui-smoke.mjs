@@ -936,36 +936,37 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
-    // In time order: a supplement to a task still running, sent after the
-    // answer to another one, is drawn where it was sent, quoting its task,
-    // not inside that task far above.
-    await step("单聊 · 补充按时间排", async () => {
+    // What you add to a task still running goes into its run at the time
+    // you sent it: what the agent does after is under it, its state last.
+    await step("单聊 · 补充接在过程里", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       // (sent from the box: a chat with nothing in it yet starts from it)
       const box = page.locator(".conv-detail .conv-compose-input");
-      await box.fill("按时间排：派出去核对链接");
+      await box.fill("补充接在过程里：派出去核对链接");
       await box.press("Enter");
-      const aMsg = page.locator(".conv-detail .conv-msg.is-me", { hasText: "按时间排：派出去核对链接" });
+      const aMsg = page.locator(".conv-detail .conv-msg.is-me", { hasText: "补充接在过程里：派出去核对链接" });
       await aMsg.waitFor({ timeout: 10_000 });
-      await page.waitForFunction(() => [...document.querySelectorAll(".conv-detail .conv-msg.is-me[data-msg]")]
-        .some((el) => el.textContent?.includes("按时间排：派出去核对链接") && !el.getAttribute("data-msg")?.startsWith("local")), null, { timeout: 10_000 });
-      const a = { id: await aMsg.evaluate((el) => el.getAttribute("data-msg")) };
-      await sendFromElsewhere("hub_studio", "review-cloud", "收到就好");
-      await page.waitForTimeout(7_000); // the second is answered; the first still runs
-      const r = await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${a.id}/steer`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: "补充：顺便看看 Windows 的包" }),
-      });
-      if (!r.ok) throw new Error(`补充没发出去：HTTP ${r.status}`);
-      const added = page.locator(".conv-detail .conv-msg.is-me", { hasText: "顺便看看 Windows 的包" });
+      // It has said something and is waiting for the one it handed out.
+      await page.locator(".conv-detail .trace-paused").last().waitFor({ timeout: 15_000 });
+      await box.fill("补充：顺便看看 Windows 的包");
+      await box.press("Enter");
+      const added = page.locator(".conv-detail .trace .trace-steer", { hasText: "顺便看看 Windows 的包" });
       await added.waitFor({ timeout: 10_000 });
-      if (await page.locator(".conv-detail .conv-supplement", { hasText: "顺便看看 Windows 的包" }).count()) throw new Error("隔了别的消息的补充不该画回上面那个任务里");
-      if (!(await added.locator(".conv-quote", { hasText: "按时间排" }).count())) throw new Error("按时间排的补充应引用它补充的任务");
-      const last = await page.locator(".conv-detail .conv-msg.is-me").last().innerText();
-      if (!last.includes("顺便看看 Windows 的包")) throw new Error("补充应排在最下面（按发出的时间）");
+      if (await page.locator(".conv-detail .conv-supplement", { hasText: "顺便看看 Windows 的包" }).count()) throw new Error("补充应接在过程里，不该再画进任务气泡");
+      // Nothing of the run (its words, its state) is drawn above what you added after it.
+      const order = await added.evaluate((el) => {
+        const run = el.closest(".trace");
+        const said = [...(run?.querySelectorAll(".trace-say, .trace-group") || [])].filter((x) => x.textContent?.includes("已经派出去了"));
+        const state = run?.querySelector(".trace-paused, .trace-wait");
+        const y = el.getBoundingClientRect().top;
+        return { saidAbove: said.every((x) => x.getBoundingClientRect().top < y), stateBelow: !state || state.getBoundingClientRect().top > y };
+      });
+      if (!order.saidAbove) throw new Error("补充之前它说的话应在补充上面");
+      if (!order.stateBelow) throw new Error("它现在的状态（在做 / 在等）应在补充下面");
       await added.scrollIntoViewIfNeeded();
       await settle(page, 300);
-      await shot(page, size, scheme, "chat-supplement-in-order");
+      await shot(page, size, scheme, "chat-supplement-in-run");
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).last().waitFor({ timeout: 25_000 });
       await noRound(page);
     });
@@ -1078,18 +1079,18 @@ async function runMatrix(browser, size, scheme) {
       const order = (await rows.allInnerTexts()).map(compactText);
       if (!order[0].includes(nextText) || !order[1].includes(dropText)) throw new Error(`排队应按先后排：${JSON.stringify(order)}`);
       if (!order[0].includes("排队中")) throw new Error(`排队条应写「排队中：」，实际「${order[0]}」`);
-      // Enter now adds to the running task: drawn inside it, not a second one.
+      // Enter now adds to the running task: in its run, where you sent it,
+      // not a second task.
       const addText = "补充：下载页的链接也顺带检查";
       await box.fill(addText);
       await box.press("Enter");
-      const add = page.locator(".conv-detail .conv-supplement", { hasText: "下载页的链接" });
+      const add = page.locator(".conv-detail .trace .trace-steer", { hasText: "下载页的链接" });
       await add.waitFor({ timeout: 20_000 });
-      const oneBubble = await page.evaluate(({ task, addText }) => {
-        const mine = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")];
-        const said = mine.filter((el) => (el.textContent || "").includes(addText));
-        return said.length === 1 && (said[0].textContent || "").includes(task);
-      }, { task, addText });
-      if (!oneBubble) throw new Error("补充应贴在那条任务里，不是单独一条消息");
+      const oneBubble = await page.evaluate(({ addText }) => {
+        const said = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")].filter((el) => (el.textContent || "").includes(addText));
+        return said.length === 1 && !!said[0].closest(".trace");
+      }, { addText });
+      if (!oneBubble) throw new Error("补充应接在那条任务的过程里，只有一处");
       await page.waitForFunction(() => {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting, .trace-group.is-live").length === 1;
