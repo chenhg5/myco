@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import MycoAPI
 import MycoCore
 import MycoStore
 import MycoUI
