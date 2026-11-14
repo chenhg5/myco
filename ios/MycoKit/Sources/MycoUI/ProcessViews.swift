@@ -9,14 +9,20 @@ public struct StepLine: Identifiable, Hashable, Sendable {
     public var detail: String
     public var failed: Bool
     public var running: Bool
+    /// Its detail is words to read (what it thought), not a command or a
+    /// path: shown in full, as text.
+    public var prose: Bool
 
-    public init(id: Int, symbol: String, label: String, detail: String, failed: Bool = false, running: Bool = false) {
+    public init(
+        id: Int, symbol: String, label: String, detail: String, failed: Bool = false, running: Bool = false, prose: Bool = false
+    ) {
         self.id = id
         self.symbol = symbol
         self.label = label
         self.detail = detail
         self.failed = failed
         self.running = running
+        self.prose = prose
     }
 }
 
@@ -57,8 +63,13 @@ public struct StepGroupView: View {
                     ForEach(steps) { step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Image(systemName: step.symbol).font(.caption).foregroundStyle(MycoColor.muted).frame(width: 16)
-                            Text(step.label).font(.footnote).foregroundStyle(MycoColor.fg2)
-                            Text(step.detail).font(.footnote.monospaced()).foregroundStyle(MycoColor.muted).lineLimit(1).truncationMode(.middle)
+                            if step.prose {
+                                Text(step.detail).font(.footnote).foregroundStyle(MycoColor.muted).lineSpacing(2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text(step.label).font(.footnote).foregroundStyle(MycoColor.fg2)
+                                Text(step.detail).font(.footnote.monospaced()).foregroundStyle(MycoColor.muted).lineLimit(1).truncationMode(.middle)
+                            }
                             if step.failed {
                                 StatusDot(.failed, size: 6)
                             } else if step.running {
@@ -72,26 +83,6 @@ public struct StepGroupView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// What the agent thought: faded text, four lines until tapped.
-public struct ThoughtText: View {
-    let text: String
-    @State private var open = false
-
-    public init(_ text: String) {
-        self.text = text
-    }
-
-    public var body: some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(MycoColor.muted)
-            .lineLimit(open ? nil : 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { open.toggle() }
     }
 }
 

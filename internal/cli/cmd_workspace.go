@@ -55,9 +55,11 @@ it with links made there, as with any hub.`,
 				return err
 			}
 			out := map[string]any{"workspace": ws}
-			// Its owner's way in: the same one-time app link a new hub gives.
-			wc, err := client.New(ws.URL, tok)
-			if err == nil {
+			if ws.OwnerLink != nil {
+				out["link"] = ws.OwnerLink.Link
+				out["expires_at"] = ws.OwnerLink.ExpiresAt
+			} else if wc, err := client.New(ws.URL, tok); err == nil {
+				// An older hub: ask the workspace itself.
 				if link, err := wc.CreatePairing(e.in.Ctx); err == nil {
 					out["link"] = link.Link
 					out["expires_at"] = link.ExpiresAt

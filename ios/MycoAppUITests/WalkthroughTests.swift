@@ -73,7 +73,7 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertEqual(submit.label, "Add")
         submit.tap()
         XCTAssertTrue(app.staticTexts["British spelling"].waitForExistence(timeout: 5), "the addition shows")
-        XCTAssertTrue(app.staticTexts["Added"].exists, "marked as an addition")
+        XCTAssertFalse(app.staticTexts["Added"].exists, "like anything else said: it carries no label")
 
         expectation(for: isStop, evaluatedWith: submit)
         waitForExpectations(timeout: 5)

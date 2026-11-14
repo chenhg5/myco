@@ -24,6 +24,10 @@ public actor FakeHub: HubAPI {
     private var latency: Duration
     /// The files kept here, by id.
     private var files: [String: (file: HubFile, data: Data)] = [:]
+    /// The messages taken out of my view.
+    private var hiddenIDs: [String] = []
+    /// Acts like a hub from before messages could be taken out of view.
+    private var tooOldForHidden = false
     /// Acts like a hub from before files could be sent from the app.
     private var tooOldForFiles = false
 
@@ -39,6 +43,21 @@ public actor FakeHub: HubAPI {
 
     public func setLatency(_ value: Duration) {
         latency = value
+    }
+
+    public func setTooOldForHidden(_ value: Bool) {
+        tooOldForHidden = value
+    }
+
+    /// Changes a message in place (for tests: a task set aside, stopped, ...).
+    public func change(_ id: String, _ change: @Sendable (inout Message) -> Void) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        change(&messages[index])
+    }
+
+    /// Adds a message as it is (for tests).
+    public func add(_ message: Message) {
+        messages.append(message)
     }
 
     public func setTooOldForFiles(_ value: Bool) {
@@ -233,6 +252,20 @@ public actor FakeHub: HubAPI {
             guard let file = files[id]?.file else { throw HubError(error: "not_found", message: "file \(id) not found") }
             return Attachment(fileId: file.id, name: file.name, size: file.size, contentType: file.contentType)
         }
+    }
+
+    public func hidden() async throws -> [String] {
+        try await check()
+        if tooOldForHidden { throw HubError(error: "not_found", message: "not found") }
+        return hiddenIDs
+    }
+
+    public func setHidden(hide: [String], show: [String]) async throws -> [String] {
+        try await check()
+        if tooOldForHidden { throw HubError(error: "not_found", message: "not found") }
+        hiddenIDs.removeAll { show.contains($0) }
+        for id in hide where !hiddenIDs.contains(id) { hiddenIDs.append(id) }
+        return hiddenIDs
     }
 
     public func joinLink() async throws -> JoinLink {

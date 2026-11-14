@@ -8,6 +8,9 @@ public enum Scenario: Sendable {
     case team
     /// The team, plus one very long conversation: for scrolling.
     case long
+    /// The team, with runs that are open but not at work: one set aside,
+    /// one waiting for work it handed out.
+    case waiting
     /// Joined, but nobody is here yet.
     case empty
 
@@ -105,7 +108,7 @@ public enum Scenario: Sendable {
             Message(id: "d1p2", from: backend.name, to: lead.name, threadId: "d1", replyTo: "d1", type: "progress",
                     body: "设备登记的接口定了：\n\n- `PUT /v1/console/me/push`\n- 只存令牌，不存内容", status: "done", project: project, createdAt: ago(900)),
             Message(id: "d1p3", from: backend.name, to: lead.name, threadId: "d1", replyTo: "d1", type: "progress",
-                    body: "正在写中转服务的设计。", status: "done", project: project, createdAt: ago(120)),
+                    body: "正在写中转服务的设计。", status: "done", project: project, createdAt: ago(40)),
             // Me and ops, directly: taken on two hours ago, quiet since.
             Message(id: "o1", from: me, to: ops.name, body: "看一下 Hub 那台机器的磁盘还剩多少。", status: "acked", createdAt: ago(7_500), updatedAt: ago(7_400), activeAt: ago(7_300)),
             // Me and the notes helper, directly: answered yesterday.
@@ -117,6 +120,22 @@ public enum Scenario: Sendable {
             Message(id: "b1", from: me, to: backend.name, type: "note", body: "推送中转先别定用哪家，等我回来再说。", status: "done", project: project, createdAt: ago(2_400)),
             Message(id: "b2", from: backend.name, to: me, threadId: "d1", replyTo: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),
         ]
+        if self == .waiting {
+            world.messages += [
+                // Set aside by the notes helper: it answers when I send more.
+                Message(id: "w1", from: me, to: helper.name, body: "第二场会议也整理一下，录音我晚点发你。", status: "held",
+                        createdAt: ago(600), updatedAt: ago(560)),
+                Message(id: "w1p", from: helper.name, to: me, threadId: "w1", replyTo: "w1", type: "progress",
+                        body: "先放着了，等你的录音。", status: "done", createdAt: ago(570)),
+                // The coordinator handed a review to the tester and waits for it.
+                Message(id: "m3", from: me, to: lead.name, body: "把推送接口的评审安排一下。", status: "acked", project: project,
+                        createdAt: ago(500), updatedAt: ago(480), activeAt: ago(100)),
+                Message(id: "d5", from: lead.name, to: tester.name, body: "评审推送接口的设计，看有没有漏掉的情况。", status: "acked", project: project,
+                        createdAt: ago(450), updatedAt: ago(440), activeAt: ago(60)),
+                Message(id: "m3p", from: lead.name, to: me, threadId: "m3", replyTo: "m3", type: "progress",
+                        body: "已经请测试来评审，等他看完我再汇总。", status: "done", project: project, createdAt: ago(430)),
+            ]
+        }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,
             // with the kinds of answers agents give.

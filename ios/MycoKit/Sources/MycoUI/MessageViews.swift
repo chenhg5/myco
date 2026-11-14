@@ -3,30 +3,23 @@ import UIKit
 
 /// Something asked of the agent: a bubble on the right. Mine is filled;
 /// one a colleague asked is outlined and carries their name, so whose
-/// words they are is never in doubt. A message added to a running task
-/// carries a small label.
+/// words they are is never in doubt. What is added to a running task
+/// looks like anything else said: it carries no label.
 public struct MyBubble: View {
     let text: String
-    let label: String?
     let name: String?
 
-    /// - Parameters:
-    ///   - label: a small mark above it ("Added").
-    ///   - name: who asked, when it was not me.
-    public init(_ text: String, label: String? = nil, name: String? = nil) {
+    /// - Parameter name: who asked, when it was not me.
+    public init(_ text: String, name: String? = nil) {
         self.text = text
-        self.label = label
         self.name = name
     }
 
     public var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            if name != nil || label != nil {
-                HStack(spacing: 6) {
-                    if let name { Text(name).font(.footnote.weight(.medium)).foregroundStyle(MycoColor.fg2) }
-                    if let label { Text(label).font(.caption2).foregroundStyle(MycoColor.muted) }
-                }
-                .padding(.trailing, 6)
+            if let name {
+                Text(name).font(.footnote.weight(.medium)).foregroundStyle(MycoColor.fg2)
+                    .padding(.trailing, 6)
             }
             Text(text)
                 .font(.body)

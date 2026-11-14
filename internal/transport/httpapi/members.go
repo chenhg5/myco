@@ -376,6 +376,19 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, out)
 }
 
+// OwnerLink makes a one-time app link that signs in as this hub's owner
+// (for a workspace just created by the server's owner, who has no
+// credential in it yet).
+func (s *Server) OwnerLink(r *http.Request) (*api.PairingLink, error) {
+	owner := s.ownerIDFor(r.Context(), app.Actor{Admin: true})
+	plain, exp, err := s.console.CreatePairing(r.Context(), owner)
+	if err != nil {
+		return nil, err
+	}
+	link := s.publicBase(r) + "/c/" + plain
+	return &api.PairingLink{Link: link, ExpiresAt: exp, Command: "curl -fsSL " + link + " | bash"}, nil
+}
+
 // createPairing makes a one-time link for the caller to add another device.
 func (s *Server) createPairing(w http.ResponseWriter, r *http.Request) {
 	owner := s.ownerIDFor(r.Context(), s.actorOf(r))

@@ -1114,6 +1114,9 @@ type Workspace struct {
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
 	CreatedAt time.Time `json:"created_at"`
+	// OwnerLink, in the answer to creating it, is a one-time app link that
+	// signs in as its owner (works once, for 24 hours).
+	OwnerLink *PairingLink `json:"owner_link,omitempty"`
 }
 
 // WorkspaceList answers GET /v1/server/workspaces.

@@ -136,6 +136,9 @@ public struct Message: Codable, Sendable, Hashable, Identifiable {
     public var updatedAt: Date
     /// The recipient's latest observed activity on an open task.
     public var activeAt: Date?
+    /// On a task: the id of its question to its sender that still waits
+    /// for an answer (the agent set the task aside to ask).
+    public var asking: String?
     @LossyList public var attachments: [Attachment]
 
     public init(

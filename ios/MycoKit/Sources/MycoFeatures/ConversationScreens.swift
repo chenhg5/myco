@@ -155,6 +155,8 @@ struct ConversationBody: View {
     @Environment(AppModel.self) private var app
     /// Speaking instead of typing: made the first time the microphone is tapped.
     @State private var dictation: Dictation?
+    /// What was just taken out of view: for a moment it can be taken back.
+    @State private var deleted: [String]?
     /// Which way of adding a file is open.
     @State private var pickingPhotos = false
     @State private var picked: [PhotosPickerItem] = []
@@ -582,9 +584,13 @@ struct ConversationBody: View {
             VStack(alignment: .trailing, spacing: Space.s) {
                 // Files sent with no words of my own: they are shown alone,
                 // without the line that only names them.
+                // What is added to a task is plain, like anything else I say.
                 if steer || by != nil || !ConversationBuilder.saysOnlyItsFiles(text, files: item.files) {
-                    MyBubble(text, label: steer ? L("补充", "Added") : nil, name: by.map { session.displayName(of: $0) })
-                        .contextMenu { copyButton(text) }
+                    MyBubble(text, name: by.map { session.displayName(of: $0) })
+                        .contextMenu {
+                            copyButton(text)
+                            deleteButton(item.id)
+                        }
                 }
                 files(of: item, trailing: true)
             }
@@ -607,7 +613,10 @@ struct ConversationBody: View {
                         copyLabel: L("复制", "Copy"))
                 }
             }
-            .contextMenu { copyButton(text) }
+            .contextMenu {
+                copyButton(text)
+                deleteButton(item.id)
+            }
         case .progress(let text, let latest):
             ProgressLine(
                 text, time: item.at.formatted(date: .omitted, time: .shortened),
@@ -625,6 +634,11 @@ struct ConversationBody: View {
             NoticeLine(.idle, L("已停止", "Stopped"))
         case .status(let state, _):
             status(state)
+        case .paused(let pause, _):
+            // Still open, but not at work: the mushroom stands, and the
+            // line says what it waits for.
+            WorkingLine(look: MushroomLook.of(session.agent(model.agent)), text: Self.words(for: pause) { session.displayName(of: $0) }, since: nil)
+                .accessibilityIdentifier("run.paused")
         case .process(let taskID, let live):
             if let process = model.process(of: taskID) { ProcessView(process: process, live: live) }
         case .dispatch(let dispatch):
@@ -638,6 +652,32 @@ struct ConversationBody: View {
                 tone: StatusTone.of(dispatch.state) ?? .idle,
                 spoken: L("派给 \(name)：\(dispatch.firstLine)，\(stateText)", "To \(name): \(dispatch.firstLine), \(stateText)"),
                 action: { router.push(.agent(dispatch.to, focus: dispatch.taskID)) })
+        }
+    }
+
+    /// What a run that has stopped for now waits for.
+    static func words(for pause: RunPause, name: (String) -> String) -> String {
+        switch pause {
+        case .waitingFor(let agents):
+            let names = agents.map(name)
+            return L("等 \(names.joined(separator: "、")) 做完", "Waiting for \(names.joined(separator: ", "))")
+        case .held:
+            return L("先放着了，晚点回复", "Set aside; it answers later")
+        case .quiet:
+            return L("在等，还没回复", "Waiting; no answer yet")
+        }
+    }
+
+    /// Takes a message out of my view (the agents and other people keep
+    /// it); for a few seconds it can be taken back.
+    private func deleteButton(_ id: String) -> some View {
+        Button(L("删除（只从你这边去掉）", "Delete (from your view only)"), systemImage: "trash", role: .destructive) {
+            deleted = [id]
+            Task {
+                await model.setHidden([id])
+                try? await Task.sleep(for: .seconds(6))
+                if deleted == [id] { withAnimation(.easeOut(duration: 0.2)) { deleted = nil } }
+            }
         }
     }
 
@@ -685,6 +725,24 @@ struct ConversationBody: View {
                 Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
+            }
+            if let ids = deleted {
+                HStack(spacing: Space.s) {
+                    Text(L("已删除", "Deleted")).font(.footnote).foregroundStyle(MycoColor.fg2)
+                    Spacer(minLength: 0)
+                    Button(L("撤销", "Undo")) {
+                        deleted = nil
+                        Task { await model.setHidden(ids, hidden: false) }
+                    }
+                    .font(.footnote.weight(.medium)).tint(MycoColor.accent)
+                    .accessibilityIdentifier("delete.undo")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 14)
+                .padding(.top, Space.s)
+                .transition(.opacity)
             }
             if let note = dictationNote {
                 HStack(alignment: .firstTextBaseline, spacing: Space.s) {
@@ -774,8 +832,6 @@ struct ProcessView: View {
                 switch segment {
                 case .said(_, let text):
                     ReplyText(text)
-                case .thought(_, let text):
-                    ThoughtText(text)
                 case .steps(_, let steps):
                     StepGroupView(summary: RunProcess.summary(of: steps), steps: steps.map(line))
                 case .failure(_, let text):
@@ -788,11 +844,13 @@ struct ProcessView: View {
     private func line(_ step: ToolStep) -> StepLine {
         StepLine(
             id: step.id, symbol: symbol(for: step.tool), label: RunProcess.label(for: step.tool),
-            detail: step.input, failed: step.failed, running: live && !step.finished)
+            detail: step.input, failed: step.failed, running: live && !step.finished,
+            prose: step.tool == RunProcess.thinking)
     }
 
     private func symbol(for tool: String) -> String {
         switch tool {
+        case RunProcess.thinking: return "brain"
         case "Bash": return "terminal"
         case "Read", "NotebookRead": return "doc.text"
         case "Edit", "Write", "MultiEdit", "NotebookEdit": return "pencil"

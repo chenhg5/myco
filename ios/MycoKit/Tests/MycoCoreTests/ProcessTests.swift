@@ -33,6 +33,65 @@ struct ProcessTests {
         #expect(last.map(\.finished) == [false])
     }
 
+    @Test func thinkingFoldsIntoTheLineOfSteps() {
+        let process = RunProcess(events: [
+            TraceEvent(seq: 1, kind: "thinking", data: TraceStep(text: "where does this live?")),
+            tool(2, "a", "Bash", "ls"), result(3, "a"),
+            TraceEvent(seq: 4, kind: "text", data: TraceStep(text: "found it")),
+            TraceEvent(seq: 5, kind: "thinking", data: TraceStep(text: "now the test")),
+        ])
+        // Not prose between what it says: part of the steps, there on a tap.
+        #expect(process.segments.count == 3)
+        guard case .steps(_, let first) = process.segments[0], case .steps(_, let last) = process.segments[2] else {
+            Issue.record("thinking is a step of its group")
+            return
+        }
+        #expect(first.map(\.tool) == [RunProcess.thinking, "Bash"])
+        #expect(first[0].input == "where does this live?")
+        // A result still finds its own step after a thought came first.
+        #expect(first[1].finished)
+        AppLanguage.$forced.withValue(.en) {
+            #expect(RunProcess.summary(of: first) == "thought, ran 1 command")
+            #expect(RunProcess.summary(of: last) == "thought")
+        }
+        AppLanguage.$forced.withValue(.zh) {
+            #expect(RunProcess.summary(of: first) == "想了一下、跑了 1 条命令")
+        }
+    }
+
+    @Test func tellsARunThatWaitsFromOneAtWork() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(seconds) }
+        func event(_ seq: Int, _ kind: String, _ seconds: TimeInterval) -> TraceEvent {
+            TraceEvent(seq: seq, kind: kind, data: TraceStep(text: "x"), at: at(seconds))
+        }
+        let task = Message(id: "t1", from: "me", to: "coder", body: "do it", status: "acked", createdAt: at(-900), updatedAt: at(-800))
+        func report(_ seconds: TimeInterval) -> Message {
+            Message(id: "p\(Int(seconds))", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "…", status: "done", createdAt: at(seconds))
+        }
+        func paused(_ events: [TraceEvent], _ task: Message, _ reports: [Message] = []) -> Bool {
+            RunProcess.isPaused(events: events, task: task, reports: reports, now: now)
+        }
+        // Just taken on, nothing yet: at work.
+        #expect(!paused([], task))
+        // Its turn is over, or its run is: it waits.
+        #expect(paused([event(1, "tool", -60), event(2, "turn_end", -50)], task))
+        #expect(paused([event(1, "usage", -5)], task))
+        // It reported after its turn ended: at it again.
+        #expect(!paused([event(1, "turn_end", -50)], task, [report(-10)]))
+        // A command still running is at work, however long.
+        #expect(!paused([event(1, "tool", -3_000)], task))
+        // It said something and went silent for two minutes: it waits.
+        #expect(!paused([event(1, "text", -60)], task))
+        #expect(paused([event(1, "text", -200)], task))
+        #expect(paused([event(1, "tool", -400)], task, [report(-200)]))
+        // Set aside, and nothing since: it waits. New steps: back at work.
+        var held = task
+        held.status = "held"
+        #expect(paused([event(1, "tool", -850)], held))
+        #expect(!paused([event(1, "tool", -30)], held))
+    }
+
     @Test func aFailedResultMarksItsOwnStep() {
         let process = RunProcess(events: [tool(1, "a", "Bash", "go test"), tool(2, "b", "Bash", "go vet"), result(3, "a", failed: true), result(4, "b")])
         guard case .steps(_, let steps) = process.segments[0] else {

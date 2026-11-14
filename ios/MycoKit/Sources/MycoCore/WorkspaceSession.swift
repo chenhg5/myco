@@ -24,6 +24,12 @@ public final class WorkspaceSession {
     /// Why it cannot be reached now; what is shown is from `loadedAt`.
     public private(set) var problem: String?
 
+    /// Messages this person took out of their own view (删除): kept by
+    /// the workspace, so all their devices agree; by this device alone
+    /// when the workspace is too old to keep them.
+    public private(set) var hidden: Set<String> = []
+    private var hiddenKeptHere = false
+
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
 
@@ -142,6 +148,7 @@ public final class WorkspaceSession {
             self.recent = r
             loadedAt = Date()
             problem = nil
+            await loadHidden()
             if readBaseline == nil {
                 // The first look at this workspace: all of it counts as seen.
                 readBaseline = Date()
@@ -155,6 +162,45 @@ public final class WorkspaceSession {
         } catch {
             problem = error.localizedDescription
         }
+    }
+
+    // MARK: Hidden messages
+
+    private func loadHidden() async {
+        if hiddenKeptHere { return }
+        do {
+            let ids = Set(try await hub.hidden())
+            if ids != hidden { hidden = ids }
+        } catch let error as HubError where error.error == "not_found" {
+            // A workspace from before this: the list lives on this device.
+            hiddenKeptHere = true
+            if let data = await snapshots?.snapshot(of: id, name: "hidden"), let ids = try? JSONDecoder().decode([String].self, from: data) {
+                hidden = Set(ids)
+            }
+        } catch {
+            // Not reachable now: what is known stays.
+        }
+    }
+
+    /// Takes messages out of my view of their conversation, or (with
+    /// `shown`) puts them back. Nothing is deleted: the agents and other
+    /// people still see them, and a task goes on. It shows at once; the
+    /// workspace is told after. Throws when the workspace refused.
+    public func setHidden(_ ids: [String], hidden hide: Bool = true) async throws {
+        let before = hidden
+        if hide { hidden.formUnion(ids) } else { hidden.subtract(ids) }
+        if !hiddenKeptHere {
+            do {
+                hidden = Set(try await hub.setHidden(hide: hide ? ids : [], show: hide ? [] : ids))
+                return
+            } catch let error as HubError where error.error == "not_found" {
+                hiddenKeptHere = true
+            } catch {
+                hidden = before
+                throw error
+            }
+        }
+        await snapshots?.setSnapshot(try? JSONEncoder().encode(hidden.sorted()), of: id, name: "hidden")
     }
 
     // MARK: Lookups

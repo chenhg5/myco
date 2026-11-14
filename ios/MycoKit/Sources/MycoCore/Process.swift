@@ -25,15 +25,14 @@ public struct PlanItem: Hashable, Sendable {
 public enum ProcessSegment: Identifiable, Hashable, Sendable {
     /// What it said along the way (Markdown).
     case said(id: Int, text: String)
-    /// What it thought.
-    case thought(id: Int, text: String)
-    /// A run of tool steps between two things it said: shown as one line.
+    /// What it did and thought between two things it said: shown as one
+    /// line ("thought, ran 2 commands") that opens.
     case steps(id: Int, [ToolStep])
     case failure(id: Int, text: String)
 
     public var id: Int {
         switch self {
-        case .said(let id, _), .thought(let id, _), .steps(let id, _), .failure(let id, _): return id
+        case .said(let id, _), .steps(let id, _), .failure(let id, _): return id
         }
     }
 }
@@ -86,7 +85,16 @@ public struct RunProcess: Hashable, Sendable {
             case "text":
                 if let text = step.text, !text.isEmpty { segments.append(.said(id: event.seq, text: text)) }
             case "thinking":
-                if let text = step.text, !text.isEmpty { segments.append(.thought(id: event.seq, text: text)) }
+                // Thinking is part of the process: folded into the line of
+                // steps, there on a tap, not grey prose between what it says.
+                guard let text = step.text, !text.isEmpty else { continue }
+                let thought = ToolStep(id: event.seq, tool: Self.thinking, input: text, failed: false, finished: true)
+                if case .steps(let id, var steps) = segments.last {
+                    steps.append(thought)
+                    segments[segments.count - 1] = .steps(id: id, steps)
+                } else {
+                    segments.append(.steps(id: event.seq, [thought]))
+                }
             case "error":
                 segments.append(.failure(id: event.seq, text: step.text ?? step.output ?? ""))
             case "usage":
@@ -114,15 +122,48 @@ public struct RunProcess: Hashable, Sendable {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// How a thought stands among the steps: a step of this "tool", its
+    /// input what was thought.
+    public static let thinking = "thinking"
+
+    /// How long a run may be silent after it said something before it
+    /// counts as stopped (a session with no `turn_end`: an older myco
+    /// following it).
+    static let quietAfterSaying: TimeInterval = 120
+
+    /// Whether a run still open has stopped, so is not at work: its session
+    /// ended its turn (`turn_end` is its latest step) or its run (`usage`),
+    /// it was set aside (held) and nothing came after, or the last thing it
+    /// did was say something and it has been silent since. A command still
+    /// running is at work however long. The desktop app's `pausedRun`.
+    /// - Parameters:
+    ///   - events: the task's steps, oldest first.
+    ///   - reports: its progress updates, oldest first.
+    public static func isPaused(events: [TraceEvent], task: Message, reports: [Message], now: Date) -> Bool {
+        let last = events.last
+        let stepAt = last?.at ?? .distantPast
+        let reportAt = reports.last?.createdAt ?? .distantPast
+        let activeAt = max(stepAt, reportAt)
+        if let last, last.kind == "turn_end" || last.kind == "usage", reportAt <= stepAt { return true }
+        if task.status == "held" { return activeAt <= task.updatedAt }
+        guard activeAt > .distantPast else { return false }
+        let said = last == nil || last?.kind == "text" || last?.kind == "thinking" || reportAt > stepAt
+        return said && now.timeIntervalSince(activeAt) > quietAfterSaying
+    }
+
     static let readTools: Set<String> = ["Read", "NotebookRead"]
     static let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
     static let searchTools: Set<String> = ["Grep", "Glob", "LS"]
 
     /// "读了 3 个文件、跑了 2 条命令、改了 1 个文件".
     public static func summary(of steps: [ToolStep]) -> String {
-        var read = 0, run = 0, edit = 0, other = 0, failed = 0
+        var read = 0, run = 0, edit = 0, other = 0, failed = 0, thought = 0
         var files: Set<String> = []
         for step in steps {
+            if step.tool == thinking {
+                thought += 1
+                continue
+            }
             if step.failed { failed += 1 }
             if readTools.contains(step.tool) {
                 read += 1
@@ -137,6 +178,7 @@ public struct RunProcess: Hashable, Sendable {
         }
         func s(_ n: Int) -> String { n > 1 ? "s" : "" }
         var parts: [String] = []
+        if thought > 0 { parts.append(L("想了一下", "thought")) }
         if read > 0 { parts.append(L("读了 \(read) 个文件", "read \(read) file\(s(read))")) }
         if run > 0 { parts.append(L("跑了 \(run) 条命令", "ran \(run) command\(s(run))")) }
         if edit > 0 {
@@ -150,6 +192,7 @@ public struct RunProcess: Hashable, Sendable {
 
     /// What a tool step is called: "运行", "读取", "修改", ...
     public static func label(for tool: String) -> String {
+        if tool == thinking { return L("想", "Thought") }
         if tool == "Bash" { return L("运行", "Run") }
         if readTools.contains(tool) { return L("读取", "Read") }
         if editTools.contains(tool) { return L("修改", "Edit") }

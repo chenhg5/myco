@@ -111,6 +111,35 @@ struct FilesTests {
         #expect(model.waiting.map(\.body) == ["下一件事"])
     }
 
+    @Test func editingAQueuedMessageGivesItsFilesBack() async throws {
+        let (model, hub, _) = await chat("vps-codex-90aa")
+        await model.attach(SamplePicture.png(hue: 0.2, width: 200, height: 200), name: "next.png", contentType: "image/png")
+        model.draft = "下一件事"
+        await model.queueNext()
+        let waiting = try #require(model.waiting.first)
+        #expect(waiting.files.map(\.name) == ["next.png"])
+
+        // Taken back to edit: its words and its picture are in the box
+        // again, and the picture is not uploaded a second time.
+        await model.withdraw(waiting, edit: true)
+        #expect(model.draft == "下一件事")
+        #expect(model.pending.map(\.name) == ["next.png"])
+        let sent = try #require(await hub.allMessages().last?.attachments.first)
+        #expect(model.pending.first?.state == .ready(fileID: sent.fileId))
+        #expect(model.waiting.isEmpty)
+        // And it is not in the conversation as something stopped.
+        await model.reload()
+        #expect(!model.items.contains { $0.id.hasPrefix(waiting.id) })
+
+        // Files queued with no words: the sentence made up for them does not come back.
+        model.draft = ""
+        await model.queueNext()
+        let alone = try #require(model.waiting.first)
+        await model.withdraw(alone, edit: true)
+        #expect(model.draft.isEmpty)
+        #expect(model.pending.map(\.name) == ["next.png"])
+    }
+
     @Test func aWorkspaceTooOldSaysSoAndSendsNothing() async {
         let (model, hub, _) = await chat()
         await hub.setTooOldForFiles(true)
