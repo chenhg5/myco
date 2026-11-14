@@ -1029,6 +1029,25 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 5_000 });
       await page.waitForTimeout(1500);
       if ((await box.inputValue()) !== "我自己打") throw new Error(`自己打字后语音不该再写进来，实际「${await box.inputValue()}」`);
+      // The round button: with nothing typed it starts a voice call, with
+      // words it sends; no hint under the box unless a round is running.
+      await noRound(page);
+      await box.fill("");
+      await page.locator(".conv-detail .conv-send.is-call").waitFor({ timeout: 5_000 });
+      await settle(page, 150);
+      await shot(page, size, scheme, "compose-empty");
+      await box.fill("有字了");
+      await page.locator(".conv-detail .conv-send:not(.is-call)").waitFor({ timeout: 5_000 });
+      if ((await page.locator(".conv-detail .conv-compose-hint").innerText()).trim()) throw new Error("没在干活时输入框下面不该有提示文字");
+      // Hold Ctrl+M (⌥Space on a Mac) to talk; letting go stops.
+      await box.fill("");
+      await box.focus();
+      await page.keyboard.down("Control");
+      await page.keyboard.down("KeyM");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ timeout: 5_000 });
+      await page.keyboard.up("KeyM");
+      await page.keyboard.up("Control");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 8_000 });
       await box.fill("");
       await clickVisible(page, page.locator(".conv-head button").first());
     });

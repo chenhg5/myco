@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Headphones, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -28,6 +28,7 @@ import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/Cha
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
+import { useVoiceEntry } from "@/app/voiceEntry";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -515,6 +516,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Messages taken out of your own view (删除), and the last one taken,
   // for a moment, to take back (撤销).
   const hiddenIds = useHidden(target.hubId);
+  // With nothing typed, the round button starts a voice call (the Mac app).
+  const voice = useVoiceEntry();
   const [undo, setUndo] = useState<{ ids: string[]; n: number } | null>(null);
   useEffect(() => {
     if (!undo) return;
@@ -1918,10 +1921,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
             </div>
+            {/* Only what is not obvious: while it works, Enter adds to the
+                task and ⌘↩ queues the next one. */}
             <span className="conv-compose-hint">
-              {supplementing
-                ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
-                : L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}
+              {supplementing ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`) : ""}
             </span>
             {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
             {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
@@ -1935,6 +1938,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 aria-label={L("停止", "Stop")}
               >
                 <Square size={11} strokeWidth={0} fill="currentColor" />
+              </button>
+            ) : !shellMode && voice && !draft.trim() && !att.items.length && !sending ? (
+              // Nothing typed: the same place starts a voice call (as in ChatGPT).
+              <button
+                type="button"
+                className="conv-send is-call"
+                onClick={(e) => { e.stopPropagation(); voice.open(); }}
+                title={voice.ready ? L("和 agent 们语音聊天", "Talk with your agents") : L("语音聊天：先填写语音设置", "Voice call: set it up first")}
+                aria-label={L("语音聊天", "Voice call")}
+              >
+                <Headphones size={15} strokeWidth={2.2} />
               </button>
             ) : (
               <button

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, FileText, Headphones, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Plus, Users, X } from "lucide-react";
 import { appApi, type RecentItem } from "@/appapi";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
+import { useVoiceEntry } from "@/app/voiceEntry";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -854,6 +855,8 @@ function Composer({ hubId, project, agents, onSent }: {
   agents: AgentRow[];
   onSent: () => void;
 }) {
+  // With nothing typed, the round button starts a voice call (the Mac app).
+  const voice = useVoiceEntry();
   const key = `${RECIPIENT_KEY}:${hubId}/${project?.name || "*"}`;
   const coordinator = project?.members.find((m) => m.role === "coordinator")?.name;
   const [to, setTo] = useState(() => {
@@ -954,14 +957,21 @@ function Composer({ hubId, project, agents, onSent }: {
               <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
               <ChevronDown />
             </button>
-            {/* How to send, beside the tools, as in a member's chat. */}
-            <span className="conv-compose-hint">{L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}</span>
+
           </div>
           {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
           <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} disabled={busy} />
-          <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
-            <ArrowUp />
-          </button>
+          {voice && !draft.trim() && !att.items.length && !busy ? (
+            // Nothing typed: the same place starts a voice call.
+            <button type="button" className="sp-send is-call" onClick={voice.open} aria-label={L("语音聊天", "Voice call")}
+              title={voice.ready ? L("和 agent 们语音聊天", "Talk with your agents") : L("语音聊天：先填写语音设置", "Voice call: set it up first")}>
+              <Headphones />
+            </button>
+          ) : (
+            <button type="button" className="sp-send" onClick={() => void send()} disabled={(!draft.trim() && !att.any) || att.busy || busy} aria-label={L("发送", "Send")} title={L("发送", "Send")}>
+              <ArrowUp />
+            </button>
+          )}
         </div>
       </div>
       {menu.element}

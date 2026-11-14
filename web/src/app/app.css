@@ -4159,6 +4159,12 @@ html.shell-mac .fp-panel.is-full .fp-head {
   background: var(--fg);
   color: var(--card);
 }
+/* Nothing typed: the round button starts a voice call. */
+.conv-send.is-call,
+.sp-send.is-call {
+  background: var(--fg);
+  color: var(--card);
+}
 .conv-send .spin {
   animation: conv-spin 0.9s linear infinite;
 }

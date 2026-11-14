@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { CommandPalette } from "@/app/CommandPalette";
+import { setVoiceEntry } from "@/app/voiceEntry";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 
@@ -225,6 +226,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const hubId = hubs.some((h) => h.id === hubPick) ? hubPick
     : namedOv?.hubs.find((h) => h.ok && hubs.some((x) => x.id === h.id))?.id || hubs[0]?.id || "";
   const hub = namedHubs.find((h) => h.id === hubId);
+  // The boxes you type in start a call too, with nothing typed.
+  const voiceRef = useRef({ ready: false, settings: openVoiceSettings });
+  voiceRef.current = { ready: !!voiceOK?.ready, settings: openVoiceSettings };
+  const canCall = !!voiceOK?.available && !!hub;
+  useEffect(() => {
+    setVoiceEntry(canCall ? {
+      ready: !!voiceOK?.ready,
+      open: () => (voiceRef.current.ready ? setVoiceOpen(true) : voiceRef.current.settings()),
+    } : null);
+  }, [canCall, voiceOK?.ready]);
   // Whether this App may add workspaces on the shown one's server (not for
   // a hub on this computer: that has its own way, NewWorkspaceDialog).
   const hubUrl = hub?.url || "";
