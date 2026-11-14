@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,10 +74,15 @@ type Deps struct {
 	// Spawned is called after a successful spawn (the runner starts serving
 	// the new profile right away instead of at its next scan).
 	Spawned func()
+	// JoinHub adds this machine to the hub (workspace) of a join link,
+	// already checked to be on this node's server; it returns the machine
+	// node there ("" if none). Nil: joining is not offered.
+	JoinHub func(ctx context.Context, hub, token string) (string, error)
 }
 
 // Node is a machine node.
 type Node struct {
+	Hub     string // the hub this node is on (join links must be on its server)
 	Machine string // machine name, e.g. "wsl"
 	Prefix  string // agent name prefix of this machine, e.g. "wsl-"
 	Policy  Policy
@@ -114,6 +120,9 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	var sr api.SpawnRequest
 	if err := json.Unmarshal([]byte(req.Body), &sr); err != nil {
 		return denied("the task body must be a spawn request (JSON), as sent by `myco agent spawn`: %v", err)
+	}
+	if sr.JoinLink != "" {
+		return n.join(ctx, sr.JoinLink)
 	}
 	if n.LoadPolicy != nil {
 		if p, err := n.LoadPolicy(); err == nil {
@@ -383,4 +392,51 @@ func (n *Node) checkShell(sr api.SpawnRequest) (Plan, error) {
 		return Plan{}, err
 	}
 	return Plan{CLI: ExecCLI, Name: n.name(sr.Name, "shell", dir), Workdir: dir, Access: harness.AccessFull}, nil
+}
+
+// join adds this machine to another workspace of the same server with its
+// join link. A link to any other server is refused: whoever can send to
+// this node could otherwise hand the machine to a hub of their choosing.
+func (n *Node) join(ctx context.Context, link string) api.SpawnResult {
+	if n.Deps.JoinHub == nil {
+		return denied("this machine's myco cannot join other workspaces from here; run there: myco machine join --link <link>")
+	}
+	hub, tok, err := SplitJoinLink(link)
+	if err != nil {
+		return denied("%v", err)
+	}
+	if !SameServer(hub, n.Hub) {
+		return denied("join link %s is not on this hub's server (%s); join other servers on the machine itself: myco machine join --link <link>", hub, n.Hub)
+	}
+	node, err := n.Deps.JoinHub(ctx, hub, tok)
+	if err != nil {
+		return api.SpawnResult{Error: fmt.Sprintf("joining %s failed: %v", hub, err)}
+	}
+	return api.SpawnResult{Joined: hub, MachineNode: node}
+}
+
+// SplitJoinLink takes a join link (<hub>/j/<token>[/<project>]) apart.
+func SplitJoinLink(link string) (hub, token string, err error) {
+	l := strings.TrimSpace(link)
+	i := strings.LastIndex(l, "/j/")
+	if i < 0 || !strings.HasPrefix(l, "http") {
+		return "", "", fmt.Errorf("not a join link: %q", l)
+	}
+	hub, token = strings.TrimRight(l[:i], "/"), strings.Trim(l[i+3:], "/ ")
+	token, _, _ = strings.Cut(token, "/")
+	if token == "" {
+		return "", "", fmt.Errorf("not a join link: %q", l)
+	}
+	return hub, token, nil
+}
+
+// SameServer reports whether hub URLs a and b are on one server (scheme,
+// host and port; the workspace path may differ).
+func SameServer(a, b string) bool {
+	ua, err1 := url.Parse(a)
+	ub, err2 := url.Parse(b)
+	if err1 != nil || err2 != nil || ua.Host == "" {
+		return false
+	}
+	return strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
 }

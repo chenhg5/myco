@@ -1623,6 +1623,12 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if !s.mayOwnMachine(w, r, r.PathValue("id"), "start sessions on") {
 		return
 	}
+	if in.JoinLink != "" {
+		// Joining another workspace, nothing else: a machine whose myco
+		// predates join_link then refuses (no directory) instead of
+		// starting a session.
+		in = api.SpawnRequest{JoinLink: strings.TrimSpace(in.JoinLink)}
+	}
 	if in.CLI == "exec" {
 		// A shell node: the machine joins it with a one-use exec enrollment
 		// made here, by the admin, carrying who may send it commands.
