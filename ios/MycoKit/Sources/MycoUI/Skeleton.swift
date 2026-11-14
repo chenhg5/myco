@@ -8,7 +8,7 @@ private struct Breathing: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .opacity(dim && !reduceMotion ? 0.45 : 1)
+            .opacity(dim && !reduceMotion ? 0.6 : 1)
             .onAppear {
                 withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true }
             }
