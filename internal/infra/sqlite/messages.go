@@ -51,10 +51,7 @@ func (r *MessageRepo) Create(ctx context.Context, m *domain.Message) error {
 }
 
 func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[domain.Status]int, error) {
-	// A held task waiting on its question is counted under CountAsking.
-	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, CASE WHEN status='held' AND asking!='' THEN '`+string(domain.CountAsking)+`' ELSE status END AS st, COUNT(*) FROM messages
-		WHERE status IN ('delivered','acked','held') OR (status='queued' AND `+afterReady+`)
-		GROUP BY to_agent, st`)
+	rows, err := r.db.QueryContext(ctx, openCountsSQL)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -78,14 +75,12 @@ func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[
 }
 
 func (r *MessageRepo) ListOpen(ctx context.Context, recipient domain.AgentName, limit int) ([]*domain.Message, error) {
-	// In progress first (delivered, acked, held), then what waits (queued).
-	return r.many(ctx, r.db, `WHERE to_agent=? AND status IN ('delivered','acked','held','queued')
-		ORDER BY CASE status WHEN 'queued' THEN 1 ELSE 0 END, updated_at DESC LIMIT ?`, recipient, limit)
+	return r.many(ctx, r.db, listOpenWhere, recipient, limit)
 }
 
 func (r *MessageRepo) ListRecent(ctx context.Context, agent domain.AgentName, limit int) ([]*domain.Message, error) {
 	if agent == "" {
-		return r.many(ctx, r.db, `ORDER BY updated_at DESC, id LIMIT ?`, limit)
+		return r.many(ctx, r.db, listRecentAllWhere, limit)
 	}
 	return r.many(ctx, r.db, `WHERE from_agent=? OR to_agent=? ORDER BY updated_at DESC, id LIMIT ?`, agent, agent, limit)
 }
@@ -121,7 +116,7 @@ func (r *MessageRepo) FindReply(ctx context.Context, messageID string) (*domain.
 }
 
 func (r *MessageRepo) AfterRecipients(ctx context.Context, id string) ([]domain.AgentName, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT to_agent FROM messages WHERE after=? AND status='queued'`, id)
+	rows, err := r.db.QueryContext(ctx, afterRecipientsSQL, id)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -166,15 +161,38 @@ func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domai
 	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, id`, threadID)
 }
 
+// The hub's hot queries only ever look at open messages (the few that are
+// queued, delivered, acked or held), never at the history. They name
+// openStatus word for word as idx_messages_open does, so SQLite reads that
+// small partial index instead of every message ever stored: their cost
+// follows the backlog, not the size of the table (plans_test.go pins this).
+const openStatus = `status IN ('queued','delivered','acked','held')`
+
 const afterReady = `(after='' OR NOT EXISTS (SELECT 1 FROM messages parent WHERE parent.id=messages.after AND parent.status NOT IN ('done','failed')))`
-const dueWhere = `((status='queued' AND ` + afterReady + `) OR (status='delivered' AND lease_until<=?))`
+const dueWhere = `(` + openStatus + ` AND ((status='queued' AND ` + afterReady + `) OR (status='delivered' AND lease_until<=?)))`
+
+const (
+	// A held task waiting on its question is counted under CountAsking.
+	openCountsSQL = `SELECT to_agent, CASE WHEN status='held' AND asking!='' THEN '` + string(domain.CountAsking) + `' ELSE status END AS st, COUNT(*) FROM messages
+		WHERE ` + openStatus + ` AND (status!='queued' OR ` + afterReady + `)
+		GROUP BY to_agent, st`
+	// In progress first (delivered, acked, held), then what waits (queued).
+	listOpenWhere = `WHERE to_agent=? AND ` + openStatus + `
+		ORDER BY CASE status WHEN 'queued' THEN 1 ELSE 0 END, updated_at DESC LIMIT ?`
+	listRecentAllWhere = `ORDER BY updated_at DESC, id LIMIT ?`
+	// after!='' lets SQLite use idx_messages_after (a partial index: it
+	// cannot tell that the argument is never empty).
+	afterRecipientsSQL = `SELECT DISTINCT to_agent FROM messages WHERE after=? AND after!='' AND status='queued'`
+	dueRecipientsSQL   = `SELECT DISTINCT to_agent FROM messages WHERE ` + dueWhere
+	dueForWhere        = `WHERE to_agent=? AND ` + dueWhere
+)
 
 func (r *MessageRepo) ListDue(ctx context.Context, recipient domain.AgentName, now time.Time, limit int) ([]*domain.Message, error) {
-	return r.many(ctx, r.db, `WHERE to_agent=? AND `+dueWhere+` ORDER BY created_at, id LIMIT ?`, recipient, ms(now), limit)
+	return r.many(ctx, r.db, dueForWhere+` ORDER BY created_at, id LIMIT ?`, recipient, ms(now), limit)
 }
 
 func (r *MessageRepo) DueRecipients(ctx context.Context, now time.Time) ([]domain.AgentName, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT to_agent FROM messages WHERE `+dueWhere, ms(now))
+	rows, err := r.db.QueryContext(ctx, dueRecipientsSQL, ms(now))
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -222,7 +240,7 @@ func (r *MessageRepo) ClaimDue(ctx context.Context, recipient domain.AgentName, 
 	}
 	defer tx.Rollback()
 	// Over-fetch: some candidates may be failed out instead of claimed.
-	where, args := `WHERE to_agent=? AND `+dueWhere, []any{recipient, ms(now)}
+	where, args := dueForWhere, []any{recipient, ms(now)}
 	if len(types) > 0 {
 		where += ` AND type IN (?` + strings.Repeat(",?", len(types)-1) + `)`
 		for _, t := range types {

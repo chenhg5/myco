@@ -38,6 +38,9 @@ const (
 	// still carries the output as the node captured it).
 	traceOutChunk = 4000
 	traceMaxLive  = 1 << 20
+	// Text and thinking as they are written (Kind "delta"): the finished
+	// block follows as its own step, so these stop after traceMaxDelta bytes.
+	traceMaxDelta = 1 << 20
 )
 
 // tracer collects a run's steps and uploads them in batches.
@@ -51,6 +54,8 @@ type tracer struct {
 	queue []api.TraceEvent
 	out   *harness.Event // output lines not queued yet
 	live  int            // output bytes so far
+	delta *harness.Event // delta text not queued yet
+	dlen  int            // delta bytes so far
 	seq   int
 	fails int
 	off   bool
@@ -67,8 +72,12 @@ func newTracer(ctx context.Context, up TraceUploader, id, mode string, log *slog
 
 // add records a step (harness.Request.OnEvent).
 func (t *tracer) add(ev harness.Event) {
-	if ev.Kind == "output" {
+	switch ev.Kind {
+	case "output":
 		t.addOutput(ev)
+		return
+	case "delta":
+		t.addDelta(ev)
 		return
 	}
 	if t.mode == TraceSummary {
@@ -83,6 +92,38 @@ func (t *tracer) add(ev harness.Event) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.queueOutput()
+	t.queueDelta()
+	t.push(ev)
+}
+
+// addDelta joins the pieces of one block written between two uploads.
+func (t *tracer) addDelta(ev harness.Event) {
+	if t.mode == TraceSummary {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.dlen >= traceMaxDelta {
+		return
+	}
+	t.dlen += len(ev.Text)
+	if t.delta != nil && (t.delta.ID != ev.ID || t.delta.Stream != ev.Stream || len(t.delta.Text) >= traceMaxText) {
+		t.queueDelta()
+	}
+	if t.delta == nil {
+		t.delta = &harness.Event{Kind: "delta", Stream: ev.Stream, ID: ev.ID}
+	}
+	t.delta.Text += ev.Text
+}
+
+// queueDelta moves the pending delta to the queue. Holds t.mu.
+func (t *tracer) queueDelta() {
+	if t.delta == nil {
+		return
+	}
+	ev := *t.delta
+	t.delta = nil
+	ev.Text = clip(ev.Text, traceMaxText)
 	t.push(ev)
 }
 
@@ -152,6 +193,7 @@ func (t *tracer) loop() {
 func (t *tracer) flush() {
 	t.mu.Lock()
 	t.queueOutput()
+	t.queueDelta()
 	batch := t.queue
 	t.queue = nil
 	off := t.off
@@ -193,3 +235,23 @@ func clip(s string, n int) string {
 	}
 	return s[:n] + "\n… (cut short)"
 }
+
+// Tracer uploads a task's steps to the hub, for a session the runner did
+// not start (myco trace follow reads them from the session's own file).
+type Tracer struct{ t *tracer }
+
+// NewTracer starts uploading steps of task id; after is the last step the
+// hub already has, so new steps continue its numbering.
+func NewTracer(ctx context.Context, up TraceUploader, id, mode string, after int, log *slog.Logger) *Tracer {
+	t := newTracer(ctx, up, id, mode, log)
+	t.mu.Lock()
+	t.seq = after
+	t.mu.Unlock()
+	return &Tracer{t: t}
+}
+
+// Add records a step.
+func (t *Tracer) Add(ev harness.Event) { t.t.add(ev) }
+
+// Close uploads what is left and stops.
+func (t *Tracer) Close() { t.t.close() }

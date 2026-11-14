@@ -65,8 +65,9 @@ type Request struct {
 
 // Event is one step of a run.
 type Event struct {
-	// Kind: text, thinking, tool, tool_result, usage, error, or output (a
-	// shell command's output as it runs; Stream says stdout or stderr).
+	// Kind: text, thinking, tool, tool_result, usage, error, output (a
+	// shell command's output as it runs; Stream says stdout or stderr), or
+	// turn_end (a session followed from its file ended its turn and waits).
 	Kind   string `json:"kind"`
 	Stream string `json:"stream,omitempty"`
 	// Text: what the agent said or thought, or the error.

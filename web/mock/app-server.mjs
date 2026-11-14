@@ -659,6 +659,47 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (typeof t.unref === "function") t.unref();
     timers.push(t);
   };
+  // Asked to hand the work out: the agent sends a task to another member,
+  // says so and ends its turn (turn_end) without answering; the task stays
+  // open while the other works. When that one answers, it answers you.
+  {
+    const task = hub.threads[threadId]?.find((m) => m.id === taskId);
+    const helper = agent === "pm-codex" ? "release-cloud" : agent === "review-cloud" ? "release-cloud" : "review-cloud";
+    if (task && /派出去/.test(task.body)) {
+      task.trace = [
+        { kind: "thinking", text: "这件事交给别人做更合适，我先派出去，等结果回来再汇总。" },
+        { kind: "tool", tool: "Bash", id: "d1", input: `myco message send --to ${helper} --body "核对一下下载页的链接"` },
+        { kind: "tool_result", id: "d1", output: "sent" },
+        { kind: "text", text: "已经派出去了，等它做完我再汇总给你。" },
+        { kind: "turn_end" },
+        { kind: "usage", input_tokens: 2400, output_tokens: 120, duration_ms: 9000 },
+      ];
+      task.trace_pace = 900;
+      later(300, () => { if (["queued", "delivered"].includes(task.status)) Object.assign(task, { status: "acked", updated_at: iso(0) }); });
+      let sub = null;
+      later(1200, () => {
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        sub = makeMessage({ thread_id: threadId, from: agent, to: helper, type: "task", status: "acked", body: "核对一下下载页的链接，三个系统的包都要能下到。", created_at: iso(0), updated_at: iso(0) });
+        msgs.push(sub);
+      });
+      later(9000, () => {
+        const msgs = hub.threads[threadId];
+        if (!msgs || !sub) return;
+        msgs.push(makeMessage({ thread_id: threadId, from: helper, to: agent, type: "reply", status: "done", reply_to: sub.id, body: "三个链接都能下，校验和也对。", created_at: iso(0), updated_at: iso(0) }));
+        Object.assign(sub, { status: "done", updated_at: iso(0) });
+      });
+      later(10500, () => {
+        replyTimers.delete(taskId);
+        const msgs = hub.threads[threadId];
+        if (!msgs || task.status === "failed") return;
+        msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "下载页核对完了：三个系统的链接都能下，校验和也对。", created_at: iso(0), updated_at: iso(0) }));
+        Object.assign(task, { status: "done", updated_at: iso(0) });
+        releaseAfter(hub, threadId, taskId);
+      });
+      return;
+    }
+  }
   // A plan, reported as a checklist, ticked off as it goes.
   const plan = (body) => () => {
     const msgs = hub.threads[threadId];
@@ -1956,7 +1997,7 @@ const server = http.createServer(async (req, res) => {
       // "Just say 收到": a run with no thinking or tools.
       if (/收到/.test(m.body || "")) steps.splice(0, steps.length, { kind: "text", text: "收到" }, { kind: "usage", input_tokens: 900, output_tokens: 3, duration_ms: 2100 });
       const running = ["queued", "delivered", "acked", "held"].includes(m.status);
-      const shown = running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / 2000))) : steps;
+      const shown = running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / (m.trace_pace || 2000)))) : steps;
       const after = Number(url.searchParams.get("after") || 0);
       const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d })).filter((e) => e.seq > after);
       return send(res, 200, { message: m.id, status: m.status, events });

@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Check, Download } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Check, Download, Maximize2, Minimize2, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Attachment, Message } from "@/api";
-import { Modal } from "@/app/dialogs";
 import { Markdown } from "@/app/Markdown";
 import { bytes } from "@/app/attach";
 import { L } from "@/lib/i18n";
@@ -14,6 +14,12 @@ import { cn } from "@/lib/utils";
  * name is its next version: its row says 第 2 版, and the preview can show
  * what changed since the one before. Anything that is not text is saved to
  * Downloads instead.
+ *
+ * It opens in a panel from the right, as a member's card does, at its full
+ * height from the start (nothing grows or jumps as the file arrives), and
+ * floats over the page, so a split view keeps both its columns. Full screen
+ * (the button, or a double click on its head) gives it the whole window;
+ * the choice is kept for the next file.
  */
 
 const TEXT_TYPE = /^(text\/|application\/(json|xml|x-yaml|yaml|toml|x-sh|javascript|typescript|x-ndjson))/;
@@ -127,6 +133,10 @@ function diffLines(before: string, after: string): Line[] {
   return out;
 }
 
+const FULL_KEY = "myco-preview-full";
+const keptFull = () => { try { return localStorage.getItem(FULL_KEY) === "1"; } catch { return false; } };
+const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1" : "0"); } catch { /* not kept */ } };
+
 /** A text file read in the App, with Save, and what changed since its
  *  previous version when there is one. */
 export function FilePreview({ hubId, file, version, open, onOpenChange }: {
@@ -141,7 +151,9 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const [error, setError] = useState("");
   const [view, setView] = useState<"file" | "source" | "changes">("file");
   const [saved, setSaved] = useState(false);
+  const [full, setFull] = useState(keptFull);
   const prev = version?.prev;
+  const toggleFull = () => setFull((f) => { keepFull(!f); return !f; });
 
   useEffect(() => {
     if (!open) return;
@@ -166,37 +178,55 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     try { await appApi.saveAttachment(hubId, file.file_id); setSaved(true); } catch (e) { setError((e as Error).message); }
   };
 
+  const about = [bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ");
+  const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
   return (
-    <Modal open={open} onOpenChange={onOpenChange} wide className="fp-modal"
-      title={file.name}
-      description={[bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ")}>
-      {views.length > 1 && text !== null && (
-        <div className="seg seg-sm fp-views" role="tablist" aria-label={L("看什么", "Show")}>
-          {views.map((v) => (
-            <button key={v.key} type="button" role="tab" aria-selected={view === v.key} className={cn("seg-btn", view === v.key && "active")} onClick={() => setView(v.key)}>
-              {v.label}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className={cn("fp-body", md && view === "file" && "is-doc", html && view === "file" && "is-page")}>
-        {error ? <p className="fp-note">{error}</p>
-          : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
-          : changes ? (
-            <pre className="fp-diff">{changes.map((l, k) => (
-              <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
-            ))}</pre>
-          ) : md && view === "file" ? <Markdown text={text} />
-          // A page as a page, in a frame of its own that runs nothing.
-          : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="" referrerPolicy="no-referrer" srcDoc={pageDoc(text)} />
-          : <pre className="fp-code">{text}</pre>}
-      </div>
-      <div className="app-modal-actions">
-        <button type="button" className="app-btn" onClick={() => void save()}>
-          {saved ? <Check /> : <Download />}{saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}
-        </button>
-        <button type="button" className="app-btn app-btn-primary" onClick={() => onOpenChange(false)}>{L("关闭", "Close")}</button>
-      </div>
-    </Modal>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="app-portal fp-scrim" />
+        <Dialog.Content className={cn("app-portal fp-panel", full && "is-full")}>
+          <div className="fp-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) toggleFull(); }}>
+            <div className="fp-titles">
+              <Dialog.Title asChild><h3 title={file.name}>{file.name}</h3></Dialog.Title>
+              <Dialog.Description asChild><p>{about}</p></Dialog.Description>
+            </div>
+            {views.length > 1 && text !== null && (
+              <div className="seg seg-sm fp-views" role="tablist" aria-label={L("看什么", "Show")}>
+                {views.map((v) => (
+                  <button key={v.key} type="button" role="tab" aria-selected={view === v.key} className={cn("seg-btn", view === v.key && "active")} onClick={() => setView(v.key)}>
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="fp-tools">
+              <button type="button" className="app-btn app-btn-plain" onClick={() => void save()}
+                title={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}
+                aria-label={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}>
+                {saved ? <Check /> : <Download />}
+              </button>
+              <button type="button" className="app-btn app-btn-plain fp-full-btn" onClick={toggleFull} title={fullLabel} aria-label={fullLabel} aria-pressed={full}>
+                {full ? <Minimize2 /> : <Maximize2 />}
+              </button>
+              <Dialog.Close asChild>
+                <button type="button" className="app-btn app-btn-plain" title={L("关闭", "Close")} aria-label={L("关闭", "Close")}><X /></button>
+              </Dialog.Close>
+            </div>
+          </div>
+          <div className={cn("fp-body", md && view === "file" && "is-doc", html && view === "file" && "is-page")}>
+            {error ? <p className="fp-note">{error}</p>
+              : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
+              : changes ? (
+                <pre className="fp-diff">{changes.map((l, k) => (
+                  <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
+                ))}</pre>
+              ) : md && view === "file" ? <div className="fp-doc"><Markdown text={text} /></div>
+              // A page as a page, in a frame of its own that runs nothing.
+              : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="" referrerPolicy="no-referrer" srcDoc={pageDoc(text)} />
+              : <pre className="fp-code">{text}</pre>}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

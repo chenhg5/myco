@@ -787,6 +787,16 @@ async function runMatrix(browser, size, scheme) {
       // tasks (as from another device, so none is a supplement to another).
       // The first asks for a screenshot: one comes with a progress update.
       for (let i = 0; i < 4; i++) await sendFromElsewhere("hub_studio", "review-cloud", i === 0 ? "图片附件 1：改完截图给我看" : `图片附件 ${i + 1}`);
+      // Several at work at once: one loading in the chat, the newest; the
+      // older ones still open stand still.
+      let quietSeen = false;
+      for (let t = 0; t < 20; t++) {
+        const n = await page.locator(".conv-detail .work-sprite:not(.is-idle)").count();
+        if (n > 1) throw new Error(`聊天里同时只该有一个在动的 loading，现在有 ${n} 个`);
+        quietSeen ||= (await page.locator(".conv-detail .trace.is-quiet, .conv-detail .trace-foot", { hasText: "还没做完" }).count()) > 0;
+        await page.waitForTimeout(150);
+      }
+      if (!quietSeen) log("    （这次没有同时在做的任务，没看到「还没做完」）");
       const thumb = page.locator(".conv-detail .conv-attach.is-image").last();
       await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
@@ -801,10 +811,33 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".lightbox").waitFor({ state: "hidden", timeout: 5_000 });
       // A Markdown file opens to read in the App, rendered; Save is there.
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "发布说明.md" }).last().click();
-      const doc = page.locator(".app-modal.fp-modal");
+      // It opens as a panel from the right at its full height: it does
+      // not grow (or jump) when the file arrives.
+      const doc = page.locator(".fp-panel");
+      await doc.waitFor({ timeout: 5_000 });
+      const h0 = await doc.evaluate((el) => el.getBoundingClientRect().height);
       await doc.locator(".fp-body.is-doc .md h1").waitFor({ timeout: 5_000 });
       await settle(page, 200);
+      const h1 = await doc.evaluate((el) => el.getBoundingClientRect().height);
+      if (Math.abs(h1 - h0) > 1) throw new Error(`文件面板打开后不该变高（${h0} → ${h1}）`);
       await shot(page, size, scheme, "file-preview");
+      // Full screen, and back (a narrow window has it all already: no
+      // button there).
+      const fullBtn = doc.getByRole("button", { name: "全屏" });
+      if (narrow) {
+        if (await fullBtn.isVisible()) throw new Error("窄窗口里文件面板不该有全屏按钮");
+      } else {
+        const w0 = await doc.evaluate((el) => el.getBoundingClientRect().width);
+        await fullBtn.click();
+        await page.waitForFunction((w) => {
+          const el = document.querySelector(".fp-panel.is-full");
+          return !!el && el.getBoundingClientRect().width > w + 1 && el.getBoundingClientRect().width >= window.innerWidth - 40;
+        }, w0, { timeout: 5_000 });
+        await settle(page, 250);
+        await shot(page, size, scheme, "file-preview-full");
+        await doc.getByRole("button", { name: "退出全屏" }).click();
+        await page.locator(".fp-panel:not(.is-full)").waitFor({ timeout: 5_000 });
+      }
       await doc.getByRole("button", { name: "存到「下载」" }).click();
       await doc.getByRole("button", { name: "已存到「下载」" }).waitFor({ timeout: 5_000 });
       await doc.getByRole("button", { name: "关闭" }).click();
@@ -870,6 +903,27 @@ async function runMatrix(browser, size, scheme) {
 
     // An agent asks you to decide: a card with the choices, the round waits
     // (no loading), a click answers it and the round goes on.
+    // An agent that hands the work out and ends its turn (turn_end) is
+    // waiting, not at work: no loading while the task stays open.
+    await step("单聊 · 派出去等结果", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("核对下载页，派出去给别人做");
+      await box.press("Enter");
+      // At work first (the mushroom moves), then waiting.
+      await page.locator(".conv-detail .work-sprite:not(.is-idle)").first().waitFor({ timeout: 15_000 });
+      const wait = page.locator(".conv-detail .trace-paused", { hasText: "在等" }).last();
+      await wait.waitFor({ timeout: 15_000 });
+      await settle(page, 300);
+      if (await page.locator(".conv-detail .work-sprite:not(.is-idle)").count()) throw new Error("它说完了在等别人，不该还有在动的 loading");
+      await shot(page, size, scheme, "chat-waiting");
+      // The answer comes when the other one is done; the line goes.
+      await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
+      await wait.waitFor({ state: "detached", timeout: 10_000 });
+      await noRound(page);
+    });
+
     await step("单聊 · 点选卡", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-detail .conv-compose-input");

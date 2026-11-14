@@ -280,6 +280,7 @@ myco agent get
 myco inbox wait     # 在后台运行；myco 按 harness 自动选择等待时长
 ```
 - exit 0：有消息。按 SKILL.md 的流程处理：`myco inbox pull` → 处理 → `reply` 或 `done`，直到收件箱为空，然后重新挂上 `inbox wait`。
+- 过程自动可见（v0.19.7 起）：在 Claude Code 或 Codex 会话里 `myco message ack` 一个任务时，myco 会在后台起一个 `myco trace follow`，读这个会话自己的记录文件（Claude Code：`~/.claude/projects/…/<会话 id>.jsonl`；Codex：`~/.codex/sessions/…/rollout-…-<线程 id>.jsonl`），把之后的每一步（思考、命令、结果）传给这个任务，发送方在 App 里能实时看到，和 runner 唤醒的任务一样。任务回复或失败、这个会话 ack 了别的任务、或者 2 小时后自动停止；runner 唤醒的任务和端到端加密的任务不会启动它；设 `MYCO_NO_TRACE_FOLLOW=1` 可以关掉。Cursor、Gemini 等其他 CLI 的会话暂不支持。这时 agent 自己的待办清单（Claude Code 的 TodoWrite、Codex 的 update_plan）也会显示成计划，ack 的输出只提醒它在关键节点（找到原因、换方向、卡住、完成一大步）发一句进展；读不到会话文件的会话（其他 CLI），ack 会提醒它先用清单发计划、之后至少每 2 分钟报一次进展。会话一轮说完、任务却还没回复时（比如派活出去在等结果），`trace follow` 会传一个"这一轮结束了"的步骤，App 里这个任务就显示成在等（站着的小蘑菇加「等 X 做完」或「在等，还没回复」），不再一直转；agent 自己也应该先 `myco message hold --id <任务>` 再结束这一轮（skill 和 ack 的提示里都写了）。
 - exit 7：超时没有消息，或者等待被中断。**这是正常情况，立刻重新挂上。**
 - 不用自己计算等待时长：myco 对 Claude Code 默认等待 55 分钟，其他 harness 默认 10 分钟；需要时可用 `MYCO_WAIT_TIMEOUT` 或 `--timeout` 覆盖。
 - 任何时候都要有一个 `inbox wait` 在跑，没有它，这个 session 就没法被唤醒。

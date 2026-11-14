@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Square } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -212,7 +212,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   role?: string;
   /** small things placed in the timeline by time (e.g. a task the agent
    *  handed out), between the messages; shown even before the first */
-  inserts?: { id: string; at: string; node: React.ReactNode }[];
+  inserts?: { id: string; at: string; node: React.ReactNode; waitsFor?: string }[];
   rows: AgentRow[];
   now: number;
   onBack: () => void;
@@ -452,6 +452,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [usageOf, setUsageOf] = useState<Record<string, string>>({});
   const onUsage = (taskId: string, line: string) =>
     setUsageOf((u) => (u[taskId] === line ? u : { ...u, [taskId]: line }));
+  // Runs still open that have stopped (their turn over, set aside, silent
+  // after they spoke): not at work, so not the loading of the chat.
+  const [pausedRuns, setPausedRuns] = useState<ReadonlySet<string>>(() => new Set());
+  const onPaused = useCallback((taskId: string, paused: boolean) =>
+    setPausedRuns((s) => {
+      if (s.has(taskId) === paused) return s;
+      const n = new Set(s);
+      if (paused) n.add(taskId); else n.delete(taskId);
+      return n;
+    }), []);
   useEffect(() => {
     const el = timelineRef.current;
     const sc = scrollRef.current;
@@ -792,6 +802,60 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       status: said?.length ? said[said.length - 1].body.split("\n")[0] : rowOf(task.to)?.st.agent.status_text,
     };
   })();
+
+  // One loading in the chat, the newest: of the runs at work (acknowledged,
+  // or reporting progress), only the newest one moves; an older one still
+  // open says quietly that it is not finished. Someone else's task at the
+  // foot counts too.
+  const liveRun = (() => {
+    if (termMode || !shown) return null;
+    let newest: Message | null = null;
+    for (const m of shown) {
+      if (m.type !== "task" || m.e2e || !isOpen(m.status) || answerOf.has(m.id) || m.asking || pausedRuns.has(m.id)) continue;
+      if (m.status !== "acked" && m.status !== "held" && !progressOf.get(m.id)?.length) continue;
+      const ours = isMe(m.from, row?.hub) && !isStuck(m);
+      const theirs = !observed && alsoSet.has(m.from) && m.to === target.agent;
+      if (!ours && !theirs) continue;
+      if (!newest || new Date(m.created_at).getTime() >= new Date(newest.created_at).getTime()) newest = m;
+    }
+    return newest;
+  })();
+  const footLive = !!working && !working.queued
+    && (!liveRun || new Date(working.task.created_at).getTime() > new Date(liveRun.created_at).getTime());
+  const liveId = footLive ? "" : liveRun?.id || "";
+  // Messages under the run at work (tasks it handed out, your supplements):
+  // its loading goes to the foot of the chat, under them, not above.
+  const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
+  const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
+    m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event")))
+    || (inserts || []).some((x) => x.at > shown![liveIndex].created_at));
+  // What each run of yours waits for: the tasks the node handed out after
+  // it began (before your next one) that are still open.
+  const waitingOn = new Map<string, string[]>();
+  if (!termMode && !observed && messages) {
+    // (the whole thread: a task it handed out is not always in this chat)
+    let current: Message | null = null;
+    for (const m of [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())) {
+      if (m.type !== "task") continue;
+      if (m.to === target.agent && (isMe(m.from, row?.hub) || alsoSet.has(m.from))) { current = m; continue; }
+      if (current && m.from === target.agent && isOpen(m.status) && !answerOf.has(m.id)) {
+        const who = nameOf(m.to);
+        const list = waitingOn.get(current.id) || [];
+        if (!list.includes(who)) waitingOn.set(current.id, [...list, who]);
+      }
+    }
+    // Work it handed out shown here as cards (a project's home): the run of
+    // yours it came during waits for it too.
+    const mineByTime = messages.filter((m) => m.type === "task" && m.to === target.agent && isMe(m.from, row?.hub))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    for (const x of inserts || []) {
+      if (!x.waitsFor) continue;
+      const during = mineByTime.find((m) => m.created_at <= x.at);
+      if (!during) continue;
+      const list = waitingOn.get(during.id) || [];
+      if (!list.includes(x.waitsFor)) waitingOn.set(during.id, [...list, x.waitsFor]);
+    }
+  }
 
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
@@ -1340,11 +1404,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -1518,9 +1582,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               return [...(before || []), ...(divider ? [divider, item] : [item])];
             })}
             {!shellMode && !execNode && trailing}
+            {/* The run at work, when messages sit under it. */}
+            {liveFoot && liveRun && (
+              <WorkingLine key={liveRun.id} name={nameOf(liveRun.to)} since={liveRun.created_at}
+                status={progressOf.get(liveRun.id)?.slice(-1)[0]?.body.split("\n")[0]} side="left" />
+            )}
             {working && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
-                status={working.status} queued={working.queued} behind={working.behind}
+                status={working.status} queued={working.queued} quiet={!footLive} behind={working.behind}
                 side={observed && working.task.to === target.agent ? "right" : "left"} />
             )}
             </>
