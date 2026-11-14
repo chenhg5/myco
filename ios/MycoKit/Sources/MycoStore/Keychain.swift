@@ -59,6 +59,24 @@ public actor FileWorkspaceStore: WorkspaceStore {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(workspaces).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
+
+    /// Which workspace was on screen last: its id, in a file beside the list.
+    private var selectedFile: URL { file.deletingLastPathComponent().appending(path: "selected") }
+
+    public func selected() -> String? {
+        guard let text = try? String(contentsOf: selectedFile, encoding: .utf8) else { return nil }
+        let id = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? nil : id
+    }
+
+    public func select(_ id: String?) {
+        guard let id else {
+            try? FileManager.default.removeItem(at: selectedFile)
+            return
+        }
+        try? FileManager.default.createDirectory(at: selectedFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data(id.utf8).write(to: selectedFile, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
 }
 
 /// Snapshots as files in the app's caches folder, one folder per

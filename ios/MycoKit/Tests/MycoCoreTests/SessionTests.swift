@@ -77,7 +77,7 @@ struct SessionTests {
         // Nothing shows until all of it is here: no page that fills in by jumps.
         while !model.loaded { try await Task.sleep(for: .milliseconds(5)) }
         #expect(model.items.contains { if case .process = $0.kind { return true } else { return false } })
-        #expect(model.process(of: "h1") == RunProcess(events: FakeHub.scriptForTests))
+        #expect(model.process(of: "h1")?.segments.map(\.id) == RunProcess(events: FakeHub.scriptForTests).segments.map(\.id))
         await loading.value
 
         // Two refreshes at once (the timer's and one after sending) do not
@@ -88,7 +88,12 @@ struct SessionTests {
         _ = await (first, second)
         let steps = try #require(again.process(of: "o1"))
         let once = RunProcess(events: Array(FakeHub.scriptForTests.prefix(5)))
-        #expect(steps == once)
+        #expect(steps.segments.map(\.id) == once.segments.map(\.id))
+        guard case .steps(_, let last) = steps.segments.last, case .steps(_, let expected) = once.segments.last else {
+            Issue.record("the run ends with steps")
+            return
+        }
+        #expect(last.map(\.id) == expected.map(\.id))
     }
 
     @Test func aMessageTakenOutOfMyViewIsGoneOnEveryDevice() async throws {
@@ -99,7 +104,14 @@ struct SessionTests {
         let model = session.conversation(with: "studio-codex-7f3a")
         await model.reload()
         #expect(model.items.contains { $0.id == "d1" })
-        #expect(model.items.contains { $0.id == "d1p3" })
+        // Its updates are part of its run.
+        func reported(_ id: String) -> Bool {
+            model.run(of: "d1").contains { part in
+                if case .reports(_, let reports) = part { return reports.contains { $0.id == id } } else { return false }
+            }
+        }
+        #expect(reported("d1p3"))
+        #expect(!model.items.contains { $0.id == "d1p3" })
 
         // The task goes, and its updates with it; nothing is deleted.
         await model.setHidden(["d1"])
@@ -118,7 +130,7 @@ struct SessionTests {
         // Taken back within a moment: all of it is there again.
         await model.setHidden(["d1"], hidden: false)
         #expect(model.items.contains { $0.id == "d1" })
-        #expect(model.items.contains { $0.id == "d1p3" })
+        #expect(reported("d1p3"))
     }
 
     @Test func anOlderWorkspaceKeepsWhatIHidOnThisDevice() async throws {

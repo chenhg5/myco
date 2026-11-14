@@ -86,14 +86,31 @@ final class ConversationTests: XCTestCase {
         // The microphone hears a script here: nobody speaks to a simulator.
         let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-dictation", "scripted"])
         let mic = app.buttons["composer.mic"]
-        XCTAssertTrue(mic.waitForExistence(timeout: 20), "the microphone is beside Send")
+        XCTAssertTrue(mic.waitForExistence(timeout: 20), "the microphone is in the input")
         let input = app.descendants(matching: .any)["composer.input"]
+        // The controls sit under the words: what adds to a message on the
+        // left, the button that sends it alone on the right, far enough
+        // from the microphone that one is never hit for the other, and
+        // each large enough to hit without aiming.
+        let send = app.descendants(matching: .any)["composer.submit"]
+        let attach = app.descendants(matching: .any)["composer.attach"]
+        XCTAssertLessThan(mic.frame.midX, app.frame.midX, "the microphone is on the left")
+        XCTAssertGreaterThan(send.frame.midX, app.frame.width * 0.8, "the send button is at the right edge")
+        XCTAssertGreaterThan(send.frame.minX - mic.frame.maxX, 150, "a whole card apart")
+        for control in [mic, send, attach] {
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, "wide enough to hit")
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, "tall enough to hit")
+        }
+        XCTAssertGreaterThanOrEqual(input.frame.width, app.frame.width * 0.8, "the words get the whole width")
+        XCTAssertGreaterThan(send.frame.minY, input.frame.maxY - 1, "the controls are under the words")
+        snap("composer-empty")
         mic.tap()
         // The words grow into the box, a new sentence after the one before.
         expectation(for: NSPredicate(format: "value CONTAINS %@", "帮我看一下下载页然后改一下标题"), evaluatedWith: input)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(mic.isSelected, "it shows that it is listening")
         snap("dictation-listening")
+        XCTAssertTrue(mic.isHittable, "the microphone stays there while there are words: speaking can go on")
         mic.tap()
         expectation(for: NSPredicate(format: "selected == false"), evaluatedWith: mic)
         waitForExpectations(timeout: 5)
@@ -295,6 +312,17 @@ final class ConversationTests: XCTestCase {
         let task = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "设计 Hub 的推送接口")).firstMatch
         XCTAssertTrue(task.waitForExistence(timeout: 20), "the coordinator's task is part of the conversation")
         XCTAssertTrue(app.staticTexts["协调者"].exists, "and says who asked")
+        // What it reported sits in its run where it came: after the step
+        // made before it, never under what it did later.
+        let first = app.staticTexts["看了现有的唤醒方式：webhook、GitHub、Claude 三种。"]
+        let newest = app.staticTexts["正在写中转服务的设计。"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "its updates show while it works")
+        XCTAssertTrue(newest.exists)
+        let summaries = app.buttons.matching(identifier: "steps.summary")
+        XCTAssertGreaterThanOrEqual(summaries.count, 2, "its steps are in more than one run of steps")
+        XCTAssertLessThan(summaries.element(boundBy: 0).frame.minY, first.frame.minY, "the first steps are above its first update")
+        XCTAssertGreaterThan(summaries.element(boundBy: summaries.count - 1).frame.minY, first.frame.minY, "and later steps are below it")
+        snap("run-member")
         XCTAssertTrue(app.buttons["steps.summary"].firstMatch.exists, "with how it is being worked on")
         snap("member-all-work")
     }

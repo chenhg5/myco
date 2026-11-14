@@ -172,7 +172,10 @@ type Backend struct {
 	// in lang itself and tells h what it heard (macOS); it returns how to
 	// stop. Dictate starts the system's voice typing in lang into the field
 	// that has the keyboard (Windows).
-	Listen  func(lang string, h *Hearing) (stop func(), err error)
+	Listen func(lang string, h *Hearing) (stop func(), err error)
+	// Voice is the microphone and speaker for voice calls (voice.go): the
+	// Mac app's; nil elsewhere (no voice calls there yet).
+	Voice   VoiceAudio
 	Dictate func(lang string) error
 	// PickImage asks for a picture with the system's own panel, pictures
 	// only (the desktop app on macOS, whose web view shows every file for
@@ -191,6 +194,9 @@ type Backend struct {
 	// translating messages (translate.go): settings, keys in Secrets
 	translateOnce sync.Once
 	translate     *translator
+	// the voice assistant (voice.go)
+	voiceOnce sync.Once
+	voice     *voice
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -245,6 +251,7 @@ func (b *Backend) Handler() http.Handler {
 	})
 	m.HandleFunc("GET /app/hubs", b.listHubs)
 	b.workspaceRoutes(m)
+	b.voiceRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)

@@ -26,6 +26,8 @@ public actor FakeHub: HubAPI {
     private var files: [String: (file: HubFile, data: Data)] = [:]
     /// The messages taken out of my view.
     private var hiddenIDs: [String] = []
+    /// Tasks whose session ended its turn (open, but waiting).
+    private var turnEnded: Set<String> = []
     /// Acts like a hub from before messages could be taken out of view.
     private var tooOldForHidden = false
     /// Acts like a hub from before files could be sent from the app.
@@ -39,6 +41,7 @@ public actor FakeHub: HubAPI {
         projectList = world.projects
         messages = world.messages
         files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
+        turnEnded = world.turnEnded
     }
 
     public func setLatency(_ value: Duration) {
@@ -160,7 +163,22 @@ public actor FakeHub: HubAPI {
         } else if task.isOpen {
             shown = 5
         }
-        return Trace(message: messageID, status: task.status, events: Self.script.prefix(shown).filter { $0.seq > seq })
+        // Each step has its time, as a real run's do: one sent from the app
+        // steps along as it is watched; one that was already there spread
+        // its steps from when it was asked to when it last moved.
+        let began = simulated[messageID].map { $0.addingTimeInterval(Self.ackAfter) } ?? task.createdAt
+        let pace = simulated[messageID] != nil
+            ? 0.8
+            : max(0, (task.activeAt ?? task.updatedAt).timeIntervalSince(task.createdAt)) / Double(max(1, shown))
+        var steps = Array(Self.script.prefix(shown))
+        // Its session ended its turn after the last step: it waits.
+        if turnEnded.contains(messageID), task.isOpen { steps.append(TraceEvent(seq: shown + 1, kind: "turn_end", data: TraceStep())) }
+        let events = steps.filter { $0.seq > seq }.map { event -> TraceEvent in
+            var timed = event
+            timed.at = began.addingTimeInterval(Double(min(event.seq, shown)) * pace)
+            return timed
+        }
+        return Trace(message: messageID, status: task.status, events: events)
     }
 
     /// The fake run, for tests that read a whole one.

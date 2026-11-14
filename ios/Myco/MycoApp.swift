@@ -10,8 +10,9 @@ import MycoStore
 ///
 /// It opens the workspace joined earlier, or the welcome page. Launch
 /// arguments change that, for tests and for trying things:
-/// `-myco-start demo|empty|long` shows a demo workspace (an in-memory
-/// hub), `-myco-start welcome` the welcome page, `-myco-join <link>`
+/// `-myco-start demo|empty|long|waiting` shows a demo workspace (an
+/// in-memory hub), `-myco-start two` two of them joined side by side,
+/// `-myco-start welcome` the welcome page, `-myco-join <link>`
 /// joins with a link at launch, `-myco-attach <agent>` starts the demo
 /// with files picked for that agent, `-myco-dictation scripted|denied`
 /// replaces the microphone with a script, and `-myco-latency <ms>` makes
@@ -23,32 +24,25 @@ struct MycoApp: App {
 
     init() {
         start = UserDefaults.standard.string(forKey: "myco-start") ?? ""
-        let workspaces = Workspaces(records: FileWorkspaceStore(), secrets: KeychainStore(), deviceName: Self.deviceName())
         let snapshots = FileSnapshotStore()
-        let session: @MainActor @Sendable ((record: WorkspaceRecord, hub: HubClient)) -> WorkspaceSession = { current in
-            WorkspaceSession(id: current.record.id, name: Workspaces.displayName(of: current.record), hub: current.hub, snapshots: snapshots)
+        // `-myco-start two`: two demo workspaces already joined (and any
+        // well-formed link joins another), to see and test switching.
+        let demos: DemoWorkspaces? = start == "two" ? DemoWorkspaces() : nil
+        let joined: any WorkspaceBook
+        if let demos {
+            joined = demos
+        } else {
+            joined = Workspaces(records: FileWorkspaceStore(), secrets: KeychainStore(), deviceName: Self.deviceName())
         }
+        let kept = demos == nil
         let doors = AppModel.Doors(
             demo: { Self.demo(.team) },
-            restore: {
-                guard let current = await workspaces.current() else { return nil }
-                return session(current)
+            book: joined,
+            session: { record, hub in
+                // What a real workspace showed last is kept for its next opening.
+                WorkspaceSession(id: record.id, name: Workspaces.displayName(of: record), hub: hub, snapshots: kept ? snapshots : nil)
             },
-            join: { link in
-                do {
-                    _ = try await workspaces.join(link: link)
-                } catch Workspaces.JoinError.notALink {
-                    throw AppModel.JoinFailure(message: L("这不是添加设备的链接。它应该像 https://你的工作区/c/myco_pair_…", "This is not an \"add a device\" link. It looks like https://your-workspace/c/myco_pair_…"))
-                } catch Workspaces.JoinError.refused(let reason) {
-                    throw AppModel.JoinFailure(message: L("工作区没有接受这个链接：\(reason)", "The workspace did not accept this link: \(reason)"))
-                }
-                guard let current = await workspaces.current() else {
-                    throw AppModel.JoinFailure(message: L("加入了，但没能保存在这台设备上。", "Joined, but it could not be saved on this device."))
-                }
-                return session(current)
-            },
-            leave: { id in
-                await workspaces.leave(id)
+            forget: { id in
                 await snapshots.removeSnapshots(of: id)
                 // What its messages carried goes with it.
                 FileShelf.forget(id)
@@ -104,5 +98,57 @@ struct MycoApp: App {
         let slug = name.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" }
         let joined = String(slug).split(separator: "-").joined(separator: "-")
         return joined.isEmpty ? "iphone" : joined
+    }
+}
+
+/// Two demo workspaces, joined: for seeing and testing what the app does
+/// with more than one (switching, the dot when something new comes in the
+/// other, joining a third, renaming, leaving) without any hub. A few
+/// seconds after launch something new arrives in the second one.
+actor DemoWorkspaces: WorkspaceBook {
+    private var records: [WorkspaceRecord]
+    private var hubs: [String: FakeHub]
+    private var chosen: String?
+
+    init() {
+        let team = WorkspaceRecord(id: "demo-team", name: "团队", url: URL(string: "https://team.myco.example")!)
+        let side = WorkspaceRecord(id: "demo-side", name: "个人项目", url: URL(string: "https://side.myco.example")!)
+        let sideHub = FakeHub(scenario: .waiting)
+        records = [team, side]
+        hubs = [team.id: FakeHub(scenario: .team), side.id: sideHub]
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            await sideHub.deliver(from: "studio-claude-c41f", body: "录音收到了，我开始整理第二场会议。")
+        }
+    }
+
+    func all() -> [WorkspaceRecord] { records }
+
+    func selected() -> String? {
+        chosen.flatMap { id in records.contains { $0.id == id } ? id : nil } ?? records.first?.id
+    }
+
+    func select(_ id: String?) { chosen = id }
+
+    func join(link: String) throws -> WorkspaceRecord {
+        guard let link = AppLink(link) else { throw JoinError.notALink }
+        if let known = records.first(where: { $0.url == link.hub }) { return known }
+        let record = WorkspaceRecord(id: "demo-\(records.count + 1)", name: link.hub.host() ?? "workspace", url: link.hub)
+        records.append(record)
+        hubs[record.id] = FakeHub(scenario: .empty)
+        return record
+    }
+
+    func hub(of id: String) -> (any HubAPI)? { hubs[id] }
+
+    func rename(_ id: String, to name: String) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        records[index].name = name
+    }
+
+    func leave(_ id: String) {
+        records.removeAll { $0.id == id }
+        hubs[id] = nil
+        if chosen == id { chosen = nil }
     }
 }

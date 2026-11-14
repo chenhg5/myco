@@ -12,6 +12,35 @@ export interface Hub {
   update_available?: boolean;
 }
 
+/** Voice calls: what the person chose (no keys) and whether this App can. */
+export interface VoiceConfig {
+  llm_base_url?: string;
+  llm_model?: string;
+  tts_speaker?: string;
+  /** Doubao's speech_rate, -50..100 (0 = normal) */
+  tts_rate?: number;
+}
+export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
+export interface VoiceInfo {
+  /** this App has a microphone and speaker for calls (the Mac app) */
+  available: boolean;
+  config: VoiceConfig;
+  has_llm_key: boolean;
+  has_tts_key: boolean;
+  session: { on: boolean; state: VoiceState; muted: boolean };
+}
+/** One line of a call: id stays the line's own; seq orders its changes. */
+export interface VoiceLine {
+  seq: number;
+  id: number;
+  kind: "user" | "hearing" | "assistant" | "action" | "notice";
+  text: string;
+  interrupted?: boolean;
+  task?: { hub_id: string; id: string; agent?: string; thread_id?: string };
+  at: string;
+}
+export interface VoiceEvents { state: VoiceState; on: boolean; muted?: boolean; seq: number; events: VoiceLine[] }
+
 /** The workspaces of a hub's server: whether it serves several (v0.19.9+),
  *  and whether this App may make more there (it signs in as the owner of
  *  the server's default workspace). */
@@ -590,6 +619,14 @@ export const appApi = {
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
+  // Voice calls with the agents (the Mac app; voice.go)
+  voice: () => request<VoiceInfo>("GET", "app/voice"),
+  putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean }) =>
+    request<VoiceInfo>("PUT", "app/voice/config", input),
+  voiceStart: (hubId: string, lang: string) => request<VoiceInfo>("POST", "app/voice/start", { hub_id: hubId, lang }),
+  voiceStop: () => request<VoiceInfo>("POST", "app/voice/stop", {}),
+  voiceMute: (muted: boolean) => request<VoiceInfo>("POST", "app/voice/mute", { muted }),
+  voiceEvents: (after: number) => request<VoiceEvents>("GET", `app/voice/events?after=${after}`),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
   workspaces: (hubId: string) =>
     request<WorkspaceState>("GET", `app/hubs/${enc(hubId)}/workspaces`),

@@ -92,6 +92,85 @@ struct ProcessTests {
         #expect(!paused([event(1, "tool", -30)], held))
     }
 
+    @Test func whatItReportedSitsInTheRunWhereItCame() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
+        func step(_ seq: Int, _ id: String, _ seconds: TimeInterval) -> TraceEvent {
+            TraceEvent(seq: seq, kind: "tool", data: TraceStep(id: id, tool: "Bash", input: "cmd \(seq)"), at: at(seconds))
+        }
+        func said(_ seq: Int, _ text: String, _ seconds: TimeInterval) -> TraceEvent {
+            TraceEvent(seq: seq, kind: "text", data: TraceStep(text: text), at: at(seconds))
+        }
+        // What a session followed by myco looks like: steps, words to its
+        // own terminal in between, and at the end the summary it wrote.
+        let process = RunProcess(events: [
+            step(1, "a", 10), step(2, "b", 20),
+            said(3, "the Mac went to sleep; waiting", 40),
+            step(4, "c", 60), step(5, "d", 70),
+            said(6, "all done: here is the summary", 90),
+        ])
+        let reports = [
+            RunReport(id: "p1", text: "taken on", at: at(15)),
+            RunReport(id: "p2", text: "research done", at: at(25)),
+            RunReport(id: "p3", text: "tests pass", at: at(65)),
+        ]
+        func shape(_ parts: [RunPart]) -> [String] {
+            parts.map { part in
+                switch part {
+                case .said(_, let text): return "said:" + String(text.prefix(8))
+                case .steps(_, let steps): return "steps:" + steps.map { String($0.id) }.joined(separator: ",")
+                case .failure: return "failure"
+                case .reports(_, let reports): return "reports:" + reports.map(\.id).joined(separator: ",")
+                case .added(let report): return "added:" + report.id
+                }
+            }
+        }
+        // Answered: each update after the step it came after, never under
+        // what was written later; and the closing summary is not said here,
+        // it is the answer under the run.
+        #expect(shape(process.parts(reports: reports, live: false)) == [
+            "steps:1", "reports:p1", "steps:2", "reports:p2", "said:the Mac ", "steps:4", "reports:p3", "steps:5",
+        ])
+        // Still at work: what it is writing now shows, at the end.
+        #expect(shape(process.parts(reports: reports, live: true)).last == "said:all done")
+        // What I added to the task is in the run where I sent it.
+        let added = [RunReport(id: "s1", text: "also check the title", at: at(45))]
+        #expect(shape(process.parts(reports: [], added: added, live: false)) == [
+            "steps:1,2", "said:the Mac ", "added:s1", "steps:4,5",
+        ])
+        // Two updates in a row are one timeline.
+        let together = [RunReport(id: "p1", text: "a", at: at(21)), RunReport(id: "p2", text: "b", at: at(22))]
+        #expect(shape(process.parts(reports: together, live: false)) == ["steps:1,2", "reports:p1,p2", "said:the Mac ", "steps:4,5"])
+        // Steps without a time (an older runner): updates go at the end.
+        let untimed = RunProcess(events: [tool(1, "a", "Bash", "ls"), result(2, "a"), tool(3, "b", "Bash", "ls")])
+        #expect(shape(untimed.parts(reports: reports, live: true)) == ["steps:1,3", "reports:p1,p2,p3"])
+    }
+
+    @Test func aRunTakesItsUpdatesAndAdditionsNotItsPlan() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(seconds) }
+        let messages = [
+            Message(id: "t1", from: "me", to: "coder", body: "do it", status: "acked", createdAt: at(-100)),
+            Message(id: "p1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "好，计划：\n- [x] a\n- [ ] b", status: "done", createdAt: at(-90)),
+            Message(id: "p2", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "- [x] a\n- [x] b", status: "done", createdAt: at(-80)),
+            Message(id: "s1", from: "me", to: "coder", threadId: "t1", replyTo: "t1", type: "steer", body: "and c", status: "done", createdAt: at(-70)),
+            Message(id: "p9", from: "coder", to: "me", threadId: "t1", replyTo: "t0", type: "progress", body: "another task's", status: "done", createdAt: at(-60)),
+        ]
+        let extras = ConversationBuilder.runExtras(of: "t1", agent: "coder", messages: messages)
+        // The line said with the plan stays; the checklist is the plan card's.
+        #expect(extras.reports.map(\.id) == ["p1"])
+        #expect(extras.reports.first?.text == "好，计划：")
+        #expect(extras.added.map(\.text) == ["and c"])
+        // With its run shown, they are not rows of the conversation too.
+        let rows = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], processes: ["t1"], status: { _ in nil }, now: now)
+        #expect(!rows.contains { $0.id == "p1" || $0.id == "s1" })
+        #expect(rows.contains { $0.id == "t1.process" })
+        // Without a run to put them in, they stay rows.
+        let plain = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now)
+        #expect(plain.contains { $0.id == "p1" })
+        #expect(plain.contains { $0.id == "s1" })
+    }
+
     @Test func aFailedResultMarksItsOwnStep() {
         let process = RunProcess(events: [tool(1, "a", "Bash", "go test"), tool(2, "b", "Bash", "go vet"), result(3, "a", failed: true), result(4, "b")])
         guard case .steps(_, let steps) = process.segments[0] else {

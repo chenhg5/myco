@@ -1,0 +1,515 @@
+package console
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+)
+
+// A voice call: what the person says goes to the model; what the model says
+// is spoken, a sentence at a time, as it is written; what it does in myco
+// is done as the person. The person speaking cuts it off. Tasks it handed
+// out are watched, and their answers and questions are told in a pause.
+
+// The model, the voice and myco, as a call needs them (fakes in tests).
+type voiceDeps struct {
+	audio VoiceAudio
+	model voiceModel
+	tts   voiceSpeech
+	hub   voiceHub
+	lang  string
+	// endOfSpeech: how long a partial hearing stays the same before the
+	// person is taken to have finished (the recognizer's own end of a
+	// sentence comes sooner when it is sure).
+	endOfSpeech time.Duration
+	// quietBeforeNotice: how long the call is quiet before it tells news.
+	quietBeforeNotice time.Duration
+	// watchEvery: how often handed-out tasks are looked at.
+	watchEvery time.Duration
+}
+
+type voiceCall struct {
+	v *voice
+	d voiceDeps
+
+	// muted is guarded by v.mu (the routes set it).
+	muted bool
+
+	ctx  context.Context
+	stop context.CancelFunc
+	in   chan func() // everything runs on the call's loop, in order
+	once sync.Once
+
+	// Loop state (only the loop goroutine touches these).
+	history   []chatMsg
+	partial   string
+	partialAt time.Time
+	endTimer  *time.Timer
+	turn      *voiceTurn
+	speaking  bool // audio queued and not yet played
+	lastSound time.Time
+	notices   []string
+	watched   map[string]*watchedTask
+	members   string // who is in the workspace, for the model
+}
+
+type voiceTurn struct {
+	cancel context.CancelFunc
+	id     int // the assistant line being said
+	said   *strings.Builder
+	done   chan struct{}
+}
+
+type watchedTask struct {
+	ref      VoiceTaskRef
+	what     string // what it was asked, short
+	asked    string // the question it asked last (told once)
+	finished bool
+}
+
+func newVoiceCall(v *voice, d voiceDeps) *voiceCall {
+	if d.endOfSpeech == 0 {
+		d.endOfSpeech = 900 * time.Millisecond
+	}
+	if d.quietBeforeNotice == 0 {
+		d.quietBeforeNotice = 1500 * time.Millisecond
+	}
+	if d.watchEvery == 0 {
+		d.watchEvery = 4 * time.Second
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	return &voiceCall{v: v, d: d, ctx: ctx, stop: stop, in: make(chan func(), 64), watched: map[string]*watchedTask{}}
+}
+
+// begin starts the loop and the watcher; the microphone is already on.
+func (c *voiceCall) begin() {
+	c.v.setState(stListening)
+	go c.loop()
+	go c.watch()
+	c.do(func() {
+		if m, err := c.d.hub.Members(c.ctx); err == nil {
+			c.members = m
+		}
+	})
+}
+
+func (c *voiceCall) do(f func()) {
+	select {
+	case c.in <- f:
+	case <-c.ctx.Done():
+	}
+}
+
+func (c *voiceCall) loop() {
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case f := <-c.in:
+			f()
+		case <-tick.C:
+			c.maybeTellNews()
+		}
+	}
+}
+
+// hangUp ends the call.
+func (c *voiceCall) hangUp() {
+	c.once.Do(func() {
+		c.d.audio.Flush()
+		c.d.audio.Stop()
+		c.stop()
+		v := c.v
+		v.mu.Lock()
+		if v.call == c {
+			v.call = nil
+		}
+		v.state = stIdle
+		v.wakeLocked()
+		v.mu.Unlock()
+	})
+}
+
+// --- what the platform says (VoiceEvents) ---
+
+func (c *voiceCall) Heard(text string, final bool) {
+	c.do(func() { c.heard(strings.TrimSpace(text), final) })
+}
+
+func (c *voiceCall) Played() {
+	c.do(func() {
+		c.speaking = false
+		c.lastSound = time.Now()
+		if c.turn == nil {
+			c.v.setState(stListening)
+		}
+	})
+}
+
+func (c *voiceCall) Ended(err string) {
+	if err != "" {
+		c.v.mu.Lock()
+		c.v.add(VoiceEvent{Kind: vNotice, Text: micError(err)})
+		c.v.mu.Unlock()
+	}
+	c.hangUp()
+}
+
+func micError(err string) string {
+	switch err {
+	case "mic-denied":
+		return "没有麦克风权限：在「系统设置 › 隐私与安全性 › 麦克风」里允许 myco。"
+	case "speech-denied":
+		return "没有语音识别权限：在「系统设置 › 隐私与安全性 › 语音识别」里允许 myco。"
+	case "unavailable":
+		return "这台电脑上现在用不了语音识别。"
+	}
+	return "麦克风停了：" + err
+}
+
+// heard: the person's words so far. While the assistant talks, real words
+// (not "嗯", not its own voice coming back) cut it off.
+func (c *voiceCall) heard(text string, final bool) {
+	c.v.mu.Lock()
+	muted := c.muted
+	c.v.mu.Unlock()
+	if muted || text == "" {
+		return
+	}
+	if (c.turn != nil || c.speaking) && !c.interrupts(text) {
+		return
+	}
+	if c.turn != nil || c.speaking {
+		c.interrupt()
+	}
+	c.partial, c.partialAt = text, time.Now()
+	c.lastSound = c.partialAt
+	c.v.mu.Lock()
+	c.v.add(VoiceEvent{Kind: vHearing, Text: text})
+	c.v.mu.Unlock()
+	if c.endTimer != nil {
+		c.endTimer.Stop()
+	}
+	if final {
+		c.finishUtterance()
+		return
+	}
+	at := c.partialAt
+	c.endTimer = time.AfterFunc(c.d.endOfSpeech, func() {
+		c.do(func() {
+			if c.partialAt.Equal(at) {
+				c.finishUtterance()
+			}
+		})
+	})
+}
+
+// backchannel: what people say to show they listen; not a turn.
+var backchannel = map[string]bool{"嗯": true, "嗯嗯": true, "啊": true, "哦": true, "噢": true, "对": true, "对对": true, "好": true, "是": true, "嗯哼": true, "ok": true, "okay": true, "mm": true, "uh-huh": true, "yeah": true}
+
+// interrupts says whether words heard while the assistant talks are the
+// person cutting in: at least two real characters, not a backchannel, and
+// not what the assistant is saying coming back through the microphone.
+func (c *voiceCall) interrupts(text string) bool {
+	t := normalizeSpeech(text)
+	if len([]rune(t)) < 2 || backchannel[t] {
+		return false
+	}
+	if c.turn != nil {
+		if said := normalizeSpeech(c.turn.said.String()); said != "" && strings.Contains(said, t) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeSpeech(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// interrupt stops the assistant: nothing more is said, and what it got to
+// say is kept as said.
+func (c *voiceCall) interrupt() {
+	c.d.audio.Flush()
+	c.speaking = false
+	if t := c.turn; t != nil {
+		t.cancel()
+		c.turn = nil
+		said := strings.TrimSpace(t.said.String())
+		c.v.mu.Lock()
+		c.v.update(t.id, said, true)
+		c.v.mu.Unlock()
+		if said != "" {
+			c.history = append(c.history, chatMsg{Role: "assistant", Content: said + "（被打断了）"})
+		}
+	}
+	c.v.setState(stListening)
+}
+
+// finishUtterance: the person has finished; the assistant answers.
+func (c *voiceCall) finishUtterance() {
+	text := strings.TrimSpace(c.partial)
+	c.partial = ""
+	if c.endTimer != nil {
+		c.endTimer.Stop()
+		c.endTimer = nil
+	}
+	if text == "" || backchannel[normalizeSpeech(text)] {
+		c.v.mu.Lock()
+		if n := len(c.v.events); n > 0 && c.v.events[n-1].Kind == vHearing {
+			c.v.events = c.v.events[:n-1]
+			c.v.wakeLocked()
+		}
+		c.v.mu.Unlock()
+		return
+	}
+	c.v.mu.Lock()
+	c.v.add(VoiceEvent{Kind: vUser, Text: text})
+	c.v.mu.Unlock()
+	c.history = append(c.history, chatMsg{Role: "user", Content: text})
+	c.startTurn()
+}
+
+// maybeTellNews: in a quiet moment, news about handed-out tasks becomes a
+// turn of its own.
+func (c *voiceCall) maybeTellNews() {
+	if len(c.notices) == 0 || c.turn != nil || c.speaking || c.partial != "" {
+		return
+	}
+	if time.Since(c.lastSound) < c.d.quietBeforeNotice {
+		return
+	}
+	news := strings.Join(c.notices, "\n")
+	c.notices = nil
+	c.history = append(c.history, chatMsg{Role: "system", Content: "（系统消息，不是对方说的）刚收到这些消息，用一两句自然的话告诉对方，别念原文：\n" + news})
+	c.startTurn()
+}
+
+// startTurn runs the model on the conversation and says what it writes.
+func (c *voiceCall) startTurn() {
+	ctx, cancel := context.WithCancel(c.ctx)
+	c.v.mu.Lock()
+	ev := c.v.add(VoiceEvent{Kind: vAssistant, Text: ""})
+	c.v.mu.Unlock()
+	t := &voiceTurn{cancel: cancel, id: ev.ID, said: &strings.Builder{}, done: make(chan struct{})}
+	c.turn = t
+	c.v.setState(stThinking)
+	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.members, c.d.hub.Name())}}, trimHistory(c.history)...)
+	go c.runTurn(ctx, t, msgs)
+}
+
+// trimHistory keeps the conversation to its last messages, starting at a
+// person's or system line (never a tool result without its call).
+func trimHistory(h []chatMsg) []chatMsg {
+	const keep = 30
+	if len(h) <= keep {
+		return h
+	}
+	h = h[len(h)-keep:]
+	for len(h) > 0 && (h[0].Role == "tool" || (h[0].Role == "assistant" && len(h[0].ToolCalls) > 0)) {
+		h = h[1:]
+	}
+	return h
+}
+
+// runTurn: model rounds (tools in between), each sentence spoken as soon
+// as it is complete. Runs off the loop; reports back through c.do.
+func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, msgs []chatMsg) {
+	defer close(t.done)
+	sentences := make(chan string, 16)
+	spoke := make(chan struct{})
+	go func() {
+		defer close(spoke)
+		for s := range sentences {
+			if ctx.Err() != nil {
+				continue
+			}
+			c.do(func() {
+				if c.turn == t {
+					c.speaking = true
+					c.v.setState(stSpeaking)
+				}
+			})
+			err := c.d.tts.Speak(ctx, s, func(pcm []byte, rate int) {
+				if ctx.Err() == nil {
+					c.d.audio.Play(pcm, rate)
+				}
+			})
+			if err != nil && ctx.Err() == nil {
+				c.notice("说不出声：" + err.Error())
+			}
+		}
+	}()
+	var added []chatMsg
+	split := &sentenceSplitter{}
+	emit := func(s string) {
+		if strings.TrimSpace(s) == "" {
+			return
+		}
+		t.said.WriteString(s)
+		said := t.said.String()
+		c.do(func() {
+			if c.turn == t {
+				c.v.mu.Lock()
+				c.v.update(t.id, strings.TrimSpace(said), false)
+				c.v.mu.Unlock()
+			}
+		})
+		sentences <- s
+	}
+	var failed error
+	for round := 0; round < 5 && ctx.Err() == nil; round++ {
+		reply, err := c.d.model.Stream(ctx, msgs, voiceTools, func(delta string) {
+			for _, s := range split.add(delta) {
+				emit(s)
+			}
+		})
+		if err != nil {
+			failed = err
+			break
+		}
+		if rest := split.flush(); rest != "" {
+			emit(rest)
+		}
+		msgs = append(msgs, reply)
+		added = append(added, reply)
+		if len(reply.ToolCalls) == 0 {
+			break
+		}
+		for _, call := range reply.ToolCalls {
+			out := c.runTool(ctx, call)
+			res := chatMsg{Role: "tool", ToolCallID: call.ID, Content: out}
+			msgs = append(msgs, res)
+			added = append(added, res)
+		}
+	}
+	close(sentences)
+	<-spoke
+	c.do(func() {
+		if c.turn != t {
+			return // cut off: interrupt() kept what was said
+		}
+		c.turn = nil
+		if failed != nil && ctx.Err() == nil {
+			c.v.mu.Lock()
+			c.v.add(VoiceEvent{Kind: vNotice, Text: "语音助手没能回答：" + failed.Error()})
+			c.v.mu.Unlock()
+		}
+		said := strings.TrimSpace(t.said.String())
+		c.v.mu.Lock()
+		if said == "" {
+			// Nothing said (only actions): drop the empty line.
+			for i := len(c.v.events) - 1; i >= 0; i-- {
+				if c.v.events[i].ID == t.id {
+					c.v.events = append(c.v.events[:i], c.v.events[i+1:]...)
+					c.v.wakeLocked()
+					break
+				}
+			}
+		}
+		c.v.mu.Unlock()
+		c.history = append(c.history, added...)
+		if !c.speaking {
+			c.v.setState(stListening)
+		}
+	})
+}
+
+func (c *voiceCall) notice(text string) {
+	c.v.mu.Lock()
+	c.v.add(VoiceEvent{Kind: vNotice, Text: text})
+	c.v.mu.Unlock()
+}
+
+// sentenceSplitter cuts streamed text into pieces worth saying on their
+// own: at the end of a sentence, or at a comma once a piece is long.
+type sentenceSplitter struct{ buf strings.Builder }
+
+func (s *sentenceSplitter) add(delta string) []string {
+	var out []string
+	for _, r := range delta {
+		s.buf.WriteRune(r)
+		n := len([]rune(s.buf.String()))
+		switch {
+		case strings.ContainsRune("。！？!?；;\n", r):
+			out = append(out, s.take())
+		case strings.ContainsRune("，,、：:", r) && n >= 18:
+			out = append(out, s.take())
+		case r == '.' && n >= 2:
+			out = append(out, s.take())
+		}
+	}
+	return out
+}
+
+func (s *sentenceSplitter) take() string {
+	t := s.buf.String()
+	s.buf.Reset()
+	return t
+}
+
+func (s *sentenceSplitter) flush() string {
+	t := strings.TrimSpace(s.take())
+	return t
+}
+
+// --- watching the tasks it handed out ---
+
+func (c *voiceCall) watchTask(ref VoiceTaskRef, what string) {
+	c.do(func() { c.watched[ref.ID] = &watchedTask{ref: ref, what: what} })
+}
+
+func (c *voiceCall) watch() {
+	tick := time.NewTicker(c.d.watchEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-tick.C:
+		}
+		var todo []*watchedTask
+		done := make(chan struct{})
+		c.do(func() {
+			for _, w := range c.watched {
+				if !w.finished {
+					todo = append(todo, w)
+				}
+			}
+			close(done)
+		})
+		select {
+		case <-done:
+		case <-c.ctx.Done():
+			return
+		}
+		for _, w := range todo {
+			st, err := c.d.hub.TaskNews(c.ctx, w.ref.ID)
+			if err != nil {
+				continue
+			}
+			w := w
+			c.do(func() {
+				switch {
+				case st.Finished:
+					w.finished = true
+					c.notices = append(c.notices, fmt.Sprintf("%s 做完了「%s」：%s", w.ref.Agent, w.what, st.Summary))
+				case st.Question != "" && st.Question != w.asked:
+					w.asked = st.Question
+					c.notices = append(c.notices, fmt.Sprintf("%s 在做「%s」时问你：%s（它在等回答，用 add_to_task 把对方的回答转给它）", w.ref.Agent, w.what, st.Question))
+				}
+			})
+		}
+	}
+}

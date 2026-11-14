@@ -27,7 +27,7 @@ let package = Package(
         .target(name: "MycoCore", dependencies: ["MycoAPI", "MycoCrypto", "MycoStore"]),
         .target(name: "MycoFake", dependencies: ["MycoAPI"]),
         .target(name: "MycoUI"),
-        .target(name: "MycoFeatures", dependencies: ["MycoCore", "MycoUI", "MycoAPI"]),
+        .target(name: "MycoFeatures", dependencies: ["MycoCore", "MycoUI", "MycoAPI", "MycoStore"]),
         .testTarget(name: "MycoAPITests", dependencies: ["MycoAPI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "MycoCoreTests", dependencies: ["MycoCore", "MycoFake"]),
         .testTarget(name: "MycoUITests", dependencies: ["MycoUI"], resources: [.copy("Fixtures")]),

@@ -19,10 +19,14 @@ public protocol SecretStore: Sendable {
     func setSecret(_ value: String?, for key: String) async throws
 }
 
-/// The workspaces this device joined, in the order they were added.
+/// The workspaces this device joined, in the order they were added, and
+/// which of them was on screen last.
 public protocol WorkspaceStore: Sendable {
     func workspaces() async throws -> [WorkspaceRecord]
     func save(_ workspaces: [WorkspaceRecord]) async throws
+    /// The id of the workspace on screen last; nil when none was chosen.
+    func selected() async -> String?
+    func select(_ id: String?) async
 }
 
 /// Text typed but not sent, per conversation.
@@ -49,6 +53,10 @@ public actor MemoryStore: SecretStore, WorkspaceStore, DraftStore, SnapshotStore
 
     private var secrets: [String: String] = [:]
     private var records: [WorkspaceRecord] = []
+    private var chosen: String?
+
+    public func selected() -> String? { chosen }
+    public func select(_ id: String?) { chosen = id }
     private var drafts: [String: String] = [:]
 
     public init() {}

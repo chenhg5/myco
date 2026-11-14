@@ -73,7 +73,9 @@ public enum ConversationBuilder {
     ///     and, on a member's page, the agent's with its colleagues.
     ///   - others: tasks the agent gave out, to show as one-line capsules
     ///     (a coordinator's hand-outs on its project's page).
-    ///   - processes: tasks whose steps are known and worth a row.
+    ///   - processes: tasks whose steps are known and worth a row. What
+    ///     such a task reported, and what was added to it, are drawn inside
+    ///     its run where each came, not as rows of their own.
     ///   - tracedPlans: the plan each task's steps hold, and when it was written.
     ///   - paused: open tasks whose run has stopped for now (`RunProcess.isPaused`).
     ///   - status: looks up a node's status, to tell working from stuck.
@@ -151,6 +153,9 @@ public enum ConversationBuilder {
                     break
                 }
             case "steer":
+                // Added to a task whose run is shown: it is in the run,
+                // where it was sent.
+                if let task = m.replyTo, processes.contains(task) { continue }
                 if asked {
                     items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by), files: files(of: m)))
                 }
@@ -174,6 +179,9 @@ public enum ConversationBuilder {
                     if split.rest.isEmpty { continue }
                     said = split.rest
                 }
+                // Its task's run is shown: the update is in the run, after
+                // the step it came after.
+                if processes.contains(taskID) { continue }
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
@@ -336,6 +344,30 @@ public enum ConversationBuilder {
             return L("🔒 已加密，这台设备还读不了", "🔒 Encrypted: this device cannot read it yet")
         }
         return message.body
+    }
+
+    /// What a task's run takes in besides its steps: the updates the agent
+    /// reported for it (without the checklist that is its plan), and what
+    /// was added to it, each with when. Oldest first.
+    public static func runExtras(of taskID: String, agent: String, messages: [Message]) -> (reports: [RunReport], added: [RunReport]) {
+        var reports: [RunReport] = []
+        var added: [RunReport] = []
+        for m in messages.sorted(by: { $0.createdAt < $1.createdAt }) {
+            switch m.type {
+            case "progress" where m.from == agent && (m.replyTo ?? m.threadId) == taskID:
+                var said = text(of: m)
+                if let split = RunProcess.splitPlan(m.body) {
+                    if split.rest.isEmpty { continue }
+                    said = split.rest
+                }
+                reports.append(RunReport(id: m.id, text: said, at: m.createdAt, files: files(of: m)))
+            case "steer" where m.from != agent && m.replyTo == taskID:
+                added.append(RunReport(id: m.id, text: text(of: m), at: m.createdAt, files: files(of: m)))
+            default:
+                break
+            }
+        }
+        return (reports, added)
     }
 
     /// The files a message shows. A sealed message's files are sealed

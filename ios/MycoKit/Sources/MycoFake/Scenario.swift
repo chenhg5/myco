@@ -20,6 +20,8 @@ public enum Scenario: Sendable {
         var projects: [Project] = []
         var messages: [Message] = []
         var files: [(file: HubFile, data: Data)] = []
+        /// Tasks whose session ended its turn: open, but waiting.
+        var turnEnded: Set<String> = []
     }
 
     func build(now: Date) -> World {
@@ -135,6 +137,8 @@ public enum Scenario: Sendable {
                 Message(id: "m3p", from: lead.name, to: me, threadId: "m3", replyTo: "m3", type: "progress",
                         body: "已经请测试来评审，等他看完我再汇总。", status: "done", project: project, createdAt: ago(430)),
             ]
+            // Having handed the review out, the coordinator ended its turn.
+            world.turnEnded = ["m3"]
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

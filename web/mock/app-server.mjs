@@ -1357,6 +1357,58 @@ const server = http.createServer(async (req, res) => {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
   }
+  // /app/voice: a voice call with a scripted assistant. Starting it plays
+  // a short call (it hears you, hands a task to the backend, answers), so a
+  // test can watch the lines and states change.
+  if (parts[0] === "app" && parts[1] === "voice") {
+    const v = (state.voice ||= { cfg: { tts_speaker: "zh_male_wennuanahu_uranus_bigtts" }, llmKey: true, ttsKey: true, on: false, muted: false, st: "idle", seq: 0, lines: [], timers: [] });
+    const info = () => ({ available: true, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey, session: { on: v.on, state: v.on ? v.st : "idle", muted: v.muted } });
+    const line = (kind, text, extra = {}) => {
+      v.seq += 1;
+      const id = extra.id || v.seq;
+      v.lines = v.lines.filter((l) => l.id !== id && (kind === "hearing" || l.kind !== "hearing"));
+      v.lines.push({ seq: v.seq, id, kind, text, at: iso(0), ...extra, ...(extra.id ? {} : {}) });
+      return id;
+    };
+    const stopAll = () => { v.timers.forEach(clearTimeout); v.timers = []; };
+    if (parts.length === 2 && method === "GET") return send(res, 200, info());
+    if (parts[2] === "config" && method === "PUT") {
+      const b = await readBody(req);
+      for (const k of ["llm_base_url", "llm_model", "tts_speaker", "tts_rate"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      if (b?.llm_key) v.llmKey = true;
+      if (b?.tts_key) v.ttsKey = true;
+      if (b?.clear_llm_key) v.llmKey = false;
+      if (b?.clear_tts_key) v.ttsKey = false;
+      return send(res, 200, info());
+    }
+    if (parts[2] === "start" && method === "POST") {
+      if (!v.llmKey || !v.ttsKey) return fail(res, 400, "not_configured", "add a Doubao speech key", "设置 › 语音");
+      stopAll();
+      v.on = true; v.st = "listening"; v.muted = false;
+      const at = (ms, f) => v.timers.push(setTimeout(f, ms));
+      at(600, () => line("hearing", "让后端把登录"));
+      at(1100, () => line("hearing", "让后端把登录那个 bug 修了"));
+      at(1500, () => { line("user", "让后端把登录那个 bug 修了"); v.st = "thinking"; });
+      at(2100, () => line("action", "交给 backend：修登录 bug", { task: { hub_id: "hub_studio", id: "msg_voice_1", agent: "backend" } }));
+      let said = "";
+      const a = { id: 0 };
+      at(2400, () => { v.st = "speaking"; a.id = line("assistant", "好，交给后端了，"); said = "好，交给后端了，"; });
+      at(2900, () => { said += "修好了我告诉你。"; line("assistant", said, { id: a.id }); });
+      at(3600, () => { v.st = "listening"; });
+      return send(res, 200, info());
+    }
+    if (parts[2] === "stop" && method === "POST") { stopAll(); v.on = false; v.st = "idle"; return send(res, 200, info()); }
+    if (parts[2] === "mute" && method === "POST") { const b = await readBody(req); v.muted = !!b?.muted; return send(res, 200, info()); }
+    if (parts[2] === "events" && method === "GET") {
+      const after = Number(url.searchParams.get("after") || 0);
+      // A short wait for something new, like the App's long-poll.
+      const until = Date.now() + 1500;
+      while (Date.now() < until && !v.lines.some((l) => l.seq > after) && after >= 0) await new Promise((r) => setTimeout(r, 100));
+      const events = v.lines.filter((l) => after < 0 || l.seq > after);
+      return send(res, 200, { state: v.on ? v.st : "idle", on: v.on, muted: v.muted, seq: v.seq, events });
+    }
+  }
+
   // /app/translate: settings (keys only said to exist) and a stand-in
   // translation: 〔译〕 and the text, so a test can tell it was translated.
   if (parts[0] === "app" && parts[1] === "translate") {
