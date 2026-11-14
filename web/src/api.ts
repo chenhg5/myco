@@ -72,8 +72,8 @@ export interface ProjectMember {
 }
 /** One step of a task's run (GET …/messages/{id}/trace). */
 export interface TraceStep {
-  kind: "text" | "thinking" | "tool" | "tool_result" | "usage" | "error" | "output" | string;
-  /** output: stdout or stderr (a shell command's output as it runs) */
+  kind: "text" | "thinking" | "tool" | "tool_result" | "usage" | "error" | "output" | "delta" | string;
+  /** output: stdout/stderr; delta: text/thinking (pieces share a block id). */
   stream?: string;
   text?: string; tool?: string; id?: string; input?: string; output?: string; failed?: boolean;
   input_tokens?: number; output_tokens?: number; cost_usd?: number; duration_ms?: number;

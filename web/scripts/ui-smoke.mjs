@@ -693,9 +693,6 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "pulled-not-started");
     });
 
-    // A chat with nothing in it yet: the agent, large, and a question.
-    // What was typed and not sent stays with its chat when you go to
-    // another and come back; an empty box is one line, whatever its hint.
     await step("单聊 · 没发的字留着", async () => {
       await openMember(page, narrow, "聊天", "legacy-codex");
       const box = page.locator(".conv-detail .conv-compose-input");
@@ -721,6 +718,106 @@ async function runMatrix(browser, size, scheme) {
 
     // Files: one picked with the paperclip, one pasted; sent alone, the
     // message says what they are and carries both.
+    await step("单聊 · 接手后正在启动", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      // Keep the conversation snapshot queued: only the trace poll may
+      // learn about ack, even after the 3-second conversation poll.
+      const freeze = async (route) => {
+        const response = await route.fetch();
+        const data = await response.json();
+        if (data.messages) for (const m of data.messages) {
+          if (m.type === "task" && m.body === "启动预览") m.status = "queued";
+        }
+        await route.fulfill({ response, json: data });
+      };
+      await page.route("**/app/hubs/*/exchanges?*", freeze);
+      try {
+        const box = page.locator(".conv-detail .conv-compose-input");
+        await box.fill("启动预览");
+        await box.press("Enter");
+        const startup = page.locator(".conv-detail .trace.is-live", { hasText: "已接手，正在启动" }).last();
+        await startup.waitFor({ timeout: 5000 });
+        if (await startup.locator(".work-sprite.is-idle").count()) throw new Error("已接手时蘑菇应该走动");
+        await shot(page, size, scheme, "conversation-starting");
+      } finally {
+        await page.unroute("**/app/hubs/*/exchanges?*", freeze);
+      }
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    await step("单聊 · delta 正在长出来", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("逐字预览");
+      await box.press("Enter");
+      const thinking = page.locator(".conv-detail .trace-group.is-live", { hasText: "正在想…" }).last();
+      await thinking.waitFor({ timeout: 6000 });
+      if (await thinking.locator(".trace-body").count()) throw new Error("增量思考应默认折在步骤行里");
+      const run = page.locator(".conv-detail .trace").last();
+      const delta = run.locator(".trace-delta").last();
+      await delta.waitFor({ timeout: 8000 });
+      // Observe frames inside one poll, then the next suffix on the same
+      // DOM node. A complete blob would have just one length throughout.
+      const growth = await delta.evaluate(async (el) => {
+        const samples = [];
+        const until = performance.now() + 2300;
+        while (performance.now() < until) {
+          samples.push(el.textContent.length);
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        return { lengths: [...new Set(samples)], connected: el.isConnected };
+      });
+      if (!growth.connected || growth.lengths.length < 5) throw new Error(`delta 应在原段落持续增长：${JSON.stringify(growth)}`);
+      if (growth.lengths.some((n, i, a) => i && n < a[i - 1])) throw new Error("追加片段不应重播已有的字");
+      await shot(page, size, scheme, "conversation-delta-growing");
+      await delta.waitFor({ state: "hidden", timeout: 5000 });
+      const complete = run.locator(".trace-say", { hasText: "不会重新开始，也不会整段闪现" });
+      if (await complete.count() !== 1) throw new Error("完整正文应替换 delta，不能重复显示");
+      const temporary = page.locator(".conv-detail .trace-delta", { hasText: "这段临时文字" });
+      await temporary.waitFor({ timeout: 6000 });
+      await temporary.waitFor({ state: "hidden", timeout: 5000 });
+      // Opening the existing step line exposes the completed thinking once.
+      await run.locator(".trace-group").first().locator("button.trace-head").click();
+      if (await run.locator(".trace-row.is-thinking").count() !== 1) throw new Error("完整思考应替换增量思考");
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    await step("单聊 · 补充最近未关闭任务", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const older = await sendFromElsewhere("hub_studio", "review-cloud", "保留任务，等我补充");
+      // (The mock answers 启动预览 after 7 seconds, 保留任务 after 20.)
+      const newer = await sendFromElsewhere("hub_studio", "review-cloud", "启动预览：先回复这条新任务");
+      await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), newer.id, { timeout: 15000 });
+      // The newer one is answered; the older one stays open.
+      let reply = null;
+      for (let i = 0; i < 30 && !reply; i++) {
+        const th = await (await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/threads/${newer.thread_id}`)).json();
+        reply = th.messages?.find((m) => m.reply_to === newer.id && m.type === "reply") || null;
+        if (!reply) await new Promise((r) => setTimeout(r, 500));
+      }
+      if (!reply) throw new Error("新任务没有收到回复");
+      await page.locator(`[data-msg="${reply.id}"]`).waitFor({ timeout: 10_000 });
+      const box = page.locator(".conv-detail .conv-compose-input");
+      if (!(await box.getAttribute("placeholder")).includes("补充")) throw new Error("最新任务结束后，仍应补充给旧的未关闭任务");
+      const sent = page.waitForRequest((req) => req.method() === "POST" && req.url().includes(`/messages/${older.id}/steer`));
+      await box.fill("再检查旧任务的链接");
+      await box.press("Enter");
+      await sent;
+      await page.locator(".trace-steer", { hasText: "再检查旧任务的链接" }).waitFor({ timeout: 10000 });
+      await shot(page, size, scheme, "conversation-supplement-older-open");
+      await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${older.id}/stop`, { method: "POST" });
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // A chat with nothing in it yet: the agent, large, and a question.
+    // What was typed and not sent stays with its chat when you go to
+    // another and come back; an empty box is one line, whatever its hint.
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");

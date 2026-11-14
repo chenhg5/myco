@@ -6387,8 +6387,8 @@ body.is-resizing {
 }
 
 /* A reply growing in (Reveal.tsx): the newest block fades up a little. */
-.reveal.is-growing .md > :last-child:not(ul):not(ol),
-.reveal.is-growing .md > :is(ul, ol):last-child > li:last-child {
+.reveal.is-growing:not(.is-streaming) .md > :last-child:not(ul):not(ol),
+.reveal.is-growing:not(.is-streaming) .md > :is(ul, ol):last-child > li:last-child {
   animation: reveal-in 0.24s ease-out;
 }
 @keyframes reveal-in {

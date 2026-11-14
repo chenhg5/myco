@@ -2408,6 +2408,7 @@ body.is-sorting * {
   list-style: none;
 }
 .trace-plan-item {
+  animation: plan-appear 180ms ease-out;
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -2432,6 +2433,20 @@ body.is-sorting * {
   height: 11px;
   stroke-width: 3;
   color: var(--card);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.trace-plan-item.is-done .trace-plan-box svg {
+  opacity: 1;
+  transform: scale(1);
+}
+.trace-plan-text {
+  transition: color 180ms ease, text-decoration-color 180ms ease;
+}
+@keyframes plan-appear {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 /* Black, white and grey: a ticked box is a quiet grey, the step in hand
    has a darker outline. No colour, so it reads as the answer's notes. */
@@ -2457,7 +2472,8 @@ body.is-sorting * {
   50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
+  .trace-plan-item, .trace-plan-item.is-doing.is-live .trace-plan-box { animation: none; }
+  .trace-plan-box, .trace-plan-box svg, .trace-plan-text { transition: none; }
 }
 
 /* A question an agent asked you (AskCard): the choices to click and a line
@@ -2705,4 +2721,20 @@ body.is-sorting * {
   margin: 12px 0 2px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* A cursor on the same baseline as the currently written Markdown. */
+.trace-delta .reveal > .md, .trace-delta .reveal > .md > p:last-child { display: inline; }
+.trace-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.1em;
+  background: var(--muted);
+  animation: trace-cursor 900ms steps(2, jump-none) infinite;
+}
+@keyframes trace-cursor { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .trace-cursor { animation: none; }
 }

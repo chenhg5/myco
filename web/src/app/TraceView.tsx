@@ -17,20 +17,42 @@ import { drafted, grown, Reveal } from "@/app/Reveal";
 const sayFirstSeen = new Map<string, number>();
 
 const POLL_MS = 1500;
-const isOpen = (s: string) => s === "queued" || s === "delivered" || s === "acked" || s === "held";
+const isOpen = (s: string) => s === "queued" || s === "pending" || s === "delivered" || s === "acked" || s === "held";
 
 /** A tool call with its result, or another step. */
 type Row =
   | { kind: "tool"; key: string; at?: string; call: TraceStep; result?: TraceStep }
-  | { kind: "thinking" | "text" | "error"; key: string; at?: string; step: TraceStep };
+  | { kind: "thinking" | "text" | "error"; key: string; at?: string; step: TraceStep; delta?: boolean; streamed?: boolean };
 
 function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
   const rows: Row[] = [];
   const calls = new Map<string, Extract<Row, { kind: "tool" }>>();
   let usage: TraceStep | undefined;
-  for (const e of events) {
+  const deltas = new Map<string, Extract<Row, { step: TraceStep }>>();
+  const replaceDeltas = (stream?: string) => {
+    let replaced: string | undefined;
+    for (const [id, row] of deltas) {
+      if (stream && row.kind !== stream) continue;
+      rows.splice(rows.indexOf(row), 1);
+      deltas.delete(id);
+      replaced ??= row.key;
+    }
+    return replaced;
+  };
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     const s = e.data;
-    if (s.kind === "tool") {
+    if (s.kind === "delta") {
+      if (!s.id || (s.stream !== "text" && s.stream !== "thinking")) continue;
+      const key = `d:${s.stream}:${s.id}`;
+      const row = deltas.get(key);
+      if (row) row.step.text = (row.step.text || "") + (s.text || "");
+      else {
+        const next: Extract<Row, { step: TraceStep }> = { kind: s.stream, key, at: e.at, delta: true, step: { ...s, kind: s.stream } };
+        deltas.set(key, next);
+        rows.push(next);
+      }
+    } else if (s.kind === "tool") {
+      replaceDeltas();
       const r = { kind: "tool" as const, key: `t${e.seq}`, at: e.at, call: s };
       rows.push(r);
       if (s.id) calls.set(s.id, r);
@@ -40,7 +62,8 @@ function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
     } else if (s.kind === "usage") {
       usage = s;
     } else if (s.kind === "thinking" || s.kind === "text" || s.kind === "error") {
-      rows.push({ kind: s.kind, key: `s${e.seq}`, at: e.at, step: s });
+      const streamed = replaceDeltas(s.kind);
+      rows.push({ kind: s.kind, key: streamed || `s${e.seq}`, at: e.at, step: s, streamed: !!streamed });
     }
   }
   return { rows, usage };
@@ -176,8 +199,10 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, footed, waitingOn, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer }: {
+export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, footed, waitingOn, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
   hubId: string; task: Message; onGrow?: () => void;
+  cli?: string;
+  onStatus?: (taskId: string, status: string) => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
   onUsage?: (taskId: string, line: string) => void;
@@ -221,6 +246,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [events, setEvents] = useState<TraceEvent[] | null>(() => (running ? null : recall<TraceEvent[]>(memoKey) ?? null));
   const [gone, setGone] = useState(false);
+  const [traceStatus, setTraceStatus] = useState<string>();
   const last = useRef(events?.length ? events[events.length - 1].seq : 0);
   const finalLoaded = useRef(!running && events !== null);
   const body = useRef<HTMLDivElement>(null);
@@ -238,10 +264,17 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   useEffect(() => {
     if (gone || (!running && finalLoaded.current)) return;
     let off = false;
+    let loading = false;
     const load = async () => {
+      if (loading) return;
+      loading = true;
       try {
         const r = await appApi.trace(hubId, task.id, last.current);
         if (off) return;
+        if (r.status) {
+          setTraceStatus(r.status);
+          onStatus?.(task.id, r.status);
+        }
         if (!running) finalLoaded.current = true;
         if (r.events.length) {
           last.current = r.events[r.events.length - 1].seq;
@@ -260,13 +293,15 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       } catch (e) {
         // A hub without traces, or a task you may not see the run of.
         if (!off && (isOldHub(e) || (e as { code?: string }).code === "not_found")) setGone(true);
+      } finally {
+        loading = false;
       }
     };
     void load();
     if (!running) return () => { off = true; };
     const t = window.setInterval(() => void load(), POLL_MS);
     return () => { off = true; window.clearInterval(t); };
-  }, [hubId, task.id, running, gone]);
+  }, [hubId, task.id, running, gone, onStatus]);
   // While nothing says what it is doing: a playful verb (the pixel mushroom
   // is at work).
   // Stopped (its turn over, set aside, or silent after it spoke): no
@@ -303,7 +338,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, running, task.id]);
 
-// Not started yet (queued or delivered but not acknowledged: the node is
+  // Not started yet (queued or delivered but not acknowledged: the node is
   // offline, its session is busy, or it has only pulled the task): a quiet
   // line saying why, not a spinner. Once it reports progress it is at it.
   const reports = said || [];
@@ -313,7 +348,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const withSteers = (node: React.ReactNode) => (steerList.length
     ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
     : node);
-  if (running && task.status !== "acked" && task.status !== "held" && !reports.length) {
+  if (running && (traceStatus || task.status) !== "acked" && (traceStatus || task.status) !== "held" && !events?.length && !reports.length) {
     return withSteers(
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">
@@ -323,15 +358,19 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       </div>
     );
   }
+  const starting = !events?.length && !reports.length && (traceStatus || task.status) === "acked";
+  const startup = cli?.startsWith("claude") ? L("已接手，正在启动 Claude Code", "Picked up, starting Claude Code")
+    : cli?.startsWith("codex") ? L("已接手，正在启动 Codex", "Picked up, starting Codex")
+    : L("已接手，正在启动", "Picked up, starting");
   // At work with no steps to show yet (none so far, or a hub that does not
-  // keep them): the mushroom at work, a playful verb, and the time.
+  // keep them): the mushroom at work, startup or a playful verb, and time.
   const atWork = paused ? (
     <div className="trace is-waiting is-paused">{pausedLine}</div>
   ) : footed && moving ? null : moving ? (
     <div className="trace is-live">
       <div className="trace-head trace-wait">
         <Mushroom />
-        <span key={verb} className="trace-title is-shimmer is-verb">{verb}</span>
+        <span key={verb} className="trace-title is-shimmer is-verb">{starting ? startup : verb}</span>
         <Elapsed since={task.created_at} className="trace-usage" />
       </div>
     </div>
@@ -348,13 +387,13 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   // The process is thinking, tool calls and errors. What the agent says is
   // the reply (shown as the message); text between steps stays as context,
   // text after the last step is the reply itself and is left out.
-  const steps = rows.filter((x) => x.kind !== "text").length;
+  const steps = rows.filter((x) => x.kind !== "text" || x.delta).length;
   let end = rows.length;
   while (end > 0 && rows[end - 1].kind === "text") end--;
   // While it works, what it is writing now shows at once (it may be the
   // start of the answer); once the answer is in, it is the message.
   // (Not while messages sit under this run: its answer comes down there.)
-  const writing = running && !asking && !footed && !onlyReports && end < rows.length && steps > 0;
+  const writing = running && !asking && !footed && !onlyReports && end < rows.length && (steps > 0 || drafted.has(task.id));
   if (writing) {
     end = rows.length;
     drafted.add(task.id);
@@ -365,7 +404,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     if (onlyReports) return withSteers(running ? atWork : null);
     if (gone) return withSteers(running ? atWork : null);
     if (!running && (events === null || steps === 0)) return withSteers(null);
-    if (running && steps === 0) return withSteers(atWork);
+    if (running && steps === 0 && !writing) return withSteers(atWork);
   }
 
   // The plan it is working through, as Claude Code's to-do list and
@@ -421,7 +460,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     items.splice(i, 0, it);
   }
   type Report = { key: string; text: string; when: string; files?: Attachment[] };
-  type Segment = { kind: "say"; key: string; text: string }
+  type Segment = { kind: "say"; key: string; text: string; delta?: boolean; streamed?: boolean }
     | { kind: "ask"; msg: Message }
     | { kind: "steer"; msg: Message }
     | { kind: "reports"; items: Report[] }
@@ -440,7 +479,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     if (it.say) { segments.push({ kind: "say", key: it.say.key, text: it.say.text }); continue; }
     const r = it.row!;
     if (r.kind === "text") {
-      if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text });
+      if (r.step.text?.trim()) segments.push({ kind: "say", key: r.key, text: r.step.text, delta: r.delta, streamed: r.streamed });
       continue;
     }
     // Thinking is part of the process: folded into the line of steps
@@ -456,9 +495,9 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
       {plan && <PlanCard items={plan.items} live={moving} />}
       {segments.map((seg, i) => seg.kind === "say" ? (
-        <div key={seg.key} className="trace-say">
+        <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>
           {/* What it says while you watch grows in; what was there, is. */}
-          {sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+          {seg.delta ? <Reveal body={seg.text} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
         </div>
       ) : seg.kind === "steer" ? (
         <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
@@ -482,7 +521,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
           ))}
         </ol>
       ) : (
-        <StepGroup key={seg.rows[0].key} rows={seg.rows} live={movingHere && i === segments.length - 1} since={task.created_at} />
+        <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={task.created_at} />
       ))}
       {pausedLine}
       {movingHere && !asking && endsWithSay && (
@@ -522,12 +561,12 @@ function SteerBubble({ hubId, msg }: { hubId: string; msg: Message }) {
   );
 }
 
-function StepGroup({ rows, live, since }: { rows: Row[]; live: boolean; since: string }) {
+function StepGroup({ rows, live, since, onGrow }: { rows: Row[]; live: boolean; since: string; onGrow?: () => void }) {
   const [open, setOpen] = useState(false);
   const last = rows[rows.length - 1];
   const doing = !last ? L("正在处理", "Working")
     : last.kind === "tool" ? `${toolLabel(last.call.tool)} ${(last.call.input || "").split("\n")[0]}`.trim()
-    : last.kind === "thinking" ? L("正在思考", "Thinking")
+    : last.kind === "thinking" ? last.delta ? L("正在想…", "Thinking…") : L("正在思考", "Thinking")
     : L("正在处理", "Working");
   const head = live ? doing : summaryOf(rows) || L("过程", "Steps");
   return (
@@ -539,14 +578,14 @@ function StepGroup({ rows, live, since }: { rows: Row[]; live: boolean; since: s
       </button>
       {open && (
         <div className="trace-body">
-          {rows.map((r) => <TraceRow key={r.key} row={r} live={live} />)}
+          {rows.map((r) => <TraceRow key={r.key} row={r} live={live} onGrow={onGrow} />)}
         </div>
       )}
     </div>
   );
 }
 
-function TraceRow({ row, live }: { row: Row; live: boolean }) {
+function TraceRow({ row, live, onGrow }: { row: Row; live: boolean; onGrow?: () => void }) {
   const [open, setOpen] = useState(false);
   if (row.kind === "thinking") {
     return (
@@ -555,7 +594,7 @@ function TraceRow({ row, live }: { row: Row; live: boolean }) {
           <Brain /><span className="trace-name">{L("思考", "Thinking")}</span>
           {!open && row.step.text && <span className="trace-arg">{row.step.text.split("\n")[0]}</span>}
         </button>
-        {open && row.step.text && <div className="trace-detail is-prose">{row.step.text}</div>}
+        {open && row.step.text && <div className="trace-detail is-prose">{row.delta ? <Reveal body={row.step.text} streaming intervalMs={POLL_MS} plain onGrow={onGrow} /> : row.step.text}</div>}
       </div>
     );
   }
@@ -600,8 +639,8 @@ function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) {
       </div>
       <ul className="trace-plan-list">
         {items.map((x, i) => (
-          <li key={i} className={cn("trace-plan-item", `is-${x.state}`, live && x.state === "doing" && "is-live")}>
-            <span className="trace-plan-box" aria-hidden>{x.state === "done" && <Check />}</span>
+          <li key={`${x.text}:${items.slice(0, i).filter((item) => item.text === x.text).length}`} className={cn("trace-plan-item", `is-${x.state}`, live && x.state === "doing" && "is-live")}>
+            <span className="trace-plan-box" aria-hidden><Check /></span>
             <span className="trace-plan-text">{x.text}</span>
           </li>
         ))}
