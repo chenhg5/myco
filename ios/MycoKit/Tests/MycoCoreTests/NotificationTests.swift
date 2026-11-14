@@ -155,7 +155,9 @@ struct NotificationTests {
         var night = NotificationSettings()
         night.enabled = true
         night.quietHours = true
-        let desk = NotificationDesk(notifier: notifier, settings: night, now: { calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 3))! })
+        // Three in the morning, by this device's own clock.
+        let three = Calendar.current.date(bySettingHour: 3, minute: 0, second: 0, of: Date())!
+        let desk = NotificationDesk(notifier: notifier, settings: night, now: { three })
         await desk.check(session, active: false)
         await hub.deliver(from: "studio-claude-c41f", body: "at night")
         await session.refresh()
