@@ -11,7 +11,7 @@ import { L } from "@/lib/i18n";
  * computer, the app can switch that on here, after the person confirms;
  * for any other machine it says where to do it.
  */
-export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "shell" | "full" }) {
+export function LocalShellAccess({ machine, what, onlyLocal, onChange }: { machine?: Machine; what: "shell" | "full"; onlyLocal?: boolean; onChange?: () => Promise<void> }) {
   const [local, setLocal] = useState<LocalState | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,6 +30,7 @@ export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "
     : L("完全权限可以让它读写那台电脑上的任何文件、运行任何命令。", "Full access lets it read and write any file and run any command on that computer.");
 
   if (!here) {
+    if (onlyLocal) return null;
     return (
       <div className="app-notice">
         <ShieldCheck />
@@ -45,6 +46,7 @@ export function LocalShellAccess({ machine, what }: { machine?: Machine; what: "
       const r = await appApi.shellAccess(allow);
       setLocal({ ...local!, shell_allowed: r.shell_allowed });
       setConfirming(false);
+      await onChange?.();
     } catch (e) {
       setError(e);
     } finally {

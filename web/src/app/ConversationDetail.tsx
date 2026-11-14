@@ -455,8 +455,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [usageOf, setUsageOf] = useState<Record<string, string>>({});
   const onUsage = (taskId: string, line: string) =>
     setUsageOf((u) => (u[taskId] === line ? u : { ...u, [taskId]: line }));
-  // Runs still open that have stopped (their turn over, set aside, silent
-  // after they spoke): not at work, so not the loading of the chat.
+  // Trace polls run twice as often as the conversation; use their status
+  // immediately to choose the single moving run after it is picked up.
+  const [traceStatuses, setTraceStatuses] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const onTraceStatus = useCallback((taskId: string, status: string) =>
+    setTraceStatuses((prev) => prev.get(taskId) === status ? prev : new Map(prev).set(taskId, status)), []);
+  // Runs that stopped (turn over, held, silent): no moving loading.
   const [pausedRuns, setPausedRuns] = useState<ReadonlySet<string>>(() => new Set());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setPausedRuns((s) => {
@@ -540,15 +544,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const lastTask = consoleTasks[consoleTasks.length - 1];
   // An answer names its task (reply_to); one that does not (older runners)
   // counts when it came after the task in the same thread. Replies to other
-  // tasks still open here (say, one just resent) do not close the newest.
-  const answered = !!lastTask && (messages || []).some((m) =>
-    (m.type === "reply" || m.type === "event") &&
-    m.id !== lastTask.id &&
-    (m.reply_to
-      ? m.reply_to === lastTask.id
-      : m.thread_id === lastTask.thread_id && new Date(m.created_at).getTime() >= new Date(lastTask.created_at).getTime()),
+  // tasks still open here (say, one just resent) do not close this one.
+  const hasAnswer = (task: Message) => (messages || []).some((m) =>
+    (m.type === "reply" || m.type === "event") && m.id !== task.id &&
+    (m.reply_to ? m.reply_to === task.id
+      : m.thread_id === task.thread_id && new Date(m.created_at).getTime() >= new Date(task.created_at).getTime()),
   );
-  const openTask = lastTask && isOpen(lastTask.status) && !answered ? lastTask : null;
+  const openTask = [...consoleTasks].reverse().find((task) => isOpen(task.status) && !hasAnswer(task)) || null;
 
   // Only an event after the newest task says something about this task; an
   // old failure should not paint a later, healthy conversation red.
@@ -849,7 +851,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     let newest: Message | null = null;
     for (const m of shown) {
       if (m.type !== "task" || m.e2e || !isOpen(m.status) || answerOf.has(m.id) || m.asking || pausedRuns.has(m.id)) continue;
-      if (m.status !== "acked" && m.status !== "held" && !progressOf.get(m.id)?.length) continue;
+      const status = traceStatuses.get(m.id) || m.status;
+      if (status !== "acked" && status !== "held" && !progressOf.get(m.id)?.length) continue;
       const ours = isMe(m.from, row?.hub) && !isStuck(m);
       const theirs = !observed && alsoSet.has(m.from) && m.to === target.agent;
       if (!ours && !theirs) continue;
@@ -1467,11 +1470,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );

@@ -69,30 +69,71 @@ const reducedMotion = () => {
   try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
 };
 
-export function Reveal({ body, onDone }: { body: string; onDone?: () => void }) {
+/** `streaming` accepts an unfinished body: each appended suffix grows in
+ * before the next poll, while completed replies keep the block reveal. */
+export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow }: {
+  body: string; onDone?: () => void; streaming?: boolean; intervalMs?: number;
+  plain?: boolean; cursor?: boolean; onGrow?: () => void;
+}) {
   const lines = body.split("\n");
-  const ends = blockEnds(body);
-  const [shown, setShown] = useState(() => (reducedMotion() || !revealable(body) ? ends.length : 1));
-  const done = shown >= ends.length;
+  const ends = blockEnds(body).map((n) => lines.slice(0, n).join("\n").length);
+  const [shown, setShown] = useState(() => reducedMotion() ? body.length
+    : streaming ? 0 : !revealable(body) ? body.length : ends[0] || 0);
+  const visible = useRef(shown);
+  const frame = useRef(0);
+  const done = shown >= body.length;
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  const growRef = useRef(onGrow);
+  growRef.current = onGrow;
+
+  useEffect(() => { growRef.current?.(); }, [shown]);
 
   useEffect(() => {
+    if (streaming) return;
     if (done) { doneRef.current?.(); return; }
     // Each block waits for the one before to be read, within the budget.
-    const sizes = ends.map((e, i) => lines.slice(i ? ends[i - 1] : 0, e).join("\n").length);
+    const sizes = ends.map((e, i) => e - (i ? ends[i - 1] : 0));
     const raw = sizes.map((n) => Math.min(420, Math.max(70, (n / PACE) * 1000)));
     const total = raw.slice(0, -1).reduce((a, b) => a + b, 0);
     const scale = total > BUDGET ? BUDGET / total : 1;
-    const t = window.setTimeout(() => setShown((s) => s + 1), raw[shown - 1] * scale);
+    const next = ends.findIndex((n) => n > shown);
+    const t = window.setTimeout(() => setShown(ends[next] ?? body.length), (raw[Math.max(0, next - 1)] || 70) * scale);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, done]);
+  }, [shown, done, streaming, body]);
 
-  // Any sign of reading on your own: all of it now.
+  useEffect(() => {
+    if (!streaming) return;
+    const from = Math.min(visible.current, body.length);
+    const start = performance.now();
+    const draw = (n: number) => { visible.current = n; setShown(n); };
+    const tick = (now: number) => {
+      const fraction = Math.min(1, (now - start) / Math.max(1, intervalMs - 100));
+      let n = from + Math.ceil((body.length - from) * fraction);
+      // Keep emoji and other UTF-16 surrogate pairs together.
+      if (n < body.length && /[\uD800-\uDBFF]/.test(body[n - 1] || "")) n++;
+      draw(n);
+      if (fraction < 1) frame.current = requestAnimationFrame(tick);
+    };
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const finish = () => {
+      if (motion.matches) { cancelAnimationFrame(frame.current); draw(body.length); }
+    };
+    if (motion.matches) draw(body.length);
+    else frame.current = requestAnimationFrame(tick);
+    motion.addEventListener("change", finish);
+    return () => { cancelAnimationFrame(frame.current); motion.removeEventListener("change", finish); };
+  }, [body, streaming, intervalMs]);
+
+  // Any sign of reading on your own: all of the received body now.
   useEffect(() => {
     if (done) return;
-    const all = () => setShown(ends.length);
+    const all = () => {
+      cancelAnimationFrame(frame.current);
+      visible.current = body.length;
+      setShown(body.length);
+    };
     const opts = { capture: true, passive: true } as const;
     window.addEventListener("wheel", all, opts);
     window.addEventListener("pointerdown", all, opts);
@@ -102,12 +143,13 @@ export function Reveal({ body, onDone }: { body: string; onDone?: () => void }) 
       window.removeEventListener("pointerdown", all, opts);
       window.removeEventListener("keydown", all, opts);
     };
-  }, [done, ends.length]);
+  }, [done, body.length]);
 
-  const text = done ? body : lines.slice(0, ends[shown - 1]).join("\n");
+  const text = done ? body : body.slice(0, shown);
   return (
-    <div className={cn("reveal", !done && "is-growing")}>
-      <MessageContent body={text} />
+    <div className={cn("reveal", !done && "is-growing", streaming && "is-streaming")}>
+      {plain ? text : <MessageContent body={text} />}
+      {cursor && <span className="trace-cursor" aria-hidden />}
     </div>
   );
 }

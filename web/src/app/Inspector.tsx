@@ -6,7 +6,7 @@ import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appap
 import type { AgentRow } from "@/app/types";
 import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
 import {
-  accessLabel, agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
+  agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -936,10 +936,6 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               </div>
               <RunRows row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
               {kind === "agent" && !isCloud(ag) && ["claude", "codex"].includes(rt?.cli || ag.binding.harness || "") && <ProviderRow row={row} onRefresh={onRefresh} />}
-              <div className="app-kv">
-                <span className="app-kv-label">{L("权限", "Access")}</span>
-                <span className="app-kv-value">{accessLabel(rt?.access)}</span>
-              </div>
               <div className="app-kv">
                 <span className="app-kv-label">{L("电脑", "Machine")}</span>
                 <span className="app-kv-value">

@@ -459,7 +459,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}/resume`),
   /** The model and effort this node runs with; "" follows the computer's
    *  setting. Hubs before the feature answer not_found. */
-  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string }) =>
+  setRunSettings: (hubId: string, name: string, input: { model: string; effort: string; access?: RuntimeAccess | "" }) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/run-settings`, input),
   // Projects
   projects: (hubId: string) => request<{ projects: Project[] }>("GET", `app/hubs/${enc(hubId)}/projects`),

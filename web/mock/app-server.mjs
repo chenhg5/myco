@@ -231,7 +231,7 @@ const deletableAgents = () => [
   makeAgent({
     name: "temp-codex", owner: "glenn", owner_id: "mem_glenn", display_name: "临时 Codex",
     description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
-    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace" },
+    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full" },
     binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
@@ -408,7 +408,7 @@ const state = {
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
             cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
-            effort: "high", effort_source: "app", access: "workspace",
+            effort: "high", effort_source: "app", access: "workspace", max_access: "workspace",
             quota: {
               source: "codex", at: iso(120),
               windows: [
@@ -436,7 +436,7 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
-            effort: "low", effort_source: "app", access: "readonly", provider: "DeepSeek", provider_source: "machine",
+            effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
             quota: {
               source: "claude", at: iso(600),
               windows: [
@@ -662,6 +662,37 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     if (typeof t.unref === "function") t.unref();
     timers.push(t);
   };
+  // Slow startup and live blocks for the conversation streaming smoke cases.
+  const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
+    const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
+    const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";
+    const tail = "不会重新开始，也不会整段闪现。现在继续检查计划卡片和补充消息的目标。";
+    preview.trace = /逐字预览/.test(preview.body) ? [
+      { kind: "delta", stream: "thinking", id: "think-1", text: thinking.slice(0, 15) },
+      { kind: "delta", stream: "thinking", id: "think-1", text: thinking.slice(15) },
+      { kind: "thinking", text: thinking },
+      { kind: "delta", stream: "text", id: "say-1", text },
+      { kind: "delta", stream: "text", id: "say-1", text: tail },
+      { kind: "text", text: text + tail },
+      // A tool replaces unfinished blocks of either stream, too.
+      { kind: "delta", stream: "text", id: "say-2", text: "这段临时文字会被后续工具替代。" },
+      { kind: "tool", tool: "Read", id: "preview-read", input: "docs/design/app-ui.md" },
+      { kind: "tool_result", id: "preview-read", output: "已核对界面规范" },
+      { kind: "usage", input_tokens: 900, output_tokens: 120, duration_ms: 20000 },
+    ] : [{ kind: "usage", input_tokens: 100, output_tokens: 5, duration_ms: 7000 }];
+    preview.trace_pace = 1500;
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(/启动预览/.test(preview.body) ? 7000 : 20000, () => {
+      replyTimers.delete(taskId);
+      const msgs = hub.threads[threadId];
+      if (!msgs || preview.status === "failed") return;
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "预览检查完成。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+      releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
   // Asked to hand the work out: the agent sends a task to another member,
   // says so and ends its turn (turn_end) without answering; the task stays
   // open while the other works. When that one answers, it answers you.
@@ -2020,7 +2051,9 @@ const server = http.createServer(async (req, res) => {
       // "Just say 收到": a run with no thinking or tools.
       if (/收到/.test(m.body || "")) steps.splice(0, steps.length, { kind: "text", text: "收到" }, { kind: "usage", input_tokens: 900, output_tokens: 3, duration_ms: 2100 });
       const running = ["queued", "delivered", "acked", "held"].includes(m.status);
-      const shown = running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / (m.trace_pace || 2000)))) : steps;
+      // Steps start once it is picked up: a runner acknowledges first.
+      const started = m.status !== "queued" && m.status !== "delivered";
+      const shown = !started ? [] : running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / (m.trace_pace || 2000)))) : steps;
       const after = Number(url.searchParams.get("after") || 0);
       const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d })).filter((e) => e.seq > after);
       return send(res, 200, { message: m.id, status: m.status, events });
@@ -2284,7 +2317,20 @@ const server = http.createServer(async (req, res) => {
         }
         const was = runSettingsAtStart.get(`${hub.id}/${agent.name}`);
         const rt = agent.runtime || (agent.runtime = { cli: agent.binding?.harness || "codex" });
+        // Omission preserves access: managers may still change the model,
+        // but only the owner can change permissions (including to "").
+        const access = body.access === undefined ? agent.run_settings?.access || "" : body.access;
+        if (body.access !== undefined) {
+          const me = whoami(hub)?.member;
+          const owns = me && (agent.owner_id ? agent.owner_id === me.id : !agent.owner && me.role === "owner");
+          if (!owns) return fail(res, 403, "permission_denied", "只有这个 agent 的主人能修改权限。");
+          const levels = ["readonly", "workspace", "full"];
+          if (!["", ...levels].includes(access)) return fail(res, 400, "invalid_argument", "权限必须是 readonly、workspace 或 full。");
+          const cap = Math.max(levels.indexOf(rt.max_access), levels.indexOf(rt.access));
+          if (access && levels.indexOf(access) > cap) return fail(res, 403, "permission_denied", "这台电脑不允许更高的权限，请在那台电脑上修改 spawn.max_access。");
+        }
         agent.run_settings = {};
+        if (access) agent.run_settings.access = access;
         if (body.model) agent.run_settings.model = body.model;
         if (body.effort) agent.run_settings.effort = body.effort;
         // What the runtime now reports, as a real hub's runner would.

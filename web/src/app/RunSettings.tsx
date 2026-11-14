@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { appApi, isOldHub } from "@/appapi";
+import type { RuntimeAccess } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, isCloud, isInbox, modelSourceLabel } from "@/app/nodes";
+import { accessLabel, agentKind, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
 import { hubAfter0194 } from "@/app/hubVersion";
-import { ErrorText } from "@/app/dialogs";
+import { ConfirmDialog, ErrorText } from "@/app/dialogs";
+import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { quotaSpent, quotaStaleNote, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn } from "@/lib/utils";
 import { L, lang } from "@/lib/i18n";
@@ -18,6 +20,8 @@ const EFFORTS: Record<string, string[]> = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh"],
 };
+const ACCESS: RuntimeAccess[] = ["readonly", "workspace", "full"];
+
 const EFFORT_LABELS: Record<string, [string, string]> = {
   minimal: ["最低", "Minimal"],
   low: ["低", "Low"],
@@ -33,8 +37,8 @@ function effortLabel(effort: string): string {
 }
 
 /** One value with where it came from, as a row shows it. */
-function SourceValue({ value, source }: { value?: string; source?: Parameters<typeof modelSourceLabel>[0] }) {
-  const label = modelSourceLabel(source);
+function SourceValue({ value, source, sourceLabel }: { value?: string; source?: Parameters<typeof modelSourceLabel>[0]; sourceLabel?: string }) {
+  const label = sourceLabel || modelSourceLabel(source);
   return (
     <>
       {value || "—"}
@@ -66,21 +70,31 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
   const [old, setOld] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [confirmAccess, setConfirmAccess] = useState(false);
   const [custom, setCustom] = useState(false);
   const [draft, setDraft] = useState("");
   const editable = mayManage && tunable && !old && hubAfter0194(row.hub.hub_version);
 
+  const member = row.hub.me?.member;
+  const owns = !!member && (ag.owner_id ? ag.owner_id === member.id
+    : ag.owner ? ag.owner === member.name : member.role === "owner");
+  const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag);
+  const accessEditable = owns && runner && !!rt?.max_access && !old && hubAfter0194(row.hub.hub_version);
+  const cap = ACCESS[Math.max(ACCESS.indexOf(rt?.max_access as RuntimeAccess), ACCESS.indexOf(rt?.access as RuntimeAccess), 0)];
+  const access = ag.run_settings?.access || "";
   const model = ag.run_settings?.model || "";
   const effort = ag.run_settings?.effort || "";
-  const save = async (next: { model: string; effort: string }) => {
+  const save = async (next: { model: string; effort: string; access?: RuntimeAccess | "" }) => {
     setBusy(true);
     setError(null);
     try {
       await appApi.setRunSettings(row.hub.id, ag.name, next);
       await onRefresh();
+      return true;
     } catch (e) {
       if (isOldHub(e)) setOld(true);
       else setError(e);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -99,6 +113,39 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
     if (v && v !== model) void save({ model: v, effort });
   };
 
+  const pickAccess = (next: RuntimeAccess | "") => {
+    if (!accessEditable || (next && ACCESS.indexOf(next) > ACCESS.indexOf(cap))) return;
+    setError(null);
+    if (next === "full" && access !== "full") setConfirmAccess(true);
+    else void save({ model, effort, access: next });
+  };
+  const accessRow = (
+    <div className={cn("app-kv", runner && "has-help")}>
+      <span className="app-kv-label">{L("权限", "Access")}</span>
+      <span className="app-kv-value">
+        {accessEditable ? (
+          <select className="app-select-field app-kv-select" aria-label={L("权限", "Access")} value={access} disabled={busy}
+            onChange={(e) => pickAccess(e.target.value as RuntimeAccess | "")}>
+            <option value="">{L("跟随电脑设置", "Follow this computer")}</option>
+            {ACCESS.map((level) => <option key={level} value={level} disabled={ACCESS.indexOf(level) > ACCESS.indexOf(cap)}>{accessLabel(level)}</option>)}
+          </select>
+        ) : <SourceValue value={accessLabel(rt?.access)} sourceLabel={access ? "App" : undefined} />}
+      </span>
+      {runner && (
+        <div className="app-kv-help">
+          {accessEditable && <>{L("现在是：", "In use: ")}<SourceValue value={accessLabel(rt?.access)} sourceLabel={access ? "App" : undefined} />
+            {L(" · 下次唤醒时生效。", " · takes effect the next time it wakes.")}</>}
+          {!rt?.max_access && L("升级那台电脑上的 myco 后才能在这里改。", "Upgrade myco on that computer to change this here.")}
+          {rt?.max_access && cap !== "full" && <div>{L(
+            `这台电脑最多允许「${accessLabel(cap)}」。要更高，在那台电脑的 ~/.myco/machine.yaml 里设 spawn.max_access。`,
+            `This computer allows at most ${accessLabel(cap)}. For more access, set spawn.max_access in ~/.myco/machine.yaml on that computer.`,
+          )}</div>}
+          {accessEditable && cap !== "full" && <LocalShellAccess machine={machineOfRow(row)} what="full" onlyLocal onChange={onRefresh} />}
+        </div>
+      )}
+    </div>
+  );
+
   const models = [...(MODELS[cli] || [])];
   for (const v of [rt?.model, model]) if (v && !models.includes(v)) models.unshift(v);
   const efforts = [...(EFFORTS[cli] || [])];
@@ -108,7 +155,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
   // neither read nor set its model and quota.
   if (isInbox(ag)) {
     return (
-      <div className="app-kv has-help">
+      <><div className="app-kv has-help">
         <span className="app-kv-label">{L("模型", "Model")}</span>
         <span className="app-kv-value">
           {rt?.model_source === "self"
@@ -118,7 +165,7 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
         <span className="app-kv-help">
           {L("模型和额度由它自己的会话管理，myco 拿不到也改不了。", "Its own session manages the model and quota; myco can't see or change them.")}
         </span>
-      </div>
+      </div>{accessRow}</>
     );
   }
 
@@ -196,6 +243,8 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
         </div>
       )}
 
+      {accessRow}
+
       {quota?.windows?.map((w) => (
         <div key={w.name} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight")}>
           <span className="app-kv-label">{quotaWindowLabel(w)}</span>
@@ -203,7 +252,14 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
         </div>
       ))}
       {stale && <div className="app-quota-stale">{stale}</div>}
-      <ErrorText error={error} />
+      <ErrorText error={confirmAccess ? null : error} />
+      <ConfirmDialog open={confirmAccess} onOpenChange={(open) => { if (!busy) setConfirmAccess(open); }}
+        title={L("使用完全权限？", "Use full access?")}
+        description={L("完全权限下，它运行时没有沙箱，可以读写这台电脑上的任何文件。确定吗？", "With full access, it runs without a sandbox and can read and write any file on this computer. Continue?")}
+        confirmLabel={L("使用完全权限", "Use full access")} busy={busy} error={error ? <ErrorText error={error} /> : undefined}
+        onConfirm={() => {
+          if (accessEditable && cap === "full") void save({ model, effort, access: "full" }).then((saved) => { if (saved) setConfirmAccess(false); });
+        }} />
     </>
   );
 }

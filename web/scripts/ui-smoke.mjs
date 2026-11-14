@@ -693,9 +693,6 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "pulled-not-started");
     });
 
-    // A chat with nothing in it yet: the agent, large, and a question.
-    // What was typed and not sent stays with its chat when you go to
-    // another and come back; an empty box is one line, whatever its hint.
     await step("单聊 · 没发的字留着", async () => {
       await openMember(page, narrow, "聊天", "legacy-codex");
       const box = page.locator(".conv-detail .conv-compose-input");
@@ -721,6 +718,106 @@ async function runMatrix(browser, size, scheme) {
 
     // Files: one picked with the paperclip, one pasted; sent alone, the
     // message says what they are and carries both.
+    await step("单聊 · 接手后正在启动", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      // Keep the conversation snapshot queued: only the trace poll may
+      // learn about ack, even after the 3-second conversation poll.
+      const freeze = async (route) => {
+        const response = await route.fetch();
+        const data = await response.json();
+        if (data.messages) for (const m of data.messages) {
+          if (m.type === "task" && m.body === "启动预览") m.status = "queued";
+        }
+        await route.fulfill({ response, json: data });
+      };
+      await page.route("**/app/hubs/*/exchanges?*", freeze);
+      try {
+        const box = page.locator(".conv-detail .conv-compose-input");
+        await box.fill("启动预览");
+        await box.press("Enter");
+        const startup = page.locator(".conv-detail .trace.is-live", { hasText: "已接手，正在启动" }).last();
+        await startup.waitFor({ timeout: 5000 });
+        if (await startup.locator(".work-sprite.is-idle").count()) throw new Error("已接手时蘑菇应该走动");
+        await shot(page, size, scheme, "conversation-starting");
+      } finally {
+        await page.unroute("**/app/hubs/*/exchanges?*", freeze);
+      }
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    await step("单聊 · delta 正在长出来", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("逐字预览");
+      await box.press("Enter");
+      const thinking = page.locator(".conv-detail .trace-group.is-live", { hasText: "正在想…" }).last();
+      await thinking.waitFor({ timeout: 6000 });
+      if (await thinking.locator(".trace-body").count()) throw new Error("增量思考应默认折在步骤行里");
+      const run = page.locator(".conv-detail .trace").last();
+      const delta = run.locator(".trace-delta").last();
+      await delta.waitFor({ timeout: 8000 });
+      // Observe frames inside one poll, then the next suffix on the same
+      // DOM node. A complete blob would have just one length throughout.
+      const growth = await delta.evaluate(async (el) => {
+        const samples = [];
+        const until = performance.now() + 2300;
+        while (performance.now() < until) {
+          samples.push(el.textContent.length);
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        return { lengths: [...new Set(samples)], connected: el.isConnected };
+      });
+      if (!growth.connected || growth.lengths.length < 5) throw new Error(`delta 应在原段落持续增长：${JSON.stringify(growth)}`);
+      if (growth.lengths.some((n, i, a) => i && n < a[i - 1])) throw new Error("追加片段不应重播已有的字");
+      await shot(page, size, scheme, "conversation-delta-growing");
+      await delta.waitFor({ state: "hidden", timeout: 5000 });
+      const complete = run.locator(".trace-say", { hasText: "不会重新开始，也不会整段闪现" });
+      if (await complete.count() !== 1) throw new Error("完整正文应替换 delta，不能重复显示");
+      const temporary = page.locator(".conv-detail .trace-delta", { hasText: "这段临时文字" });
+      await temporary.waitFor({ timeout: 6000 });
+      await temporary.waitFor({ state: "hidden", timeout: 5000 });
+      // Opening the existing step line exposes the completed thinking once.
+      await run.locator(".trace-group").first().locator("button.trace-head").click();
+      if (await run.locator(".trace-row.is-thinking").count() !== 1) throw new Error("完整思考应替换增量思考");
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    await step("单聊 · 补充最近未关闭任务", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const older = await sendFromElsewhere("hub_studio", "review-cloud", "保留任务，等我补充");
+      // (The mock answers 启动预览 after 7 seconds, 保留任务 after 20.)
+      const newer = await sendFromElsewhere("hub_studio", "review-cloud", "启动预览：先回复这条新任务");
+      await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), newer.id, { timeout: 15000 });
+      // The newer one is answered; the older one stays open.
+      let reply = null;
+      for (let i = 0; i < 30 && !reply; i++) {
+        const th = await (await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/threads/${newer.thread_id}`)).json();
+        reply = th.messages?.find((m) => m.reply_to === newer.id && m.type === "reply") || null;
+        if (!reply) await new Promise((r) => setTimeout(r, 500));
+      }
+      if (!reply) throw new Error("新任务没有收到回复");
+      await page.locator(`[data-msg="${reply.id}"]`).waitFor({ timeout: 10_000 });
+      const box = page.locator(".conv-detail .conv-compose-input");
+      if (!(await box.getAttribute("placeholder")).includes("补充")) throw new Error("最新任务结束后，仍应补充给旧的未关闭任务");
+      const sent = page.waitForRequest((req) => req.method() === "POST" && req.url().includes(`/messages/${older.id}/steer`));
+      await box.fill("再检查旧任务的链接");
+      await box.press("Enter");
+      await sent;
+      await page.locator(".trace-steer", { hasText: "再检查旧任务的链接" }).waitFor({ timeout: 10000 });
+      await shot(page, size, scheme, "conversation-supplement-older-open");
+      await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${older.id}/stop`, { method: "POST" });
+      await noRound(page);
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // A chat with nothing in it yet: the agent, large, and a question.
+    // What was typed and not sent stays with its chat when you go to
+    // another and come back; an empty box is one line, whatever its hint.
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");
@@ -1630,6 +1727,71 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "member-run-inbox");
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    await step("成员 · 修改权限", async () => {
+      await go(page, "成员", narrow);
+      const openRun = async (name) => {
+        const card = page.locator(".mb-card", { hasText: name }).first();
+        await card.scrollIntoViewIfNeeded();
+        await card.click();
+        await page.locator(".ms").waitFor({ timeout: 10000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        return page.locator(".ms .ms-fold-body .app-kv").filter({ has: page.locator(".app-kv-label", { hasText: /^权限$/ }) });
+      };
+      const closeRun = async () => {
+        await page.keyboard.press("Escape");
+        await page.locator(".ms").waitFor({ state: "hidden" });
+      };
+      const savedAccess = async (agent, access) => {
+        for (let i = 0; i < 60; i++) {
+          const data = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+          if (data.last?.agent === agent && data.last.body.access === access) return data.last.body;
+          await sleep(100);
+        }
+        throw new Error(`没有保存 ${agent} 的权限 ${access}`);
+      };
+      const permission = await openRun("PM (Codex)");
+      const select = permission.getByRole("combobox", { name: "权限", exact: true });
+      await select.waitFor({ timeout: 5000 });
+      if (!(await select.locator('option[value="full"]').isDisabled())) throw new Error("超过工作区上限的完全权限应禁用");
+      if (!(await permission.innerText()).includes('这台电脑最多允许「工作区」')) throw new Error("需要说明这台电脑的权限上限");
+      const model = await page.locator('.ms select[aria-label="模型"]').inputValue();
+      const effort = await page.locator('.ms select[aria-label="推理强度"]').inputValue();
+      await select.selectOption("readonly");
+      const request = await savedAccess("pm-codex", "readonly");
+      if (request.model !== model || request.effort !== effort || Object.keys(request).sort().join(",") !== "access,effort,model") throw new Error("修改权限只能发送当前模型、推理强度和新权限");
+      await permission.getByText(/现在是：工作区（App）/).waitFor({ timeout: 5000 });
+      if (!(await permission.innerText()).includes("下次唤醒时生效")) throw new Error("需要说明下次唤醒生效");
+      await shot(page, size, scheme, "member-access-capped");
+      await select.selectOption("");
+      await savedAccess("pm-codex", "");
+      await closeRun();
+
+      const full = await openRun("临时 Codex");
+      const fullSelect = full.getByRole("combobox", { name: "权限", exact: true });
+      await fullSelect.selectOption("full");
+      const confirm = page.locator(".app-modal.app-confirm");
+      await confirm.waitFor({ timeout: 5000 });
+      if (!(await confirm.innerText()).includes("没有沙箱，可以读写这台电脑上的任何文件")) throw new Error("完全权限需要先说明风险");
+      const before = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+      if (before.last?.agent === "temp-codex" && before.last.body.access === "full") throw new Error("确认之前不能保存完全权限");
+      await shot(page, size, scheme, "member-access-full-confirm");
+      await confirm.getByRole("button", { name: "取消", exact: true }).click();
+      await confirm.waitFor({ state: "hidden" });
+      await fullSelect.selectOption("full");
+      await confirm.getByRole("button", { name: "使用完全权限", exact: true }).click();
+      await savedAccess("temp-codex", "full");
+      await confirm.waitFor({ state: "hidden", timeout: 5000 });
+      await closeRun();
+
+      const other = await openRun("docs-claude");
+      if (await other.locator("select").count()) throw new Error("即使是工作区主人，也不能改别人的 agent 权限");
+      await closeRun();
+      const legacy = await openRun("legacy-codex");
+      if (await legacy.locator("select").count()) throw new Error("旧 runner 没有上报上限时不能改权限");
+      if (!(await legacy.innerText()).includes("升级那台电脑上的 myco")) throw new Error("旧 runner 应显示升级提示");
+      await closeRun();
     });
 
     await step("电脑", async () => {
