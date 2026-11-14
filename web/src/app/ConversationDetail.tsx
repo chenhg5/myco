@@ -116,6 +116,9 @@ export function modKey(): string {
 // lib/memo). The hub stays the source of truth.
 type SeenConversation = { messages: Message[]; more: boolean };
 const cacheKey = (t: ConversationTarget) => ["conv", t.hubId, t.threadId || "", t.agent, t.peer || ""].join("\u0000");
+/** Where each conversation was left in this window: how far above its
+ *  bottom (0 = at the bottom). Coming back puts you there again. */
+const leftAt = new Map<string, number>();
 function remember(key: string, messages: Message[], more: boolean) {
   rememberMemo<SeenConversation>(key, { messages, more });
 }
@@ -273,6 +276,33 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // grow with the text, up to about eight lines, then scroll
   useAutoGrow(inputRef, draft, 200);
   const atBottom = useRef(true);
+  // How far above the bottom the view is, and where to put it back when a
+  // conversation left higher up opens again.
+  const belowNow = useRef(0);
+  const restoreBelow = useRef(0);
+  // (kept while what it shows loads, a moment: until then the view is put
+  // back there each time the conversation grows)
+  const restoreUntil = useRef(0);
+  // (anything that sends the view to the bottom ends it: atBottom)
+  const restoring = () => restoreBelow.current > 0 && !atBottom.current && Date.now() < restoreUntil.current;
+  const putBack = (el: HTMLElement) => { el.scrollTop = el.scrollHeight - el.clientHeight - restoreBelow.current; };
+  // When you last scrolled yourself (wheel, touch, a click on the
+  // scrollbar, a key): only that leaves the bottom. A scroll the browser
+  // makes as content loads above (Chromium keeps what is on screen in
+  // place) does not.
+  const userScrollAt = useRef(0);
+  const pointerHeld = useRef(false);
+  const markUserScroll = () => { userScrollAt.current = Date.now(); };
+  // A jump made on purpose (to a message, to a stuck task) scrolls smoothly
+  // for a moment: that too is yours, not content moving the view.
+  const jumpUntil = useRef(0);
+  const markJump = () => { jumpUntil.current = Date.now() + 1500; };
+  useEffect(() => {
+    const up = () => { pointerHeld.current = false; };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => { window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+  }, []);
   // When the box below grows (a line, files), the conversation gets
   // shorter: if it was at the bottom, it stays there instead of the last
   // lines sliding under the box.
@@ -316,8 +346,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setWithdrawn(new Set());
     setOlder([]);
     setMore(hit?.more ?? false);
-    // Opened at a message: stay there instead of following the bottom.
-    atBottom.current = !target.focus;
+
     focusDone.current = false;
     focusTries.current = 0;
     // Polls ask only for what changed since the newest change they have
@@ -439,14 +468,36 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // message, a changed one) brings it down, and only if it was at the
   // bottom: a refresh with nothing new never moves what you are reading.
   const lastSeen = useRef("");
+  // Opened at a message: stay there instead of following the bottom; left
+  // higher up before: back there; else at the bottom. (Before the effect
+  // below, which places the view as soon as the messages are drawn.)
+  useLayoutEffect(() => {
+    const was = leftAt.get(cacheKey(target)) ?? 0;
+    belowNow.current = was;
+    atBottom.current = !target.focus && was < 80;
+    restoreBelow.current = !target.focus && was >= 80 ? was : 0;
+    restoreUntil.current = Date.now() + 1500;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.threadId, target.agent, target.peer, target.focus]);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const last = messages?.[messages.length - 1];
     const sig = `${messages?.length ?? -1}\u0000${last?.id ?? ""}\u0000${last?.updated_at ?? ""}`;
     const changed = sig !== lastSeen.current;
     lastSeen.current = sig;
+    if (el && restoring() && messages?.length) {
+      putBack(el);
+      return;
+    }
     if (el && changed && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+  // Leaving a conversation: remember where it was.
+  useEffect(() => {
+    const key = cacheKey(target);
+    // (left while still being put back: that place, not where it is yet)
+    return () => { leftAt.set(key, restoreBelow.current > 0 ? restoreBelow.current : atBottom.current ? 0 : belowNow.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.threadId, target.agent, target.peer]);
   // What loads after the messages (a finished task's steps, a picture)
   // makes the conversation taller above the bottom: at the bottom, it
   // stays at the bottom instead of the last lines being pushed down.
@@ -490,7 +541,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     let h = el.offsetHeight;
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
-      if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
+      if (nh !== h && restoring()) putBack(sc);
+      else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
       h = nh;
     });
     ro.observe(el);
@@ -523,7 +575,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const yours = pointerHeld.current || Date.now() - userScrollAt.current <= 300 || Date.now() < jumpUntil.current;
+    if (yours) restoreBelow.current = 0; // you took over
+    else if (restoring()) {
+      putBack(el);
+      const far0 = restoreBelow.current > 400;
+      if (far0 !== away) {
+        if (far0) awaySince.current = Date.now();
+        setAway(far0);
+      }
+      return;
+    }
+    if (below >= 80 && atBottom.current && !yours) {
+      // Not you: content moved the view. At the bottom it stays.
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
     atBottom.current = below < 80;
+    belowNow.current = below;
     const far = below > 400;
     if (far !== away) {
       if (far) awaySince.current = Date.now();
@@ -534,6 +603,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     atBottom.current = true;
+    restoreBelow.current = 0;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
@@ -610,8 +680,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = firstStuck && scrollRef.current?.querySelector<HTMLElement>(`[data-stuck="${firstStuck.id}"]`);
     if (!el) return;
     // Taken up there on purpose: what grows at the bottom must not pull
-    // the view back down.
+    // the view back down (nor a place being put back).
     atBottom.current = false;
+    restoreBelow.current = 0;
+    markJump();
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.remove("is-flash");
     void el.offsetWidth; // restart the highlight
@@ -928,6 +1000,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
     if (!el) return false;
     atBottom.current = false;
+    restoreBelow.current = 0;
+    markJump();
     el.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
     el.classList.remove("is-flash");
     void el.offsetWidth;
@@ -1653,7 +1727,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </button>
         );
       })()}
-      <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
+      <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}
+        onWheel={markUserScroll} onTouchMove={markUserScroll} onKeyDown={markUserScroll}
+        onPointerDown={() => { pointerHeld.current = true; markUserScroll(); }}>
         <div ref={timelineRef} className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
             loadError && !isTransient(loadError) ? (

@@ -1116,7 +1116,10 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
       const scroller = page.locator(".conv-detail .conv-scroll");
       if (await scroller.evaluate((el) => el.scrollHeight - el.clientHeight > 600)) {
-        await scroller.evaluate((el) => { el.scrollTop = 0; });
+        // (by wheel, as you would: a scroll from code alone does not leave the bottom)
+        const sb = await scroller.boundingBox();
+        await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+        for (let k = 0; k < 6; k++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(40); }
         const btn = page.locator(".conv-detail .conv-to-bottom");
         await btn.waitFor({ timeout: 5_000 });
         await shot(page, size, scheme, "chat-to-bottom");
@@ -1159,6 +1162,30 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
       await page.waitForTimeout(800);
       if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删掉的消息刷新后不该回来");
+    });
+
+    // Opening a chat: at the bottom, or where you left it higher up (not
+    // somewhere in between as what is above loads).
+    await step("单聊 · 打开时的位置", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const below = () => page.evaluate(() => { const el = document.querySelector(".conv-detail .conv-scroll"); return el ? Math.round(el.scrollHeight - el.scrollTop - el.clientHeight) : -1; });
+      await page.waitForTimeout(1500);
+      if ((await below()) > 4) throw new Error(`打开对话应停在最底下，实际离底部 ${await below()}px`);
+      if (await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.scrollHeight - el.clientHeight < 800)) return; // too short to read higher up
+      const r = await page.locator(".conv-detail .conv-scroll").boundingBox();
+      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+      for (let k = 0; k < 4; k++) { await page.mouse.wheel(0, -200); await page.waitForTimeout(60); }
+      await page.waitForTimeout(400);
+      const left = await below();
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await page.waitForTimeout(500);
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.waitForTimeout(1600);
+      const back = await below();
+      if (Math.abs(back - left) > 80) throw new Error(`回到对话应停在上次看的位置（离底部 ${left}px），实际 ${back}px`);
+      await page.locator(".conv-detail .conv-to-bottom").click();
+      await page.waitForFunction(() => { const el = document.querySelector(".conv-detail .conv-scroll"); return !!el && el.scrollHeight - el.scrollTop - el.clientHeight < 5; }, null, { timeout: 5_000 });
     });
 
     // ⌘K: find a member and open its chat; find words in your messages and
