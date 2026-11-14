@@ -52,7 +52,10 @@ struct MycoApp: App {
             speech: Self.speech,
             // `-myco-notifier recorded`: nothing is shown and the system
             // is not asked, to see the settings in a test.
-            notifier: { UserDefaults.standard.string(forKey: "myco-notifier") == "recorded" ? RecordingNotifier() : SystemNotifier() },
+            notifier: {
+                if UserDefaults.standard.string(forKey: "myco-notifier") == "recorded" { return RecordingNotifier() }
+                return SystemNotifier()
+            },
             leftFront: { Self.askForBackgroundRefresh() })
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
