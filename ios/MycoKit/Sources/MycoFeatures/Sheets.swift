@@ -285,7 +285,9 @@ struct WorkspaceSheet: View {
                 Text(L("这台设备会从它的设备列表里移除，要再用得重新加入。别的工作区不受影响。", "This device is removed from its list of devices; to use it again, join again. Your other workspaces stay."))
             }
         }
-        .presentationDetents([.medium, .large])
+        // Half the screen holds two workspaces and what can be done with
+        // them; with more, the panel opens at its full height.
+        .presentationDetents(app.workspaces.count > 2 ? [.large] : [.medium, .large])
     }
 
     private func rename(_ record: WorkspaceRecord) {
