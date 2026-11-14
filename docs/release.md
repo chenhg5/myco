@@ -5,7 +5,7 @@
 ## 0. 准备（第一次）
 
 - 仓库在 `~/code/myco-team/release`，只用于发版，不在这里写功能。
-- UI 冒烟测试要 Playwright 的 Chromium：`cd web && npx playwright install --with-deps chromium`（装一次就行）。
+- UI 冒烟测试要 Playwright 模块和它的 Chromium（装一次就行，不改仓库依赖）：`npm install -g playwright && npx playwright install --with-deps chromium`。找不到浏览器时，用 `UI_SMOKE_EXECUTABLE=<Chromium 路径>` 指过去。
 
 ## 1. 检查
 
