@@ -297,22 +297,17 @@ final class ConversationTests: XCTestCase {
         // The system's preview covers the page.
         expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
-        _ = app.buttons["Done"].waitForExistence(timeout: 2.5)
+        XCTAssertTrue(app.descendants(matching: .any)["QLPreviewControllerView"].waitForExistence(timeout: 5), "it is the system's preview")
         snap("files-look")
-        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
-            try? app.debugDescription.write(toFile: dir + "/files-look-open.txt", atomically: true, encoding: .utf8)
-        }
-        // Closed the way the system's preview is: its button, or a swipe down.
-        let close = ["Done", "Close"].map { app.buttons[$0] }.first { $0.exists }
-        if let close {
-            close.tap()
-        } else {
+        // Closed the way the system's preview is: a picture fills the
+        // screen, a tap brings its bar, and the bar has Done.
+        let done = app.buttons["Done"]
+        if !done.exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        if !done.waitForExistence(timeout: 5), let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
             // (What the preview offers, for whoever reads a failure here.)
-            if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
-                try? app.debugDescription.write(toFile: dir + "/files-look.txt", atomically: true, encoding: .utf8)
-            }
-            app.swipeDown(velocity: .fast)
+            try? app.debugDescription.write(toFile: dir + "/files-look.txt", atomically: true, encoding: .utf8)
         }
+        done.tap()
         // It is still waiting to go.
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
@@ -322,25 +317,20 @@ final class ConversationTests: XCTestCase {
 
     @MainActor
     func testPullingUpAtTheEndReadsTheConversationAgain() {
-        // (Every answer takes a moment here, as on a real connection.)
-        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "300"])
-        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 20))
-        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.waitForExistence(timeout: 20), "the conversation is open")
+        // (Every answer takes a while here, as on a slow connection: the
+        // refresh is still going when the finger has let go.)
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "1500"])
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.waitForExistence(timeout: 40), "the conversation is open")
         let spinner = app.descendants(matching: .any)["conversation.refreshing"]
         XCTAssertFalse(spinner.exists)
         // A finger pulls the end of the conversation up, past where it stops.
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
-        let dbg = app.descendants(matching: .any)["dbg.end"]
-        let before = dbg.value as? String ?? "none"
         from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
-        let after = dbg.value as? String ?? "none"
-        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
-            try? ("before: " + before + "\nafter: " + after + "\n").write(toFile: dir + "/dbg-end.txt", atomically: true, encoding: .utf8)
-        }
         XCTAssertTrue(spinner.waitForExistence(timeout: 3), "pulling up past the end refreshes, and shows that it does")
         snap("refresh-end")
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: spinner)
-        waitForExpectations(timeout: 10)
+        waitForExpectations(timeout: 30)
         XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.exists, "the conversation is still there")
     }
 
