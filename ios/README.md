@@ -141,7 +141,7 @@ An open conversation asks for its messages every two seconds and shows them as s
 
 Leaving the app stops the asking; coming back starts it over at once, for the lists and for the conversation on screen alike, so the page never waits for an answer that was cut off when the app left the front.
 
-The person can ask too: pulling a list down (the system's refresh), or pulling a conversation up past its end (new messages come at the end, so that is where one pulls): a spinner turns in the room under the last message while the conversation and the lists are read again. When the workspace does not answer twice in a row, or when a refresh that was asked for fails, a line across the top of the conversation says that what is shown may not be the latest, as the lists do.
+The person can ask too: pulling a list down (a spinner turns above it: the system's own does not show under a bar with a search field), or pulling a conversation up past its end (new messages come at the end, so that is where one pulls): a spinner turns in the room under the last message while the conversation and the lists are read again. When the workspace does not answer twice in a row, or when a refresh that was asked for fails, a line across the top of the conversation says that what is shown may not be the latest, as the lists do.
 
 ## Rules
 

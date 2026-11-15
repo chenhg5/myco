@@ -187,7 +187,8 @@ private struct WorkspaceChrome: ViewModifier {
     @Environment(\.isSearching) private var isSearching
     let title: String
     let add: Bool
-    @State private var dbgRefreshes = 0
+    /// The list was pulled down and is being read again.
+    @State private var refreshing = false
 
     func body(content: Content) -> some View {
         content
@@ -200,7 +201,20 @@ private struct WorkspaceChrome: ViewModifier {
             // The list fades in over them when it comes.
             .animation(.easeOut(duration: 0.22), value: session.loadedAt == nil)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let problem = session.problem { StaleBanner(staleText(problem)) }
+                VStack(spacing: 0) {
+                    if let problem = session.problem { StaleBanner(staleText(problem)) }
+                    // The list was pulled down: it is being read again. (The
+                    // system's own spinner does not show under a bar with a
+                    // search field in it, so the page says it itself.)
+                    if refreshing {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .accessibilityLabel(L("正在刷新", "Refreshing"))
+                            .accessibilityIdentifier("list.refreshing")
+                            .transition(.opacity)
+                    }
+                }
             }
             // The app's own tab bar, one row across; the keyboard covers it
             // while searching.
@@ -208,17 +222,16 @@ private struct WorkspaceChrome: ViewModifier {
                 if !isSearching { AppTabBar() }
             }
             .toolbar(.hidden, for: .tabBar)
-            .overlay(alignment: .topLeading) {
-                Color.clear.frame(width: 1, height: 1).accessibilityElement().accessibilityIdentifier("dbg.refreshes").accessibilityValue("\(dbgRefreshes)")
-            }
             // Pulling down asks the workspace again, now. The spinner stays
             // long enough to be seen, however quick the answer.
             .refreshable {
-                dbgRefreshes += 1
+                withAnimation(.easeOut(duration: 0.15)) { refreshing = true }
                 async let seen: Void? = try? await Task.sleep(for: .milliseconds(500))
                 await session.refresh()
                 _ = await seen
+                withAnimation(.easeOut(duration: 0.2)) { refreshing = false }
             }
+            .sensoryFeedback(.impact(weight: .light), trigger: refreshing) { _, now in now }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)
