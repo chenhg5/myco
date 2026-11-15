@@ -300,13 +300,10 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["QLPreviewControllerView"].waitForExistence(timeout: 5), "it is the system's preview")
         snap("files-look")
         // Closed the way the system's preview is: a picture fills the
-        // screen, a tap brings its bar, and the bar has Done.
-        let done = app.buttons["Done"]
+        // screen, a tap brings its bar, and the bar has a close button.
+        let done = app.buttons["QLOverlayDoneButtonAccessibilityIdentifier"]
         if !done.exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
-        if !done.waitForExistence(timeout: 5), let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
-            // (What the preview offers, for whoever reads a failure here.)
-            try? app.debugDescription.write(toFile: dir + "/files-look.txt", atomically: true, encoding: .utf8)
-        }
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the preview can be closed")
         done.tap()
         // It is still waiting to go.
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
