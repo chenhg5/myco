@@ -1,11 +1,11 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -22,7 +22,7 @@ import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 
-type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "about";
+type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "voice" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -163,6 +163,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
+  { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
@@ -184,6 +185,16 @@ const LANGS: { choice: LangChoice; label: string }[] = [
   { choice: "zh", label: "中文" },
   { choice: "en", label: "English" },
 ];
+
+/** A section another page asks Settings to open on (say, voice from the
+ *  call button); taken once. */
+let nextSettingsSection: Section | null = null;
+export function openSettingsSection(s: "voice") { nextSettingsSection = s; }
+function takeSettingsSection(): Section | null {
+  const s = nextSettingsSection;
+  nextSettingsSection = null;
+  return s;
+}
 
 /** The section to come back to when a language change remounts the page. */
 let langSwitchSection: Section | null = null;
@@ -238,7 +249,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
 }) {
-  const [section, setSection] = useState<Section>(() => langSwitchSection ?? "hubs");
+  const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? "hubs");
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
@@ -584,6 +595,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         )}
 
         {section === "translate" && <TranslateSection />}
+        {section === "voice" && <VoiceSection />}
         {section === "about" && <AboutSection info={info} local={local} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
@@ -1007,6 +1019,97 @@ function TranslateSection() {
           </button>
           <button type="button" className="app-btn" disabled={busy || dirty || (needsKey && !hasKey)} onClick={() => void tryIt()}>{L("试一下", "Try it")}</button>
           {tried && <span className="tr-tried"><Check />{tried}</span>}
+        </div>
+        <ErrorText error={error} />
+      </section>
+    </>
+  );
+}
+
+/** Voice calls: the model the voice assistant talks with (by default the
+ *  translation's OpenAI-compatible one), Doubao's key and voice. Keys go to
+ *  the system keychain and are never shown. */
+function VoiceSection() {
+  const [info, setInfo] = useState<VoiceInfo | null>(null);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [llmKey, setLlmKey] = useState("");
+  const [speaker, setSpeaker] = useState("");
+  const [rate, setRate] = useState(0);
+  const [ttsKey, setTtsKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [saved, setSaved] = useState(false);
+  const load = (v: VoiceInfo) => {
+    setInfo(v);
+    setBaseUrl(v.config.llm_base_url || ""); setModel(v.config.llm_model || "");
+    setSpeaker(v.config.tts_speaker || ""); setRate(v.config.tts_rate || 0);
+  };
+  useEffect(() => { appApi.voice().then(load, setError); }, []);
+  const save = async (extra: { clear_llm_key?: boolean; clear_tts_key?: boolean } = {}) => {
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      const v = await appApi.putVoiceConfig({
+        llm_base_url: baseUrl.trim(), llm_model: model.trim(), tts_speaker: speaker.trim(), tts_rate: rate,
+        ...(llmKey.trim() ? { llm_key: llmKey.trim() } : {}), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}), ...extra,
+      });
+      load(v); setLlmKey(""); setTtsKey(""); setSaved(true);
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  if (!info) return <ErrorText error={error} />;
+  return (
+    <>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line">
+          <div className="app-setting-line-text">
+            <b>{L("和 agent 们语音聊天", "Talk with your agents")}</b>
+            <span>{info.available
+              ? L("顶栏右边的耳机按钮开始。语音助手听你说话，替你把活交给 agent、转达它们的问题和结果；你一开口它就停下来听。说的话只留在这台电脑上的「语音」记录里，录音不保存。",
+                "Start with the headset button at the top right. The voice assistant listens, hands work to your agents and tells you their questions and answers; it stops as soon as you speak. What was said stays on this computer; no recordings are kept.")
+              : L("语音聊天目前只在 Mac 版 App 里有。", "Voice calls are in the Mac app for now.")}</span>
+          </div>
+        </div>
+      </section>
+      <h4 className="app-setting-group">{L("语音助手用的模型", "The assistant's model")}</h4>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line">
+          <p className="tr-note">{L("任意 OpenAI 兼容接口（OpenAI、DeepSeek、豆包、OpenRouter…）。选反应快的模型，它不用很聪明，难的事都交给 agent。不填就用「翻译」里配好的那个。",
+            "Any OpenAI-compatible API (OpenAI, DeepSeek, Doubao, OpenRouter…). Pick a fast model: the hard work goes to the agents. Left empty, the one set up under Translation is used.")}</p>
+        </div>
+        <div className="app-setting-line tr-fields">
+          <label>{L("地址", "Address")}<input className="app-input mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1" spellCheck={false} /></label>
+          <label>{L("模型", "Model")}<input className="app-input mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" spellCheck={false} /></label>
+        </div>
+        <div className="app-setting-line tr-fields">
+          <label>{L("密钥", "Key")}
+            <input className="app-input mono" type="password" value={llmKey} onChange={(e) => setLlmKey(e.target.value)} autoComplete="off" spellCheck={false}
+              placeholder={info.has_llm_key ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L("粘贴 API 密钥", "Paste the API key")} />
+          </label>
+          {info.has_llm_key && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_llm_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
+        </div>
+      </section>
+      <h4 className="app-setting-group">{L("声音（豆包语音合成）", "Voice (Doubao speech)")}</h4>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line">
+          <p className="tr-note">{L("在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。音色填控制台里的音色 ID（复刻的声音以 S_ 开头）。",
+            "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key. The voice is a voice ID from the console (cloned voices start with S_).")}</p>
+        </div>
+        <div className="app-setting-line tr-fields">
+          <label>{L("音色", "Voice")}<input className="app-input mono" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder="zh_male_wennuanahu_uranus_bigtts" spellCheck={false} /></label>
+          <label>{L("语速", "Speed")}
+            <input className="app-input" type="number" min={-50} max={100} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value) || 0)} />
+          </label>
+        </div>
+        <div className="app-setting-line tr-fields">
+          <label>{L("API Key", "API key")}
+            <input className="app-input mono" type="password" value={ttsKey} onChange={(e) => setTtsKey(e.target.value)} autoComplete="off" spellCheck={false}
+              placeholder={info.has_tts_key ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L("粘贴豆包语音的 API Key", "Paste the Doubao speech API key")} />
+          </label>
+          {info.has_tts_key && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_tts_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
+        </div>
+        <div className="app-setting-line tr-actions">
+          <button type="button" className="app-btn app-btn-primary" disabled={busy} onClick={() => void save()}>{L("保存", "Save")}</button>
+          {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
         </div>
         <ErrorText error={error} />
       </section>

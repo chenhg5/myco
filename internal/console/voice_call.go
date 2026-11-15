@@ -11,8 +11,9 @@ import (
 
 // A voice call: what the person says goes to the model; what the model says
 // is spoken, a sentence at a time, as it is written; what it does in myco
-// is done as the person. The person speaking cuts it off. Tasks it handed
-// out are watched, and their answers and questions are told in a pause.
+// is done as the person, in their conversation with one agent. The person
+// speaking cuts it off. The agent's task at work is watched, and its answer
+// or question is told in a pause.
 
 // The model, the voice and myco, as a call needs them (fakes in tests).
 type voiceDeps struct {
@@ -53,7 +54,6 @@ type voiceCall struct {
 	lastSound time.Time
 	notices   []string
 	watched   map[string]*watchedTask
-	members   string // who is in the workspace, for the model
 }
 
 type voiceTurn struct {
@@ -89,11 +89,12 @@ func (c *voiceCall) begin() {
 	c.v.setState(stListening)
 	go c.loop()
 	go c.watch()
-	c.do(func() {
-		if m, err := c.d.hub.Members(c.ctx); err == nil {
-			c.members = m
+	// What the agent is doing already: its answer is news too.
+	go func() {
+		if ref, err := c.d.hub.Current(c.ctx); err == nil && ref != nil {
+			c.watchTask(*ref, "")
 		}
-	})
+	}()
 }
 
 func (c *voiceCall) do(f func()) {
@@ -305,8 +306,7 @@ func (c *voiceCall) startTurn() {
 	t := &voiceTurn{cancel: cancel, id: ev.ID, said: &strings.Builder{}, done: make(chan struct{})}
 	c.turn = t
 	c.v.setState(stThinking)
-	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.members, c.d.hub.Name())}}, trimHistory(c.history)...)
-	go c.runTurn(ctx, t, msgs)
+	go c.runTurn(ctx, t, trimHistory(c.history))
 }
 
 // trimHistory keeps the conversation to its last messages, starting at a
@@ -325,8 +325,16 @@ func trimHistory(h []chatMsg) []chatMsg {
 
 // runTurn: model rounds (tools in between), each sentence spoken as soon
 // as it is complete. Runs off the loop; reports back through c.do.
-func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, msgs []chatMsg) {
+func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg) {
 	defer close(t.done)
+	// The conversation with the agent as it is now (it moves on its own).
+	cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	convo, err := c.d.hub.Context(cctx)
+	cancel()
+	if err != nil && convo == "" {
+		convo = "（这会儿读不到对话：" + err.Error() + "）"
+	}
+	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo)}}, history...)
 	sentences := make(chan string, 16)
 	spoke := make(chan struct{})
 	go func() {
@@ -464,10 +472,18 @@ func (s *sentenceSplitter) flush() string {
 	return t
 }
 
-// --- watching the tasks it handed out ---
+// --- watching the agent's tasks ---
 
 func (c *voiceCall) watchTask(ref VoiceTaskRef, what string) {
-	c.do(func() { c.watched[ref.ID] = &watchedTask{ref: ref, what: what} })
+	c.do(func() {
+		if w := c.watched[ref.ID]; w != nil {
+			if w.what == "" {
+				w.what = what
+			}
+			return
+		}
+		c.watched[ref.ID] = &watchedTask{ref: ref, what: what}
+	})
 }
 
 func (c *voiceCall) watch() {
@@ -495,19 +511,23 @@ func (c *voiceCall) watch() {
 			return
 		}
 		for _, w := range todo {
-			st, err := c.d.hub.TaskNews(c.ctx, w.ref.ID)
+			st, err := c.d.hub.TaskNews(c.ctx, w.ref)
 			if err != nil {
 				continue
 			}
 			w := w
 			c.do(func() {
+				what := ""
+				if w.what != "" {
+					what = "「" + w.what + "」"
+				}
 				switch {
 				case st.Finished:
 					w.finished = true
-					c.notices = append(c.notices, fmt.Sprintf("%s 做完了「%s」：%s", w.ref.Agent, w.what, st.Summary))
+					c.notices = append(c.notices, fmt.Sprintf("它回复了%s：%s", what, st.Summary))
 				case st.Question != "" && st.Question != w.asked:
 					w.asked = st.Question
-					c.notices = append(c.notices, fmt.Sprintf("%s 在做「%s」时问你：%s（它在等回答，用 add_to_task 把对方的回答转给它）", w.ref.Agent, w.what, st.Question))
+					c.notices = append(c.notices, fmt.Sprintf("它在问你%s：%s（它在等回答；对方回答了就用 tell_agent 转给它）", what, st.Question))
 				}
 			})
 		}

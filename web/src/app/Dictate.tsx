@@ -84,6 +84,32 @@ export function DictateButton({ input, value, onText, disabled }: {
       setListening(false);
     }
   }, [value]);
+  // Hold to talk, with the caret in this box: ⌥Space (the Mac), or Ctrl+M
+  // anywhere (⌥Space opens the window menu on Windows). Letting go stops.
+  const startRef = useRef<() => void>(() => undefined);
+  const listeningRef = useRef(false);
+  listeningRef.current = listening;
+  const holding = useRef(false);
+  useEffect(() => {
+    const isHold = (e: KeyboardEvent) => (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "Space")
+      || (e.ctrlKey && !e.metaKey && !e.altKey && e.code === "KeyM");
+    const down = (e: KeyboardEvent) => {
+      if (!isHold(e) || document.activeElement !== input.current || disabled) return;
+      e.preventDefault();
+      if (e.repeat || holding.current) return;
+      holding.current = true;
+      if (!listeningRef.current) startRef.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (!holding.current || !["Space", "KeyM", "AltLeft", "AltRight", "ControlLeft", "ControlRight"].includes(e.code)) return;
+      holding.current = false;
+      e.preventDefault();
+      live.current?.stop();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, [input, disabled]);
   if (!appDictation && !Recog) return null;
 
   const begin = () => {
@@ -170,9 +196,12 @@ export function DictateButton({ input, value, onText, disabled }: {
     try { r.start(); } catch { live.current = null; setListening(false); }
   };
 
+  startRef.current = () => { void start(); };
+  const holdKey = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌥空格" : "Ctrl+M";
+  const holdKeyEn = holdKey === "⌥空格" ? "⌥Space" : "Ctrl+M";
   const title = note
     || (listening ? L("正在听…再点一下停止", "Listening… click to stop")
-      : L(`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言）`, `Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language)`));
+      : L(`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言；按住 ${holdKey} 说话）`, `Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language; hold ${holdKeyEn} to talk)`));
   return (
     <button type="button" className={cn("att-btn dictate-btn", listening && "is-listening", note && "is-note")} disabled={disabled}
       onMouseDown={(e) => e.preventDefault() /* keep the caret in the box */}

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -24,6 +24,7 @@ import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
+import { openVoiceSettings, takePendingCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
@@ -116,6 +117,9 @@ export function modKey(): string {
 // lib/memo). The hub stays the source of truth.
 type SeenConversation = { messages: Message[]; more: boolean };
 const cacheKey = (t: ConversationTarget) => ["conv", t.hubId, t.threadId || "", t.agent, t.peer || ""].join("\u0000");
+/** Where each conversation was left in this window: how far above its
+ *  bottom (0 = at the bottom). Coming back puts you there again. */
+const leftAt = new Map<string, number>();
 function remember(key: string, messages: Message[], more: boolean) {
   rememberMemo<SeenConversation>(key, { messages, more });
 }
@@ -241,6 +245,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
+  // A voice chat with this agent (VoiceBar); another chat hangs it up.
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => { setVoiceOn(takePendingCall(target.hubId, target.agent)); }, [target.hubId, target.agent, target.peer]);
   const draftKeyRef = useRef(draftKey);
   draftKeyRef.current = draftKey;
   const writeDraft = (v: string) => {
@@ -273,6 +280,33 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // grow with the text, up to about eight lines, then scroll
   useAutoGrow(inputRef, draft, 200);
   const atBottom = useRef(true);
+  // How far above the bottom the view is, and where to put it back when a
+  // conversation left higher up opens again.
+  const belowNow = useRef(0);
+  const restoreBelow = useRef(0);
+  // (kept while what it shows loads, a moment: until then the view is put
+  // back there each time the conversation grows)
+  const restoreUntil = useRef(0);
+  // (anything that sends the view to the bottom ends it: atBottom)
+  const restoring = () => restoreBelow.current > 0 && !atBottom.current && Date.now() < restoreUntil.current;
+  const putBack = (el: HTMLElement) => { el.scrollTop = el.scrollHeight - el.clientHeight - restoreBelow.current; };
+  // When you last scrolled yourself (wheel, touch, a click on the
+  // scrollbar, a key): only that leaves the bottom. A scroll the browser
+  // makes as content loads above (Chromium keeps what is on screen in
+  // place) does not.
+  const userScrollAt = useRef(0);
+  const pointerHeld = useRef(false);
+  const markUserScroll = () => { userScrollAt.current = Date.now(); };
+  // A jump made on purpose (to a message, to a stuck task) scrolls smoothly
+  // for a moment: that too is yours, not content moving the view.
+  const jumpUntil = useRef(0);
+  const markJump = () => { jumpUntil.current = Date.now() + 1500; };
+  useEffect(() => {
+    const up = () => { pointerHeld.current = false; };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => { window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+  }, []);
   // When the box below grows (a line, files), the conversation gets
   // shorter: if it was at the bottom, it stays there instead of the last
   // lines sliding under the box.
@@ -316,8 +350,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setWithdrawn(new Set());
     setOlder([]);
     setMore(hit?.more ?? false);
-    // Opened at a message: stay there instead of following the bottom.
-    atBottom.current = !target.focus;
+
     focusDone.current = false;
     focusTries.current = 0;
     // Polls ask only for what changed since the newest change they have
@@ -439,14 +472,36 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // message, a changed one) brings it down, and only if it was at the
   // bottom: a refresh with nothing new never moves what you are reading.
   const lastSeen = useRef("");
+  // Opened at a message: stay there instead of following the bottom; left
+  // higher up before: back there; else at the bottom. (Before the effect
+  // below, which places the view as soon as the messages are drawn.)
+  useLayoutEffect(() => {
+    const was = leftAt.get(cacheKey(target)) ?? 0;
+    belowNow.current = was;
+    atBottom.current = !target.focus && was < 80;
+    restoreBelow.current = !target.focus && was >= 80 ? was : 0;
+    restoreUntil.current = Date.now() + 1500;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.threadId, target.agent, target.peer, target.focus]);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const last = messages?.[messages.length - 1];
     const sig = `${messages?.length ?? -1}\u0000${last?.id ?? ""}\u0000${last?.updated_at ?? ""}`;
     const changed = sig !== lastSeen.current;
     lastSeen.current = sig;
+    if (el && restoring() && messages?.length) {
+      putBack(el);
+      return;
+    }
     if (el && changed && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+  // Leaving a conversation: remember where it was.
+  useEffect(() => {
+    const key = cacheKey(target);
+    // (left while still being put back: that place, not where it is yet)
+    return () => { leftAt.set(key, restoreBelow.current > 0 ? restoreBelow.current : atBottom.current ? 0 : belowNow.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.hubId, target.threadId, target.agent, target.peer]);
   // What loads after the messages (a finished task's steps, a picture)
   // makes the conversation taller above the bottom: at the bottom, it
   // stays at the bottom instead of the last lines being pushed down.
@@ -464,6 +519,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Messages taken out of your own view (删除), and the last one taken,
   // for a moment, to take back (撤销).
   const hiddenIds = useHidden(target.hubId);
+  // With nothing typed, the round button starts a voice chat with this
+  // agent (the Mac app; VoiceBar).
+  const voice = useVoiceReady();
   const [undo, setUndo] = useState<{ ids: string[]; n: number } | null>(null);
   useEffect(() => {
     if (!undo) return;
@@ -490,7 +548,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     let h = el.offsetHeight;
     const ro = new ResizeObserver(() => {
       const nh = el.offsetHeight;
-      if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
+      if (nh !== h && restoring()) putBack(sc);
+      else if (nh !== h && atBottom.current) sc.scrollTop = sc.scrollHeight;
       h = nh;
     });
     ro.observe(el);
@@ -523,7 +582,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const yours = pointerHeld.current || Date.now() - userScrollAt.current <= 300 || Date.now() < jumpUntil.current;
+    if (yours) restoreBelow.current = 0; // you took over
+    else if (restoring()) {
+      putBack(el);
+      const far0 = restoreBelow.current > 400;
+      if (far0 !== away) {
+        if (far0) awaySince.current = Date.now();
+        setAway(far0);
+      }
+      return;
+    }
+    if (below >= 80 && atBottom.current && !yours) {
+      // Not you: content moved the view. At the bottom it stays.
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
     atBottom.current = below < 80;
+    belowNow.current = below;
     const far = below > 400;
     if (far !== away) {
       if (far) awaySince.current = Date.now();
@@ -534,6 +610,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current;
     if (!el) return;
     atBottom.current = true;
+    restoreBelow.current = 0;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
@@ -610,8 +687,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = firstStuck && scrollRef.current?.querySelector<HTMLElement>(`[data-stuck="${firstStuck.id}"]`);
     if (!el) return;
     // Taken up there on purpose: what grows at the bottom must not pull
-    // the view back down.
+    // the view back down (nor a place being put back).
     atBottom.current = false;
+    restoreBelow.current = 0;
+    markJump();
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.remove("is-flash");
     void el.offsetWidth; // restart the highlight
@@ -928,6 +1007,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
     if (!el) return false;
     atBottom.current = false;
+    restoreBelow.current = 0;
+    markJump();
     el.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
     el.classList.remove("is-flash");
     void el.offsetWidth;
@@ -1438,6 +1519,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const quote = !!quoted && prevShown.get(m.id) !== quoted && (!!asked || !!m.reply_to);
       const steps = observed && answers ? progressOf.get(answers) : undefined;
       const usage = answers ? usageOf[answers] : undefined;
+      const voiced = m.unreadable ? null : viaVoice(m.body);
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
       return (
@@ -1458,8 +1540,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
             ))}
             {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
+            {mine && voiced && <VoiceMark heard={voiced.heard} />}
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
+              : mine && voiced ? <MessageContent body={voiced.text} />
               : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
@@ -1472,7 +1556,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 </div>
                 {s.unreadable
                   ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
-                  : <MessageContent body={s.body} />}
+                  : (() => {
+                    const v = viaVoice(s.body);
+                    return v ? <><VoiceMark heard={v.heard} /><MessageContent body={v.text} /></> : <MessageContent body={s.body} />;
+                  })()}
                 {s.attachments && s.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={s.attachments} />}
               </div>
             ))}
@@ -1653,7 +1740,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </button>
         );
       })()}
-      <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}>
+      <div className="conv-scroll" ref={scrollRef} onScroll={onScroll}
+        onWheel={markUserScroll} onTouchMove={markUserScroll} onKeyDown={markUserScroll}
+        onPointerDown={() => { pointerHeld.current = true; markUserScroll(); }}>
         <div ref={timelineRef} className={cn("conv-timeline", termMode && "is-shell", observed && "is-observed")}>
           {shown === null ? (
             loadError && !isTransient(loadError) ? (
@@ -1810,6 +1899,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {queueRows.length > 0 && <ErrorText error={queueError} />}
+        {voiceOn && !shellMode && (
+          <VoiceBar hubId={target.hubId} agent={target.agent} peer={target.peer} agentName={agentName} onClose={() => setVoiceOn(false)} />
+        )}
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea
@@ -1842,10 +1934,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
             </div>
+            {/* Only what is not obvious: while it works, Enter adds to the
+                task and ⌘↩ queues the next one. */}
             <span className="conv-compose-hint">
-              {supplementing
-                ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
-                : L("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for a new line")}
+              {supplementing ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`) : ""}
             </span>
             {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
             {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
@@ -1859,6 +1951,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 aria-label={L("停止", "Stop")}
               >
                 <Square size={11} strokeWidth={0} fill="currentColor" />
+              </button>
+            ) : !shellMode && !voiceOn && voice?.available && !draft.trim() && !att.items.length && !sending ? (
+              // Nothing typed: the same place starts a voice chat with it (as in ChatGPT).
+              <button
+                type="button"
+                className="conv-send is-call"
+                onClick={(e) => { e.stopPropagation(); if (voice.ready) setVoiceOn(true); else openVoiceSettings(); }}
+                title={voice.ready ? L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`) : L("语音聊天：先填写语音设置", "Voice chat: set it up first")}
+                aria-label={L("语音聊天", "Voice chat")}
+                disabled={busy}
+              >
+                <AudioLines size={16} strokeWidth={2.2} />
               </button>
             ) : (
               <button

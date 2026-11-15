@@ -1029,6 +1029,25 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 5_000 });
       await page.waitForTimeout(1500);
       if ((await box.inputValue()) !== "我自己打") throw new Error(`自己打字后语音不该再写进来，实际「${await box.inputValue()}」`);
+      // The round button: with nothing typed it starts a voice call, with
+      // words it sends; no hint under the box unless a round is running.
+      await noRound(page);
+      await box.fill("");
+      await page.locator(".conv-detail .conv-send.is-call").waitFor({ timeout: 5_000 });
+      await settle(page, 150);
+      await shot(page, size, scheme, "compose-empty");
+      await box.fill("有字了");
+      await page.locator(".conv-detail .conv-send:not(.is-call)").waitFor({ timeout: 5_000 });
+      if ((await page.locator(".conv-detail .conv-compose-hint").innerText()).trim()) throw new Error("没在干活时输入框下面不该有提示文字");
+      // Hold Ctrl+M (⌥Space on a Mac) to talk; letting go stops.
+      await box.fill("");
+      await box.focus();
+      await page.keyboard.down("Control");
+      await page.keyboard.down("KeyM");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ timeout: 5_000 });
+      await page.keyboard.up("KeyM");
+      await page.keyboard.up("Control");
+      await page.locator(".conv-detail .dictate-btn.is-listening").waitFor({ state: "detached", timeout: 8_000 });
       await box.fill("");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
@@ -1116,7 +1135,10 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
       const scroller = page.locator(".conv-detail .conv-scroll");
       if (await scroller.evaluate((el) => el.scrollHeight - el.clientHeight > 600)) {
-        await scroller.evaluate((el) => { el.scrollTop = 0; });
+        // (by wheel, as you would: a scroll from code alone does not leave the bottom)
+        const sb = await scroller.boundingBox();
+        await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+        for (let k = 0; k < 6; k++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(40); }
         const btn = page.locator(".conv-detail .conv-to-bottom");
         await btn.waitFor({ timeout: 5_000 });
         await shot(page, size, scheme, "chat-to-bottom");
@@ -1159,6 +1181,30 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
       await page.waitForTimeout(800);
       if (await page.locator(".conv-detail .conv-msg.is-me", { hasText: "删除用的一句" }).count()) throw new Error("删掉的消息刷新后不该回来");
+    });
+
+    // Opening a chat: at the bottom, or where you left it higher up (not
+    // somewhere in between as what is above loads).
+    await step("单聊 · 打开时的位置", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const below = () => page.evaluate(() => { const el = document.querySelector(".conv-detail .conv-scroll"); return el ? Math.round(el.scrollHeight - el.scrollTop - el.clientHeight) : -1; });
+      await page.waitForTimeout(1500);
+      if ((await below()) > 4) throw new Error(`打开对话应停在最底下，实际离底部 ${await below()}px`);
+      if (await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.scrollHeight - el.clientHeight < 800)) return; // too short to read higher up
+      const r = await page.locator(".conv-detail .conv-scroll").boundingBox();
+      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+      for (let k = 0; k < 4; k++) { await page.mouse.wheel(0, -200); await page.waitForTimeout(60); }
+      await page.waitForTimeout(400);
+      const left = await below();
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      await page.waitForTimeout(500);
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.waitForTimeout(1600);
+      const back = await below();
+      if (Math.abs(back - left) > 80) throw new Error(`回到对话应停在上次看的位置（离底部 ${left}px），实际 ${back}px`);
+      await page.locator(".conv-detail .conv-to-bottom").click();
+      await page.waitForFunction(() => { const el = document.querySelector(".conv-detail .conv-scroll"); return !!el && el.scrollHeight - el.scrollTop - el.clientHeight < 5; }, null, { timeout: 5_000 });
     });
 
     // ⌘K: find a member and open its chat; find words in your messages and
@@ -1958,6 +2004,58 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
       if (await page.locator(".app-hub-menu").isVisible().catch(() => false)) await page.locator(".sp-switch .app-hub-trigger").click();
+      if (narrow) await sidebar(page, false);
+    });
+
+    // Voice chat with one agent, in its chat (as in ChatGPT and Claude): the
+    // round button, with nothing typed, docks a bar above the box; what it passes on
+    // is in the chat as a task marked 经语音 (the trailer hidden); mute and
+    // hang up are on the bar. No voice button at the top any more.
+    await step("语音 · 和一个 agent 语音聊天", async () => {
+      if (await page.locator(".app-topbar .vc-entry, .vc-overlay").count()) throw new Error("顶栏不该再有全局语音入口");
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await page.locator(".conv-detail .conv-compose-input").fill("");
+      const voiceBtn = page.locator(".conv-detail .conv-send.is-call");
+      await voiceBtn.waitFor({ timeout: 10_000 });
+      await voiceBtn.hover();
+      await settle(page, 200);
+      await shot(page, size, scheme, "voice-button");
+      await clickVisible(page, voiceBtn);
+      const call = page.locator(".conv-detail .vc-bar");
+      await call.waitFor({ timeout: 10_000 });
+      if (!compactText(await call.innerText()).includes("和 Review")) throw new Error(`语音条应写明和谁聊，实际「${compactText(await call.innerText())}」`);
+      await call.locator(".vc-line.is-me", { hasText: "帮我看一下下载页的链接对不对" }).waitFor({ timeout: 10_000 });
+      await call.locator(".vc-line.is-them", { hasText: "核对完我告诉你" }).waitFor({ timeout: 10_000 });
+      if (await call.locator(".vc-line.is-hearing").count() > 1) throw new Error("听到一半的字应该只有一行");
+      const sent = page.locator(".conv-detail .conv-msg.is-me", { hasText: "核对下载页上的每个下载链接" }).last();
+      await sent.waitFor({ timeout: 10_000 });
+      await sent.locator(".conv-voice-tag").waitFor({ timeout: 5_000 });
+      if (compactText(await sent.innerText()).includes("经语音转述")) throw new Error("经语音转述那行应收成一个小标记");
+      await settle(page, 300);
+      await shot(page, size, scheme, "voice-chat");
+      // Mute, then hang up.
+      await clickVisible(page, call.getByRole("button", { name: "静音" }));
+      await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, call.getByRole("button", { name: "挂断" }));
+      await call.waitFor({ state: "detached", timeout: 5_000 });
+      // From the space's box: the chat with whoever it is addressed to opens
+      // with the call on.
+      await go(page, "聊天", narrow);
+      if (narrow) await sidebar(page, false);
+      await clickVisible(page, page.locator(".sp-send.is-call"));
+      const call2 = page.locator(".conv-detail .vc-bar");
+      await call2.waitFor({ timeout: 10_000 });
+      await clickVisible(page, call2.getByRole("button", { name: "挂断" }));
+      await call2.waitFor({ state: "detached", timeout: 5_000 });
+      // Its settings.
+      await go(page, "设置", narrow);
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
+      await page.locator(".app-setting-group", { hasText: "豆包" }).waitFor({ timeout: 10_000 });
+      if (await page.locator("input[type=password]").evaluateAll((els) => els.some((e) => e.value))) throw new Error("密钥不应显示出来");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-voice");
       if (narrow) await sidebar(page, false);
     });
 

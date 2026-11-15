@@ -4159,6 +4159,12 @@ html.shell-mac .fp-panel.is-full .fp-head {
   background: var(--fg);
   color: var(--card);
 }
+/* Nothing typed: the round button starts a voice call. */
+.conv-send.is-call,
+.sp-send.is-call {
+  background: var(--fg);
+  color: var(--card);
+}
 .conv-send .spin {
   animation: conv-spin 0.9s linear infinite;
 }
@@ -6698,3 +6704,58 @@ body.is-resizing {
   font-size: 11px;
   color: var(--faint);
 }
+
+/* VoiceBar: a voice chat with the agent, docked above the box of its chat.
+   A breathing dot for the state, the last lines of the talk, mute and hang
+   up. */
+.vc-bar {
+  margin: 0 0 8px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.vc-bar-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vc-bar-state { font-size: 13px; font-weight: 500; color: var(--fg); flex: none; }
+.vc-bar-who { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vc-dot { position: relative; width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--accent); }
+.vc-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); opacity: 0; }
+.vc-dot.is-idle { background: var(--faint); }
+.vc-dot.is-listening { animation: vc-breathe 2.6s ease-in-out infinite; }
+.vc-dot.is-thinking { animation: vc-breathe 1s ease-in-out infinite; filter: saturate(0.6); }
+.vc-dot.is-speaking { animation: vc-talk 0.42s ease-in-out infinite alternate; }
+.vc-dot.is-speaking::after { animation: vc-ripple 1.4s ease-out infinite; }
+.vc-dot.is-muted { background: var(--faint); animation: none; }
+@keyframes vc-breathe { 0%, 100% { transform: scale(0.8); opacity: 0.75; } 50% { transform: scale(1.05); opacity: 1; } }
+@keyframes vc-talk { from { transform: scale(0.85); } to { transform: scale(1.15); } }
+@keyframes vc-ripple { from { transform: scale(0.7); opacity: 0.8; } to { transform: scale(1.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .vc-dot, .vc-dot::after { animation: none !important; }
+}
+.vc-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--nav-hover);
+  color: var(--fg);
+  cursor: pointer;
+}
+.vc-bar-btn svg { width: 14px; height: 14px; }
+.vc-bar-btn.is-on { background: var(--fg); color: var(--card); }
+.vc-bar-btn:disabled { opacity: 0.5; cursor: default; }
+.vc-bar-btn.vc-hangup { background: var(--red); color: #fff; }
+.vc-bar-lines { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.vc-bar-lines:empty { display: none; }
+.vc-hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.vc-line { font-size: 13px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.vc-line-who { margin-right: 6px; font-size: 11px; color: var(--faint); }
+.vc-line.is-hearing, .vc-line.is-cut { color: var(--muted); }
+.vc-line.is-cut::after { content: " …"; }
+.vc-action, .vc-notice { font-size: 12px; color: var(--muted); }
+.vc-action::before { content: "→ "; }
+.conv-voice-tag { display: inline-flex; align-items: center; gap: 3px; margin-right: 4px; }

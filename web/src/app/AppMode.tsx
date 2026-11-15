@@ -11,7 +11,7 @@ import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
 import { renameHub, useHubNames } from "@/app/hubNames";
 import { ProjectPage } from "@/app/ProjectPage";
-import { SettingsPage } from "@/app/SettingsPage";
+import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
@@ -116,6 +116,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
+  // Settings › Voice, from a chat's voice button (VoiceBar).
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<{ section?: string }>).detail?.section === "voice") openSettingsSection("voice");
+      setPage("settings");
+    };
+    window.addEventListener("myco-open-settings", on);
+    return () => window.removeEventListener("myco-open-settings", on);
+  }, []);
   // The workspaces of the shown workspace's server (hubs v0.19.9+): whether
   // this App may add one there.
   const [serverWs, setServerWs] = useState<WorkspaceState | null>(null);
@@ -702,6 +711,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}
         taken={(serverWs?.workspaces || []).map((w) => w.name)} onStart={createOnServer} />
+
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}

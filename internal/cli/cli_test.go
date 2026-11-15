@@ -1187,9 +1187,22 @@ func TestProgressStatusAndSteer(t *testing.T) {
 	if code, _, _ := boss.run("message", "progress", "--id", id, "--body", "x"); code != ExitPermission {
 		t.Fatalf("only the recipient reports progress, exit %d", code)
 	}
+	// An agent waiting gets how many and the latest, not every note...
+	if code, out, e := worker.run("message", "progress", "--id", id, "--body", "nearly there"); code != 0 {
+		t.Fatalf("progress: %s %s", out, e)
+	}
 	code, out, e := boss.run("message", "wait", "--id", id, "--timeout", "1s", "--format", "json")
-	if code != ExitTimeout || !strings.Contains(e, "[progress") || !strings.Contains(e, "half way") || !strings.Contains(out, `"half way"`) {
+	if code != ExitTimeout || strings.Contains(e, "[progress") || strings.Contains(out, `"half way"`) ||
+		!strings.Contains(out, `"progress_count": 2`) || !strings.Contains(out, `"nearly there"`) {
 		t.Fatalf("wait with progress: %d %s %s", code, out, e)
+	}
+	// ...all of them when it asks; a person at a terminal sees them come.
+	code, out, e = boss.run("message", "wait", "--id", id, "--timeout", "1s", "--format", "json", "--progress", "all")
+	if code != ExitTimeout || !strings.Contains(e, "[progress") || !strings.Contains(out, `"half way"`) || !strings.Contains(out, `"nearly there"`) {
+		t.Fatalf("wait --progress all: %d %s %s", code, out, e)
+	}
+	if code, _, e := boss.run("message", "wait", "--id", id, "--timeout", "1s", "--format", "text"); code != ExitTimeout || !strings.Contains(e, "half way") {
+		t.Fatalf("wait in a terminal: %d %s", code, e)
 	}
 	// Steer: the runner interrupts the slow run and resumes with the correction.
 	if code, _, _ := worker.run("message", "steer", "--id", id, "--body", "x"); code != ExitPermission {

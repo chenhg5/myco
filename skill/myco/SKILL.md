@@ -140,9 +140,13 @@ Follow and steer work you delegated:
 
 ```bash
 myco agent list                                   # STATE: working / pending / idle / offline, plus STATUS lines
-myco message wait --id <task id> --timeout 30m    # prints the recipient's progress updates as they arrive
+myco message wait --id <task id> --timeout 30m    # the reply, plus how many progress updates and the latest
 myco message steer --id <task id> --body "use PostgreSQL, not SQLite"   # correct it mid-flight
 ```
+
+What you get back is the hand-over: the reply, and of the recipient's progress updates only
+the count and the latest (`--progress all` for every one, when you really need them). The
+person sees every step in the app.
 
 A steer interrupts the recipient's runner and resumes the same session with your note
 (work done so far is kept); the final answer is still the task's reply. Attachments
