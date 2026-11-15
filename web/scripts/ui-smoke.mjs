@@ -2183,6 +2183,17 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // The Mac's menu bar asks the page for what it offers (a "myco-menu"
+    // event): search, then settings.
+    await step("菜单栏 · 搜索、设置", async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-menu", { detail: "search" })));
+      await page.locator(".cp").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".cp").waitFor({ state: "detached", timeout: 5_000 });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-menu", { detail: "settings" })));
+      await page.locator(".app-settings-tab").first().waitFor({ timeout: 5_000 });
+    });
+
     await step("设置", async () => {
       await go(page, "设置", narrow);
       await page.locator(".app-settings").waitFor({ timeout: 20_000 });

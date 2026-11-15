@@ -103,15 +103,27 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		}
 	})
 
-	appMenu := app.NewMenu()
-	appMenu.AddRole(application.AppMenu)
-	appMenu.AddRole(application.EditMenu)
-	appMenu.AddRole(application.WindowMenu)
-	app.Menu.Set(appMenu)
+	// The menu bar, in the App's language (the system's until the pages
+	// have said); redrawn when it changes, with the tray menu.
+	menuSend := func(cmd string) {
+		show()
+		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-menu",{detail:%q}))`, cmd))
+	}
+	menuZh := trayText(systemPrefersChinese())
+	if l := readUILang(h); l != "" {
+		menuZh = l == "zh"
+	}
+	app.Menu.Set(appMenu(app, menuZh, menuSend))
 
 	// Clicking the menu-bar icon opens its menu (the Mac way): the agents'
 	// status at a glance, then open / restart the runner / quit.
 	menu := newTrayMenu(app, h, show, app.Quit)
+	trayLang := uiLangHook
+	uiLangHook = func(l string) {
+		trayLang(l)
+		// The menu bar is the main thread's.
+		application.InvokeAsync(func() { app.Menu.Set(appMenu(app, trayText(l == "zh"), menuSend)) })
+	}
 	tray := app.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon)
 	tray.SetTooltip("myco")
