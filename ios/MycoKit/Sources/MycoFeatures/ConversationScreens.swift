@@ -160,7 +160,7 @@ struct ConversationBody: View {
     @State private var call: VoiceCall?
     /// Why the last call ended by itself (no microphone, no permission).
     @State private var callProblem: DictationProblem?
-    /// Voice is not set up yet: its settings are open.
+    /// A call could not be made from what is set: its settings are open.
     @State private var settingUpVoice = false
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
@@ -461,9 +461,11 @@ struct ConversationBody: View {
     // MARK: A voice call
 
     /// With nothing typed and nothing running, the round button starts a
-    /// voice call with this agent (not with a shell or a person).
+    /// voice call with this agent (not with a shell or a person), once
+    /// voice is set up in Settings. Until then it is Send, as always (the
+    /// desktop app's rule).
     private var canCall: Bool {
-        guard call == nil, model.action == .send, model.pending.isEmpty,
+        guard app.voiceReady, call == nil, model.action == .send, model.pending.isEmpty,
               model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return false }
         return session.agent(model.agent).map { Naming.kind(of: $0) == .agent } ?? false
@@ -475,7 +477,7 @@ struct ConversationBody: View {
         Task {
             guard call == nil else { return }
             guard let new = await app.call(in: model, of: session) else {
-                // Not set up yet: its settings, then.
+                // Its key could not be read after all: its settings, then.
                 settingUpVoice = true
                 return
             }

@@ -64,7 +64,7 @@ Messages show their pictures as thumbnails and other files as rows; a tap opens 
 
 ## The input
 
-One card, two rows: the words get the whole width, and the controls sit under them. What adds to a message is on the left (the plus for pictures and files, the microphone); the one button that sends it, adds it to the running task, or stops the run is alone at the lower right, under the thumb. With nothing typed and nothing running, that button starts a voice chat with the agent (below), as on the desktop. The microphone and Send are a whole card apart, so one is never hit for the other, and the microphone stays while there are words, so speaking can go on where it stopped (an input that swaps the microphone for Send, as Messages does, cannot do that). Every control is at least 44 points to the finger. A tap anywhere else on the card is a tap in the text.
+One card, two rows: the words get the whole width, and the controls sit under them. What adds to a message is on the left (the plus for pictures and files, the microphone); the one button that sends it, adds it to the running task, or stops the run is alone at the lower right, under the thumb. Once voice is set up, with nothing typed and nothing running that button starts a voice chat with the agent (below), as on the desktop. The microphone and Send are a whole card apart, so one is never hit for the other, and the microphone stays while there are words, so speaking can go on where it stopped (an input that swaps the microphone for Send, as Messages does, cannot do that). Every control is at least 44 points to the finger. A tap anywhere else on the card is a tap in the text.
 
 Return breaks the line. What is said to an agent often takes several lines, sending wakes it or interrupts what it is doing, and a phone's keyboard has no Shift+Return, so sending stays on a button; "Return sends" in Settings is there for those who want a chat app's way, off by default. With a keyboard attached, ⌘Return sends.
 
@@ -74,7 +74,7 @@ The microphone is in the input's lower left, beside the plus. It listens with Ap
 
 ## A voice chat
 
-Talking with an agent out loud, in its conversation: the desktop app's voice call ([docs/design/voice.md](../docs/design/voice.md)), with the same rules. With nothing typed and nothing running, the input's round button (a waveform) starts it; the call is a bar docked above the input with how it stands (listening, thinking, speaking, muted), the last few lines of the talk, mute and hang up. The conversation scrolls and the input types as always.
+Talking with an agent out loud, in its conversation: the desktop app's voice call ([docs/design/voice.md](../docs/design/voice.md)), with the same rules. Once it is set up in Settings, with nothing typed and nothing running the input's round button (a waveform) starts it; the call is a bar docked above the input with how it stands (listening, thinking, speaking, muted), the last few lines of the talk, mute and hang up. The conversation scrolls and the input types as always.
 
 - **What is said goes to the agent as if typed.** A fast model hears the person and passes on what they want with `tell_agent`: added to the agent's open task, else a new one, with no confirmation (`ConversationModel.tell`, the rule of the send button). What it passes on ends with the desktop's trailer (`ViaVoice`), which the page shows as a small "By voice" mark; a tap shows the words as heard. Questions about progress it answers itself from the conversation (`VoiceContext`); `stop_agent` stops the open task, `check_agent` reads the conversation again.
 - **It can be cut off.** Real words while it talks stop it at once (not an "嗯", not its own voice coming back); what the person heard of its answer is kept as said, marked as cut off.
@@ -88,7 +88,7 @@ A phone has no local backend, so the loop the desktop runs in Go (`internal/cons
 | Thinking (`VoiceModel`) | `OpenAIChat`: any OpenAI-compatible chat API, streamed, with tools; the desktop's prompt | `ScriptedVoiceModel` |
 | Speaking (`VoiceSpeech`) | `DoubaoSpeech` (the desktop's API and default voice); with no Doubao key, `SystemSpeech`: the phone's own voice, played through the same engine | `SilentSpeech` |
 
-Settings › Voice chat takes the model's address, name and key, and optionally a Doubao key, voice and speed. Keys go to the keychain (`voice:llm`, `voice:tts`), are never shown again and never reach the workspace; the desktop's keys are in the Mac's keychain and cannot be read from here, so they are typed once more. Until the model is set, the round button opens that page.
+Settings › Voice chat takes the model's address, name and key, and optionally a Doubao key, voice and speed. Keys go to the keychain (`voice:llm`, `voice:tts`), are never shown again and never reach the workspace; the desktop's keys are in the Mac's keychain and cannot be read from here, so they are typed once more. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
 
 What differs from the desktop: the call hangs up when the conversation is left, when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
 

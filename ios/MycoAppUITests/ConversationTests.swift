@@ -183,19 +183,13 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testAVoiceChatNotSetUpOpensItsSettings() {
-        // No key on this simulator: the button leads to where one is typed.
+    func testWithoutVoiceSetUpTheButtonOnlySends() {
+        // No key on this simulator: the round button is Send, as always.
         let app = launch(["-myco-route", "agent:studio-codex-e07b"])
         let submit = app.descendants(matching: .any)["composer.submit"]
         XCTAssertTrue(submit.waitForExistence(timeout: 20))
-        submit.tap()
-        XCTAssertTrue(app.textFields["voice.baseURL"].waitForExistence(timeout: 5), "the model's address")
-        XCTAssertTrue(app.textFields["voice.model"].exists)
-        XCTAssertTrue(app.secureTextFields["voice.modelKey"].exists, "keys are typed blind")
-        XCTAssertTrue(app.secureTextFields["voice.speechKey"].exists)
-        snap("voice-settings")
-        app.buttons["voice.done"].tap()
-        XCTAssertFalse(app.descendants(matching: .any)["voice.bar"].exists, "no call without a model")
+        XCTAssertEqual(submit.label, "Send")
+        XCTAssertFalse(submit.isEnabled, "nothing typed: nothing to send, and no voice chat to start")
     }
 
     @MainActor
@@ -217,10 +211,9 @@ final class ConversationTests: XCTestCase {
         var paused = app.descendants(matching: .any)["run.paused"]
         XCTAssertTrue(paused.waitForExistence(timeout: 20), "an open run that is not at work says so")
         XCTAssertTrue(app.staticTexts["Set aside; it answers later"].exists)
-        // It is free meanwhile: there is nothing of mine to stop, so with
-        // nothing typed the button offers a voice chat, as when it is idle.
+        // It is free meanwhile: what I type is a new message, not an addition.
         let submit = app.descendants(matching: .any)["composer.submit"]
-        XCTAssertEqual(submit.label, "Voice chat")
+        XCTAssertEqual(submit.label, "Send")
         snap("waiting-held")
         app.terminate()
 

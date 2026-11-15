@@ -424,8 +424,8 @@ struct SettingsScreen: View {
             } header: {
                 Text(L("语音", "Voice"))
             } footer: {
-                Text(L("和 agent 像打电话一样说话：输入框空着时，右下角的按钮就是语音聊天。",
-                       "Talk with an agent as on a call: with nothing typed, the button at the lower right starts a voice chat."))
+                Text(L("和 agent 像打电话一样说话。设置好以后，输入框空着时右下角的按钮就是语音聊天。",
+                       "Talk with an agent as on a call. Once it is set up, with nothing typed the button at the lower right starts a voice chat."))
             }
             Section(L("关于", "About")) {
                 LabeledContent(L("版本", "Version"), value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")

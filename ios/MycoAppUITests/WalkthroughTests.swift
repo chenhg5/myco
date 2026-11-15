@@ -54,13 +54,12 @@ final class WalkthroughTests: XCTestCase {
         let input = app.descendants(matching: .any)["composer.input"]
         let submit = app.buttons["composer.submit"]
         XCTAssertTrue(input.waitForExistence(timeout: 5), "the conversation opens")
-        // Nothing typed and nothing running: the button offers a voice chat.
-        XCTAssertEqual(submit.label, "Voice chat")
-        XCTAssertTrue(submit.isEnabled)
+        // (Voice is not set up here, so the button is not a voice chat.)
+        XCTAssertEqual(submit.label, "Send")
+        XCTAssertFalse(submit.isEnabled, "nothing typed: nothing to send")
 
         input.tap()
         input.typeText("Translate the readme")
-        XCTAssertEqual(submit.label, "Send", "with words, it sends")
         XCTAssertTrue(submit.isEnabled)
         submit.tap()
         XCTAssertTrue(app.staticTexts["Translate the readme"].waitForExistence(timeout: 5), "what I said shows")
@@ -81,8 +80,25 @@ final class WalkthroughTests: XCTestCase {
         waitForExpectations(timeout: 5)
         submit.tap()
         XCTAssertTrue(app.staticTexts["Stopped"].waitForExistence(timeout: 5), "stopping says so")
-        expectation(for: NSPredicate(format: "label == %@", "Voice chat"), evaluatedWith: submit)
+        expectation(for: NSPredicate(format: "label == %@", "Send"), evaluatedWith: submit)
         waitForExpectations(timeout: 5)
+    }
+
+    @MainActor
+    func testVoiceIsSetUpInSettings() {
+        // Settings is where the model and the voice of a voice chat go.
+        let app = launch()
+        XCTAssertTrue(app.buttons["workspace.button"].waitForExistence(timeout: 15))
+        app.buttons["workspace.button"].tap()
+        app.buttons["Settings"].tap()
+        let voice = app.descendants(matching: .any)["settings.voice"]
+        XCTAssertTrue(voice.waitForExistence(timeout: 5), "Settings has a line for voice")
+        voice.tap()
+        XCTAssertTrue(app.textFields["voice.baseURL"].waitForExistence(timeout: 5), "the model's address")
+        XCTAssertTrue(app.textFields["voice.model"].exists)
+        XCTAssertTrue(app.secureTextFields["voice.modelKey"].exists, "keys are typed blind")
+        XCTAssertTrue(app.secureTextFields["voice.speechKey"].exists)
+        shot("voice-settings")
     }
 
     @MainActor
