@@ -187,6 +187,7 @@ private struct WorkspaceChrome: ViewModifier {
     @Environment(\.isSearching) private var isSearching
     let title: String
     let add: Bool
+    @State private var dbgRefreshes = 0
 
     func body(content: Content) -> some View {
         content
@@ -207,9 +208,13 @@ private struct WorkspaceChrome: ViewModifier {
                 if !isSearching { AppTabBar() }
             }
             .toolbar(.hidden, for: .tabBar)
+            .overlay(alignment: .topLeading) {
+                Color.clear.frame(width: 1, height: 1).accessibilityElement().accessibilityIdentifier("dbg.refreshes").accessibilityValue("\(dbgRefreshes)")
+            }
             // Pulling down asks the workspace again, now. The spinner stays
             // long enough to be seen, however quick the answer.
             .refreshable {
+                dbgRefreshes += 1
                 async let seen: Void? = try? await Task.sleep(for: .milliseconds(500))
                 await session.refresh()
                 _ = await seen

@@ -93,11 +93,19 @@ final class WalkthroughTests: XCTestCase {
         let chat = app.buttons["chat.project:myco-ios"]
         XCTAssertTrue(chat.waitForExistence(timeout: 40))
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let dbg = app.descendants(matching: .any)["dbg.refreshes"]
+        let before = dbg.value as? String ?? "none"
         from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        let after1 = dbg.value as? String ?? "none"
         // The system's own spinner turns at the top while the workspace is asked.
         shot("refresh-list")
+        sleep(8)
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22))
+        top.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)), withVelocity: .slow, thenHoldForDuration: 1.0)
+        let after2 = dbg.value as? String ?? "none"
+        shot("refresh-list-2")
         if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
-            try? app.debugDescription.write(toFile: dir + "/refresh-list.txt", atomically: true, encoding: .utf8)
+            try? "before=\(before) afterShortPull=\(after1) afterLongPull=\(after2)\n".write(toFile: dir + "/refresh-list.txt", atomically: true, encoding: .utf8)
         }
         XCTAssertTrue(chat.waitForExistence(timeout: 20), "the list is there after the refresh")
     }
