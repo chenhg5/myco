@@ -92,6 +92,9 @@ final class WalkthroughTests: XCTestCase {
         app.buttons["workspace.button"].tap()
         app.buttons["Settings"].tap()
         let voice = app.descendants(matching: .any)["settings.voice"]
+        // (It is further down the page than a sheet shows at first.)
+        XCTAssertTrue(app.switches["settings.notifications"].waitForExistence(timeout: 5))
+        for _ in 0..<4 where !voice.exists { app.swipeUp() }
         XCTAssertTrue(voice.waitForExistence(timeout: 5), "Settings has a line for voice")
         voice.tap()
         XCTAssertTrue(app.textFields["voice.baseURL"].waitForExistence(timeout: 5), "the model's address")
