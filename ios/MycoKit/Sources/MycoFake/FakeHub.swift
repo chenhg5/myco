@@ -56,6 +56,38 @@ public actor FakeHub: HubAPI {
         slowSteps = value
     }
 
+    /// The voice settings kept here, and whether this acts like a hub from
+    /// before they were kept.
+    private var voice: VoiceDocument?
+    private var tooOldForVoice = false
+
+    public func setTooOldForVoice(_ value: Bool) {
+        tooOldForVoice = value
+    }
+
+    /// What is kept here (for tests: as if another device had set it).
+    public func setVoice(_ document: VoiceDocument?) {
+        voice = document
+    }
+
+    public func keptVoice() -> VoiceDocument? {
+        voice
+    }
+
+    public func voiceSettings() async throws -> VoiceDocument {
+        try await check()
+        if tooOldForVoice { throw HubError(error: "not_found", message: "not found") }
+        return voice ?? VoiceDocument(updatedAt: Date(timeIntervalSince1970: -62_135_596_800))
+    }
+
+    public func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument {
+        try await check()
+        if tooOldForVoice { throw HubError(error: "not_found", message: "not found") }
+        if let voice, voice.updatedAt > document.updatedAt { return voice }
+        voice = document
+        return document
+    }
+
     public func setTooOldForHidden(_ value: Bool) {
         tooOldForHidden = value
     }

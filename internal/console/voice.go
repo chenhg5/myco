@@ -28,8 +28,9 @@ import (
 // app's: one audio engine with the system's voice processing, so its own
 // voice is not heard as the person's and background noise is held down).
 //
-//	GET  /app/voice                 {available, config, has_llm_key, has_tts_key, session}
-//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_speaker, tts_key?, clear_*}
+//	GET  /app/voice                 {available, ready, config, has_llm_key, has_tts_key, tts_providers, share, sync, session}
+//	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, tts_key?, share?, clear_*}
+//	POST /app/voice/sync            looks at the hubs for newer settings, then answers as GET
 //	POST /app/voice/start           {hub_id, agent, peer?, lang}  starts a call with one agent
 //	POST /app/voice/stop            hangs up
 //	POST /app/voice/mute            {muted}
@@ -64,10 +65,21 @@ type VoiceEvents interface {
 type VoiceConfig struct {
 	LLMBaseURL string `json:"llm_base_url,omitempty"`
 	LLMModel   string `json:"llm_model,omitempty"`
-	TTSSpeaker string `json:"tts_speaker,omitempty"`
-	// TTSRate: Doubao's speech_rate, -50..100 (0 = normal).
+	// TTSProvider: the speech service the voice speaks with (voice_sync.go
+	// lists them); "" is the default one.
+	TTSProvider string `json:"tts_provider,omitempty"`
+	TTSSpeaker  string `json:"tts_speaker,omitempty"`
+	// TTSRate: how fast it talks, -50..100 (0 = normal).
 	TTSRate int `json:"tts_rate,omitempty"`
+	// Share: keep these settings (keys too) on the hubs this App is signed
+	// in to, so the person's other devices have them. On unless turned off.
+	Share *bool `json:"share,omitempty"`
+	// UpdatedAt: when the person last changed them (on any device).
+	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// shares says whether the settings are kept on the hubs.
+func (c VoiceConfig) shares() bool { return c.Share == nil || *c.Share }
 
 const (
 	defaultVoiceSpeaker = "zh_male_wennuanahu_uranus_bigtts"
@@ -132,6 +144,10 @@ type voice struct {
 	seq     int
 	state   string
 	changed chan struct{}
+	// The settings, when there is no file to keep them in (tests).
+	mem VoiceConfig
+	// How the hubs stood with the settings at the last look.
+	sync voiceSync
 }
 
 func (b *Backend) voiceState() *voice {
@@ -148,21 +164,40 @@ func (b *Backend) voiceState() *voice {
 	return b.voice
 }
 
-func (v *voice) config() VoiceConfig {
+// stored is what the settings file says, as it is.
+func (v *voice) stored() VoiceConfig {
 	var c VoiceConfig
 	if v.path != "" {
 		if b, err := os.ReadFile(v.path); err == nil {
 			_ = json.Unmarshal(b, &c)
 		}
+	} else {
+		v.mu.Lock()
+		c = v.mem
+		v.mu.Unlock()
+	}
+	return c
+}
+
+// config is the settings in use: the default speech service and its
+// default voice where none is chosen.
+func (v *voice) config() VoiceConfig {
+	c := v.stored()
+	if ttsProviderOf(c.TTSProvider) == nil || c.TTSProvider == "" {
+		c.TTSProvider = defaultTTSProvider
 	}
 	if c.TTSSpeaker == "" {
-		c.TTSSpeaker = defaultVoiceSpeaker
+		c.TTSSpeaker = ttsProviderOf(c.TTSProvider).DefaultSpeaker
 	}
 	return c
 }
 
 func (v *voice) save(c VoiceConfig) error {
 	if v.path == "" {
+		// No settings file (tests): kept in memory.
+		v.mu.Lock()
+		v.mem = c
+		v.mu.Unlock()
 		return nil
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
@@ -265,6 +300,7 @@ func (v *voice) wakeLocked() {
 func (b *Backend) voiceRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/voice", b.getVoice)
 	m.HandleFunc("PUT /app/voice/config", b.putVoiceConfig)
+	m.HandleFunc("POST /app/voice/sync", b.syncVoiceRoute)
 	m.HandleFunc("POST /app/voice/start", b.startVoice)
 	m.HandleFunc("POST /app/voice/stop", b.stopVoice)
 	m.HandleFunc("POST /app/voice/mute", b.muteVoice)
@@ -281,7 +317,7 @@ func (b *Backend) voiceKeys(c VoiceConfig) (llm, tts string) {
 			llm, _ = b.Secrets.Get(secretName("openai"))
 		}
 	}
-	tts, _ = b.Secrets.Get(voiceTTSSecret)
+	tts = b.ttsKey(c.TTSProvider)
 	return llm, tts
 }
 
@@ -317,9 +353,21 @@ func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 	// ready: a call can start (this App has a microphone, and the model and
 	// the voice are set up); the App shows the way in only then.
 	ready := b.Voice != nil && c.LLMBaseURL != "" && c.LLMModel != "" && llm != "" && tts != ""
+	// The first look at the hubs for the settings kept there, in the
+	// background: a device set up elsewhere becomes ready by itself.
+	v.sync.once.Do(func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			b.syncVoice(ctx)
+		}()
+	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": b.Voice != nil, "ready": ready, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
 		"session": session,
+		// The speech services this App can speak with (the pages draw
+		// these), and how the hubs stand with the settings.
+		"tts_providers": b.voiceTTSProviders(), "share": c.shares(), "sync": b.lastVoiceSync(),
 	})
 }
 
@@ -335,11 +383,22 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := in.VoiceConfig
-	c.LLMBaseURL, c.LLMModel, c.TTSSpeaker = strings.TrimSpace(c.LLMBaseURL), strings.TrimSpace(c.LLMModel), strings.TrimSpace(c.TTSSpeaker)
+	trimVoiceConfig(&c)
 	if c.TTSRate < -50 || c.TTSRate > 100 {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "speech rate must be between -50 and 100"})
 		return
 	}
+	if ttsProviderOf(c.TTSProvider) == nil {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "unknown speech service " + c.TTSProvider,
+			Suggestion: "GET /app/voice lists the speech services under tts_providers"})
+		return
+	}
+	// The key typed is the chosen speech service's. Sharing stays as it
+	// was unless this change says otherwise.
+	if c.Share == nil {
+		c.Share = b.voiceState().stored().Share
+	}
+	c.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	set := func(name, key string, clear bool) error {
 		switch {
 		case clear:
@@ -353,7 +412,7 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if err := set(voiceTTSSecret, in.TTSKey, in.ClearTTS); err != nil {
+	if err := set(ttsSecret(c.TTSProvider), in.TTSKey, in.ClearTTS); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -361,6 +420,8 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// The person's other devices get it from the hubs.
+	b.syncVoice(r.Context())
 	b.getVoice(w, r)
 }
 
@@ -390,14 +451,25 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	}
 	c := b.effectiveVoiceConfig()
 	llmKey, ttsKey := b.voiceKeys(c)
+	if c.LLMBaseURL == "" || c.LLMModel == "" || llmKey == "" || ttsKey == "" {
+		// Maybe set up on another device since: look at the hubs once more.
+		b.syncVoice(r.Context())
+		c = b.effectiveVoiceConfig()
+		llmKey, ttsKey = b.voiceKeys(c)
+	}
+	provider := ttsProviderOf(c.TTSProvider)
 	if c.LLMBaseURL == "" || c.LLMModel == "" || llmKey == "" {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "choose the model the voice assistant talks with",
 			Suggestion: "设置 › 语音：填 OpenAI 兼容接口的地址、模型和密钥（或在「翻译」里配好 OpenAI 兼容接口）"})
 		return
 	}
-	if ttsKey == "" {
-		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "add a Doubao speech key",
-			Suggestion: "设置 › 语音：填豆包语音合成的 API Key"})
+	if provider == nil || ttsKey == "" {
+		name := c.TTSProvider
+		if provider != nil {
+			name = provider.Name
+		}
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "not_configured", Message: "add the speech service's key (" + c.TTSProvider + ")",
+			Suggestion: "设置 › 语音：填语音合成（" + name + "）的 API Key"})
 		return
 	}
 	hc, err := b.client(hub)
@@ -426,7 +498,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	call := newVoiceCall(v, voiceDeps{
 		audio: b.Voice,
 		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
-		tts:   &doubaoTTS{key: ttsKey, speaker: c.TTSSpeaker, rate: c.TTSRate},
+		tts:   provider.speech(ttsKey, c),
 		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
 		lang:  lang,
 	})

@@ -127,9 +127,19 @@ public final class AppModel {
 
     /// What the person chose for voice calls (the keys are in the keychain).
     public private(set) var voice: VoiceSettings = AppModel.savedVoice()
-    /// Whether the model's key and Doubao's are saved on this device.
+    /// Whether the model's key and the chosen speech service's are on
+    /// this device.
     public private(set) var voiceHasModelKey = false
     public private(set) var voiceHasSpeechKey = false
+    /// How each workspace stood with the settings kept on it, at the last
+    /// look: its name, and whether it has them.
+    public private(set) var voiceSync: [VoiceSyncLine] = []
+
+    public struct VoiceSyncLine: Identifiable, Hashable, Sendable {
+        public var id: String
+        public var name: String
+        public var state: VoiceSharing.State
+    }
 
     private static let voiceKey = "myco-voice"
 
@@ -145,53 +155,97 @@ public final class AppModel {
         doors.voice != nil || (voice.namesModel && voiceHasModelKey)
     }
 
-    private func readVoiceKeys() async {
-        voiceHasModelKey = ((try? await doors.secrets.secret(for: VoiceSettings.modelKey)) ?? "").isEmpty == false
-        voiceHasSpeechKey = ((try? await doors.secrets.secret(for: VoiceSettings.speechKey)) ?? "").isEmpty == false
+    private func secret(_ name: String) async -> String {
+        (try? await doors.secrets.secret(for: name)) ?? ""
     }
 
-    /// Keeps what was set for voice. A key left empty stays as it was;
-    /// `forget` takes saved keys away.
+    private func readVoiceKeys() async {
+        voiceHasModelKey = !(await secret(VoiceSettings.modelKey)).isEmpty
+        voiceHasSpeechKey = !(await secret(VoiceSettings.speechKey(of: voice.provider))).isEmpty
+    }
+
+    /// What this device has for voice: the choices and every key.
+    private func localVoice() async -> VoiceSharing.Local {
+        var keys: [String: String] = [:]
+        for service in SpeechService.all {
+            keys[service.id] = await secret(VoiceSettings.speechKey(of: service.id))
+        }
+        return VoiceSharing.Local(settings: voice, modelKey: await secret(VoiceSettings.modelKey), speechKeys: keys)
+    }
+
+    /// Makes what is given this device's: the choices are kept, the keys
+    /// go to the keychain (one that is gone is removed).
+    private func keepVoice(_ local: VoiceSharing.Local) async {
+        voice = local.settings
+        UserDefaults.standard.set(try? JSONEncoder().encode(local.settings), forKey: Self.voiceKey)
+        try? await doors.secrets.setSecret(local.modelKey.isEmpty ? nil : local.modelKey, for: VoiceSettings.modelKey)
+        for service in SpeechService.all {
+            let key = local.speechKeys[service.id] ?? ""
+            try? await doors.secrets.setSecret(key.isEmpty ? nil : key, for: VoiceSettings.speechKey(of: service.id))
+        }
+        await readVoiceKeys()
+    }
+
+    /// Keeps what was set for voice, as changed now. A key left empty
+    /// stays as it was; `forget` takes saved keys away. Then the person's
+    /// other devices get it from the workspaces.
     public func saveVoice(_ settings: VoiceSettings, modelKey: String = "", speechKey: String = "", forgetModelKey: Bool = false, forgetSpeechKey: Bool = false) async {
+        var local = await localVoice()
         var settings = settings
         settings.baseURL = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speaker = settings.speaker.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.rate = min(100, max(-50, settings.rate))
-        voice = settings
-        UserDefaults.standard.set(try? JSONEncoder().encode(settings), forKey: Self.voiceKey)
+        if SpeechService.named(settings.provider) == nil { settings.provider = "" }
         let modelKey = modelKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let speechKey = speechKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if forgetModelKey {
-            try? await doors.secrets.setSecret(nil, for: VoiceSettings.modelKey)
-        } else if !modelKey.isEmpty {
-            try? await doors.secrets.setSecret(modelKey, for: VoiceSettings.modelKey)
-        }
-        if forgetSpeechKey {
-            try? await doors.secrets.setSecret(nil, for: VoiceSettings.speechKey)
-        } else if !speechKey.isEmpty {
-            try? await doors.secrets.setSecret(speechKey, for: VoiceSettings.speechKey)
-        }
-        await readVoiceKeys()
+        let service = settings.service.id
+        if forgetModelKey { local.modelKey = "" } else if !modelKey.isEmpty { local.modelKey = modelKey }
+        if forgetSpeechKey { local.speechKeys[service] = nil } else if !speechKey.isEmpty { local.speechKeys[service] = speechKey }
+        // Only a real change is a change: looking at the page is not.
+        var before = local.settings
+        before.updatedAt = settings.updatedAt
+        let changed = before != settings || !modelKey.isEmpty || !speechKey.isEmpty || forgetModelKey || forgetSpeechKey
+        if changed { settings.updatedAt = Date() }
+        local.settings = settings
+        await keepVoice(local)
+        await syncVoice()
+    }
+
+    /// Brings this device and its workspaces to the newest voice settings
+    /// (`VoiceSharing`): what was set on another device since is taken,
+    /// and what was set here goes to the workspaces that are behind.
+    public func syncVoice() async {
+        guard doors.voice == nil else { return }
+        var all = Array(sessions.values)
+        if let current = session, sessions[current.id] == nil, current.id != Self.demoID { all.append(current) }
+        let names = Dictionary(all.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let local = await localVoice()
+        let (next, states) = await VoiceSharing.sync(local, with: all.map { (id: $0.id, hub: $0.hub) })
+        if next != local { await keepVoice(next) }
+        voiceSync = states.map { VoiceSyncLine(id: $0.key, name: names[$0.key] ?? $0.key, state: $0.value) }
+            .sorted { $0.name < $1.name }
     }
 
     /// A voice call with the agent of a conversation: the phone's
-    /// microphone, the model set in Settings, and Doubao's voice (the
-    /// phone's own when there is no Doubao key). Nil when voice is not
-    /// set up yet.
+    /// microphone, the model set in Settings, and the speech service
+    /// chosen there (the phone's own voice when there is no key for it).
+    /// Nil when voice is not set up yet.
     public func call(in conversation: ConversationModel, of session: WorkspaceSession) async -> VoiceCall? {
         let hub = ConversationVoice(session: session, model: conversation)
         if let stand = doors.voice?() {
             return VoiceCall(.init(audio: stand.audio, model: stand.model, speech: stand.speech, hub: hub))
         }
-        guard voice.namesModel, let key = try? await doors.secrets.secret(for: VoiceSettings.modelKey), !key.isEmpty else { return nil }
-        let speechKey = (try? await doors.secrets.secret(for: VoiceSettings.speechKey)) ?? ""
-        let speech: any VoiceSpeech
-        if speechKey.isEmpty {
-            speech = SystemSpeech(language: .current)
-        } else {
-            speech = DoubaoSpeech(key: speechKey, speaker: voice.speakerInUse, rate: voice.rate)
+        var key = await secret(VoiceSettings.modelKey)
+        if !voice.namesModel || key.isEmpty {
+            // Maybe set up on another device since.
+            await syncVoice()
+            key = await secret(VoiceSettings.modelKey)
         }
+        guard voice.namesModel, !key.isEmpty else { return nil }
+        let speechKey = await secret(VoiceSettings.speechKey(of: voice.provider))
+        let speech: any VoiceSpeech = speechKey.isEmpty
+            ? SystemSpeech(language: .current) : voice.service.speech(key: speechKey, settings: voice)
         let chat = OpenAIChat(
             base: voice.baseURL, model: voice.model, key: key,
             session: "myco-voice-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())
@@ -318,6 +372,8 @@ public final class AppModel {
         guard !started else { return }
         if restoring { await loadWorkspaces() }
         started = true
+        // What was set for voice on another device: here without asking.
+        Task { await syncVoice() }
         if let pending = pendingOpen {
             pendingOpen = nil
             await open(workspace: pending.workspace, page: pending.page)

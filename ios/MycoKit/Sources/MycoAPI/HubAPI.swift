@@ -42,6 +42,42 @@ public struct HubFile: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+/// A person's voice chat settings as the hub keeps them (`api.VoiceSettings`):
+/// the model the voice thinks with, the speech service it speaks with, and
+/// their keys. `updatedAt` is when the person changed them, on whichever
+/// device: the newest wins.
+public struct VoiceDocument: Codable, Sendable, Hashable {
+    public var llmBaseUrl: String?
+    public var llmModel: String?
+    public var llmKey: String?
+    /// The speech service ("doubao", ...). Its ids have no underscore:
+    /// they are keys of `ttsKeys`, and JSON keys are rewritten on the way.
+    public var ttsProvider: String?
+    public var ttsSpeaker: String?
+    /// How fast it talks, -50...100.
+    public var ttsRate: Int?
+    /// The speech services' keys, by service.
+    public var ttsKeys: [String: String]?
+    public var updatedAt: Date
+
+    public init(
+        llmBaseUrl: String? = nil, llmModel: String? = nil, llmKey: String? = nil, ttsProvider: String? = nil,
+        ttsSpeaker: String? = nil, ttsRate: Int? = nil, ttsKeys: [String: String]? = nil, updatedAt: Date
+    ) {
+        self.llmBaseUrl = llmBaseUrl
+        self.llmModel = llmModel
+        self.llmKey = llmKey
+        self.ttsProvider = ttsProvider
+        self.ttsSpeaker = ttsSpeaker
+        self.ttsRate = ttsRate
+        self.ttsKeys = ttsKeys
+        self.updatedAt = updatedAt
+    }
+
+    /// Nothing was ever set (the hub answers the year 1).
+    public var neverSet: Bool { updatedAt.timeIntervalSince1970 < 0 }
+}
+
 /// Which recent list to ask the hub for.
 public enum RecentScope: Sendable, Hashable {
     /// What I talk to, one row per party (`group=pair&side=me`).
@@ -115,6 +151,13 @@ public protocol HubAPI: Sendable {
     /// `POST /v1/console/hidden`: takes messages out of this person's
     /// view, or puts them back; answers the list as it is then.
     func setHidden(hide: [String], show: [String]) async throws -> [String]
+    /// `GET /v1/console/voice`: what this person set for voice chats, kept
+    /// on the hub for all their devices, keys included. A workspace from
+    /// before this answers `not_found`.
+    func voiceSettings() async throws -> VoiceDocument
+    /// `PUT /v1/console/voice`: keeps them, unless the hub holds newer
+    /// ones; answers what it holds then.
+    func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink

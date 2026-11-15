@@ -2114,10 +2114,27 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "设置", narrow);
       if (narrow) await sidebar(page, true);
       await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
-      await page.locator(".app-setting-group", { hasText: "豆包" }).waitFor({ timeout: 10_000 });
+      // The speech service is one of those the backend lists, not a fixed
+      // one: the heading names none, and the service is a choice.
+      await page.locator(".app-setting-group", { hasText: /^语音合成$/ }).waitFor({ timeout: 10_000 });
+      if (await page.locator(".app-setting-group", { hasText: "豆包" }).count()) throw new Error("语音合成的标题不该写死豆包");
+      const services = page.locator(".vs-services .seg-btn");
+      if ((await services.count()) < 1 || !(await services.first().innerText()).includes("豆包语音")) throw new Error("语音合成服务应来自后端的列表");
       if (await page.locator("input[type=password]").evaluateAll((els) => els.some((e) => e.value))) throw new Error("密钥不应显示出来");
+      // Kept on the workspaces for the person's other devices, and it says
+      // where: one hub has them, one is too old to.
+      const where = page.locator("[data-testid=voice-sync]");
+      await where.waitFor({ timeout: 10_000 });
+      const said = await where.innerText();
+      if (!said.includes("已存到") || !said.includes("版本太旧")) throw new Error(`应写明设置存到了哪些工作区，实际「${said}」`);
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
+      // Turned off: nothing says where any more; and back on.
+      const share = page.getByRole("tablist", { name: "把这些设置存到工作区" });
+      await clickVisible(page, share.getByRole("tab", { name: "关" }));
+      await where.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, share.getByRole("tab", { name: "开" }));
+      await where.waitFor({ timeout: 5_000 });
       if (narrow) await sidebar(page, false);
     });
 

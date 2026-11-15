@@ -6570,6 +6570,12 @@ body.is-resizing {
   justify-content: flex-start;
   gap: 8px;
 }
+/* Settings › Voice: where the settings are kept (a line under the note). */
+.vs-sync {
+  display: block;
+  margin-top: 6px;
+  color: var(--fg-2);
+}
 .tr-tried {
   display: inline-flex;
   align-items: center;

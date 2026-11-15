@@ -119,7 +119,16 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(app.textFields["voice.model"].exists)
         XCTAssertTrue(app.secureTextFields["voice.modelKey"].exists, "keys are typed blind")
         XCTAssertTrue(app.secureTextFields["voice.speechKey"].exists)
+        // The speech service is a choice, not a fixed one.
+        XCTAssertTrue(app.descendants(matching: .any)["voice.service"].exists, "the speech service is chosen from a list")
+        XCTAssertFalse(app.staticTexts["Voice (Doubao speech synthesis)"].exists, "no service is written into the heading")
         shot("voice-settings")
+        // The settings can be kept on the workspaces for the other devices.
+        let share = app.switches["voice.share"]
+        for _ in 0..<3 where !share.exists { app.swipeUp() }
+        XCTAssertTrue(share.waitForExistence(timeout: 5), "sharing with the person's other devices is a switch")
+        XCTAssertEqual(share.value as? String, "1", "on unless turned off")
+        shot("voice-settings-share")
     }
 
     @MainActor
