@@ -55,6 +55,7 @@ type Server struct {
 	resume    *app.ResumeService
 	traces    *app.TraceService
 	hidden    *app.HiddenService
+	voice     *app.VoiceSettingsService
 	activity  sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu sync.Mutex // serialize alias permission checks with writes
 	namesMu   sync.Mutex
@@ -82,6 +83,10 @@ func (s *Server) SetOverview(o *app.OverviewService) { s.overview = o }
 // SetHidden enables /v1/console/hidden (messages a person took out of
 // their own view).
 func (s *Server) SetHidden(h *app.HiddenService) { s.hidden = h }
+
+// SetVoiceSettings enables /v1/console/voice (a person's voice chat
+// settings, shared by their devices).
+func (s *Server) SetVoiceSettings(v *app.VoiceSettingsService) { s.voice = v }
 
 // SetFiles enables the file endpoints.
 func (s *Server) SetFiles(f *app.FileService) { s.files = f }
@@ -166,6 +171,8 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/recent", s.admin(s.consoleRecent))
 	m.HandleFunc("GET /v1/console/hidden", s.admin(s.consoleHidden))
 	m.HandleFunc("POST /v1/console/hidden", s.admin(s.consoleHide))
+	m.HandleFunc("GET /v1/console/voice", s.admin(s.consoleVoice))
+	m.HandleFunc("PUT /v1/console/voice", s.admin(s.putConsoleVoice))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
 	// Members (people) and the audit log. Console tokens act as their member;
 	// handlers check what that member may do.
@@ -2123,6 +2130,38 @@ func (s *Server) consoleHidden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, api.HiddenList{IDs: ids})
+}
+
+// A person's voice chat settings (keys included): their own devices
+// only, by the same identity as their hidden messages. Never logged.
+func (s *Server) consoleVoice(w http.ResponseWriter, r *http.Request) {
+	if s.voice == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep voice settings"))
+		return
+	}
+	out, err := s.voice.Get(r.Context(), s.hiddenViewer(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) putConsoleVoice(w http.ResponseWriter, r *http.Request) {
+	if s.voice == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep voice settings"))
+		return
+	}
+	var in api.VoiceSettings
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.voice.Put(r.Context(), s.hiddenViewer(r), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) consoleHide(w http.ResponseWriter, r *http.Request) {
