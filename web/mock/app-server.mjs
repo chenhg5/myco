@@ -1363,7 +1363,7 @@ const server = http.createServer(async (req, res) => {
   // lines and states change.
   if (parts[0] === "app" && parts[1] === "voice") {
     const v = (state.voice ||= { cfg: { tts_speaker: "zh_male_wennuanahu_uranus_bigtts" }, llmKey: true, ttsKey: true, on: false, muted: false, st: "idle", seq: 0, lines: [], timers: [] });
-    const info = () => ({ available: true, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
+    const info = () => ({ available: true, ready: v.llmKey && v.ttsKey, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
       session: { on: v.on, state: v.on ? v.st : "idle", muted: v.muted, ...(v.on ? { hub_id: v.hubId, agent: v.agent } : {}) } });
     const line = (kind, text, extra = {}) => {
       v.seq += 1;

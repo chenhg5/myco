@@ -24,7 +24,7 @@ import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
-import { openVoiceSettings, takePendingCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
+import { takePendingCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
@@ -1952,13 +1952,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               >
                 <Square size={11} strokeWidth={0} fill="currentColor" />
               </button>
-            ) : !shellMode && !voiceOn && voice?.available && !draft.trim() && !att.items.length && !sending ? (
+            ) : !shellMode && !voiceOn && voice?.ready && !draft.trim() && !att.items.length && !sending ? (
               // Nothing typed: the same place starts a voice chat with it (as in ChatGPT).
               <button
                 type="button"
                 className="conv-send is-call"
-                onClick={(e) => { e.stopPropagation(); if (voice.ready) setVoiceOn(true); else openVoiceSettings(); }}
-                title={voice.ready ? L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`) : L("语音聊天：先填写语音设置", "Voice chat: set it up first")}
+                onClick={(e) => { e.stopPropagation(); setVoiceOn(true); }}
+                title={L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`)}
                 aria-label={L("语音聊天", "Voice chat")}
                 disabled={busy}
               >

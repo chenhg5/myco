@@ -2016,6 +2016,14 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       await page.locator(".conv-detail .conv-compose-input").fill("");
+      // Not set up: no way in; the round button is Send, as usual.
+      const voiceConfig = (body) => fetch(`http://${HOST}:${mockPort()}/app/voice/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      await voiceConfig({ clear_tts_key: true });
+      await page.evaluate(() => window.dispatchEvent(new Event("myco-voice-changed")));
+      await page.locator(".conv-detail .conv-send.is-call").waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .conv-send").waitFor({ timeout: 5_000 });
+      await voiceConfig({ tts_key: "set" });
+      await page.evaluate(() => window.dispatchEvent(new Event("myco-voice-changed")));
       const voiceBtn = page.locator(".conv-detail .conv-send.is-call");
       await voiceBtn.waitFor({ timeout: 10_000 });
       await voiceBtn.hover();
