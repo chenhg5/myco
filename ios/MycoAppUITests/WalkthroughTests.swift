@@ -89,18 +89,17 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testPullingAListDownReadsItAgain() {
         // (Every answer takes a moment here, as on a real connection.)
-        let app = launch(["-myco-latency", "2500"])
+        let app = launch(["-myco-latency", "600"])
         let chat = app.buttons["chat.project:myco-ios"]
-        XCTAssertTrue(chat.waitForExistence(timeout: 40))
+        XCTAssertTrue(chat.waitForExistence(timeout: 30))
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
         from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
-        // A spinner turns above the list while the workspace is asked.
-        let spinner = app.descendants(matching: .any)["list.refreshing"]
-        XCTAssertTrue(spinner.waitForExistence(timeout: 3), "pulling the list down refreshes it, and shows that it does")
+        // The system's spinner turns under the search field while the
+        // workspace is asked. (This test cannot see it: the pull only
+        // returns once the app is still again. `RefreshTests` covers the
+        // refresh itself.)
         shot("refresh-list")
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: spinner)
-        waitForExpectations(timeout: 30)
-        XCTAssertTrue(chat.exists, "the list is there after the refresh")
+        XCTAssertTrue(chat.waitForExistence(timeout: 30), "the list is there after the refresh")
     }
 
     @MainActor

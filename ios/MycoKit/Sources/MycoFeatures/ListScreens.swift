@@ -199,18 +199,7 @@ private struct WorkspaceChrome: ViewModifier {
             // The list fades in over them when it comes.
             .animation(.easeOut(duration: 0.22), value: session.loadedAt == nil)
             .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(spacing: 0) {
-                    if let problem = session.problem { StaleBanner(staleText(problem)) }
-                    // The list was pulled down: it is being read again.
-                    if session.refreshingByHand {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .accessibilityLabel(L("正在刷新", "Refreshing"))
-                            .accessibilityIdentifier("list.refreshing")
-                            .transition(.opacity)
-                    }
-                }
+                if let problem = session.problem { StaleBanner(staleText(problem)) }
             }
             // The app's own tab bar, one row across; the keyboard covers it
             // while searching.
@@ -222,13 +211,12 @@ private struct WorkspaceChrome: ViewModifier {
             // long enough to be seen, however quick the answer.
             .refreshable {
                 // In a task of its own: SwiftUI gives this one up as soon
-                // as the list is drawn again, which the first answer does,
-                // and the refresh would end half done with no spinner.
+                // as the list is drawn again, which the first answer does;
+                // the refresh then ended half done and the system's
+                // spinner never showed.
                 let session = session
                 await Task { await session.refreshByHand() }.value
             }
-            .animation(.easeOut(duration: 0.18), value: session.refreshingByHand)
-            .sensoryFeedback(.impact(weight: .light), trigger: session.refreshingByHand) { _, now in now }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)
