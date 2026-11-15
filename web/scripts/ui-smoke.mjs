@@ -2029,6 +2029,18 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "compose-suggestion");
       await box.press("Tab");
       if ((await box.inputValue()) !== "再跑一遍完整测试") throw new Error(`Tab 应填入建议，实际「${await box.inputValue()}」`);
+      // A long one shows on one line, cut with "…"; Tab still takes all of it.
+      await box.fill("还是登录页，下一步给个长建议");
+      await box.press("Enter");
+      await page.waitForFunction(() => {
+        const ph = document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || "";
+        return ph.startsWith("把注册页") && ph.endsWith("…");
+      }, null, { timeout: 15_000 });
+      const ph = await box.getAttribute("placeholder");
+      if (ph.length > 60) throw new Error(`长建议应截短到一行，实际 ${ph.length} 字`);
+      await box.focus();
+      await box.press("Tab");
+      if (!(await box.inputValue()).endsWith("再跑一遍完整测试")) throw new Error(`Tab 应填入完整的建议，实际「${await box.inputValue()}」`);
       await box.fill("");
     });
 

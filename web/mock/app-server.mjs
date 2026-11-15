@@ -673,7 +673,10 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       const msgs = hub.threads[threadId];
       if (!msgs || preview.status === "failed") return;
       msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "登录页改好了，表单校验也加上了。", created_at: iso(0), updated_at: iso(0) }));
-      Object.assign(preview, { status: "done", suggest: "再跑一遍完整测试", updated_at: iso(0) });
+      const suggest = /长建议/.test(preview.body)
+        ? "把注册页、找回密码页和个人设置页也按同样的方式检查一遍，顺便补上缺的表单校验和错误提示，再跑一遍完整测试"
+        : "再跑一遍完整测试";
+      Object.assign(preview, { status: "done", suggest, updated_at: iso(0) });
       releaseAfter(hub, threadId, taskId);
     });
     return;

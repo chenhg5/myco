@@ -220,7 +220,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			`myco message suggest --text "Also add the same check to the signup page"   # inside a runner, --id is $MYCO_MESSAGE_ID`,
 			`myco message reply --body "Fixed the login page." --suggest "Run the full test suite"`,
 		},
-		Flags: []Flag{idFlag, {Name: "text", Kind: String, Help: "The suggested next message, in the sender's language, one line"}},
+		Flags: []Flag{idFlag, {Name: "text", Kind: String, Help: "The suggested next message, in the sender's language: one short line, at most 80 characters (cut beyond)"}},
 		Run: handler(func(e *env) error {
 			if err := e.in.Require("id"); err != nil {
 				return err
@@ -802,13 +802,17 @@ func (e *env) waited(reply *api.Message, progress []api.Message) map[string]any 
 }
 
 // suggestFlag offers the sender a next message along with a reply.
-var suggestFlag = Flag{Name: "suggest", Kind: String, Help: "Also offer the sender what they may want to say next: one short line the app shows in the empty input (Tab takes it); only when there is an obvious next step"}
+var suggestFlag = Flag{Name: "suggest", Kind: String, Help: "Also offer the sender what they may want to say next: one short line (at most 80 characters, cut beyond) the app shows in the empty input (Tab takes it); only when there is an obvious next step"}
 
-// clipSuggest keeps a suggestion to one line of at most 300 characters.
+// maxSuggestRunes keeps a suggestion to what fits on the input's one line.
+const maxSuggestRunes = 80
+
+// clipSuggest keeps a suggestion to one line of at most maxSuggestRunes
+// characters (cut with "…").
 func clipSuggest(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 300 {
-		s = string(r[:300])
+	if r := []rune(s); len(r) > maxSuggestRunes {
+		s = string(r[:maxSuggestRunes-1]) + "…"
 	}
 	return s
 }

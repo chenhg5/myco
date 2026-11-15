@@ -182,7 +182,8 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
   To give up explicitly: `myco message fail --reason "..."`.
 - **Suggest the next step** when there is an obvious one the person may want ("Also fix
   the signup page", "Run the full test suite", "Ship it"): one short line in their
-  language, `myco message suggest --text "..."` before you finish (or
+  language that fits the input (about 30 Chinese or 60 English characters; myco cuts it
+  at 80), `myco message suggest --text "..."` before you finish (or
   `myco message reply --suggest "..."`). The app shows it in the empty input and Tab fills
   it in. Give none when there is no clear next step; never a question back to them.
   Can't handle it right now? `myco message release --id <id> --delay 10m` hands it back

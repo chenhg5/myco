@@ -102,6 +102,25 @@ function ProgressFold({ items }: { items: Message[] }) {
   );
 }
 
+/** text cut with "…" to fit on one line of input el (its font and width):
+ *  a long suggestion as the placeholder. Without a width yet, 40 characters. */
+let fitCanvas: HTMLCanvasElement | null = null;
+function fitOneLine(text: string, el: HTMLTextAreaElement | null): string {
+  const st = el ? getComputedStyle(el) : null;
+  const width = el ? el.clientWidth - parseFloat(st!.paddingLeft || "0") - parseFloat(st!.paddingRight || "0") - 4 : 0;
+  const ctx = width > 0 ? (fitCanvas ||= document.createElement("canvas")).getContext("2d") : null;
+  if (!ctx || !st) return [...text].length > 40 ? [...text].slice(0, 39).join("") + "…" : text;
+  ctx.font = `${st.fontStyle} ${st.fontWeight} ${st.fontSize} ${st.fontFamily}`;
+  if (ctx.measureText(text).width <= width) return text;
+  const chars = [...text];
+  let lo = 0, hi = chars.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(chars.slice(0, mid).join("") + "…").width <= width) lo = mid; else hi = mid - 1;
+  }
+  return chars.slice(0, lo).join("") + "…";
+}
+
 function isOpen(status: string): boolean {
   return status !== "done" && status !== "failed";
 }
@@ -1930,7 +1949,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 ? L(`回答 ${agentName} 的问题…`, `Answer ${agentName}'s question…`)
               : supplementing
                 ? L(`补充给 ${agentName}…（${mod}↩ 排到下一条）`, `Add to ${agentName}… (${mod}↩ queues the next one)`)
-                : suggestion || L(`发给 ${agentName}…`, `Message ${agentName}…`)}
+                : (suggestion && fitOneLine(suggestion, inputRef.current)) || L(`发给 ${agentName}…`, `Message ${agentName}…`)}
             rows={1}
             aria-label={L("消息", "Message")}
           />
