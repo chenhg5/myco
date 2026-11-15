@@ -118,16 +118,17 @@ func (zh trayText) summary(st trayStatus) string {
 	return strings.Join(parts, " · ")
 }
 
-// nodeLine is a busy node's menu line: "⚡ PM (Codex) — reviewing the branch".
+// nodeLine is a busy node's menu line: "PM (Codex) — reviewing the branch",
+// or "— tasks waiting" for one not at work yet.
 func (zh trayText) nodeLine(n trayNode) string {
-	icon, status := "⚡", n.Status
-	if !n.Working {
-		icon = "📬"
-		if status == "" {
+	status := n.Status
+	if status == "" {
+		status = zh.s("在干活", "working")
+		if !n.Working {
 			status = zh.s("有任务在排队", "tasks waiting")
 		}
 	}
-	line := icon + " " + clip(n.Name, 24)
+	line := clip(n.Name, 24)
 	if status != "" {
 		line += " — " + clip(strings.Join(strings.Fields(status), " "), 36)
 	}
@@ -150,7 +151,20 @@ func (zh trayText) wakeLabel() string {
 
 // downLine names the hubs the app cannot reach.
 func (zh trayText) downLine(down []string) string {
-	return "⚠️ " + zh.s("连不上 ", "Can't reach ") + clip(strings.Join(down, zh.s("、", ", ")), 40)
+	return zh.s("连不上 ", "Can't reach ") + clip(strings.Join(down, zh.s("、", ", ")), 40)
+}
+
+// readUILang is the language the App's pages last said ("" if not yet).
+func readUILang(h http.Handler) string {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/ui-lang", nil))
+	var out struct {
+		Lang string `json:"lang"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil {
+		return ""
+	}
+	return out.Lang
 }
 
 // readTrayUpdate is the newer release the app can update to ("" if none,
@@ -171,5 +185,5 @@ func readTrayUpdate(h http.Handler) string {
 
 // updateLine is the menu item for a newer release.
 func (zh trayText) updateLine(latest string) string {
-	return "⬆️ " + zh.s("有新版本 "+latest+"，点此更新", "myco "+latest+" is out — update")
+	return zh.s("有新版本 "+latest+"，点此更新", "myco "+latest+" is out: update")
 }

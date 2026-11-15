@@ -186,6 +186,9 @@ type Backend struct {
 	// Cache, when set, keeps what the pages fetched across restarts
 	// (/app/cache); nil leaves the UI with its in-memory data only.
 	Cache *Cache
+	// OnUILang, when set, hears the pages' language change (uilang.go):
+	// the desktop app redraws its menu in it.
+	OnUILang func(lang string)
 
 	pending pendingLink
 	sealers sealers
@@ -197,6 +200,8 @@ type Backend struct {
 	// the voice assistant (voice.go)
 	voiceOnce sync.Once
 	voice     *voice
+	// the pages' language (uilang.go)
+	uiLang uiLang
 }
 
 func (b *Backend) timeout() time.Duration {
@@ -223,6 +228,7 @@ func (b *Backend) client(h Hub) (*client.Client, error) {
 func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
+	b.uiLangRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil})
 	})

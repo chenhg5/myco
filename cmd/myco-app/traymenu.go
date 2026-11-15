@@ -14,8 +14,9 @@ import (
 
 // The menu-bar (macOS) or tray (Windows) menu: how the nodes are doing at a
 // glance (who is at work and on what), then open, wake this computer's
-// nodes, quit. It follows the system language and refreshes in the
-// background.
+// nodes, quit. Plain words, no emoji. It is in the language the App's pages
+// show (Settings › Appearance; the system's until they have said), changes
+// with it at once, and refreshes in the background.
 
 // trayBusyLines is how many busy nodes the menu lists by name.
 const trayBusyLines = 5
@@ -29,8 +30,12 @@ type trayMenu struct {
 	down    *application.MenuItem
 	wake    *application.MenuItem
 	update  *application.MenuItem
-	// checked is when the latest release was last looked up.
+	open    *application.MenuItem
+	quit    *application.MenuItem
+	// checked is when the latest release was last looked up; latest is
+	// the newer release, if any.
 	checked time.Time
+	latest  string
 	zh      trayText
 	h       http.Handler
 	mu      sync.Mutex
@@ -40,6 +45,9 @@ type trayMenu struct {
 // newTrayMenu builds the menu. show opens the window; quit quits.
 func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayMenu {
 	zh := trayText(systemPrefersChinese())
+	if l := readUILang(h); l != "" {
+		zh = trayText(l == "zh")
+	}
 	t := &trayMenu{menu: app.NewMenu(), zh: zh, h: h}
 	t.summary = t.menu.Add(zh.s("正在读取…", "Loading…")).SetEnabled(false)
 	// Busy nodes: clicking one opens the app.
@@ -51,11 +59,33 @@ func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayM
 	t.menu.AddSeparator()
 	// A newer release: opening the window shows the update (sidebar).
 	t.update = t.menu.Add("").SetHidden(true).OnClick(func(*application.Context) { show() })
-	t.menu.Add(zh.s("打开 myco", "Open myco")).OnClick(func(*application.Context) { show() })
+	t.open = t.menu.Add(zh.s("打开 myco", "Open myco")).OnClick(func(*application.Context) { show() })
 	t.wake = t.menu.Add(zh.wakeLabel()).OnClick(func(*application.Context) { go t.wakeNodes() })
 	t.menu.AddSeparator()
-	t.menu.Add(zh.s("退出 myco", "Quit myco")).OnClick(func(*application.Context) { quit() })
+	t.quit = t.menu.Add(zh.s("退出 myco", "Quit myco")).OnClick(func(*application.Context) { quit() })
+	// The pages' language changed: the menu follows at once.
+	uiLangHook = func(l string) { t.setLang(l == "zh") }
 	return t
+}
+
+// setLang redraws the menu in Chinese (zh) or English.
+func (t *trayMenu) setLang(zh bool) {
+	t.mu.Lock()
+	if t.zh == trayText(zh) {
+		t.mu.Unlock()
+		return
+	}
+	t.zh = trayText(zh)
+	t.open.SetLabel(t.zh.s("打开 myco", "Open myco"))
+	t.quit.SetLabel(t.zh.s("退出 myco", "Quit myco"))
+	if !t.waking {
+		t.wake.SetLabel(t.zh.wakeLabel())
+	}
+	if t.latest != "" {
+		t.update.SetLabel(t.zh.updateLine(t.latest))
+	}
+	t.mu.Unlock()
+	t.refresh()
 }
 
 // wakeNodes restarts this computer's runner, which brings its nodes back
@@ -79,7 +109,7 @@ func (t *trayMenu) wakeNodes() {
 
 	t.mu.Lock()
 	if ok {
-		t.wake.SetLabel(t.zh.s("已唤醒 ✓", "Awake ✓"))
+		t.wake.SetLabel(t.zh.s("已唤醒", "Awake"))
 	} else {
 		t.wake.SetLabel(t.zh.s("没能唤醒，打开 myco 看看", "Couldn't wake them; open myco to see why"))
 	}
@@ -93,12 +123,22 @@ func (t *trayMenu) wakeNodes() {
 	t.mu.Unlock()
 }
 
+func (t *trayMenu) zhNow() trayText {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.zh
+}
+
 // trayUpdateEvery is how often the menu looks for a newer release.
 const trayUpdateEvery = 6 * time.Hour
 
 // refresh reads the status (and, now and then, the latest release) and
 // updates the menu.
 func (t *trayMenu) refresh() {
+	if l := readUILang(t.h); l != "" && trayText(l == "zh") != t.zhNow() {
+		t.setLang(l == "zh") // (it refreshes)
+		return
+	}
 	st := readTrayStatus(t.h)
 	var latest string
 	check := time.Since(t.checked) >= trayUpdateEvery
@@ -109,6 +149,7 @@ func (t *trayMenu) refresh() {
 	defer t.mu.Unlock()
 	if check {
 		t.checked = time.Now()
+		t.latest = latest
 		if latest != "" {
 			t.update.SetLabel(t.zh.updateLine(latest)).SetHidden(false)
 		} else {
