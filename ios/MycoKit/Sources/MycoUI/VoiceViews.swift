@@ -127,6 +127,10 @@ public struct VoiceBarView: View {
         .accessibilityIdentifier("voice.bar")
     }
 
+    /// The column of who spoke: wide enough for "Voice", the same for
+    /// every line, so the words start at one edge.
+    private static let nameWidth: CGFloat = 36
+
     @ViewBuilder private func row(_ line: Line) -> some View {
         switch line.kind {
         case .me(let hearing):
@@ -136,13 +140,17 @@ public struct VoiceBarView: View {
             said(voiceLabel, (line.text.isEmpty ? "…" : line.text) + (cut ? " …" : ""), quiet: cut)
                 .accessibilityIdentifier("voice.line.voice")
         case .action:
-            Label {
+            // The arrow stands where a speaker's name does: what was done
+            // lines up with what was said.
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                Image(systemName: "arrow.turn.down.right").font(.caption)
+                    .foregroundStyle(MycoColor.faint)
+                    .frame(width: Self.nameWidth, alignment: .leading)
                 Text(line.text).lineLimit(2)
-            } icon: {
-                Image(systemName: "arrow.turn.down.right")
             }
             .font(.footnote).foregroundStyle(MycoColor.fg2)
             .padding(.trailing, 8)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("voice.line.action")
         case .notice:
             Text(line.text).font(.footnote).foregroundStyle(MycoColor.amber).lineLimit(3)
@@ -154,8 +162,8 @@ public struct VoiceBarView: View {
 
     private func said(_ who: String, _ text: String, quiet: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-            Text(who).font(.caption).foregroundStyle(MycoColor.faint)
-                .frame(minWidth: 28, alignment: .leading)
+            Text(who).font(.caption).foregroundStyle(MycoColor.faint).lineLimit(1)
+                .frame(width: Self.nameWidth, alignment: .leading)
             Text(text).font(.subheadline).foregroundStyle(quiet ? MycoColor.muted : MycoColor.fg)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)

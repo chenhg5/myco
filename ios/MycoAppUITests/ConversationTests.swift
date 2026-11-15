@@ -156,6 +156,8 @@ final class ConversationTests: XCTestCase {
         // A question about progress is answered by the voice itself.
         let answer = app.descendants(matching: .any).matching(identifier: "voice.line.voice").firstMatch
         XCTAssertTrue(answer.waitForExistence(timeout: 10), "the voice answers")
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "checking the links"), evaluatedWith: answer)
+        waitForExpectations(timeout: 10)
         snap("voice-answer")
 
         // What is wanted goes to the agent as if typed, marked as said.
