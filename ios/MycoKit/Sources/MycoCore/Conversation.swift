@@ -317,14 +317,15 @@ public enum ConversationBuilder {
 
     /// The newest task of mine that is still open: what the input speaks
     /// to. Not one that waits behind another: that one has not begun. And
-    /// not one the agent set aside (held): it is free meanwhile, so what
-    /// I type is a new task, unless it set the task aside to ask me
-    /// something, when what I type is the answer.
-    public static func openTask(me: String, messages: [Message]) -> Message? {
+    /// not one the agent set aside (held), nor one it has stopped working
+    /// on (its turn is over: `paused`): what I type then is a new message,
+    /// as in a chat, and there is nothing to stop. Unless it asks me
+    /// something, when what I type is the answer. The desktop app's rule.
+    public static func openTask(me: String, messages: [Message], paused: Set<String> = []) -> Message? {
         let waiting = Set(queuedBehind(messages).map(\.id))
         return messages
             .filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }
-            .filter { $0.status != "held" || !($0.asking ?? "").isEmpty }
+            .filter { ($0.status != "held" && !paused.contains($0.id)) || !($0.asking ?? "").isEmpty }
             .max { $0.createdAt < $1.createdAt }
     }
 

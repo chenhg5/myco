@@ -489,7 +489,7 @@ public final class ConversationModel {
             items = built
             revision += 1
         }
-        openTask = ConversationBuilder.openTask(me: me, messages: mine)
+        openTask = ConversationBuilder.openTask(me: me, messages: mine, paused: paused)
         loaded = true
     }
 
