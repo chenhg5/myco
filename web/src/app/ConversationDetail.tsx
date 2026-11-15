@@ -649,11 +649,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     (m.reply_to ? m.reply_to === task.id
       : m.thread_id === task.thread_id && new Date(m.created_at).getTime() >= new Date(task.created_at).getTime()),
   );
-  // A task it set aside (held: waiting on someone else, it answers later)
-  // does not take what you type: that is a new task, as it is free. One
-  // held on a question to you does: what you type answers it.
+  // A task it set aside (held: waiting on someone else, it answers later),
+  // or one it stopped working on (its turn is over, pausedRun) does not
+  // take what you type: that is a new message, as in a chat, and there is
+  // nothing to stop. One held on a question to you does: what you type
+  // answers it.
   const openTask = [...consoleTasks].reverse().find((task) =>
-    isOpen(task.status) && ((traceStatuses.get(task.id) || task.status) !== "held" || !!task.asking) && !hasAnswer(task)) || null;
+    isOpen(task.status) && (((traceStatuses.get(task.id) || task.status) !== "held" && !pausedRuns.has(task.id)) || !!task.asking) && !hasAnswer(task)) || null;
 
   // Only an event after the newest task says something about this task; an
   // old failure should not paint a later, healthy conversation red.
