@@ -297,7 +297,11 @@ final class ConversationTests: XCTestCase {
         // The system's preview covers the page.
         expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
+        _ = app.buttons["Done"].waitForExistence(timeout: 2.5)
         snap("files-look")
+        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
+            try? app.debugDescription.write(toFile: dir + "/files-look-open.txt", atomically: true, encoding: .utf8)
+        }
         // Closed the way the system's preview is: its button, or a swipe down.
         let close = ["Done", "Close"].map { app.buttons[$0] }.first { $0.exists }
         if let close {
