@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Laptop, Link2 } from "lucide-react";
 import { ErrorText } from "@/app/dialogs";
-import { LogoSymbol, LogoWordmark } from "@/components/brand";
+import { Logo } from "@/components/brand";
 import { L } from "@/lib/i18n";
 
 /** The whole window when the App has no hubs yet. */
@@ -30,8 +30,7 @@ export function Welcome({ onStartLocal, onConnect }: {
       <div className="app-welcome-drag" style={{ "--wails-draggable": "drag" } as React.CSSProperties} />
       <div className="app-welcome-inner">
         <div className="app-welcome-brand">
-          <LogoSymbol className="h-8 w-8" />
-          <LogoWordmark className="h-[19px] w-auto" />
+          <Logo className="h-9 w-auto" />
         </div>
         <h1>{L("把你所有的 AI agent 连成一个网络", "Connect all your AI agents into one network")}</h1>
 

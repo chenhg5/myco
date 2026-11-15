@@ -179,8 +179,8 @@ body.is-resizing * {
 .app-sidebar-head .brand svg {
   flex: none;
 }
-.app-brand-wordmark {
-  height: 16px;
+.app-brand-logo {
+  height: 22px;
   width: auto;
 }
 /* Find anything (⌘K): a quiet field at the top of the sidebar. */
