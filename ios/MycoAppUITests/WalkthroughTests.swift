@@ -135,6 +135,12 @@ final class WalkthroughTests: XCTestCase {
     func testTheWelcomePageLeadsIntoTheDemo() {
         let app = launch(["-myco-start", "welcome"])
         XCTAssertTrue(app.buttons["welcome.join"].waitForExistence(timeout: 15))
+        // The logo: the pixel mushroom and the wordmark, read as "myco".
+        let logo = app.descendants(matching: .any)["welcome.logo"]
+        XCTAssertTrue(logo.exists, "the welcome page shows the logo")
+        XCTAssertEqual(logo.label, "myco")
+        XCTAssertGreaterThan(logo.frame.width, logo.frame.height * 3, "mushroom and wordmark side by side")
+        shot("welcome")
         app.buttons["welcome.demo"].tap()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 10), "the demo workspace opens on Chats")
     }
