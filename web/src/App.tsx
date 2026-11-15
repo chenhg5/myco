@@ -14,7 +14,7 @@ import { AgentCard, AgentTable, Aliases, Labels, StatusLine } from "@/components
 import { MessageBubble, MessageRow } from "@/components/messages";
 import { HarnessBadge, StateBadge } from "@/components/status";
 import { CopyText } from "@/components/copy";
-import { LogoSymbol, LogoWordmark } from "@/components/brand";
+import { Logo } from "@/components/brand";
 import { cn, timeAgo } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { probeAppMode, type AppInfo, type Hub } from "@/appapi";
@@ -165,10 +165,7 @@ function HubApp() {
         <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-md">
           <div className="container flex h-14 items-center gap-2 px-4 sm:gap-4 sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex items-center gap-2">
-                <LogoSymbol className="h-[22px] w-[22px]" />
-                <LogoWordmark className="h-[17px] w-auto text-foreground" />
-              </div>
+              <Logo className="h-[22px] w-auto text-foreground" />
               <span className="hidden text-border sm:inline">/</span>
               <span className="hidden max-w-[280px] truncate font-mono text-xs text-muted-foreground sm:inline">{session?.hub || "…"}</span>
             </div>
