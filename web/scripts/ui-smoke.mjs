@@ -2014,6 +2014,24 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // An agent offers the next step with its answer: the empty input shows
+    // it, Tab fills it in.
+    await step("单聊 · Tab 填入 agent 建议的下一步", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("改好登录页，然后告诉我下一步");
+      await box.press("Enter");
+      await page.locator(".conv-detail .conv-msg", { hasText: "登录页改好了" }).waitFor({ timeout: 15_000 });
+      await page.waitForFunction(() => (document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || "") === "再跑一遍完整测试", null, { timeout: 15_000 });
+      await box.focus();
+      await settle(page, 200);
+      await shot(page, size, scheme, "compose-suggestion");
+      await box.press("Tab");
+      if ((await box.inputValue()) !== "再跑一遍完整测试") throw new Error(`Tab 应填入建议，实际「${await box.inputValue()}」`);
+      await box.fill("");
+    });
+
     // Voice chat with one agent, in its chat (as in ChatGPT and Claude): the
     // round button, with nothing typed, docks a bar above the box; what it passes on
     // is in the chat as a task marked 经语音 (the trailer hidden); mute and

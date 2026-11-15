@@ -225,7 +225,9 @@ func Open(path string) (*sql.DB, error) {
 		{"from_owner", "TEXT NOT NULL DEFAULT ''"}, {"project", "TEXT NOT NULL DEFAULT ''"}, {"after", "TEXT NOT NULL DEFAULT ''"},
 		// Questions to a task's sender: the question, the task waiting on it,
 		// the steer answering it.
-		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"},
+		// What a task's recipient suggests its sender says next.
+		{"suggest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

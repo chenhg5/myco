@@ -100,7 +100,11 @@ type Message struct {
 	// answer ("" when none).
 	Asking string
 	// Answers, on a steer, is the id of the question it answers.
-	Answers   string
+	Answers string
+	// Suggest, on a task, is what its recipient thinks the sender may want
+	// to say next ("" for none): the app offers it in the input, Tab takes
+	// it. Sealed like a body when end-to-end encryption is on.
+	Suggest   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -260,6 +264,26 @@ func (m *Message) Reply(by AgentName, replyID, body string, now time.Time) (*Mes
 	r.Project = m.Project
 	m.Status, m.UpdatedAt = StatusDone, now
 	return r, nil
+}
+
+// maxSuggest bounds a suggested next input (sealed, it is longer).
+const maxSuggest = 8 << 10
+
+// SuggestNext sets what task m's recipient thinks its sender may want to
+// say next; "" clears it. Only the recipient sets it, open or answered.
+func (m *Message) SuggestNext(by AgentName, text string, now time.Time) error {
+	if err := m.requireRecipient(by); err != nil {
+		return err
+	}
+	if m.Type != TypeTask {
+		return Errf(CodeInvalidArgument, "a suggestion goes on a task; %s is a %s", m.ID, m.Type)
+	}
+	text = strings.TrimSpace(text)
+	if len(text) > maxSuggest {
+		return Errf(CodeInvalidArgument, "suggestion too long (%d bytes, at most %d)", len(text), maxSuggest)
+	}
+	m.Suggest, m.UpdatedAt = text, now
+	return nil
 }
 
 // Progress returns an interim update on task m from its recipient. The task

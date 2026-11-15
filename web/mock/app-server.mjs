@@ -664,6 +664,20 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // An agent that offers the next step (myco message reply --suggest): the
+  // task carries it, the app's input shows it, Tab takes it.
+  if (preview && /下一步/.test(preview.body)) {
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(1500, () => {
+      replyTimers.delete(taskId);
+      const msgs = hub.threads[threadId];
+      if (!msgs || preview.status === "failed") return;
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "登录页改好了，表单校验也加上了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", suggest: "再跑一遍完整测试", updated_at: iso(0) });
+      releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
   if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
     const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
     const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";

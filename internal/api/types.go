@@ -236,6 +236,10 @@ type Message struct {
 	Ask     bool   `json:"ask,omitempty"`
 	Asking  string `json:"asking,omitempty"`
 	Answers string `json:"answers,omitempty"`
+	// Suggest, on a task: what its recipient thinks the sender may want to
+	// say next (POST /v1/messages/{id}/suggest, v0.19.15+); the app offers
+	// it in the input and Tab takes it.
+	Suggest string `json:"suggest,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -450,6 +454,12 @@ type MessageList struct {
 // AgentList wraps a list of agents.
 type AgentList struct {
 	Agents []Agent `json:"agents"`
+}
+
+// SuggestRequest is the body of POST /v1/messages/{id}/suggest: what the
+// task's sender may want to say next ("" clears it).
+type SuggestRequest struct {
+	Text string `json:"text"`
 }
 
 // ReplyRequest is the body of POST /v1/messages/{id}/reply.

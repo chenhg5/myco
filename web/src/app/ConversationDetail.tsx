@@ -837,6 +837,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+  // What the agent offers you to say next (on your newest task, once it is
+  // not at work any more): the empty input shows it, Tab takes it.
+  const suggestion = !shellMode && !openTask && lastTask?.suggest?.trim() && !lastTask.unreadable ? lastTask.suggest.trim() : "";
+
   // Enter adds to the running task; ⌘/Ctrl+Enter puts the next one behind
   // it. A hub from v0.19.2 holds both (a steer may carry files, a queued
   // message knows what it waits for); older hubs get the text as a steer,
@@ -1169,6 +1173,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Tab takes what the agent offered you to say next.
+    if (e.key === "Tab" && !e.shiftKey && !e.nativeEvent.isComposing && suggestion && !draft) {
+      e.preventDefault();
+      writeDraft(suggestion);
+      chatHistory.reset();
+      return;
+    }
     if (!shellMode && chatHistory.onKeyDown(e)) return;
     if (shellMode && (e.key === "ArrowUp" || e.key === "ArrowDown") && !e.nativeEvent.isComposing && !draft.includes("\n") && history.length > 0) {
       e.preventDefault();
@@ -1919,7 +1930,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 ? L(`回答 ${agentName} 的问题…`, `Answer ${agentName}'s question…`)
               : supplementing
                 ? L(`补充给 ${agentName}…（${mod}↩ 排到下一条）`, `Add to ${agentName}… (${mod}↩ queues the next one)`)
-                : L(`发给 ${agentName}…`, `Message ${agentName}…`)}
+                : suggestion || L(`发给 ${agentName}…`, `Message ${agentName}…`)}
             rows={1}
             aria-label={L("消息", "Message")}
           />
@@ -1932,7 +1943,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {/* Only what is not obvious: while it works, Enter adds to the
                 task and ⌘↩ queues the next one. */}
             <span className="conv-compose-hint">
-              {supplementing ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`) : ""}
+              {supplementing ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
+                : suggestion && !draft ? <><kbd className="conv-kbd">Tab</kbd>{L(" 填入建议", " to use the suggestion")}</> : ""}
             </span>
             {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
             {!shellMode && <DictateButton input={inputRef} value={draft} onText={(t) => { writeDraft(t); chatHistory.reset(); }} disabled={busy} />}
