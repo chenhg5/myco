@@ -130,6 +130,8 @@ public final class VoiceCall {
     @ObservationIgnored private var lastSound = ContinuousClock.now
     /// The speaker still has something to play.
     @ObservationIgnored private var speaking = false
+    /// When what was queued should have been played, by its length.
+    @ObservationIgnored private var playUntil = ContinuousClock.now
     /// The answer being made.
     @ObservationIgnored private var turn: Turn?
     /// What the voice said last: its echo is not the person cutting in.
@@ -210,6 +212,7 @@ public final class VoiceCall {
                     sinceWatch = .zero
                     self.lookAtTasks()
                 }
+                self.missedPlayed()
                 self.maybeTellNews()
             }
         })
@@ -270,6 +273,14 @@ public final class VoiceCall {
                 dropResidue()
             }
         }
+    }
+
+    /// The speaker should have said by now that it played everything
+    /// (the audio was rebuilt under it, or a piece went nowhere): it is
+    /// taken as played, so the call does not wait for ever.
+    private func missedPlayed() {
+        guard speaking, clock.now > playUntil + .seconds(2) else { return }
+        handle(.played)
     }
 
     /// The person's words so far. While the voice talks, real words (not
@@ -493,6 +504,8 @@ public final class VoiceCall {
                         guard let self, self.turn === turn, !samples.isEmpty else { return }
                         // From here until the speaker says it has played it all.
                         self.speaking = true
+                        let length = Duration.seconds(Double(samples.count) / 2 / Double(max(rate, 1)))
+                        self.playUntil = max(self.playUntil, self.clock.now) + length
                         self.parts.audio.play(samples, rate: rate)
                     }
                 } catch {
