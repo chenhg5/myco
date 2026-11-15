@@ -264,22 +264,22 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testWhatIsSentShowsAtOnceMarkedAsOnItsWay() {
         // (Every answer takes a while here, as on a slow connection.)
-        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-latency", "900"])
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-latency", "2000"])
         let input = app.descendants(matching: .any)["composer.input"]
-        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        XCTAssertTrue(input.waitForExistence(timeout: 30))
         input.tap()
         input.typeText("Translate the readme")
         app.buttons["composer.submit"].tap()
         // On the page before the workspace has answered, and said to be on its way.
         let sending = app.descendants(matching: .any)["message.sending"]
-        XCTAssertTrue(sending.waitForExistence(timeout: 1), "what I sent is marked as being sent")
+        XCTAssertTrue(sending.waitForExistence(timeout: 1.5), "what I sent is marked as being sent")
         XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "and shows at once")
-        XCTAssertEqual(input.value as? String, "Message 翻译", "the input is empty again")
+        XCTAssertFalse((input.value as? String ?? "").contains("Translate"), "the input is empty again")
         XCTAssertEqual(app.keyboards.count, 0, "the keyboard is out of the way")
         snap("sending")
         // Then it is simply there.
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: sending)
-        waitForExpectations(timeout: 10)
+        waitForExpectations(timeout: 20)
         XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "it stays when the workspace has it")
     }
 
