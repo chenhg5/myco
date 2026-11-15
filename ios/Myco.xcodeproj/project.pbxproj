@@ -10,6 +10,7 @@
 		121A24BFD60DBE7DC6B9D14B /* MycoCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0A8F987EE5174C9680E74F9 /* MycoCore */; };
 		123BFA56FB552E17C9F39C66 /* WalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */; };
 		1D545EB0684148316F38D89D /* MycoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18020A27DDD396B1B7EE0BDB /* MycoApp.swift */; };
+		4275D257DAC509927CB68B15 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 49AA4339FCD427180BB2B4E3 /* PrivacyInfo.xcprivacy */; };
 		4EC293FC5B3BD6E5FC180110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 886FD6187A4B3C8B0BD050C3 /* Assets.xcassets */; };
 		7AC8FDEBBB6425345FF33D1E /* MycoFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 085F2D73144060F86EE604FE /* MycoFeatures */; };
 		83854068EBC85383E1D126EE /* MycoStore in Frameworks */ = {isa = PBXBuildFile; productRef = 20963E2AF56CF797BFFFCF13 /* MycoStore */; };
@@ -34,6 +35,7 @@
 		18020A27DDD396B1B7EE0BDB /* MycoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MycoApp.swift; sourceTree = "<group>"; };
 		23448C88988322580323A2D7 /* Myco.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Myco.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24A5FD33A357ADE84D32FFC7 /* WalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkthroughTests.swift; sourceTree = "<group>"; };
+		49AA4339FCD427180BB2B4E3 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		4D0FBB181679672E5351419A /* MycoAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MycoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		886FD6187A4B3C8B0BD050C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CB46834E6F9C7052F7503569 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -88,6 +90,7 @@
 				886FD6187A4B3C8B0BD050C3 /* Assets.xcassets */,
 				CB46834E6F9C7052F7503569 /* Info.plist */,
 				18020A27DDD396B1B7EE0BDB /* MycoApp.swift */,
+				49AA4339FCD427180BB2B4E3 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Myco;
 			sourceTree = "<group>";
@@ -192,6 +195,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4EC293FC5B3BD6E5FC180110 /* Assets.xcassets in Resources */,
+				4275D257DAC509927CB68B15 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -21,7 +21,8 @@ MycoKit/              a local Swift package with everything else
   Tests/
 project.yml           the Xcode project's source (XcodeGen); Myco.xcodeproj is generated and committed
 design/app-icon.svg   the app icon's source: the logo's ink mushroom on cream, on a full square (iOS cuts the corners)
-scripts/              gen-look-fixtures.mjs: avatar fixtures made from web/src/app/persona.tsx
+scripts/              gen-look-fixtures.mjs: avatar fixtures made from web/src/app/persona.tsx;
+                      testflight.sh: archives the app and uploads it to TestFlight
 ```
 
 Dependencies point down only: `MycoFeatures` → `MycoUI`, `MycoCore` → `MycoAPI`, `MycoCrypto`, `MycoStore`. A page reads its model and draws; what a task's state is (`RunState`), what a member is up to (`MemberState`) and what the send button does (`ComposerAction`) are each worked out in one place in `MycoCore`. Navigation state lives only in `Router`.
@@ -36,6 +37,23 @@ cd ios && xcodebuild test -project Myco.xcodeproj -scheme Myco -destination 'pla
 cd ios && xcodegen generate            # after changing project.yml or adding a file to Myco/ or MycoAppUITests/; commit the result
 node ios/scripts/gen-look-fixtures.mjs # after changing how faces are drawn in web/src/app/persona.tsx
 ```
+
+## Releasing to TestFlight
+
+What is installed from Xcode is a development build: it runs only on devices registered in the developer account. Other people get the app through TestFlight.
+
+Once, in the developer account: register the bundle id (`PRODUCT_BUNDLE_IDENTIFIER` in `project.yml`) as an explicit App ID, and create the app in App Store Connect with it. The name there must be one no other app has; the name under the icon is `CFBundleDisplayName` and stays "myco".
+
+Then, for every build:
+
+```bash
+TEAM=<Apple team id> ios/scripts/testflight.sh            # archive (Release), export, upload
+TEAM=<Apple team id> UPLOAD=0 ios/scripts/testflight.sh   # archive only: does a release build work?
+```
+
+The upload signs in as the account Xcode is signed in to on the Mac, or with an App Store Connect API key (`ASC_KEY_PATH`, `ASC_KEY_ID`, `ASC_ISSUER_ID`). The build number is the time (UTC) unless `BUILD` is given, since it must grow with every upload; the version is the project's `MARKETING_VERSION` unless `VERSION` is given (a new version means a new beta review for outside testers, so it changes only on purpose). After some minutes the build shows in TestFlight: testers who are members of the team can install it at once; outside testers need the first build of a version to pass beta review.
+
+What an upload is checked for is in the project: the privacy manifest (`Myco/PrivacyInfo.xcprivacy`: no tracking, nothing collected, `UserDefaults` for the app's own settings), and the export compliance answer (`ITSAppUsesNonExemptEncryption` is false: the app encrypts nothing itself, it uses the system's HTTPS and keychain). Both must be kept true: change them the day the app collects something or encrypts messages itself.
 
 ## Trying it
 
