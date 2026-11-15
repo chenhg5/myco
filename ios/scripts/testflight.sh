@@ -23,7 +23,7 @@ settings=(DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VER
 if [ -n "${VERSION:-}" ]; then settings+=(MARKETING_VERSION="$VERSION"); fi
 
 # With a key, xcodebuild signs in to App Store Connect by itself.
-# (\${auth[@]+...}: the Mac's bash 3.2 calls an empty array unset.)
+# (${auth[@]+...}: the Mac's bash 3.2 calls an empty array unset.)
 auth=()
 if [ -n "${ASC_KEY_PATH:-}" ]; then
   auth=(-authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "${ASC_KEY_ID:?}" -authenticationKeyIssuerID "${ASC_ISSUER_ID:?}")
