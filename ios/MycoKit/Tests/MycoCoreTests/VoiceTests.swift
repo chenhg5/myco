@@ -405,13 +405,14 @@ struct VoiceCallTests {
         await started(setup)
         setup.audio.hear("做到哪了")
         await until { setup.call.state == .speaking }
-        // Its own voice coming back, or a nod, is not the person cutting in.
-        setup.audio.hear("它刚把下载页")
-        setup.audio.hear("嗯")
+        // Its own voice coming back (heard a little wrong, as echoes
+        // are), or a nod, is not the person cutting in.
+        setup.audio.hear("他刚把下载页的板式")
         try? await Task.sleep(for: .milliseconds(50))
         #expect(setup.call.state == .speaking)
         #expect(setup.audio.flushes == 0)
-        setup.audio.hear("等一下")
+        // The person's words come after that echo in the recognizer's text.
+        setup.audio.hear("他刚把下载页的板式，等一下")
         await until { setup.audio.flushes == 1 }
         #expect(setup.audio.flushes == 1)
         let cut = try! #require(setup.call.lines.first { $0.kind == .assistant })
@@ -425,6 +426,24 @@ struct VoiceCallTests {
         #expect(asked[1].contains { $0.role == "assistant" && $0.content.hasSuffix("（被打断了）") })
         #expect(asked[1].last == ChatMessage(role: "user", content: "等一下"))
         setup.call.hangUp()
+    }
+
+    @Test func anEchoIsToldFromThePersonCuttingIn() {
+        let said = "它刚把下载页的版式改完。现在正在一条一条地核对里面的链接。"
+        #expect(VoiceCall.isEcho("下载页的版式", of: said))
+        // Heard a little wrong, as an echo is.
+        #expect(VoiceCall.isEcho("他刚把下载页的板式改完", of: said))
+        #expect(!VoiceCall.isEcho("等一下", of: said))
+        #expect(!VoiceCall.isEcho("下载页先不要改了", of: said))
+        #expect(!VoiceCall.isEcho("等一下", of: ""))
+        let english = "It just finished the layout of the download page."
+        #expect(VoiceCall.isEcho("the layout of the download", of: english))
+        #expect(!VoiceCall.isEcho("wait, stop that", of: english))
+        // What follows an echo in the recognizer's text is the person's.
+        #expect(VoiceCall.after("他刚把下载页的板式", in: "他刚把下载页的板式，等一下") == "等一下")
+        #expect(VoiceCall.after("他刚把下载页", in: "等一下") == "等一下")
+        #expect(VoiceCall.after("", in: "等一下") == "等一下")
+        #expect(VoiceCall.after("等一下", in: "等一下") == "")
     }
 
     @Test func theAgentsAnswerIsToldInAQuietMoment() async {

@@ -137,6 +137,9 @@ public final class VoiceCall {
     /// Words were heard while the voice talked and left alone (its own
     /// echo, an "嗯"): they are still in the recognizer's text.
     @ObservationIgnored private var residue = false
+    /// Those words, as the recognizer gave them: what the person says
+    /// next comes after them in its text.
+    @ObservationIgnored private var echoed = ""
     /// News about tasks, waiting for a quiet moment.
     @ObservationIgnored private var news: [String] = []
     @ObservationIgnored private var watched: [String: Watched] = [:]
@@ -241,6 +244,8 @@ public final class VoiceCall {
             if let last = lines.last, last.kind == .hearing { lines.removeLast() }
         } else {
             // What was said meanwhile is not part of what comes next.
+            residue = false
+            echoed = ""
             parts.audio.newUtterance()
         }
     }
@@ -269,20 +274,26 @@ public final class VoiceCall {
 
     /// The person's words so far. While the voice talks, real words (not
     /// "嗯", not its own voice coming back) cut it off.
-    private func heard(_ text: String, final: Bool) {
+    private func heard(_ whole: String, final: Bool) {
         guard state != .connecting, state != .ended, !muted else { return }
-        guard !text.isEmpty else {
+        guard !whole.isEmpty else {
             // The recognizer settled on what was already taken.
             if final, !partial.isEmpty { finishUtterance() }
             return
         }
         let now = clock.now
+        // What was taken for the voice's echo is still at the start of
+        // the recognizer's text: the person's words are what follows it.
+        let text = Self.after(echoed, in: whole)
         if turn != nil || speaking {
             guard interrupts(text) else {
                 residue = true
+                echoed = whole
                 return
             }
             interrupt()
+        } else if text.isEmpty {
+            return
         }
         partial = text
         partialAt = now
@@ -319,8 +330,47 @@ public final class VoiceCall {
     private func interrupts(_ text: String) -> Bool {
         let heard = Self.normalize(text)
         guard heard.count >= 2, !Self.backchannel.contains(heard) else { return false }
-        let said = Self.normalize(turn?.said ?? lastSaid)
-        return said.isEmpty || !said.contains(heard)
+        return !Self.isEcho(text, of: turn?.said ?? lastSaid)
+    }
+
+    /// Whether what was heard is what the voice said, come back through
+    /// the microphone. The recognizer rarely hears an echo word for word
+    /// (a character here and there comes out as another that sounds the
+    /// same), so a long stretch in common is enough: four characters in
+    /// a row for Chinese, ten letters otherwise, and two fifths of what
+    /// was heard.
+    nonisolated static func isEcho(_ heard: String, of said: String) -> Bool {
+        let heard = Array(normalize(heard)), said = Array(normalize(said))
+        guard !heard.isEmpty, !said.isEmpty else { return false }
+        var best = 0
+        var runs = [Int](repeating: 0, count: said.count + 1)
+        for character in heard {
+            var previous = 0
+            for index in 1...said.count {
+                let above = runs[index]
+                runs[index] = said[index - 1] == character ? previous + 1 : 0
+                best = max(best, runs[index])
+                previous = above
+            }
+        }
+        if best == heard.count { return true }
+        let wide = heard.contains { $0.unicodeScalars.contains { $0.value >= 0x2E80 } }
+        return best >= (wide ? 4 : 10) && best * 5 >= heard.count * 2
+    }
+
+    /// What follows `echo` in the recognizer's text; all of it when the
+    /// text does not begin with it (the recognizer started over, or
+    /// changed its mind about the beginning).
+    nonisolated static func after(_ echo: String, in text: String) -> String {
+        guard !echo.isEmpty else { return text }
+        var left = normalize(echo).count
+        guard left > 0, normalize(text).hasPrefix(normalize(echo)) else { return text }
+        var rest = Substring(text)
+        while left > 0, let first = rest.first {
+            left -= normalize(String(first)).count
+            rest = rest.dropFirst()
+        }
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
 
     /// Stops the voice: nothing more is said, and what it got to say is
@@ -354,6 +404,7 @@ public final class VoiceCall {
     private func dropResidue() {
         guard residue, partial.isEmpty else { return }
         residue = false
+        echoed = ""
         parts.audio.newUtterance()
     }
 
@@ -365,6 +416,10 @@ public final class VoiceCall {
         partialAt = nil
         endTimer?.cancel()
         endTimer = nil
+        // The recognizer starts over (told to, or by itself): nothing of
+        // what was heard so far is in its next text.
+        residue = false
+        echoed = ""
         if cut { parts.audio.newUtterance() }
         guard !text.isEmpty, !Self.backchannel.contains(Self.normalize(text)) else {
             if let last = lines.last, last.kind == .hearing { lines.removeLast() }
