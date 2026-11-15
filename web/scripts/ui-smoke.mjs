@@ -1071,6 +1071,10 @@ async function runMatrix(browser, size, scheme) {
       const lines = await page.locator(".conv-detail .trace").last().innerText();
       if (/在等|还没做完|先放着/.test(lines)) throw new Error(`它这一轮停了，不该再挂一行状态，实际有「${compactText(lines)}」`);
       if (await page.locator(".conv-detail .conv-msg.is-me .conv-receipt").count()) throw new Error("开始做之后，消息下面不该还有「还没开始看」");
+      // It stopped: the box is a plain one again (a new message, nothing to stop).
+      const ph = await page.locator(".conv-detail .conv-compose-input").getAttribute("placeholder");
+      if ((ph || "").startsWith("补充给")) throw new Error(`它这一轮停了，输入框不该还是「补充给…」，实际「${ph}」`);
+      if (await page.locator(".conv-detail .conv-send.is-stop").count()) throw new Error("它这一轮停了，不该还有停止按钮");
       await shot(page, size, scheme, "chat-waiting");
       // The answer comes when the other one is done.
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
@@ -1088,8 +1092,9 @@ async function runMatrix(browser, size, scheme) {
       await box.press("Enter");
       const aMsg = page.locator(".conv-detail .conv-msg.is-me", { hasText: "补充接在过程里：派出去核对链接" });
       await aMsg.waitFor({ timeout: 10_000 });
-      // It has said something and is waiting for the one it handed out.
-      await page.locator(".conv-detail .trace-say", { hasText: "已经派出去了" }).last().waitFor({ timeout: 15_000 });
+      // While it is at it (it has run its command, not yet said it is done):
+      // what you add goes into the run.
+      await page.locator(".conv-detail .trace-group").last().waitFor({ timeout: 15_000 });
       await box.fill("补充：顺便看看 Windows 的包");
       await box.press("Enter");
       const added = page.locator(".conv-detail .trace .trace-steer", { hasText: "顺便看看 Windows 的包" });
@@ -1098,12 +1103,12 @@ async function runMatrix(browser, size, scheme) {
       // Nothing of the run (its words, its state) is drawn above what you added after it.
       const order = await added.evaluate((el) => {
         const run = el.closest(".trace");
-        const said = [...(run?.querySelectorAll(".trace-say, .trace-group") || [])].filter((x) => x.textContent?.includes("已经派出去了"));
+        const said = [...(run?.querySelectorAll(".trace-group") || [])].slice(0, 1);
         const state = run?.querySelector(".trace-wait");
         const y = el.getBoundingClientRect().top;
         return { saidAbove: said.every((x) => x.getBoundingClientRect().top < y), stateBelow: !state || state.getBoundingClientRect().top > y };
       });
-      if (!order.saidAbove) throw new Error("补充之前它说的话应在补充上面");
+      if (!order.saidAbove) throw new Error("补充之前它做的步骤应在补充上面");
       if (!order.stateBelow) throw new Error("它现在的状态（在做 / 在等）应在补充下面");
       await added.scrollIntoViewIfNeeded();
       await settle(page, 300);
