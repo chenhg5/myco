@@ -641,8 +641,11 @@ struct WelcomeScreen: View {
     var body: some View {
         VStack(spacing: 14) {
             Spacer()
-            AvatarView(.mushroom(MushroomLook(cap: 0, pattern: 0, face: 0, sprout: true)), size: 96)
-            Text("myco").font(.largeTitle.weight(.bold)).foregroundStyle(MycoColor.fg)
+            // The logo as designed: the pixel mushroom and the wordmark.
+            BrandLogo(.whole, height: 60)
+                .foregroundStyle(MycoColor.fg)
+                .padding(.bottom, 10)
+                .accessibilityIdentifier("welcome.logo")
             Text(L("在手机上跟进和指挥你的 agent。", "Follow and direct your agents from your phone."))
                 .font(.body).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
             Spacer()
