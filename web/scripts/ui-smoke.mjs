@@ -689,6 +689,8 @@ async function runMatrix(browser, size, scheme) {
       const line = compactText(await wait.innerText());
       if (!line.includes("排队中")) throw new Error(`拉走没开始的任务应写「排队中」，实际是「${line}」`);
       if (await page.locator(".conv-detail .trace-spin").count()) throw new Error("拉走没开始的任务不该转圈");
+      if (await wait.locator(".work-sprite").count()) throw new Error("排队的任务不该有蘑菇（看着像第二个 loading），应是小圆点");
+      if (!(await wait.locator(".work-dot").count())) throw new Error("排队的任务前应有一个小圆点");
       await settle(page, 300);
       await shot(page, size, scheme, "pulled-not-started");
     });
@@ -900,8 +902,9 @@ async function runMatrix(browser, size, scheme) {
       // older ones still open stand still.
       let quietSeen = false;
       for (let t = 0; t < 20; t++) {
-        const n = await page.locator(".conv-detail .work-sprite:not(.is-idle)").count();
-        if (n > 1) throw new Error(`聊天里同时只该有一个在动的 loading，现在有 ${n} 个`);
+        // (a standing mushroom reads as a loading too: the others get a dot)
+        const n = await page.locator(".conv-detail .work-sprite").count();
+        if (n > 1) throw new Error(`聊天里同时只该有一个 loading（蘑菇），现在有 ${n} 个`);
         quietSeen ||= (await page.locator(".conv-detail .trace.is-quiet, .conv-detail .trace-foot", { hasText: "还没做完" }).count()) > 0;
         await page.waitForTimeout(150);
       }
@@ -1067,7 +1070,7 @@ async function runMatrix(browser, size, scheme) {
       const wait = page.locator(".conv-detail .trace-paused", { hasText: "在等" }).last();
       await wait.waitFor({ timeout: 15_000 });
       await settle(page, 300);
-      if (await page.locator(".conv-detail .work-sprite:not(.is-idle)").count()) throw new Error("它说完了在等别人，不该还有在动的 loading");
+      if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("它说完了在等别人，不该还有蘑菇 loading");
       await shot(page, size, scheme, "chat-waiting");
       // The answer comes when the other one is done; the line goes.
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });

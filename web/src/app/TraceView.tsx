@@ -5,7 +5,7 @@ import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 import { L, locale } from "@/lib/i18n";
-import { Elapsed, Mushroom, useVerb } from "@/app/Working";
+import { Elapsed, Mushroom, QuietDot, useVerb } from "@/app/Working";
 import { useReportsOnly } from "@/app/quietRuns";
 import { TranslatableBody } from "@/app/translate";
 import { MessageContent } from "@/app/Markdown";
@@ -333,7 +333,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const movingHere = moving && !footed;
   const pausedLine = paused ? (
     <div className="trace-head trace-wait trace-paused">
-      <Mushroom idle />
+      <QuietDot />
       <span className="trace-title">{waitingOn?.length
         ? L(`等 ${waitingOn.join("、")} 做完`, `Waiting for ${waitingOn.join(", ")}`)
         : task.status === "held" ? L("先放着了，晚点回复", "Set aside; it answers later")
@@ -362,7 +362,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     return withSteers(
       <div className="trace is-waiting">
         <div className="trace-head trace-wait">
-          <Mushroom idle />
+          <QuietDot />
           <span className="trace-title">{waiting || L("排队中，轮到它时开始", "Queued: it starts when the node gets to it")}</span>
         </div>
       </div>
@@ -400,7 +400,7 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   ) : (
     <div className="trace is-waiting is-quiet">
       <div className="trace-head trace-wait">
-        <Mushroom idle />
+        <QuietDot />
         <span className="trace-title">{L("还没做完", "Not finished yet")}</span>
       </div>
     </div>

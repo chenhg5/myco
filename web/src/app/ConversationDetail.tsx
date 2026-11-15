@@ -968,6 +968,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const footLive = !!working && !working.queued
     && (!liveRun || new Date(working.task.created_at).getTime() > new Date(liveRun.created_at).getTime());
   const liveId = footLive ? "" : liveRun?.id || "";
+  // The one at work, wherever its loading is (another waits behind it).
+  const atWorkId = liveId || (footLive && working ? working.task.id : "");
   // Messages under the run at work (tasks it handed out, your supplements):
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
@@ -1594,7 +1596,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} waiting={waitingReason} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} waiting={waitingReason || (atWorkId && atWorkId !== m.id ? L("排队中，等它做完手上这件", "Queued, after the one it is working on") : undefined)} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (

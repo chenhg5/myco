@@ -6237,6 +6237,34 @@ body.is-resizing {
   cursor: default;
 }
 
+/* A line that is not the one at work (queued, set aside, not finished):
+   a small still dot where the mushroom would be, so a chat shows one
+   loading at a time. Same width as the mushroom, so the words line up. */
+.work-dot {
+  flex: none;
+  position: relative;
+  width: 20px;
+  height: 14px;
+}
+.work-dot::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted, rgba(127, 127, 127, 0.6));
+  opacity: 0.6;
+}
+.work-line .work-dot {
+  width: 30px;
+  align-self: center;
+}
+.work-line .work-dot::before {
+  left: 12px;
+}
+
 /* New conversation: search, then the nodes; a click opens the chat. */
 .app-convpick-search {
   display: flex;

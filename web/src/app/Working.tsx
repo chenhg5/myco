@@ -108,6 +108,13 @@ export function Elapsed({ since, className }: { since: string; className?: strin
   return <span className={className}>{elapsed(now - start)}</span>;
 }
 
+/** Standing in for the mushroom on a line that is not the one at work
+ *  (queued, set aside, not finished): a small still dot, so a chat shows
+ *  one loading at a time. */
+export function QuietDot() {
+  return <span className="work-dot" aria-hidden="true" />;
+}
+
 export function WorkingLine({ name, since, status, side, queued, quiet, behind = 0 }: {
   /** who is working */
   name: string;
@@ -129,7 +136,7 @@ export function WorkingLine({ name, since, status, side, queued, quiet, behind =
   const text = queued ? L("排队中，等它接手", "Queued, waiting to be picked up") : status || (quiet ? L("还没做完", "Not finished yet") : verb);
   return (
     <div className={cn("work-line", side === "right" && "is-right")} role="status" aria-live="off">
-      <Mushroom idle={queued || quiet} />
+      {queued || quiet ? <QuietDot /> : <Mushroom />}
       <div className="work-text">
         <span className="work-name">{name}</span>
         {/* keyed, so a new verb fades in */}
