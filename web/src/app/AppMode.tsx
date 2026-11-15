@@ -23,7 +23,7 @@ import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, AvatarStack, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
-import { Logo } from "@/components/brand";
+import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useSortable } from "@/app/sortable";
@@ -467,7 +467,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             aria-label={L("拖动调整边栏宽度", "Drag to resize the sidebar")}
             title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} />
           <div className="app-sidebar-head" style={dragStyle}>
-            <div className="brand"><Logo className="app-brand-logo" /></div>
+            <div className="brand"><LogoWordmark className="app-brand-wordmark" /></div>
           </div>
           <button type="button" className="app-nav-search" onClick={() => setPaletteOpen(true)} style={{ ["--wails-draggable" as string]: "no-drag" }}>
             <Search /><span>{L("搜索", "Search")}</span><kbd>{modKey()}K</kbd>
