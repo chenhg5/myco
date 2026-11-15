@@ -207,8 +207,13 @@ private struct WorkspaceChrome: ViewModifier {
                 if !isSearching { AppTabBar() }
             }
             .toolbar(.hidden, for: .tabBar)
-            // Pulling down asks the workspace again, now.
-            .refreshable { await session.refresh() }
+            // Pulling down asks the workspace again, now. The spinner stays
+            // long enough to be seen, however quick the answer.
+            .refreshable {
+                async let seen: Void? = try? await Task.sleep(for: .milliseconds(500))
+                await session.refresh()
+                _ = await seen
+            }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)

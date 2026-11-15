@@ -36,6 +36,11 @@ public final class ConversationModel {
     public private(set) var items: [ConversationItem] = []
     public private(set) var openTask: Message?
     public private(set) var loaded = false
+    /// Why the last look at the workspace failed; nil while it answers.
+    /// What is on the page is then from before.
+    public private(set) var unreachable: String?
+    /// A refresh the person asked for is under way.
+    public private(set) var refreshing = false
     /// Why the last send, steer or stop did not go through.
     public private(set) var problem: String?
     /// A message waiting for the open task to finish.
@@ -88,6 +93,12 @@ public final class ConversationModel {
     /// On a member's page: its exchanges with its colleagues, by id.
     private var colleagueMessages: [String: Message] = [:]
     private var reloads = 0
+    /// The steps and the surroundings being fetched, while they are.
+    private var details: Task<Void, Never>?
+    /// The newest page of messages, as last read.
+    private var newestPage: [Message] = []
+    /// Looks at the workspace that failed, in a row.
+    private var failures = 0
 
     /// A member's colleagues' exchanges are asked for again every this many
     /// refreshes (mine with it: every time).
@@ -248,60 +259,112 @@ public final class ConversationModel {
         show(others: snapshot.others)
     }
 
+    /// Keeps the page fresh until the surrounding task is cancelled (the
+    /// page left the screen, the app left the front). What was said is
+    /// asked for every two seconds and shown as soon as it comes; how it
+    /// was worked on follows by itself.
     public func run() async {
         await restore()
         while !Task.isCancelled {
-            await reload()
+            await load(whole: false)
+            if await sendNextQueued() { await load(whole: false) }
             try? await Task.sleep(for: Self.pollInterval)
         }
+        // Nobody is looking: what was still on its way is let go, so a
+        // request that hangs does not hold up the next look.
+        details?.cancel()
     }
 
+    /// Reads the page again, all of it: what was said, and how it was
+    /// worked on.
     public func reload() async {
-        await load()
+        await load(whole: true)
         // The open task closed: what waited behind it goes out now.
-        if await sendNextQueued() { await load() }
+        if await sendNextQueued() { await load(whole: true) }
     }
 
-    private func load() async {
+    /// A refresh the person asked for: the conversation and the
+    /// workspace's lists, now.
+    public func refresh() async {
+        guard !refreshing else { return }
+        refreshing = true
+        async let lists: Void = session.refresh()
+        await reload()
+        await lists
+        refreshing = false
+    }
+
+    /// - Parameter whole: wait for the steps and the surroundings too.
+    ///   Without it they are fetched alongside: one slow answer among
+    ///   them must not keep back a message that is already here.
+    private func load(whole: Bool) async {
         let me = session.me
         guard !me.isEmpty else { return }
         do {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
+            failures = 0
+            unreachable = nil
             for message in page.messages { known[message.id] = message }
             if !wentBack { hasEarlier = page.more }
-            // The first look shows the page whole: what was asked, how it
-            // was worked on and the rest of the agent's work arrive
-            // together, not in three jumps. Only when that takes long is
-            // what is already here shown meanwhile.
-            var early: Task<Void, Never>?
-            if !loaded {
-                early = Task {
-                    try? await Task.sleep(for: Self.patience)
-                    if !Task.isCancelled, !self.loaded { self.show(others: self.others) }
+            newestPage = page.messages
+            // What was said shows at once. (The first look shows the page
+            // whole: see below.)
+            if loaded { show(others: others) }
+            // One fetch of the steps at a time: an earlier one ends first.
+            if whole { await details?.value }
+            startDetails()
+            if whole {
+                await details?.value
+            } else if !loaded {
+                // The first look shows the page whole: what was asked, how
+                // it was worked on and the rest of the agent's work arrive
+                // together, not in three jumps. Only when that takes long
+                // is what is already here shown meanwhile.
+                let patience = ContinuousClock.now + Self.patience
+                while details != nil, ContinuousClock.now < patience, !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(30))
                 }
             }
-            defer { early?.cancel() }
-            var others = self.others
-            let around = reloads % Self.colleaguesEvery == 0
-            reloads += 1
-            // My tasks' steps come while the agent's other work is asked for.
-            let myTasks = Self.traceable(Array(known.values), for: agent)
-            async let mine: Void = loadSteps(of: myTasks)
-            if around { others = await loadSurroundings() }
-            await mine
-            if !colleagueMessages.isEmpty {
-                await loadSteps(of: Self.traceable(Array(known.values) + Array(colleagueMessages.values), for: agent))
-            }
-            early?.cancel()
-            show(others: others)
-            // Only the newest pages are kept between launches.
-            await save(Snapshot(messages: page.messages, others: others, traces: traces, colleagues: Array(colleagueMessages.values)))
-        } catch is CancellationError {
-            return
+            if !loaded, !Task.isCancelled { show(others: others) }
         } catch {
-            // The workspace's own banner says it cannot be reached.
+            // Leaving the page is not a failure to report.
+            guard !Task.isCancelled, !(error is CancellationError) else { return }
+            // One look that failed is a blip; the page says so when the
+            // next fails too, or when the person asked for this one.
+            failures += 1
+            if failures >= 2 || refreshing {
+                unreachable = (error as? HubError)?.message ?? error.localizedDescription
+            }
             loaded = true
         }
+    }
+
+    /// Fetches how the tasks were worked on and what surrounds the
+    /// conversation, unless that is under way already, and shows it.
+    private func startDetails() {
+        guard details == nil else { return }
+        let around = reloads % Self.colleaguesEvery == 0
+        reloads += 1
+        details = Task { [weak self] in
+            await self?.loadDetails(around: around)
+            self?.details = nil
+        }
+    }
+
+    private func loadDetails(around: Bool) async {
+        var others = self.others
+        // My tasks' steps come while the agent's other work is asked for.
+        let myTasks = Self.traceable(Array(known.values), for: agent)
+        async let mine: Void = loadSteps(of: myTasks)
+        if around { others = await loadSurroundings() }
+        await mine
+        if !colleagueMessages.isEmpty {
+            await loadSteps(of: Self.traceable(Array(known.values) + Array(colleagueMessages.values), for: agent))
+        }
+        guard !Task.isCancelled else { return }
+        show(others: others)
+        // Only the newest pages are kept between launches.
+        await save(Snapshot(messages: newestPage, others: others, traces: traces, colleagues: Array(colleagueMessages.values)))
     }
 
     /// How long the first look at a conversation waits for all of it

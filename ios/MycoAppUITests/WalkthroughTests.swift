@@ -85,6 +85,19 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testPullingAListDownReadsItAgain() {
+        // (Every answer takes a moment here, as on a real connection.)
+        let app = launch(["-myco-latency", "500"])
+        let chat = app.buttons["chat.project:myco-ios"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 20))
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        // The system's own spinner turns at the top while the workspace is asked.
+        shot("refresh-list")
+        XCTAssertTrue(chat.waitForExistence(timeout: 10), "the list is there after the refresh")
+    }
+
+    @MainActor
     func testVoiceIsSetUpInSettings() {
         // Settings is where the model and the voice of a voice chat go.
         let app = launch()

@@ -135,6 +135,14 @@ Push that arrives the moment a task is done needs Apple's push service: the hub 
 
 Nothing pops in. A list that waits for its first answer shows rows in its shape (`SkeletonRows`), breathing, and the list fades in over them. A conversation is laid out and scrolled to where it opens before it is shown, then fades in whole; one that takes longer than a moment shows `ConversationSkeleton` meanwhile, and one kept on the device opens before that. Its parts (what was asked, how it was worked on, the agent's other work) are asked for together and shown together; only after 1.5 seconds is the part that is here shown first. What comes once a page is open (a new message, an older page) arrives with `Arrival`: it fades in and rises a little, and the page glides to follow it.
 
+## Staying fresh
+
+An open conversation asks for its messages every two seconds and shows them as soon as they come. How the tasks were worked on (their steps) and what surrounds the conversation (the agent's work with colleagues) are fetched alongside, one round at a time, and shown when they come: one slow answer among them never keeps back a message that is already here (`ConversationModel.load`). The lists ask every five seconds. What is asked again and again is given up after 12 seconds, since the next asking is seconds away.
+
+Leaving the app stops the asking; coming back starts it over at once, for the lists and for the conversation on screen alike, so the page never waits for an answer that was cut off when the app left the front.
+
+The person can ask too: pulling a list down (the system's refresh), or pulling a conversation up past its end (new messages come at the end, so that is where one pulls): a spinner turns in the room under the last message while the conversation and the lists are read again. When the workspace does not answer twice in a row, or when a refresh that was asked for fails, a line across the top of the conversation says that what is shown may not be the latest, as the lists do.
+
 ## Rules
 
 - Everything tappable answers on the press (`RowButtonStyle`, `PressScaleStyle`), bars are translucent layers that content scrolls under, and motion is quick, bounce-free and off under Reduce Motion.

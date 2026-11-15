@@ -262,6 +262,24 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testPullingUpAtTheEndReadsTheConversationAgain() {
+        // (Every answer takes a moment here, as on a real connection.)
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "300"])
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.waitForExistence(timeout: 20), "the conversation is open")
+        let spinner = app.descendants(matching: .any)["conversation.refreshing"]
+        XCTAssertFalse(spinner.exists)
+        // A finger pulls the end of the conversation up, past where it stops.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        XCTAssertTrue(spinner.waitForExistence(timeout: 3), "pulling up past the end refreshes, and shows that it does")
+        snap("refresh-end")
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: spinner)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.exists, "the conversation is still there")
+    }
+
+    @MainActor
     func testALongConversationOpensAtItsEndAndScrolls() {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

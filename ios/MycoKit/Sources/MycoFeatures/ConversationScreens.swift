@@ -129,15 +129,23 @@ struct ConversationHost: View {
     let project: String?
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let model = session.conversation(with: agent, project: project)
+        // The app in the background asks for nothing.
+        let front = scenePhase != .background
         ZStack {
             MycoColor.bg.ignoresSafeArea()
             ConversationBody(model: model, focus: focus)
         }
-        // Starts once the workspace has said who this device is.
-        .task(id: session.me) { await model.run() }
+        // Starts once the workspace has said who this device is, and
+        // starts over when the app comes back to the front: what was
+        // asked before it left may never be answered, and the page must
+        // not wait for it.
+        .task(id: session.me + (front ? "|front" : "|away")) {
+            if front { await model.run() }
+        }
         // On screen, and whenever something new arrives while it is: read.
         .onChange(of: model.items.last?.id, initial: true) { session.markRead(agent) }
         .onDisappear { session.markRead(agent) }
@@ -162,6 +170,10 @@ struct ConversationBody: View {
     @State private var callProblem: DictationProblem?
     /// A call could not be made from what is set: its settings are open.
     @State private var settingUpVoice = false
+    /// The end was pulled up: the page is asking the workspace again.
+    @State private var refreshingFromEnd = false
+    /// Counts those pulls: a tap answers each.
+    @State private var pulls = 0
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
@@ -198,6 +210,8 @@ struct ConversationBody: View {
     @State private var waiting = false
 
     private static let bottomID = "conversation.bottom"
+    /// How far past its end the conversation is pulled to refresh it.
+    private static let pullToRefresh: CGFloat = 56
 
     private var name: String { session.displayName(of: model.agent) }
 
@@ -243,6 +257,22 @@ struct ConversationBody: View {
                     // thing said and the input, so "the end" includes it.
                     // On screen (or nearly) means "at the bottom".
                     Color.clear.frame(height: Space.xl)
+                        // Pulled up past the end: the page asks again, and
+                        // says so here, in the room under the last message.
+                        .overlay {
+                            if refreshingFromEnd {
+                                ProgressView()
+                                    .accessibilityLabel(L("正在刷新", "Refreshing"))
+                                    .accessibilityIdentifier("conversation.refreshing")
+                                    .transition(.opacity)
+                            }
+                        }
+                        .onGeometryChange(for: Bool.self) { proxy in
+                            viewport - proxy.frame(in: .named(Self.space)).maxY > Self.pullToRefresh
+                        } action: { pulled in
+                            // Only a finger pulls: not the keyboard, not the page growing.
+                            if pulled, touched, revealed { refreshFromEnd() }
+                        }
                         .id(Self.bottomID)
                         .onGeometryChange(for: Bool.self) { proxy in
                             proxy.frame(in: .named(Self.space)).minY <= viewport + 40
@@ -385,6 +415,14 @@ struct ConversationBody: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+        // The workspace does not answer: what is here is from before.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if model.unreachable != nil {
+                StaleBanner(L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."))
+                    .accessibilityIdentifier("conversation.stale")
+            }
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: pulls)
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
@@ -423,6 +461,22 @@ struct ConversationBody: View {
                 Task { await addPicture(data, name: Self.pictureName(L("照片", "photo"), at: Date(), index: 0)) }
             }
             .ignoresSafeArea()
+        }
+    }
+
+    // MARK: Refreshing
+
+    /// The end was pulled up: the conversation and the lists are read
+    /// again now. The spinner stays long enough to be seen.
+    private func refreshFromEnd() {
+        guard !refreshingFromEnd else { return }
+        pulls += 1
+        withAnimation(.easeOut(duration: 0.15)) { refreshingFromEnd = true }
+        Task {
+            async let seen: Void? = try? await Task.sleep(for: .milliseconds(600))
+            await model.refresh()
+            _ = await seen
+            withAnimation(.easeOut(duration: 0.2)) { refreshingFromEnd = false }
         }
     }
 
