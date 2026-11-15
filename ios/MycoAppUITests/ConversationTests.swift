@@ -267,6 +267,8 @@ final class ConversationTests: XCTestCase {
         let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-latency", "2000"])
         let input = app.descendants(matching: .any)["composer.input"]
         XCTAssertTrue(input.waitForExistence(timeout: 30))
+        // (Once the conversation itself has come: nothing was said in it yet.)
+        XCTAssertTrue(app.staticTexts["What should 翻译 do for you?"].waitForExistence(timeout: 40))
         input.tap()
         input.typeText("Translate the readme")
         app.buttons["composer.submit"].tap()
@@ -289,14 +291,25 @@ final class ConversationTests: XCTestCase {
         let open = app.buttons.matching(identifier: "composer.file.open")
         XCTAssertTrue(open.firstMatch.waitForExistence(timeout: 20), "what was picked shows above the input")
         // A tap on the picture opens it full size, to see it is the right one.
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.isHittable)
         open.firstMatch.tap()
-        let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 10), "the system's preview opens")
+        // The system's preview covers the page.
+        expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
         snap("files-look")
-        done.tap()
+        // Closed the way the system's preview is: its button, or a swipe down.
+        let close = ["Done", "Close"].map { app.buttons[$0] }.first { $0.exists }
+        if let close {
+            close.tap()
+        } else {
+            app.swipeDown(velocity: .fast)
+        }
         // It is still waiting to go.
-        XCTAssertTrue(open.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["composer.submit"].isEnabled)
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(open.firstMatch.exists)
+        XCTAssertTrue(submit.isEnabled)
     }
 
     @MainActor

@@ -177,6 +177,9 @@ struct ConversationBody: View {
     @State private var refreshingFromEnd = false
     /// Counts those pulls: a tap answers each.
     @State private var pulls = 0
+    /// Where the conversation's end sits when it is at rest at its end:
+    /// pulled further up than this, it is being pulled to refresh.
+    @State private var endAtRest: CGFloat?
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
@@ -288,8 +291,17 @@ struct ConversationBody: View {
                                     .transition(.opacity)
                             }
                         }
+                        // Where the end rests when nobody touches the page
+                        // (above the input, wherever that is): learned
+                        // here, not worked out from the screen's parts.
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            touched ? -1 : proxy.frame(in: .named(Self.space)).maxY.rounded()
+                        } action: { resting in
+                            if resting >= 0, atBottom { endAtRest = resting }
+                        }
                         .onGeometryChange(for: Bool.self) { proxy in
-                            viewport - proxy.frame(in: .named(Self.space)).maxY > Self.pullToRefresh
+                            guard let endAtRest else { return false }
+                            return endAtRest - proxy.frame(in: .named(Self.space)).maxY > Self.pullToRefresh
                         } action: { pulled in
                             // Only a finger pulls: not the keyboard, not the page growing.
                             if pulled, touched, revealed { refreshFromEnd() }
