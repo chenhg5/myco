@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import QuickLook
 import UniformTypeIdentifiers
 import MycoAPI
 import MycoCore
@@ -170,6 +171,8 @@ struct ConversationBody: View {
     @State private var callProblem: DictationProblem?
     /// A call could not be made from what is set: its settings are open.
     @State private var settingUpVoice = false
+    /// A file about to go, opened to look at it first.
+    @State private var lookingAt: URL?
     /// The end was pulled up: the page is asking the workspace again.
     @State private var refreshingFromEnd = false
     /// Counts those pulls: a tap answers each.
@@ -249,9 +252,27 @@ struct ConversationBody: View {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item, at: index)
                             // What comes once the page is open arrives; what
-                            // it opened with is simply there.
-                            .modifier(Arrival(animated: settled))
+                            // it opened with is simply there, and so is what
+                            // was already shown while it was being sent.
+                            .modifier(Arrival(animated: settled && !model.placed.contains(item.id)))
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
+                    }
+                    // What I just sent, before the workspace hands it back:
+                    // on the page at once, marked as on its way.
+                    ForEach(model.outgoing) { sent in
+                        VStack(alignment: .trailing, spacing: Space.s) {
+                            if !sent.text.isEmpty { MyBubble(sent.text) }
+                            files(sent.files, trailing: true)
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.mini)
+                                Text(L("发送中", "Sending")).font(.caption).foregroundStyle(MycoColor.muted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.trailing, 6)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("message.sending")
+                        }
+                        .padding(.top, model.items.isEmpty ? 0 : Space.xl)
                     }
                     // Marks the end. It is also the room between the last
                     // thing said and the input, so "the end" includes it.
@@ -349,6 +370,17 @@ struct ConversationBody: View {
                     }
                 }
             }
+            .onChange(of: model.outgoing.count) { old, new in
+                // What I just said is where I look, wherever I had scrolled.
+                guard new > old else { return }
+                pinned = true
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                Task {
+                    // Once more when the keyboard has gone and the row has its height.
+                    try? await Task.sleep(for: .milliseconds(320))
+                    if pinned { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                }
+            }
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, new != nil else { return }
@@ -405,7 +437,7 @@ struct ConversationBody: View {
             if !revealed { withAnimation(.easeOut(duration: 0.15)) { waiting = true } }
         }
         .overlay {
-            if model.loaded, model.items.isEmpty {
+            if model.loaded, model.items.isEmpty, model.outgoing.isEmpty {
                 EmptyState(
                     face: session.agent(model.agent).map(AvatarView.Face.of),
                     title: model.project == nil
@@ -423,6 +455,7 @@ struct ConversationBody: View {
             }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: pulls)
+        .quickLookPreview($lookingAt)
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
@@ -964,20 +997,33 @@ struct ConversationBody: View {
                 mic: call == nil ? micState : nil,
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
+                openLabel: L("看一下", "Look at"),
                 onSubmit: {
                     commits += 1
                     if canCall {
                         startCall()
                     } else {
+                        // What is sent shows on the page at once; the
+                        // keyboard gets out of its way. (Stopping a task
+                        // leaves the keyboard alone.)
+                        if model.action != .stop { Self.dismissKeyboard() }
                         Task { await model.submit() }
                     }
                 },
                 onQueue: {
                     commits += 1
+                    Self.dismissKeyboard()
                     Task { await model.queueNext() }
                 },
                 onRemoveFile: { model.removePending($0) },
                 onRetryFile: { id in Task { await model.retryPending(id) } },
+                onOpenFile: { id in
+                    Task {
+                        guard let place = await model.preview(ofPending: id) else { return }
+                        Self.dismissKeyboard()
+                        lookingAt = place
+                    }
+                },
                 onMic: toggleDictation)
         }
         .background(.bar)

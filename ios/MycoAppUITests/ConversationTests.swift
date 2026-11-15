@@ -262,6 +262,44 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testWhatIsSentShowsAtOnceMarkedAsOnItsWay() {
+        // (Every answer takes a while here, as on a slow connection.)
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-latency", "900"])
+        let input = app.descendants(matching: .any)["composer.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        input.tap()
+        input.typeText("Translate the readme")
+        app.buttons["composer.submit"].tap()
+        // On the page before the workspace has answered, and said to be on its way.
+        let sending = app.descendants(matching: .any)["message.sending"]
+        XCTAssertTrue(sending.waitForExistence(timeout: 1), "what I sent is marked as being sent")
+        XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "and shows at once")
+        XCTAssertEqual(input.value as? String, "Message 翻译", "the input is empty again")
+        XCTAssertEqual(app.keyboards.count, 0, "the keyboard is out of the way")
+        snap("sending")
+        // Then it is simply there.
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: sending)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "it stays when the workspace has it")
+    }
+
+    @MainActor
+    func testAFileAboutToGoCanBeLookedAtFirst() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-attach", "studio-claude-c41f"])
+        let open = app.buttons.matching(identifier: "composer.file.open")
+        XCTAssertTrue(open.firstMatch.waitForExistence(timeout: 20), "what was picked shows above the input")
+        // A tap on the picture opens it full size, to see it is the right one.
+        open.firstMatch.tap()
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "the system's preview opens")
+        snap("files-look")
+        done.tap()
+        // It is still waiting to go.
+        XCTAssertTrue(open.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["composer.submit"].isEnabled)
+    }
+
+    @MainActor
     func testPullingUpAtTheEndReadsTheConversationAgain() {
         // (Every answer takes a moment here, as on a real connection.)
         let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "300"])

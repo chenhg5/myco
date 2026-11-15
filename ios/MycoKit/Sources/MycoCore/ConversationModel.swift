@@ -41,6 +41,25 @@ public final class ConversationModel {
     public private(set) var unreachable: String?
     /// A refresh the person asked for is under way.
     public private(set) var refreshing = false
+
+    /// Something I sent that the workspace has not handed back yet: it
+    /// shows at the end of the conversation at once, marked as being sent.
+    public struct Outgoing: Identifiable, Hashable, Sendable {
+        public var id: String
+        /// What I typed (nothing, when only files go).
+        public var text: String
+        public var files: [Attachment]
+        /// The message as it goes, and the messages known before it went:
+        /// how its arrival on the page is told.
+        var body: String
+        var before: Set<String>
+    }
+
+    public private(set) var outgoing: [Outgoing] = []
+    /// Messages that took the place of something shown as being sent:
+    /// they are simply there, they do not arrive.
+    public private(set) var placed: Set<String> = []
+    private var sends = 0
     /// Why the last send, steer or stop did not go through.
     public private(set) var problem: String?
     /// A message waiting for the open task to finish.
@@ -412,6 +431,16 @@ public final class ConversationModel {
     private func show(others: [Message]) {
         self.others = others
         let me = session.me
+        // What was shown as being sent is on the page for real now.
+        if !outgoing.isEmpty {
+            outgoing.removeAll { entry in
+                guard let arrived = known.values.first(where: { $0.from == me && $0.body == entry.body && !entry.before.contains($0.id) }) else {
+                    return false
+                }
+                placed.insert(arrived.id)
+                return true
+            }
+        }
         // Mine with the agent, and on a member's page the agent's with its
         // colleagues, as one conversation.
         // Not what I took back, and not what I took out of my view (on any
@@ -563,32 +592,81 @@ public final class ConversationModel {
         let files = pending
         let attachments = Self.ids(of: files)
         let body = Self.body(text, files: readyFiles)
-        if action != .stop { takeDraft() }
+        var going: String?
+        if action != .stop {
+            // On the page at once, as being sent: the person does not wait
+            // for the workspace to see what they said.
+            sends += 1
+            let entry = Outgoing(
+                id: "sending-\(sends)", text: text, files: readyFiles.compactMap(Self.attachment),
+                body: body, before: Set(known.keys))
+            going = entry.id
+            outgoing.append(entry)
+            takeDraft()
+        }
         sending = true
         do {
+            var sent: Message?
             switch action {
             case .send:
-                _ = try await session.hub.send(request(body, attachments: attachments))
+                sent = try await session.hub.send(request(body, attachments: attachments))
             case .steer:
                 guard let task = openTask else { break }
                 do {
                     try await session.hub.steer(task.id, body: body, attachments: attachments)
                 } catch let error as HubError where error.error == "invalid_state" {
                     // The task ended just now: this is a new message.
-                    _ = try await session.hub.send(request(body, attachments: attachments))
+                    sent = try await session.hub.send(request(body, attachments: attachments))
                 }
             case .stop:
                 if let task = openTask { try await session.hub.stop(task.id) }
             }
             problem = nil
             if action != .stop { dropSentPayloads() }
+            // The workspace has it: the real message takes the place of
+            // the one shown as being sent (`show`), with no wait between.
+            if let sent {
+                known[sent.id] = sent
+                show(others: others)
+            }
         } catch {
             // Give it all back: nothing typed or picked is lost to a failed send.
+            outgoing.removeAll { $0.id == going }
             if action != .stop { giveBack(text, files) }
             problem = (error as? HubError)?.message ?? error.localizedDescription
         }
         sending = false
         await reload()
+        // An addition has no message handed back: it is on the page by
+        // now. (When the page could not be read just now, it stays shown
+        // as sent until the next look finds it.)
+        if failures == 0 { outgoing.removeAll { $0.id == going } }
+    }
+
+    /// A file that went up, as the message will carry it.
+    private static func attachment(_ file: PendingFile) -> Attachment? {
+        guard case .ready(let id) = file.state else { return nil }
+        return Attachment(fileId: id, name: file.name, size: Int64(file.size), contentType: file.contentType)
+    }
+
+    /// Where a file waiting above the input is on this device, to look at
+    /// it before it goes: one still going up (or that did not) is written
+    /// out from memory, one that went up is on the shelf already.
+    public func preview(ofPending id: String) async -> URL? {
+        guard let file = pending.first(where: { $0.id == id }) else { return nil }
+        if let attachment = Self.attachment(file) {
+            return try? await session.shelf.url(of: attachment)
+        }
+        guard let data = payloads[id] else { return nil }
+        let folder = URL.temporaryDirectory.appending(path: "myco-pending/\(id)")
+        let place = folder.appending(path: FileShelf.fileName(file.name))
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: place, options: .atomic)
+            return place
+        } catch {
+            return nil
+        }
     }
 
     /// Empties the input: its words and files are on their way.

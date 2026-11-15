@@ -69,7 +69,9 @@ final class WalkthroughTests: XCTestCase {
         expectation(for: isStop, evaluatedWith: submit)
         waitForExpectations(timeout: 5)
 
-        // Typing turns it into adding to the open task.
+        // Typing turns it into adding to the open task. (Sending put the
+        // keyboard away: a tap in the input brings it back.)
+        input.tap()
         input.typeText("British spelling")
         XCTAssertEqual(submit.label, "Add")
         submit.tap()
@@ -130,6 +132,7 @@ final class WalkthroughTests: XCTestCase {
 
         // Something typed while it runs: a long press on the button offers
         // to send it after this one.
+        input.tap()
         input.typeText("Then the changelog")
         submit.press(forDuration: 1.0)
         let after = app.buttons["Send after this one"]
