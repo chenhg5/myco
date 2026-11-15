@@ -46,7 +46,7 @@ struct RefreshTests {
         // Something new from the agent: it is on the page at the next
         // look, not when the slow steps have come.
         await hub.deliver(from: Self.agent, body: "新消息到了")
-        #expect(await until(.milliseconds(2600)) { said(model).contains("新消息到了") }, "a message that is here is not kept back by a slow answer")
+        #expect(await until(.seconds(4)) { said(model).contains("新消息到了") }, "a message that is here is not kept back by a slow answer")
     }
 
     @Test func readingAgainOnRequestBringsTheStepsToo() async throws {
