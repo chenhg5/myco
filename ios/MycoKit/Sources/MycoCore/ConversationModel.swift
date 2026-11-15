@@ -310,11 +310,15 @@ public final class ConversationModel {
             // What was said shows at once. (The first look shows the page
             // whole: see below.)
             if loaded { show(others: others) }
-            // One fetch of the steps at a time: an earlier one ends first.
-            if whole { await details?.value }
+            // One fetch of the steps at a time. Asked to read it all now,
+            // an earlier one that may be hanging is given up, not waited for.
+            if whole {
+                details?.cancel()
+                _ = await details?.value
+            }
             startDetails()
             if whole {
-                await details?.value
+                _ = await details?.value
             } else if !loaded {
                 // The first look shows the page whole: what was asked, how
                 // it was worked on and the rest of the agent's work arrive
