@@ -330,7 +330,7 @@ func TestVoiceSettingsKeepKeysOutOfSight(t *testing.T) {
 	b := &Backend{Store: NewStore(dir + "/hubs.json"), Secrets: keys}
 	srv := httptestServer(t, b)
 	code, body := srv("PUT", "/app/voice/config", `{"llm_base_url":"https://api.example.com/v1","llm_model":"fast","llm_key":"sk-secret-1","tts_speaker":"zh_male_x","tts_key":"tts-secret-2"}`)
-	if code != 200 || strings.Contains(body, "secret") || !strings.Contains(body, `"has_llm_key":true`) || !strings.Contains(body, `"has_tts_key":true`) {
+	if code != 200 || strings.Contains(body, "secret") || !strings.Contains(body, `"has_llm_key":true`) || !strings.Contains(body, `"has_tts_key":true`) || !strings.Contains(body, `"ready":false`) {
 		t.Fatalf("put: %d %s", code, body)
 	}
 	if keys.m[voiceLLMSecret] != "sk-secret-1" || keys.m[voiceTTSSecret] != "tts-secret-2" {

@@ -189,7 +189,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about") { nextSettingsSection = s; }
 function takeSettingsSection(): Section | null {
   const s = nextSettingsSection;
   nextSettingsSection = null;
@@ -1054,6 +1054,7 @@ function VoiceSection() {
         ...(llmKey.trim() ? { llm_key: llmKey.trim() } : {}), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}), ...extra,
       });
       load(v); setLlmKey(""); setTtsKey(""); setSaved(true);
+      window.dispatchEvent(new Event("myco-voice-changed")); // the chats' round buttons
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
   if (!info) return <ErrorText error={error} />;
@@ -1062,11 +1063,11 @@ function VoiceSection() {
       <section className="app-setting-card app-setting-lines">
         <div className="app-setting-line">
           <div className="app-setting-line-text">
-            <b>{L("和 agent 们语音聊天", "Talk with your agents")}</b>
+            <b>{L("和 agent 语音聊天", "Voice chat with an agent")}</b>
             <span>{info.available
-              ? L("顶栏右边的耳机按钮开始。语音助手听你说话，替你把活交给 agent、转达它们的问题和结果；你一开口它就停下来听。说的话只留在这台电脑上的「语音」记录里，录音不保存。",
-                "Start with the headset button at the top right. The voice assistant listens, hands work to your agents and tells you their questions and answers; it stops as soon as you speak. What was said stays on this computer; no recordings are kept.")
-              : L("语音聊天目前只在 Mac 版 App 里有。", "Voice calls are in the Mac app for now.")}</span>
+              ? L("配好下面的模型和声音后，对话里输入框空着时，右边的圆按钮就是语音聊天。你说的话转给这个 agent（有活就补充，空着就是新任务），它的回复和提问挑空档说给你听；你一开口它就停下来听。录音不保存。",
+                "Once the model and the voice below are set up, the round button beside an empty box starts a voice chat with that agent. What you ask goes to it (added to its task at work, or a new task); its answers and questions are told in a pause; it stops as soon as you speak. No recordings are kept.")
+              : L("语音聊天目前只在 Mac 版 App 里有。", "Voice chat is in the Mac app for now.")}</span>
           </div>
         </div>
       </section>

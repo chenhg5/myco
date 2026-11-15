@@ -35,6 +35,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -43,11 +45,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>拍照片发给你的 agent。 Take photos to send to your agents.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>只在你点了麦克风时听，把你说的话变成消息。 myco listens only after you tap the microphone, to turn what you say into a message.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>把你说的话转成文字，用你在 App 里选的语言。 myco turns what you say into text in your message box, in the language you chose for the app.</string>
+	<string>只在你点了麦克风或在语音聊天时听：把你说的话变成消息，或者和 agent 通话。 myco listens only after you tap the microphone or during a voice chat you started: to turn what you say into a message, or to talk with an agent.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>把对话里的图片存到相册。 Save pictures from conversations to your library.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>把你说的话转成文字（语音输入和语音聊天），用你在 App 里选的语言。 myco turns what you say into text, for dictation and voice chats, in the language you chose for the app.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

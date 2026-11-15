@@ -22,16 +22,20 @@ export function openVoiceSettings() {
 
 let known: { available: boolean; ready: boolean } | null = null;
 
-/** Whether this App can call (the Mac app) and has its keys. */
+/** Whether this App can call (the Mac app) and voice is set up: the way in
+ *  shows only then (Settings › 语音 is where it is set up). */
 export function useVoiceReady(): { available: boolean; ready: boolean } | null {
   const [v, setV] = useState(known);
   useEffect(() => {
     let off = false;
-    appApi.voice().then((r) => {
-      known = { available: r.available, ready: r.has_llm_key && r.has_tts_key };
+    const load = () => appApi.voice().then((r) => {
+      known = { available: r.available, ready: r.ready ?? (r.available && r.has_llm_key && r.has_tts_key && !!r.config.llm_base_url && !!r.config.llm_model) };
       if (!off) setV(known);
     }, () => undefined);
-    return () => { off = true; };
+    void load();
+    // Set up (or taken away) in Settings › 语音: the button follows.
+    window.addEventListener("myco-voice-changed", load);
+    return () => { off = true; window.removeEventListener("myco-voice-changed", load); };
   }, []);
   return v;
 }

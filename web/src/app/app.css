@@ -179,8 +179,9 @@ body.is-resizing * {
 .app-sidebar-head .brand svg {
   flex: none;
 }
+/* Only the wordmark up here (the mushroom is the app's icon). */
 .app-brand-wordmark {
-  height: 16px;
+  height: 17px;
   width: auto;
 }
 /* Find anything (⌘K): a quiet field at the top of the sidebar. */

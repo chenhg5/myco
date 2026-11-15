@@ -6,7 +6,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
-import { callWhenOpened, openVoiceSettings, useVoiceReady } from "@/app/VoiceBar";
+import { callWhenOpened, useVoiceReady } from "@/app/VoiceBar";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -973,10 +973,10 @@ function Composer({ hubId, project, agents, onSent, onCall }: {
           </div>
           {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
           <DictateButton input={input} value={draft} onText={(t) => { setDraft(t); history.reset(); }} disabled={busy} />
-          {voice?.available && onCall && recipient && !draft.trim() && !att.items.length && !busy ? (
+          {voice?.ready && onCall && recipient && !draft.trim() && !att.items.length && !busy ? (
             // Nothing typed: the same place starts a voice chat with them.
-            <button type="button" className="sp-send is-call" onClick={() => (voice.ready ? onCall(recipient) : openVoiceSettings())} aria-label={L("语音聊天", "Voice chat")}
-              title={voice.ready ? L(`和 ${rec ? nodeName(rec.st.agent, rec.hub) : recipient} 语音聊天`, `Voice chat with ${rec ? nodeName(rec.st.agent, rec.hub) : recipient}`) : L("语音聊天：先填写语音设置", "Voice chat: set it up first")}>
+            <button type="button" className="sp-send is-call" onClick={() => onCall(recipient)} aria-label={L("语音聊天", "Voice chat")}
+              title={L(`和 ${rec ? nodeName(rec.st.agent, rec.hub) : recipient} 语音聊天`, `Voice chat with ${rec ? nodeName(rec.st.agent, rec.hub) : recipient}`)}>
               <AudioLines />
             </button>
           ) : (

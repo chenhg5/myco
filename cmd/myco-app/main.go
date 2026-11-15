@@ -84,6 +84,12 @@ func main() {
 			return pickImage()
 		}
 	}
+	// The pages' language changed: the tray menu (when there is one) follows.
+	b.OnUILang = func(l string) {
+		if f := uiLangHook; f != nil {
+			f(l)
+		}
+	}
 	if err := runGUI(handler(b), b.SetPendingLink, b.Update.SetRelaunch); err != nil {
 		fmt.Fprintln(os.Stderr, "myco-app:", err)
 		os.Exit(1)
@@ -93,6 +99,9 @@ func main() {
 // pickImage opens the system's panel for a picture (set by runGUI where
 // the web view's own panel cannot keep to pictures).
 var pickImage func() (string, error)
+
+// uiLangHook, when the tray menu is up, redraws it in the pages' language.
+var uiLangHook func(lang string)
 
 // bundledCLI is the myco CLI inside the app bundle
 // (myco.app/Contents/Resources/myco), or "" when not running from one.

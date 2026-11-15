@@ -20,8 +20,9 @@ MycoKit/              a local Swift package with everything else
     MycoFeatures/     pages and navigation (Router)
   Tests/
 project.yml           the Xcode project's source (XcodeGen); Myco.xcodeproj is generated and committed
-design/app-icon.svg   the app icon's source: the desktop icon's mark, on a full square (iOS cuts the corners)
-scripts/              gen-look-fixtures.mjs: avatar fixtures made from web/src/app/persona.tsx
+design/app-icon.svg   the app icon's source: the logo's ink mushroom on cream, on a full square (iOS cuts the corners)
+scripts/              gen-look-fixtures.mjs: avatar fixtures made from web/src/app/persona.tsx;
+                      testflight.sh: archives the app and uploads it to TestFlight
 ```
 
 Dependencies point down only: `MycoFeatures` → `MycoUI`, `MycoCore` → `MycoAPI`, `MycoCrypto`, `MycoStore`. A page reads its model and draws; what a task's state is (`RunState`), what a member is up to (`MemberState`) and what the send button does (`ComposerAction`) are each worked out in one place in `MycoCore`. Navigation state lives only in `Router`.
@@ -37,6 +38,23 @@ cd ios && xcodegen generate            # after changing project.yml or adding a 
 node ios/scripts/gen-look-fixtures.mjs # after changing how faces are drawn in web/src/app/persona.tsx
 ```
 
+## Releasing to TestFlight
+
+What is installed from Xcode is a development build: it runs only on devices registered in the developer account. Other people get the app through TestFlight.
+
+Once, in the developer account: register the bundle id (`PRODUCT_BUNDLE_IDENTIFIER` in `project.yml`) as an explicit App ID, and create the app in App Store Connect with it. The name there must be one no other app has; the name under the icon is `CFBundleDisplayName` and stays "myco".
+
+Then, for every build:
+
+```bash
+TEAM=<Apple team id> ios/scripts/testflight.sh            # archive (Release), export, upload
+TEAM=<Apple team id> UPLOAD=0 ios/scripts/testflight.sh   # archive only: does a release build work?
+```
+
+The upload signs in as the account Xcode is signed in to on the Mac, or with an App Store Connect API key (`ASC_KEY_PATH`, `ASC_KEY_ID`, `ASC_ISSUER_ID`). The build number is the time (UTC) unless `BUILD` is given, since it must grow with every upload; the version is the project's `MARKETING_VERSION` unless `VERSION` is given (a new version means a new beta review for outside testers, so it changes only on purpose). After some minutes the build shows in TestFlight: testers who are members of the team can install it at once; outside testers need the first build of a version to pass beta review.
+
+What an upload is checked for is in the project: the privacy manifest (`Myco/PrivacyInfo.xcprivacy`: no tracking, nothing collected, `UserDefaults` for the app's own settings), and the export compliance answer (`ITSAppUsesNonExemptEncryption` is false: the app encrypts nothing itself, it uses the system's HTTPS and keychain). Both must be kept true: change them the day the app collects something or encrypts messages itself.
+
 ## Trying it
 
 The app opens the workspace joined earlier, or the welcome page: join with a link from the desktop app (Settings → Members → Add a device), or look around the demo workspace. Launch arguments pick what to show:
@@ -48,6 +66,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-dictation` | `scripted`: the microphone hears a script (nobody speaks to a simulator); `denied`: it is not allowed to listen |
+| `-myco-voice` | `scripted`: a voice chat is a script (the microphone hears a question and a request, a scripted model answers, the voice is silent), with no key and nobody speaking; `denied`: the microphone may not open |
 | `-myco-latency` | milliseconds every answer of the demo takes: a slow connection, to see what loading looks like |
 | `-myco-notifier` | `recorded`: notifications are kept in memory and the system is never asked for permission |
 | `-myco-appearance` | `system`, `light`, `dark` |
@@ -63,13 +82,33 @@ Messages show their pictures as thumbnails and other files as rows; a tap opens 
 
 ## The input
 
-One card, two rows: the words get the whole width, and the controls sit under them. What adds to a message is on the left (the plus for pictures and files, the microphone); the one button that sends it, adds it to the running task, or stops the run is alone at the lower right, under the thumb. The microphone and Send are a whole card apart, so one is never hit for the other, and the microphone stays while there are words, so speaking can go on where it stopped (an input that swaps the microphone for Send, as Messages does, cannot do that). Every control is at least 44 points to the finger. A tap anywhere else on the card is a tap in the text.
+One card, two rows: the words get the whole width, and the controls sit under them. What adds to a message is on the left (the plus for pictures and files, the microphone); the one button that sends it, adds it to the running task, or stops the run is alone at the lower right, under the thumb. Once voice is set up, with nothing typed and nothing running that button starts a voice chat with the agent (below), as on the desktop. The microphone and Send are a whole card apart, so one is never hit for the other, and the microphone stays while there are words, so speaking can go on where it stopped (an input that swaps the microphone for Send, as Messages does, cannot do that). Every control is at least 44 points to the finger. A tap anywhere else on the card is a tap in the text.
 
 Return breaks the line. What is said to an agent often takes several lines, sending wakes it or interrupts what it is doing, and a phone's keyboard has no Shift+Return, so sending stays on a button; "Return sends" in Settings is there for those who want a chat app's way, off by default. With a keyboard attached, ⌘Return sends.
 
 ## Speaking instead of typing
 
 The microphone is in the input's lower left, beside the plus. It listens with Apple's speech recognition (`AppleSpeechListener`), on the phone when the language allows, in the language chosen for the app, and the words grow into the box after what was typed. A tap stops it; so does typing or sending, and nothing more is written after that. A pause does not end it: the recognizer ends its session at each pause, and the next one starts at once on the running microphone, its words after what was said (`Utterances`, the desktop's rule in `internal/console/dictation.go`); six silent sessions in a row end the listening. The system asks for the microphone and for speech recognition the first time; without them the button turns amber and a line says where to allow them.
+
+## A voice chat
+
+Talking with an agent out loud, in its conversation: the desktop app's voice call ([docs/design/voice.md](../docs/design/voice.md)), with the same rules. Once it is set up in Settings, with nothing typed and nothing running the input's round button (a waveform) starts it; the call is a bar docked above the input with how it stands (listening, thinking, speaking, muted), the last few lines of the talk, mute and hang up. The conversation scrolls and the input types as always.
+
+- **What is said goes to the agent as if typed.** A fast model hears the person and passes on what they want with `tell_agent`: added to the agent's open task, else a new one, with no confirmation (`ConversationModel.tell`, the rule of the send button). What it passes on ends with the desktop's trailer (`ViaVoice`), which the page shows as a small "By voice" mark; a tap shows the words as heard. Questions about progress it answers itself from the conversation (`VoiceContext`); `stop_agent` stops the open task, `check_agent` reads the conversation again.
+- **It can be cut off.** Real words while it talks stop it at once (not an "嗯", not its own voice coming back); what the person heard of its answer is kept as said, marked as cut off.
+- **News is told in a pause.** When the agent answers or asks something, the voice says the gist once nobody has made a sound for a second and a half. A task typed in during the call is watched like one spoken.
+
+A phone has no local backend, so the loop the desktop runs in Go (`internal/console/voice_call.go`) runs in the app (`VoiceCall`), in three parts behind protocols:
+
+| Part | In the app | In the demo and tests |
+|---|---|---|
+| Hearing and playing (`VoiceAudio`) | `AppleVoiceAudio`: one audio engine with the system's voice processing (echo cancellation, noise suppression), Apple's speech recognition on the phone when the language allows, one session after another; a pause of 0.9 s ends what is said | `ScriptedVoiceAudio` |
+| Thinking (`VoiceModel`) | `OpenAIChat`: any OpenAI-compatible chat API, streamed, with tools; the desktop's prompt | `ScriptedVoiceModel` |
+| Speaking (`VoiceSpeech`) | `DoubaoSpeech` (the desktop's API and default voice); with no Doubao key, `SystemSpeech`: the phone's own voice, played through the same engine | `SilentSpeech` |
+
+Settings › Voice chat takes the model's address, name and key, and optionally a Doubao key, voice and speed. Keys go to the keychain (`voice:llm`, `voice:tts`), are never shown again and never reach the workspace; the desktop's keys are in the Mac's keychain and cannot be read from here, so they are typed once more. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
+
+What differs from the desktop: the call hangs up when the conversation is left, when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
 
 ## A conversation, as the desktop app shows it
 

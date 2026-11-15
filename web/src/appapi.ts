@@ -28,6 +28,8 @@ export interface VoiceInfo {
   has_llm_key: boolean;
   has_tts_key: boolean;
   session: { on: boolean; state: VoiceState; muted: boolean; hub_id?: string; agent?: string };
+  /** a call can start: a microphone here, the model and the voice set up (v0.19.12+) */
+  ready?: boolean;
 }
 /** One line of a call: id stays the line's own; seq orders its changes. */
 export interface VoiceLine {
@@ -629,6 +631,8 @@ export const appApi = {
   voiceStop: () => request<VoiceInfo>("POST", "app/voice/stop", {}),
   voiceMute: (muted: boolean) => request<VoiceInfo>("POST", "app/voice/mute", { muted }),
   voiceEvents: (after: number) => request<VoiceEvents>("GET", `app/voice/events?after=${after}`),
+  /** The language these pages show, for what the desktop app draws itself (its tray menu). */
+  putUILang: (lang: "zh" | "en") => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
   workspaces: (hubId: string) =>
     request<WorkspaceState>("GET", `app/hubs/${enc(hubId)}/workspaces`),

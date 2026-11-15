@@ -2019,6 +2019,14 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       await page.locator(".conv-detail .conv-compose-input").fill("");
+      // Not set up: no way in; the round button is Send, as usual.
+      const voiceConfig = (body) => fetch(`http://${HOST}:${mockPort()}/app/voice/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      await voiceConfig({ clear_tts_key: true });
+      await page.evaluate(() => window.dispatchEvent(new Event("myco-voice-changed")));
+      await page.locator(".conv-detail .conv-send.is-call").waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .conv-send").waitFor({ timeout: 5_000 });
+      await voiceConfig({ tts_key: "set" });
+      await page.evaluate(() => window.dispatchEvent(new Event("myco-voice-changed")));
       const voiceBtn = page.locator(".conv-detail .conv-send.is-call");
       await voiceBtn.waitFor({ timeout: 10_000 });
       await voiceBtn.hover();
@@ -2176,6 +2184,17 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "dialog-new-project");
       await closeDialog(page);
       if (narrow) await sidebar(page, false);
+    });
+
+    // The Mac's menu bar asks the page for what it offers (a "myco-menu"
+    // event): search, then settings.
+    await step("菜单栏 · 搜索、设置", async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-menu", { detail: "search" })));
+      await page.locator(".cp").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".cp").waitFor({ state: "detached", timeout: 5_000 });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-menu", { detail: "settings" })));
+      await page.locator(".app-settings-tab").first().waitFor({ timeout: 5_000 });
     });
 
     await step("设置", async () => {

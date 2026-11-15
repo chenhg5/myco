@@ -116,6 +116,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
+  // The desktop app's tray menu speaks the pages' language: say it when
+  // they load and when it changes (AppMode is drawn again then).
+  const uiLang = lang();
+  useEffect(() => { void appApi.putUILang(uiLang).catch(() => undefined); }, [uiLang]);
   // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {
     const on = (e: Event) => {
@@ -396,6 +400,25 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return next;
     });
   };
+  // The Mac's menu bar (appmenu_darwin.go) asks for what it offers.
+  const menuRef = useRef<(cmd: string) => void>(() => undefined);
+  menuRef.current = (cmd: string) => {
+    switch (cmd) {
+      case "settings": setPage("settings"); break;
+      case "about": openSettingsSection("about"); setPage("settings"); break;
+      case "search": setPaletteOpen((o) => !o); break;
+      case "sidebar": toggleSidebar(); break;
+      case "new-project": setNewProjectOpen(true); break;
+      case "connect": setConnectOpen(true); break;
+      case "add-computer": setAddMachineOpen(true); break;
+      case "refresh": void refreshRef.current(); break;
+    }
+  };
+  useEffect(() => {
+    const on = (e: Event) => menuRef.current(String((e as CustomEvent<string>).detail || ""));
+    window.addEventListener("myco-menu", on);
+    return () => window.removeEventListener("myco-menu", on);
+  }, []);
   const sidebar = useSidebarWidth(() => {
     setCollapsed(true);
     try { localStorage.setItem(SIDEBAR_KEY, "closed"); } catch { /* storage unavailable */ }

@@ -414,12 +414,128 @@ struct SettingsScreen: View {
                 Text(L("关着时回车是换行，用右下角的按钮发送：给 agent 的话常常要分段，发出去就会叫醒它或打断正在做的事。打开后回车直接发送，像聊天软件那样，但就不能用回车换行了。",
                        "Off: Return breaks the line and the button at the lower right sends. What you tell an agent often takes several lines, and sending wakes it or interrupts what it is doing. On: Return sends, as in a chat app, and can no longer break a line."))
             }
+            Section {
+                NavigationLink {
+                    VoiceSettingsScreen()
+                } label: {
+                    LabeledContent(L("语音聊天", "Voice chat"), value: app.voiceReady ? L("已设置", "Set up") : L("未设置", "Not set up"))
+                }
+                .accessibilityIdentifier("settings.voice")
+            } header: {
+                Text(L("语音", "Voice"))
+            } footer: {
+                Text(L("和 agent 像打电话一样说话。设置好以后，输入框空着时右下角的按钮就是语音聊天。",
+                       "Talk with an agent as on a call. Once it is set up, with nothing typed the button at the lower right starts a voice chat."))
+            }
             Section(L("关于", "About")) {
                 LabeledContent(L("版本", "Version"), value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")
             }
         }
         .navigationTitle(L("设置", "Settings"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Settings › 语音: the model a voice call talks with, and the voice it
+/// answers in. Keys go to the keychain and are never shown again.
+struct VoiceSettingsScreen: View {
+    /// Opened by itself from a conversation: it has a button to close it.
+    var closes = false
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var settings = VoiceSettings()
+    @State private var modelKey = ""
+    @State private var speechKey = ""
+    @State private var forgetModelKey = false
+    @State private var forgetSpeechKey = false
+    @State private var read = false
+
+    private var hasModelKey: Bool { app.voiceHasModelKey && !forgetModelKey }
+    private var hasSpeechKey: Bool { app.voiceHasSpeechKey && !forgetSpeechKey }
+
+    /// What is still missing before a call can start.
+    private var missing: String? {
+        if !settings.namesModel { return L("填上接口地址和模型，就可以开始语音聊天。", "Fill in the address and the model to start a voice chat.") }
+        if !hasModelKey, modelKey.trimmingCharacters(in: .whitespaces).isEmpty { return L("还差模型的密钥。", "The model's key is still missing.") }
+        return nil
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField(L("接口地址，如 https://api.deepseek.com/v1", "Address, e.g. https://api.openai.com/v1"), text: $settings.baseURL)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("voice.baseURL")
+                TextField(L("模型，如 deepseek-chat", "Model, e.g. gpt-4o-mini"), text: $settings.model)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("voice.model")
+                key($modelKey, saved: hasModelKey, forget: $forgetModelKey, id: "voice.modelKey")
+            } header: {
+                Text(L("快模型（OpenAI 兼容接口）", "Fast model (OpenAI-compatible API)"))
+            } footer: {
+                Text(missing ?? L("它听你说话、把话转给 agent、再把进展说给你听，所以要选反应快的模型。",
+                                  "It hears you, passes things on to the agent and tells you how it goes, so pick a fast one."))
+                    .foregroundStyle(missing == nil ? MycoColor.muted : MycoColor.amber)
+            }
+            Section {
+                key($speechKey, saved: hasSpeechKey, forget: $forgetSpeechKey, id: "voice.speechKey")
+                if hasSpeechKey || !speechKey.isEmpty {
+                    TextField(L("音色，留空用默认的", "Voice id; empty uses the default"), text: $settings.speaker)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Stepper(value: $settings.rate, in: -50...100, step: 10) {
+                        LabeledContent(L("语速", "Speed"), value: settings.rate == 0 ? L("正常", "Normal") : (settings.rate > 0 ? "+\(settings.rate)" : "\(settings.rate)"))
+                    }
+                }
+            } header: {
+                Text(L("声音（豆包语音合成）", "Voice (Doubao speech synthesis)"))
+            } footer: {
+                Text(L("火山引擎控制台里的 API Key。不填就用 iPhone 自带的声音。", "An API key from the Volcengine console. Without one, the iPhone's own voice is used."))
+            }
+            Section {
+            } footer: {
+                Text(L("密钥只存在这台 iPhone 的钥匙串里，不会传到工作区。你说的话由苹果的语音识别转成文字（这门语言能在手机上识别时不出手机），文字发给上面的模型；它回答的文字发给豆包合成声音。",
+                       "Keys stay in this iPhone's keychain and never go to the workspace. Apple's speech recognition turns what you say into text (on the phone when the language allows); the text goes to the model above, and its answers go to Doubao to be spoken."))
+            }
+        }
+        .navigationTitle(L("语音聊天", "Voice chat"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if closes {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("完成", "Done")) { dismiss() }
+                        .accessibilityIdentifier("voice.done")
+                }
+            }
+        }
+        .onAppear {
+            guard !read else { return }
+            read = true
+            settings = app.voice
+        }
+        // Leaving the page keeps what was typed.
+        .onDisappear {
+            let chosen = settings
+            let keys = (model: modelKey, speech: speechKey)
+            let forget = (model: forgetModelKey && modelKey.isEmpty, speech: forgetSpeechKey && speechKey.isEmpty)
+            Task {
+                await app.saveVoice(
+                    chosen, modelKey: keys.model, speechKey: keys.speech, forgetModelKey: forget.model, forgetSpeechKey: forget.speech)
+            }
+        }
+    }
+
+    /// A key's field: what is saved is never shown, only that it is.
+    @ViewBuilder private func key(_ text: SwiftUI.Binding<String>, saved: Bool, forget: SwiftUI.Binding<Bool>, id: String) -> some View {
+        HStack {
+            SecureField(saved ? L("密钥已保存，要换就填新的", "Key saved; type a new one to replace it") : "API Key", text: text)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityIdentifier(id)
+            if saved, text.wrappedValue.isEmpty {
+                Button(L("清除", "Clear")) { forget.wrappedValue = true }
+                    .font(.footnote).tint(MycoColor.red)
+                    .buttonStyle(.borderless)
+            }
+        }
     }
 }
 
@@ -525,8 +641,11 @@ struct WelcomeScreen: View {
     var body: some View {
         VStack(spacing: 14) {
             Spacer()
-            AvatarView(.mushroom(MushroomLook(cap: 0, pattern: 0, face: 0, sprout: true)), size: 96)
-            Text("myco").font(.largeTitle.weight(.bold)).foregroundStyle(MycoColor.fg)
+            // The logo as designed: the pixel mushroom and the wordmark.
+            BrandLogo(.whole, height: 60)
+                .foregroundStyle(MycoColor.fg)
+                .padding(.bottom, 10)
+                .accessibilityIdentifier("welcome.logo")
             Text(L("在手机上跟进和指挥你的 agent。", "Follow and direct your agents from your phone."))
                 .font(.body).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
             Spacer()

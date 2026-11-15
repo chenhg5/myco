@@ -1,14 +1,17 @@
 # myco logo
 
+A pixel mushroom and a pixel wordmark (since v0.19.13), in one ink color. The light parts (the cap's spots, the stem, the inside of the o) are cut out, so the logo sits on any background.
+
 | File | Use |
 |---|---|
-| `myco-logo.svg` | Symbol + wordmark, for light backgrounds |
-| `myco-logo-dark.svg` | Symbol + wordmark, for dark backgrounds |
-| `myco-symbol.svg` | The mycelium symbol alone: favicon, avatars, small sizes (reads down to 16 px) |
+| `myco-logo.svg` | Mushroom + wordmark, ink `#0a0a0a`, for light backgrounds |
+| `myco-logo-dark.svg` | Mushroom + wordmark, `#fafafa`, for dark backgrounds |
+| `myco-symbol.svg` | The mushroom alone: favicon, avatars, small sizes |
 | `myco-wordmark.svg`, `myco-wordmark-dark.svg` | The wordmark alone |
-| `myco-icon-512.png`, `myco-app-icon.svg` | App icon / avatar: gradient symbol on a graphite (`#2a2c30`) rounded tile |
-| `../social-preview.png` | 1280×640 card for links (GitHub → Settings → Social preview) |
+| `myco-icon-512.png`, `myco-app-icon.svg` | App icon: the ink mushroom (`#141414`) on a cream (`#f3efe6`) rounded tile |
 
-Colors: the symbol is a mint-to-teal gradient (since v0.18.7): `#5ee0a8 → #2fb889 → #0f8f84` on light backgrounds, `#a6f4c5 → #34d399 → #0f9488` on dark ones and in the app icon; flat uses keep brand green `#3a9a78`. The wordmark is ink `#0a0a0a` on light and `#fafafa` on dark.
-The dashboard uses the same green as its `--brand` token (`web/src/index.css`) and draws the logo from
-`web/src/components/brand.tsx`.
+The App and the dashboard draw the logo from `web/src/components/brand.tsx` (`Logo`, `LogoSymbol`, `LogoWordmark`) in the current text color; `web/public/favicon.svg` follows the browser's light or dark scheme. The App's sidebar shows the wordmark alone (the mushroom is the app's icon).
+
+The iOS app's icon is `ios/Myco/Assets.xcassets/AppIcon.appiconset/icon-1024.png`, rendered from `ios/design/app-icon.svg`: the same mushroom on the cream filling the whole square (the system rounds the corners itself), at the size it has on the Mac's tile; its welcome page draws the logo from `BrandLogo` (`ios/MycoKit/Sources/MycoUI/BrandLogo.swift`), the same paths.
+
+The desktop app's icons are in `cmd/myco-app/build/`: `darwin/icon-1024.png` (the Big Sur grid: an 824 px tile in 1024, with a soft shadow), `darwin/tray-template.png` (the mushroom in black, a template image the menu bar tints), `windows/icon-256.png`, and `windows/tray.png` (the ink mushroom with cream spots and stem and a thin cream outline, so it reads on light and dark taskbars).

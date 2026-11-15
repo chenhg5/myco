@@ -131,6 +131,80 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAVoiceChatHearsAnswersAndPassesOn() {
+        // Nobody speaks to a simulator and there is no key: the microphone
+        // hears a script, a scripted model answers, the voice is silent.
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-voice", "scripted"])
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        XCTAssertEqual(submit.label, "Voice chat", "nothing typed: the round button starts a voice chat")
+        snap("voice-entry")
+        submit.tap()
+
+        // The call is a bar docked above the input.
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "the call shows above the input")
+        let input = app.descendants(matching: .any)["composer.input"]
+        XCTAssertLessThan(bar.frame.maxY, input.frame.minY + 1, "above the words")
+        XCTAssertFalse(app.buttons["composer.mic"].exists, "the microphone is the call's while it is on")
+        XCTAssertNotEqual(submit.label, "Voice chat", "one call at a time")
+        for control in [app.buttons["voice.mute"], app.buttons["voice.hangup"]] {
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, "wide enough to hit")
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, "tall enough to hit")
+        }
+
+        // A question about progress is answered by the voice itself.
+        let answer = app.descendants(matching: .any).matching(identifier: "voice.line.voice").firstMatch
+        XCTAssertTrue(answer.waitForExistence(timeout: 10), "the voice answers")
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "checking the links"), evaluatedWith: answer)
+        waitForExpectations(timeout: 10)
+        snap("voice-answer")
+
+        // What is wanted goes to the agent as if typed, marked as said.
+        let action = app.descendants(matching: .any).matching(identifier: "voice.line.action").firstMatch
+        XCTAssertTrue(action.waitForExistence(timeout: 25), "the bar says what it passed on")
+        let mark = app.buttons["voice.mark"].firstMatch
+        XCTAssertTrue(mark.waitForExistence(timeout: 10), "the message in the conversation carries the voice mark")
+        XCTAssertTrue(app.staticTexts["顺便把标题也改短一点"].exists, "and reads as what was asked, without the note under it")
+        snap("voice-passed-on")
+        mark.tap()
+        XCTAssertTrue(app.staticTexts["As said: 顺便把标题也改短一点"].waitForExistence(timeout: 3), "a tap shows the words as heard")
+
+        // Muting, then hanging up: the bar goes and the microphone is back.
+        // (Once it has finished what it was saying, the bar says so.)
+        app.buttons["voice.mute"].tap()
+        expectation(for: NSPredicate(format: "label == %@", "Muted"), evaluatedWith: app.staticTexts["voice.state"])
+        waitForExpectations(timeout: 25)
+        snap("voice-muted")
+        app.buttons["voice.hangup"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: bar)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["composer.mic"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testWithoutVoiceSetUpTheButtonOnlySends() {
+        // No key on this simulator: the round button is Send, as always.
+        let app = launch(["-myco-route", "agent:studio-codex-e07b"])
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        XCTAssertEqual(submit.label, "Send")
+        XCTAssertFalse(submit.isEnabled, "nothing typed: nothing to send, and no voice chat to start")
+    }
+
+    @MainActor
+    func testAVoiceChatWithoutTheMicrophoneSaysWhereToAllowIt() {
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-voice", "denied"])
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        submit.tap()
+        let note = app.descendants(matching: .any)["dictation.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "it says why the call ended")
+        XCTAssertTrue(app.buttons["Settings"].exists, "and where to allow it")
+        XCTAssertFalse(app.descendants(matching: .any)["voice.bar"].exists)
+    }
+
+    @MainActor
     func testARunThatWaitsStandsStillAndSaysWhatFor() {
         // The notes helper set my task aside: it answers later.
         var app = launch(["-myco-start", "waiting", "-myco-route", "agent:studio-claude-c41f"])
