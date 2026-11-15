@@ -262,6 +262,76 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testWhatIsSentShowsAtOnceMarkedAsOnItsWay() {
+        // (Every answer takes a while here, as on a slow connection.)
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-latency", "2000"])
+        let input = app.descendants(matching: .any)["composer.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 30))
+        // (Once the conversation itself has come: nothing was said in it yet.)
+        XCTAssertTrue(app.staticTexts["What should 翻译 do for you?"].waitForExistence(timeout: 40))
+        input.tap()
+        input.typeText("Translate the readme")
+        app.buttons["composer.submit"].tap()
+        // On the page before the workspace has answered, and said to be on its way.
+        let sending = app.descendants(matching: .any)["message.sending"]
+        XCTAssertTrue(sending.waitForExistence(timeout: 1.5), "what I sent is marked as being sent")
+        XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "and shows at once")
+        XCTAssertFalse((input.value as? String ?? "").contains("Translate"), "the input is empty again")
+        XCTAssertEqual(app.keyboards.count, 0, "the keyboard is out of the way")
+        snap("sending")
+        // Then it is simply there.
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: sending)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(app.staticTexts["Translate the readme"].exists, "it stays when the workspace has it")
+    }
+
+    @MainActor
+    func testAFileAboutToGoCanBeLookedAtFirst() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-attach", "studio-claude-c41f"])
+        let open = app.buttons.matching(identifier: "composer.file.open")
+        XCTAssertTrue(open.firstMatch.waitForExistence(timeout: 20), "what was picked shows above the input")
+        // A tap on the picture opens it full size, to see it is the right one.
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.isHittable)
+        open.firstMatch.tap()
+        // The system's preview covers the page.
+        expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.descendants(matching: .any)["QLPreviewControllerView"].waitForExistence(timeout: 5), "it is the system's preview")
+        snap("files-look")
+        // Closed the way the system's preview is: a picture fills the
+        // screen, a tap brings its bar, and the bar has a close button.
+        let done = app.buttons["QLOverlayDoneButtonAccessibilityIdentifier"]
+        if !done.exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the preview can be closed")
+        done.tap()
+        // It is still waiting to go.
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(open.firstMatch.exists)
+        XCTAssertTrue(submit.isEnabled)
+    }
+
+    @MainActor
+    func testPullingUpAtTheEndReadsTheConversationAgain() {
+        // (Every answer takes a while here, as on a slow connection: the
+        // refresh is still going when the finger has let go.)
+        let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-latency", "1500"])
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.waitForExistence(timeout: 40), "the conversation is open")
+        let spinner = app.descendants(matching: .any)["conversation.refreshing"]
+        XCTAssertFalse(spinner.exists)
+        // A finger pulls the end of the conversation up, past where it stops.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        XCTAssertTrue(spinner.waitForExistence(timeout: 3), "pulling up past the end refreshes, and shows that it does")
+        snap("refresh-end")
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: spinner)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue(app.buttons["attachment.picture"].firstMatch.exists, "the conversation is still there")
+    }
+
+    @MainActor
     func testALongConversationOpensAtItsEndAndScrolls() {
         let app = launch(["-myco-start", "long", "-myco-route", "agent:studio-claude-c41f"])
         let last = app.staticTexts[Self.lastReply]

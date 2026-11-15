@@ -207,8 +207,16 @@ private struct WorkspaceChrome: ViewModifier {
                 if !isSearching { AppTabBar() }
             }
             .toolbar(.hidden, for: .tabBar)
-            // Pulling down asks the workspace again, now.
-            .refreshable { await session.refresh() }
+            // Pulling down asks the workspace again, now. The spinner stays
+            // long enough to be seen, however quick the answer.
+            .refreshable {
+                // In a task of its own: SwiftUI gives this one up as soon
+                // as the list is drawn again, which the first answer does;
+                // the refresh then ended half done and the system's
+                // spinner never showed.
+                let session = session
+                await Task { await session.refreshByHand() }.value
+            }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)

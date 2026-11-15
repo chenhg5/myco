@@ -48,6 +48,14 @@ public actor FakeHub: HubAPI {
         latency = value
     }
 
+    /// How long a task's steps take to come, on top of that: one slow
+    /// answer among the quick ones.
+    private var slowSteps: Duration = .zero
+
+    public func setSlowSteps(_ value: Duration) {
+        slowSteps = value
+    }
+
     public func setTooOldForHidden(_ value: Bool) {
         tooOldForHidden = value
     }
@@ -150,6 +158,7 @@ public actor FakeHub: HubAPI {
 
     public func trace(of messageID: String, after seq: Int) async throws -> Trace {
         try await check()
+        if slowSteps > .zero { try? await Task.sleep(for: slowSteps) }
         advance()
         guard let task = messages.first(where: { $0.id == messageID }) else {
             throw HubError(error: "not_found", message: "message \(messageID) not found")

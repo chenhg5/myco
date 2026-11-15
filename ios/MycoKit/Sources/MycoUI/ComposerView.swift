@@ -61,6 +61,9 @@ public struct ComposerView: View {
     let attachChoices: [AttachChoice]
     let onRemoveFile: (String) -> Void
     let onRetryFile: (String) -> Void
+    /// A tap on a file about to go: look at it first.
+    let openLabel: String
+    let onOpenFile: (String) -> Void
     /// Speaking instead of typing: nil leaves the microphone out.
     let mic: MicState?
     let micLabel: String
@@ -73,8 +76,10 @@ public struct ComposerView: View {
         text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
         files: [TrayFile] = [], fileNote: String? = nil, attachLabel: String, removeLabel: String, retryLabel: String,
         attachChoices: [AttachChoice], mic: MicState? = nil, micLabel: String = "", returnSends: Bool = false,
+        openLabel: String = "",
         onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void,
         onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in },
+        onOpenFile: @escaping (String) -> Void = { _ in },
         onMic: @escaping () -> Void = {}
     ) {
         _text = text
@@ -93,6 +98,8 @@ public struct ComposerView: View {
         self.attachChoices = attachChoices
         self.onRemoveFile = onRemoveFile
         self.onRetryFile = onRetryFile
+        self.openLabel = openLabel
+        self.onOpenFile = onOpenFile
         self.mic = mic
         self.micLabel = micLabel
         self.onMic = onMic
@@ -114,7 +121,9 @@ public struct ComposerView: View {
         // where it stopped.
         VStack(alignment: .leading, spacing: 0) {
             if !files.isEmpty {
-                AttachmentTray(files: files, removeLabel: removeLabel, retryLabel: retryLabel, onRemove: onRemoveFile, onRetry: onRetryFile)
+                AttachmentTray(
+                    files: files, removeLabel: removeLabel, retryLabel: retryLabel, openLabel: openLabel,
+                    onRemove: onRemoveFile, onRetry: onRetryFile, onOpen: onOpenFile)
                     .padding(.top, 8)
                 if let fileNote {
                     Text(fileNote).font(.caption).foregroundStyle(MycoColor.red)

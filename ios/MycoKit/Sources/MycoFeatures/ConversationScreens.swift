@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import QuickLook
 import UniformTypeIdentifiers
 import MycoAPI
 import MycoCore
@@ -129,15 +130,23 @@ struct ConversationHost: View {
     let project: String?
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let model = session.conversation(with: agent, project: project)
+        // The app in the background asks for nothing.
+        let front = scenePhase != .background
         ZStack {
             MycoColor.bg.ignoresSafeArea()
             ConversationBody(model: model, focus: focus)
         }
-        // Starts once the workspace has said who this device is.
-        .task(id: session.me) { await model.run() }
+        // Starts once the workspace has said who this device is, and
+        // starts over when the app comes back to the front: what was
+        // asked before it left may never be answered, and the page must
+        // not wait for it.
+        .task(id: session.me + (front ? "|front" : "|away")) {
+            if front { await model.run() }
+        }
         // On screen, and whenever something new arrives while it is: read.
         .onChange(of: model.items.last?.id, initial: true) { session.markRead(agent) }
         .onDisappear { session.markRead(agent) }
@@ -162,6 +171,12 @@ struct ConversationBody: View {
     @State private var callProblem: DictationProblem?
     /// A call could not be made from what is set: its settings are open.
     @State private var settingUpVoice = false
+    /// A file about to go, opened to look at it first.
+    @State private var lookingAt: URL?
+    /// The end was pulled up: the page is asking the workspace again.
+    @State private var refreshingFromEnd = false
+    /// Counts those pulls: a tap answers each.
+    @State private var pulls = 0
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
@@ -198,6 +213,8 @@ struct ConversationBody: View {
     @State private var waiting = false
 
     private static let bottomID = "conversation.bottom"
+    /// How far past its end the conversation is pulled to refresh it.
+    private static let pullToRefresh: CGFloat = 56
 
     private var name: String { session.displayName(of: model.agent) }
 
@@ -235,14 +252,51 @@ struct ConversationBody: View {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         row(item, at: index)
                             // What comes once the page is open arrives; what
-                            // it opened with is simply there.
-                            .modifier(Arrival(animated: settled))
+                            // it opened with is simply there, and so is what
+                            // was already shown while it was being sent.
+                            .modifier(Arrival(animated: settled && !model.placed.contains(item.id)))
                             .padding(.top, index == 0 ? 0 : gap(from: model.items[index - 1], to: item))
+                    }
+                    // What I just sent, before the workspace hands it back:
+                    // on the page at once, marked as on its way.
+                    ForEach(model.outgoing) { sent in
+                        VStack(alignment: .trailing, spacing: Space.s) {
+                            if !sent.text.isEmpty { MyBubble(sent.text) }
+                            files(sent.files, trailing: true)
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.mini)
+                                Text(L("发送中", "Sending")).font(.caption).foregroundStyle(MycoColor.muted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.trailing, 6)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("message.sending")
+                        }
+                        .padding(.top, model.items.isEmpty ? 0 : Space.xl)
                     }
                     // Marks the end. It is also the room between the last
                     // thing said and the input, so "the end" includes it.
                     // On screen (or nearly) means "at the bottom".
                     Color.clear.frame(height: Space.xl)
+                        // Pulled up past the end: the page asks again, and
+                        // says so here, in the room under the last message.
+                        .overlay {
+                            if refreshingFromEnd {
+                                ProgressView()
+                                    .accessibilityLabel(L("正在刷新", "Refreshing"))
+                                    .accessibilityIdentifier("conversation.refreshing")
+                                    .transition(.opacity)
+                            }
+                        }
+                        .onGeometryChange(for: Bool.self) { proxy in
+                            // At rest the end sits on the lower edge of what
+                            // can be seen (measured: the two are equal);
+                            // pulled, it is further up than that.
+                            viewport - proxy.frame(in: .named(Self.space)).maxY > Self.pullToRefresh
+                        } action: { pulled in
+                            // Only a finger pulls: not the keyboard, not the page growing.
+                            if pulled, touched, revealed { refreshFromEnd() }
+                        }
                         .id(Self.bottomID)
                         .onGeometryChange(for: Bool.self) { proxy in
                             proxy.frame(in: .named(Self.space)).minY <= viewport + 40
@@ -319,6 +373,17 @@ struct ConversationBody: View {
                     }
                 }
             }
+            .onChange(of: model.outgoing.count) { old, new in
+                // What I just said is where I look, wherever I had scrolled.
+                guard new > old else { return }
+                pinned = true
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                Task {
+                    // Once more when the keyboard has gone and the row has its height.
+                    try? await Task.sleep(for: .milliseconds(320))
+                    if pinned { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                }
+            }
             .onChange(of: newestMine) { old, new in
                 // What I just said comes into view even if I had scrolled up.
                 guard old != nil, new != nil else { return }
@@ -375,7 +440,7 @@ struct ConversationBody: View {
             if !revealed { withAnimation(.easeOut(duration: 0.15)) { waiting = true } }
         }
         .overlay {
-            if model.loaded, model.items.isEmpty {
+            if model.loaded, model.items.isEmpty, model.outgoing.isEmpty {
                 EmptyState(
                     face: session.agent(model.agent).map(AvatarView.Face.of),
                     title: model.project == nil
@@ -385,6 +450,15 @@ struct ConversationBody: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+        // The workspace does not answer: what is here is from before.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if model.unreachable != nil {
+                StaleBanner(L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."))
+                    .accessibilityIdentifier("conversation.stale")
+            }
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: pulls)
+        .quickLookPreview($lookingAt)
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
@@ -423,6 +497,22 @@ struct ConversationBody: View {
                 Task { await addPicture(data, name: Self.pictureName(L("照片", "photo"), at: Date(), index: 0)) }
             }
             .ignoresSafeArea()
+        }
+    }
+
+    // MARK: Refreshing
+
+    /// The end was pulled up: the conversation and the lists are read
+    /// again now. The spinner stays long enough to be seen.
+    private func refreshFromEnd() {
+        guard !refreshingFromEnd else { return }
+        pulls += 1
+        withAnimation(.easeOut(duration: 0.15)) { refreshingFromEnd = true }
+        Task {
+            async let seen: Void? = try? await Task.sleep(for: .milliseconds(600))
+            await model.refresh()
+            _ = await seen
+            withAnimation(.easeOut(duration: 0.2)) { refreshingFromEnd = false }
         }
     }
 
@@ -910,20 +1000,33 @@ struct ConversationBody: View {
                 mic: call == nil ? micState : nil,
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
+                openLabel: L("看一下", "Look at"),
                 onSubmit: {
                     commits += 1
                     if canCall {
                         startCall()
                     } else {
+                        // What is sent shows on the page at once; the
+                        // keyboard gets out of its way. (Stopping a task
+                        // leaves the keyboard alone.)
+                        if model.action != .stop { Self.dismissKeyboard() }
                         Task { await model.submit() }
                     }
                 },
                 onQueue: {
                     commits += 1
+                    Self.dismissKeyboard()
                     Task { await model.queueNext() }
                 },
                 onRemoveFile: { model.removePending($0) },
                 onRetryFile: { id in Task { await model.retryPending(id) } },
+                onOpenFile: { id in
+                    Task {
+                        guard let place = await model.preview(ofPending: id) else { return }
+                        Self.dismissKeyboard()
+                        lookingAt = place
+                    }
+                },
                 onMic: toggleDictation)
         }
         .background(.bar)
