@@ -28,10 +28,10 @@ func TestTrayStatus(t *testing.T) {
 	if len(st.Busy) != 3 || st.Busy[0].Name != "PM (Codex)" || st.Busy[1].Name != "coder" || st.Busy[2].Working {
 		t.Fatalf("busy: %+v (working first, then waiting)", st.Busy)
 	}
-	if got := trayText(false).nodeLine(st.Busy[0]); got != "⚡ PM (Codex) — reviewing the multihub branch" {
+	if got := trayText(false).nodeLine(st.Busy[0]); got != "PM (Codex) — reviewing the multihub branch" {
 		t.Errorf("node line: %q", got)
 	}
-	if got := trayText(true).nodeLine(st.Busy[2]); got != "📬 waiter — 有任务在排队" {
+	if got := trayText(true).nodeLine(st.Busy[2]); got != "waiter — 有任务在排队" {
 		t.Errorf("waiting line: %q", got)
 	}
 	if got := trayText(true).summary(st); got != "2 个在干活 · 1 个有活待接 · 1 个空闲 · 1 个离线" {
@@ -62,7 +62,7 @@ func TestTrayUpdate(t *testing.T) {
 			t.Errorf("%s: got %q, want %q", body, got, want)
 		}
 	}
-	if got := trayText(true).updateLine("v0.18.29"); got != "⬆️ 有新版本 v0.18.29，点此更新" {
+	if got := trayText(true).updateLine("v0.18.29"); got != "有新版本 v0.18.29，点此更新" {
 		t.Errorf("line: %q", got)
 	}
 }

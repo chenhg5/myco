@@ -1357,6 +1357,15 @@ const server = http.createServer(async (req, res) => {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
   }
+  // /app/ui-lang: the pages' language, for the desktop app's tray menu.
+  if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {
+    if (method === "PUT") {
+      const b = await readBody(req);
+      if (b?.lang !== "zh" && b?.lang !== "en") return fail(res, 400, "invalid_argument", "lang is zh or en");
+      state.uiLang = b.lang;
+    }
+    return send(res, 200, { lang: state.uiLang || "" });
+  }
   // /app/voice: a voice chat with one agent, scripted. Starting it plays a
   // short call (it hears you, passes a task to that agent, which shows in
   // the chat marked as said by voice, and answers), so a test can watch the

@@ -116,6 +116,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
+  // The desktop app's tray menu speaks the pages' language: say it when
+  // they load and when it changes (AppMode is drawn again then).
+  const uiLang = lang();
+  useEffect(() => { void appApi.putUILang(uiLang).catch(() => undefined); }, [uiLang]);
   // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {
     const on = (e: Event) => {
