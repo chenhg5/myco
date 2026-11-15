@@ -2032,6 +2032,23 @@ async function runMatrix(browser, size, scheme) {
       await sent.waitFor({ timeout: 10_000 });
       await sent.locator(".conv-voice-tag").waitFor({ timeout: 5_000 });
       if (compactText(await sent.innerText()).includes("经语音转述")) throw new Error("经语音转述那行应收成一个小标记");
+      // The bar lines up with the box under it; what was said starts in one
+      // place whoever said it.
+      const edges = await page.evaluate(() => {
+        const a = document.querySelector(".conv-detail .vc-bar")?.getBoundingClientRect();
+        const b = document.querySelector(".conv-detail .conv-compose-box")?.getBoundingClientRect();
+        const texts = [...document.querySelectorAll(".conv-detail .vc-line")].map((l) => {
+          const who = l.querySelector(".vc-line-who");
+          const r = document.createRange();
+          const node = [...l.childNodes].find((n) => n !== who && (n.textContent || "").trim());
+          if (!node) return null;
+          r.selectNodeContents(node);
+          return Math.round(r.getBoundingClientRect().left);
+        }).filter((x) => x !== null);
+        return { dl: a && b ? Math.round(a.left - b.left) : 99, dr: a && b ? Math.round(a.right - b.right) : 99, texts };
+      });
+      if (Math.abs(edges.dl) > 1 || Math.abs(edges.dr) > 1) throw new Error(`语音条应和输入框左右对齐，差 ${edges.dl} / ${edges.dr}px`);
+      if (new Set(edges.texts).size > 1) throw new Error(`语音条里每行说的话应从同一处开始，实际 ${edges.texts.join(" / ")}`);
       await settle(page, 300);
       await shot(page, size, scheme, "voice-chat");
       // Mute, then hang up.

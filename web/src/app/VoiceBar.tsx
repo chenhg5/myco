@@ -159,7 +159,7 @@ export function VoiceBar({ hubId, agent, peer, agentName, onClose }: {
         {shown.map((l) => l.kind === "action" ? (
           <div key={l.id} className="vc-action">{l.text}</div>
         ) : l.kind === "notice" ? (
-          <div key={l.id} className="vc-notice">{l.text}</div>
+          <div key={l.id} className="vc-notice" title={l.text}>{shortNotice(l.text)}</div>
         ) : (
           <div key={l.id} className={cn("vc-line", l.kind === "assistant" ? "is-them" : "is-me", l.kind === "hearing" && "is-hearing", l.interrupted && "is-cut")}>
             <span className="vc-line-who">{l.kind === "assistant" ? L("语音", "Voice") : L("你", "You")}</span>
@@ -173,6 +173,20 @@ export function VoiceBar({ hubId, agent, peer, agentName, onClose }: {
       </div>
     </div>
   );
+}
+
+/** A notice in words: a service's raw answer ("model HTTP 400: {json}")
+ *  shortened to its message; all of it on hover. */
+export function shortNotice(text: string): string {
+  const m = /^([\s\S]*?)\{[\s\S]*\}\s*$/.exec(text);
+  if (!m) return text;
+  let said = "";
+  try {
+    const j = JSON.parse(text.slice(m[1].length)) as { message?: string; error?: { message?: string } | string };
+    said = (typeof j.error === "object" ? j.error?.message : typeof j.error === "string" ? j.error : "") || j.message || "";
+  } catch { /* not JSON after all */ }
+  const head = m[1].replace(/[:：]\s*$/, "");
+  return said ? `${head}：${said.length > 140 ? said.slice(0, 140) + "…" : said}` : head;
 }
 
 /** What the voice passed on ends with "——\n（经语音转述。原话：…）"
