@@ -3943,11 +3943,6 @@ html.shell-mac .fp-panel.is-full .fp-head {
 .work-sprite.is-idle .work-feet.is-b {
   opacity: 0;
 }
-.work-verb.is-still {
-  background: none;
-  color: var(--muted);
-  animation: work-in 0.35s ease-out;
-}
 @media (prefers-reduced-motion: reduce) {
   .conv-msg.is-flash .conv-bubble { animation: none; }
   .work-body,
@@ -5297,6 +5292,12 @@ button.app-label:hover { filter: brightness(0.95); }
   color: var(--amber, #b7862a);
   font-size: 10.5px;
 }
+/* Under a task of yours not opened yet or set aside: a few words, like a
+   receipt (还没开始看 / 排在后面 / 稍后回复), before the time. */
+.conv-receipt {
+  margin-right: 6px;
+  color: var(--muted);
+}
 .conv-unreadable {
   display: inline-flex;
   align-items: center;
@@ -6233,37 +6234,9 @@ body.is-resizing {
   margin-top: 3px;
 }
 
-/* A task the node has not picked up yet: why, the mushroom standing by. */
+/* The line at the end of a run at work: the mushroom and what it does. */
 .trace-head.trace-wait {
   cursor: default;
-}
-
-/* A line that is not the one at work (queued, set aside, not finished):
-   a small still dot where the mushroom would be, so a chat shows one
-   loading at a time. Same width as the mushroom, so the words line up. */
-.work-dot {
-  flex: none;
-  position: relative;
-  width: 20px;
-  height: 14px;
-}
-.work-dot::before {
-  content: "";
-  position: absolute;
-  left: 7px;
-  top: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted, rgba(127, 127, 127, 0.6));
-  opacity: 0.6;
-}
-.work-line .work-dot {
-  width: 30px;
-  align-self: center;
-}
-.work-line .work-dot::before {
-  left: 12px;
 }
 
 /* New conversation: search, then the nodes; a click opens the chat. */

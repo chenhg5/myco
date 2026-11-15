@@ -220,7 +220,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   role?: string;
   /** small things placed in the timeline by time (e.g. a task the agent
    *  handed out), between the messages; shown even before the first */
-  inserts?: { id: string; at: string; node: React.ReactNode; waitsFor?: string }[];
+  inserts?: { id: string; at: string; node: React.ReactNode }[];
   rows: AgentRow[];
   now: number;
   onBack: () => void;
@@ -775,6 +775,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       : row && runnerAway(row.st, row.hub)
         ? L("它那台电脑上的 myco 没在运行（可能在重启），恢复后会接着做", "The node's runner is not running (maybe restarting); it starts when the runner is back")
         : undefined;
+  // The same, in a few words: under your message that waits (the full
+  // sentence when the pointer is on it).
+  const waitingShort = busy ? L("会话开在别处，空出来再看", "Its session is busy elsewhere")
+    : offline ? L("对方离线，上线后再看", "Offline; it reads it when back")
+    : waitingReason ? L("对方的 myco 没在运行，恢复后再看", "Its runner is not running")
+    : "";
 
   // Busy elsewhere: a copy of the session (a new node on the same machine
   // and folder) can take the work now; the original stays as it is.
@@ -970,40 +976,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const liveId = footLive ? "" : liveRun?.id || "";
   // The one at work, wherever its loading is (another waits behind it).
   const atWorkId = liveId || (footLive && working ? working.task.id : "");
+  // A task of yours not opened yet, or set aside: a few words under it,
+  // like a receipt, not a line of its own (it is a message, not a state).
+  // Gone once it starts; nothing is said while it works or after it stops.
+  const receiptOf = (m: Message): { text: string; title?: string } | null => {
+    if (m.type !== "task" || m.e2e || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id) || m.asking || isStuck(m)) return null;
+    const st = traceStatuses.get(m.id) || m.status;
+    if (st === "held") return { text: L("稍后回复", "Will answer later") };
+    if (st === "acked" || progressOf.get(m.id)?.length) return null;
+    if (waitingShort) return { text: waitingShort, title: waitingReason };
+    return { text: atWorkId && atWorkId !== m.id ? L("排在后面", "Queued behind the current one") : L("还没开始看", "Not opened yet") };
+  };
   // Messages under the run at work (tasks it handed out, your supplements):
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
   const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
     m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
     || (inserts || []).some((x) => x.at > shown![liveIndex].created_at));
-  // What each run of yours waits for: the tasks the node handed out after
-  // it began (before your next one) that are still open.
-  const waitingOn = new Map<string, string[]>();
-  if (!termMode && !observed && messages) {
-    // (the whole thread: a task it handed out is not always in this chat)
-    let current: Message | null = null;
-    for (const m of [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())) {
-      if (m.type !== "task") continue;
-      if (m.to === target.agent && (isMe(m.from, row?.hub) || alsoSet.has(m.from))) { current = m; continue; }
-      if (current && m.from === target.agent && isOpen(m.status) && !answerOf.has(m.id)) {
-        const who = nameOf(m.to);
-        const list = waitingOn.get(current.id) || [];
-        if (!list.includes(who)) waitingOn.set(current.id, [...list, who]);
-      }
-    }
-    // Work it handed out shown here as cards (a project's home): the run of
-    // yours it came during waits for it too.
-    const mineByTime = messages.filter((m) => m.type === "task" && m.to === target.agent && isMe(m.from, row?.hub))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-    for (const x of inserts || []) {
-      if (!x.waitsFor) continue;
-      const during = mineByTime.find((m) => m.created_at <= x.at);
-      if (!during) continue;
-      const list = waitingOn.get(during.id) || [];
-      if (!list.includes(x.waitsFor)) waitingOn.set(during.id, [...list, x.waitsFor]);
-    }
-  }
-
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
@@ -1524,6 +1513,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const voiced = m.unreadable ? null : viaVoice(m.body);
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
         : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
+      const receipt = receiptOf(m);
       return (
         <Fragment key={m.id}>
         <div className={cn("conv-msg", mine ? "is-me" : "is-agent", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
@@ -1568,10 +1558,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", failedNote && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", (failedNote || receipt) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
+            {receipt && <span className="conv-receipt" title={receipt.title}>{receipt.text}</span>}
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
@@ -1596,11 +1587,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               </button>
             </span>
           </div>
-        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} waiting={waitingReason || (atWorkId && atWorkId !== m.id ? L("排队中，等它做完手上这件", "Queued, after the one it is working on") : undefined)} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} waitingOn={waitingOn.get(m.id)} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
@@ -1830,9 +1821,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   .reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a))}
                 status={progressOf.get(liveRun.id)?.slice(-1)[0]?.body.split("\n")[0]} side="left" />
             )}
-            {working && (
+            {working && footLive && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
-                status={working.status} queued={working.queued} quiet={!footLive} behind={working.behind}
+                status={working.status} behind={working.behind}
                 side={observed && working.task.to === target.agent ? "right" : "left"} />
             )}
             </>
