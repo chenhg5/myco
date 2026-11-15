@@ -153,6 +153,21 @@ struct RefreshTests {
         #expect(await model.preview(ofPending: "nope") == nil)
     }
 
+    @Test func aListPulledDownSaysItIsBeingReadAgain() async {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        #expect(!session.refreshingByHand)
+        let pulling = Task { await session.refreshByHand(atLeast: .milliseconds(200)) }
+        #expect(await until(.milliseconds(150)) { session.refreshingByHand })
+        // A second pull meanwhile is the same refresh.
+        await session.refreshByHand()
+        #expect(session.refreshingByHand)
+        await pulling.value
+        #expect(!session.refreshingByHand)
+        #expect(session.problem == nil)
+    }
+
     @Test func aRefreshThePersonAskedForSaysAtOnceWhenItFails() async {
         let (model, hub) = await makeConversation()
         await hub.deliver(from: Self.agent, body: "刚到的")

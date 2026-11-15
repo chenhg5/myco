@@ -187,8 +187,6 @@ private struct WorkspaceChrome: ViewModifier {
     @Environment(\.isSearching) private var isSearching
     let title: String
     let add: Bool
-    /// The list was pulled down and is being read again.
-    @State private var refreshing = false
 
     func body(content: Content) -> some View {
         content
@@ -203,10 +201,8 @@ private struct WorkspaceChrome: ViewModifier {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     if let problem = session.problem { StaleBanner(staleText(problem)) }
-                    // The list was pulled down: it is being read again. (The
-                    // system's own spinner does not show under a bar with a
-                    // search field in it, so the page says it itself.)
-                    if refreshing {
+                    // The list was pulled down: it is being read again.
+                    if session.refreshingByHand {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -225,13 +221,14 @@ private struct WorkspaceChrome: ViewModifier {
             // Pulling down asks the workspace again, now. The spinner stays
             // long enough to be seen, however quick the answer.
             .refreshable {
-                withAnimation(.easeOut(duration: 0.15)) { refreshing = true }
-                async let seen: Void? = try? await Task.sleep(for: .milliseconds(500))
-                await session.refresh()
-                _ = await seen
-                withAnimation(.easeOut(duration: 0.2)) { refreshing = false }
+                // In a task of its own: SwiftUI gives this one up as soon
+                // as the list is drawn again, which the first answer does,
+                // and the refresh would end half done with no spinner.
+                let session = session
+                await Task { await session.refreshByHand() }.value
             }
-            .sensoryFeedback(.impact(weight: .light), trigger: refreshing) { _, now in now }
+            .animation(.easeOut(duration: 0.18), value: session.refreshingByHand)
+            .sensoryFeedback(.impact(weight: .light), trigger: session.refreshingByHand) { _, now in now }
             .navigationTitle(title)
             // A small title in the bar: the list starts right under it.
             .navigationBarTitleDisplayMode(.inline)

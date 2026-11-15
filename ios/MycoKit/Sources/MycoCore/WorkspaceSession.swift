@@ -143,6 +143,20 @@ public final class WorkspaceSession {
         }
     }
 
+    /// A refresh the person asked for (a list pulled down) is under way.
+    public private(set) var refreshingByHand = false
+
+    /// Reads the lists again because the person asked. It takes long
+    /// enough to be seen, however quick the answer.
+    public func refreshByHand(atLeast shown: Duration = .milliseconds(500)) async {
+        guard !refreshingByHand else { return }
+        refreshingByHand = true
+        async let seen: Void? = try? await Task.sleep(for: shown)
+        await refresh()
+        _ = await seen
+        refreshingByHand = false
+    }
+
     public func refresh() async {
         do {
             if me.isEmpty { me = try await hub.whoami().consoleSender }
