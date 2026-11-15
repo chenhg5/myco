@@ -251,6 +251,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/messages/{id}/done", s.agent(s.transition(app.TransitionComplete)))
 	m.HandleFunc("POST /v1/messages/{id}/reply", s.agent(s.reply))
 	m.HandleFunc("POST /v1/messages/{id}/progress", s.agent(s.followUp("progress")))
+	m.HandleFunc("POST /v1/messages/{id}/suggest", s.agent(s.suggest))
 	m.HandleFunc("POST /v1/messages/{id}/trace", s.agent(s.postTrace))
 	m.HandleFunc("GET /v1/messages/{id}/trace", s.agent(s.agentTrace))
 	m.HandleFunc("POST /v1/messages/{id}/steer", s.agent(s.followUp("steer")))
@@ -1439,6 +1440,21 @@ func (s *Server) followUp(kind string) func(http.ResponseWriter, *http.Request, 
 		}
 		writeJSON(w, status, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 	}
+}
+
+// suggest: what a task's recipient thinks its sender may want to say next.
+func (s *Server) suggest(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	var req api.SuggestRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	dry := dryRun(r)
+	m, err := s.messages.Suggest(r.Context(), a, r.PathValue("id"), req.Text, dry)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.MessageResult{Message: s.messageDTO(m), DryRun: dry})
 }
 
 func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {

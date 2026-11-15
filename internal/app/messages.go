@@ -507,6 +507,23 @@ func (s *MessageService) update(ctx context.Context, agent *domain.Agent, id, bo
 	return out, nil
 }
 
+// Suggest sets what task id's recipient thinks its sender may want to say
+// next (the app offers it in the input; "" clears it).
+func (s *MessageService) Suggest(ctx context.Context, agent *domain.Agent, id, text string, dryRun bool) (*domain.Message, error) {
+	var out *domain.Message
+	err := s.mutateOrPreview(ctx, id, dryRun, func(m *domain.Message) ([]*domain.Message, error) {
+		if err := m.SuggestNext(agent.Name, text, s.clock.Now()); err != nil {
+			return nil, err
+		}
+		out = m
+		return nil, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Steer sends a correction for open task id from its sender to the task's
 // recipient.
 func (s *MessageService) Steer(ctx context.Context, agent *domain.Agent, id, body string, dryRun bool) (*domain.Message, error) {

@@ -92,6 +92,16 @@ func TestEndToEndEncryption(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Body != "the launch date is secret" {
 		t.Fatalf("recipient: %v %+v", err, got)
 	}
+	// The recipient's suggested next message is sealed for the sender too.
+	if _, err := laohuBot.Suggest(c, sent.Message.ID, "ask marketing for the date", false); err != nil {
+		t.Fatal(err)
+	}
+	if raw := rawOf(sent.Message.ID); !e2e.IsSealed(raw.Suggest) || strings.Contains(raw.Suggest, "marketing") {
+		t.Fatalf("the hub must only hold a sealed suggestion: %q", raw.Suggest)
+	}
+	if m, err := glennBot.GetMessage(c, sent.Message.ID); err != nil || m.Suggest != "ask marketing for the date" {
+		t.Fatalf("the sender reads the suggestion: %v %+v", err, m)
+	}
 	// laohu (the recipient's owner) reads it in the app; matthew cannot.
 	th, err := laohuApp.Thread(c, sent.Message.ThreadID)
 	if err != nil || len(th) != 1 || th[0].Body != "the launch date is secret" {
