@@ -85,33 +85,104 @@ struct DoubaoStreamReader {
     }
 }
 
+/// A speech service the voice can speak with. Which ones there are is
+/// this list (one today), as on the desktop (`internal/console/voice_sync.go`):
+/// the settings name the one chosen and keep a key for each, and the
+/// settings page draws what the list says.
+public struct SpeechService: Sendable, Hashable, Identifiable {
+    /// Its id, as the workspace keeps it. No underscores (see `VoiceDocument`).
+    public var id: String
+    public var name: String
+    public var englishName: String
+    /// The voice used when none is chosen.
+    public var defaultSpeaker: String
+    /// How to get a key and a voice.
+    public var help: String
+    public var englishHelp: String
+
+    public static let doubao = SpeechService(
+        id: "doubao", name: "豆包语音", englishName: "Doubao Speech",
+        defaultSpeaker: "zh_male_wennuanahu_uranus_bigtts",
+        help: "在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。音色填控制台里的音色 ID（复刻的声音以 S_ 开头）。",
+        englishHelp: "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key. The voice is a voice ID from the console (cloned voices start with S_).")
+
+    /// Every service this app can speak with.
+    public static let all: [SpeechService] = [.doubao]
+    public static let standard = "doubao"
+
+    /// The service by id; nil for one this app does not know (chosen on a
+    /// newer desktop app).
+    public static func named(_ id: String) -> SpeechService? {
+        all.first { $0.id == (id.isEmpty ? standard : id) }
+    }
+
+    /// Makes its voice, with its key and what was chosen for it.
+    public func speech(key: String, settings: VoiceSettings) -> any VoiceSpeech {
+        switch id {
+        default: return DoubaoSpeech(key: key, speaker: settings.speakerInUse, rate: settings.rate)
+        }
+    }
+}
+
 /// What the person chose for voice calls (no keys: those are in the
-/// keychain, under `modelKey` and `speechKey`).
+/// keychain, under `modelKey` and `speechKey(of:)`).
 public struct VoiceSettings: Codable, Sendable, Hashable {
     /// The model's OpenAI-compatible API ("https://api.deepseek.com/v1").
     public var baseURL = ""
     public var model = ""
-    /// Doubao's voice; empty is the default one.
+    /// The speech service; empty is the standard one.
+    public var provider = ""
+    /// Its voice; empty is its default one.
     public var speaker = ""
-    /// Doubao's speech_rate, -50...100.
+    /// How fast it talks, -50...100.
     public var rate = 0
+    /// Kept on the workspaces too, keys and all, so the person's other
+    /// devices have them. On unless turned off.
+    public var share = true
+    /// When the person last changed them, on whichever device.
+    public var updatedAt: Date?
 
-    public init(baseURL: String = "", model: String = "", speaker: String = "", rate: Int = 0) {
+    public init(baseURL: String = "", model: String = "", provider: String = "", speaker: String = "", rate: Int = 0, share: Bool = true, updatedAt: Date? = nil) {
         self.baseURL = baseURL
         self.model = model
+        self.provider = provider
         self.speaker = speaker
         self.rate = rate
+        self.share = share
+        self.updatedAt = updatedAt
+    }
+
+    // What was saved before a field existed still reads.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        baseURL = try values.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+        model = try values.decodeIfPresent(String.self, forKey: .model) ?? ""
+        provider = try values.decodeIfPresent(String.self, forKey: .provider) ?? ""
+        speaker = try values.decodeIfPresent(String.self, forKey: .speaker) ?? ""
+        rate = try values.decodeIfPresent(Int.self, forKey: .rate) ?? 0
+        share = try values.decodeIfPresent(Bool.self, forKey: .share) ?? true
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 
     /// The desktop app's default voice.
-    public static let defaultSpeaker = "zh_male_wennuanahu_uranus_bigtts"
-    /// Where the keys are kept in the keychain.
+    public static let defaultSpeaker = SpeechService.doubao.defaultSpeaker
+    /// Where the keys are kept in the keychain. The standard service's
+    /// keeps the name it had when it was the only one.
     public static let modelKey = "voice:llm"
     public static let speechKey = "voice:tts"
 
+    public static func speechKey(of provider: String) -> String {
+        provider.isEmpty || provider == SpeechService.standard ? speechKey : speechKey + ":" + provider
+    }
+
+    /// The service in use: the one chosen, when this app knows it.
+    public var service: SpeechService {
+        SpeechService.named(provider) ?? .doubao
+    }
+
     public var speakerInUse: String {
         let chosen = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
-        return chosen.isEmpty ? Self.defaultSpeaker : chosen
+        return chosen.isEmpty ? service.defaultSpeaker : chosen
     }
 
     /// The model is named: with its key, a call can start.

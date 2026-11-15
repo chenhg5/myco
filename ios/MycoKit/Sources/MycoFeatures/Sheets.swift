@@ -436,14 +436,20 @@ struct SettingsScreen: View {
     }
 }
 
-/// Settings › 语音: the model a voice call talks with, and the voice it
-/// answers in. Keys go to the keychain and are never shown again.
+/// Settings › 语音: the model a voice call talks with, and the speech
+/// service it answers with (one of `SpeechService.all`). Keys go to the
+/// keychain and are never shown again. The settings are the person's:
+/// kept on the workspaces too, so what was set on the desktop is here
+/// already, and the other way round.
 struct VoiceSettingsScreen: View {
     /// Opened by itself from a conversation: it has a button to close it.
     var closes = false
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var settings = VoiceSettings()
+    /// What the fields started from: untouched, they follow what another
+    /// device set meanwhile.
+    @State private var loaded = VoiceSettings()
     @State private var modelKey = ""
     @State private var speechKey = ""
     @State private var forgetModelKey = false
@@ -451,13 +457,34 @@ struct VoiceSettingsScreen: View {
     @State private var read = false
 
     private var hasModelKey: Bool { app.voiceHasModelKey && !forgetModelKey }
-    private var hasSpeechKey: Bool { app.voiceHasSpeechKey && !forgetSpeechKey }
+    /// (The key on this device is the one of the service in use.)
+    private var hasSpeechKey: Bool {
+        app.voiceHasSpeechKey && !forgetSpeechKey && settings.service.id == app.voice.service.id
+    }
 
     /// What is still missing before a call can start.
     private var missing: String? {
         if !settings.namesModel { return L("填上接口地址和模型，就可以开始语音聊天。", "Fill in the address and the model to start a voice chat.") }
         if !hasModelKey, modelKey.trimmingCharacters(in: .whitespaces).isEmpty { return L("还差模型的密钥。", "The model's key is still missing.") }
         return nil
+    }
+
+    private var service: SpeechService { settings.service }
+
+    /// Where the settings are kept, in words.
+    private var kept: String {
+        let lines = app.voiceSync
+        var said: [String] = []
+        let have = lines.filter { $0.state == .synced }.map(\.name)
+        let old = lines.filter { $0.state == .unsupported }.map(\.name)
+        let away = lines.filter { $0.state == .unreachable }.map(\.name)
+        if !have.isEmpty { said.append(L("已存到：\(have.joined(separator: "、"))。", "Kept on: \(have.joined(separator: ", ")).")) }
+        if !old.isEmpty {
+            said.append(L("\(old.joined(separator: "、")) 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。",
+                          "\(old.joined(separator: ", ")): the hub is too old to keep them; update its myco."))
+        }
+        if !away.isEmpty { said.append(L("\(away.joined(separator: "、")) 现在连不上，下次再试。", "\(away.joined(separator: ", ")): not reachable now; tried again next time.")) }
+        return said.joined(separator: " ")
     }
 
     var body: some View {
@@ -478,6 +505,18 @@ struct VoiceSettingsScreen: View {
                     .foregroundStyle(missing == nil ? MycoColor.muted : MycoColor.amber)
             }
             Section {
+                // Which service speaks: one of those this app knows.
+                Picker(L("服务", "Service"), selection: Binding(
+                    get: { service.id },
+                    set: { id in
+                        settings.provider = id
+                        speechKey = ""
+                    })) {
+                    ForEach(SpeechService.all) { one in
+                        Text(AppLanguage.current == .zh ? one.name : one.englishName).tag(one.id)
+                    }
+                }
+                .accessibilityIdentifier("voice.service")
                 key($speechKey, saved: hasSpeechKey, forget: $forgetSpeechKey, id: "voice.speechKey")
                 if hasSpeechKey || !speechKey.isEmpty {
                     TextField(L("音色，留空用默认的", "Voice id; empty uses the default"), text: $settings.speaker)
@@ -487,14 +526,31 @@ struct VoiceSettingsScreen: View {
                     }
                 }
             } header: {
-                Text(L("声音（豆包语音合成）", "Voice (Doubao speech synthesis)"))
+                Text(L("语音合成", "Speech"))
             } footer: {
-                Text(L("火山引擎控制台里的 API Key。不填就用 iPhone 自带的声音。", "An API key from the Volcengine console. Without one, the iPhone's own voice is used."))
+                Text((AppLanguage.current == .zh ? service.help : service.englishHelp)
+                     + L(" 没有密钥时用 iPhone 自带的声音。", " Without a key, the iPhone's own voice is used."))
+            }
+            Section {
+                Toggle(L("存到工作区，多设备同步", "Keep on the workspaces"), isOn: $settings.share)
+                    .tint(MycoColor.green)
+                    .accessibilityIdentifier("voice.share")
+            } header: {
+                Text(L("多设备同步", "On your other devices"))
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("打开后，这里的设置和密钥存在你加入的工作区（Hub）里，电脑上的 myco 和别的手机不用再填一遍；哪台设备后改的算数。密钥只给你自己的设备，但 Hub 所在机器的管理员读得到它的数据库：不是你自己的 Hub，介意就关掉。",
+                           "With this on, these settings and their keys are kept on the workspaces (hubs) you joined, so myco on your computer and other phones need not be set up again; the device that changed them last wins. The keys are handed only to your own devices, but whoever administers a hub's machine can read its database: turn this off for a hub that is not yours, if that matters."))
+                    if settings.share, !kept.isEmpty {
+                        Text(kept).foregroundStyle(MycoColor.fg2)
+                            .accessibilityIdentifier("voice.kept")
+                    }
+                }
             }
             Section {
             } footer: {
-                Text(L("密钥只存在这台 iPhone 的钥匙串里，不会传到工作区。你说的话由苹果的语音识别转成文字（这门语言能在手机上识别时不出手机），文字发给上面的模型；它回答的文字发给豆包合成声音。",
-                       "Keys stay in this iPhone's keychain and never go to the workspace. Apple's speech recognition turns what you say into text (on the phone when the language allows); the text goes to the model above, and its answers go to Doubao to be spoken."))
+                Text(L("密钥在这台 iPhone 上存在钥匙串里。你说的话由苹果的语音识别转成文字（这门语言能在手机上识别时不出手机），文字发给上面的模型；它回答的文字发给上面选的语音合成服务。",
+                       "On this iPhone the keys are in the keychain. Apple's speech recognition turns what you say into text (on the phone when the language allows); the text goes to the model above, and its answers go to the speech service chosen above."))
             }
         }
         .navigationTitle(L("语音聊天", "Voice chat"))
@@ -511,6 +567,16 @@ struct VoiceSettingsScreen: View {
             guard !read else { return }
             read = true
             settings = app.voice
+            loaded = app.voice
+        }
+        // What another device set since is here once the workspaces have
+        // answered; fields already touched are left alone.
+        .task {
+            await app.syncVoice()
+            if settings == loaded {
+                settings = app.voice
+                loaded = app.voice
+            }
         }
         // Leaving the page keeps what was typed.
         .onDisappear {

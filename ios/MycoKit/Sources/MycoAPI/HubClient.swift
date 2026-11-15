@@ -111,6 +111,15 @@ public struct HubClient: HubAPI {
         return try Self.decode(HiddenEnvelope.self, from: data).ids
     }
 
+    public func voiceSettings() async throws -> VoiceDocument {
+        try await get("/v1/console/voice", timeout: Self.pollTimeout)
+    }
+
+    public func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument {
+        let data = try await call("PUT", "/v1/console/voice", body: HubJSON.encoder().encode(document), timeout: Self.pollTimeout)
+        return try Self.decode(VoiceDocument.self, from: data)
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
