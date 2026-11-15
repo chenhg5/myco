@@ -41,6 +41,11 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: dev.myco.ios
             CFBundleURLSchemes: [myco]
+        # Export compliance, asked of every build sent to App Store Connect:
+        # the app encrypts nothing itself. It talks HTTPS and keeps keys in
+        # the keychain, both the system's, which is exempt. Change this the
+        # day the app does its own encryption (end-to-end messages).
+        ITSAppUsesNonExemptEncryption: false
     dependencies:
       - package: MycoKit
         product: MycoFeatures
