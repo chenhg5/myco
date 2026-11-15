@@ -489,7 +489,7 @@ public final class VoiceCall {
         if said.isEmpty { lines.removeAll { $0.id == turn.line } }
         lastSaid = said
         // A tool's result always follows its call, even when the turn ended early.
-        history += added
+        self.history += added
         if !speaking {
             state = .listening
             dropResidue()
