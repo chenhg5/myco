@@ -41,6 +41,13 @@ public final class AppModel {
         /// The app left the front: the place to ask the system for a
         /// moment in the background later.
         public var leftFront: @MainActor @Sendable () -> Void
+        /// Where the voice's keys are kept: the keychain, or memory in
+        /// the demo and in tests.
+        public var secrets: any SecretStore
+        /// A voice call's microphone, model and voice from outside (a
+        /// script, where nobody speaks and there are no keys); nil makes
+        /// them from what is set in Settings.
+        public var voice: (@MainActor @Sendable () -> VoiceStandIn)?
 
         public init(
             demo: @escaping @MainActor @Sendable () -> WorkspaceSession,
@@ -51,7 +58,9 @@ public final class AppModel {
             forget: @escaping @MainActor @Sendable (String) async -> Void = { _ in },
             speech: @escaping @MainActor @Sendable () -> any SpeechListener = { AppleSpeechListener() },
             notifier: @escaping @MainActor @Sendable () -> any Notifier = { SystemNotifier() },
-            leftFront: @escaping @MainActor @Sendable () -> Void = {}
+            leftFront: @escaping @MainActor @Sendable () -> Void = {},
+            secrets: any SecretStore = MemoryStore(),
+            voice: (@MainActor @Sendable () -> VoiceStandIn)? = nil
         ) {
             self.demo = demo
             self.book = book
@@ -60,6 +69,21 @@ public final class AppModel {
             self.speech = speech
             self.notifier = notifier
             self.leftFront = leftFront
+            self.secrets = secrets
+            self.voice = voice
+        }
+    }
+
+    /// What stands in for a call's microphone, model and voice.
+    public struct VoiceStandIn {
+        public var audio: any VoiceAudio
+        public var model: any VoiceModel
+        public var speech: any VoiceSpeech
+
+        public init(audio: any VoiceAudio, model: any VoiceModel, speech: any VoiceSpeech) {
+            self.audio = audio
+            self.model = model
+            self.speech = speech
         }
     }
 
@@ -96,6 +120,82 @@ public final class AppModel {
             Task { await self?.open(workspace: workspace, page: page) }
         }
         if let session { watch(session) }
+        Task { await readVoiceKeys() }
+    }
+
+    // MARK: Voice calls
+
+    /// What the person chose for voice calls (the keys are in the keychain).
+    public private(set) var voice: VoiceSettings = AppModel.savedVoice()
+    /// Whether the model's key and Doubao's are saved on this device.
+    public private(set) var voiceHasModelKey = false
+    public private(set) var voiceHasSpeechKey = false
+
+    private static let voiceKey = "myco-voice"
+
+    private static func savedVoice() -> VoiceSettings {
+        guard let data = UserDefaults.standard.data(forKey: voiceKey),
+              let settings = try? JSONDecoder().decode(VoiceSettings.self, from: data)
+        else { return VoiceSettings() }
+        return settings
+    }
+
+    /// A call can start: the model is named and its key is here.
+    public var voiceReady: Bool {
+        doors.voice != nil || (voice.namesModel && voiceHasModelKey)
+    }
+
+    private func readVoiceKeys() async {
+        voiceHasModelKey = ((try? await doors.secrets.secret(for: VoiceSettings.modelKey)) ?? "").isEmpty == false
+        voiceHasSpeechKey = ((try? await doors.secrets.secret(for: VoiceSettings.speechKey)) ?? "").isEmpty == false
+    }
+
+    /// Keeps what was set for voice. A key left empty stays as it was;
+    /// `forget` takes saved keys away.
+    public func saveVoice(_ settings: VoiceSettings, modelKey: String = "", speechKey: String = "", forgetModelKey: Bool = false, forgetSpeechKey: Bool = false) async {
+        var settings = settings
+        settings.baseURL = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.speaker = settings.speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.rate = min(100, max(-50, settings.rate))
+        voice = settings
+        UserDefaults.standard.set(try? JSONEncoder().encode(settings), forKey: Self.voiceKey)
+        let modelKey = modelKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let speechKey = speechKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if forgetModelKey {
+            try? await doors.secrets.setSecret(nil, for: VoiceSettings.modelKey)
+        } else if !modelKey.isEmpty {
+            try? await doors.secrets.setSecret(modelKey, for: VoiceSettings.modelKey)
+        }
+        if forgetSpeechKey {
+            try? await doors.secrets.setSecret(nil, for: VoiceSettings.speechKey)
+        } else if !speechKey.isEmpty {
+            try? await doors.secrets.setSecret(speechKey, for: VoiceSettings.speechKey)
+        }
+        await readVoiceKeys()
+    }
+
+    /// A voice call with the agent of a conversation: the phone's
+    /// microphone, the model set in Settings, and Doubao's voice (the
+    /// phone's own when there is no Doubao key). Nil when voice is not
+    /// set up yet.
+    public func call(in conversation: ConversationModel, of session: WorkspaceSession) async -> VoiceCall? {
+        let hub = ConversationVoice(session: session, model: conversation)
+        if let stand = doors.voice?() {
+            return VoiceCall(.init(audio: stand.audio, model: stand.model, speech: stand.speech, hub: hub))
+        }
+        guard voice.namesModel, let key = try? await doors.secrets.secret(for: VoiceSettings.modelKey), !key.isEmpty else { return nil }
+        let speechKey = (try? await doors.secrets.secret(for: VoiceSettings.speechKey)) ?? ""
+        let speech: any VoiceSpeech
+        if speechKey.isEmpty {
+            speech = SystemSpeech(language: .current)
+        } else {
+            speech = DoubaoSpeech(key: speechKey, speaker: voice.speakerInUse, rate: voice.rate)
+        }
+        let chat = OpenAIChat(
+            base: voice.baseURL, model: voice.model, key: key,
+            session: "myco-voice-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())
+        return VoiceCall(.init(audio: AppleVoiceAudio(), model: chat, speech: speech, hub: hub))
     }
 
     // MARK: Notifications

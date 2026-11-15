@@ -17,8 +17,10 @@ import MycoStore
 /// joins with a link at launch, `-myco-attach <agent>` starts the demo
 /// with files picked for that agent, `-myco-dictation scripted|denied`
 /// replaces the microphone with a script, `-myco-latency <ms>` makes the
-/// demo answer as slowly as a bad connection, and `-myco-notifier
-/// recorded` keeps notifications from reaching the system.
+/// demo answer as slowly as a bad connection, `-myco-notifier
+/// recorded` keeps notifications from reaching the system, and
+/// `-myco-voice scripted|denied` makes a voice call a script (a microphone
+/// that hears two sentences, a model that answers them, a silent voice).
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -56,7 +58,10 @@ struct MycoApp: App {
                 if UserDefaults.standard.string(forKey: "myco-notifier") == "recorded" { return RecordingNotifier() }
                 return SystemNotifier()
             },
-            leftFront: { Self.askForBackgroundRefresh() })
+            leftFront: { Self.askForBackgroundRefresh() },
+            // The voice's keys live in the keychain, beside the device tokens.
+            secrets: KeychainStore(),
+            voice: Self.voice)
         let scenarios: [String: Scenario] = ["demo": .team, "empty": .empty, "long": .long, "waiting": .waiting]
         _model = State(initialValue: AppModel(session: scenarios[start].map(Self.demo), doors: doors))
     }
@@ -74,6 +79,24 @@ struct MycoApp: App {
             return AppleSpeechListener()
         }
     }
+
+    /// What a voice call is made of: nil is the real thing (the phone's
+    /// microphone, the model and the voice set in Settings). With
+    /// `-myco-voice scripted|denied` a script, to see and test a call
+    /// where there is nobody to speak and no key.
+    private static let voice: (@MainActor @Sendable () -> AppModel.VoiceStandIn)? = {
+        switch UserDefaults.standard.string(forKey: "myco-voice") {
+        case "scripted":
+            return { AppModel.VoiceStandIn(audio: ScriptedVoiceAudio.demo(), model: ScriptedVoiceModel.demo(), speech: SilentSpeech()) }
+        case "denied":
+            return {
+                AppModel.VoiceStandIn(
+                    audio: ScriptedVoiceAudio(problem: .microphoneDenied), model: ScriptedVoiceModel.demo(), speech: SilentSpeech())
+            }
+        default:
+            return nil
+        }
+    }()
 
     private static func demo(_ scenario: Scenario) -> WorkspaceSession {
         // `-myco-latency <ms>`: every answer of the demo takes this long,

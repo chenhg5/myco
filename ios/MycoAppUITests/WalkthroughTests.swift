@@ -54,11 +54,13 @@ final class WalkthroughTests: XCTestCase {
         let input = app.descendants(matching: .any)["composer.input"]
         let submit = app.buttons["composer.submit"]
         XCTAssertTrue(input.waitForExistence(timeout: 5), "the conversation opens")
-        XCTAssertEqual(submit.label, "Send")
-        XCTAssertFalse(submit.isEnabled, "nothing typed: nothing to send")
+        // Nothing typed and nothing running: the button offers a voice chat.
+        XCTAssertEqual(submit.label, "Voice chat")
+        XCTAssertTrue(submit.isEnabled)
 
         input.tap()
         input.typeText("Translate the readme")
+        XCTAssertEqual(submit.label, "Send", "with words, it sends")
         XCTAssertTrue(submit.isEnabled)
         submit.tap()
         XCTAssertTrue(app.staticTexts["Translate the readme"].waitForExistence(timeout: 5), "what I said shows")
@@ -79,7 +81,7 @@ final class WalkthroughTests: XCTestCase {
         waitForExpectations(timeout: 5)
         submit.tap()
         XCTAssertTrue(app.staticTexts["Stopped"].waitForExistence(timeout: 5), "stopping says so")
-        expectation(for: NSPredicate(format: "label == %@", "Send"), evaluatedWith: submit)
+        expectation(for: NSPredicate(format: "label == %@", "Voice chat"), evaluatedWith: submit)
         waitForExpectations(timeout: 5)
     }
 

@@ -543,6 +543,39 @@ public final class ConversationModel {
         pending = files + pending
     }
 
+    // MARK: For a voice call (ConversationVoice)
+
+    /// Every message between me and the agent seen so far, oldest first.
+    public var exchanged: [Message] {
+        known.values.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// Says something to the agent as if it were typed and sent: added to
+    /// the open task, else a new message. What is in the input stays.
+    /// Answers the task it went to.
+    public func tell(_ body: String) async throws -> (task: String, steered: Bool) {
+        if let task = openTask {
+            do {
+                try await session.hub.steer(task.id, body: body, attachments: [])
+                await reload()
+                return (task.id, true)
+            } catch let error as HubError where error.error == "invalid_state" {
+                // The task ended just now: this is a new message.
+            }
+        }
+        let sent = try await session.hub.send(request(body))
+        await reload()
+        return (sent.id, false)
+    }
+
+    /// Stops the open task; false when there is none.
+    public func stopOpenTask() async throws -> Bool {
+        guard let task = openTask else { return false }
+        try await session.hub.stop(task.id)
+        await reload()
+        return true
+    }
+
     /// Stops the open task whatever is typed (the action on a stuck task).
     public func submitStop() async {
         guard let task = openTask, !sending else { return }
