@@ -28,6 +28,8 @@ export interface VoiceInfo {
   has_llm_key: boolean;
   has_tts_key: boolean;
   session: { on: boolean; state: VoiceState; muted: boolean; hub_id?: string; agent?: string };
+  /** a call can start: a microphone here, the model and the voice set up (v0.19.12+) */
+  ready?: boolean;
 }
 /** One line of a call: id stays the line's own; seq orders its changes. */
 export interface VoiceLine {

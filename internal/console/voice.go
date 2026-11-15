@@ -314,8 +314,11 @@ func (b *Backend) getVoice(w http.ResponseWriter, r *http.Request) {
 		session["hub_id"], session["agent"] = v.with.HubID, v.with.Agent
 	}
 	v.mu.Unlock()
+	// ready: a call can start (this App has a microphone, and the model and
+	// the voice are set up); the App shows the way in only then.
+	ready := b.Voice != nil && c.LLMBaseURL != "" && c.LLMModel != "" && llm != "" && tts != ""
 	writeJSON(w, http.StatusOK, map[string]any{
-		"available": b.Voice != nil, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
+		"available": b.Voice != nil, "ready": ready, "config": c, "has_llm_key": llm != "", "has_tts_key": tts != "",
 		"session": session,
 	})
 }
