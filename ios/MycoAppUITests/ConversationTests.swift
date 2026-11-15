@@ -303,6 +303,10 @@ final class ConversationTests: XCTestCase {
         if let close {
             close.tap()
         } else {
+            // (What the preview offers, for whoever reads a failure here.)
+            if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
+                try? app.debugDescription.write(toFile: dir + "/files-look.txt", atomically: true, encoding: .utf8)
+            }
             app.swipeDown(velocity: .fast)
         }
         // It is still waiting to go.
