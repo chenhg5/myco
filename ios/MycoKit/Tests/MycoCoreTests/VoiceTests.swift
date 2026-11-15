@@ -262,14 +262,14 @@ struct VoiceCallTests {
 
     func makeCall(
         _ answers: [ScriptedVoiceModel.Answer], speech: SilentSpeech = SilentSpeech(perCharacter: .milliseconds(2)),
-        audio: ScriptedVoiceAudio? = nil, pace: Duration = .zero
+        audio: ScriptedVoiceAudio? = nil, pace: Duration = .zero, endOfSpeech: Duration = .milliseconds(120)
     ) -> Setup {
         let audio = audio ?? ScriptedVoiceAudio()
         let model = ScriptedVoiceModel(answers, pace: pace)
         let hub = Hub()
         let call = VoiceCall(.init(
             audio: audio, model: model, speech: speech, hub: hub, language: .zh,
-            endOfSpeech: .milliseconds(60), quietBeforeNews: .milliseconds(100), watchEvery: .milliseconds(250)))
+            endOfSpeech: endOfSpeech, quietBeforeNews: .milliseconds(100), watchEvery: .milliseconds(250)))
         return Setup(call: call, audio: audio, model: model, hub: hub)
     }
 
@@ -292,7 +292,9 @@ struct VoiceCallTests {
     }
 
     @Test func aQuestionIsAnsweredOutLoud() async {
-        let setup = makeCall([.init("它还在做。刚改完版式。")])
+        // (A long pause ends what is said here, so that two words heard
+        // one after the other are one sentence however busy the machine is.)
+        let setup = makeCall([.init("它还在做。刚改完版式。")], endOfSpeech: .milliseconds(600))
         #expect(setup.call.state == .connecting)
         await started(setup)
         setup.audio.hear("做到")
@@ -542,7 +544,7 @@ struct ConversationVoiceTests {
         let second = try await voice.tell(ViaVoice.body("标题也看看", heard: ""))
         #expect(second.steered)
         #expect(second.task == first.task)
-        let sent = await hub.allMessages().filter { $0.from == FakeHub.me }
+        let sent = await hub.allMessages().filter { $0.from == FakeHub.me && $0.to == agent }
         #expect(sent.map(\.type).sorted() == ["steer", "task"])
         #expect(voice.news(of: first.task) == TaskNews())
         let context = await voice.context(fresh: true)
