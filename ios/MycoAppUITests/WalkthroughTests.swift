@@ -146,7 +146,10 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testNotificationsCanBeSetAndAChatMuted() {
         // Nothing reaches the system here: the test only sets what the person chooses.
-        let app = launch(["-myco-notifier", "recorded"])
+        // (`-myco-notifications` hides what an earlier run chose: an argument
+        // comes before what the app saved, and is not settings it can read,
+        // so every run starts with nothing muted and notifications off.)
+        let app = launch(["-myco-notifier", "recorded", "-myco-notifications", "fresh"])
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
         // A long press on a chat mutes it: a crossed bell by its name.
         let chat = app.buttons["chat.agent:studio-claude-c41f"]
