@@ -164,18 +164,20 @@ struct ConversationBuilderTests {
         ]
         let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], processes: ["c2"], status: { _ in nil }, now: now))
         // The task with a run shown takes its update into the run.
-        #expect(items.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2.process", "c2.status", "t2", "t2.status"])
+        #expect(items.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2.process", "c2.status", "t2"])
         #expect(items[0].kind == .mine(text: "design the API", steer: false, by: "lead"))
         #expect(items[1].kind == .reply(text: "designed", taskID: "c1", to: "lead"))
         #expect(items[2].kind == .mine(text: "and the docs?", steer: false, by: nil))
         #expect(items[3].kind == .reply(text: "on it", taskID: "t1", to: nil))
-        // The colleague's open task keeps its state with it, under its
-        // run; mine closes the page.
+        // The colleague's task, at work, keeps its state with it, under
+        // its run. Mine has not begun: no line of its own, a few words
+        // under the message instead.
         #expect(items[6].kind == .status(.working(since: at(-5)), taskID: "c2"))
-        #expect(items[8].kind == .status(.queued, taskID: "t2"))
+        #expect(items[7].receipt == .notOpened)
+        #expect(items[2].receipt == nil)
         // Without its run, its update is a row, and its state comes under that.
         let plain = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now))
-        #expect(plain.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2p", "c2.status", "t2", "t2.status"])
+        #expect(plain.map(\.id) == ["c1", "c1r", "t1", "t1r", "c2", "c2p", "c2.status", "t2"])
         #expect(plain[5].kind == .progress(text: "half built", latest: true))
         // The input speaks to my open task, never to a colleague's.
         #expect(ConversationBuilder.openTask(me: "me", messages: messages)?.id == "t2")
@@ -265,6 +267,44 @@ struct ConversationBuilderTests {
         #expect(ConversationBuilder.openTask(me: "me", messages: [held, open])?.id == "t2")
     }
 
+    @Test func aTaskNotStartedHasAFewWordsUnderIt() {
+        // The desktop app's rule: a task reads as a message, not a state.
+        let first = Message(id: "t1", from: "me", to: "coder", body: "fix the login", status: "acked", createdAt: at(-300), updatedAt: at(-5))
+        let second = Message(id: "t2", from: "me", to: "coder", body: "then the docs", status: "queued", createdAt: at(-100))
+        func receipt(_ id: String, _ messages: [Message], _ status: AgentStatus? = nil) -> TaskReceipt? {
+            ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in status }, now: now)
+                .first { $0.id == id }?.receipt
+        }
+        // At work: nothing under it. The one behind it says so.
+        #expect(receipt("t1", [first, second]) == nil)
+        #expect(receipt("t2", [first, second]) == .behind)
+        // Alone and not looked at yet.
+        #expect(receipt("t2", [second]) == .notOpened)
+        var delivered = second
+        delivered.status = "delivered"
+        #expect(receipt("t2", [delivered]) == .notOpened)
+        // Why it has not been: the agent is away, or its session is open elsewhere.
+        let coder = Agent(id: "a1", name: "coder")
+        #expect(receipt("t2", [second], AgentStatus(agent: coder, state: "offline")) == .offline)
+        #expect(receipt("t2", [second], AgentStatus(agent: coder, state: "idle", receiving: nil, sessionInUse: true)) == .sessionBusy)
+        // (A node that only receives in its own session is not "busy elsewhere".)
+        #expect(receipt("t2", [second], AgentStatus(agent: coder, state: "idle", receiving: "session", sessionInUse: true)) == .notOpened)
+        // Set aside: it answers later. Unless it asks me something: the question says it.
+        var held = second
+        held.status = "held"
+        #expect(receipt("t2", [held]) == .later)
+        held.asking = "q1"
+        #expect(receipt("t2", [held]) == nil)
+        // Started without taking it on formally (it reported): gone.
+        let report = Message(id: "p1", from: "coder", to: "me", threadId: "t2", replyTo: "t2", type: "progress", body: "looking", status: "done", createdAt: at(-50))
+        #expect(receipt("t2", [second, report]) == nil)
+        // Answered, or a colleague's: never.
+        let answer = Message(id: "r1", from: "coder", to: "me", threadId: "t2", replyTo: "t2", type: "reply", body: "done", status: "done", createdAt: at(-40))
+        #expect(receipt("t2", [second, answer]) == nil)
+        let theirs = Message(id: "c1", from: "lead", to: "coder", body: "build it", status: "queued", createdAt: at(-80))
+        #expect(receipt("c1", [theirs]) == nil)
+    }
+
     @Test func aRunThatWaitsDoesNotLookAtWork() {
         // Mine, taken on; it handed work to the tester, whose task is open.
         let mine = Message(id: "t1", from: "me", to: "lead", body: "ship it", status: "acked", createdAt: at(-300), updatedAt: at(-200), activeAt: at(-200))
@@ -275,18 +315,18 @@ struct ConversationBuilderTests {
         }
         // Still at it: the usual line.
         #expect(kinds([mine, handed], paused: []) == [.status(.working(since: at(-200)), taskID: "t1")])
-        // Its turn ended: it waits for whom it handed work to.
-        #expect(kinds([mine, handed], paused: ["t1"]) == [.paused(.waitingFor(["tester"]), taskID: "t1")])
-        // The work it handed out shows as a capsule on a project's page: the same.
-        #expect(kinds([mine], others: [handed], paused: ["t1"]) == [.paused(.waitingFor(["tester"]), taskID: "t1")])
-        // That work is done: it just has not answered yet.
+        // Its turn ended (it handed work to the tester and waits): nothing
+        // is said. What it said last stands, as in any chat.
+        #expect(kinds([mine, handed], paused: ["t1"]) == [])
+        #expect(kinds([mine], others: [handed], paused: ["t1"]) == [])
+        // That work is done and it has not answered yet: the same.
         var finished = handed
         finished.status = "done"
-        #expect(kinds([mine, finished], paused: ["t1"]) == [.paused(.quiet, taskID: "t1")])
-        // Set aside, and nothing since.
+        #expect(kinds([mine, finished], paused: ["t1"]) == [])
+        // Set aside, and nothing since: no line (a receipt, below).
         var held = mine
         held.status = "held"
-        #expect(kinds([held], paused: ["t1"]) == [.paused(.held, taskID: "t1")])
+        #expect(kinds([held], paused: ["t1"]) == [])
         // Set aside, then at it again: at work, not "waiting its turn".
         #expect(kinds([held], paused: []) == [.status(.working(since: at(-200)), taskID: "t1")])
     }

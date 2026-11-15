@@ -205,23 +205,27 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testARunThatWaitsStandsStillAndSaysWhatFor() {
-        // The notes helper set my task aside: it answers later.
+    func testATaskThatWaitsReadsAsAMessageNotAState() {
+        // The notes helper set my task aside: a few words under what I
+        // asked say it answers later, and no line of its own says so.
         var app = launch(["-myco-start", "waiting", "-myco-route", "agent:studio-claude-c41f"])
-        var paused = app.descendants(matching: .any)["run.paused"]
-        XCTAssertTrue(paused.waitForExistence(timeout: 20), "an open run that is not at work says so")
-        XCTAssertTrue(app.staticTexts["Set aside; it answers later"].exists)
+        let receipt = app.staticTexts["message.receipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 20), "a task not started has a few words under it")
+        XCTAssertEqual(receipt.label, "Will answer later")
+        XCTAssertFalse(app.staticTexts["Set aside; it answers later"].exists, "no line of state hangs under the task")
         // It is free meanwhile: what I type is a new message, not an addition.
         let submit = app.descendants(matching: .any)["composer.submit"]
         XCTAssertEqual(submit.label, "Send")
         snap("waiting-held")
         app.terminate()
 
-        // The coordinator handed work out and waits for it.
+        // The coordinator handed work out and its turn ended: what it said
+        // last stands; nothing says "waiting for".
         app = launch(["-myco-start", "waiting", "-myco-route", "project:myco-ios"])
-        paused = app.descendants(matching: .any)["run.paused"]
-        XCTAssertTrue(paused.waitForExistence(timeout: 20))
-        XCTAssertTrue(app.staticTexts["Waiting for 测试"].exists, "it names whom it waits for")
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["steps.summary"].firstMatch.waitForExistence(timeout: 20), "its run is on the page")
+        XCTAssertFalse(app.staticTexts["Waiting for 测试"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["message.receipt"].exists, "it began: nothing under what I asked")
         snap("waiting-for")
     }
 

@@ -797,6 +797,14 @@ struct ConversationBody: View {
                     }
                 }
                 files(of: item, trailing: true)
+                // Not started yet: a few words under it, like a receipt.
+                // Gone once the agent starts on it.
+                if let receipt = item.receipt {
+                    Text(Self.words(for: receipt)).font(.caption).foregroundStyle(MycoColor.muted)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 6)
+                        .accessibilityIdentifier("message.receipt")
+                }
             }
         case .reply(let text, let taskID, let to):
             VStack(alignment: .leading, spacing: Space.s) {
@@ -838,11 +846,6 @@ struct ConversationBody: View {
             NoticeLine(.idle, L("已停止", "Stopped"))
         case .status(let state, _):
             status(state)
-        case .paused(let pause, _):
-            // Still open, but not at work: the mushroom stands, and the
-            // line says what it waits for.
-            WorkingLine(look: MushroomLook.of(session.agent(model.agent)), text: Self.words(for: pause) { session.displayName(of: $0) }, since: nil)
-                .accessibilityIdentifier("run.paused")
         case .process(let taskID, let live):
             ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
                 AnyView(files(attachments, trailing: trailing))
@@ -861,16 +864,14 @@ struct ConversationBody: View {
         }
     }
 
-    /// What a run that has stopped for now waits for.
-    static func words(for pause: RunPause, name: (String) -> String) -> String {
-        switch pause {
-        case .waitingFor(let agents):
-            let names = agents.map(name)
-            return L("等 \(names.joined(separator: "、")) 做完", "Waiting for \(names.joined(separator: ", "))")
-        case .held:
-            return L("先放着了，晚点回复", "Set aside; it answers later")
-        case .quiet:
-            return L("在等，还没回复", "Waiting; no answer yet")
+    /// What stands under a task of mine that has not started.
+    static func words(for receipt: TaskReceipt) -> String {
+        switch receipt {
+        case .notOpened: return L("还没开始看", "Not opened yet")
+        case .behind: return L("排在后面", "Queued behind the current one")
+        case .offline: return L("对方离线，上线后再看", "Offline; it reads it when back")
+        case .sessionBusy: return L("会话开在别处，空出来再看", "Its session is busy elsewhere")
+        case .later: return L("稍后回复", "Will answer later")
         }
     }
 
@@ -905,7 +906,8 @@ struct ConversationBody: View {
         let look = MushroomLook.of(session.agent(model.agent))
         switch state {
         case .queued:
-            WorkingLine(look: look, text: L("排队中，轮到它时开始", "Waiting its turn"), since: nil)
+            // Not begun: the message has a receipt under it instead.
+            EmptyView()
         case .working(let since):
             // What it says it is doing; when it has not said, a playful
             // word that changes every few seconds, as on the desktop.
