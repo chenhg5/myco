@@ -189,7 +189,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about") { nextSettingsSection = s; }
 function takeSettingsSection(): Section | null {
   const s = nextSettingsSection;
   nextSettingsSection = null;
