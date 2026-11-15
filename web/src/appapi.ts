@@ -16,10 +16,25 @@ export interface Hub {
 export interface VoiceConfig {
   llm_base_url?: string;
   llm_model?: string;
+  /** the speech service the voice speaks with (one of VoiceInfo.tts_providers) */
+  tts_provider?: string;
   tts_speaker?: string;
-  /** Doubao's speech_rate, -50..100 (0 = normal) */
+  /** how fast it talks, -50..100 (0 = normal) */
   tts_rate?: number;
 }
+/** A speech service this App can speak with: the settings page draws these. */
+export interface VoiceTTSProvider {
+  id: string;
+  name: string;
+  name_en: string;
+  default_speaker?: string;
+  help?: string;
+  help_en?: string;
+  /** this App holds a key for it */
+  has_key: boolean;
+}
+/** How one workspace's hub stands with the voice settings kept on it. */
+export interface VoiceSyncHub { id: string; name: string; state: "synced" | "unsupported" | "unreachable" }
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
 export interface VoiceInfo {
   /** this App has a microphone and speaker for calls (the Mac app) */
@@ -30,6 +45,12 @@ export interface VoiceInfo {
   session: { on: boolean; state: VoiceState; muted: boolean; hub_id?: string; agent?: string };
   /** a call can start: a microphone here, the model and the voice set up (v0.19.12+) */
   ready?: boolean;
+  /** the speech services to choose from (absent before v0.19.14: Doubao alone) */
+  tts_providers?: VoiceTTSProvider[];
+  /** the settings (keys too) are kept on the workspaces' hubs for the person's other devices */
+  share?: boolean;
+  /** how each hub stood at the last look */
+  sync?: VoiceSyncHub[];
 }
 /** One line of a call: id stays the line's own; seq orders its changes. */
 export interface VoiceLine {
@@ -623,8 +644,10 @@ export const appApi = {
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
   // Voice chat with an agent (the Mac app; voice.go)
   voice: () => request<VoiceInfo>("GET", "app/voice"),
-  putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean }) =>
+  putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  /** Looks at the hubs for newer settings (set on another device), then answers as voice(). */
+  voiceSync: () => request<VoiceInfo>("POST", "app/voice/sync", {}),
   /** A call with one agent, in the person's chat with it (peer: their address there). */
   voiceStart: (hubId: string, agent: string, peer: string | undefined, lang: string) =>
     request<VoiceInfo>("POST", "app/voice/start", { hub_id: hubId, agent, peer, lang }),
