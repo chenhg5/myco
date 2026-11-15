@@ -48,7 +48,10 @@ type voiceModel interface {
 
 type openAIModel struct {
 	base, model, key string
-	http             *http.Client
+	// session names the call: some gateways route and cache by it
+	// (opencode's Go plan refuses requests without x-opencode-session).
+	session string
+	http    *http.Client
 }
 
 func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string)) (chatMsg, error) {
@@ -67,6 +70,10 @@ func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+m.key)
+	req.Header.Set("User-Agent", "myco-voice")
+	if m.session != "" {
+		req.Header.Set("x-opencode-session", m.session)
+	}
 	hc := m.http
 	if hc == nil {
 		hc = &http.Client{Timeout: 90 * time.Second}

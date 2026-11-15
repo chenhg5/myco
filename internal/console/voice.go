@@ -422,7 +422,7 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 	}
 	call := newVoiceCall(v, voiceDeps{
 		audio: b.Voice,
-		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey},
+		model: &openAIModel{base: c.LLMBaseURL, model: c.LLMModel, key: llmKey, session: "myco-voice-" + requestID()},
 		tts:   &doubaoTTS{key: ttsKey, speaker: c.TTSSpeaker, rate: c.TTSRate},
 		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
 		lang:  lang,
