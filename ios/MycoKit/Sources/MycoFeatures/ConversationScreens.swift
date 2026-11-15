@@ -180,6 +180,9 @@ struct ConversationBody: View {
     /// Where the part of the conversation that can be seen ends: the
     /// input's top edge (the page itself goes on under the input).
     @State private var visibleEnd: CGFloat = 800
+    @State private var dbgMaxY: CGFloat = 0
+    @State private var dbgMin: CGFloat = 99999
+    @State private var dbgTouched = false
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
@@ -291,6 +294,16 @@ struct ConversationBody: View {
                                     .transition(.opacity)
                             }
                         }
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .named(Self.space)).maxY.rounded()
+                        } action: { v in
+                            dbgMaxY = v
+                            dbgMin = min(dbgMin, v)
+                        }
+                        .accessibilityElement()
+                        .accessibilityIdentifier("dbg.end")
+                        .accessibilityValue("viewport=\(Int(viewport)) visibleEnd=\(Int(visibleEnd)) maxY=\(Int(dbgMaxY)) minMaxY=\(Int(dbgMin)) touched=\(touched) everTouched=\(dbgTouched)")
+                        .onChange(of: touched) { _, t in if t { dbgTouched = true } }
                         .onGeometryChange(for: Bool.self) { proxy in
                             // At rest the end sits on the input's top edge;
                             // pulled, it is further up than that.

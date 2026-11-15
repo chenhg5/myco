@@ -326,7 +326,13 @@ final class ConversationTests: XCTestCase {
         XCTAssertFalse(spinner.exists)
         // A finger pulls the end of the conversation up, past where it stops.
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+        let dbg = app.descendants(matching: .any)["dbg.end"]
+        let before = dbg.value as? String ?? "none"
         from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        let after = dbg.value as? String ?? "none"
+        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
+            try? ("before: " + before + "\nafter: " + after + "\n").write(toFile: dir + "/dbg-end.txt", atomically: true, encoding: .utf8)
+        }
         XCTAssertTrue(spinner.waitForExistence(timeout: 3), "pulling up past the end refreshes, and shows that it does")
         snap("refresh-end")
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: spinner)
