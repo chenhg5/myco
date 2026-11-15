@@ -265,6 +265,15 @@ struct ConversationBuilderTests {
         // Another one still open takes it.
         let open = Message(id: "t2", from: "me", to: "coder", body: "and this", status: "acked", createdAt: at(-50))
         #expect(ConversationBuilder.openTask(me: "me", messages: [held, open])?.id == "t2")
+        // One it stopped working on (its turn is over) takes nothing
+        // either: what I type is a new message, and there is nothing to
+        // stop. At work again, it does.
+        #expect(ConversationBuilder.openTask(me: "me", messages: [open], paused: ["t2"]) == nil)
+        #expect(ConversationBuilder.openTask(me: "me", messages: [open], paused: [])?.id == "t2")
+        // Stopped, but asking me something: what I type is the answer.
+        var stoppedAsking = open
+        stoppedAsking.asking = "q2"
+        #expect(ConversationBuilder.openTask(me: "me", messages: [stoppedAsking], paused: ["t2"])?.id == "t2")
     }
 
     @Test func aTaskNotStartedHasAFewWordsUnderIt() {

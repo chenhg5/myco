@@ -226,6 +226,9 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.buttons["steps.summary"].firstMatch.waitForExistence(timeout: 20), "its run is on the page")
         XCTAssertFalse(app.staticTexts["Waiting for 测试"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["message.receipt"].exists, "it began: nothing under what I asked")
+        // Its turn is over: the input is a plain message box again, with
+        // nothing to stop.
+        XCTAssertEqual(app.descendants(matching: .any)["composer.submit"].label, "Send")
         snap("waiting-for")
     }
 
