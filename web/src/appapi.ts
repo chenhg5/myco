@@ -45,7 +45,7 @@ export interface VoiceInfo {
   session: { on: boolean; state: VoiceState; muted: boolean; hub_id?: string; agent?: string };
   /** a call can start: a microphone here, the model and the voice set up (v0.19.12+) */
   ready?: boolean;
-  /** the speech services to choose from (absent before v0.19.14: Doubao alone) */
+  /** the speech services to choose from (absent before v0.19.15: Doubao alone) */
   tts_providers?: VoiceTTSProvider[];
   /** the settings (keys too) are kept on the workspaces' hubs for the person's other devices */
   share?: boolean;
