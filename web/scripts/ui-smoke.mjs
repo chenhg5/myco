@@ -684,11 +684,13 @@ async function runMatrix(browser, size, scheme) {
       // The header has no running state any more; it must not say it is at it.
       const head = compactText(await page.locator(".conv-detail .conv-head").innerText());
       if (/在干活|处理中/.test(head)) throw new Error(`拉走没开始的对话不该说在干活，标题栏是「${head}」`);
-      const wait = page.locator(".conv-detail .trace.is-waiting").first();
-      await wait.waitFor({ timeout: 20_000 });
-      const line = compactText(await wait.innerText());
-      if (!line.includes("排队中")) throw new Error(`拉走没开始的任务应写「排队中」，实际是「${line}」`);
-      if (await page.locator(".conv-detail .trace-spin").count()) throw new Error("拉走没开始的任务不该转圈");
+      // Not a line of its own: a few words under your message, like a receipt.
+      const receipt = page.locator(".conv-detail .conv-msg.is-me .conv-receipt").first();
+      await receipt.waitFor({ timeout: 20_000 });
+      const line = compactText(await receipt.innerText());
+      if (line !== "还没开始看") throw new Error(`拉走没开始的任务，消息下面应写「还没开始看」，实际是「${line}」`);
+      if (!(await receipt.isVisible())) throw new Error("「还没开始看」应一直看得到，不用指上去");
+      if (await page.locator(".conv-detail .trace.is-waiting, .conv-detail .trace-spin, .conv-detail .work-sprite").count()) throw new Error("拉走没开始的任务不该有 loading 或单独一行状态");
       await settle(page, 300);
       await shot(page, size, scheme, "pulled-not-started");
     });
@@ -898,14 +900,12 @@ async function runMatrix(browser, size, scheme) {
       for (let i = 0; i < 4; i++) await sendFromElsewhere("hub_studio", "review-cloud", i === 0 ? "图片附件 1：改完截图给我看" : `图片附件 ${i + 1}`);
       // Several at work at once: one loading in the chat, the newest; the
       // older ones still open stand still.
-      let quietSeen = false;
       for (let t = 0; t < 20; t++) {
-        const n = await page.locator(".conv-detail .work-sprite:not(.is-idle)").count();
-        if (n > 1) throw new Error(`聊天里同时只该有一个在动的 loading，现在有 ${n} 个`);
-        quietSeen ||= (await page.locator(".conv-detail .trace.is-quiet, .conv-detail .trace-foot", { hasText: "还没做完" }).count()) > 0;
+        // (a standing mushroom reads as a loading too: the others get a dot)
+        const n = await page.locator(".conv-detail .work-sprite").count();
+        if (n > 1) throw new Error(`聊天里同时只该有一个 loading（蘑菇），现在有 ${n} 个`);
         await page.waitForTimeout(150);
       }
-      if (!quietSeen) log("    （这次没有同时在做的任务，没看到「还没做完」）");
       const thumb = page.locator(".conv-detail .conv-attach.is-image").last();
       await thumb.waitFor({ timeout: 25_000 });
       const w = await thumb.locator("img").evaluate((img) => new Promise((ok) => (img.complete ? ok(img.naturalWidth) : img.addEventListener("load", () => ok(img.naturalWidth), { once: true }))));
@@ -1062,16 +1062,18 @@ async function runMatrix(browser, size, scheme) {
       const box = page.locator(".conv-detail .conv-compose-input");
       await box.fill("核对下载页，派出去给别人做");
       await box.press("Enter");
-      // At work first (the mushroom moves), then waiting.
+      // At work first (the mushroom moves); once its turn is over, nothing:
+      // what it said last stands, as in a chat (no "在等" line, no loading).
       await page.locator(".conv-detail .work-sprite:not(.is-idle)").first().waitFor({ timeout: 15_000 });
-      const wait = page.locator(".conv-detail .trace-paused", { hasText: "在等" }).last();
-      await wait.waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .trace-say", { hasText: "已经派出去了" }).last().waitFor({ timeout: 15_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-detail .work-sprite"), null, { timeout: 15_000 });
       await settle(page, 300);
-      if (await page.locator(".conv-detail .work-sprite:not(.is-idle)").count()) throw new Error("它说完了在等别人，不该还有在动的 loading");
+      const lines = await page.locator(".conv-detail .trace").last().innerText();
+      if (/在等|还没做完|先放着/.test(lines)) throw new Error(`它这一轮停了，不该再挂一行状态，实际有「${compactText(lines)}」`);
+      if (await page.locator(".conv-detail .conv-msg.is-me .conv-receipt").count()) throw new Error("开始做之后，消息下面不该还有「还没开始看」");
       await shot(page, size, scheme, "chat-waiting");
-      // The answer comes when the other one is done; the line goes.
+      // The answer comes when the other one is done.
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
-      await wait.waitFor({ state: "detached", timeout: 10_000 });
       await noRound(page);
     });
 
@@ -1087,7 +1089,7 @@ async function runMatrix(browser, size, scheme) {
       const aMsg = page.locator(".conv-detail .conv-msg.is-me", { hasText: "补充接在过程里：派出去核对链接" });
       await aMsg.waitFor({ timeout: 10_000 });
       // It has said something and is waiting for the one it handed out.
-      await page.locator(".conv-detail .trace-paused").last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .trace-say", { hasText: "已经派出去了" }).last().waitFor({ timeout: 15_000 });
       await box.fill("补充：顺便看看 Windows 的包");
       await box.press("Enter");
       const added = page.locator(".conv-detail .trace .trace-steer", { hasText: "顺便看看 Windows 的包" });
@@ -1097,7 +1099,7 @@ async function runMatrix(browser, size, scheme) {
       const order = await added.evaluate((el) => {
         const run = el.closest(".trace");
         const said = [...(run?.querySelectorAll(".trace-say, .trace-group") || [])].filter((x) => x.textContent?.includes("已经派出去了"));
-        const state = run?.querySelector(".trace-paused, .trace-wait");
+        const state = run?.querySelector(".trace-wait");
         const y = el.getBoundingClientRect().top;
         return { saidAbove: said.every((x) => x.getBoundingClientRect().top < y), stateBelow: !state || state.getBoundingClientRect().top > y };
       });

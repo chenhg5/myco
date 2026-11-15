@@ -3943,11 +3943,6 @@ html.shell-mac .fp-panel.is-full .fp-head {
 .work-sprite.is-idle .work-feet.is-b {
   opacity: 0;
 }
-.work-verb.is-still {
-  background: none;
-  color: var(--muted);
-  animation: work-in 0.35s ease-out;
-}
 @media (prefers-reduced-motion: reduce) {
   .conv-msg.is-flash .conv-bubble { animation: none; }
   .work-body,
@@ -5297,6 +5292,12 @@ button.app-label:hover { filter: brightness(0.95); }
   color: var(--amber, #b7862a);
   font-size: 10.5px;
 }
+/* Under a task of yours not opened yet or set aside: a few words, like a
+   receipt (还没开始看 / 排在后面 / 稍后回复), before the time. */
+.conv-receipt {
+  margin-right: 6px;
+  color: var(--muted);
+}
 .conv-unreadable {
   display: inline-flex;
   align-items: center;
@@ -6233,7 +6234,7 @@ body.is-resizing {
   margin-top: 3px;
 }
 
-/* A task the node has not picked up yet: why, the mushroom standing by. */
+/* The line at the end of a run at work: the mushroom and what it does. */
 .trace-head.trace-wait {
   cursor: default;
 }

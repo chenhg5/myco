@@ -199,7 +199,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, footed, waitingOn, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
   hubId: string; task: Message; onGrow?: () => void;
   cli?: string;
   onStatus?: (taskId: string, status: string) => void;
@@ -214,8 +214,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   /** you sent the task: you may answer its questions */
   canAnswer?: boolean;
   onAnswer?: (text: string) => Promise<void>;
-  /** why it has not started yet, when known (the session is open elsewhere) */
-  waiting?: string;
   /** its answer is in the conversation: done, even if its status lags */
   answered?: boolean;
   /** a newer run in the chat is the one at work on screen: this one, still
@@ -224,8 +222,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   /** later messages sit under this run (tasks it handed out, your
    *  supplements): its loading is at the foot of the chat, not here */
   footed?: boolean;
-  /** who it is waiting for: the tasks it handed out that are still open */
-  waitingOn?: string[];
   /** told whenever it stops or goes back to work (pausedRun) */
   onPaused?: (taskId: string, paused: boolean) => void;
   /** what you added to the task (steer): in the run at the time you sent
@@ -331,15 +327,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
   const moving = running && !quiet && !paused;
   // At work, with its loading here (not at the foot of the chat).
   const movingHere = moving && !footed;
-  const pausedLine = paused ? (
-    <div className="trace-head trace-wait trace-paused">
-      <Mushroom idle />
-      <span className="trace-title">{waitingOn?.length
-        ? L(`等 ${waitingOn.join("、")} 做完`, `Waiting for ${waitingOn.join(", ")}`)
-        : task.status === "held" ? L("先放着了，晚点回复", "Set aside; it answers later")
-        : L("在等，还没回复", "Waiting; no answer yet")}</span>
-    </div>
-  ) : null;
   // A finished run's time, tokens and cost go with its answer.
   useEffect(() => {
     if (!onUsage || running || !events) return;
@@ -359,14 +346,8 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     ? <>{steerList.map((m) => <SteerBubble key={m.id} hubId={hubId} msg={m} />)}{node}</>
     : node);
   if (running && (traceStatus || task.status) !== "acked" && (traceStatus || task.status) !== "held" && !events?.length && !reports.length) {
-    return withSteers(
-      <div className="trace is-waiting">
-        <div className="trace-head trace-wait">
-          <Mushroom idle />
-          <span className="trace-title">{waiting || L("排队中，轮到它时开始", "Queued: it starts when the node gets to it")}</span>
-        </div>
-      </div>
-    );
+    // (said under your message, not as a line here: ConversationDetail)
+    return withSteers(null);
   }
   const starting = !events?.length && !reports.length && (traceStatus || task.status) === "acked";
   const startup = cli?.startsWith("claude") ? L("已接手，正在启动 Claude Code", "Picked up, starting Claude Code")
@@ -387,21 +368,14 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
     }
     return new Date(t).toISOString();
   })();
-  const atWork = paused ? (
-    <div className="trace is-waiting is-paused">{pausedLine}</div>
-  ) : footed && moving ? null : moving ? (
+  // Stopped, or not the newest still open: nothing here. It is a message,
+  // not a state: what it said last stands, as in a chat.
+  const atWork = !moving || footed ? null : (
     <div className="trace is-live">
       <div className="trace-head trace-wait">
         <Mushroom />
         <span key={verb} className="trace-title is-shimmer is-verb">{starting ? startup : verb}</span>
         <Elapsed since={turnSince} className="trace-usage" />
-      </div>
-    </div>
-  ) : (
-    <div className="trace is-waiting is-quiet">
-      <div className="trace-head trace-wait">
-        <Mushroom idle />
-        <span className="trace-title">{L("还没做完", "Not finished yet")}</span>
       </div>
     </div>
   );
@@ -546,7 +520,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
       ) : (
         <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
       ))}
-      {pausedLine}
       {movingHere && !asking && endsWithSay && (
         <div className="trace-head trace-wait">
           <Mushroom />
@@ -554,8 +527,6 @@ export function TraceView({ hubId, task, onGrow, waiting, answered, quiet, foote
           <Elapsed since={turnSince} className="trace-usage" />
         </div>
       )}
-      {/* still open, but a newer run is the one moving: said, not shown */}
-      {running && quiet && !paused && !asking && <div className="trace-foot">{L("还没做完", "Not finished yet")}</div>}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
   );

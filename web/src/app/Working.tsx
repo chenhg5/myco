@@ -108,7 +108,7 @@ export function Elapsed({ since, className }: { since: string; className?: strin
   return <span className={className}>{elapsed(now - start)}</span>;
 }
 
-export function WorkingLine({ name, since, status, side, queued, quiet, behind = 0 }: {
+export function WorkingLine({ name, since, status, side, behind = 0 }: {
   /** who is working */
   name: string;
   /** when it took the task (for the clock) */
@@ -117,23 +117,18 @@ export function WorkingLine({ name, since, status, side, queued, quiet, behind =
   status?: string;
   /** the side of the conversation its messages are on */
   side: "left" | "right";
-  /** not picked up yet: the mushroom stands and waits */
-  queued?: boolean;
   /** more tasks for it waiting behind this one */
   behind?: number;
-  /** a newer run in the chat is the one at work on screen: this one does
-   *  not move (one loading at a time) */
-  quiet?: boolean;
 }) {
-  const verb = useVerb(!status && !queued && !quiet);
-  const text = queued ? L("排队中，等它接手", "Queued, waiting to be picked up") : status || (quiet ? L("还没做完", "Not finished yet") : verb);
+  const verb = useVerb(!status);
+  const text = status || verb;
   return (
     <div className={cn("work-line", side === "right" && "is-right")} role="status" aria-live="off">
-      <Mushroom idle={queued || quiet} />
+      <Mushroom />
       <div className="work-text">
         <span className="work-name">{name}</span>
         {/* keyed, so a new verb fades in */}
-        <span key={text} className={cn("work-verb", (queued || quiet) && "is-still")}>{text}</span>
+        <span key={text} className="work-verb">{text}</span>
         <Elapsed since={since} className="work-time" />
         {behind > 0 && <span className="work-time">{L(`后面还有 ${behind} 个任务`, `${behind} more queued`)}</span>}
       </div>
