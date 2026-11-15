@@ -391,6 +391,7 @@ struct ConversationBody: View {
         .onDisappear {
             dictation?.stop()
             call?.hangUp()
+            UIApplication.shared.isIdleTimerDisabled = false
         }
         // A call lasts while this conversation is in front: leaving the
         // app hangs up, and the screen stays on meanwhile.

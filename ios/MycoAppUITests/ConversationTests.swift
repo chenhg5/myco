@@ -160,7 +160,7 @@ final class ConversationTests: XCTestCase {
 
         // What is wanted goes to the agent as if typed, marked as said.
         let action = app.descendants(matching: .any).matching(identifier: "voice.line.action").firstMatch
-        XCTAssertTrue(action.waitForExistence(timeout: 15), "the bar says what it passed on")
+        XCTAssertTrue(action.waitForExistence(timeout: 25), "the bar says what it passed on")
         let mark = app.buttons["voice.mark"].firstMatch
         XCTAssertTrue(mark.waitForExistence(timeout: 10), "the message in the conversation carries the voice mark")
         XCTAssertTrue(app.staticTexts["顺便把标题也改短一点"].exists, "and reads as what was asked, without the note under it")
@@ -169,8 +169,10 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["As said: 顺便把标题也改短一点"].waitForExistence(timeout: 3), "a tap shows the words as heard")
 
         // Muting, then hanging up: the bar goes and the microphone is back.
+        // (Once it has finished what it was saying, the bar says so.)
         app.buttons["voice.mute"].tap()
-        XCTAssertEqual(app.staticTexts["voice.state"].label, "Muted")
+        expectation(for: NSPredicate(format: "label == %@", "Muted"), evaluatedWith: app.staticTexts["voice.state"])
+        waitForExpectations(timeout: 25)
         snap("voice-muted")
         app.buttons["voice.hangup"].tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: bar)

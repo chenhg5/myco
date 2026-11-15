@@ -557,14 +557,19 @@ public final class ConversationModel {
         if let task = openTask {
             do {
                 try await session.hub.steer(task.id, body: body, attachments: [])
-                await reload()
+                // The page catches up by itself: the call does not wait for it.
+                Task { await reload() }
                 return (task.id, true)
             } catch let error as HubError where error.error == "invalid_state" {
                 // The task ended just now: this is a new message.
             }
         }
         let sent = try await session.hub.send(request(body))
-        await reload()
+        // It is the open task from now on, before the page has read it
+        // back: what is said next is added to it.
+        known[sent.id] = sent
+        show(others: others)
+        Task { await reload() }
         return (sent.id, false)
     }
 

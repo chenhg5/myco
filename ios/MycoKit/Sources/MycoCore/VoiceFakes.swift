@@ -174,7 +174,7 @@ public struct SilentSpeech: VoiceSpeech {
     /// Fails instead, with these words.
     public var failure: String?
 
-    public init(perCharacter: Duration = .milliseconds(70), failure: String? = nil) {
+    public init(perCharacter: Duration = .milliseconds(55), failure: String? = nil) {
         self.perCharacter = perCharacter
         self.failure = failure
     }
@@ -214,7 +214,7 @@ extension ScriptedVoiceAudio {
     public static func demo() -> ScriptedVoiceAudio {
         ScriptedVoiceAudio([
             Line(after: .milliseconds(900), ["做到", "做到哪了"]),
-            Line(after: .seconds(5), ["顺便", "顺便把标题", "顺便把标题也改短一点"]),
+            Line(after: .seconds(8), ["顺便", "顺便把标题", "顺便把标题也改短一点"]),
         ])
     }
 }
