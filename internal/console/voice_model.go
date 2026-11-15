@@ -56,6 +56,8 @@ func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 	if base == "" {
 		base = "https://api.openai.com/v1"
 	}
+	// The whole endpoint pasted in works too.
+	base = strings.TrimSuffix(base, "/chat/completions")
 	body, _ := json.Marshal(map[string]any{
 		"model": m.model, "messages": msgs, "tools": tools, "stream": true, "temperature": 0.7,
 	})

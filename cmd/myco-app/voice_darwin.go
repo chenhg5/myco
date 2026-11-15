@@ -56,6 +56,7 @@ static void vSession(void) {
 		NSString *text = result ? [[result bestTranscription] formattedString] : nil;
 		if ([text length]) mycoVoiceHeard((char *)[text UTF8String], final ? 1 : 0);
 		if (!error && !final) return;
+		if (error) NSLog(@"myco voice: recognition ended: %@", error);
 		dispatch_async(dispatch_get_main_queue(), ^{
 			if (vOn && vTask && req == vRequest) vSession();
 		});
@@ -96,11 +97,28 @@ static void vStartOnMain(NSString *loc) {
 		}
 	}
 	AVAudioFormat *inFormat = [input outputFormatForBus:0];
+	NSLog(@"myco voice: microphone %@", inFormat);
+	// With voice processing on, the microphone gives several channels (the
+	// processed voice first); speech recognition hears nothing in that, so
+	// it gets the first channel alone, as float mono.
+	AVAudioFormat *mono = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32 sampleRate:inFormat.sampleRate channels:1 interleaved:NO];
 	[input installTapOnBus:0 bufferSize:1024 format:inFormat block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-		@synchronized(vLock) {
-			if (vRequest) [vRequest appendAudioPCMBuffer:buffer];
+		AVAudioPCMBuffer *out = nil;
+		if (buffer.format.channelCount != 1 || buffer.format.commonFormat != AVAudioPCMFormatFloat32) {
+			if (!buffer.floatChannelData) return;
+			out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:mono frameCapacity:buffer.frameLength];
+			out.frameLength = buffer.frameLength;
+			const float *src = buffer.floatChannelData[0];
+			NSUInteger stride = buffer.format.isInterleaved ? buffer.format.channelCount : 1;
+			float *dst = out.floatChannelData[0];
+			for (AVAudioFrameCount i = 0; i < buffer.frameLength; i++) dst[i] = src[i * stride];
 		}
+		@synchronized(vLock) {
+			if (vRequest) [vRequest appendAudioPCMBuffer:(out ? out : buffer)];
+		}
+		if (out) [out release];
 	}];
+	[mono release];
 	// The assistant's voice: 24 kHz mono from Go, mixed into the output.
 	vPlayer = [[AVAudioPlayerNode alloc] init];
 	[vEngine attachNode:vPlayer];

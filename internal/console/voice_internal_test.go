@@ -370,3 +370,18 @@ func httptestServer(t *testing.T, b *Backend) func(method, path, body string) (i
 		return resp.StatusCode, string(raw)
 	}
 }
+
+// The model's address may be given as the whole endpoint.
+func TestVoiceModelTakesTheWholeEndpoint(t *testing.T) {
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	m := &openAIModel{base: srv.URL + "/v1/chat/completions", model: "fast", key: "k"}
+	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil)
+	if err != nil || out.Content != "好" || path != "/v1/chat/completions" {
+		t.Fatalf("got %q %v at %s", out.Content, err, path)
+	}
+}
