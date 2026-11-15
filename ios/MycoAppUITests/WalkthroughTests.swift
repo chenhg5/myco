@@ -96,6 +96,9 @@ final class WalkthroughTests: XCTestCase {
         from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
         // The system's own spinner turns at the top while the workspace is asked.
         shot("refresh-list")
+        if let dir = ProcessInfo.processInfo.environment["MYCO_SHOTS_DIR"], !dir.isEmpty {
+            try? app.debugDescription.write(toFile: dir + "/refresh-list.txt", atomically: true, encoding: .utf8)
+        }
         XCTAssertTrue(chat.waitForExistence(timeout: 20), "the list is there after the refresh")
     }
 
