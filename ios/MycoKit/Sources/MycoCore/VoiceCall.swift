@@ -302,12 +302,12 @@ public final class VoiceCall {
     }
 
     /// What people say to show they listen; not a turn.
-    static let backchannel: Set<String> = [
+    nonisolated static let backchannel: Set<String> = [
         "嗯", "嗯嗯", "啊", "哦", "噢", "对", "对对", "好", "是", "嗯哼", "ok", "okay", "mm", "uhhuh", "yeah",
     ]
 
     /// Letters and digits only, lower case: how heard words are compared.
-    static func normalize(_ text: String) -> String {
+    nonisolated static func normalize(_ text: String) -> String {
         String(String.UnicodeScalarView(text.lowercased().unicodeScalars.filter {
             $0.properties.isAlphabetic || $0.properties.numericType != nil
         }))
@@ -408,7 +408,7 @@ public final class VoiceCall {
 
     /// Keeps the talk to its last messages, starting at a person's or a
     /// system line (never a tool's result without its call).
-    static func trim(_ history: [ChatMessage], keep: Int = 30) -> [ChatMessage] {
+    nonisolated static func trim(_ history: [ChatMessage], keep: Int = 30) -> [ChatMessage] {
         guard history.count > keep else { return history }
         var kept = Array(history.suffix(keep))
         while let first = kept.first, first.role == "tool" || (first.role == "assistant" && !first.toolCalls.isEmpty) {
@@ -513,7 +513,7 @@ public final class VoiceCall {
         parts.language == .zh ? zh : en
     }
 
-    static func words(of error: Error) -> String {
+    nonisolated static func words(of error: Error) -> String {
         if let failure = error as? VoiceFailure { return failure.message }
         return error.localizedDescription
     }
