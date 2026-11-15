@@ -54,6 +54,7 @@ final class WalkthroughTests: XCTestCase {
         let input = app.descendants(matching: .any)["composer.input"]
         let submit = app.buttons["composer.submit"]
         XCTAssertTrue(input.waitForExistence(timeout: 5), "the conversation opens")
+        // (Voice is not set up here, so the button is not a voice chat.)
         XCTAssertEqual(submit.label, "Send")
         XCTAssertFalse(submit.isEnabled, "nothing typed: nothing to send")
 
@@ -81,6 +82,26 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Stopped"].waitForExistence(timeout: 5), "stopping says so")
         expectation(for: NSPredicate(format: "label == %@", "Send"), evaluatedWith: submit)
         waitForExpectations(timeout: 5)
+    }
+
+    @MainActor
+    func testVoiceIsSetUpInSettings() {
+        // Settings is where the model and the voice of a voice chat go.
+        let app = launch()
+        XCTAssertTrue(app.buttons["workspace.button"].waitForExistence(timeout: 15))
+        app.buttons["workspace.button"].tap()
+        app.buttons["Settings"].tap()
+        let voice = app.descendants(matching: .any)["settings.voice"]
+        // (It is further down the page than a sheet shows at first.)
+        XCTAssertTrue(app.switches["settings.notifications"].waitForExistence(timeout: 5))
+        for _ in 0..<4 where !voice.exists { app.swipeUp() }
+        XCTAssertTrue(voice.waitForExistence(timeout: 5), "Settings has a line for voice")
+        voice.tap()
+        XCTAssertTrue(app.textFields["voice.baseURL"].waitForExistence(timeout: 5), "the model's address")
+        XCTAssertTrue(app.textFields["voice.model"].exists)
+        XCTAssertTrue(app.secureTextFields["voice.modelKey"].exists, "keys are typed blind")
+        XCTAssertTrue(app.secureTextFields["voice.speechKey"].exists)
+        shot("voice-settings")
     }
 
     @MainActor
@@ -144,7 +165,10 @@ final class WalkthroughTests: XCTestCase {
     @MainActor
     func testNotificationsCanBeSetAndAChatMuted() {
         // Nothing reaches the system here: the test only sets what the person chooses.
-        let app = launch(["-myco-notifier", "recorded"])
+        // (`-myco-notifications` hides what an earlier run chose: an argument
+        // comes before what the app saved, and is not settings it can read,
+        // so every run starts with nothing muted and notifications off.)
+        let app = launch(["-myco-notifier", "recorded", "-myco-notifications", "fresh"])
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
         // A long press on a chat mutes it: a crossed bell by its name.
         let chat = app.buttons["chat.agent:studio-claude-c41f"]

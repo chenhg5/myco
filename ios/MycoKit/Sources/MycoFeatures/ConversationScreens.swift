@@ -153,8 +153,15 @@ struct ConversationBody: View {
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
     /// Speaking instead of typing: made the first time the microphone is tapped.
     @State private var dictation: Dictation?
+    /// A voice call with this agent, while one is on.
+    @State private var call: VoiceCall?
+    /// Why the last call ended by itself (no microphone, no permission).
+    @State private var callProblem: DictationProblem?
+    /// A call could not be made from what is set: its settings are open.
+    @State private var settingUpVoice = false
     /// A setting: the keyboard's Return sends instead of breaking the line.
     @AppStorage("myco-return-sends") private var returnSends = false
     /// What was just taken out of view: for a moment it can be taken back.
@@ -381,7 +388,25 @@ struct ConversationBody: View {
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
-        .onDisappear { dictation?.stop() }
+        .onDisappear {
+            dictation?.stop()
+            call?.hangUp()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        // A call lasts while this conversation is in front: leaving the
+        // app hangs up, and the screen stays on meanwhile.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { call?.hangUp() }
+        }
+        .onChange(of: call?.state) { _, state in
+            UIApplication.shared.isIdleTimerDisabled = state != nil && state != .ended
+            guard state == .ended, let ended = call else { return }
+            callProblem = ended.problem
+            withAnimation(.snappy(duration: 0.25)) { call = nil }
+        }
+        .sheet(isPresented: $settingUpVoice) {
+            NavigationStack { VoiceSettingsScreen(closes: true) }
+        }
         .photosPicker(isPresented: $pickingPhotos, selection: $picked, maxSelectionCount: 9, matching: .images, preferredItemEncoding: .compatible)
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
@@ -404,6 +429,7 @@ struct ConversationBody: View {
     // MARK: Speaking
 
     private func toggleDictation() {
+        callProblem = nil
         let dictation = dictation ?? Dictation(listener: app.speechListener())
         self.dictation = dictation
         dictation.toggle(typed: { model.draft }, write: { model.draft = $0 })
@@ -417,7 +443,7 @@ struct ConversationBody: View {
 
     /// Why it could not listen, and whether Settings is where to fix it.
     private var dictationNote: (text: String, settings: Bool)? {
-        switch dictation?.problem {
+        switch dictation?.problem ?? callProblem {
         case nil: return nil
         case .speechDenied:
             return (L("没有语音识别权限：在「设置 › myco」里打开「语音识别」", "No speech recognition access: allow it in Settings › myco"), true)
@@ -430,6 +456,83 @@ struct ConversationBody: View {
         case .other(let text):
             return (text, false)
         }
+    }
+
+    // MARK: A voice call
+
+    /// With nothing typed and nothing running, the round button starts a
+    /// voice call with this agent (not with a shell or a person), once
+    /// voice is set up in Settings. Until then it is Send, as always (the
+    /// desktop app's rule).
+    private var canCall: Bool {
+        guard app.voiceReady, call == nil, model.action == .send, model.pending.isEmpty,
+              model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        return session.agent(model.agent).map { Naming.kind(of: $0) == .agent } ?? false
+    }
+
+    private func startCall() {
+        dictation?.stop()
+        callProblem = nil
+        Task {
+            guard call == nil else { return }
+            guard let new = await app.call(in: model, of: session) else {
+                // Its key could not be read after all: its settings, then.
+                settingUpVoice = true
+                return
+            }
+            withAnimation(.snappy(duration: 0.25)) { call = new }
+            new.start()
+        }
+    }
+
+    private func voiceBar(_ call: VoiceCall) -> some View {
+        let stage: VoiceBarView.Stage
+        let words: String
+        switch call.state {
+        case .connecting, .ended:
+            stage = .connecting
+            words = L("正在接通…", "Connecting…")
+        case .listening:
+            stage = .listening
+            words = call.muted ? L("已静音", "Muted") : L("在听", "Listening")
+        case .thinking:
+            stage = .thinking
+            words = L("在想", "Thinking")
+        case .speaking:
+            stage = .speaking
+            words = L("在说", "Speaking")
+        }
+        // The talk, last few lines: what I said, what it said, what it did.
+        // (An answer not begun yet shows only while it is the last line.)
+        let newest = call.lines.last?.id
+        let lines = call.lines.filter { line in
+            switch line.kind {
+            case .notice: return line.id == newest
+            case .assistant: return !line.text.isEmpty || line.id == newest
+            default: return true
+            }
+        }.suffix(3)
+        return VoiceBarView(
+            stage: stage, muted: call.muted, stageText: words,
+            title: L("和 \(name) 语音聊天", "Voice chat with \(name)"),
+            hint: L("说吧，比如「把登录那个 bug 修了」「做到哪了」。它说话时你随时可以打断。",
+                    "Go ahead, e.g. “fix the login bug” or “how far along is it?”. Cut in any time."),
+            lines: lines.map { line in
+                let kind: VoiceBarView.Line.Kind
+                switch line.kind {
+                case .user: kind = .me(hearing: false)
+                case .hearing: kind = .me(hearing: true)
+                case .assistant: kind = .voice(cut: line.interrupted)
+                case .action: kind = .action
+                case .notice: kind = .notice
+                }
+                return VoiceBarView.Line(id: line.id, kind: kind, text: line.text)
+            },
+            meLabel: L("你", "You"), voiceLabel: L("语音", "Voice"),
+            muteLabel: call.muted ? L("取消静音", "Unmute") : L("静音", "Mute"), hangUpLabel: L("挂断", "Hang up"),
+            onMute: { call.setMuted(!call.muted) },
+            onHangUp: { call.hangUp() })
     }
 
     // MARK: Adding files
@@ -591,11 +694,17 @@ struct ConversationBody: View {
                 // without the line that only names them.
                 // What is added to a task is plain, like anything else I say.
                 if steer || by != nil || !ConversationBuilder.saysOnlyItsFiles(text, files: item.files) {
-                    MyBubble(text, name: by.map { session.displayName(of: $0) })
+                    // Passed on by a voice call: the words, and a small
+                    // mark in place of the note the call put under them.
+                    let voiced = ViaVoice.split(text)
+                    MyBubble(voiced?.text ?? text, name: by.map { session.displayName(of: $0) })
                         .contextMenu {
-                            copyButton(text)
+                            copyButton(voiced?.text ?? text)
                             deleteButton(item.id)
                         }
+                    if let voiced {
+                        VoiceMark(label: L("经语音", "By voice"), heard: voiced.heard.isEmpty ? "" : L("原话：", "As said: ") + voiced.heard)
+                    }
                 }
                 files(of: item, trailing: true)
             }
@@ -783,19 +892,31 @@ struct ConversationBody: View {
                 .padding(.top, Space.s)
                 .accessibilityIdentifier("queue.row")
             }
+            if let call {
+                voiceBar(call)
+                    .padding(.horizontal, 12)
+                    .padding(.top, Space.s)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             ComposerView(
                 text: $model.draft,
                 placeholder: model.openTask == nil ? L("发给 \(name)", "Message \(name)") : L("补充给 \(name)", "Add to what \(name) is doing"),
-                mode: mode, enabled: model.canSubmit, submitLabel: submitLabel,
+                mode: mode, enabled: canCall || model.canSubmit, submitLabel: submitLabel,
                 queueTitle: L("排到下一条", "Send after this one"),
                 files: trayFiles, fileNote: fileNote,
                 attachLabel: L("加图片或文件", "Add pictures or files"), removeLabel: L("不发这个", "Remove"), retryLabel: L("再传一次", "Try again"),
                 attachChoices: attachChoices,
-                mic: micState, micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
+                // The microphone is the call's while one is on.
+                mic: call == nil ? micState : nil,
+                micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
                 onSubmit: {
                     commits += 1
-                    Task { await model.submit() }
+                    if canCall {
+                        startCall()
+                    } else {
+                        Task { await model.submit() }
+                    }
                 },
                 onQueue: {
                     commits += 1
@@ -811,6 +932,7 @@ struct ConversationBody: View {
     }
 
     private var submitLabel: String {
+        if canCall { return L("语音聊天", "Voice chat") }
         switch model.action {
         case .send: return L("发送", "Send")
         case .steer: return L("补充", "Add")
@@ -819,6 +941,7 @@ struct ConversationBody: View {
     }
 
     private var mode: ComposerView.Mode {
+        if canCall { return .call }
         switch model.action {
         case .send: return .send
         case .steer: return .steer
@@ -873,7 +996,11 @@ struct ProcessView: View {
                     // What I added, where I sent it: what it did before is
                     // above, what it did about it below.
                     VStack(alignment: .trailing, spacing: Space.s) {
-                        MyBubble(report.text)
+                        let voiced = ViaVoice.split(report.text)
+                        MyBubble(voiced?.text ?? report.text)
+                        if let voiced {
+                            VoiceMark(label: L("经语音", "By voice"), heard: voiced.heard.isEmpty ? "" : L("原话：", "As said: ") + voiced.heard)
+                        }
                         if !report.files.isEmpty { files(report.files, true) }
                     }
                 }

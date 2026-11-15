@@ -26,12 +26,16 @@ public enum MicState: Sendable, Hashable {
 
 /// The input at the bottom of a conversation: a card with the words on
 /// top and the controls under them. Attach and speak on the left; on the
-/// right, alone, the one button that sends, adds to the running task, or
-/// stops it. What that button does is decided outside (`mode`); this view
-/// only draws it. The files about to go sit above the words.
+/// right, alone, the one button that sends, adds to the running task,
+/// stops it, or, with nothing typed, starts a voice call. What that
+/// button does is decided outside (`mode`); this view only draws it. The
+/// files about to go sit above the words.
 public struct ComposerView: View {
     public enum Mode: Sendable, Hashable {
         case send, steer, stop
+        /// Nothing typed and nothing running: the button starts a voice
+        /// call with the agent (as in ChatGPT and Claude).
+        case call
     }
 
     @Binding var text: String
@@ -129,7 +133,7 @@ public struct ComposerView: View {
                 .accessibilityIdentifier("composer.input")
                 // With a keyboard attached, ⌘Return sends.
                 .onKeyPress(.return, phases: .down) { press in
-                    guard press.modifiers.contains(.command), enabled, mode != .stop else { return .ignored }
+                    guard press.modifiers.contains(.command), enabled, mode != .stop, mode != .call else { return .ignored }
                     onSubmit()
                     return .handled
                 }
@@ -138,7 +142,7 @@ public struct ComposerView: View {
                     // app. The line break it typed is taken back out.
                     guard returnSends, let typed = Self.withoutTypedReturn(old: old, new: new) else { return }
                     text = typed
-                    if enabled, mode != .stop { onSubmit() }
+                    if enabled, mode != .stop, mode != .call { onSubmit() }
                 }
             HStack(spacing: 0) {
                 // A tap opens the ways to add something, right at the finger.
@@ -210,9 +214,17 @@ public struct ComposerView: View {
         }
     }
 
+    private var symbol: (name: String, size: CGFloat) {
+        switch mode {
+        case .stop: return ("stop.fill", 13)
+        case .call: return ("waveform", 16)
+        case .send, .steer: return ("arrow.up", 17)
+        }
+    }
+
     private var icon: some View {
-        Image(systemName: mode == .stop ? "stop.fill" : "arrow.up")
-            .font(.system(size: mode == .stop ? 13 : 17, weight: .bold))
+        Image(systemName: symbol.name)
+            .font(.system(size: symbol.size, weight: .bold))
             .foregroundStyle(MycoColor.buttonText)
             .frame(width: 36, height: 36)
             .background(MycoColor.button.opacity(enabled ? 1 : 0.3), in: Circle())
