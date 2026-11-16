@@ -134,6 +134,8 @@ public final class AppModel {
     /// How each workspace stood with the settings kept on it, at the last
     /// look: its name, and whether it has them.
     public private(set) var voiceSync: [VoiceSyncLine] = []
+    /// A save and a look at the workspaces, one at a time.
+    @ObservationIgnored private let voiceTurns = VoiceSharing.Turns()
 
     public struct VoiceSyncLine: Identifiable, Hashable, Sendable {
         public var id: String
@@ -190,6 +192,14 @@ public final class AppModel {
     /// stays as it was; `forget` takes saved keys away. Then the person's
     /// other devices get it from the workspaces.
     public func saveVoice(_ settings: VoiceSettings, modelKey: String = "", speechKey: String = "", forgetModelKey: Bool = false, forgetSpeechKey: Bool = false) async {
+        // In turn with a look at the workspaces: one that began before
+        // this save cannot put back what it replaces.
+        await voiceTurns.take { [self] in
+            await saveVoiceNow(settings, modelKey: modelKey, speechKey: speechKey, forgetModelKey: forgetModelKey, forgetSpeechKey: forgetSpeechKey)
+        }
+    }
+
+    private func saveVoiceNow(_ settings: VoiceSettings, modelKey: String, speechKey: String, forgetModelKey: Bool, forgetSpeechKey: Bool) async {
         var local = await localVoice()
         var settings = settings
         settings.baseURL = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -206,16 +216,20 @@ public final class AppModel {
         var before = local.settings
         before.updatedAt = settings.updatedAt
         let changed = before != settings || !modelKey.isEmpty || !speechKey.isEmpty || forgetModelKey || forgetSpeechKey
-        if changed { settings.updatedAt = Date() }
+        if changed { settings.updatedAt = VoiceSharing.stamp(after: local.settings.updatedAt) }
         local.settings = settings
         await keepVoice(local)
-        await syncVoice()
+        await syncVoiceNow()
     }
 
     /// Brings this device and its workspaces to the newest voice settings
     /// (`VoiceSharing`): what was set on another device since is taken,
     /// and what was set here goes to the workspaces that are behind.
     public func syncVoice() async {
+        await voiceTurns.take { [self] in await syncVoiceNow() }
+    }
+
+    private func syncVoiceNow() async {
         guard doors.voice == nil else { return }
         var all = Array(sessions.values)
         if let current = session, sessions[current.id] == nil, current.id != Self.demoID { all.append(current) }
