@@ -922,6 +922,17 @@ async function runMatrix(browser, size, scheme) {
       if (!file || !file.name.endsWith(".txt") || !file.name.includes("…")) throw new Error(`长文件名应从中间省略、保留扩展名，实际「${file?.name}」`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-attach");
+      // A picture not sent yet opens full size, to see what it was; no
+      // Save (it is yours already); Esc closes it and it is still there.
+      await box.locator(".att-chip.is-picture .att-thumb-btn").first().click();
+      const big = page.locator(".lightbox");
+      await big.waitFor({ timeout: 5_000 });
+      if (!(await big.locator(".lightbox-img").getAttribute("src"))?.startsWith("blob:") && !(await big.locator(".lightbox-img").getAttribute("src"))?.startsWith("data:")) throw new Error("没发出去的图片应能看大图");
+      if (await big.locator(".lightbox-btn", { hasText: "保存" }).count()) throw new Error("没发出去的图片不该有「保存」");
+      await page.keyboard.press("Escape");
+      await big.waitFor({ state: "detached", timeout: 5_000 });
+      if ((await box.locator(".att-chip").count()) !== 2) throw new Error("看完大图，待发的文件应还在");
+      await page.locator(".conv-compose-input").focus();
       await page.locator(".conv-compose-input").press("Enter");
       const sent = page.locator(".conv-msg.is-me", { hasText: "发来 2 个文件" }).last();
       await sent.waitFor({ timeout: 20_000 });

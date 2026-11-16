@@ -2222,6 +2222,16 @@ body.is-resizing {
 .att-chip.is-picture {
   box-shadow: inset 0 0 0 1px var(--line-2);
 }
+/* A picture waiting to be sent: a click shows it full size (Lightbox). */
+.att-thumb-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
 .att-thumb {
   display: block;
   width: 100%;

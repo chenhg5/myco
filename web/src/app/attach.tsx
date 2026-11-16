@@ -3,6 +3,7 @@ import { AlertCircle, FileText, Loader2, Paperclip, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Lightbox } from "@/app/lightbox";
 
 /*
  * Files to send with a message: picked with the paperclip, pasted into the
@@ -167,13 +168,20 @@ export function shortName(name: string, room = 16): string {
  *  picture is its thumbnail alone (it says what it is); another file is an
  *  icon and its name, cut in the middle. The full name and size on hover. */
 export function AttachList({ items, onRemove }: { items: Pending[]; onRemove: (key: string) => void }) {
+  // A picture waiting to be sent opens full size: what was it again?
+  const [open, setOpen] = useState<number | null>(null);
   if (!items.length) return null;
+  const pictures = items.filter((x) => x.preview);
   return (
     <div className="att-list" onClick={(e) => e.stopPropagation()}>
       {items.map((x) => (
         <div key={x.key} className={cn("att-chip", x.preview && "is-picture", x.state === "error" && "is-error", x.state === "uploading" && "is-busy")}
-          title={x.error ? `${x.name}\n${x.error}` : `${x.name} · ${bytes(x.size)}`}>
-          {x.preview ? <img className="att-thumb" src={x.preview} alt={x.name} /> : (
+          title={x.error ? `${x.name}\n${x.error}` : x.preview ? L(`${x.name} · 点一下看大图`, `${x.name} · click to enlarge`) : `${x.name} · ${bytes(x.size)}`}>
+          {x.preview ? (
+            <button type="button" className="att-thumb-btn" onClick={() => setOpen(pictures.indexOf(x))} aria-label={L(`看大图：${x.name}`, `Enlarge ${x.name}`)}>
+              <img className="att-thumb" src={x.preview} alt={x.name} draggable={false} />
+            </button>
+          ) : (
             <span className="att-file">
               <FileText />
               <span className="att-name">{shortName(x.name)}</span>
@@ -184,6 +192,9 @@ export function AttachList({ items, onRemove }: { items: Pending[]; onRemove: (k
           <button type="button" className="att-x" onClick={() => onRemove(x.key)} aria-label={L("不发这个", "Remove")} title={L("不发这个", "Remove")}><X /></button>
         </div>
       ))}
+      {open !== null && pictures[open] && (
+        <Lightbox items={pictures.map((x) => ({ name: x.name, src: x.preview! }))} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />
+      )}
     </div>
   );
 }
