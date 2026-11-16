@@ -141,6 +141,9 @@ public struct Message: Codable, Sendable, Hashable, Identifiable {
     public var asking: String?
     /// On an update: it asks the task's sender to decide.
     public var ask: Bool?
+    /// On a task: what its recipient thinks I may want to say next, one
+    /// short line (hubs from v0.19.15); the input offers it.
+    public var suggest: String?
     @LossyList public var attachments: [Attachment]
 
     public init(
