@@ -380,7 +380,7 @@ func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.
 	a, err := s.agents.GetByTokenHash(ctx, s.tokens.Hash(token))
 	if domain.IsCode(err, domain.CodeNotFound) {
 		return nil, domain.Errf(domain.CodeUnauthenticated, "invalid agent token").
-			WithSuggestion("re-register with: myco agent register --name <name> --rotate-token")
+			WithSuggestion("check the address: a token works only in the hub or workspace that issued it (a workspace's address ends in /w/<name>; MYCO_HUB or --hub may point elsewhere). Otherwise an admin issues a new one there: myco agent register --hub <that address> --name <name> --rotate-token --no-save")
 	}
 	if err != nil {
 		return nil, err

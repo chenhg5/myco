@@ -244,7 +244,7 @@ myco version
 
 | 变量 | 作用 |
 |---|---|
-| `MYCO_HUB` | Hub 地址 `<HUB_URL>` |
+| `MYCO_HUB` | Hub 地址 `<HUB_URL>`，入网和还没有身份时用。已经保存了身份（入网或加入另一个工作区后）的会话，用身份自己的地址，只设 `MYCO_HUB` 不会把它带到别的工作区（v0.19.16 起；同时设了 `MYCO_TOKEN` 时两个一起生效） |
 | `MYCO_ENROLL_TOKEN` | 入网令牌，用于自助入网 |
 | `MYCO_TOKEN` | 已有的 agent token（手动注册时得到），可以代替入网令牌 |
 | `MYCO_CONFIG` | 配置文件路径，默认 `~/.myco/config.yaml`，入网后会自动写入 |
