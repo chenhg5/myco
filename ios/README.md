@@ -66,7 +66,7 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 | `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-dictation` | `scripted`: the microphone hears a script (nobody speaks to a simulator); `denied`: it is not allowed to listen |
-| `-myco-voice` | `scripted`: a voice chat is a script (the microphone hears a question and a request, a scripted model answers, the voice is silent), with no key and nobody speaking; `denied`: the microphone may not open |
+| `-myco-voice` | `scripted`: a voice chat is a script (the microphone hears a question and a request, a scripted model answers, the voice is silent), with no key and nobody speaking; `denied`: the microphone may not open; `probe`: opens a call's real microphone and speaker alone for a few seconds, plays a short tone, and writes what happened to the system's log (subsystem `dev.myco.ios`, category `voice`; never what was said), to see on a phone why a call would not start |
 | `-myco-latency` | milliseconds every answer of the demo takes: a slow connection, to see what loading looks like |
 | `-myco-notifier` | `recorded`: notifications are kept in memory and the system is never asked for permission |
 | `-myco-appearance` | `system`, `light`, `dark` |
