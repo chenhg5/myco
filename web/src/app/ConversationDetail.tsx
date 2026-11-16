@@ -555,15 +555,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setUndo({ ids: [m.id], n: Date.now() });
     void setHidden(target.hubId, [m.id], true).catch((e) => { setUndo(null); setSendError(e); });
   };
-  // Runs that stopped (turn over, held, silent): no moving loading.
-  const [pausedRuns, setPausedRuns] = useState<ReadonlySet<string>>(() => new Set());
+  // What each run's trace says (TraceView's pausedRun): stopped (turn over,
+  // set aside, silent) or at work. Not known until its trace is read.
+  const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
-    setPausedRuns((s) => {
-      if (s.has(taskId) === paused) return s;
-      const n = new Set(s);
-      if (paused) n.add(taskId); else n.delete(taskId);
-      return n;
-    }), []);
+    setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);
   useEffect(() => {
     const el = timelineRef.current;
     const sc = scrollRef.current;
@@ -686,13 +682,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     (m.reply_to ? m.reply_to === task.id
       : m.thread_id === task.thread_id && new Date(m.created_at).getTime() >= new Date(task.created_at).getTime()),
   );
+  // At work, by one rule for the loading and the box: not stopped by its
+  // trace; one set aside (held) only once its trace says it moved again.
+  const atWork = (m: Message): boolean => {
+    const p = runPaused.get(m.id);
+    return (traceStatuses.get(m.id) || m.status) === "held" ? p === false : p !== true;
+  };
   // A task it set aside (held: waiting on someone else, it answers later),
   // or one it stopped working on (its turn is over, pausedRun) does not
   // take what you type: that is a new message, as in a chat, and there is
   // nothing to stop. One held on a question to you does: what you type
   // answers it.
   const openTask = [...consoleTasks].reverse().find((task) =>
-    isOpen(task.status) && (((traceStatuses.get(task.id) || task.status) !== "held" && !pausedRuns.has(task.id)) || !!task.asking) && !hasAnswer(task)) || null;
+    isOpen(task.status) && (atWork(task) || !!task.asking) && !hasAnswer(task)) || null;
 
   // Only an event after the newest task says something about this task; an
   // old failure should not paint a later, healthy conversation red.
@@ -1012,7 +1014,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (termMode || !shown) return null;
     let newest: Message | null = null;
     for (const m of shown) {
-      if (m.type !== "task" || m.e2e || !isOpen(m.status) || answerOf.has(m.id) || m.asking || pausedRuns.has(m.id)) continue;
+      if (m.type !== "task" || m.e2e || !isOpen(m.status) || answerOf.has(m.id) || m.asking || !atWork(m)) continue;
       const status = traceStatuses.get(m.id) || m.status;
       if (status !== "acked" && status !== "held" && !progressOf.get(m.id)?.length) continue;
       const ours = isMe(m.from, row?.hub) && !isStuck(m);

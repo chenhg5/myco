@@ -1107,6 +1107,14 @@ async function runMatrix(browser, size, scheme) {
       if ((ph || "").startsWith("补充给")) throw new Error(`它这一轮停了，输入框不该还是「补充给…」，实际「${ph}」`);
       if (await page.locator(".conv-detail .conv-send.is-stop").count()) throw new Error("它这一轮停了，不该还有停止按钮");
       await shot(page, size, scheme, "chat-waiting");
+      // Meanwhile its session woke only to keep listening (its wait timed
+      // out): no loading again, none of that turn shown.
+      for (let t = 0; t < 30; t++) {
+        if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("它醒来只是重新等消息，不该又冒出 loading");
+        if (await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).count()) break;
+        await page.waitForTimeout(400);
+      }
+      if (await page.locator(".conv-detail .trace", { hasText: "还在等消息" }).count()) throw new Error("只为继续等消息醒来的那一轮不该显示在过程里");
       // The answer comes when the other one is done.
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
       await noRound(page);

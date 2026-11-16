@@ -170,6 +170,8 @@ func (e *env) followTrace(ctx context.Context, c tracePoster, id, file string, l
 	tr := runner.NewTracer(ctx, c, id, runner.TraceFull, after, log)
 	defer tr.Close()
 
+	// (turns it wakes for only to keep listening are left out)
+	var gate turnGate
 	steps := 0
 	end := time.Now().Add(limit)
 	tick := time.NewTicker(time.Second)
@@ -192,8 +194,10 @@ func (e *env) followTrace(ctx context.Context, c tracePoster, id, file string, l
 					partial = nil
 				}
 				for _, ev := range parse(line) {
-					tr.Add(ev)
-					steps++
+					for _, ev := range gate.add(ev) {
+						tr.Add(ev)
+						steps++
+					}
 				}
 			}
 		}

@@ -729,6 +729,14 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         { kind: "tool_result", id: "d1", output: "sent" },
         { kind: "text", text: "已经派出去了，等它做完我再汇总给你。" },
         { kind: "turn_end" },
+        // A session that receives in its conversation wakes when its wait
+        // times out, starts it again and ends the turn: not work on this
+        // task (older CLIs upload it; the App leaves it out).
+        { kind: "thinking", text: "等待超时了，重新开始等。" },
+        { kind: "tool", tool: "Bash", id: "w1", input: "myco inbox wait --timeout 55m --format text" },
+        { kind: "tool_result", id: "w1", output: "Command running in background" },
+        { kind: "text", text: "还在等消息，继续等。" },
+        { kind: "turn_end" },
         { kind: "usage", input_tokens: 2400, output_tokens: 120, duration_ms: 9000 },
       ];
       task.trace_pace = 900;
