@@ -50,6 +50,37 @@ public enum VoiceSharing {
         }
     }
 
+    /// The time of a change made now: in whole seconds, as the desktop
+    /// app counts them (a workspace gives back exactly what it was sent),
+    /// and later than the change it replaces, also within the same second.
+    public static func stamp(after previous: Date?, now: Date = Date()) -> Date {
+        let whole = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+        guard let previous, whole <= previous else { return whole }
+        return Date(timeIntervalSince1970: previous.timeIntervalSince1970.rounded(.down) + 1)
+    }
+
+    /// One change to the settings at a time, in the order asked: a save
+    /// and a look at the workspaces each wait for the one before. Without
+    /// it a look that began before a save would, when its answers came,
+    /// put back what the save replaced. (The desktop app's
+    /// `voiceSync.changing`.)
+    @MainActor
+    public final class Turns {
+        private var last: Task<Void, Never>?
+
+        public init() {}
+
+        public func take(_ work: @escaping @MainActor @Sendable () async -> Void) async {
+            let before = last
+            let turn = Task { @MainActor in
+                await before?.value
+                await work()
+            }
+            last = turn
+            await turn.value
+        }
+    }
+
     /// How one workspace stands with the settings.
     public enum State: Sendable, Hashable {
         case synced
@@ -91,7 +122,7 @@ public enum VoiceSharing {
             mine = mine.adopting(newest)
         } else if mine.settings.updatedAt == nil, !mine.isEmpty {
             // Set up before settings were shared: they count as changed now.
-            mine.settings.updatedAt = now
+            mine.settings.updatedAt = stamp(after: nil, now: now)
         }
         var states: [String: State] = [:]
         var behind: [(id: String, hub: any HubAPI)] = []

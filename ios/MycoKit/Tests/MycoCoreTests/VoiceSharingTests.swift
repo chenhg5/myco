@@ -117,4 +117,49 @@ struct VoiceSharingTests {
         #expect(VoiceSettings.speechKey(of: "other") == "voice:tts:other")
         #expect(SpeechService.named("nope") == nil)
     }
+
+    /// What a device holds, as `AppModel` does.
+    @MainActor final class Kept {
+        var local: VoiceSharing.Local
+        init(_ local: VoiceSharing.Local) { self.local = local }
+
+        func look(at hub: FakeHub, now: Date) async {
+            let before = local
+            let (next, _) = await VoiceSharing.sync(before, with: [("hub", hub)], now: now)
+            if next != before { local = next }
+        }
+    }
+
+    @MainActor @Test func aLookThatBeganBeforeASaveDoesNotPutBackWhatItReplaced() async {
+        // The workspace is slow, and holds what the desktop set a while ago.
+        let hub = FakeHub(scenario: .empty, latency: .milliseconds(200))
+        await hub.setVoice(VoiceDocument(llmModel: "desktop", llmKey: "sk-desktop", updatedAt: Self.now.addingTimeInterval(-600)))
+        let kept = Kept(Self.local(model: "old", at: Self.now.addingTimeInterval(-3600)))
+        let turns = VoiceSharing.Turns()
+
+        // The app opens: a look at the workspace begins...
+        let look = Task { @MainActor in
+            await turns.take { await kept.look(at: hub, now: Self.now) }
+        }
+        try? await Task.sleep(for: .milliseconds(40))
+        // ...and before it has its answer, the person saves a change.
+        await turns.take {
+            kept.local.settings.model = "phone"
+            kept.local.settings.updatedAt = VoiceSharing.stamp(after: kept.local.settings.updatedAt, now: Self.now)
+            await kept.look(at: hub, now: Self.now)
+        }
+        await look.value
+        #expect(kept.local.settings.model == "phone")
+        #expect(await hub.keptVoice()?.llmModel == "phone")
+    }
+
+    @Test func aChangeIsLaterThanTheOneItReplaces() {
+        // Whole seconds, as the desktop counts and as a workspace gives back.
+        let at = Date(timeIntervalSince1970: 1_800_000_000.75)
+        #expect(VoiceSharing.stamp(after: nil, now: at) == Self.now)
+        #expect(VoiceSharing.stamp(after: Self.now.addingTimeInterval(-5), now: at) == Self.now)
+        // Twice within a second, or after settings from a clock a little ahead.
+        #expect(VoiceSharing.stamp(after: Self.now, now: at) == Self.now.addingTimeInterval(1))
+        #expect(VoiceSharing.stamp(after: Self.now.addingTimeInterval(90), now: at) == Self.now.addingTimeInterval(91))
+    }
 }
