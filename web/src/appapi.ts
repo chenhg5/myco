@@ -666,6 +666,8 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
+  saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */
   previewVoice: async (input: { tts_provider: string; tts_speaker: string; tts_rate: number; tts_key?: string; lang: string }): Promise<Blob> => {
     const r = await fetch("app/voice/preview", {

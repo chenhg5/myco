@@ -1290,6 +1290,16 @@ const server = http.createServer(async (req, res) => {
   // the app at a member; the mock just says yes.
   if (parts[0] === "app" && parts[1] === "island" && method === "POST") return send(res, 200, { ok: true });
 
+  // /app/export — the App saves a conversation it rendered; the mock keeps
+  // the last one for the UI smoke (GET /app/mock/last-export).
+  if (parts[0] === "app" && parts[1] === "export" && parts.length === 2 && method === "POST") {
+    const b = await readBody(req);
+    if (!/\.(md|jsonl)$/.test(b?.name || "")) return fail(res, 400, "invalid_argument", "an export is a .md or .jsonl file");
+    state.lastExport = { name: b.name, content: String(b.content || "") };
+    return send(res, 200, { path: `/Users/glenn/Downloads/${b.name}` });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
+
   // /app/mock/run-join — the UI smoke "runs" the last shell-node command on a
   // computer: the folder it ran in shows up as a computer of the workspace.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-join" && parts.length === 3 && method === "POST") {

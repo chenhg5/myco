@@ -100,6 +100,13 @@ OUT="$(myco message send --to worker --body "smoke test" --wait 20s 2>>"$T/cli.l
 grep -q 'SMOKE TEST' <<<"$OUT" || fail "unexpected reply: $OUT"
 ok
 
+step "thread export (Markdown)"
+TID="$(grep -o '"thread_id": *"[^"]*"' <<<"$OUT" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+[ -n "$TID" ] || fail "no thread id in: $OUT"
+MD="$(myco thread export --id "$TID" 2>>"$T/cli.log")" || fail "thread export: $MD"
+grep -q '^# 对话导出' <<<"$MD" && grep -q 'SMOKE TEST' <<<"$MD" || fail "unexpected export: $MD"
+ok
+
 step "exec node runs an allowed command"
 OUT="$(myco exec --to ci --cmd "echo smoke-exec-ok" --timeout 20s 2>>"$T/cli.log")" || fail "exec: $OUT"
 grep -q 'smoke-exec-ok' <<<"$OUT" || fail "exec output: $OUT"

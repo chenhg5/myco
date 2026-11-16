@@ -2219,6 +2219,41 @@ async function runMatrix(browser, size, scheme) {
       await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
+    // A conversation is exported from its header: Markdown for people or
+    // JSON Lines for programs, saved to Downloads.
+    await step("单聊 · 导出对话", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await clickVisible(page, page.locator("[data-testid=export-open]").first());
+      const dlg = page.locator("[data-testid=export-chat]");
+      await dlg.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dlg.getByRole("checkbox"));
+      await settle(page, 200);
+      await shot(page, size, scheme, "export-chat");
+      await clickVisible(page, page.getByRole("button", { name: "导出", exact: true }));
+      await dlg.locator("[data-testid=export-saved]").waitFor({ timeout: 20_000 });
+      const md = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/last-export`)).json();
+      if (!/\.md$/.test(md.name) || !md.name.includes("Myco (Grok)")) throw new Error(`导出的文件名不对：「${md.name}」`);
+      for (const want of ["# 和 Myco (Grok) 的对话", "**你** → Myco (Grok)", "把 release 分支的 Go 测试跑一遍"]) {
+        if (!md.content.includes(want)) throw new Error(`导出的 Markdown 里应有「${want}」`);
+      }
+      // JSON Lines: one message per line, each a whole object.
+      await clickVisible(page, dlg.getByRole("tab", { name: "JSONL" }));
+      await clickVisible(page, page.getByRole("button", { name: "导出", exact: true }));
+      await page.waitForFunction(async () => true);
+      for (let i = 0; ; i++) {
+        const j = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/last-export`)).json();
+        if (/\.jsonl$/.test(j.name || "")) {
+          const rows = j.content.trim().split("\n").map((l) => JSON.parse(l));
+          if (!rows.length || !rows.every((r) => r.id && r.from && r.to && "body" in r)) throw new Error("JSONL 每行应是一条完整的消息");
+          break;
+        }
+        if (i > 50) throw new Error("没导出 JSONL");
+        await settle(page, 200);
+      }
+      await clickVisible(page, dlg.getByRole("button", { name: "好" }));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+    });
+
     // A task the hub gave up on (taken, never started on) says so in words,
     // not the hub's reason, and is sent again with one click.
     await step("单聊 · 没送到可以重新发送", async () => {

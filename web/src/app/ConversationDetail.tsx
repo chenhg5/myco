@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -282,6 +283,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Seen before in this window: shown from the first frame (no empty
   // flash while the cache is read in an effect).
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
+  // Exporting this conversation (Markdown or JSON Lines, to Downloads).
+  const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
   // What was typed and not sent stays with the conversation (drafts.ts).
@@ -1842,10 +1845,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Search />
               </button>
             )}
+            {!observed && (shown?.length || 0) > 0 && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="export-open"
+                onClick={() => setExporting(true)} title={L("导出这段对话", "Export this conversation")} aria-label={L("导出这段对话", "Export this conversation")}>
+                <Download />
+              </button>
+            )}
             {headActions}
           </span>
         )}
       </header>}
+      <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
+        messages={shown || []} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />
 
       {/* The terminal shows only your own commands; ones other nodes sent to
           this computer may be stuck with nothing on screen. Say so above it,
