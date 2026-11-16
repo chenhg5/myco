@@ -368,3 +368,25 @@ export function runnerAway(st: AgentStatus, hub: HubOverview): boolean {
   if (mode !== "pull" || (k !== "agent" && k !== "shell") || /cloud/.test(st.agent.binding?.harness || "")) return false;
   return (hub.overview?.agents || []).some((x) => !!x.receiving);
 }
+
+/**
+ * Whether a computer lets agents open a terminal there (a shell node): its
+ * own machine.yaml decides (spawn.max_access: full), and its agents report
+ * that limit as runtime.max_access. "unknown": nothing on it has said (its
+ * myco is older, or no agent of it reported yet).
+ */
+export function machineShell(hub: AgentRow["hub"], machineId: string): "yes" | "no" | "unknown" {
+  let said: string | undefined;
+  for (const s of hub.overview?.agents || []) {
+    if (s.agent.machine_id !== machineId) continue;
+    const max = s.agent.runtime?.max_access;
+    if (max === "full") return "yes";
+    if (max) said = max;
+  }
+  return said ? "no" : "unknown";
+}
+
+/** The command that lets a computer run terminals, run there. */
+export const ALLOW_SHELL_COMMAND = "myco machine shell-access --allow";
+/** And the one that stops new ones. */
+export const DENY_SHELL_COMMAND = "myco machine shell-access --deny";

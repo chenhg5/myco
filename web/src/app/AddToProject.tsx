@@ -4,7 +4,7 @@ import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, ty
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
@@ -497,14 +497,14 @@ function folderOf(dir: string): string {
  * can run commands (a terminal opens on it). Pick the computer, pick the
  * folder; every agent in the project may use it.
  */
-export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, onClose, onAdded, onNewComputer }: {
+export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, onClose, onAdded, onNewComputer }: {
   open: boolean;
   hub?: Hub;
   /** none: a computer of the workspace, not in a project yet */
   project?: Project;
   rows: AgentRow[];
-  /** the workspace's connected computers (else read from rows) */
-  connected?: Machine[];
+  /** the workspace as last read: its computers, and what they allow (else from rows) */
+  workspace?: AgentRow["hub"];
   /** a computer to pick (one just connected) */
   pick?: string;
   onClose: () => void;
@@ -513,8 +513,10 @@ export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, 
   onNewComputer: () => void;
 }) {
   const hubId = hub?.id || "";
-  const ov = rows.find((r) => r.hub.id === hubId)?.hub;
-  const machines = useMemo(() => (connected || (ov ? machinesOfHub(ov) : [])).filter((m) => m.can_spawn), [connected, ov]);
+  const ov = workspace || rows.find((r) => r.hub.id === hubId)?.hub;
+  const machines = useMemo(() => (ov ? machinesOfHub(ov) : []).filter((m) => m.can_spawn), [ov]);
+  // What each computer allows, as it reported.
+  const shellOf = (m: Machine) => (ov ? machineShell(ov, m.id) : "unknown");
   const [local, setLocal] = useState<LocalState | null>(null);
   const [machineId, setMachineId] = useState("");
   // Until a computer is picked by hand, this computer (once known) is it.
@@ -545,6 +547,10 @@ export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, 
     }
   }, [open, pick, machines]);
   const machine = machines.find((m) => m.id === machineId);
+  const shell = machine ? shellOf(machine) : "unknown";
+  // A computer that said no is not tried (it would only be refused).
+  // (This computer is allowed right here, in the notice.)
+  const blocked = shell === "no" && !!machine && !isHere(machine);
   // The project's agents may use it; without any yet, every agent of yours here.
   const users = (project ? project.members.map((m) => m.name) : [])
     .filter((n) => rows.some((r) => r.hub.id === hubId && r.st.agent.name === n && agentKind(r.st.agent) === "agent"));
@@ -588,7 +594,11 @@ export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, 
       onAdded();
       onClose();
     } catch (err) {
-      setError(err);
+      // Refused for its own limit: say it as the notice above does.
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(/spawn\.max_access/.test(msg)
+        ? new Error(L("那台电脑还没允许开终端：按上面的说明在那台电脑上允许，再点添加。", "That computer hasn't allowed terminals yet: allow it there as said above, then Add again."))
+        : err);
     } finally {
       setBusy(null);
     }
@@ -632,7 +642,8 @@ export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, 
                 <button key={m.id} type="button" className={cn("ws-computer", m.id === machineId && "active", !m.online && "is-away")} onClick={() => { setMachineId(m.id); setPicked(true); }} disabled={!!busy}>
                   <Icon />
                   <span className="ws-computer-name">{isHere(m) ? L("这台电脑", "This computer") : m.name}</span>
-                  {!m.online && <span className="ws-computer-sub">{L("不在线", "Away")}</span>}
+                  {!m.online ? <span className="ws-computer-sub">{L("不在线", "Away")}</span>
+                    : shellOf(m) === "no" && <span className="ws-computer-sub">{L("还没允许", "Not allowed yet")}</span>}
                 </button>
               );
             })}
@@ -657,14 +668,15 @@ export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, 
               ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
               : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
-        {machine && <LocalShellAccess machine={machine} what="shell" />}
+        {machine && <LocalShellAccess machine={machine} what="shell" shell={shell} />}
         <ErrorText error={error} />
         {busy ? (
           <div className="app-convpick-starting"><Mushroom /><span>{L("正在准备", "Setting it up")} · <Elapsed since={busy} /></span></div>
         ) : (
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={onClose}>{L("取消", "Cancel")}</button>
-            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim()}>{L("添加", "Add")}</button>
+            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim() || blocked}
+              title={blocked ? L("那台电脑还没允许开终端", "That computer hasn't allowed terminals yet") : undefined}>{L("添加", "Add")}</button>
           </div>
         )}
       </form>

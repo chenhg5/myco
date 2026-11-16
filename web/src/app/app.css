@@ -4967,6 +4967,14 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-picker-empty { padding: 10px; font-size: 12px; color: var(--muted); }
 /* AddMachineDialog: computers of the server's other workspaces */
 .app-picker-nearby { margin-top: 12px; }
+/* A choice with its consequence under it (the join link's "allow terminals"). */
+/* A short command inside a notice stays on one line (it is copied, not read). */
+.app-notice .app-command code { white-space: nowrap; overflow-x: auto; }
+.pc-machine-tag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; color: var(--muted); background: var(--pill); }
+.app-check-line { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 2px; font-size: 13px; color: var(--fg); cursor: pointer; }
+.app-check-line input { margin-top: 3px; flex: none; }
+.app-check-line small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.app-check-line code { font-size: 11.5px; }
 .app-picker-nearby > .app-small-note { display: block; margin-top: 6px; }
 .app-picker-done { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
 .app-picker-done svg { width: 12px; height: 12px; }

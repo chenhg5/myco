@@ -782,7 +782,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
-        connected={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)?.overview?.machines} pick={addWsPick}
+        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWsPick}
         onClose={() => { setAddWorkspace(null); setAddWsPick(undefined); }} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
       <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()}
         machines={hub ? namedOv?.hubs.find((h) => h.id === hub.id)?.overview?.machines : undefined}

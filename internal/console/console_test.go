@@ -313,6 +313,16 @@ func TestBackendMachinesAndLinks(t *testing.T) {
 	if code != 200 || !strings.Contains(m["join_url"].(string), "/j/") || !strings.HasPrefix(m["command"].(string), "curl -fsSL ") {
 		t.Fatalf("links: %d %v", code, m)
 	}
+	if strings.Contains(m["command"].(string), "shell=1") || m["allow_shell"] != false {
+		t.Fatalf("a link lets nothing open a terminal unless asked: %v", m)
+	}
+	// Asked: the command carries ?shell=1, so the computer that runs it
+	// allows terminals too (its own choice, made by running it there).
+	code, m, _ = r.do("POST", "/app/hubs/"+id+"/links", map[string]any{"allow_shell": true})
+	if code != 200 || m["command"] != "curl -fsSL '"+m["join_url"].(string)+"?shell=1' | bash" ||
+		m["ps_command"] != "irm '"+m["join_url"].(string)+"?format=ps1&shell=1' | iex" || m["allow_shell"] != true {
+		t.Fatalf("links with allow_shell: %d %v", code, m)
+	}
 	if code, m, _ := r.do("DELETE", "/app/hubs/"+id+"/machines/"+ms[0].ID+"?dry_run=true", nil); code != 200 || m["dry_run"] != true {
 		t.Fatalf("remove machine preview: %d %v", code, m)
 	}

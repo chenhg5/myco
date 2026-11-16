@@ -27,15 +27,18 @@ type runtimeReporter struct {
 	log *slog.Logger
 	cfg string // runner.model, if set
 
-	mu      sync.Mutex
-	base    *api.Runtime // nil until the CLI version is known
-	choice  providerChoice
-	model   string // the agent's run settings from the hub ("" = none)
-	effort  string
-	access  string
-	quota   *api.Quota // the account's limits, as the CLI last reported them
-	last    api.Runtime
-	sending bool
+	mu     sync.Mutex
+	base   *api.Runtime // nil until the CLI version is known
+	choice providerChoice
+	model  string // the agent's run settings from the hub ("" = none)
+	effort string
+	access string
+	quota  *api.Quota // the account's limits, as the CLI last reported them
+	// maxAccess is the machine's spawn.max_access as last read, when it has
+	// changed since the start ("" = as at the start).
+	maxAccess string
+	last      api.Runtime
+	sending   bool
 }
 
 // reportToHub reports this machine (once) and the agent's runtime, and
@@ -109,6 +112,44 @@ func (r *runtimeReporter) Quota(q harness.Quota) {
 	r.flushLater()
 }
 
+// MaxAccess records the machine's spawn.max_access (machine.yaml) after it
+// changed: the app reads from it whether agents may open a terminal here.
+func (r *runtimeReporter) MaxAccess(a harness.Access) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	changed := r.maxAccess != string(a)
+	r.maxAccess = string(a)
+	r.mu.Unlock()
+	if changed {
+		r.flushLater()
+	}
+}
+
+// watchMaxAccess reports the machine's spawn.max_access again whenever
+// machine.yaml changes it (`myco machine shell-access`, or the app on this
+// computer), until ctx ends. read is e.machineMaxAccess.
+func (r *runtimeReporter) watchMaxAccess(ctx context.Context, every time.Duration, start harness.Access, read func() harness.Access) {
+	if r == nil {
+		return
+	}
+	last := start
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if a := read(); a != last {
+			last = a
+			r.MaxAccess(a)
+		}
+	}
+}
+
 func (r *runtimeReporter) flushLater() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -158,6 +199,9 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		rt.Access = r.access
 	}
 	rt.Quota = r.quota
+	if r.maxAccess != "" {
+		rt.MaxAccess = r.maxAccess
+	}
 	if rt == r.last {
 		r.mu.Unlock()
 		return
