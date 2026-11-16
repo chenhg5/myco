@@ -23,9 +23,13 @@ func TestReadChatStreamTextAndTools(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n\n")
 	var got []string
-	m, err := readChatStream(strings.NewReader(stream), func(s string) { got = append(got, s) })
+	var tools []string
+	m, err := readChatStream(strings.NewReader(stream), func(s string) { got = append(got, s) }, func(n string) { tools = append(tools, n) })
 	if err != nil || m.Content != "好的，交给后端。" || strings.Join(got, "|") != "好的，|交给后端。" {
 		t.Fatalf("text: %v %+v %v", err, m, got)
+	}
+	if strings.Join(tools, "|") != "send_task" {
+		t.Fatalf("a tool's start is told once: %v", tools)
 	}
 	if len(m.ToolCalls) != 1 || m.ToolCalls[0].ID != "c1" || m.ToolCalls[0].Function.Name != "send_task" || m.ToolCalls[0].Function.Arguments != `{"to":"backend"}` {
 		t.Fatalf("tools: %+v", m.ToolCalls)
@@ -98,7 +102,7 @@ type scriptModel struct {
 	seen    [][]chatMsg
 }
 
-func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string)) (chatMsg, error) {
+func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string), onTool func(string)) (chatMsg, error) {
 	m.mu.Lock()
 	m.seen = append(m.seen, append([]chatMsg(nil), msgs...))
 	var r chatMsg
@@ -118,6 +122,11 @@ func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 			}
 		}
 		onText(string(ch))
+	}
+	for _, tc := range r.ToolCalls {
+		if onTool != nil {
+			onTool(tc.Function.Name)
+		}
 	}
 	return r, nil
 }
@@ -202,6 +211,10 @@ func TestVoiceCallPassesWorkOnAndSaysSo(t *testing.T) {
 	c.Heard("把登录那个", false)
 	c.Heard("把登录那个 bug 修了", true)
 	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "交给后端了") })
+	// It said a few words before it acted, not only after.
+	if !has(v, vAssistant, "好，我跟它说。好，交给后端了") {
+		t.Fatalf("no word before acting: %+v", lines(v))
+	}
 	h.mu.Lock()
 	told := append([]string(nil), h.told...)
 	h.mu.Unlock()
@@ -382,7 +395,7 @@ func TestVoiceModelTakesTheWholeEndpoint(t *testing.T) {
 	}))
 	defer srv.Close()
 	m := &openAIModel{base: srv.URL + "/v1/chat/completions", model: "fast", key: "k", session: "myco-voice-1"}
-	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil)
+	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil, nil)
 	if err != nil || out.Content != "好" || path != "/v1/chat/completions" || session != "myco-voice-1" {
 		t.Fatalf("got %q %v at %s (session %q)", out.Content, err, path, session)
 	}
@@ -439,5 +452,25 @@ func TestVoiceListAndPreview(t *testing.T) {
 	keys.m[voiceTTSSecret] = "kept-key"
 	if code, _ := srv("POST", "/app/voice/preview", `{"lang":"en"}`); code != 200 || gotKey != "kept-key" || gotSpeaker != defaultVoiceSpeaker || gotText != voiceSampleLines["zh"] {
 		t.Fatalf("kept key: %d %q %q %q", code, gotKey, gotSpeaker, gotText)
+	}
+}
+
+// Words the model says before a tool are enough: no second line is added.
+func TestVoiceCallAckOnlyWhenSilent(t *testing.T) {
+	send := toolCall{ID: "c1", Type: "function"}
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"加一个暗色模式"}`
+	m := &scriptModel{replies: []chatMsg{
+		{Role: "assistant", Content: "好，让它加暗色模式。", ToolCalls: []toolCall{send}},
+		{Role: "assistant", Content: "转过去了。"},
+	}}
+	v, c, _ := newTestCall(t, m, &fakeHub{})
+	c.Heard("加个暗色模式", true)
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
+	if has(v, vAssistant, "我跟它说") {
+		t.Fatalf("an ack on top of the model's own words: %+v", lines(v))
+	}
+	if toolAck("en-US", "stop_agent") != "OK, I'll stop it. " || toolAck("zh-CN", "check_agent") != "我看一眼。" {
+		t.Fatal("toolAck")
 	}
 }

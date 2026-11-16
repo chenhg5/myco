@@ -54,6 +54,13 @@ type voiceCall struct {
 	lastSound time.Time
 	notices   []string
 	watched   map[string]*watchedTask
+
+	// The conversation with the agent as last read, so a turn need not
+	// wait for the hub: read again when the person starts talking.
+	convoMu sync.Mutex
+	convo   string
+	convoAt time.Time
+	convoIn chan struct{} // a read under way
 }
 
 type voiceTurn struct {
@@ -187,6 +194,9 @@ func (c *voiceCall) heard(text string, final bool) {
 	}
 	if c.turn != nil || c.speaking {
 		c.interrupt()
+	}
+	if c.partial == "" {
+		c.readConvo() // ready by the time they finish
 	}
 	c.partial, c.partialAt = text, time.Now()
 	c.lastSound = c.partialAt
@@ -328,12 +338,7 @@ func trimHistory(h []chatMsg) []chatMsg {
 func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg) {
 	defer close(t.done)
 	// The conversation with the agent as it is now (it moves on its own).
-	cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	convo, err := c.d.hub.Context(cctx)
-	cancel()
-	if err != nil && convo == "" {
-		convo = "（这会儿读不到对话：" + err.Error() + "）"
-	}
+	convo := c.conversation(ctx)
 	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo)}}, history...)
 	sentences := make(chan string, 16)
 	spoke := make(chan struct{})
@@ -377,12 +382,24 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 		sentences <- s
 	}
 	var failed error
+	// About to act with nothing said yet: a few words first, so the person
+	// is not left in silence while the model writes the message out.
+	onTool := func(name string) {
+		if strings.TrimSpace(t.said.String()) != "" {
+			return
+		}
+		if rest := split.flush(); rest != "" {
+			emit(rest)
+			return
+		}
+		emit(toolAck(c.d.lang, name))
+	}
 	for round := 0; round < 5 && ctx.Err() == nil; round++ {
 		reply, err := c.d.model.Stream(ctx, msgs, voiceTools, func(delta string) {
 			for _, s := range split.add(delta) {
 				emit(s)
 			}
-		})
+		}, onTool)
 		if err != nil {
 			failed = err
 			break
@@ -395,6 +412,10 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 		if len(reply.ToolCalls) == 0 {
 			break
 		}
+		// What it did shows in the conversation: read it again next time.
+		c.convoMu.Lock()
+		c.convoAt = time.Time{}
+		c.convoMu.Unlock()
 		for _, call := range reply.ToolCalls {
 			out := c.runTool(ctx, call)
 			res := chatMsg{Role: "tool", ToolCallID: call.ID, Content: out}
@@ -532,4 +553,79 @@ func (c *voiceCall) watch() {
 			})
 		}
 	}
+}
+
+// toolAck is what is said when the model starts an action before saying
+// anything.
+func toolAck(lang, tool string) string {
+	en := strings.HasPrefix(lang, "en")
+	switch tool {
+	case "tell_agent":
+		if en {
+			return "Sure, I'll tell it. "
+		}
+		return "好，我跟它说。"
+	case "stop_agent":
+		if en {
+			return "OK, I'll stop it. "
+		}
+		return "好，我让它停下。"
+	case "check_agent":
+		if en {
+			return "Let me check. "
+		}
+		return "我看一眼。"
+	}
+	if en {
+		return "One moment. "
+	}
+	return "稍等。"
+}
+
+// readConvo starts reading the conversation with the agent, unless one is
+// under way or the last is a moment old.
+func (c *voiceCall) readConvo() <-chan struct{} {
+	c.convoMu.Lock()
+	defer c.convoMu.Unlock()
+	if c.convoIn != nil {
+		return c.convoIn
+	}
+	done := make(chan struct{})
+	if time.Since(c.convoAt) < 2*time.Second {
+		close(done)
+		return done
+	}
+	c.convoIn = done
+	go func() {
+		ctx, cancel := context.WithTimeout(c.ctx, 4*time.Second)
+		convo, err := c.d.hub.Context(ctx)
+		cancel()
+		if err != nil && convo == "" {
+			convo = "（这会儿读不到对话：" + err.Error() + "）"
+		}
+		c.convoMu.Lock()
+		c.convo, c.convoAt, c.convoIn = convo, time.Now(), nil
+		c.convoMu.Unlock()
+		close(done)
+	}()
+	return done
+}
+
+// conversation is the conversation with the agent for a turn: read when
+// the person started talking (or now, if that was a while ago).
+func (c *voiceCall) conversation(ctx context.Context) string {
+	c.convoMu.Lock()
+	fresh := c.convoIn == nil && time.Since(c.convoAt) < 10*time.Second
+	convo := c.convo
+	c.convoMu.Unlock()
+	if fresh {
+		return convo
+	}
+	select {
+	case <-c.readConvo():
+	case <-ctx.Done():
+	}
+	c.convoMu.Lock()
+	defer c.convoMu.Unlock()
+	return c.convo
 }

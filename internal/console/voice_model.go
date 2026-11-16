@@ -40,10 +40,11 @@ type toolDef struct {
 	} `json:"function"`
 }
 
-// voiceModel streams one reply: text deltas to onText, the whole reply
-// (with its tool calls) at the end.
+// voiceModel streams one reply: text deltas to onText, each tool's name to
+// onTool as soon as the model starts the call (its arguments come later),
+// and the whole reply (with its tool calls) at the end.
 type voiceModel interface {
-	Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string)) (chatMsg, error)
+	Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string), onTool func(string)) (chatMsg, error)
 }
 
 type openAIModel struct {
@@ -54,7 +55,7 @@ type openAIModel struct {
 	http    *http.Client
 }
 
-func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string)) (chatMsg, error) {
+func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string), onTool func(string)) (chatMsg, error) {
 	base := strings.TrimRight(m.base, "/")
 	if base == "" {
 		base = "https://api.openai.com/v1"
@@ -87,11 +88,11 @@ func (m *openAIModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
 		return chatMsg{}, fmt.Errorf("model HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
-	return readChatStream(resp.Body, onText)
+	return readChatStream(resp.Body, onText, onTool)
 }
 
 // readChatStream reads server-sent chat completion chunks.
-func readChatStream(r io.Reader, onText func(string)) (chatMsg, error) {
+func readChatStream(r io.Reader, onText func(string), onTool func(string)) (chatMsg, error) {
 	out := chatMsg{Role: "assistant"}
 	var text strings.Builder
 	calls := map[int]*toolCall{}
@@ -148,8 +149,12 @@ func readChatStream(r io.Reader, onText func(string)) (chatMsg, error) {
 				if tc.ID != "" {
 					c.ID = tc.ID
 				}
+				named := c.Function.Name != ""
 				c.Function.Name += tc.Function.Name
 				c.Function.Arguments += tc.Function.Arguments
+				if !named && c.Function.Name != "" && onTool != nil {
+					onTool(c.Function.Name)
+				}
 			}
 		}
 	}
@@ -179,7 +184,8 @@ How you talk:
 - When the agent answers or asks, say the gist in a sentence or two in your own words; never read it out. If it is long or detailed, add that the rest is in the chat.
 
 What you do:
-- When they want something done, changed or added, pass it on at once with tell_agent (no need to confirm): it goes to the task the agent is doing, or as a new task when it is free. Write it clearly and completely for the agent, then say in a few words that you passed it on.
+- Before you call a tool, say in a few words what you are doing ("Sure, I'll tell it to..."), so they are not left waiting in silence; afterwards a short confirmation is enough, without repeating yourself.
+- When they want something done, changed or added, pass it on at once with tell_agent (no need to confirm): it goes to the task the agent is doing, or as a new task when it is free. Write it clearly and completely for the agent.
 - Their answer to the agent's question also goes through tell_agent.
 - Questions about how things stand ("how far is it?", "what did it change?") you answer yourself from the conversation below; check_agent reads it again if you need the latest. Never make up what the agent did.
 - stop_agent stops what it is doing, when they ask.
@@ -195,7 +201,8 @@ What you do:
 - 它回复了或者在问问题时，用一两句自己的话说个大概，别照念原文；内容长或者细节多，就补一句「详细的放在对话里了」。
 
 做事的方式：
-- 对方要它做事、改主意、补充要求，直接用 tell_agent 转过去，不用先确认：它手上有活就补充进那个任务，空着就作为新任务。转的话要写清楚、写完整，像靠谱的同事转达那样；然后用几个字告诉对方转过去了。
+- 调用工具之前，先用几个字说你要做什么（「好，我让它把……」），别让对方干等；做完后简单确认一句就行，别把前面说过的再说一遍。
+- 对方要它做事、改主意、补充要求，直接用 tell_agent 转过去，不用先确认：它手上有活就补充进那个任务，空着就作为新任务。转的话要写清楚、写完整，像靠谱的同事转达那样。
 - 它问的问题，对方回答了，也用 tell_agent 转过去。
 - 对方问进展（「做到哪了」「改了什么」），你根据下面的对话自己回答；要最新的就用 check_agent 再看一眼。不要编造它做了什么。
 - 对方让它停，用 stop_agent。
