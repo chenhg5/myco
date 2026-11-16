@@ -293,6 +293,25 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testWhatTheAgentOffersToSayNextIsATapAway() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let input = app.descendants(matching: .any)["composer.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 30))
+        // The notes helper answered, and offers what I may want to say next.
+        let offer = app.buttons["suggestion.row"]
+        XCTAssertTrue(offer.waitForExistence(timeout: 20), "the agent's suggestion shows above the empty input")
+        XCTAssertTrue(offer.label.contains("把这三条结论发到项目里"))
+        snap("suggestion")
+        offer.tap()
+        // It is in the input now, to edit or send; the offer is gone.
+        XCTAssertTrue((input.value as? String ?? "").contains("把这三条结论发到项目里"), "a tap writes it into the input")
+        XCTAssertFalse(offer.exists, "with something in the input, nothing is offered")
+        app.buttons["composer.submit"].tap()
+        XCTAssertTrue(app.staticTexts["把这三条结论发到项目里"].waitForExistence(timeout: 10), "and it sends like anything typed")
+        XCTAssertFalse(offer.waitForExistence(timeout: 2), "what was offered was for the task before")
+    }
+
+    @MainActor
     func testAFileAboutToGoCanBeLookedAtFirst() {
         let app = launch(["-myco-route", "agent:studio-claude-c41f", "-myco-attach", "studio-claude-c41f"])
         let open = app.buttons.matching(identifier: "composer.file.open")

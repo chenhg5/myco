@@ -329,6 +329,20 @@ public enum ConversationBuilder {
             .max { $0.createdAt < $1.createdAt }
     }
 
+    /// What the agent offers me to say next: the suggestion on my newest
+    /// task, once the agent is not at work on anything of mine (`open`).
+    /// One that is sealed, or on a task this device cannot read, is left
+    /// out: it is only an offer. The desktop app's rule (there the empty
+    /// input shows it and Tab takes it).
+    public static func suggestion(me: String, messages: [Message], open: Message?) -> String? {
+        guard open == nil,
+              let last = messages.filter({ $0.type == "task" && $0.from == me }).max(by: { $0.createdAt < $1.createdAt })
+        else { return nil }
+        let text = (last.suggest ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, (last.unreadable ?? "").isEmpty, !Envelope.isSealed(text) else { return nil }
+        return text
+    }
+
     /// Messages put behind another and stopped before their turn came
     /// (edited or withdrawn): never sent, so not part of the conversation
     /// (not "stopped" there). The desktop app's rule.

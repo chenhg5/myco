@@ -276,6 +276,36 @@ struct ConversationBuilderTests {
         #expect(ConversationBuilder.openTask(me: "me", messages: [stoppedAsking], paused: ["t2"])?.id == "t2")
     }
 
+    @Test func whatTheAgentOffersToSayNextIsOnMyNewestTask() {
+        var answered = Message(id: "t1", from: "me", to: "coder", body: "fix the test", status: "done", createdAt: at(-100))
+        answered.suggest = "  now open the pull request \n"
+        let reply = Message(id: "r1", from: "coder", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "fixed", status: "done", createdAt: at(-90))
+        // On my newest task, the agent not at work: offered, trimmed.
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [answered, reply], open: nil) == "now open the pull request")
+        // While it works on something of mine, nothing is offered.
+        let open = Message(id: "t2", from: "me", to: "coder", body: "and this", status: "acked", createdAt: at(-50))
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [answered, reply, open], open: open) == nil)
+        // A newer task of mine without one: the old offer is over.
+        var done = open
+        done.status = "done"
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [answered, reply, done], open: nil) == nil)
+        // A task someone else gave the agent is not mine to continue.
+        var theirs = answered
+        theirs.from = "lead"
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [theirs], open: nil) == nil)
+        // Sealed for a device that can open it, or on a task this one
+        // cannot read: left out.
+        var sealed = answered
+        sealed.suggest = "myco-e2e:v1:abc" // Envelope.prefix
+        var unreadable = answered
+        unreadable.unreadable = "no key"
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [sealed], open: nil) == nil)
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [unreadable], open: nil) == nil)
+        // A hub from before suggestions says nothing.
+        let plain = Message(id: "t3", from: "me", to: "coder", body: "x", status: "done", createdAt: at(-10))
+        #expect(ConversationBuilder.suggestion(me: "me", messages: [plain], open: nil) == nil)
+    }
+
     @Test func aTaskNotStartedHasAFewWordsUnderIt() {
         // The desktop app's rule: a task reads as a message, not a state.
         let first = Message(id: "t1", from: "me", to: "coder", body: "fix the login", status: "acked", createdAt: at(-300), updatedAt: at(-5))

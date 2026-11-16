@@ -122,6 +122,10 @@ public enum Scenario: Sendable {
             Message(id: "b1", from: me, to: backend.name, type: "note", body: "推送中转先别定用哪家，等我回来再说。", status: "done", project: project, createdAt: ago(2_400)),
             Message(id: "b2", from: backend.name, to: me, threadId: "d1", replyTo: "d1", type: "progress", body: "看完了现有的唤醒方式，正在写设备登记的接口。", status: "done", project: project, createdAt: ago(600)),
         ]
+        // The notes helper offers what I may want to say next.
+        if let index = world.messages.firstIndex(where: { $0.id == "h1" }) {
+            world.messages[index].suggest = "把这三条结论发到项目里"
+        }
         if self == .waiting {
             world.messages += [
                 // Set aside by the notes helper: it answers when I send more.

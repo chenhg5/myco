@@ -531,6 +531,15 @@ struct ConversationBody: View {
         return dictation.problem == nil ? .idle : .blocked
     }
 
+    /// What the agent offers me to say next, while the input is empty and
+    /// nothing else is going on in it.
+    private var offered: String? {
+        guard call == nil, dictation?.listening != true, model.pending.isEmpty,
+              model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return model.suggestion
+    }
+
     /// Why it could not listen, and whether Settings is where to fix it.
     private var dictationNote: (text: String, settings: Bool)? {
         switch dictation?.problem ?? callProblem {
@@ -983,6 +992,32 @@ struct ConversationBody: View {
                 .padding(.horizontal, 14)
                 .padding(.top, Space.s)
                 .accessibilityIdentifier("queue.row")
+            }
+            // What the agent offers me to say next, above an empty input:
+            // a tap writes it there, to edit or send. (The desktop app
+            // shows it in the input and Tab takes it; a phone has no Tab.)
+            if let offered {
+                Button {
+                    model.takeSuggestion()
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(L("建议：", "Suggested: ") + ConversationBuilder.firstLine(of: offered))
+                            .font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Image(systemName: "arrow.up.left")
+                            .font(.footnote.weight(.medium)).foregroundStyle(MycoColor.muted)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.top, Space.s)
+                .accessibilityLabel(L("填入建议：", "Use the suggestion: ") + offered)
+                .accessibilityIdentifier("suggestion.row")
+                .transition(.opacity)
             }
             if let call {
                 voiceBar(call)

@@ -35,6 +35,10 @@ public final class ConversationModel {
 
     public private(set) var items: [ConversationItem] = []
     public private(set) var openTask: Message?
+    /// What the agent offers me to say next (see
+    /// `ConversationBuilder.suggestion`); the page shows it above an empty
+    /// input, and a tap writes it there to edit or send.
+    public private(set) var suggestion: String?
     public private(set) var loaded = false
     /// Why the last look at the workspace failed; nil while it answers.
     /// What is on the page is then from before.
@@ -165,6 +169,12 @@ public final class ConversationModel {
 
     /// Sending is off while a send is under way, while a file is still
     /// going up, or with nothing to send. Files can go without words.
+    /// Takes what the agent offered: it is in the input now.
+    public func takeSuggestion() {
+        guard let suggestion, draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        draft = suggestion
+    }
+
     public var canSubmit: Bool {
         guard !sending else { return false }
         if action == .stop { return true }
@@ -490,6 +500,8 @@ public final class ConversationModel {
             revision += 1
         }
         openTask = ConversationBuilder.openTask(me: me, messages: mine, paused: paused)
+        let offered = ConversationBuilder.suggestion(me: me, messages: mine, open: openTask)
+        if offered != suggestion { suggestion = offered }
         loaded = true
     }
 
