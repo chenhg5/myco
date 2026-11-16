@@ -15,11 +15,23 @@ public struct TaskNews: Sendable, Hashable {
     public var summary = ""
     /// The question it waits on.
     public var question = ""
+    /// The task's status ("acked": at work).
+    public var status = ""
+    /// When it was sent.
+    public var since: Date?
+    /// Its newest progress note, short.
+    public var progress = ""
 
-    public init(finished: Bool = false, summary: String = "", question: String = "") {
+    public init(
+        finished: Bool = false, summary: String = "", question: String = "", status: String = "", since: Date? = nil,
+        progress: String = ""
+    ) {
         self.finished = finished
         self.summary = summary
         self.question = question
+        self.status = status
+        self.since = since
+        self.progress = progress
     }
 }
 
@@ -106,6 +118,11 @@ public enum VoiceContext {
         "queued": "排队中", "delivered": "已送达，还没开始", "acked": "在做", "held": "先放着了", "done": "完成了", "failed": "失败或被停了",
     ]
 
+    /// A task's status in words ("在做"); the status itself when unknown.
+    public static func statusWord(_ status: String) -> String {
+        statuses[status] ?? status
+    }
+
     /// - Parameters:
     ///   - messages: the person's exchanges with the agent, any order.
     public static func text(agent: String, status: AgentStatus?, me: String, messages: [Message], timeZone: TimeZone = .current) -> String {
@@ -143,11 +160,16 @@ public enum VoiceContext {
     /// the task is not among them.
     public static func news(of task: String, in messages: [Message]) -> TaskNews? {
         guard let message = messages.first(where: { $0.id == task }) else { return nil }
-        var news = TaskNews()
+        var news = TaskNews(status: message.status, since: message.createdAt)
         for other in messages.sorted(by: { $0.createdAt < $1.createdAt }) {
             if other.replyTo == task, other.type == "reply" {
                 news.finished = true
                 news.summary = clip(other.body, 800)
+            }
+            // (oldest first: the last one stands)
+            if other.replyTo == task, other.type == "progress", other.ask != true {
+                let said = other.body.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !said.isEmpty { news.progress = clip(said, 200) }
             }
             if let asking = message.asking, !asking.isEmpty, other.id == asking {
                 news.question = clip(other.body, 400)
@@ -205,6 +227,19 @@ public final class ConversationVoice: VoiceHub {
 /// Who the voice is, how it talks, and the conversation with the agent
 /// as it stands. The desktop app's prompt, word for word.
 public enum VoicePrompt {
+    /// What is said when the model starts an action before it has said
+    /// anything: a few words, so the person is not left in silence while
+    /// it writes the message out. The desktop app's `toolAck`.
+    public static func toolAck(language: AppLanguage, tool: String) -> String {
+        let english = language == .en
+        switch tool {
+        case VoiceTools.tell: return english ? "Sure, I'll tell it. " : "好，我跟它说。"
+        case VoiceTools.stop: return english ? "OK, I'll stop it. " : "好，我让它停下。"
+        case VoiceTools.check: return english ? "Let me check. " : "我看一眼。"
+        default: return english ? "One moment. " : "稍等。"
+        }
+    }
+
     public static func system(language: AppLanguage, agent: String, conversation: String) -> String {
         if language == .en {
             return """
@@ -216,7 +251,8 @@ public enum VoicePrompt {
             - When the agent answers or asks, say the gist in a sentence or two in your own words; never read it out. If it is long or detailed, add that the rest is in the chat.
 
             What you do:
-            - When they want something done, changed or added, pass it on at once with tell_agent (no need to confirm): it goes to the task the agent is doing, or as a new task when it is free. Write it clearly and completely for the agent, then say in a few words that you passed it on.
+            - Before you call a tool, say in a few words what you are doing ("Sure, I'll tell it to..."), so they are not left waiting in silence; afterwards a short confirmation is enough, without repeating yourself.
+            - When they want something done, changed or added, pass it on at once with tell_agent (no need to confirm): it goes to the task the agent is doing, or as a new task when it is free. Write it clearly and completely for the agent.
             - Their answer to the agent's question also goes through tell_agent.
             - Questions about how things stand ("how far is it?", "what did it change?") you answer yourself from the conversation below; check_agent reads it again if you need the latest. Never make up what the agent did.
             - stop_agent stops what it is doing, when they ask.
@@ -234,7 +270,8 @@ public enum VoicePrompt {
         - 它回复了或者在问问题时，用一两句自己的话说个大概，别照念原文；内容长或者细节多，就补一句「详细的放在对话里了」。
 
         做事的方式：
-        - 对方要它做事、改主意、补充要求，直接用 tell_agent 转过去，不用先确认：它手上有活就补充进那个任务，空着就作为新任务。转的话要写清楚、写完整，像靠谱的同事转达那样；然后用几个字告诉对方转过去了。
+        - 调用工具之前，先用几个字说你要做什么（「好，我让它把……」），别让对方干等；做完后简单确认一句就行，别把前面说过的再说一遍。
+        - 对方要它做事、改主意、补充要求，直接用 tell_agent 转过去，不用先确认：它手上有活就补充进那个任务，空着就作为新任务。转的话要写清楚、写完整，像靠谱的同事转达那样。
         - 它问的问题，对方回答了，也用 tell_agent 转过去。
         - 对方问进展（「做到哪了」「改了什么」），你根据下面的对话自己回答；要最新的就用 check_agent 再看一眼。不要编造它做了什么。
         - 对方让它停，用 stop_agent。
