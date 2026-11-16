@@ -1314,6 +1314,15 @@ async function runMatrix(browser, size, scheme) {
       const v = await page.locator(".conv-detail .conv-search input").first().inputValue();
       if (v !== "芒果布丁") throw new Error(`从搜索打开的对话应标出搜的词，实际「${v}」`);
       await page.locator(".conv-detail .conv-search input").first().press("Escape");
+      // Empty, it lists the chats opened last first: back to one in a keystroke.
+      await page.keyboard.press("Control+k");
+      await cp.waitFor({ timeout: 5_000 });
+      const firstGroup = compactText(await cp.locator(".cp-group").first().innerText());
+      if (firstGroup !== "最近") throw new Error(`⌘K 空着时第一组应是「最近」，实际「${firstGroup}」`);
+      const firstItem = compactText(await cp.locator(".cp-item").first().innerText());
+      if (!firstItem.includes("Review")) throw new Error(`最近聊的应排第一，实际「${firstItem}」`);
+      await page.keyboard.press("Escape");
+      await cp.waitFor({ state: "detached", timeout: 5_000 });
     });
 
     // Translating what an agent wrote: nothing until a service has a key
@@ -2072,16 +2081,34 @@ async function runMatrix(browser, size, scheme) {
       );
     });
 
+    // Switching workspaces (the switcher, or Ctrl/⌘ + its number) and back
+    // finds you where you were: the chat you had open is open again.
     await step("工作区切换", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
       await sidebar(page, true);
       await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
       await page.locator(".app-hub-menu").waitFor();
+      const hubs = await page.locator(".app-hub-menu-item[role=menuitemradio]").evaluateAll((els) => els.map((e) => ({
+        on: e.getAttribute("aria-checked") === "true", ok: !!e.querySelector(".dot.working"), key: e.querySelector(".app-hub-menu-key")?.textContent || "",
+        name: e.querySelector(".app-hub-menu-name")?.textContent || "",
+      })));
+      if (hubs.some((h, i) => i < 9 && h.key !== `Ctrl+${i + 1}`)) throw new Error(`工作区菜单应标出切换快捷键，实际 ${hubs.map((h) => h.key).join(" / ")}`);
       await settle(page, 300);
       await shot(page, size, scheme, "workspace-switch");
       await page.keyboard.press("Escape");
       await page.locator(".app-hub-menu").waitFor({ state: "hidden" }).catch(() => undefined);
       if (await page.locator(".app-hub-menu").isVisible().catch(() => false)) await page.locator(".sp-switch .app-hub-trigger").click();
-      if (narrow) await sidebar(page, false);
+      const here = hubs.findIndex((h) => h.on);
+      const other = hubs.findIndex((h, i) => i !== here && h.ok);
+      if (here >= 0 && other >= 0) {
+        await page.keyboard.press(`Control+${other + 1}`);
+        await page.locator(".sp-switch .app-hub-name", { hasText: hubs[other].name }).waitFor({ timeout: 10_000 });
+        await page.keyboard.press(`Control+${here + 1}`);
+        await page.locator(".sp-switch .app-hub-name", { hasText: hubs[here].name }).waitFor({ timeout: 10_000 });
+        if (narrow) await sidebar(page, false);
+        await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
+      } else if (narrow) await sidebar(page, false);
     });
 
     // An agent offers the next step with its answer: the empty input shows

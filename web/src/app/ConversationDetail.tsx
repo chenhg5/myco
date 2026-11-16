@@ -30,6 +30,7 @@ import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/Cha
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
+import { noteChat } from "@/app/recentChats";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -865,6 +866,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const observed = exchange
     ? !isMe(target.agent, row?.hub) && !isMe(target.peer || "", row?.hub)
     : !!messages && messages.length > 0 && !messages.some((m) => isMe(m.from, row?.hub) || isMe(m.to, row?.hub));
+  // Your chat with it, opened: one of the recent ones (⌘K).
+  useEffect(() => {
+    if (exchange && !observed && target.agent && !target.agent.startsWith("@")) noteChat(target.hubId, target.agent);
+  }, [target.hubId, target.agent, exchange, observed]);
   const parties = exchange
     ? [target.agent, target.peer!]
     : observed && messages

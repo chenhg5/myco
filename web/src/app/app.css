@@ -2006,6 +2006,12 @@ textarea.app-input {
   text-overflow: ellipsis;
 }
 /* A workspace that runs on this computer, where it was started. */
+.app-hub-menu-key {
+  flex: none;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
 .app-hub-menu-tag {
   flex: none;
   padding: 0 6px;

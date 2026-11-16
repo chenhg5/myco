@@ -100,9 +100,30 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // are kept apart: everything shown and done is in this one.
   const [hubPick, setHubPickState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || ""; } catch { return ""; } });
   const setHubPick = (v: string) => {
+    // Leaving a workspace: where you were in it is kept, to come back to.
+    if (v !== hubId && hubId) {
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" ? page : "space" };
+      try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
+    }
     setHubPickState(v);
     try { localStorage.setItem(HUB_KEY, v); } catch { /* not kept */ }
   };
+  // Each workspace's place: the space (and its page) you were on there.
+  const places = useRef<Record<string, { space?: SpaceRef; page?: Page }>>((() => {
+    try { return JSON.parse(localStorage.getItem(PLACES_KEY) || "{}"); } catch { return {}; }
+  })());
+  // Switching workspaces (the switcher, ⌘1…⌘9): back where you were in it.
+  const switchHub = (v: string) => {
+    if (v === hubId) return;
+    const back = places.current[v];
+    setHubPick(v);
+    setPage(back?.page || "space");
+    if (back?.space) setSpace(back.space);
+    setChatWith(null);
+    setProfile(null);
+  };
+  const switchRef = useRef(switchHub);
+  switchRef.current = switchHub;
   const [space, setSpaceState] = useState<SpaceRef | null>(() => {
     try { const v = localStorage.getItem(SPACE_KEY); return v ? JSON.parse(v) as SpaceRef : null; } catch { return null; }
   });
@@ -212,6 +233,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return m[1] ? L(`${m[1]} 的工作区`, `${m[1]}'s workspace`) : L("我的工作区", "My workspace");
   }, [hubNames]);
   const namedHubs = useMemo(() => hubs.map((h) => ({ ...h, name: nameOf(h) })), [hubs, nameOf]);
+  const hubsRef = useRef(namedHubs);
+  hubsRef.current = namedHubs;
   const namedOv = useMemo(() => ov && { ...ov, hubs: ov.hubs.map((h) => ({ ...h, name: nameOf(h) })) }, [ov, nameOf]);
   const allRows = useMemo<AgentRow[]>(() => {
     if (!namedOv) return [];
@@ -297,11 +320,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
 
   // Picking a space (again) shows its group, as a chat app's list does.
-  const [spaceTap, setSpaceTap] = useState(0);
+  // (counted per space: picking one does not send another back to its home)
+  const [spaceTap, setSpaceTap] = useState<Record<string, number>>({});
   const openSpace = (s: SpaceRef) => {
     setSpace(s);
     setPage("space");
-    setSpaceTap((n) => n + 1);
+    setSpaceTap((t) => ({ ...t, [spaceKey(s)]: (t[spaceKey(s)] || 0) + 1 }));
   };
   const projectCreated = (ref: { hubId: string; name: string }) => {
     setNewProjectOpen(false);
@@ -363,6 +387,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      // ⌘1…⌘9 (Ctrl on Windows): the workspaces, in the switcher's order.
+      const digit = /^Digit([1-9])$/.exec(e.code);
+      if (digit) {
+        const h = hubsRef.current[Number(digit[1]) - 1];
+        if (h) { e.preventDefault(); switchRef.current(h.id); }
+        return;
+      }
       if (e.key === ",") {
         e.preventDefault();
         setPage("settings");
@@ -608,7 +639,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 switched, so it sits at the bottom. */}
             <div className="sp-switch">
               <HubSwitcher hubs={namedHubs} hubsOv={namedOv?.hubs} value={hubId}
-                onChange={(v) => { setHubPick(v); setPage("space"); setChatWith(null); }}
+                onChange={switchHub}
                 onAdd={() => setConnectOpen(true)} onNewLocal={() => setNewLocalOpen(true)}
                 onNewOnServer={serverWs?.allowed ? () => setNewServerOpen(true) : undefined}
                 serverName={serverWs ? hostName(serverWs.server) : undefined}
@@ -654,7 +685,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             now={now}
             me={meOn(shown.hubId)}
             openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n, focus: chatWith.focus, reveal: chatWith.reveal } : undefined}
-            home={spaceTap}
+            home={spaceTap[spaceKey(shown)] || 0}
             onAddAgent={() => setAddAgent(shown)}
             onAddWorkspace={() => setAddWorkspace(shown)}
             onOpenMember={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
@@ -773,6 +804,7 @@ const SPACE_KEY = "myco-app-space";
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
 const HUB_KEY = "myco-app-hub";
+const PLACES_KEY = "myco-app-places";
 /** A hub that answered 401: it no longer takes this app's token. The hub says
  *  so as "admin token missing or invalid" (or "console token missing or
  *  invalid"), or the proxy answers with the 401 itself. */
