@@ -381,8 +381,14 @@ func execNodeName(prefix, workdir, home string) string {
 	if err != nil {
 		abs = workdir
 	}
-	if home != "" && filepath.Clean(abs) == filepath.Clean(home) {
-		return prefix + "shell"
+	if home != "" {
+		// Both absolute, so a drive letter (Windows) does not tell them apart.
+		if h, err := filepath.Abs(home); err == nil {
+			home = h
+		}
+		if filepath.Clean(abs) == filepath.Clean(home) {
+			return prefix + "shell"
+		}
 	}
 	var b strings.Builder
 	dash := false
