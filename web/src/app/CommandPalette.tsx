@@ -7,6 +7,7 @@ import type { AgentRow } from "@/app/types";
 import { isMe, nodeName } from "@/app/nodes";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { recentChats } from "@/app/recentChats";
+import { isUnread } from "@/app/unread";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -27,7 +28,7 @@ export type PaletteTarget =
   | { kind: "message"; row: AgentRow; message: string; find: string }
   | { kind: "page"; page: "settings" | "members" | "computers" };
 
-type Result = { key: string; group: string; title: string; sub?: string; icon: React.ReactNode; target: PaletteTarget };
+type Result = { key: string; group: string; title: string; sub?: string; icon: React.ReactNode; target: PaletteTarget; unread?: boolean };
 
 /** What a conversation search found, waiting for its chat to open: the
  *  chat marks those words (ConversationDetail). */
@@ -100,6 +101,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
         key: `r:${r.hub.id}:${r.st.agent.name}`, group: L("最近", "Recent"), title: nodeName(r.st.agent, r.hub),
         sub: [isWorkspace(r.st.agent) ? L("电脑", "Computer") : r.st.agent.description, where(r.hub.id)].filter(Boolean).join(" · "),
         icon: isWorkspace(r.st.agent) ? <Monitor /> : <Avatar agent={r.st.agent} size={22} badge={false} />, target: { kind: "member", row: r },
+        unread: isUnread(r.hub.id, r.st.agent.name),
       });
     }
     const agents = rows.filter((r) => !isWorkspace(r.st.agent) && r.st.agent.kind !== "machine" && !inRecent.has(`${r.hub.id}:${r.st.agent.name}`));
@@ -188,7 +190,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
                   <button type="button" role="option" aria-selected={i === sel} data-i={i} className={cn("cp-item", i === sel && "is-sel")}
                     onMouseMove={() => setSel(i)} onClick={() => pick(r)}>
                     <span className="cp-icon">{r.icon}</span>
-                    <span className="cp-text"><b>{r.title}</b>{r.sub && <span>{r.sub}</span>}</span>
+                    <span className="cp-text"><b>{r.title}{r.unread && <span className="unread-dot" aria-label={L("有未读", "Unread")} />}</b>{r.sub && <span>{r.sub}</span>}</span>
                   </button>
                 </div>
               );

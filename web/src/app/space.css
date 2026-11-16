@@ -197,6 +197,50 @@
   border-radius: 999px;
   background: var(--green);
 }
+/* Unread (unread.ts): a red count of the conversations not read in this
+   space, or a red dot on one conversation's row. The same red as the Dock
+   badge; it takes the place of the work dot while there is one. */
+.sp-nav-unread {
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sp-nav-unread.is-dot {
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+}
+.unread-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #ff3b30;
+  vertical-align: middle;
+}
+.sp-strip-face {
+  position: relative;
+}
+.unread-dot.is-on-face {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  margin: 0;
+  box-shadow: 0 0 0 2px var(--bg, #fff);
+}
 /* Work in progress that has gone quiet: it may be stuck, not running. */
 .sp-nav-busy.is-stuck {
   background: var(--amber);

@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
+import { isUnread, unreadCount, useUnread, useUnreadWatch } from "@/app/unread";
 import { CommandPalette } from "@/app/CommandPalette";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
@@ -526,6 +527,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // amber when all the work in progress may be stuck (it was picked up, but
   // nothing is moving). A node with both reads as working: something is live.
   // An agent waiting on your decision comes first: amber, saying so.
+  // What you have not read (unread.ts): a red count in the sidebar, and
+  // the number on the Mac app's Dock icon.
+  useUnreadWatch(namedOv?.hubs || []);
+  useUnread();
+  const unreadIn = (rs: AgentRow[]) => rs.filter((r) => isUnread(r.hub.id, r.st.agent.name)).length;
+  const badge = unreadCount();
+  const badgeOn = !!info?.badge;
+  useEffect(() => {
+    if (badgeOn) void appApi.setBadge(badge).catch(() => undefined);
+  }, [badge, badgeOn]);
   const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | null => {
     if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
     let busy = false;
@@ -563,12 +574,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const ref: SpaceRef = { hubId: id, loose: true };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const dot = workDot(loose);
+                const unread = unreadIn(loose);
                 return (
                   <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => openSpace(ref)}
                     title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
                     <span className="app-nav-label">{L("聊天", "Chat")}</span>
                     {looseAgents.length > 0 && <AvatarStack agents={looseAgents.map((r) => r.st.agent)} size={18} max={3} />}
-                    {dot && (
+                    {unread > 0 ? <UnreadCount n={unread} /> : dot && (
                       <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
                         title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有 agent 可能卡住", "Someone may be stuck") : L("有 agent 在干活", "Someone is at work")} />
                     )}
@@ -586,7 +598,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const names = new Set(x.p.members.map((m) => m.name));
-                const dot = workDot(rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name)));
+                const inIt = rows.filter((r) => r.hub.id === x.hubId && names.has(r.st.agent.name));
+                const dot = workDot(inIt);
+                const unread = unreadIn(inIt);
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
@@ -598,7 +612,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     ])}
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
-                    {dot && (
+                    {unread > 0 ? <UnreadCount n={unread} /> : dot && (
                       <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
                         title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
                     )}
@@ -632,7 +646,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
-                      {dot && (
+                      {isUnread(r.hub.id, r.st.agent.name) ? <UnreadCount /> : dot && (
                         <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
                           title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
                       )}
@@ -870,4 +884,11 @@ export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): 
 /** A server's address as people say it: its host name. */
 function hostName(u: string): string {
   try { return new URL(u).host; } catch { return u; }
+}
+
+/** Unread conversations in a sidebar row: a red count (a dot alone for one
+ *  conversation's row). */
+function UnreadCount({ n }: { n?: number }) {
+  const label = n ? L(`${n} 段对话有未读`, `${n} unread`) : L("有未读", "Unread");
+  return <span className={cn("sp-nav-unread", !n && "is-dot")} title={label} aria-label={label}>{n ? (n > 99 ? "99+" : n) : null}</span>;
 }

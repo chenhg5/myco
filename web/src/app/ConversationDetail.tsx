@@ -31,6 +31,7 @@ import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
+import { markRead } from "@/app/unread";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -625,6 +626,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       return;
     }
     atBottom.current = below < 80;
+    if (atBottom.current) seenRef.current();
     belowNow.current = below;
     const far = below > 400;
     if (far !== away) {
@@ -890,6 +892,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   useEffect(() => {
     if (exchange && !observed && target.agent && !target.agent.startsWith("@")) noteChat(target.hubId, target.agent);
   }, [target.hubId, target.agent, exchange, observed]);
+  // Read (unread.ts): your chat with it on screen, the App in front, its
+  // bottom in view; up to its newest message. Checked as messages come,
+  // as you scroll to the bottom, and as the App comes to the front.
+  const newestAt = (messages || []).reduce((a, m) => (m.created_at > a ? m.created_at : a), "");
+  const seenRef = useRef<() => void>(() => undefined);
+  seenRef.current = () => {
+    if (!exchange || observed || !newestAt || target.agent.startsWith("@")) return;
+    if (document.visibilityState !== "visible" || !document.hasFocus() || !atBottom.current) return;
+    markRead(target.hubId, target.agent, newestAt);
+  };
+  useEffect(() => { seenRef.current(); }, [newestAt, observed]);
+  useEffect(() => {
+    const on = () => seenRef.current();
+    window.addEventListener("focus", on);
+    document.addEventListener("visibilitychange", on);
+    return () => { window.removeEventListener("focus", on); document.removeEventListener("visibilitychange", on); };
+  }, []);
   const parties = exchange
     ? [target.agent, target.peer!]
     : observed && messages

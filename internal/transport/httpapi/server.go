@@ -55,6 +55,7 @@ type Server struct {
 	resume    *app.ResumeService
 	traces    *app.TraceService
 	hidden    *app.HiddenService
+	reads     *app.ReadService
 	voice     *app.VoiceSettingsService
 	activity  sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu sync.Mutex // serialize alias permission checks with writes
@@ -83,6 +84,10 @@ func (s *Server) SetOverview(o *app.OverviewService) { s.overview = o }
 // SetHidden enables /v1/console/hidden (messages a person took out of
 // their own view).
 func (s *Server) SetHidden(h *app.HiddenService) { s.hidden = h }
+
+// SetReads enables /v1/console/reads (how far a person has read each of
+// their conversations: the App's unread dots).
+func (s *Server) SetReads(r *app.ReadService) { s.reads = r }
 
 // SetVoiceSettings enables /v1/console/voice (a person's voice chat
 // settings, shared by their devices).
@@ -171,6 +176,8 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/recent", s.admin(s.consoleRecent))
 	m.HandleFunc("GET /v1/console/hidden", s.admin(s.consoleHidden))
 	m.HandleFunc("POST /v1/console/hidden", s.admin(s.consoleHide))
+	m.HandleFunc("GET /v1/console/reads", s.admin(s.consoleReads))
+	m.HandleFunc("POST /v1/console/reads", s.admin(s.consoleMarkRead))
 	m.HandleFunc("GET /v1/console/voice", s.admin(s.consoleVoice))
 	m.HandleFunc("PUT /v1/console/voice", s.admin(s.putConsoleVoice))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
@@ -2130,6 +2137,37 @@ func (s *Server) consoleHidden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, api.HiddenList{IDs: ids})
+}
+
+// How far the person has read each conversation (per person, as hidden).
+func (s *Server) consoleReads(w http.ResponseWriter, r *http.Request) {
+	if s.reads == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep read marks"))
+		return
+	}
+	marks, err := s.reads.Reads(r.Context(), s.hiddenViewer(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ReadMarks{Reads: marks})
+}
+
+func (s *Server) consoleMarkRead(w http.ResponseWriter, r *http.Request) {
+	if s.reads == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep read marks"))
+		return
+	}
+	var in api.ReadMarks
+	if !decode(w, r, &in) {
+		return
+	}
+	marks, err := s.reads.Mark(r.Context(), s.hiddenViewer(r), in.Reads)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, api.ReadMarks{Reads: marks})
 }
 
 // A person's voice chat settings (keys included): their own devices

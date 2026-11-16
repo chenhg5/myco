@@ -182,6 +182,9 @@ type Backend struct {
 	// only (the desktop app on macOS, whose web view shows every file for
 	// an <input accept="image/*">); "" when cancelled. Nil elsewhere.
 	PickImage func() (path string, err error)
+	// SetBadge puts how many conversations have something unread on the
+	// app's icon (the Mac app's Dock icon). Nil elsewhere.
+	SetBadge func(n int)
 	// OpenURL opens a web or mail link in the default browser (the desktop
 	// app, whose web view opens no new windows). Nil elsewhere.
 	OpenURL func(url string) error
@@ -234,7 +237,7 @@ func (b *Backend) Handler() http.Handler {
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil, "badge": b.SetBadge != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -257,6 +260,24 @@ func (b *Backend) Handler() http.Handler {
 	b.translateRoutes(m)
 	m.HandleFunc("POST /app/pick-image", b.pickImage)
 	m.HandleFunc("POST /app/open-url", b.openURL)
+	// POST /app/badge {count}: the number on the app's icon (unread chats).
+	m.HandleFunc("POST /app/badge", func(w http.ResponseWriter, r *http.Request) {
+		if b.SetBadge == nil {
+			writeErr(w, &client.Error{Code: "not_supported", Message: "only the Mac app has a badge on its icon", Status: http.StatusNotFound})
+			return
+		}
+		var in struct {
+			Count int `json:"count"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if in.Count < 0 {
+			in.Count = 0
+		}
+		b.SetBadge(in.Count)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	})
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})
@@ -281,6 +302,27 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		l, err := c.UpdateHidden(r.Context(), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, l)
+	}))
+	// How far you have read each conversation (the unread dots), on the hub.
+	m.HandleFunc("GET /app/hubs/{id}/reads", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		l, err := c.Reads(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, l)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/reads", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.ReadMarks
+		if !decode(w, r, &in) {
+			return
+		}
+		l, err := c.MarkRead(r.Context(), in.Reads)
 		if err != nil {
 			writeErr(w, err)
 			return

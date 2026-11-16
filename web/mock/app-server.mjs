@@ -192,6 +192,8 @@ const stuckProgress = makeMessage({
 });
 // Links the App asked to open in the browser (/app/open-url).
 const openedLinks = [];
+// The highest number the App put on its icon (/app/badge).
+let badgeSeen = 0;
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -1493,7 +1495,18 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac", open_url: true });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac", open_url: true, badge: true });
+  }
+  // /app/badge: the number on the Mac app's Dock icon; noted here (GET
+  // /app/mock/badge says the highest asked for, for the smoke test).
+  if (parts[0] === "app" && parts[1] === "badge" && parts.length === 2) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    badgeSeen = Math.max(badgeSeen, Number(body?.count) || 0);
+    return send(res, 200, { ok: true });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "badge" && parts.length === 3) {
+    return send(res, 200, { max: badgeSeen });
   }
   // /app/open-url: the desktop app opens a link in the default browser;
   // here it is only noted (GET /app/mock/opened lists them, for the smoke test).
@@ -2328,6 +2341,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
+    // /app/hubs/{id}/reads — how far you have read each conversation. The
+    // mock keeps none (it answers what it was sent): the smoke test's
+    // windows run at once, each keeps its own marks on its own page.
+    if (parts.length === 4 && parts[3] === "reads") {
+      if (method === "GET") return send(res, 200, { reads: {} });
+      if (method === "POST") return send(res, 200, { reads: (await readBody(req))?.reads || {} });
+    }
     // /app/hubs/{id}/hidden — messages taken out of your own view.
     if (parts.length === 4 && parts[3] === "hidden") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
