@@ -301,7 +301,16 @@ public final class AppModel {
         let chat = OpenAIChat(
             base: voice.baseURL, model: voice.model, key: key,
             session: "myco-voice-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())
-        return VoiceCall(.init(audio: AppleVoiceAudio(), model: chat, speech: speech, hub: hub))
+        // The end of the last call with this agent goes into this one's
+        // instructions, and this one's end is kept for the next: on this
+        // device only.
+        let memos = FileMemoStore.standard
+        let memoKey = VoiceMemo.key(workspace: session.id, agent: conversation.agent)
+        let language = AppLanguage.current
+        return VoiceCall(.init(
+            audio: AppleVoiceAudio(), model: chat, speech: speech, hub: hub, language: language,
+            memo: VoiceMemos.memo(for: memoKey, in: memos)?.prompt(language: language) ?? "",
+            ended: { history in VoiceMemos.keep(history, for: memoKey, in: memos) }))
     }
 
     // MARK: Notifications

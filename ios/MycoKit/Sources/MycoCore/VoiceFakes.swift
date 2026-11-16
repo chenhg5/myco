@@ -150,7 +150,8 @@ public actor ScriptedVoiceModel: VoiceModel {
     }
 
     public func stream(
-        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void
+        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void,
+        onTool: @escaping @MainActor @Sendable (String) -> Void = { _ in }
     ) async throws -> ChatMessage {
         asked.append(messages)
         let reply = self.answer(messages)
@@ -161,6 +162,12 @@ public actor ScriptedVoiceModel: VoiceModel {
             if pace > .zero { try await Task.sleep(for: pace) }
             try Task.checkCancellation()
             await onText(String(piece))
+        }
+        // What it wants done is named first; writing it out takes a moment.
+        for call in reply.calls {
+            await onTool(call.name)
+            if pace > .zero { try await Task.sleep(for: pace) }
+            try Task.checkCancellation()
         }
         return ChatMessage(role: "assistant", content: reply.text, toolCalls: reply.calls)
     }
