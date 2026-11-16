@@ -168,6 +168,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
+  // A computer just connected, to pick in that dialog.
+  const [addWsPick, setAddWsPick] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
@@ -609,7 +611,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <button type="button" className={cn("sp-nav-title-link", page === "computers" && "active")} onClick={() => setPage("computers")}
                   title={L("管理电脑", "Manage computers")}>{L("电脑", "Computers")}</button>
                 <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
-                  onClick={() => (shownProject && shown ? setAddWorkspace(shown) : setPage("computers"))}><Plus /></button>
+                  onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
               </div>
               {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                 const dot = workDot([r]);
@@ -727,7 +729,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <ComputersPage rows={rows} projects={hubProjects}
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
-              onAddComputer={() => setAddMachineOpen(true)}
+              onAddComputer={() => hub && setAddWorkspace({ hubId: hub.id, loose: true })}
               onChanged={() => void refresh()} />
           </div>
         )}
@@ -780,8 +782,16 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
-        onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
-      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()} />
+        connected={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)?.overview?.machines} pick={addWsPick}
+        onClose={() => { setAddWorkspace(null); setAddWsPick(undefined); }} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
+      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()}
+        machines={hub ? namedOv?.hubs.find((h) => h.id === hub.id)?.overview?.machines : undefined}
+        onConnected={(id) => {
+          // On to the folder: in the dialog it was opened from, else a new one.
+          setAddMachineOpen(false);
+          setAddWsPick(id);
+          if (!addWorkspace && hub) setAddWorkspace({ hubId: hub.id, loose: true });
+        }} />
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}
