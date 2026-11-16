@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 import Speech
 import MycoCore
 
@@ -77,6 +78,12 @@ private final class CallLine: @unchecked Sendable {
     private var generation = 0
     private var observers: [NSObjectProtocol] = []
     private var closed = false
+    /// The system's voice processing is on (echo cancellation); off when
+    /// this phone would not start the engine with it.
+    private var processing = true
+    /// When the engine was last built again, and how often in a row: a
+    /// system that keeps changing its mind ends the call, not the app.
+    private var rebuilt: [Date] = []
 
     /// What the voice is played at; anything else is left out.
     private static let playRate = 24000.0
@@ -85,6 +92,18 @@ private final class CallLine: @unchecked Sendable {
     private static let noSpeech = 1110
     /// This many sessions failing at once, in a row, end the call.
     private static let failuresAllowed = 6
+    /// What the audio did, step by step, in the system's log (Console,
+    /// category "voice"): never what was said.
+    private static let log = Logger(subsystem: "dev.myco.ios", category: "voice")
+
+    private func note(_ text: String) {
+        Self.log.notice("\(text, privacy: .public)")
+    }
+
+    private static func said(_ error: Error) -> String {
+        let error = error as NSError
+        return "\(error.domain) \(error.code)"
+    }
 
     init(locale: Locale, continuation: AsyncThrowingStream<VoiceAudioEvent, Error>.Continuation) {
         self.locale = locale
@@ -118,6 +137,7 @@ private final class CallLine: @unchecked Sendable {
     private func start() {
         guard !closed else { return }
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
+            note("no recognizer for \(locale.identifier)")
             end(.unavailable)
             return
         }
@@ -128,27 +148,61 @@ private final class CallLine: @unchecked Sendable {
             // headphones are on.
             try audio.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
             try audio.setActive(true, options: .notifyOthersOnDeactivation)
+            note("session on: \(audio.sampleRate) Hz, in \(audio.currentRoute.inputs.map(\.portType.rawValue)), out \(audio.currentRoute.outputs.map(\.portType.rawValue))")
+        } catch {
+            note("session failed: \(Self.said(error))")
+            end(Self.wouldNotOpen(L("音频会话", "audio session"), error))
+            return
+        }
+        do {
             try build()
         } catch {
-            end(.microphone)
-            return
+            // Some phones and routes will not start the engine with the
+            // system's voice processing: without it there is still a call
+            // (what the voice says is told apart by its words).
+            note("engine failed with voice processing: \(Self.said(error))")
+            processing = false
+            do {
+                try build()
+            } catch {
+                note("engine failed: \(Self.said(error))")
+                end(Self.wouldNotOpen(L("音频引擎", "audio engine"), error))
+                return
+            }
         }
         watchTheSystem()
         continuation.yield(.ready)
         hear()
     }
 
+    /// "The microphone would not open", with what refused and the
+    /// system's number for it: something to tell whoever can fix it.
+    private static func wouldNotOpen(_ what: String, _ error: Error) -> DictationProblem {
+        if let problem = error as? DictationProblem, problem != .microphone { return problem }
+        let detail = (error as? DictationProblem) == .microphone ? L("没有可用的输入", "no input to hear with") : said(error)
+        return .other(L("麦克风打不开（", "Could not open the microphone (") + what + L("：", ": ") + detail + L("）", ")"))
+    }
+
     /// The engine: the microphone tapped for the recognizer, and a player
-    /// for the voice. Built again when the route changes (headphones).
+    /// for the voice. Built again when the system stops it (headphones on
+    /// or off, another sample rate).
     private func build() throws {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         // Echo cancellation and noise suppression: before the formats are read.
-        try? input.setVoiceProcessingEnabled(true)
+        if processing {
+            do {
+                try input.setVoiceProcessingEnabled(true)
+            } catch {
+                note("voice processing refused: \(Self.said(error))")
+                processing = false
+            }
+        }
         let format = input.outputFormat(forBus: 0)
         // No microphone to hear with (a simulator without one): a tap on
         // such an input does not fail, it crashes.
         guard format.sampleRate > 0, format.channelCount > 0, let playFormat else {
+            note("no input: \(format.sampleRate) Hz, \(format.channelCount) channels")
             throw DictationProblem.microphone
         }
         // With voice processing on, the microphone may give several
@@ -166,11 +220,13 @@ private final class CallLine: @unchecked Sendable {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
+            engine.stop()
             throw error
         }
         player.play()
         self.engine = engine
         self.player = player
+        note("engine on: input \(format.sampleRate) Hz, \(format.channelCount) channels, voice processing \(processing ? "on" : "off")")
     }
 
     private func feed(_ buffer: AVAudioPCMBuffer) {
@@ -191,30 +247,46 @@ private final class CallLine: @unchecked Sendable {
     }
 
     /// A phone call or another app takes the audio: the call ends. The
-    /// route changes (headphones on or off): the engine is built again.
+    /// system stops the engine (headphones on or off, another sample
+    /// rate): it is built again.
     private func watchTheSystem() {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { note in
             let began = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue
-            guard began else { return }
+            let reason = note.userInfo?[AVAudioSessionInterruptionReasonKey] as? UInt
             self.queue.async {
+                self.note("interruption: began \(began), reason \(reason.map(String.init) ?? "none")")
+                guard began else { return }
                 self.end(.other(L("别的通话或 App 用了麦克风，语音聊天结束了", "A call or another app took the microphone: the voice chat ended")))
             }
         })
         observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil) { _ in
-            self.queue.async { self.end(.microphone) }
+            self.queue.async {
+                self.note("media services were reset")
+                self.end(.other(L("系统的音频服务重启了，语音聊天结束了", "The system's audio restarted: the voice chat ended")))
+            }
         })
         observers.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: nil) { note in
             let changed = note.object as AnyObject?
             let which = changed.map(ObjectIdentifier.init)
             self.queue.async {
                 guard !self.closed, let engine = self.engine, which == ObjectIdentifier(engine) else { return }
+                self.note("configuration change: engine running \(engine.isRunning)")
+                // The system says so too while the engine is being set up
+                // (turning voice processing on changes its formats). Only
+                // an engine it has stopped needs building again: building
+                // one for every notice would never end.
+                guard !engine.isRunning else { return }
                 self.rebuild()
             }
         })
     }
 
-    private func rebuild() {
+    /// This many rebuilds within a few seconds: the system will not settle.
+    private static let rebuildsAllowed = 6
+
+    private func rebuild(attempt: Int = 0) {
+        guard !closed else { return }
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         engine = nil
@@ -225,11 +297,27 @@ private final class CallLine: @unchecked Sendable {
             pending = 0
             continuation.yield(.played)
         }
+        let now = Date()
+        rebuilt = rebuilt.filter { now.timeIntervalSince($0) < 5 } + [now]
         do {
+            guard rebuilt.count <= Self.rebuildsAllowed else { throw DictationProblem.other(L("音频设备一直在变，语音聊天结束了", "The audio route keeps changing: the voice chat ended")) }
             try build()
         } catch {
-            end(.microphone)
+            note("rebuild \(attempt) failed: \(Self.said(error))")
+            // Just after a change the system may not be ready yet: a few
+            // more tries, a little later each time.
+            guard attempt < 3, rebuilt.count <= Self.rebuildsAllowed else {
+                end(Self.wouldNotOpen(L("音频引擎", "audio engine"), error))
+                return
+            }
+            queue.asyncAfter(deadline: .now() + 0.3 * Double(attempt + 1)) {
+                guard !self.closed, self.engine == nil else { return }
+                self.rebuild(attempt: attempt + 1)
+            }
+            return
         }
+        // The microphone may give another format now: a new session hears it.
+        hear()
     }
 
     // MARK: Hearing
@@ -273,6 +361,7 @@ private final class CallLine: @unchecked Sendable {
         if let failure, !failure.isEmpty, text.isEmpty, Date().timeIntervalSince(sessionBegan) < 1 {
             failures += 1
             guard failures < Self.failuresAllowed else {
+                note("recognition keeps failing: \(failure)")
                 end(.other(failure))
                 return
             }
@@ -337,6 +426,7 @@ private final class CallLine: @unchecked Sendable {
     private func end(_ problem: DictationProblem?) {
         guard !closed else { return }
         closed = true
+        note("ended\(problem.map { ": \($0)" } ?? "")")
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
         generation += 1
@@ -359,5 +449,50 @@ private final class CallLine: @unchecked Sendable {
         } else {
             continuation.finish()
         }
+    }
+}
+
+/// `-myco-voice probe`: opens a call's microphone and speaker alone for a
+/// few seconds, plays a short tone, and says in the system's log
+/// (category "voice") what happened and never what was said: to see on a
+/// real phone why a call would not start.
+@MainActor
+public enum VoiceProbe {
+    public static func run(seconds: Double = 8) async {
+        let log = Logger(subsystem: "dev.myco.ios", category: "voice")
+        let audio = AppleVoiceAudio()
+        log.notice("probe: start")
+        let listening = Task { @MainActor in
+            do {
+                for try await event in audio.start(language: .zh) {
+                    switch event {
+                    case .ready:
+                        log.notice("probe: ready")
+                        audio.play(tone(), rate: 24000)
+                    case .heard(let text, let final):
+                        log.notice("probe: heard \(text.count, privacy: .public) characters, final \(final, privacy: .public)")
+                    case .played:
+                        log.notice("probe: played")
+                    }
+                }
+                log.notice("probe: ended")
+            } catch {
+                log.notice("probe: failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        try? await Task.sleep(for: .seconds(seconds))
+        audio.stop()
+        await listening.value
+        log.notice("probe: done")
+    }
+
+    /// Half a second of a quiet 440 Hz tone, as the voice's sound comes.
+    private static func tone() -> Data {
+        var data = Data()
+        for index in 0..<12000 {
+            let sample = Int16(sin(Double(index) * 2 * .pi * 440 / 24000) * 6000)
+            withUnsafeBytes(of: sample.littleEndian) { data.append(contentsOf: $0) }
+        }
+        return data
     }
 }
