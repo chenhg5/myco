@@ -111,13 +111,23 @@ func Save(path string, c *Config) error {
 }
 
 // ApplyEnv overrides hub/token from the environment (getenv is injected
-// so callers and tests control the source).
+// so callers and tests control the source). A saved identity keeps its own
+// hub: MYCO_HUB alone (a cloud environment's default, there to enroll new
+// sessions) must not send a token issued by one hub or workspace to
+// another, where it is refused as invalid. With MYCO_TOKEN as well, the
+// environment is a whole identity of its own (what the runner hands the
+// CLIs it starts) and wins.
 func (c *Config) ApplyEnv(getenv func(string) string) {
-	if v := getenv(EnvHub); v != "" {
-		c.Hub = v
+	hub, token := getenv(EnvHub), getenv(EnvToken)
+	if token != "" {
+		c.Token = token
+		if hub != "" {
+			c.Hub = hub
+		}
+		return
 	}
-	if v := getenv(EnvToken); v != "" {
-		c.Token = v
+	if hub != "" && (c.Token == "" || c.Hub == "") {
+		c.Hub = hub
 	}
 }
 

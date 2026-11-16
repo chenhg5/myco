@@ -20,7 +20,9 @@ import MycoStore
 /// demo answer as slowly as a bad connection, `-myco-notifier
 /// recorded` keeps notifications from reaching the system, and
 /// `-myco-voice scripted|denied` makes a voice call a script (a microphone
-/// that hears two sentences, a model that answers them, a silent voice).
+/// that hears two sentences, a model that answers them, a silent voice);
+/// `-myco-voice probe` opens a call's real microphone and speaker alone
+/// for a few seconds and says in the system's log what happened.
 @main
 struct MycoApp: App {
     @State private var model: AppModel
@@ -121,6 +123,11 @@ struct MycoApp: App {
             AppRootView(
                 model: model, initialRoute: UserDefaults.standard.string(forKey: "myco-route"),
                 restoring: start != "welcome", joinLink: UserDefaults.standard.string(forKey: "myco-join"))
+                .task {
+                    // `-myco-voice probe`: a call's microphone and speaker
+                    // alone, for a few seconds, into the system's log.
+                    if UserDefaults.standard.string(forKey: "myco-voice") == "probe" { await VoiceProbe.run() }
+                }
         }
         // Now and then the system gives the app a moment while it is not in
         // front: it looks at every workspace and announces what is new.
