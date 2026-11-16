@@ -83,7 +83,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
     <div className="pc">
       <div className="pc-head">
         <p className="pc-intro">{L("agent 在这些电脑上跑命令，点「打开」就能看着。", "Agents run commands on these; Open lets you watch.")}</p>
-        <button type="button" className="app-btn app-btn-small" onClick={onAddComputer}><Plus />{L("连上另一台电脑", "Connect another computer")}</button>
+        <button type="button" className="app-btn app-btn-small" onClick={onAddComputer}><Plus />{L("加一台电脑", "Add a computer")}</button>
       </div>
       <ErrorText error={error} />
       {list.length === 0 ? (

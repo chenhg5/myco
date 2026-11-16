@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Link2, Monitor } from "lucide-react";
+import type { Machine } from "@/api";
 import { appApi, type Hub, type JoinLink, type ServerMachine } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -8,12 +9,17 @@ import { L } from "@/lib/i18n";
 /** Pick a hub, create a one-off join link, show the command. A computer
  *  already on the same server (in another workspace there) is added with
  *  one click instead, through its existing connection. */
-export function AddMachineDialog({ open, onOpenChange, hubs, onAdded }: {
+export function AddMachineDialog({ open, onOpenChange, hubs, machines, onAdded, onConnected }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hubs: Hub[];
+  /** the workspace's computers as last read: one that appears while this
+   *  is open has just connected */
+  machines?: Machine[];
   /** a computer was added (from another workspace of the server) */
   onAdded?: () => void;
+  /** go on with a computer that connected: pick a folder on it */
+  onConnected?: (machineId: string) => void;
 }) {
   const [hubId, setHubId] = useState("");
   const [link, setLink] = useState<JoinLink | null>(null);
@@ -22,6 +28,14 @@ export function AddMachineDialog({ open, onOpenChange, hubs, onAdded }: {
   const [nearby, setNearby] = useState<ServerMachine[]>([]);
   const [adding, setAdding] = useState("");
   const [added, setAdded] = useState<string[]>([]);
+  // The computers there when the dialog opened; any other is new.
+  const before = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    before.current = open ? new Set((machines || []).map((m) => m.id)) : null;
+    // Only when it opens: later reads are what is compared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const fresh = open && before.current ? (machines || []).filter((m) => !before.current!.has(m.id)) : [];
 
   // Computers of the server's other workspaces (hubs from v0.19.9).
   useEffect(() => {
@@ -114,6 +128,27 @@ export function AddMachineDialog({ open, onOpenChange, hubs, onAdded }: {
             </select>
           </label>}
 
+          {fresh.length > 0 && onConnected && (
+            <div className="app-picker app-picker-nearby" data-testid="machine-connected">
+              <span className="app-field-label">{L("连上了", "Connected")}</span>
+              <div className="app-picker-list">
+                {fresh.map((m) => (
+                  <div key={m.id} className="app-picker-row">
+                    <Monitor />
+                    <span className="app-picker-name">{m.name}</span>
+                    <span className="app-picker-sub">{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
+                    <span className="app-picker-kind">
+                      <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => onConnected(m.id)}>
+                        {L("选一个文件夹", "Pick a folder")}
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="app-small-note">{L("再选它上面的一个文件夹，它就出现在侧栏的「电脑」里。", "Pick a folder on it and it shows under Computers in the sidebar.")}</div>
+            </div>
+          )}
+
           {nearby.length > 0 && !link && (
             <div className="app-picker app-picker-nearby">
               <span className="app-field-label">{L("已经连着这台服务器的电脑", "Computers already on this server")}</span>
@@ -166,7 +201,9 @@ export function AddMachineDialog({ open, onOpenChange, hubs, onAdded }: {
                 <CopyButton value={link.command} />
               </div>
               <div className="app-hint">
-                {L("在那台电脑的终端里运行这一行。装好以后，给项目加电脑时就能选它了。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}
+                {onConnected
+                  ? L("在那台电脑的终端里运行这一行。连上以后这里会出现它，接着选一个文件夹。", "Run this in a terminal on that computer. Once it connects it shows up here; then pick a folder on it.")
+                  : L("在那台电脑的终端里运行这一行。装好以后，给项目加电脑时就能选它了。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}
               </div>
               <ErrorText error={error} />
               <div className="app-modal-actions">

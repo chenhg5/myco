@@ -497,11 +497,16 @@ function folderOf(dir: string): string {
  * can run commands (a terminal opens on it). Pick the computer, pick the
  * folder; every agent in the project may use it.
  */
-export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded, onNewComputer }: {
+export function AddWorkspaceDialog({ open, hub, project, rows, connected, pick, onClose, onAdded, onNewComputer }: {
   open: boolean;
   hub?: Hub;
+  /** none: a computer of the workspace, not in a project yet */
   project?: Project;
   rows: AgentRow[];
+  /** the workspace's connected computers (else read from rows) */
+  connected?: Machine[];
+  /** a computer to pick (one just connected) */
+  pick?: string;
   onClose: () => void;
   onAdded: () => void;
   /** connect another computer first */
@@ -509,7 +514,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
 }) {
   const hubId = hub?.id || "";
   const ov = rows.find((r) => r.hub.id === hubId)?.hub;
-  const machines = useMemo(() => (ov ? machinesOfHub(ov) : []).filter((m) => m.can_spawn), [ov]);
+  const machines = useMemo(() => (connected || (ov ? machinesOfHub(ov) : [])).filter((m) => m.can_spawn), [connected, ov]);
   const [local, setLocal] = useState<LocalState | null>(null);
   const [machineId, setMachineId] = useState("");
   // Until a computer is picked by hand, this computer (once known) is it.
@@ -532,6 +537,13 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
     if (open && (!picked || !machines.some((m) => m.id === machineId))) setMachineId(ordered[0]?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, machines.length, local]);
+  // A computer just connected is the one to use.
+  useEffect(() => {
+    if (open && pick && machines.some((m) => m.id === pick)) {
+      setMachineId(pick);
+      setPicked(true);
+    }
+  }, [open, pick, machines]);
   const machine = machines.find((m) => m.id === machineId);
   // The project's agents may use it; without any yet, every agent of yours here.
   const users = (project ? project.members.map((m) => m.name) : [])
@@ -583,8 +595,11 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
   };
 
   return (
-    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("给项目加一台电脑", "Add a computer to the project")}
-      description={L("选你的一台电脑和其中一个文件夹，项目里的 agent 就能在里面跑命令。你也可以打开它的终端在旁边看着。", "Pick one of your computers and a folder on it, and the project's agents can run commands there. You can open its terminal and watch.")}
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()}
+      title={project ? L("给项目加一台电脑", "Add a computer to the project") : L("加一台电脑", "Add a computer")}
+      description={project
+        ? L("选你的一台电脑和其中一个文件夹，项目里的 agent 就能在里面跑命令。你也可以打开它的终端在旁边看着。", "Pick one of your computers and a folder on it, and the project's agents can run commands there. You can open its terminal and watch.")
+        : L("选一台连上的电脑和其中一个文件夹，它就出现在侧栏的「电脑」里，点开是它的终端。把它加进项目，项目里的 agent 就能在里面跑命令。", "Pick a connected computer and a folder on it: it shows under Computers in the sidebar, and opens as a terminal. Put it in a project and the project's agents can run commands there.")}
       className="app-modal-add">
       {existing.length > 0 && (
         <div className="app-field">
@@ -609,6 +624,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
       <form onSubmit={add}>
         <div className="app-field">
           <span className="app-field-label">{L("在哪台电脑上", "On which computer")}</span>
+          {ordered.length === 0 && <div className="app-small-note">{L("这个工作区还没有连上的电脑：点「另一台电脑…」先连一台。", "No computer is connected to this workspace yet: connect one with Another computer….")}</div>}
           <div className="ws-computers">
             {ordered.map((m) => {
               const Icon = osInfo(m.os).icon;
@@ -635,9 +651,11 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
           </div>
         )}
         <div className="ws-who">
-          {users.length > 0
-            ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
-            : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
+          {!project
+            ? L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在这里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")
+            : users.length > 0
+              ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
+              : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
         {machine && <LocalShellAccess machine={machine} what="shell" />}
         <ErrorText error={error} />

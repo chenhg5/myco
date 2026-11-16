@@ -2327,21 +2327,42 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".sp-switch .app-hub-name", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
-      // The new workspace offers the server's computers.
+      // Adding a computer to the new workspace, outside any project: pick a
+      // computer and a folder, and it is in the sidebar. None is connected
+      // yet, so it is connected first: the server's other computers are
+      // offered, one click each; once one is in, the folder is next.
       await go(page, "电脑", narrow);
-      await clickVisible(page, page.getByRole("button", { name: "连上另一台电脑" }));
-      const add = page.locator(".app-modal");
-      await add.locator(".app-picker-row").first().waitFor({ timeout: 10_000 });
-      const offered = add.locator(".app-picker-row", { has: page.getByRole("button", { name: "加进来" }) }).first();
-      await offered.waitFor({ timeout: 10_000 });
-      const machineName = (await offered.locator(".app-picker-name").innerText()).trim();
-      const row = add.locator(".app-picker-row", { has: page.locator(".app-picker-name", { hasText: machineName }) }).first();
+      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "加一台电脑" }));
+      const pick = page.locator(".app-modal-add");
+      await pick.waitFor({ timeout: 10_000 });
+      if (!(await pick.locator("h3").first().innerText()).includes("加一台电脑")) throw new Error("工作区里加电脑不该说「给项目」");
+      await pick.getByText("还没有连上的电脑").waitFor({ timeout: 10_000 });
+      await clickVisible(page, pick.getByRole("button", { name: "另一台电脑…" }));
+      const add = page.locator(".app-modal").filter({ hasText: "连上另一台电脑" });
+      const row = add.locator(".app-picker-nearby:not([data-testid=machine-connected]) .app-picker-row", { has: page.locator(".app-picker-name", { hasText: "Studio Mac" }) }).first();
+      await row.waitFor({ timeout: 10_000 });
       await clickVisible(page, row.getByRole("button", { name: "加进来" }));
       await row.locator(".app-picker-done", { hasText: "已加进来" }).waitFor({ timeout: 10_000 });
+      const connected = add.locator("[data-testid=machine-connected]");
+      await connected.waitFor({ timeout: 20_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "dialog-add-computer-same-server");
-      await page.keyboard.press("Escape");
-      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+      await clickVisible(page, connected.getByRole("button", { name: "选一个文件夹" }));
+      await add.waitFor({ state: "hidden", timeout: 5_000 });
+      await pick.locator(".ws-computer.active", { hasText: /Studio Mac|这台电脑/ }).waitFor({ timeout: 10_000 });
+      await pick.locator("input.app-input").fill("~/code/team-b");
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-add-computer-folder");
+      await pick.locator("button[type=submit]").click();
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 20_000 });
+      // It is a computer of the workspace now: in the sidebar, and on the page.
+      if (narrow) await sidebar(page, true);
+      await page.locator(".sp-nav-pc", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      if (narrow) await sidebar(page, false);
+      await page.locator(".pc-row", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      if (narrow) await sidebar(page, true);
+      await settle(page, 300);
+      await shot(page, size, scheme, "workspace-computer-added");
       if (narrow) await sidebar(page, false);
     });
 

@@ -2350,7 +2350,7 @@ const server = http.createServer(async (req, res) => {
         const dir = typeof body.dir === "string" ? body.dir.trim() : "";
         if (!Array.isArray(body.allow_from) || body.allow_from.length === 0) return fail(res, 400, "invalid_argument", "a shell node needs at least one agent allowed to send it commands");
         if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
-        if (machine.id !== "m_studio") { // only Studio Mac allows full access in the mock
+        if (!machine.id.startsWith("m_studio")) { // only Studio Mac (in any workspace) allows full access in the mock
           return fail(res, 403, "permission_denied", `a shell node runs commands with full rights, but machine ${machine.name} allows at most workspace; the machine's owner can allow it with spawn.max_access: full in ~/.myco/machine.yaml`);
         }
         await sleep(1200);
