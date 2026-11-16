@@ -246,11 +246,63 @@ public struct RunProcess: Hashable, Sendable {
     /// following it).
     static let quietAfterSaying: TimeInterval = 120
 
+    /// A command that only keeps a session listening (`myco inbox
+    /// wait`/`pull`, `myco message ack`/`done`/`release`, a `cd` before
+    /// them): not work on a task. The CLI's `isChore` (trace_chores.go)
+    /// and the desktop app's.
+    public static func isChore(_ input: String) -> Bool {
+        var command = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let shell = command.range(of: #"^(?:/\S*/)?(?:ba|z)?sh\s+-l?c\s+"#, options: .regularExpression) {
+            command.removeSubrange(shell)
+        }
+        command = command.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard !command.isEmpty else { return false }
+        var seen = false
+        let parts = command.replacingOccurrences(of: #"&&|\|\||;|\n"#, with: "\u{1}", options: .regularExpression).split(separator: "\u{1}")
+        for part in parts {
+            let first = (part.split(separator: "|", omittingEmptySubsequences: false).first ?? "").trimmingCharacters(in: .whitespaces)
+            if first.isEmpty || first.range(of: #"^cd(?:\s|$)"#, options: .regularExpression) != nil { continue }
+            guard first.range(of: #"^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)"#, options: .regularExpression) != nil
+            else { return false }
+            seen = true
+        }
+        return seen
+    }
+
+    /// Leaves out the turns a session that receives in its conversation
+    /// woke for only to keep listening (its wait timed out and it started
+    /// it again): newer CLIs do not upload them, older ones do, and they
+    /// read as the agent at work again under an answer already given. The
+    /// first turn (the one that took the task) is always kept, and what a
+    /// run cost stays. The desktop app's `withoutChores`.
+    public static func withoutChores(_ events: [TraceEvent]) -> [TraceEvent] {
+        var out: [TraceEvent] = []
+        var turn: [TraceEvent] = []
+        var first = true
+        func worked(_ turn: [TraceEvent]) -> Bool {
+            turn.contains { $0.kind == "tool" && !isChore($0.data.input ?? "") }
+        }
+        for event in events {
+            turn.append(event)
+            guard event.kind == "turn_end" else { continue }
+            let tools = turn.filter { $0.kind == "tool" }
+            let chores = !tools.isEmpty && tools.allSatisfy { isChore($0.data.input ?? "") }
+            out += first || !chores ? turn : turn.filter { $0.kind == "usage" }
+            first = false
+            turn = []
+        }
+        // The turn still going, after one ended: shown once it does
+        // something (until then it may be only that).
+        out += first || worked(turn) ? turn : turn.filter { $0.kind == "usage" }
+        return out
+    }
+
     /// Whether a run still open has stopped, so is not at work: its session
-    /// ended its turn (`turn_end` is its latest step) or its run (`usage`),
-    /// it was set aside (held) and nothing came after, or the last thing it
-    /// did was say something and it has been silent since. A command still
-    /// running is at work however long. The desktop app's `pausedRun`.
+    /// ended its turn and it has done nothing since (a chore is nothing) or
+    /// its run (`usage`), it was set aside (held) and nothing came after, or
+    /// the last thing it did was say something and it has been silent
+    /// since. A command still running is at work however long. The desktop
+    /// app's `pausedRun`.
     /// - Parameters:
     ///   - events: the task's steps, oldest first.
     ///   - reports: its progress updates, oldest first.
@@ -259,7 +311,15 @@ public struct RunProcess: Hashable, Sendable {
         let stepAt = last?.at ?? .distantPast
         let reportAt = reports.last?.createdAt ?? .distantPast
         let activeAt = max(stepAt, reportAt)
-        if let last, last.kind == "turn_end" || last.kind == "usage", reportAt <= stepAt { return true }
+        // Its run over (usage ends a runner's run: the answer is on its way).
+        if let last, last.kind == "usage", reportAt <= stepAt { return true }
+        // Its turn over, and not at work since: after a turn ends, only a
+        // step that does something (not a chore, not only words) or a new
+        // report says it is at it again.
+        if let end = events.lastIndex(where: { $0.kind == "turn_end" }), reportAt <= (events[end].at ?? .distantPast),
+           !events[(end + 1)...].contains(where: { $0.kind == "tool" && !isChore($0.data.input ?? "") }) {
+            return true
+        }
         if task.status == "held" { return activeAt <= task.updatedAt }
         guard activeAt > .distantPast else { return false }
         let said = last == nil || last?.kind == "text" || last?.kind == "thinking" || reportAt > stepAt

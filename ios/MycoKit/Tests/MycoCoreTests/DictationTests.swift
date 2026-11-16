@@ -57,6 +57,30 @@ struct DictationTests {
         #expect(chinese.add("帮我改一下") == "帮我看一下帮我改一下")
     }
 
+    /// The desktop app's cases (TestUtterancesFinalRewritesTheStart,
+    /// TestUtterancesRevisionIsNotANewSentence).
+    @Test func stoppingDoesNotWriteTheSentenceTwice() {
+        var heard = Utterances()
+        _ = heard.add("我们先看一下日志")
+        heard.commit()
+        _ = heard.add("妹那边")
+        _ = heard.add("妹那边那妹妹那边有做了一些改动")
+        _ = heard.add("妹那边那妹妹那边有做了一些改动然后可能你可以参照着Mac那边的改动看移动端这边也能不能一起改一下")
+        // On stopping, the sentence as the recognizer settled on it, its
+        // first words rewritten: it takes the place of what was shown.
+        let settled = "妹可那边有做了一些改动然后可能你可以参照着Mac那边的改动看移动端这边也能不能一起改一下"
+        #expect(heard.add(settled, final: true) == "我们先看一下日志" + settled)
+        // Its session ends, and the same sentence comes once more.
+        heard.commit()
+        #expect(heard.add(settled, final: true) == "我们先看一下日志" + settled)
+
+        // A text that rewrites the start of a long sentence and is about
+        // as long is the same sentence, not a new one.
+        var revised = Utterances()
+        _ = revised.add("那妹妹那边有做了一些改动")
+        #expect(revised.add("妹可那边有做了一些改动吧") == "妹可那边有做了一些改动吧")
+    }
+
     @Test func heardWordsGoAfterWhatWasTyped() async {
         let listener = ScriptedSpeechListener(
             ["帮", "帮我看一下下载页", "然后", "然后改一下标题"], pause: .milliseconds(15), endsItself: true)

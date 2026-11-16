@@ -400,7 +400,7 @@ private final class CallLine: @unchecked Sendable {
         let over = final || failure != nil
         if !text.isEmpty {
             failures = 0
-            continuation.yield(.heard(words.add(text), final: over))
+            continuation.yield(.heard(words.add(text, final: final), final: over))
         }
         guard over else { return }
         // A session that fails as soon as it starts, again and again: the

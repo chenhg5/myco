@@ -282,7 +282,7 @@ public final class ConversationModel {
         for message in snapshot.messages { known[message.id] = message }
         for message in snapshot.colleagues ?? [] { colleagueMessages[message.id] = message }
         traces = snapshot.traces
-        processes = snapshot.traces.mapValues { RunProcess(events: $0) }
+        processes = snapshot.traces.mapValues { RunProcess(events: RunProcess.withoutChores($0)) }
         // Closed tasks' steps are complete: no need to fetch them again.
         settled = Set((snapshot.messages + (snapshot.colleagues ?? [])).filter { !$0.isOpen }.map(\.id)).intersection(snapshot.traces.keys)
         show(others: snapshot.others)
@@ -499,7 +499,10 @@ public final class ConversationModel {
             items = built
             revision += 1
         }
-        openTask = ConversationBuilder.openTask(me: me, messages: mine, paused: paused)
+        // One set aside takes what I type only once its steps say it is at
+        // it again (the same rule as its line in the conversation).
+        let moving = Set(mine.filter { $0.status == "held" && $0.to == agent && $0.isOpen && !paused.contains($0.id) }.map(\.id))
+        openTask = ConversationBuilder.openTask(me: me, messages: mine, paused: paused, moving: moving)
         let offered = ConversationBuilder.suggestion(me: me, messages: mine, open: openTask)
         if offered != suggestion { suggestion = offered }
         loaded = true
@@ -586,7 +589,8 @@ public final class ConversationModel {
             if !fresh.isEmpty || processes[task.id] == nil {
                 let events = known + fresh
                 traces[task.id] = events
-                let process = RunProcess(events: events)
+                // (without the turns it woke for only to keep listening)
+                let process = RunProcess(events: RunProcess.withoutChores(events))
                 if processes[task.id] != process {
                     processes[task.id] = process
                     revision += 1
