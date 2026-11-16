@@ -11,6 +11,10 @@ public enum Route: Hashable, Sendable {
     case project(String)
     /// An agent's conversation; `focus` is a task to land on.
     case agent(String, focus: String?)
+    /// What two agents said to each other, to read: `agent` did the work
+    /// (its steps show), `with` is the one that gave it. `focus` is a
+    /// message to land on. Opened from a handoff card.
+    case exchange(agent: String, with: String, focus: String?)
     case projectInfo(String)
 }
 

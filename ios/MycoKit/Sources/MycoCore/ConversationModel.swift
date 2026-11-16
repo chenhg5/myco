@@ -30,8 +30,19 @@ public struct PendingFile: Identifiable, Hashable, Sendable {
 public final class ConversationModel {
     public let agent: String
     /// Set on a project's page: the conversation is with its coordinator,
-    /// and the coordinator's dispatches show as capsules.
+    /// and what it and the members handed each other shows as cards.
     public let project: String?
+    /// Set on a look at what two agents said to each other (opened from a
+    /// handoff card): the other one. The page then shows their exchange
+    /// as the other one's conversation with the agent, and nothing can be
+    /// sent from it.
+    public let observed: String?
+
+    /// Whose conversation with the agent this is: mine, or the other agent's.
+    private var me: String { observed ?? session.me }
+
+    /// A look at two agents' exchange: nothing is sent from here.
+    public var readOnly: Bool { observed != nil }
 
     public private(set) var items: [ConversationItem] = []
     public private(set) var openTask: Message?
@@ -112,8 +123,11 @@ public final class ConversationModel {
     /// Every message of this conversation seen so far, by id: the newest
     /// page, refreshed all the time, and the older pages scrolled back to.
     private var known: [String: Message] = [:]
-    private var others: [Message] = []
-    /// On a member's page: its exchanges with its colleagues, by id.
+    /// On a project's page: what the coordinator and the members handed
+    /// each other, one card per exchange.
+    private var cards: [Handoff] = []
+    /// On a member's page: its exchanges with its colleagues, by id (they
+    /// show as handoff cards, not as messages).
     private var colleagueMessages: [String: Message] = [:]
     private var reloads = 0
     /// The steps and the surroundings being fetched, while they are.
@@ -144,10 +158,11 @@ public final class ConversationModel {
     /// How often an open conversation refreshes.
     public static let pollInterval: Duration = .seconds(2)
 
-    public init(session: WorkspaceSession, agent: String, project: String? = nil) {
+    public init(session: WorkspaceSession, agent: String, project: String? = nil, observed: String? = nil) {
         self.session = session
         self.agent = agent
         self.project = project
+        self.observed = observed
     }
 
     /// How a task of mine was worked on, when its steps are known.
@@ -263,12 +278,12 @@ public final class ConversationModel {
     /// What is kept of a conversation between launches.
     struct Snapshot: Codable {
         var messages: [Message]
-        var others: [Message]
         var traces: [String: [TraceEvent]]
         var colleagues: [Message]?
+        var cards: [Handoff]?
     }
 
-    private var snapshotName: String { "conversation-" + agent + "-" + (project ?? "") }
+    private var snapshotName: String { "conversation-" + agent + "-" + (project ?? "") + (observed.map { "-with-" + $0 } ?? "") }
     private var restored = false
     private var lastSaved: Data?
 
@@ -285,7 +300,7 @@ public final class ConversationModel {
         processes = snapshot.traces.mapValues { RunProcess(events: RunProcess.withoutChores($0)) }
         // Closed tasks' steps are complete: no need to fetch them again.
         settled = Set((snapshot.messages + (snapshot.colleagues ?? [])).filter { !$0.isOpen }.map(\.id)).intersection(snapshot.traces.keys)
-        show(others: snapshot.others)
+        show(cards: snapshot.cards ?? [])
     }
 
     /// Keeps the page fresh until the surrounding task is cancelled (the
@@ -327,7 +342,7 @@ public final class ConversationModel {
     ///   Without it they are fetched alongside: one slow answer among
     ///   them must not keep back a message that is already here.
     private func load(whole: Bool) async {
-        let me = session.me
+        let me = self.me
         guard !me.isEmpty else { return }
         do {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
@@ -338,7 +353,7 @@ public final class ConversationModel {
             newestPage = page.messages
             // What was said shows at once. (The first look shows the page
             // whole: see below.)
-            if loaded { show(others: others) }
+            if loaded { show(cards: cards) }
             // One fetch of the steps at a time. Asked to read it all now,
             // an earlier one that may be hanging is given up, not waited for.
             if whole {
@@ -358,7 +373,7 @@ public final class ConversationModel {
                     try? await Task.sleep(for: .milliseconds(30))
                 }
             }
-            if !loaded, !Task.isCancelled { show(others: others) }
+            if !loaded, !Task.isCancelled { show(cards: cards) }
         } catch {
             // Leaving the page is not a failure to report.
             guard !Task.isCancelled, !(error is CancellationError) else { return }
@@ -385,19 +400,17 @@ public final class ConversationModel {
     }
 
     private func loadDetails(around: Bool) async {
-        var others = self.others
+        var cards = self.cards
         // My tasks' steps come while the agent's other work is asked for.
         let myTasks = Self.traceable(Array(known.values), for: agent)
         async let mine: Void = loadSteps(of: myTasks)
-        if around { others = await loadSurroundings() }
+        // (A look at two agents' exchange is only that exchange.)
+        if around, observed == nil { cards = await loadSurroundings() }
         await mine
-        if !colleagueMessages.isEmpty {
-            await loadSteps(of: Self.traceable(Array(known.values) + Array(colleagueMessages.values), for: agent))
-        }
         guard !Task.isCancelled else { return }
-        show(others: others)
+        show(cards: cards)
         // Only the newest pages are kept between launches.
-        await save(Snapshot(messages: newestPage, others: others, traces: traces, colleagues: Array(colleagueMessages.values)))
+        await save(Snapshot(messages: newestPage, traces: traces, colleagues: Array(colleagueMessages.values), cards: cards))
     }
 
     /// How long the first look at a conversation waits for all of it
@@ -430,17 +443,23 @@ public final class ConversationModel {
         guard hasEarlier, !loadingEarlier, let oldest = known.values.map(\.createdAt).min() else { return false }
         loadingEarlier = true
         defer { loadingEarlier = false }
-        guard let page = try? await session.hub.exchanges(between: session.me, and: agent, before: oldest) else { return false }
+        guard let page = try? await session.hub.exchanges(between: me, and: agent, before: oldest) else { return false }
         wentBack = true
         hasEarlier = page.more && !page.messages.isEmpty
         for message in page.messages { known[message.id] = message }
-        show(others: others)
+        show(cards: cards)
         return !page.messages.isEmpty
     }
 
-    private func show(others: [Message]) {
-        self.others = others
-        let me = session.me
+    /// Someone who is not an agent: what such a one says is a message,
+    /// never a handoff card.
+    private func isPerson(_ name: String) -> Bool {
+        name.hasPrefix("@") || (session.agent(name).map { Naming.kind(of: $0) == .human } ?? false)
+    }
+
+    private func show(cards: [Handoff]) {
+        self.cards = cards
+        let me = self.me
         // What was shown as being sent is on the page for real now.
         if !outgoing.isEmpty {
             outgoing.removeAll { entry in
@@ -451,8 +470,8 @@ public final class ConversationModel {
                 return true
             }
         }
-        // Mine with the agent, and on a member's page the agent's with its
-        // colleagues, as one conversation.
+        // Mine with the agent. What the agent and its colleagues said to
+        // each other is not part of it: one card per exchange instead.
         // Not what I took back, and not what I took out of my view (on any
         // of my devices): a task taken out takes its updates and what was
         // added to it along; its answer stays until taken out too.
@@ -462,8 +481,15 @@ public final class ConversationModel {
             if message.type == "progress" || message.type == "steer", let task = message.replyTo, hidden.contains(task) { return false }
             return true
         }
-        var all = known.filter { shown($0.value) }
-        for (id, message) in colleagueMessages where all[id] == nil && shown(message) { all[id] = message }
+        let all = known.filter { shown($0.value) }
+        var handoffs: [Handoff] = []
+        if observed == nil {
+            handoffs = project != nil ? cards : ConversationBuilder.handoffs(
+                between: colleagueMessages.values.filter { message in
+                    known[message.id] == nil && shown(message) && message.from != me && message.to != me
+                        && !isPerson(message.from) && !isPerson(message.to)
+                }, and: agent)
+        }
         // Which open runs have stopped for now: not at work.
         let reports = Dictionary(grouping: all.values.filter { $0.type == "progress" }, by: { $0.replyTo ?? $0.threadId })
         var paused: Set<String> = []
@@ -486,7 +512,7 @@ public final class ConversationModel {
             revision += 1
         }
         let built = ConversationBuilder.items(
-            me: me, agent: agent, messages: Array(all.values), others: others,
+            me: me, agent: agent, messages: Array(all.values), handoffs: handoffs,
             processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
@@ -516,7 +542,7 @@ public final class ConversationModel {
             startedProjectThread = true
             return SendRequest(to: agent, body: body, project: project, after: after, attachments: attachments)
         }
-        let thread = ConversationBuilder.threadToContinue(me: session.me, messages: Array(known.values))
+        let thread = ConversationBuilder.threadToContinue(me: me, messages: Array(known.values))
         return SendRequest(
             to: agent, body: body, threadId: thread, project: thread == nil ? project : nil, after: after, attachments: attachments)
     }
@@ -528,11 +554,11 @@ public final class ConversationModel {
     }
 
     /// What surrounds my own exchange with the agent, as the desktop app
-    /// gathers it. On a project's page (the agent is its coordinator): the
-    /// work it gave the other members, returned to show as capsules. On a
+    /// gathers it. On a project's page (the agent is its coordinator): what
+    /// it and the members handed each other, returned as cards. On a
     /// member's own page: its exchanges with its colleagues in its
-    /// projects, merged into the conversation.
-    private func loadSurroundings() async -> [Message] {
+    /// projects, kept to make its cards from.
+    private func loadSurroundings() async -> [Handoff] {
         let hub = session.hub
         let agent = agent
         // Which projects to look through: this page's, or the agent's.
@@ -551,7 +577,8 @@ public final class ConversationModel {
         }
         if project != nil {
             guard let found = scanned.first else { return [] }
-            return feed(found).compactMap(\.task).filter { $0.from == agent && $0.to != session.me }
+            let mine = session.me
+            return ConversationBuilder.handoffs(ofHome: feed(found), coordinator: agent) { $0 == mine || isPerson($0) }
         }
         var colleagues: [String] = []
         for project in scanned {
@@ -643,7 +670,7 @@ public final class ConversationModel {
             // the one shown as being sent (`show`), with no wait between.
             if let sent {
                 known[sent.id] = sent
-                show(others: others)
+                show(cards: cards)
             }
         } catch {
             // Give it all back: nothing typed or picked is lost to a failed send.
@@ -729,7 +756,7 @@ public final class ConversationModel {
         // It is the open task from now on, before the page has read it
         // back: what is said next is added to it.
         known[sent.id] = sent
-        show(others: others)
+        show(cards: cards)
         Task { await reload() }
         return (sent.id, false)
     }
@@ -811,7 +838,7 @@ public final class ConversationModel {
             let madeUp = ConversationBuilder.filesOnlyBodies(names).values.contains(item.body)
             draft = madeUp ? "" : item.body
         }
-        show(others: others)
+        show(cards: cards)
     }
 
     /// Puts the files of a message taken back into the box again. They are
@@ -842,7 +869,7 @@ public final class ConversationModel {
         } catch {
             problem = (error as? HubError)?.message ?? error.localizedDescription
         }
-        show(others: others)
+        show(cards: cards)
     }
 
     /// Sends the first waiting message once nothing is open. True if it went.

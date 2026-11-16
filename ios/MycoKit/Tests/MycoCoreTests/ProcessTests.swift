@@ -216,11 +216,11 @@ struct ProcessTests {
         #expect(extras.reports.first?.text == "好，计划：")
         #expect(extras.added.map(\.text) == ["and c"])
         // With its run shown, they are not rows of the conversation too.
-        let rows = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], processes: ["t1"], status: { _ in nil }, now: now)
+        let rows = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, processes: ["t1"], status: { _ in nil }, now: now)
         #expect(!rows.contains { $0.id == "p1" || $0.id == "s1" })
         #expect(rows.contains { $0.id == "t1.process" })
         // Without a run to put them in, they stay rows.
-        let plain = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, others: [], status: { _ in nil }, now: now)
+        let plain = ConversationBuilder.items(me: "me", agent: "coder", messages: messages, status: { _ in nil }, now: now)
         #expect(plain.contains { $0.id == "p1" })
         #expect(plain.contains { $0.id == "s1" })
     }
@@ -338,42 +338,63 @@ struct ConversationProcessTests {
         #expect(other.items.isEmpty)
     }
 
-    @Test func aMembersPageShowsTheWorkItsCoordinatorGaveIt() async {
+    @Test func aMembersPageShowsWhatItAndItsColleaguesHandedEachOtherAsCards() async {
         let session = WorkspaceSession(id: "demo", name: "Demo", hub: FakeHub())
         await session.refresh()
         let model = ConversationModel(session: session, agent: "studio-codex-7f3a")
         await model.reload()
-        // The coordinator's task is part of the conversation, named, with
-        // how it is being worked on and where it stands.
-        let asked = model.items.first { $0.id == "d1" }
-        guard case .mine(let text, false, "cloud-lead")? = asked?.kind else {
-            Issue.record("the coordinator's task shows as something asked, by the coordinator")
+        // The coordinator's task is not a message in my conversation with
+        // the member (it would read as if I had asked): it is a card.
+        #expect(!model.items.contains { $0.id == "d1" })
+        #expect(!model.items.contains { $0.id == "d1.process" })
+        guard case .handoff(let card)? = model.items.first(where: { $0.id == "d1.handoff" })?.kind else {
+            Issue.record("the coordinator's task shows as a handoff card")
             return
         }
-        #expect(text.hasPrefix("设计 Hub 的推送接口"))
-        #expect(model.items.contains { $0.id == "d1.process" })
-        guard case .status(.working, "d1")? = model.items.first(where: { $0.id == "d1.status" })?.kind else {
-            Issue.record("and says it is being worked on")
-            return
-        }
-        // What I said to it myself is there too; nothing is a capsule.
+        #expect(!card.outgoing)
+        #expect(card.other == "cloud-lead")
+        #expect(card.isTask)
+        #expect(card.text.hasPrefix("设计 Hub 的推送接口"))
+        #expect(card.state == .working)
+        // What I said to it myself is the conversation.
         #expect(model.items.contains { $0.kind == .mine(text: "推送中转先别定用哪家，等我回来再说。", steer: false, by: nil) })
-        #expect(!model.items.contains { if case .dispatch = $0.kind { return true } else { return false } })
+        #expect(!model.items.contains { if case .mine(_, _, let by) = $0.kind { return by != nil } else { return false } })
         // The input speaks to my own open task only: there is none.
         #expect(model.openTask == nil)
         #expect(model.action == .send)
+        #expect(!model.readOnly)
+
+        // The card opens the two agents' exchange, to read: the
+        // coordinator's task as asked, how the member works on it.
+        let theirs = session.exchange(of: "studio-codex-7f3a", with: "cloud-lead")
+        await theirs.reload()
+        #expect(theirs.readOnly)
+        guard case .mine(let text, false, nil)? = theirs.items.first(where: { $0.id == "d1" })?.kind else {
+            Issue.record("in their exchange the coordinator's task is what was asked")
+            return
+        }
+        #expect(text.hasPrefix("设计 Hub 的推送接口"))
+        #expect(theirs.items.contains { $0.id == "d1.process" })
+        // Only theirs: what I said to the member is not in it.
+        #expect(!theirs.items.contains { $0.id == "b1" })
+        #expect(!theirs.items.contains { if case .handoff = $0.kind { return true } else { return false } })
     }
 
-    @Test func aProjectsPageShowsWhatItsCoordinatorHandedOut() async {
+    @Test func aProjectsPageShowsWhatItsCoordinatorAndMembersHandedEachOther() async {
         let session = WorkspaceSession(id: "demo", name: "Demo", hub: FakeHub())
         await session.refresh()
         let model = ConversationModel(session: session, agent: "cloud-lead", project: "myco-ios")
         await model.reload()
-        let handedOut = model.items.compactMap { item -> String? in
-            if case .dispatch(let d) = item.kind { return d.to }
+        let cards = model.items.compactMap { item -> Handoff? in
+            if case .handoff(let card) = item.kind { return card }
             return nil
         }
-        #expect(Set(handedOut) == ["studio-codex-7f3a", "studio-claude-2b9c", "studio-claude-55d0", "laptop-claude-a1e2"])
+        #expect(Set(cards.filter(\.outgoing).map(\.other)) == ["studio-codex-7f3a", "studio-claude-2b9c", "studio-claude-55d0", "laptop-claude-a1e2"])
+        // The tester handed its list back: the card says so, with its first line.
+        let tested = cards.first { $0.id == "d3" }
+        let came = tested?.result ?? ""
+        #expect(tested?.state == .done)
+        #expect(came.hasPrefix("清单写好了"))
         // Its page is my conversation with it: the members' work is not mixed in.
         #expect(!model.items.contains { if case .mine(_, _, let by) = $0.kind { return by != nil } else { return false } })
     }

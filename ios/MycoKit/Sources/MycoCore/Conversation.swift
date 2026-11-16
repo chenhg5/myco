@@ -34,8 +34,9 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         /// where it stands now. One whose run has stopped, or that has not
         /// begun, gets no line: a task reads as a message, not as a state.
         case status(RunState, taskID: String)
-        /// Work someone else gave, as one line: who, to whom, what, state.
-        case dispatch(Dispatch)
+        /// What the agent and another agent said to each other, as one
+        /// card: who gave what to whom, how it stands, what came back.
+        case handoff(Handoff)
     }
 
     public var id: String
@@ -64,23 +65,58 @@ public enum TaskReceipt: Hashable, Sendable {
     case later
 }
 
-/// A task between two others, shown as a one-line capsule.
-public struct Dispatch: Hashable, Sendable {
-    public var taskID: String
-    public var from: String
-    public var to: String
-    public var firstLine: String
-    public var state: RunState
+/// What two agents said to each other, in a conversation that is mine with
+/// one of them: never as messages (they would read as if it were talking
+/// to me), one card per exchange instead. A line says who gave what to
+/// whom and how it is going; once something came back, a second line holds
+/// the first line of it: the handoff, not the back and forth. A tap opens
+/// their whole exchange. The desktop app's `Handoff.tsx`.
+public struct Handoff: Hashable, Sendable, Codable, Identifiable {
+    public enum State: String, Hashable, Sendable, Codable {
+        case queued, working, done, failed, note
+    }
+
+    /// The first message of the exchange: its key, and where it opens.
+    public var id: String
+    /// When it started: where the card goes in the conversation.
+    public var at: Date
+    /// When it last moved.
+    public var updated: Date
+    /// The agent whose page this is sent it; else it was sent to it.
+    public var outgoing: Bool
+    /// The other agent.
+    public var other: String
+    /// A task (work to do), or only a note.
+    public var isTask: Bool
+    /// The first line of what was sent.
+    public var text: String
+    public var state: State
+    /// The first line of what came back.
+    public var result: String?
+
+    public init(
+        id: String, at: Date, updated: Date, outgoing: Bool, other: String, isTask: Bool, text: String, state: State,
+        result: String? = nil
+    ) {
+        self.id = id
+        self.at = at
+        self.updated = updated
+        self.outgoing = outgoing
+        self.other = other
+        self.isTask = isTask
+        self.text = text
+        self.state = state
+        self.result = result
+    }
 }
 
 /// Builds what a conversation page shows. Pure: same input, same list.
 public enum ConversationBuilder {
     /// - Parameters:
     ///   - agent: whose page this is.
-    ///   - messages: every message to show, any order: mine with the agent
-    ///     and, on a member's page, the agent's with its colleagues.
-    ///   - others: tasks the agent gave out, to show as one-line capsules
-    ///     (a coordinator's hand-outs on its project's page).
+    ///   - messages: every message to show, any order: mine with the agent.
+    ///   - handoffs: what the agent and other agents said to each other,
+    ///     one card per exchange (`handoffs(between:and:)`, `handoffs(ofHome:)`).
     ///   - processes: tasks whose steps are known and worth a row. What
     ///     such a task reported, and what was added to it, are drawn inside
     ///     its run where each came, not as rows of their own.
@@ -89,7 +125,7 @@ public enum ConversationBuilder {
     ///     they get no line saying where they stand.
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
-        me: String, agent: String, messages all: [Message], others: [Message], processes: Set<String> = [],
+        me: String, agent: String, messages all: [Message], handoffs: [Handoff] = [], processes: Set<String> = [],
         tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
@@ -274,13 +310,92 @@ public enum ConversationBuilder {
             // Where the last update was: right above the answer.
             items.append(.init(id: taskID + ".progress", at: last.message.createdAt, kind: .pastProgress(texts: ordered.map(\.said))))
         }
-        for task in others where task.type == "task" {
-            let dispatch = Dispatch(
-                taskID: task.id, from: task.from, to: task.to, firstLine: firstLine(of: task.body),
-                state: RunState.of(task, recipient: status(task.to), now: now))
-            items.append(.init(id: task.id + ".dispatch", at: task.createdAt, kind: .dispatch(dispatch)))
+        for handoff in handoffs {
+            items.append(.init(id: handoff.id + ".handoff", at: handoff.at, kind: .handoff(handoff)))
         }
         return withTimeBreaks(items.sorted { ($0.at, $0.id) < ($1.at, $1.id) })
+    }
+
+    private static func handoffState(of task: Message) -> Handoff.State {
+        switch task.status {
+        case "done": return .done
+        case "failed": return .failed
+        case "acked", "held": return .working
+        default: return .queued
+        }
+    }
+
+    /// The cards for what `agent` and the others said to each other (the
+    /// messages between them, as loaded): one per task, the notes around
+    /// it folded into it, a note on its own its own card. Updates and
+    /// additions do not show: the handoff, not the work. The desktop app's
+    /// `handoffsFrom`.
+    public static func handoffs(between messages: [Message], and agent: String) -> [Handoff] {
+        var threads: [String: [Message]] = [:]
+        for message in messages where message.type != "progress" && message.type != "steer" {
+            threads[message.threadId, default: []].append(message)
+        }
+        var out: [Handoff] = []
+        for list in threads.values {
+            // (who began the card, and its task)
+            var cards: [(card: Handoff, from: String, task: String?)] = []
+            for message in list.sorted(by: { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }) {
+                let isTask = message.type == "task"
+                if isTask || cards.isEmpty {
+                    cards.append((
+                        Handoff(
+                            id: message.id, at: message.createdAt, updated: max(message.updatedAt, message.createdAt),
+                            outgoing: message.from == agent, other: message.from == agent ? message.to : message.from,
+                            isTask: isTask, text: firstLine(of: message.body), state: isTask ? handoffState(of: message) : .note),
+                        message.from, isTask ? message.id : nil))
+                    continue
+                }
+                // What came back: the answer to the task, or a note from the other side.
+                var current = cards[cards.count - 1]
+                if message.type == "event", message.replyTo == nil || message.replyTo == current.task {
+                    current.card.state = .failed
+                } else if message.from != current.from, message.type == "reply" || message.type == "note" {
+                    let line = firstLine(of: message.body)
+                    if !line.isEmpty { current.card.result = line }
+                }
+                current.card.updated = max(current.card.updated, message.updatedAt, message.createdAt)
+                cards[cards.count - 1] = current
+            }
+            out += cards.map(\.card)
+        }
+        return out.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+    }
+
+    /// The cards on a project's page, from its threads: the work the
+    /// coordinator handed out, and what the members sent it. Only between
+    /// agents: what a person writes is a message. The desktop app's
+    /// `handoffsOfHome`.
+    public static func handoffs(ofHome items: [RecentItem], coordinator: String, isPerson: (String) -> Bool) -> [Handoff] {
+        var out: [Handoff] = []
+        for item in items where item.kind == "thread" {
+            guard let first = item.task ?? item.first, !isPerson(first.from), !isPerson(first.to),
+                  first.from == coordinator || first.to == coordinator
+            else { continue }
+            let outgoing = first.from == coordinator
+            let isTask = first.type == "task"
+            var back: Message?
+            if let answer = item.answer, answer.from != first.from {
+                back = answer
+            } else if item.last.id != first.id, item.last.from != first.from, item.last.type == "reply" || item.last.type == "note" {
+                back = item.last
+            }
+            let state: Handoff.State
+            if !isTask {
+                state = .note
+            } else {
+                state = Handoff.State(rawValue: item.state ?? "").flatMap { $0 == .note ? nil : $0 } ?? handoffState(of: first)
+            }
+            out.append(Handoff(
+                id: first.id, at: first.createdAt, updated: item.updatedAt, outgoing: outgoing,
+                other: outgoing ? first.to : first.from, isTask: isTask, text: firstLine(of: first.body), state: state,
+                result: back.map { firstLine(of: $0.body) }.flatMap { $0.isEmpty ? nil : $0 }))
+        }
+        return out.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
     }
 
     /// A long quiet stretch gets the time written before what follows it.

@@ -334,56 +334,92 @@ public struct NoticeLine: View {
     }
 }
 
-/// Work given to someone, as one line: whose face and name, what, and
-/// where it stands. The name gives way first: the task is what is read.
-public struct DispatchCapsule: View {
+/// What two agents handed each other, as a card in a conversation that is
+/// not theirs: who gave what to whom and where it stands, and under it the
+/// first line of what came back. The name gives way first: what was
+/// handed over is what is read.
+public struct HandoffCard: View {
     let face: AvatarView.Face
     let name: String
+    /// "To" or "From", in words.
+    let label: String
+    /// The label comes before the name ("To X") or after it ("X · From").
+    let labelFirst: Bool
     let text: String
     let stateText: String
     let tone: StatusTone
-    /// The whole line in words, for VoiceOver ("To X: …, Working").
+    /// The first line of what came back.
+    let result: String?
+    /// The whole card in words, for VoiceOver ("To X: …, Working").
     let spoken: String
-    /// Where a tap leads; nil for a capsule that only reports.
+    /// Where a tap leads; nil for a card that only reports.
     let action: (() -> Void)?
 
     public init(
-        face: AvatarView.Face, name: String, text: String, stateText: String, tone: StatusTone, spoken: String,
-        action: (() -> Void)? = nil
+        face: AvatarView.Face, name: String, label: String, labelFirst: Bool, text: String, stateText: String, tone: StatusTone,
+        result: String? = nil, spoken: String, action: (() -> Void)? = nil
     ) {
         self.face = face
         self.name = name
-        self.spoken = spoken
+        self.label = label
+        self.labelFirst = labelFirst
         self.text = text
         self.stateText = stateText
         self.tone = tone
+        self.result = result
+        self.spoken = spoken
         self.action = action
     }
 
     public var body: some View {
         if let action {
-            Button(action: action) { capsule }.buttonStyle(PressScaleStyle())
+            Button(action: action) { card }.buttonStyle(PressScaleStyle())
         } else {
-            capsule
+            card
         }
     }
 
-    private var capsule: some View {
-        HStack(spacing: 8) {
-            AvatarView(face, size: 22)
+    private var who: some View {
+        HStack(spacing: 6) {
+            AvatarView(face, size: 20)
             Text(name).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg2).lineLimit(1)
                 .frame(maxWidth: 84, alignment: .leading).fixedSize(horizontal: true, vertical: false)
-            Text(text).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)
-                .layoutPriority(1)
-            Spacer(minLength: 6)
-            StatusDot(tone, size: 6)
-            Text(stateText).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
-            if action != nil {
-                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(MycoColor.faint)
+        }
+    }
+
+    private var said: some View {
+        Text(label).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                if labelFirst {
+                    said
+                    who
+                } else {
+                    who
+                    said
+                }
+                Text(text).font(.subheadline).foregroundStyle(MycoColor.muted).lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 6)
+                StatusDot(tone, size: 6)
+                Text(stateText).font(.footnote).foregroundStyle(MycoColor.muted).fixedSize()
+                if action != nil {
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(MycoColor.faint)
+                }
+            }
+            if let result, !result.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "arrow.turn.down.right").font(.caption2.weight(.semibold)).foregroundStyle(MycoColor.faint)
+                    Text(result).font(.subheadline).foregroundStyle(MycoColor.fg2).lineLimit(1)
+                }
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(MycoColor.line, lineWidth: 0.5))
         .accessibilityElement(children: .ignore)

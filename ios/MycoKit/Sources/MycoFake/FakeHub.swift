@@ -163,9 +163,11 @@ public actor FakeHub: HubAPI {
             }
             var parties: [String] = []
             for m in sorted { for p in [m.from, m.to] where !parties.contains(p) { parties.append(p) } }
-            return RecentItem(
+            var item = RecentItem(
                 threadId: id, participants: parties, updatedAt: sorted.map(\.updatedAt).max() ?? first.createdAt,
                 last: last, task: task, answer: answer, open: open, state: state, project: first.project)
+            item.first = first
+            return item
         }
         .sorted { $0.updatedAt > $1.updatedAt }
     }
