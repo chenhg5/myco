@@ -321,11 +321,17 @@ public enum ConversationBuilder {
     /// on (its turn is over: `paused`): what I type then is a new message,
     /// as in a chat, and there is nothing to stop. Unless it asks me
     /// something, when what I type is the answer. The desktop app's rule.
-    public static func openTask(me: String, messages: [Message], paused: Set<String> = []) -> Message? {
+    /// `moving`: tasks set aside that the agent is at again (new steps
+    /// since): those take what I type like any at work. One rule for the
+    /// input and for the line that says it is working.
+    public static func openTask(me: String, messages: [Message], paused: Set<String> = [], moving: Set<String> = []) -> Message? {
         let waiting = Set(queuedBehind(messages).map(\.id))
+        func atWork(_ task: Message) -> Bool {
+            task.status == "held" ? moving.contains(task.id) : !paused.contains(task.id)
+        }
         return messages
             .filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }
-            .filter { ($0.status != "held" && !paused.contains($0.id)) || !($0.asking ?? "").isEmpty }
+            .filter { atWork($0) || !($0.asking ?? "").isEmpty }
             .max { $0.createdAt < $1.createdAt }
     }
 

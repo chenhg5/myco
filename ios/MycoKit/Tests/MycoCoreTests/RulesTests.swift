@@ -262,6 +262,8 @@ struct ConversationBuilderTests {
         var asking = held
         asking.asking = "p9"
         #expect(ConversationBuilder.openTask(me: "me", messages: [asking])?.id == "t1")
+        // Set aside, then at it again (its steps say so): it takes it.
+        #expect(ConversationBuilder.openTask(me: "me", messages: [held], moving: ["t1"])?.id == "t1")
         // Another one still open takes it.
         let open = Message(id: "t2", from: "me", to: "coder", body: "and this", status: "acked", createdAt: at(-50))
         #expect(ConversationBuilder.openTask(me: "me", messages: [held, open])?.id == "t2")

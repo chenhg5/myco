@@ -181,7 +181,7 @@ private final class Ear: @unchecked Sendable {
         guard !ended, session == self.session else { return }
         if !text.isEmpty {
             everHeard = true
-            continuation.yield(heard.add(text))
+            continuation.yield(heard.add(text, final: final))
         }
         guard final || failure != nil else { return }
         // The session is over. What it said stays; the next goes after it.

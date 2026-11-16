@@ -35,12 +35,20 @@ public protocol SpeechListener: AnyObject {
 public struct Utterances: Sendable {
     private var done = ""
     private var last = ""
+    /// The sentence the last session ended on.
+    private var ended = ""
 
     public init() {}
 
-    /// Takes the recognizer's text now and answers all of it so far.
-    public mutating func add(_ text: String) -> String {
-        if !last.isEmpty, Self.startsOver(last, text) { done = Self.join(done, last) }
+    /// Takes the recognizer's text now and answers all of it so far. A
+    /// `final` text is the sentence as the recognizer settled on it, never
+    /// a new one: on stopping it may rewrite the first words, and taken
+    /// for a new sentence it would be written twice. (The desktop app's
+    /// rule, internal/console/dictation.go.)
+    public mutating func add(_ text: String, final: Bool = false) -> String {
+        // The settled sentence once more, after its session ended.
+        if final, last.isEmpty, text == ended { return done }
+        if !last.isEmpty, !final, Self.startsOver(last, text) { done = Self.join(done, last) }
         last = text
         return Self.join(done, text)
     }
@@ -48,6 +56,7 @@ public struct Utterances: Sendable {
     /// Ends the current sentence (the recognizer's session ended): what
     /// comes next goes after it, even if it starts the same way.
     public mutating func commit() {
+        if !last.isEmpty { ended = last }
         done = Self.join(done, last)
         last = ""
     }
@@ -60,6 +69,9 @@ public struct Utterances: Sendable {
         var same = 0
         while same < p.count, same < n.count, p[same] == n[same] { same += 1 }
         if same >= 2 || same == p.count || same == n.count { return false }
+        // A new sentence has only just begun: much shorter than the one
+        // before. About as long is the same one, heard again differently.
+        if 2 * n.count > p.count { return false }
         // The first word or two may still change as more is heard.
         return p.count > 3
     }

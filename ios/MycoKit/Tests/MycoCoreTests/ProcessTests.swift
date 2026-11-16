@@ -92,6 +92,60 @@ struct ProcessTests {
         #expect(!paused([event(1, "tool", -30)], held))
     }
 
+    @Test func aTurnThatOnlyKeepsListeningIsNotWork() {
+        // The CLI's own cases (trace_chores_test.go).
+        let cases: [String: Bool] = [
+            "myco inbox wait --timeout 55m --format text": true,
+            "cd /home/user/myco && myco inbox wait --timeout 55m": true,
+            "myco inbox pull --format text 2>&1 | head -40": true,
+            "myco message ack --id msg_x >/dev/null 2>&1; echo ok": false,
+            "myco message ack --id msg_x && myco inbox wait": true,
+            #"bash -lc "myco inbox wait --timeout 55m""#: true,
+            "myco message reply --id msg_x --body done": false,
+            "myco message progress --id msg_x --body 'half way'": false,
+            "go test ./... && myco inbox wait": false,
+            "": false,
+            "cd /tmp": false,
+            "myco inbox": false,
+            "myco message done --id msg_y": true,
+        ]
+        for (input, want) in cases {
+            #expect(RunProcess.isChore(input) == want, "\(input)")
+        }
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(seconds) }
+        var seq = 0
+        func event(_ kind: String, _ seconds: TimeInterval, _ input: String? = nil) -> TraceEvent {
+            seq += 1
+            return TraceEvent(seq: seq, kind: kind, data: TraceStep(text: "x", tool: input == nil ? nil : "Bash", input: input), at: at(seconds))
+        }
+        let wait = "myco inbox wait --timeout 55m"
+        // The turn that took the task (chores and all), its answer, then
+        // two turns that only started the wait again, one of them going.
+        let took = [event("tool", -900, "myco message ack --id t1"), event("tool", -890, "go test ./..."), event("text", -880), event("turn_end", -870)]
+        let woke = [event("thinking", -500), event("tool", -499, wait), event("tool_result", -498), event("usage", -497), event("turn_end", -496)]
+        let going = [event("thinking", -20), event("tool", -19, wait)]
+        let kept = RunProcess.withoutChores(took + woke + going)
+        #expect(kept.map(\.seq) == took.map(\.seq) + [woke[3].seq], "only what it did, and what the idle turn cost")
+        // A first turn of chores alone is the task being taken: kept.
+        let first = [event("tool", -100, "myco message ack --id t1"), event("turn_end", -99)]
+        #expect(RunProcess.withoutChores(first) == first)
+        // A later turn that does something is work again, chores and all.
+        let again = [event("tool", -10, "myco inbox pull"), event("tool", -9, "make test")]
+        #expect(RunProcess.withoutChores(took + again) == took + again)
+        // Nothing to leave out: the same steps.
+        #expect(RunProcess.withoutChores(took) == took)
+
+        // And such a turn does not make the run look at work: its turn
+        // ended, and only chores came since.
+        let task = Message(id: "t1", from: "me", to: "coder", body: "do it", status: "acked", createdAt: at(-1_000), updatedAt: at(-950))
+        #expect(RunProcess.isPaused(events: took + going, task: task, reports: [], now: now))
+        #expect(RunProcess.isPaused(events: took + woke, task: task, reports: [], now: now))
+        // A step that does something after the turn ended: at work.
+        #expect(!RunProcess.isPaused(events: took + again, task: task, reports: [], now: now))
+    }
+
     @Test func whatItReportedSitsInTheRunWhereItCame() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
