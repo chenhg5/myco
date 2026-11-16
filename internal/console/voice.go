@@ -139,12 +139,15 @@ type voice struct {
 	mu      sync.Mutex
 	path    string // settings file
 	logPath string // what was said, kept on this computer
-	call    *voiceCall
-	with    voiceWith // whom the call is with (while on)
-	events  []VoiceEvent
-	seq     int
-	state   string
-	changed chan struct{}
+	// The last call with each agent, for the next one (voice_memo.go).
+	memoPath string
+	memoMu   sync.Mutex
+	call     *voiceCall
+	with     voiceWith // whom the call is with (while on)
+	events   []VoiceEvent
+	seq      int
+	state    string
+	changed  chan struct{}
 	// The settings, when there is no file to keep them in (tests).
 	mem VoiceConfig
 	// How the hubs stood with the settings at the last look.
@@ -158,6 +161,7 @@ func (b *Backend) voiceState() *voice {
 			dir := filepath.Dir(b.Store.path)
 			v.path = filepath.Join(dir, "console-voice.json")
 			v.logPath = filepath.Join(dir, "voice-log.json")
+			v.memoPath = filepath.Join(dir, "voice-memo.json")
 			v.loadLog()
 		}
 		b.voice = v
@@ -514,6 +518,8 @@ func (b *Backend) startVoice(w http.ResponseWriter, r *http.Request) {
 		tts:   provider.speech(ttsKey, c),
 		hub:   &hubActions{hubID: hub.ID, agent: in.Agent, peer: peer, c: hc},
 		lang:  lang,
+		memo:  memoPrompt(lang, v.memo(memoKey(hub.ID, in.Agent))),
+		ended: func(history []chatMsg) { v.keepMemo(memoKey(hub.ID, in.Agent), history) },
 	})
 	v.call = call
 	v.with = voiceWith{HubID: hub.ID, Agent: in.Agent}

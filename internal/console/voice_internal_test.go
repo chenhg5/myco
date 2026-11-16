@@ -527,3 +527,62 @@ func contains(xs []string, x string) bool {
 	}
 	return false
 }
+
+// A call ended leaves its last lines for the next call with that agent:
+// kept per workspace and agent, word for word, for a day.
+func TestVoiceMemoCarriesTheLastCallOver(t *testing.T) {
+	v := &voice{state: stIdle, changed: make(chan struct{}), memoPath: t.TempDir() + "/voice-memo.json"}
+	var history []chatMsg
+	for i := 0; i < 6; i++ {
+		history = append(history, chatMsg{Role: "user", Content: fmt.Sprintf("第 %d 句", i)},
+			chatMsg{Role: "assistant", ToolCalls: []toolCall{{ID: "x"}}}, chatMsg{Role: "tool", Content: "sent"},
+			chatMsg{Role: "system", Content: "（系统消息）"}, chatMsg{Role: "assistant", Content: fmt.Sprintf("回答 %d", i)})
+	}
+	v.keepMemo(memoKey("h1", "backend"), history)
+	m := v.memo(memoKey("h1", "backend"))
+	if m == nil || len(m.Lines) != memoLines || m.Lines[0].Text != "第 2 句" || m.Lines[7] != (memoLine{Who: "assistant", Text: "回答 5"}) {
+		t.Fatalf("memo: %+v", m)
+	}
+	if v.memo(memoKey("h1", "frontend")) != nil || v.memo(memoKey("h2", "backend")) != nil {
+		t.Fatal("a memo is per workspace and agent")
+	}
+	// A call where nothing was said keeps the memo from before.
+	v.keepMemo(memoKey("h1", "backend"), []chatMsg{{Role: "system", Content: "x"}})
+	if m := v.memo(memoKey("h1", "backend")); m == nil || m.Lines[0].Text != "第 2 句" {
+		t.Fatalf("an empty call wiped the memo: %+v", m)
+	}
+	p := memoPrompt("zh-CN", m)
+	if !strings.Contains(p, "上一通电话（1 分钟前）") || !strings.Contains(p, "- 对方：第 2 句") || !strings.Contains(p, "- 你：回答 5") {
+		t.Fatalf("prompt: %s", p)
+	}
+	if memoPrompt("zh-CN", nil) != "" {
+		t.Fatal("no memo, no words")
+	}
+
+	// A call: the memo goes into its instructions, and what was said is
+	// handed back when it ends.
+	ms := &scriptModel{replies: []chatMsg{{Role: "assistant", Content: "下午再说，记住了。"}}}
+	got := make(chan []chatMsg, 1)
+	_, c, _ := newTestCall(t, ms, &fakeHub{}, func(d *voiceDeps) {
+		d.memo = p
+		d.ended = func(h []chatMsg) { got <- h }
+	})
+	c.Heard("这个先不急，下午再说", true)
+	waitFor(t, "a turn", func() bool { ms.mu.Lock(); defer ms.mu.Unlock(); return len(ms.seen) > 0 })
+	ms.mu.Lock()
+	sys := ms.seen[0][0].Content
+	ms.mu.Unlock()
+	if !strings.Contains(sys, "上一通电话") || !strings.Contains(sys, "回答 5") {
+		t.Fatalf("instructions without the memo: %s", sys)
+	}
+	time.Sleep(100 * time.Millisecond)
+	c.hangUp()
+	select {
+	case h := <-got:
+		if l := memoOf(h); len(l) == 0 || l[0].Text != "这个先不急，下午再说" {
+			t.Fatalf("ended with %+v", h)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the call's end was not handed over")
+	}
+}
