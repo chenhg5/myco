@@ -692,6 +692,22 @@ spawn:
 - **审计**：设置 → 审计（所有者和管理员）记录谁在什么时候做了什么：邀请、移除、生成链接、在机器上新建、删除或踢下线节点、从 App 派任务等，不记录消息内容；`myco audit`。
 - agent 收到消息时会知道是谁的：自己主人发的、其他成员从 App 发的、自己主人的其他 agent，还是别人的 agent。要不要先问主人由 agent 自己判断。
 
+### 4.15 导出聊天记录
+
+一段对话可以导出成文件保存或发给别人。在 App 里：打开对话，点顶栏的下载图标「导出这段对话」，选格式、要不要带上过程，文件存到「下载」文件夹（会自动在访达 / 资源管理器里选中）。App 导出的就是你在对话里看到的那些消息（几段任务合在一起），名字用对话里显示的名字。格式有两种：
+- Markdown（默认），给人看。
+- JSON Lines，给程序用，每条消息一行，字段是 myco 自己的：`id`、`thread_id`、`from`、`to`、`type`、`status`、`body`、`attachments`、`created_at`，可选 `steps`。
+
+```bash
+myco thread export --id <对话 ID> --output chat.md                 # Markdown
+myco thread export --id <对话 ID> --as jsonl --steps > chat.jsonl  # JSON Lines，带上每个任务里 agent 做了什么
+```
+
+- `--steps` 只带上这个 agent 能看到的过程，Hub 没有记录的就省略，stderr 会提示。
+- 附件只写文件名和大小，不包含文件本身。
+- 开了端到端加密的对话，能解开的消息按明文写进文件，解不开的标成「无法解密」。文件只有自己能读（权限 600），转发前留意内容。
+- 格式是 myco 自己的，不兼容 Claude Code、Codex 的会话文件：那些记录的是一个 agent 的模型和工具调用，myco 记录的是人和 agent 之间的消息。
+
 ## 5. 接入后的自检
 
 ```bash

@@ -577,6 +577,33 @@ func (b *Backend) Handler() http.Handler {
 		revealFile(path)
 		writeJSON(w, http.StatusOK, map[string]string{"path": path})
 	}))
+	// A conversation exported from the app (it renders it: it has the
+	// decrypted messages and the names), saved to Downloads and shown.
+	m.HandleFunc("POST /app/export", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name    string `json:"name"`
+			Content string `json:"content"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		ext := strings.ToLower(filepath.Ext(in.Name))
+		if ext != ".md" && ext != ".jsonl" {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "an export is a .md or .jsonl file"})
+			return
+		}
+		if len(in.Content) > maxExport {
+			writeErr(w, &client.Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: "the export is too large"})
+			return
+		}
+		path, err := writeToDownloads(in.Name, strings.NewReader(in.Content))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		revealExport(path)
+		writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	})
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
 		if err != nil {
@@ -1556,6 +1583,12 @@ func filterConversations(cs []api.Conversation, query string) []api.Conversation
 // maxTextPreview bounds a file the app shows as text (longer ones are
 // saved instead).
 const maxTextPreview = 2 << 20
+
+// revealExport shows a saved export (tests replace it: no Finder there).
+var revealExport = revealFile
+
+// maxExport bounds a conversation export the app saves (rendered by it).
+const maxExport = 64 << 20
 
 func inlineImage(contentType string) bool {
 	t, _, _ := mime.ParseMediaType(contentType)

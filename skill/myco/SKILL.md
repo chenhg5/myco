@@ -177,7 +177,8 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
   3. When all answers are in: `myco message reply --body-file result.md --id <original task id>`.
 - **reply / event / note**: these answer something you sent earlier (or inform you).
   Nothing is sent back automatically. Act on it; if it completes a held task, reply to
-  that task. `myco thread get` shows the whole conversation.
+  that task. `myco thread get` shows the whole conversation; `myco thread export --id <thread> [--as jsonl] [--output file]`
+  writes it to Markdown (default) or JSON Lines.
 - To reply yourself instead of via final output: `myco message reply --body "..."`.
   To give up explicitly: `myco message fail --reason "..."`.
 - **Suggest the next step** when there is an obvious one the person may want ("Also fix

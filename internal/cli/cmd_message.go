@@ -750,7 +750,7 @@ func threadCommands() *Command {
 			})
 		}),
 	}
-	return (&Command{Name: "thread", Summary: "Inspect conversations"}).Add(get)
+	return (&Command{Name: "thread", Summary: "Inspect conversations"}).Add(get, threadExportCommand())
 }
 
 func nonNilMsgs(m []api.Message) []api.Message {
