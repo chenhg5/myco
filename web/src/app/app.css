@@ -4968,6 +4968,14 @@ button.app-label:hover { filter: brightness(0.95); }
 /* AddMachineDialog: computers of the server's other workspaces */
 .app-picker-nearby { margin-top: 12px; }
 /* A choice with its consequence under it (the join link's "allow terminals"). */
+/* Adding a computer: one command, run in the folder on that computer. */
+.ws-command { display: flex; flex-direction: column; gap: 10px; }
+.ws-command-os { align-self: flex-start; }
+.ws-command-wait { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.ws-command-done { display: flex; align-items: flex-start; gap: 6px; font-size: 13px; color: var(--fg); }
+.ws-command-done svg { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--green); }
+.ws-command .app-modal-actions { margin-top: 2px; }
+.ws-switch { margin-right: auto; }
 /* A short command inside a notice stays on one line (it is copied, not read). */
 .app-notice .app-command code { white-space: nowrap; overflow-x: auto; }
 .pc-machine-tag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; color: var(--muted); background: var(--pill); }

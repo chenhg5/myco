@@ -5,7 +5,6 @@ import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
-import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
@@ -146,7 +145,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectPrefill, setConnectPrefill] = useState("");
-  const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
   // The desktop app's tray menu speaks the pages' language: say it when
@@ -168,8 +166,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
-  // A computer just connected, to pick in that dialog.
-  const [addWsPick, setAddWsPick] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
@@ -464,7 +460,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "sidebar": toggleSidebar(); break;
       case "new-project": setNewProjectOpen(true); break;
       case "connect": setConnectOpen(true); break;
-      case "add-computer": setAddMachineOpen(true); break;
+      case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
     }
   };
@@ -782,16 +778,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
-        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWsPick}
-        onClose={() => { setAddWorkspace(null); setAddWsPick(undefined); }} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
-      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()}
-        machines={hub ? namedOv?.hubs.find((h) => h.id === hub.id)?.overview?.machines : undefined}
-        onConnected={(id) => {
-          // On to the folder: in the dialog it was opened from, else a new one.
-          setAddMachineOpen(false);
-          setAddWsPick(id);
-          if (!addWorkspace && hub) setAddWorkspace({ hubId: hub.id, loose: true });
-        }} />
+        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)}
+        onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} />
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}

@@ -181,7 +181,7 @@ if [ -z "$MYCO" ]; then
   MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"
   [ -f "$MYCO.exe" ] && MYCO="$MYCO.exe" # Windows (Git Bash)
 fi
-"$MYCO" machine join --format text{{if .Shell}} --allow-shell{{end}}
+"$MYCO" machine join --format text{{if .Shell}} --allow-shell{{end}}{{if .Exec}} --workdir "$PWD"{{end}}
 unset MYCO_JOIN_TOKEN
 {{- if not .Exec}}
 cat <<'MYCO_NEXT'
@@ -240,7 +240,7 @@ var joinPowerShell = template.Must(template.New("ps1").Funcs(template.FuncMap{"p
     Invoke-RestMethod 'https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.ps1' | Invoke-Expression
     $myco = (Get-Command myco.exe -ErrorAction SilentlyContinue).Source
     if (-not $myco) { $myco = Join-Path $env:LOCALAPPDATA 'Programs\myco\myco.exe' }
-    & $myco machine join --format text{{if .Shell}} --allow-shell{{end}}
+    & $myco machine join --format text{{if .Shell}} --allow-shell{{end}}{{if .Exec}} --workdir (Get-Location).Path{{end}}
 {{- if not .Exec}}
     Write-Host ''
     Write-Host '==> This machine is on myco. One step left, in the agent session that ran this:'
@@ -284,8 +284,9 @@ different machines find and message each other. Do this:
 
 {{- if .Exec}}
 
-   This link makes the machine an **exec node**: tasks from {{.AllowFrom}} run here as shell
-   commands. Make sure your user really wants that before running it.
+   This link adds a **shell node** (a computer, in the app): run it in the folder the agents should
+   use. That folder becomes the shell node, and tasks from {{.AllowFrom}} run there as shell
+   commands with your user's rights. Make sure your user really wants that before running it.
 {{- else}}
 
 2. Register this session as an agent, saying who you are:
@@ -340,9 +341,9 @@ small{color:var(--muted)}
 {{if .Error}}<div class="card err"><h2>链接不可用</h2><p>{{.Error}}</p></div>{{else}}
 <div class="meta"><span class="pill">{{.Expires}}</span><span class="pill">{{.Uses}}</span>{{if .Exec}}<span class="pill">exec 节点 · 允许 {{.AllowFrom}}</span>{{end}}{{if .Shell}}<span class="pill">允许 agent 在这台电脑上开终端</span>{{end}}</div>
 {{if .Shell}}<div class="card warn"><h2>这条命令也允许开终端</h2><p>接入后，工作区里的 agent 可以在这台电脑上开终端、以你的身份跑命令（只有加给它们的文件夹）。之后想关掉，在这台电脑上运行 myco machine shell-access --deny。</p></div>{{end}}
-{{if .Exec}}<div class="card warn"><h2>这是 exec 节点链接</h2><p>执行后，这台机器会成为命令执行节点：{{.AllowFrom}} 发来的任务会在这台机器上作为 shell 命令运行。建议用一个低权限用户执行。</p></div>{{end}}
-<div class="card"><h2>① 在要接入的电脑上执行</h2>
-<p>安装 myco、登记这台机器、装好后台服务。可以重复执行。macOS / Linux / WSL / VPS，以及 Windows 的 Git Bash：</p>
+{{if .Exec}}<div class="card warn"><h2>这条命令会加一台『电脑』</h2><p>在终端里先进到要给 agent 用的文件夹，再执行下面的命令：这个文件夹就成为工作区里的一台『电脑』（shell 节点），{{.AllowFrom}} 发来的命令会以你的身份在这个文件夹里运行。</p></div>{{end}}
+<div class="card"><h2>① {{if .Exec}}在那台电脑上、要用的文件夹里执行{{else}}在要接入的电脑上执行{{end}}</h2>
+<p>安装 myco、登记这台机器{{if .Exec}}、把当前文件夹加成『电脑』{{end}}、装好后台服务。可以重复执行。macOS / Linux / WSL / VPS，以及 Windows 的 Git Bash：</p>
 <div class="cmd"><code id="c1">{{.Command}}</code><button data-copy="c1">复制</button></div>
 <p style="margin-top:12px">Windows 的 PowerShell：</p>
 <div class="cmd"><code id="c3">{{.PSCommand}}</code><button data-copy="c3">复制</button></div></div>

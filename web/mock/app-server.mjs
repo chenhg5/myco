@@ -1224,6 +1224,25 @@ const server = http.createServer(async (req, res) => {
   // the app at a member; the mock just says yes.
   if (parts[0] === "app" && parts[1] === "island" && method === "POST") return send(res, 200, { ok: true });
 
+  // /app/mock/run-join — the UI smoke "runs" the last shell-node command on a
+  // computer: the folder it ran in shows up as a computer of the workspace.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-join" && parts.length === 3 && method === "POST") {
+    const j = state.pendingJoin;
+    const hub = j && state.hubs.find((h) => h.id === j.hubId);
+    if (!hub) return fail(res, 404, "not_found", "no shell-node command to run");
+    state.pendingJoin = null;
+    state.counter += 1;
+    const body = await readBody(req);
+    const dir = (typeof body?.dir === "string" && body.dir) || "~/code/wsl-app";
+    const base = dir.split("/").filter(Boolean).pop() || "shell";
+    const agent = makeAgent({
+      name: `wsl-${base}-shell`, kind: "shell", machine_id: "", created_at: iso(0), last_seen_at: iso(0),
+      labels: ["machine=wsl"], binding: { harness: "exec", environment: "WSL Ubuntu", workdir: dir }, allow_from: j.allow,
+    });
+    hub.agents.push(agent);
+    return send(res, 200, { agent: agent.name });
+  }
+
   // /app/mock/stuck — the smoke test puts the stale demo task back: it stops
   // and resends it, and the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
@@ -2326,9 +2345,13 @@ const server = http.createServer(async (req, res) => {
       const hours = Number.isInteger(body?.expires_hours) ? body.expires_hours : 24;
       state.counter += 1;
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
+      // A shell-node link: the UI smoke "runs" it with /app/mock/run-join.
+      if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       return send(res, 200, {
         join_url: joinUrl,
-        command: body?.allow_shell ? `curl -fsSL '${joinUrl}?shell=1' | bash` : `curl -fsSL ${joinUrl} | bash`,
+        command: body?.allow_shell && !body?.shell_node ? `curl -fsSL '${joinUrl}?shell=1' | bash` : `curl -fsSL ${joinUrl} | bash`,
+        ps_command: `irm '${joinUrl}?format=ps1' | iex`,
+        shell_node: !!body?.shell_node,
         agent_guide: true,
         uses,
         expires_hours: hours,
