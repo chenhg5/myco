@@ -107,11 +107,13 @@ public struct VoiceFailure: Error, Sendable, Hashable, LocalizedError {
 }
 
 /// The model a voice call talks with. One reply at a time: its text comes
-/// bit by bit to `onText`, the whole reply (with what it wants done) at
-/// the end.
+/// bit by bit to `onText`, the name of each thing it wants done to
+/// `onTool` as soon as it starts asking for it (what exactly comes
+/// later), and the whole reply at the end.
 public protocol VoiceModel: Sendable {
     func stream(
-        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void
+        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void,
+        onTool: @escaping @MainActor @Sendable (String) -> Void
     ) async throws -> ChatMessage
 }
 
@@ -160,6 +162,15 @@ struct ChatStreamReader {
     private(set) var done = false
     private var calls: [Int: ToolCall] = [:]
     private var order: [Int] = []
+    /// The tools whose calls began in the lines taken since last asked.
+    private var began: [String] = []
+
+    /// The names of the tools the model has just started to call (their
+    /// arguments are still being written), each given once.
+    mutating func takeBegun() -> [String] {
+        defer { began = [] }
+        return began
+    }
 
     /// Takes one line. Answers the text it added, if any; throws what the
     /// model said went wrong.
@@ -187,8 +198,10 @@ struct ChatStreamReader {
                 }
                 if let id = call["id"] as? String, !id.isEmpty { calls[index]?.id = id }
                 if let function = call["function"] as? [String: Any] {
+                    let named = !(calls[index]?.name.isEmpty ?? true)
                     calls[index]?.name += function["name"] as? String ?? ""
                     calls[index]?.arguments += function["arguments"] as? String ?? ""
+                    if !named, let name = calls[index]?.name, !name.isEmpty { began.append(name) }
                 }
             }
         }
@@ -238,7 +251,8 @@ public struct OpenAIChat: VoiceModel {
     }
 
     public func stream(
-        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void
+        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void,
+        onTool: @escaping @MainActor @Sendable (String) -> Void = { _ in }
     ) async throws -> ChatMessage {
         guard let url = Self.endpoint(base) else {
             throw VoiceFailure(L("模型的接口地址不对", "The model's address is not a web address"))
@@ -259,6 +273,7 @@ public struct OpenAIChat: VoiceModel {
         var reader = ChatStreamReader()
         for try await line in lines {
             if let added = try reader.take(line) { await onText(added) }
+            for name in reader.takeBegun() { await onTool(name) }
             if reader.done { break }
         }
         try Task.checkCancellation()

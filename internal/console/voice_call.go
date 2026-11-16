@@ -34,6 +34,10 @@ type voiceDeps struct {
 	// that is not done before it says that it still is (a long task would
 	// otherwise be minutes of silence).
 	stillWorkingEvery time.Duration
+	// memo: the last call's end, for the instructions (voice_memo.go);
+	// ended gets what was said in this one when it ends.
+	memo  string
+	ended func(history []chatMsg)
 }
 
 type voiceCall struct {
@@ -126,6 +130,9 @@ func (c *voiceCall) loop() {
 	for {
 		select {
 		case <-c.ctx.Done():
+			if c.d.ended != nil {
+				c.d.ended(c.history)
+			}
 			return
 		case f := <-c.in:
 			f()
@@ -348,7 +355,7 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 	defer close(t.done)
 	// The conversation with the agent as it is now (it moves on its own).
 	convo := c.conversation(ctx)
-	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo)}}, history...)
+	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo) + c.d.memo}}, history...)
 	sentences := make(chan string, 16)
 	spoke := make(chan struct{})
 	go func() {

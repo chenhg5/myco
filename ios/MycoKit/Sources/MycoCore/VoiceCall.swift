@@ -95,10 +95,20 @@ public final class VoiceCall {
         public var quietBeforeNews: Duration
         /// How often the tasks handed out are looked at.
         public var watchEvery: Duration
+        /// How long the call goes without a word about a task that is not
+        /// done before it says that it still is (a long task would
+        /// otherwise be minutes of silence).
+        public var stillWorkingEvery: Duration
+        /// The end of the last call with this agent, for the model's
+        /// instructions (`VoiceMemo.prompt`); empty when there was none.
+        public var memo: String
+        /// Gets what was said in this call when it ends (to keep its memo).
+        public var ended: (@MainActor @Sendable ([ChatMessage]) -> Void)?
 
         public init(
             audio: any VoiceAudio, model: any VoiceModel, speech: any VoiceSpeech, hub: any VoiceHub, language: AppLanguage = .current,
-            endOfSpeech: Duration = .milliseconds(900), quietBeforeNews: Duration = .milliseconds(1500), watchEvery: Duration = .seconds(2)
+            endOfSpeech: Duration = .milliseconds(900), quietBeforeNews: Duration = .milliseconds(1500), watchEvery: Duration = .seconds(2),
+            stillWorkingEvery: Duration = .seconds(120), memo: String = "", ended: (@MainActor @Sendable ([ChatMessage]) -> Void)? = nil
         ) {
             self.audio = audio
             self.model = model
@@ -108,6 +118,9 @@ public final class VoiceCall {
             self.endOfSpeech = endOfSpeech
             self.quietBeforeNews = quietBeforeNews
             self.watchEvery = watchEvery
+            self.stillWorkingEvery = stillWorkingEvery
+            self.memo = memo
+            self.ended = ended
         }
     }
 
@@ -145,6 +158,9 @@ public final class VoiceCall {
     /// News about tasks, waiting for a quiet moment.
     @ObservationIgnored private var news: [String] = []
     @ObservationIgnored private var watched: [String: Watched] = [:]
+    /// The voice passed something on or stopped the agent: the
+    /// conversation is read again before the next answer.
+    @ObservationIgnored private var acted = false
     @ObservationIgnored private var nextLine = 0
     @ObservationIgnored private var running: [Task<Void, Never>] = []
 
@@ -171,6 +187,10 @@ public final class VoiceCall {
         /// The question it asked last (told once).
         var asked = ""
         var finished = false
+        /// When the person last heard about it.
+        var toldAt: ContinuousClock.Instant
+        /// The progress note told last.
+        var progress = ""
     }
 
     public init(_ parts: Parts) {
@@ -235,6 +255,8 @@ public final class VoiceCall {
         if let last = lines.last, last.kind == .hearing { lines.removeLast() }
         parts.audio.flush()
         parts.audio.stop()
+        // What was said, for the next call with this agent.
+        parts.ended?(history)
     }
 
     /// Muted: nothing the microphone hears is taken.
@@ -486,11 +508,16 @@ public final class VoiceCall {
     /// The model's rounds (tools in between), each sentence said as soon
     /// as it is whole.
     private func run(_ turn: Turn, history: [ChatMessage]) async {
-        // The conversation with the agent as it is now (it moves on its own).
-        let conversation = await parts.hub.context(fresh: false)
+        // The conversation with the agent as it is now (it moves on its
+        // own). After the voice passed something on or stopped the agent,
+        // it is read from the workspace again: what it did shows there.
+        let again = acted
+        acted = false
+        let conversation = await parts.hub.context(fresh: again)
         guard self.turn === turn else { return }
         var messages = [ChatMessage(
-            role: "system", content: VoicePrompt.system(language: parts.language, agent: parts.hub.name, conversation: conversation))]
+            role: "system",
+            content: VoicePrompt.system(language: parts.language, agent: parts.hub.name, conversation: conversation) + parts.memo)]
         messages += history
         let (sentences, feed) = AsyncStream<String>.makeStream()
         let speech = parts.speech
@@ -520,10 +547,20 @@ public final class VoiceCall {
             guard !Task.isCancelled, self.turn === turn else { break }
             let reply: ChatMessage
             do {
-                reply = try await parts.model.stream(messages, tools: VoiceTools.all) { [weak self] delta in
+                let language = parts.language
+                reply = try await parts.model.stream(messages, tools: VoiceTools.all, onText: { [weak self] delta in
                     guard let self, self.turn === turn else { return }
                     for sentence in turn.splitter.add(delta) { self.say(sentence, in: turn, to: feed) }
-                }
+                }, onTool: { [weak self] name in
+                    // About to act with nothing said yet: a few words
+                    // first, so the person is not left in silence while
+                    // the model writes the message out.
+                    guard let self, self.turn === turn,
+                          turn.said.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else { return }
+                    let rest = turn.splitter.flush()
+                    self.say(rest.isEmpty ? VoicePrompt.toolAck(language: language, tool: name) : rest, in: turn, to: feed)
+                })
             } catch {
                 if !(error is CancellationError) { failure = Self.words(of: error) }
                 break rounds
@@ -593,6 +630,7 @@ public final class VoiceCall {
         let name = parts.hub.name
         switch call.name {
         case VoiceTools.tell:
+            acted = true
             let arguments = call.texts
             let text = (arguments["text"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return "error: text is required" }
@@ -611,11 +649,12 @@ public final class VoiceCall {
                 return "error: " + Self.words(of: error)
             }
         case VoiceTools.stop:
+            acted = true
             do {
                 let current = parts.hub.current
                 try await parts.hub.stopCurrent()
                 // Its ending is no news: the person asked for it.
-                if let current { watched[current, default: Watched(what: "")].finished = true }
+                if let current { watched[current, default: Watched(what: "", toldAt: clock.now)].finished = true }
                 add(.action, self.text("让 \(name) 停下了", "Stopped \(name)"))
                 return "stopped"
             } catch {
@@ -632,7 +671,7 @@ public final class VoiceCall {
 
     private func watch(_ task: String, what: String) {
         if watched[task] == nil {
-            watched[task] = Watched(what: what)
+            watched[task] = Watched(what: what, toldAt: clock.now)
         } else if watched[task]?.what.isEmpty == true {
             watched[task]?.what = what
         }
@@ -648,12 +687,39 @@ public final class VoiceCall {
             let what = entry.what.isEmpty ? "" : "「" + entry.what + "」"
             if found.finished {
                 watched[task]?.finished = true
+                watched[task]?.toldAt = clock.now
                 news.append("它回复了\(what)：\(found.summary)")
             } else if !found.question.isEmpty, found.question != entry.asked {
                 watched[task]?.asked = found.question
+                watched[task]?.toldAt = clock.now
                 news.append("它在问你\(what)：\(found.question)（它在等回答；对方回答了就用 tell_agent 转给它）")
+            } else if found.question.isEmpty, stillWorkingDue(entry) {
+                watched[task]?.toldAt = clock.now
+                if !found.progress.isEmpty { watched[task]?.progress = found.progress }
+                news.append(Self.stillWorking(what: what, found, told: entry.progress, now: Date()))
             }
         }
+    }
+
+    /// A task not done has gone unmentioned for a while, and the call has
+    /// been quiet for a good part of it (not in the middle of talk about
+    /// something else).
+    private func stillWorkingDue(_ entry: Watched) -> Bool {
+        let every = parts.stillWorkingEvery
+        return clock.now - entry.toldAt >= every && clock.now - lastSound >= every / 2 && turn == nil && !speaking
+    }
+
+    /// The notice that a task is still going: how it stands, for how
+    /// long, and its newest progress note if not told yet. The desktop
+    /// app's `stillWorking`.
+    nonisolated static func stillWorking(what: String, _ found: TaskNews, told: String, now: Date) -> String {
+        var out = "（不是回复，只是让对方知道还在进行）" + what + "：它" + VoiceContext.statusWord(found.status)
+        if let since = found.since {
+            let minutes = Int(now.timeIntervalSince(since) / 60)
+            if minutes >= 1 { out += "，已经 \(minutes) 分钟了" }
+        }
+        if !found.progress.isEmpty, found.progress != told { out += "；它最新报的进展：" + found.progress }
+        return out + "。用一句很短的话告诉对方还在进行（可以带上它在做什么），别说做完了，也不用问对方要不要等。"
     }
 
     // MARK: Lines

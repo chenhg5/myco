@@ -40,7 +40,10 @@ struct VoicePartsTests {
         #expect(try reader.take(#"data: {"choices":[{"delta":{"role":"assistant","content":"好，"}}]}"#) == "好，")
         #expect(try reader.take(": keep-alive") == nil)
         #expect(try reader.take(#"data: {"choices":[{"delta":{"content":null,"tool_calls":[{"index":0,"id":"call_a","function":{"name":"tell_agent","arguments":"{\"text\":"}}]}}]}"#) == nil)
+        // A tool's start is told as soon as its name is there, and once.
+        #expect(reader.takeBegun() == [VoiceTools.tell])
         #expect(try reader.take(#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"改标题\",\"what\":\"标题\"}"}}]}}]}"#) == nil)
+        #expect(reader.takeBegun().isEmpty)
         #expect(try reader.take(#"data: {"choices":[{"delta":{"content":"转过去了。"}}]}"#) == "转过去了。")
         #expect(!reader.done)
         _ = try reader.take("data: [DONE]")
@@ -167,8 +170,12 @@ struct VoicePartsTests {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         var task = Message(id: "t1", from: me, to: agent, body: "把下载页改一下", status: "held", createdAt: start)
         task.asking = "q1"
+        var question = Message(id: "q1", from: agent, to: me, threadId: "t1", replyTo: "t1", type: "progress", body: "标题用哪一版？", status: "done", createdAt: start.addingTimeInterval(60))
+        question.ask = true
         let messages = [
-            Message(id: "q1", from: agent, to: me, threadId: "t1", replyTo: "t1", type: "progress", body: "标题用哪一版？", status: "done", createdAt: start.addingTimeInterval(60)),
+            question,
+            Message(id: "p0", from: agent, to: me, threadId: "t1", replyTo: "t1", type: "progress", body: "先看了现在的版式", status: "done", createdAt: start.addingTimeInterval(20)),
+            Message(id: "p1", from: agent, to: me, threadId: "t1", replyTo: "t1", type: "progress", body: " 版式改了一半 \n", status: "done", createdAt: start.addingTimeInterval(40)),
             task,
             Message(id: "t0", from: me, to: agent, body: ViaVoice.body("先看看首页", heard: "看下首页"), status: "done", createdAt: start.addingTimeInterval(-600)),
             Message(id: "r0", from: agent, to: me, threadId: "t0", replyTo: "t0", type: "reply", body: "首页看过了，没问题。", status: "done", createdAt: start.addingTimeInterval(-500)),
@@ -184,8 +191,14 @@ struct VoicePartsTests {
         #expect(text.contains("它手上正在做你交的：把下载页改一下（先放着了）"))
         #expect(text.contains("它在等你回答：标题用哪一版？"))
         // What became of each task.
-        #expect(VoiceContext.news(of: "t0", in: messages) == TaskNews(finished: true, summary: "首页看过了，没问题。"))
-        #expect(VoiceContext.news(of: "t1", in: messages) == TaskNews(question: "标题用哪一版？"))
+        #expect(VoiceContext.news(of: "t0", in: messages)
+            == TaskNews(finished: true, summary: "首页看过了，没问题。", status: "done", since: start.addingTimeInterval(-600)))
+        // Its status, when it was sent, and its newest progress note (a
+        // question is not one).
+        #expect(VoiceContext.news(of: "t1", in: messages)
+            == TaskNews(question: "标题用哪一版？", status: "held", since: start, progress: "版式改了一半"))
+        #expect(VoiceContext.statusWord("acked") == "在做")
+        #expect(VoiceContext.statusWord("odd") == "odd")
         #expect(VoiceContext.news(of: "nope", in: messages) == nil)
         #expect(VoiceContext.text(agent: agent, status: nil, me: me, messages: []).contains("你们还没有说过话"))
     }
@@ -208,7 +221,8 @@ struct VoicePartsTests {
 /// A model that is refused.
 private struct FailingModel: VoiceModel {
     func stream(
-        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void
+        _ messages: [ChatMessage], tools: [VoiceTool], onText: @escaping @MainActor @Sendable (String) -> Void,
+        onTool: @escaping @MainActor @Sendable (String) -> Void
     ) async throws -> ChatMessage {
         throw VoiceFailure("HTTP 401: Incorrect API key")
     }
@@ -262,14 +276,16 @@ struct VoiceCallTests {
 
     func makeCall(
         _ answers: [ScriptedVoiceModel.Answer], speech: SilentSpeech = SilentSpeech(perCharacter: .milliseconds(2)),
-        audio: ScriptedVoiceAudio? = nil, pace: Duration = .zero, endOfSpeech: Duration = .milliseconds(120)
+        audio: ScriptedVoiceAudio? = nil, pace: Duration = .zero, endOfSpeech: Duration = .milliseconds(120),
+        stillWorkingEvery: Duration = .seconds(120), memo: String = "", ended: (@MainActor @Sendable ([ChatMessage]) -> Void)? = nil
     ) -> Setup {
         let audio = audio ?? ScriptedVoiceAudio()
         let model = ScriptedVoiceModel(answers, pace: pace)
         let hub = Hub()
         let call = VoiceCall(.init(
             audio: audio, model: model, speech: speech, hub: hub, language: .zh,
-            endOfSpeech: endOfSpeech, quietBeforeNews: .milliseconds(100), watchEvery: .milliseconds(250)))
+            endOfSpeech: endOfSpeech, quietBeforeNews: .milliseconds(100), watchEvery: .milliseconds(250),
+            stillWorkingEvery: stillWorkingEvery, memo: memo, ended: ended))
         return Setup(call: call, audio: audio, model: model, hub: hub)
     }
 
@@ -284,6 +300,11 @@ struct VoiceCallTests {
     func started(_ setup: Setup) async {
         setup.call.start()
         await until { setup.call.state == .listening }
+    }
+
+    /// What the voice said last.
+    func said(_ setup: Setup) -> String {
+        setup.call.lines.last { $0.kind == .assistant }?.text ?? ""
     }
 
     static func call(_ name: String, _ arguments: [String: String] = [:], id: String = "c1") -> ToolCall {
@@ -351,10 +372,13 @@ struct VoiceCallTests {
         ])
         await started(setup)
         setup.audio.hear("顺便把标题也改短一点")
-        await until { setup.call.lines.contains { $0.kind == .assistant && $0.text == "好，转过去了。" } }
+        // A few words before it acts (the model said nothing first), then
+        // what it says once it is done: not silence until then.
+        await until { said(setup) == "好，我跟它说。好，转过去了。" }
+        #expect(said(setup) == "好，我跟它说。好，转过去了。")
         #expect(setup.hub.told == ["把下载页的标题改短一点\n\n——\n（经语音转述。原话：顺便把标题也改短一点）"])
-        // What it did is a line of its own, before what it said about it.
-        #expect(setup.call.lines.map(\.kind) == [.user, .action, .assistant])
+        // What it did is a line of its own, under the words it began with.
+        #expect(setup.call.lines.map(\.kind) == [.user, .assistant, .action])
         #expect(setup.call.lines.first { $0.kind == .action }?.text == "交给 前端：改短标题")
         // The model saw how the tool went.
         let asked = await setup.model.asked
@@ -381,18 +405,23 @@ struct VoiceCallTests {
         setup.hub.current = "t9"
         await started(setup)
         setup.audio.hear("注册页也改一下")
-        await until { setup.call.lines.last?.text == "补上了。" && setup.call.state == .listening }
+        await until { said(setup) == "好，我跟它说。补上了。" && setup.call.state == .listening }
         #expect(setup.call.lines.first { $0.kind == .action }?.text == "补充给 前端：注册页")
+        #expect(setup.hub.freshContexts == 0)
         setup.audio.hear("现在怎么样了")
-        await until { setup.call.lines.last?.text == "它还在做。" && setup.call.state == .listening }
-        #expect(setup.hub.freshContexts == 1)
+        await until { said(setup) == "我看一眼。它还在做。" && setup.call.state == .listening }
+        // Having passed something on, the conversation was read again for
+        // this answer; and looking again reads it once more.
+        #expect(setup.hub.freshContexts == 2)
         setup.audio.hear("让它停下")
-        await until { setup.call.lines.last?.text == "停了。" && setup.call.state == .listening }
+        await until { said(setup) == "好，我让它停下。停了。" && setup.call.state == .listening }
         #expect(setup.hub.stops == 1)
+        #expect(setup.hub.freshContexts == 2, "nothing was done since: what is on the page will do")
         #expect(setup.call.lines.contains { $0.kind == .action && $0.text == "让 前端 停下了" })
         // Nothing at work: the model is told so, and no action is shown.
         setup.audio.hear("再让它停一次")
-        await until { setup.call.lines.last?.text == "它现在没在做什么。" }
+        await until { said(setup) == "好，我让它停下。它现在没在做什么。" }
+        #expect(setup.hub.freshContexts == 3, "it stopped the agent: read again")
         let asked = await setup.model.asked
         #expect(asked.last?.last?.content == "error: nothing at work")
         #expect(setup.call.lines.filter { $0.kind == .action }.count == 2)
@@ -473,6 +502,161 @@ struct VoiceCallTests {
         try? await Task.sleep(for: .milliseconds(600))
         #expect(await setup.model.asked.count == 1)
         setup.call.hangUp()
+    }
+
+    /// The desktop app's TestVoiceCallAckOnlyWhenSilent.
+    @Test func wordsBeforeActingAreNotSaidTwice() async {
+        // The model said what it is about to do: nothing is added.
+        let spoken = makeCall([
+            .init("好，让它加暗色模式。", calls: [Self.call(VoiceTools.tell, ["text": "加一个暗色模式", "what": "暗色模式"])]),
+            .init("转过去了。"),
+        ])
+        await started(spoken)
+        spoken.audio.hear("加个暗色模式")
+        await until { said(spoken) == "好，让它加暗色模式。转过去了。" }
+        #expect(said(spoken) == "好，让它加暗色模式。转过去了。")
+        spoken.call.hangUp()
+
+        // Half a sentence when it starts to act: that is said then, not
+        // held back until the action is over; nothing else is added.
+        let half = makeCall([
+            .init("好我让它改", calls: [Self.call(VoiceTools.tell, ["text": "改标题", "what": "标题"])]),
+            .init("转过去了。"),
+        ], pace: .milliseconds(20))
+        await started(half)
+        half.audio.hear("把标题改一下")
+        await until { half.hub.told.count == 1 }
+        #expect(said(half).hasPrefix("好我让它改"))
+        await until { said(half) == "好我让它改转过去了。" }
+        #expect(!said(half).contains("我跟它说"))
+        half.call.hangUp()
+
+        #expect(VoicePrompt.toolAck(language: .en, tool: VoiceTools.stop) == "OK, I'll stop it. ")
+        #expect(VoicePrompt.toolAck(language: .zh, tool: VoiceTools.check) == "我看一眼。")
+        #expect(VoicePrompt.toolAck(language: .zh, tool: "something_new") == "稍等。")
+        // The prompt asks for the same: a few words before a tool.
+        #expect(VoicePrompt.system(language: .zh, agent: "前端", conversation: "").contains("调用工具之前，先用几个字说你要做什么"))
+        #expect(VoicePrompt.system(language: .en, agent: "Frontend", conversation: "").contains("Before you call a tool, say in a few words"))
+    }
+
+    /// The desktop app's TestVoiceCallSaysALongTaskIsStillGoing.
+    @Test func aLongTaskGetsAWordThatItIsStillGoing() async {
+        let setup = makeCall([
+            .init(calls: [Self.call(VoiceTools.tell, ["text": "把整个项目的测试跑一遍", "what": "跑全部测试"])]),
+            .init("转过去了。"),
+            .init("它还在跑测试。"),
+            .init("还在跑。"),
+        ], stillWorkingEvery: .milliseconds(400))
+        await started(setup)
+        setup.hub.newsOf["task-1"] = TaskNews(status: "acked", since: Date().addingTimeInterval(-6 * 60 - 5), progress: "在跑集成测试")
+        setup.audio.hear("把测试都跑一遍")
+        await until { said(setup).hasSuffix("转过去了。") && setup.call.state == .listening }
+        func notices() async -> [String] {
+            var out: [String] = []
+            for messages in await setup.model.asked {
+                for message in messages where message.role == "system" && message.content.contains("还在进行") && !out.contains(message.content) {
+                    out.append(message.content)
+                }
+            }
+            return out
+        }
+        await until { await !notices().isEmpty }
+        let first = await notices().first ?? ""
+        #expect(first.contains("「跑全部测试」"))
+        #expect(first.contains("它在做"))
+        #expect(first.contains("已经 6 分钟了"))
+        #expect(first.contains("它最新报的进展：在跑集成测试"))
+        #expect(first.contains("别说做完了"))
+        // And again after as long, without the note already told.
+        await until { await notices().count > 1 }
+        let second = await notices().dropFirst().first ?? ""
+        #expect(!second.isEmpty)
+        #expect(!second.contains("在跑集成测试"))
+        setup.call.hangUp()
+
+        // The words of it: a task not started yet is said to be waiting,
+        // and under a minute no minutes are counted.
+        let waiting = VoiceCall.stillWorking(
+            what: "", TaskNews(status: "delivered", since: Date(timeIntervalSince1970: 1_000)), told: "", now: Date(timeIntervalSince1970: 1_030))
+        #expect(waiting.contains("它已送达，还没开始。"))
+        #expect(!waiting.contains("分钟"))
+    }
+
+    /// The desktop app's TestVoiceMemoCarriesTheLastCallOver.
+    @Test func theNextCallStartsWithTheEndOfTheLastOne() async {
+        let store = MemoryMemoStore()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var history: [ChatMessage] = []
+        for index in 0..<6 {
+            history += [
+                ChatMessage(role: "user", content: "第 \(index) 句"),
+                ChatMessage(role: "assistant", content: "", toolCalls: [ToolCall(id: "x", name: VoiceTools.tell, arguments: "{}")]),
+                ChatMessage(role: "tool", content: "sent", toolCallID: "x"),
+                ChatMessage(role: "system", content: "（系统消息）"),
+                ChatMessage(role: "assistant", content: "回答 \(index)"),
+            ]
+        }
+        let key = VoiceMemo.key(workspace: "h1", agent: "backend")
+        VoiceMemos.keep(history, for: key, in: store, now: now)
+        // The last eight lines said: the person's and the voice's words,
+        // not what was done or what the system said.
+        let memo = VoiceMemos.memo(for: key, in: store, now: now.addingTimeInterval(60))
+        #expect(memo?.lines.count == 8)
+        #expect(memo?.lines.first == VoiceMemo.Line(who: "person", text: "第 2 句"))
+        #expect(memo?.lines.last == VoiceMemo.Line(who: "assistant", text: "回答 5"))
+        // By workspace and agent.
+        #expect(VoiceMemos.memo(for: VoiceMemo.key(workspace: "h1", agent: "frontend"), in: store, now: now) == nil)
+        #expect(VoiceMemos.memo(for: VoiceMemo.key(workspace: "h2", agent: "backend"), in: store, now: now) == nil)
+        // A call where nothing was said keeps the memo from before.
+        VoiceMemos.keep([ChatMessage(role: "system", content: "x")], for: key, in: store, now: now.addingTimeInterval(30))
+        #expect(VoiceMemos.memo(for: key, in: store, now: now.addingTimeInterval(60))?.lines.first?.text == "第 2 句")
+        // A long line is cut; a day later the memo is gone, and another
+        // call's memo kept then drops it from the device.
+        #expect(VoiceMemo.lines(of: [ChatMessage(role: "user", content: String(repeating: "长", count: 400))]).first?.text.count == 301)
+        #expect(VoiceMemos.memo(for: key, in: store, now: now.addingTimeInterval(25 * 3600)) == nil)
+        let other = VoiceMemo.key(workspace: "h1", agent: "tester")
+        VoiceMemos.keep([ChatMessage(role: "user", content: "嗨")], for: other, in: store, now: now.addingTimeInterval(25 * 3600))
+        #expect(VoiceMemos.memo(for: key, in: store, now: now.addingTimeInterval(60)) == nil)
+        #expect(VoiceMemos.memo(for: other, in: store, now: now.addingTimeInterval(25 * 3600 + 60)) != nil)
+
+        // In words, for the model.
+        let prompt = memo?.prompt(language: .zh, now: now.addingTimeInterval(60)) ?? ""
+        #expect(prompt.hasPrefix("\n上一通电话（1 分钟前）最后说的，供参考，以上面的对话为准；用得上再提，别主动复述：\n"))
+        #expect(prompt.contains("- 对方：第 2 句\n"))
+        #expect(prompt.hasSuffix("- 你：回答 5\n"))
+        let english = memo?.prompt(language: .en, now: now.addingTimeInterval(3 * 3600 + 10)) ?? ""
+        #expect(english.contains("The end of your last call with them (3 h ago), for reference"))
+        #expect(english.contains("- They：第 2 句\n"))
+        #expect(english.contains("- You：回答 5\n"))
+
+        // A call: the memo goes into its instructions, and what was said
+        // is handed back when it ends.
+        final class Kept: @unchecked Sendable { var history: [ChatMessage]? }
+        let kept = Kept()
+        let setup = makeCall([.init("下午再说，记住了。")], memo: prompt, ended: { kept.history = $0 })
+        await started(setup)
+        setup.audio.hear("这个先不急，下午再说")
+        await until { said(setup) == "下午再说，记住了。" && setup.call.state == .listening }
+        let instructions = await setup.model.asked.first?.first?.content ?? ""
+        #expect(instructions.contains("上一通电话"))
+        #expect(instructions.contains("回答 5"))
+        #expect(kept.history == nil)
+        setup.call.hangUp()
+        let lines = VoiceMemo.lines(of: kept.history ?? [])
+        #expect(lines.map(\.text) == ["这个先不急，下午再说", "下午再说，记住了。"])
+    }
+
+    @Test func aMemoIsKeptInAFileOfItsOwn() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("memo-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FileMemoStore(url: folder.appendingPathComponent("voice-memo.json"))
+        #expect(store.read() == nil)
+        let key = VoiceMemo.key(workspace: "h1", agent: "backend")
+        VoiceMemos.keep([ChatMessage(role: "user", content: "嗨")], for: key, in: store)
+        // Another launch reads the same file.
+        let again = FileMemoStore(url: folder.appendingPathComponent("voice-memo.json"))
+        #expect(VoiceMemos.memo(for: key, in: again)?.lines == [VoiceMemo.Line(who: "person", text: "嗨")])
     }
 
     @Test func mutedItHearsNothing() async {
@@ -565,7 +749,12 @@ struct ConversationVoiceTests {
         #expect(second.task == first.task)
         let sent = await hub.allMessages().filter { $0.from == FakeHub.me && $0.to == agent }
         #expect(sent.map(\.type).sorted() == ["steer", "task"])
-        #expect(voice.news(of: first.task) == TaskNews())
+        // Not done and not asking: at work since it was sent.
+        let standing = voice.news(of: first.task)
+        #expect(standing?.finished == false)
+        #expect(standing?.question == "")
+        #expect(standing?.status == "acked")
+        #expect(standing?.since != nil)
         let context = await voice.context(fresh: true)
         #expect(context.contains("你（任务）：看一下首页"))
         #expect(context.contains("它手上正在做你交的：看一下首页"))
