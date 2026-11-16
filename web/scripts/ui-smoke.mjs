@@ -2231,6 +2231,22 @@ async function runMatrix(browser, size, scheme) {
       await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
+    // A task the hub gave up on (taken, never started on) says so in words,
+    // not the hub's reason, and is sent again with one click.
+    await step("单聊 · 没送到可以重新发送", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const failed = page.locator("[data-failed]").last();
+      await failed.waitFor({ timeout: 20_000 });
+      const said = compactText(await failed.innerText());
+      if (!said.includes("没送到") || /delivery attempts|acknowledged/.test(said)) throw new Error(`没送到的说明应该是人话，实际「${said}」`);
+      if (/delivery attempts/.test(await page.locator(".conv-detail").first().innerText())) throw new Error("气泡下不该再出现英文原因");
+      await settle(page, 200);
+      await shot(page, size, scheme, "failed-retry");
+      const before = await page.locator(".conv-msg.is-me", { hasText: "README 的截图换成新版的。" }).count();
+      await clickVisible(page, failed.getByRole("button", { name: "重新发送" }));
+      await page.waitForFunction((n) => [...document.querySelectorAll(".conv-msg.is-me")].filter((x) => (x.textContent || "").includes("README 的截图换成新版的。")).length > n, before, { timeout: 10_000 });
+    });
+
     // The sidebar lists the computers too: one click opens a terminal.
     await step("电脑 · 边栏直达终端", async () => {
       await sidebar(page, true);
@@ -2238,14 +2254,46 @@ async function runMatrix(browser, size, scheme) {
       const wrap = page.locator(".sp-nav-pc-wrap").first();
       await wrap.hover();
       await clickVisible(page, wrap.locator(".sp-nav-more"));
-      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目、移除…" }));
+      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目" }));
       const set = page.locator("[data-testid=computer-settings]");
       await set.waitFor({ timeout: 10_000 });
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await set.waitFor({ state: "hidden", timeout: 5_000 });
+      // Right click: rename it in place, or go straight to removing it.
+      const last = page.locator(".sp-nav-pc").last();
+      const oldName = (await last.locator(".app-nav-label").innerText()).trim();
+      await last.click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await set.waitFor({ timeout: 10_000 });
+      const nameBox = set.getByRole("textbox", { name: "名字" });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "名字", null, { timeout: 5_000 });
+      const newName = `电脑 ${size.width} ${scheme}`;
+      await nameBox.fill(newName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-rename");
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: newName }).waitFor({ timeout: 20_000 });
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "移除这台电脑" }));
+      const sure = page.locator(".app-modal.app-confirm");
+      await sure.waitFor({ timeout: 5_000 });
+      if (await set.isVisible()) throw new Error("从右键直接移除时只该出现确认框");
+      await clickVisible(page, sure.getByRole("button", { name: "取消" }));
+      await sure.waitFor({ state: "hidden", timeout: 5_000 });
+      // Back to its name for the steps after this one.
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await set.waitFor({ timeout: 10_000 });
+      await nameBox.fill(oldName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: oldName }).waitFor({ timeout: 20_000 });
       await clickVisible(page, page.locator(".sp-nav-pc").first());
       if (narrow) await sidebar(page, false);
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.locator(".conv-detail").first().waitFor({ timeout: 20_000 });
     });
 
     // A command another agent left on a computer: the sidebar dot turns

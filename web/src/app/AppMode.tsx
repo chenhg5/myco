@@ -169,7 +169,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
   // A computer's settings: who may use it, its projects, removing it.
-  const [pcSettings, setPcSettings] = useState<{ hubId: string; name: string } | null>(null);
+  const [pcSettings, setPcSettings] = useState<{ hubId: string; name: string; focus?: "name" | "remove" } | null>(null);
   useEffect(() => {
     // The terminal's header asks for them too.
     const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; name: string }>).detail; if (d) setPcSettings(d); };
@@ -634,9 +634,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
               </div>
               {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                 const dot = workDot([r]);
+                const pc = { hubId: r.hub.id, name: r.st.agent.name };
                 const menu = [
                   { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
-                  { label: L("谁能用、项目、移除…", "Who can use it, projects, remove…"), onSelect: () => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name }) },
+                  { label: L("改名", "Rename"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
+                  { label: L("谁能用、项目", "Who can use it, projects"), onSelect: () => setPcSettings(pc) },
+                  { label: L("移除这台电脑", "Remove this computer"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
                 ];
                 return (
                   <div key={r.st.agent.name} className="sp-nav-pc-wrap">
@@ -806,7 +809,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
-      <ComputerSettings row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
+      <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
         rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
         onOpenTerminal={(r) => chatWithMember(r)} />
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />

@@ -228,6 +228,24 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
+/**
+ * Why a message failed, in words: short beside its time, long under it.
+ * Known hub reasons are explained; anything else is shown as it came.
+ */
+function failureWords(err: string): { short: string; long: string } {
+  if (/delivery attempts exhausted/.test(err)) {
+    return {
+      short: L("没送到", "Not delivered"),
+      long: L("没送到：它取走了几次，都没开始处理。它那边的会话可能没在运行，或者卡住了。可以重新发送，或者先看看它在不在线。",
+        "Not delivered: it picked this up several times but never started on it. Its session may not be running, or may be stuck. Send it again, or check that it is online first."),
+    };
+  }
+  if (/lease expired|timed out|timeout/i.test(err)) {
+    return { short: L("超时了", "Timed out"), long: L(`超时了：${err}`, `Timed out: ${err}`) };
+  }
+  return { short: L("失败了", "Failed"), long: L(`失败了：${err}`, `Failed: ${err}`) };
+}
+
 export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
@@ -1421,6 +1439,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // A task that failed: the same message to the same node again, in the same
+  // conversation, as a fresh task (the failed one stays, marked).
+  const sendAgain = async (task: Message) => {
+    if (resending) return;
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
+      setMessages((prev) => [...(prev || []), fresh]);
+      atBottom.current = true;
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+
   // Messages waiting behind this round, in order: on the hub (v0.19.2) or
   // here. Both are one list above the box, with edit and withdraw.
   type QueueItem = { key: string; body: string; server?: Message; local?: Queued };
@@ -1654,7 +1689,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const usage = answers ? usageOf[answers] : undefined;
       const voiced = m.unreadable ? null : viaVoice(m.body);
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
-        : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
+        : m.status === "failed" && m.error ? failureWords(m.error).short : "";
+      // A task of yours that failed (not one you stopped): what happened, in
+      // words, and sending it again is one click.
+      const retry = m.type === "task" && m.status === "failed" && !!m.error && m.error !== STOPPED && isMe(m.from, row?.hub) && !observed;
       const receipt = receiptOf(m);
       return (
         <Fragment key={m.id}>
@@ -1712,6 +1750,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
         </div>
+        {retry && (
+          <div className="conv-stuck is-failed" data-failed={m.id}>
+            <span className="dot failed" aria-hidden />
+            <span className="conv-stuck-text">{failureWords(m.error!).long}</span>
+            <span className="conv-stuck-actions">
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void sendAgain(m)}>
+                {resending === m.id ? L("正在发送…", "Sending…") : L("重新发送", "Send again")}
+              </button>
+            </span>
+          </div>
+        )}
         {/* What the agent did for a task you gave it (its runner reports it):
             the start of its turn, on its side of the conversation. A task that
             went quiet after it was picked up may have lost its result: say so,
