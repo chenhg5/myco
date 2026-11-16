@@ -623,9 +623,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 const pc = { hubId: r.hub.id, name: r.st.agent.name };
                 const menu = [
                   { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
-                  { label: L("改名…", "Rename…"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
-                  { label: L("谁能用、项目…", "Who can use it, projects…"), onSelect: () => setPcSettings(pc) },
-                  { label: L("移除这台电脑…", "Remove this computer…"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
+                  { label: L("改名", "Rename"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
+                  { label: L("谁能用、项目", "Who can use it, projects"), onSelect: () => setPcSettings(pc) },
+                  { label: L("移除这台电脑", "Remove this computer"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
                 ];
                 return (
                   <div key={r.st.agent.name} className="sp-nav-pc-wrap">
