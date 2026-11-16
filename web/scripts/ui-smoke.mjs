@@ -341,6 +341,8 @@ async function runMatrix(browser, size, scheme) {
   // running, so put it back before each width and theme.
   const reset = await fetch(`http://${HOST}:${mockPort()}/app/mock/stuck`, { method: "POST" });
   if (!reset.ok) throw new Error(`重置「可能卡住」的演示任务失败：HTTP ${reset.status}`);
+  // (its times count from now: its last progress 40 minutes ago, the task 45)
+  const stuckResetAt = Date.now();
   // The machine-delete step removes the demo machine and its nodes.
   const resetMachine = await fetch(`http://${HOST}:${mockPort()}/app/mock/machine`, { method: "POST" });
   if (!resetMachine.ok) throw new Error(`重置演示机器失败：HTTP ${resetMachine.status}`);
@@ -1650,6 +1652,18 @@ async function runMatrix(browser, size, scheme) {
       }
       const spins = await page.locator(".conv-detail .trace-spin").count();
       if (spins > 0) throw new Error(`卡住的任务不应转圈，实际有 ${spins} 个 .trace-spin`);
+      // What it did and reported stays (its run), the line goes under it;
+      // the quiet counts from what it last reported.
+      const said = page.locator(".conv-detail .trace .trace-report", { hasText: "整理到一半" });
+      await said.waitFor({ timeout: 10_000 });
+      const quietMin = Number(/^(\d+) 分钟没有动静/.exec(noteText)?.[1]);
+      const sinceReport = 40 + Math.floor((Date.now() - stuckResetAt) / 60_000);
+      if (!(Math.abs(quietMin - sinceReport) <= 1)) throw new Error(`没有动静的时间应从它最后报的进度算起（约 ${sinceReport} 分钟），实际「${noteText}」`);
+      const below = await note.evaluate((el, s) => {
+        const r = [...document.querySelectorAll(".conv-detail .trace-report")].find((x) => (x.textContent || "").includes(s));
+        return !!r && r.getBoundingClientRect().bottom <= el.getBoundingClientRect().top + 1;
+      }, "整理到一半");
+      if (!below) throw new Error("「可能卡住」那一行应在它的过程下面");
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-stuck");
       const body = "把旧版 runner 的日志整理到 docs/legacy.md。";

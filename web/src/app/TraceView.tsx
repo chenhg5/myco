@@ -248,7 +248,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
   hubId: string; task: Message; onGrow?: () => void;
   cli?: string;
   onStatus?: (taskId: string, status: string) => void;
@@ -273,6 +273,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   footed?: boolean;
   /** told whenever it stops or goes back to work (pausedRun) */
   onPaused?: (taskId: string, paused: boolean) => void;
+  /** told when its last step was, and whether it ended its turn or set the
+   *  task aside (then it waits; it is not stuck) */
+  onActivity?: (taskId: string, at: number, ended: boolean) => void;
   /** what you added to the task (steer): in the run at the time you sent
    *  it, so what it did after is under it */
   steers?: Message[];
@@ -371,6 +374,13 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   }, [running]);
   const paused = running && !asking && !gone && pausedRun(events || [], task, said || [], now);
   useEffect(() => { onPaused?.(task.id, paused); }, [onPaused, task.id, paused]);
+  useEffect(() => {
+    if (!onActivity || !running || !events) return;
+    let at = 0;
+    for (const e of events) at = Math.max(at, e.at ? new Date(e.at).getTime() || 0 : 0);
+    const last = events[events.length - 1]?.data.kind;
+    onActivity(task.id, at, (traceStatus || task.status) === "held" || last === "turn_end" || last === "usage");
+  }, [onActivity, task.id, running, events, traceStatus, task.status]);
   const verb = useVerb(running && !quiet && !paused && !footed);
   // 只看进度 (Settings): only what it reported, not its steps.
   const onlyReports = useReportsOnly();

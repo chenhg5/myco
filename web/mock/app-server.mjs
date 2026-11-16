@@ -183,6 +183,13 @@ const machineStuckTask = makeMessage({
   updated_at: iso(60 * 60),
   active_at: iso(60 * 60),
 });
+// What it reported on that task before it went quiet: it stays in the run
+// (above the line saying it may be stuck), and the quiet counts from it.
+const stuckProgress = makeMessage({
+  thread_id: "th_console_stuck", from: "legacy-codex", to: CONSOLE, type: "progress", status: "done",
+  reply_to: "msg_stuck_legacy", body: "整理到一半：已经列出了 3 种旧版 runner 的日志格式。",
+  created_at: iso(40 * 60), updated_at: iso(40 * 60),
+});
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -343,7 +350,7 @@ const consoleThreads = {
     makeMessage({ thread_id: "th_console_busy", from: "ios-shell", to: CONSOLE, type: "progress", status: "done", body: "已经跑完 3/5 个场景…", created_at: iso(60), updated_at: iso(60) }),
   ],
   // Picked up long ago and quiet since: looks stuck in the chat and the list.
-  th_console_stuck: [stuckTask],
+  th_console_stuck: [stuckTask, stuckProgress],
   // An older task stuck behind a newer one the sender stopped: it still has
   // its own stop and resend in the chat.
   th_console_stuck_stopped: [stuckOlderTask, stoppedAfterTask],
@@ -1215,7 +1222,8 @@ const server = http.createServer(async (req, res) => {
       if (m.type === "task" && !["done", "failed"].includes(m.status)) Object.assign(m, { status: "done", updated_at: iso(60) });
       return m;
     })];
-    hub.threads.th_console_stuck = keep("th_console_stuck", [stuckTask]);
+    stuckProgress.created_at = stuckProgress.updated_at = iso(40 * 60);
+    hub.threads.th_console_stuck = keep("th_console_stuck", [stuckTask, stuckProgress]);
     stuckOlderTask.status = "acked";
     delete stuckOlderTask.error;
     stuckOlderTask.created_at = iso(19 * 60 * 60);
