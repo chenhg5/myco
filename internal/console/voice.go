@@ -395,10 +395,21 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// The key typed is the chosen speech service's. Sharing stays as it
 	// was unless this change says otherwise.
+	// One change at a time: a look at the hubs must not see the keys of
+	// this save without its choices.
+	v := b.voiceState()
+	v.sync.changing.Lock()
+	defer v.sync.changing.Unlock()
+	was := v.stored()
 	if c.Share == nil {
-		c.Share = b.voiceState().stored().Share
+		c.Share = was.Share
 	}
+	// Later than what it replaces, also within the same second: the
+	// hubs keep the newer by this time.
 	c.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+	if !c.UpdatedAt.After(was.UpdatedAt) {
+		c.UpdatedAt = was.UpdatedAt.Add(time.Second)
+	}
 	set := func(name, key string, clear bool) error {
 		switch {
 		case clear:
@@ -416,12 +427,12 @@ func (b *Backend) putVoiceConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if err := b.voiceState().save(c); err != nil {
+	if err := v.save(c); err != nil {
 		writeErr(w, err)
 		return
 	}
 	// The person's other devices get it from the hubs.
-	b.syncVoice(r.Context())
+	b.syncVoiceLocked(r.Context())
 	b.getVoice(w, r)
 }
 

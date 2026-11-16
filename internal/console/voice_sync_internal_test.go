@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -160,5 +161,68 @@ func TestVoiceSettingsFromBeforeSharing(t *testing.T) {
 	srv2 := httptestServer(t, b2)
 	if _, body := srv2("POST", "/app/voice/sync", ""); !strings.Contains(body, `"llm_model":"from-the-phone"`) || keys2.m[voiceLLMSecret] != "sk-phone" {
 		t.Fatalf("a hub that has them: %s %v", body, keys2.m)
+	}
+}
+
+// Keys that call back when one is set: a look at the hubs can be started
+// in the middle of a save.
+type hookKeys struct {
+	*memKeys
+	onSet func(id string)
+}
+
+func (s *hookKeys) Set(id, v string) error {
+	err := s.memKeys.Set(id, v)
+	if s.onSet != nil {
+		s.onSet(id)
+	}
+	return err
+}
+
+// A look at the hubs that starts while a save is half done (the keys are
+// in, the choices not yet) waits for it: the hub never gets the keys with
+// empty choices under the save's own time.
+func TestVoiceSaveAndSyncDoNotCross(t *testing.T) {
+	mem := &memKeys{m: map[string]string{}}
+	keys := &hookKeys{memKeys: mem}
+	b := &Backend{Store: NewStore(t.TempDir() + "/hubs.json"), Secrets: keys}
+	kept := &settingsHub{}
+	hub, err := b.Store.Add("mine", kept.serve(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.m[hub.ID] = "myco_console_mine"
+	srv := httptestServer(t, b)
+
+	done := make(chan struct{})
+	var once sync.Once
+	keys.onSet = func(id string) {
+		if id != ttsSecret("doubao") {
+			return
+		}
+		once.Do(func() {
+			go func() {
+				defer close(done)
+				b.syncVoice(context.Background())
+			}()
+			// Long enough for the look to read the hub and this App's
+			// settings, were nothing holding it back.
+			time.Sleep(150 * time.Millisecond)
+		})
+	}
+	code, body := srv("PUT", "/app/voice/config", `{"llm_base_url":"https://api.example.com/v1","llm_model":"fast-1","llm_key":"sk-model","tts_provider":"doubao","tts_key":"tts-key"}`)
+	if code != 200 {
+		t.Fatalf("put: %d %s", code, body)
+	}
+	<-done
+	if d := kept.get(); d.LLMModel != "fast-1" || d.LLMBaseURL == "" || d.LLMKey != "sk-model" || d.TTSKeys["doubao"] != "tts-key" {
+		t.Fatalf("the hub holds a half-saved change: model %q, address set %v", d.LLMModel, d.LLMBaseURL != "")
+	}
+
+	// Two changes within one second: the second is still the newer one.
+	first := kept.get().UpdatedAt
+	srv("PUT", "/app/voice/config", `{"llm_base_url":"https://api.example.com/v1","llm_model":"fast-2","tts_provider":"doubao"}`)
+	if d := kept.get(); d.LLMModel != "fast-2" || !d.UpdatedAt.After(first) {
+		t.Fatalf("a second change in the same second: model %q, %v then %v", d.LLMModel, first, d.UpdatedAt)
 	}
 }
