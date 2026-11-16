@@ -2166,6 +2166,22 @@ async function runMatrix(browser, size, scheme) {
       await where.waitFor({ timeout: 10_000 });
       const said = await where.innerText();
       if (!said.includes("已存到") || !said.includes("版本太旧")) throw new Error(`应写明设置存到了哪些工作区，实际「${said}」`);
+      // The voice is picked from the service's list (by language), and tried
+      // before it is saved; one not on the list is typed in under Other.
+      const pick = page.locator("[data-testid=voice-speaker]");
+      if ((await pick.locator("option").count()) < 100) throw new Error("音色应是豆包的列表");
+      await pick.selectOption("zh_female_vv_uranus_bigtts");
+      await clickVisible(page, page.locator("[data-testid=voice-try]"));
+      for (let i = 0; ; i++) {
+        const t = await (await fetch(`http://${HOST}:${mockPort()}/app/voice/tried`)).json();
+        if (t.speaker === "zh_female_vv_uranus_bigtts") break;
+        if (i > 50) throw new Error(`试听应合成选中的音色，实际「${t.speaker}」`);
+        await settle(page, 200);
+      }
+      await page.locator("[data-testid=voice-try]", { hasText: "试听" }).waitFor({ timeout: 5_000 });
+      await pick.selectOption({ label: "其他（填音色 ID）" });
+      await page.locator("input[placeholder='S_…']").waitFor({ timeout: 5_000 });
+      await pick.selectOption("zh_female_vv_uranus_bigtts");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
       // Turned off: nothing says where any more; and back on.

@@ -4,6 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
+import { readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
@@ -1406,7 +1407,10 @@ const server = http.createServer(async (req, res) => {
     // The speech services come from the backend; the settings are kept on
     // the workspaces' hubs unless sharing is off (one hub here is too old).
     const providers = () => [{ id: "doubao", name: "豆包语音", name_en: "Doubao Speech", default_speaker: "zh_male_wennuanahu_uranus_bigtts",
-      help: "在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。", help_en: "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key.", has_key: !!v.ttsKey }];
+      help: "在火山引擎控制台「豆包语音」里开通语音合成 2.0、创建 API Key。音色从列表里选，选好点「试听」；复刻的声音选「其他」，填 S_ 开头的 ID。",
+      help_en: "Turn on speech synthesis 2.0 under Doubao Speech in the Volcengine console and create an API key. Pick a voice from the list and try it; for a cloned voice choose Other and type its ID (it starts with S_).",
+      voices: doubaoVoices(), has_key: !!v.ttsKey }];
+    if (parts[2] === "tried" && method === "GET") return send(res, 200, { speaker: v.tried || "" });
     const sync = () => (v.share === false ? [] : state.hubs.map((h, i) => ({ id: h.id, name: h.name, state: i === 1 ? "unsupported" : "synced" })));
     const info = () => ({ available: true, ready: v.llmKey && v.ttsKey, config: { tts_provider: "doubao", ...v.cfg }, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
       tts_providers: providers(), share: v.share !== false, sync: sync(),
@@ -1432,6 +1436,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, info());
     }
     if (parts[2] === "sync" && method === "POST") return send(res, 200, info());
+    // Trying a voice: a short tone stands in for the line (the last voice
+    // tried is kept for the UI smoke to check).
+    if (parts[2] === "preview" && method === "POST") {
+      const b = await readBody(req);
+      if (!v.ttsKey && !b?.tts_key) return fail(res, 400, "no_key", "no API key for Doubao Speech", "type the speech service's API key first");
+      v.tried = b?.tts_speaker || "zh_male_wennuanahu_uranus_bigtts";
+      res.writeHead(200, { "Content-Type": "audio/wav", "Cache-Control": "no-store" });
+      return res.end(toneWav());
+    }
     if (parts[2] === "start" && method === "POST") {
       const b = await readBody(req);
       if (!b?.agent) return fail(res, 400, "invalid_argument", "agent is required: a voice call is with one agent");
@@ -2611,3 +2624,21 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, "127.0.0.1", () => {
   console.error(`myco app mock listening on http://127.0.0.1:${PORT}`);
 });
+
+// Doubao's voices, as the App backend ships them.
+let voicesCache;
+function doubaoVoices() {
+  return (voicesCache ||= JSON.parse(readFileSync(new URL("../../internal/console/voice_doubao_voices.json", import.meta.url), "utf8")));
+}
+
+// A quiet 0.3s tone as 16-bit mono WAV, for a voice being tried.
+function toneWav() {
+  const rate = 24000, n = Math.round(rate * 0.3);
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write("RIFF", 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write("WAVEfmt ", 8);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
+  buf.write("data", 36); buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 2000 * Math.min(1, (n - i) / 2000)), 44 + i * 2);
+  return buf;
+}
