@@ -255,6 +255,8 @@ export interface AppInfo {
   dictation?: boolean;
   /** the desktop app asks for a face's picture with its own panel (macOS) */
   pick_image?: boolean;
+  /** the desktop app opens links in the default browser (POST /app/open-url) */
+  open_url?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -434,6 +436,7 @@ export const appApi = {
   hiddenMessages: (hubId: string) => request<{ ids: string[] }>("GET", `app/hubs/${enc(hubId)}/hidden`),
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
+  openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
   translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>

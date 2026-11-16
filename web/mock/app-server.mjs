@@ -190,6 +190,8 @@ const stuckProgress = makeMessage({
   reply_to: "msg_stuck_legacy", body: "整理到一半：已经列出了 3 种旧版 runner 的日志格式。",
   created_at: iso(40 * 60), updated_at: iso(40 * 60),
 });
+// Links the App asked to open in the browser (/app/open-url).
+const openedLinks = [];
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -1395,7 +1397,19 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac", open_url: true });
+  }
+  // /app/open-url: the desktop app opens a link in the default browser;
+  // here it is only noted (GET /app/mock/opened lists them, for the smoke test).
+  if (parts[0] === "app" && parts[1] === "open-url" && parts.length === 2) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    if (!/^(https?:\/\/[^/]|mailto:)/i.test(body?.url || "")) return fail(res, 400, "invalid_argument", "only http, https and mailto links open in the browser");
+    openedLinks.push(body.url);
+    return send(res, 200, { ok: true });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
+    return send(res, 200, { urls: openedLinks });
   }
   // /app/ui-lang: the pages' language, for the desktop app's tray menu.
   if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {

@@ -181,6 +181,9 @@ type Backend struct {
 	// only (the desktop app on macOS, whose web view shows every file for
 	// an <input accept="image/*">); "" when cancelled. Nil elsewhere.
 	PickImage func() (path string, err error)
+	// OpenURL opens a web or mail link in the default browser (the desktop
+	// app, whose web view opens no new windows). Nil elsewhere.
+	OpenURL func(url string) error
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -230,7 +233,7 @@ func (b *Backend) Handler() http.Handler {
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -252,6 +255,7 @@ func (b *Backend) Handler() http.Handler {
 	b.dictationRoutes(m)
 	b.translateRoutes(m)
 	m.HandleFunc("POST /app/pick-image", b.pickImage)
+	m.HandleFunc("POST /app/open-url", b.openURL)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})

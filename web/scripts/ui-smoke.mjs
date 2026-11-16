@@ -435,6 +435,21 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-home");
     });
 
+    // A link in a chat opens in the default browser (the desktop app's web
+    // view opens no new windows): the App hands it over, no tab of its own.
+    await step("链接用浏览器打开", async () => {
+      const link = page.locator(".sp-home .conv-timeline a", { hasText: "发布页" }).first();
+      await link.scrollIntoViewIfNeeded();
+      const before = page.context().pages().length;
+      await link.click();
+      await page.waitForFunction(async () => {
+        const r = await (await fetch("/app/mock/opened")).json();
+        return r.urls.includes("https://example.com/releases/v0.16.8");
+      }, null, { timeout: 5_000 });
+      await page.waitForTimeout(300);
+      if (page.context().pages().length !== before) throw new Error("链接应交给默认浏览器打开，不该在 App 里开新窗口");
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
@@ -1043,7 +1058,9 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "首页.html" }).last().click();
       const frame = doc.locator(".fp-body.is-page iframe.fp-frame");
       await frame.waitFor({ timeout: 5_000 });
-      if ((await frame.getAttribute("sandbox")) !== "") throw new Error("HTML 预览的框不该允许运行脚本");
+      // (same origin only so its links can be opened from the App; no scripts)
+      const sandbox = (await frame.getAttribute("sandbox")) ?? "missing";
+      if (sandbox === "missing" || /allow-scripts|allow-popups|allow-top-navigation/.test(sandbox)) throw new Error(`HTML 预览的框不该允许运行脚本，实际 sandbox="${sandbox}"`);
       if (!((await frame.getAttribute("srcdoc")) || "").includes("新版首页")) throw new Error("HTML 预览应显示这个页面");
       await doc.getByRole("tab", { name: "源码" }).click();
       await doc.locator(".fp-code", { hasText: "<h1>新版首页</h1>" }).waitFor({ timeout: 5_000 });

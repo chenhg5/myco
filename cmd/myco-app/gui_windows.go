@@ -37,6 +37,9 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		Assets: application.AssetOptions{Handler: h},
 	})
 
+	// Links from the pages open in the default browser.
+	openURL = func(u string) error { return app.Browser.OpenURL(u) }
+
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:  "main",
 		Title: "myco",

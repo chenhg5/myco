@@ -5,6 +5,7 @@ import { appApi } from "@/appapi";
 import type { Attachment, Message } from "@/api";
 import { Markdown } from "@/app/Markdown";
 import { bytes } from "@/app/attach";
+import { handleLinkClick } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -262,7 +263,10 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
                 ))}</pre>
               ) : md && view === "file" ? <div className="fp-doc"><Markdown text={text} /></div>
               // A page as a page, in a frame of its own that runs nothing.
-              : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="" referrerPolicy="no-referrer" srcDoc={pageDoc(text)} />
+              : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={pageDoc(text)}
+                  // (no scripts run in it; same origin only so its links
+                  // can be opened from here: the sandbox lets none open)
+                  onLoad={(e) => e.currentTarget.contentDocument?.addEventListener("click", (ev) => { handleLinkClick(ev); })} />
               : <pre className="fp-code">{text}</pre>}
           </div>
         </Dialog.Content>

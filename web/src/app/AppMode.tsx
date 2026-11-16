@@ -32,6 +32,7 @@ import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
+import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
@@ -88,6 +89,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
   setSystemDictation(!!info?.dictation);
   setSystemPicker(!!info?.pick_image);
+  // Links out of the App open in the default browser (its web view opens
+  // no new windows): a click on one anywhere in the page.
+  const linksViaApp = !!info?.open_url;
+  setOpenLinksViaApp(linksViaApp);
+  useEffect(() => {
+    if (!linksViaApp) return;
+    // (after the page's own handlers: one that took the click keeps it)
+    const on = (e: MouseEvent) => { handleLinkClick(e); };
+    document.addEventListener("click", on);
+    return () => document.removeEventListener("click", on);
+  }, [linksViaApp]);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
   // What the hubs showed last (also from before a restart) until they answer.

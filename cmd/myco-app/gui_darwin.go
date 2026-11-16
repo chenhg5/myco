@@ -51,6 +51,9 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 		},
 	})
 
+	// Links from the pages open in the default browser.
+	openURL = func(u string) error { return app.Browser.OpenURL(u) }
+
 	// A face is chosen with the system's own panel, pictures only: the web
 	// view's panel for <input type=file> shows every file.
 	pickImage = func() (string, error) {
