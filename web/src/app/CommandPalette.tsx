@@ -6,12 +6,14 @@ import type { Message } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { isMe, nodeName } from "@/app/nodes";
 import { Avatar, isWorkspace } from "@/app/persona";
+import { recentChats } from "@/app/recentChats";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
- * Finding anything (⌘K, Ctrl+K on Windows): one box over the App. What you
- * type is matched against members, projects and computers in every
+ * Finding anything (⌘K, Ctrl+K on Windows): one box over the App. Empty, it
+ * lists the chats you opened last first (Enter goes back to one). What you
+ * type is matched against those, members, projects and computers in every
  * workspace this App has, and looked for in the messages of your own
  * conversations (each workspace's hub searches them). ↑/↓ choose, Enter
  * opens, Esc closes. A message opens its conversation at that message,
@@ -87,7 +89,20 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
     const many = hubs.filter((h) => h.ok).length > 1;
     const where = (hubId: string) => (many ? hubs.find((h) => h.id === hubId)?.name : undefined);
     const out: Result[] = [];
-    const agents = rows.filter((r) => !isWorkspace(r.st.agent) && r.st.agent.kind !== "machine");
+    // The chats you opened last, first: ⌘K, Enter goes back to one.
+    const recent = recentChats()
+      .map((c) => rows.find((r) => r.hub.id === c.hubId && r.st.agent.name === c.agent))
+      .filter((r): r is AgentRow => !!r && hit(nodeName(r.st.agent, r.hub), r.st.agent.name, r.st.agent.description))
+      .slice(0, text ? 4 : 6);
+    const inRecent = new Set(recent.map((r) => `${r.hub.id}:${r.st.agent.name}`));
+    for (const r of recent) {
+      out.push({
+        key: `r:${r.hub.id}:${r.st.agent.name}`, group: L("最近", "Recent"), title: nodeName(r.st.agent, r.hub),
+        sub: [isWorkspace(r.st.agent) ? L("电脑", "Computer") : r.st.agent.description, where(r.hub.id)].filter(Boolean).join(" · "),
+        icon: isWorkspace(r.st.agent) ? <Monitor /> : <Avatar agent={r.st.agent} size={22} badge={false} />, target: { kind: "member", row: r },
+      });
+    }
+    const agents = rows.filter((r) => !isWorkspace(r.st.agent) && r.st.agent.kind !== "machine" && !inRecent.has(`${r.hub.id}:${r.st.agent.name}`));
     for (const r of agents.filter((x) => hit(nodeName(x.st.agent, x.hub), x.st.agent.name, x.st.agent.description)).slice(0, text ? 6 : 4)) {
       out.push({
         key: `m:${r.hub.id}:${r.st.agent.name}`, group: L("成员", "Members"), title: nodeName(r.st.agent, r.hub),
@@ -101,7 +116,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
         icon: <FolderKanban />, target: { kind: "project", hubId: p.hubId, name: p.name },
       });
     }
-    for (const r of rows.filter((x) => isWorkspace(x.st.agent) && hit(nodeName(x.st.agent, x.hub), x.st.agent.name)).slice(0, text ? 4 : 2)) {
+    for (const r of rows.filter((x) => isWorkspace(x.st.agent) && !inRecent.has(`${x.hub.id}:${x.st.agent.name}`) && hit(nodeName(x.st.agent, x.hub), x.st.agent.name)).slice(0, text ? 4 : 2)) {
       out.push({
         key: `c:${r.hub.id}:${r.st.agent.name}`, group: L("电脑", "Computers"), title: nodeName(r.st.agent, r.hub), sub: where(r.hub.id),
         icon: <Monitor />, target: { kind: "member", row: r },
@@ -130,7 +145,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
       out.push({ key: `g:${p.page}`, group: L("前往", "Go to"), title: p.title, icon: p.icon, target: { kind: "page", page: p.page } });
     }
     return out;
-  }, [q, rows, hubs, projects, found, now]);
+  }, [q, rows, hubs, projects, found, now, open]);
 
   useEffect(() => { setSel(0); }, [q]);
   useEffect(() => {

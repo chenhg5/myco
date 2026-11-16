@@ -36,9 +36,11 @@ type Side = { agent: string; peer?: string; focus?: string; also?: string[] };
 let openedChatN = 0;
 
 const SPLIT_KEY = "myco-space-split";
-// Per project: the pane open beside the coordinator and full width, for
-// this run of the app (see ProjectSpace).
-const panes = new Map<string, { side: Side | null; only: "" | "left" | "right" }>();
+// Per space: what was open (a chat, a pair, the activity), the pane beside
+// the coordinator and full width, for this run of the app (see
+// ProjectSpace): going to another space or workspace and back finds it so.
+type Panes = { side: Side | null; only: "" | "left" | "right"; view?: View; tap?: number };
+const panes = new Map<string, Panes>();
 // The members column, and the least each pane needs.
 const SIDE_W = 248;
 const SIDE_FOLDED_W = 56;
@@ -137,7 +139,19 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hubId, project?.name, coordinatorSet, coordinator]);
 
-  const [view, setView] = useState<View>({ kind: "home" });
+  // (kept per space: see panes)
+  const paneKey = project ? `${hubId}\u0000${project.name}` : `${hubId}\u0000~loose`;
+  const keep = (part: Partial<Panes>) => panes.set(paneKey, { side: null, only: "", ...panes.get(paneKey), ...part });
+  // (picked again in the sidebar since: its home, as a chat app's list)
+  const [view, setViewState] = useState<View>(() => {
+    const kept = panes.get(paneKey);
+    return kept?.view && kept.tap === home ? kept.view : { kind: "home" };
+  });
+  const setView = (v: View) => {
+    // (without a message to go to: coming back is not a search again)
+    keep({ view: "focus" in v && v.focus ? { ...v, focus: undefined } : v, tap: home });
+    setViewState(v);
+  };
   // Your chat with an agent: the name you have talked to it as (this
   // device's, or your own on the hub), found among your conversations;
   // your own name when there are none yet.
@@ -183,16 +197,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // What is open beside the coordinator, and whether one pane has the whole
   // width, outlive this view being rebuilt (say, a workspace that did not
   // answer for a moment): kept per space for this run of the app.
-  const paneKey = project ? `${hubId}\u0000${project.name}` : "";
   const [side, setSideState] = useState<Side | null>(() => panes.get(paneKey)?.side ?? null);
   const [only, setOnlyState] = useState<"" | "left" | "right">(() => panes.get(paneKey)?.only ?? "");
   const setSide = (v: Side | null | ((s: Side | null) => Side | null)) => setSideState((prev) => {
     const next = typeof v === "function" ? v(prev) : v;
-    panes.set(paneKey, { side: next, only: panes.get(paneKey)?.only ?? "" });
+    keep({ side: next && next.focus ? { ...next, focus: undefined } : next });
     return next;
   });
   const setOnly = (v: "" | "left" | "right") => {
-    panes.set(paneKey, { side: panes.get(paneKey)?.side ?? null, only: v });
+    keep({ only: v });
     setOnlyState(v);
   };
   const chatWith = async (agent: string, focus?: string) => {

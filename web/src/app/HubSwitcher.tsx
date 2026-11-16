@@ -55,6 +55,12 @@ function nodeCount(hubsOv: HubOverview[] | undefined, id: string): number | unde
 
 /** Workspace picker: one at a time (they are kept apart), add another, or
  *  open their settings. */
+/** The shortcut that switches to the nth workspace (AppMode). */
+function switchKey(n: number): string {
+  const p = typeof navigator === "undefined" ? "" : navigator.platform || "";
+  return /Mac|iPhone|iPad/.test(p) ? `⌘${n}` : `Ctrl+${n}`;
+}
+
 export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, isLocal, variant = "sidebar", down = false }: {
   hubs: Hub[];
   hubsOv?: HubOverview[];
@@ -238,6 +244,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                   <Avatar name={e.hub.name} id={e.hub.id} />
                   <span className="app-hub-menu-name">{e.hub.name}</span>
                   {isLocal?.(e.hub) && <span className="app-hub-menu-tag">{L("这台电脑", "This computer")}</span>}
+                  {/* ⌘1…⌘9 switch to it (AppMode) */}
+                  {i < 9 && hubs.length > 1 && <span className="app-hub-menu-key">{switchKey(i + 1)}</span>}
                   <span className={cn("dot", e.hub.ok ? "working" : "down")} />
                   {value === e.hub.id && <Check className="app-hub-menu-check" />}
                 </button>

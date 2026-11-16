@@ -23,9 +23,13 @@ func TestReadChatStreamTextAndTools(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n\n")
 	var got []string
-	m, err := readChatStream(strings.NewReader(stream), func(s string) { got = append(got, s) })
+	var tools []string
+	m, err := readChatStream(strings.NewReader(stream), func(s string) { got = append(got, s) }, func(n string) { tools = append(tools, n) })
 	if err != nil || m.Content != "好的，交给后端。" || strings.Join(got, "|") != "好的，|交给后端。" {
 		t.Fatalf("text: %v %+v %v", err, m, got)
+	}
+	if strings.Join(tools, "|") != "send_task" {
+		t.Fatalf("a tool's start is told once: %v", tools)
 	}
 	if len(m.ToolCalls) != 1 || m.ToolCalls[0].ID != "c1" || m.ToolCalls[0].Function.Name != "send_task" || m.ToolCalls[0].Function.Arguments != `{"to":"backend"}` {
 		t.Fatalf("tools: %+v", m.ToolCalls)
@@ -98,7 +102,7 @@ type scriptModel struct {
 	seen    [][]chatMsg
 }
 
-func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string)) (chatMsg, error) {
+func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDef, onText func(string), onTool func(string)) (chatMsg, error) {
 	m.mu.Lock()
 	m.seen = append(m.seen, append([]chatMsg(nil), msgs...))
 	var r chatMsg
@@ -118,6 +122,11 @@ func (m *scriptModel) Stream(ctx context.Context, msgs []chatMsg, tools []toolDe
 			}
 		}
 		onText(string(ch))
+	}
+	for _, tc := range r.ToolCalls {
+		if onTool != nil {
+			onTool(tc.Function.Name)
+		}
 	}
 	return r, nil
 }
@@ -149,12 +158,16 @@ func (h *fakeHub) TaskNews(context.Context, VoiceTaskRef) (taskNews, error) {
 	return h.news, nil
 }
 
-func newTestCall(t *testing.T, m *scriptModel, h *fakeHub) (*voice, *voiceCall, *fakeAudio) {
+func newTestCall(t *testing.T, m *scriptModel, h *fakeHub, tweak ...func(*voiceDeps)) (*voice, *voiceCall, *fakeAudio) {
 	t.Helper()
 	v := &voice{state: stIdle, changed: make(chan struct{})}
 	a := &fakeAudio{}
-	c := newVoiceCall(v, voiceDeps{audio: a, model: m, tts: fakeSpeech{}, hub: h, lang: "zh-CN",
-		endOfSpeech: 80 * time.Millisecond, quietBeforeNotice: 50 * time.Millisecond, watchEvery: 30 * time.Millisecond})
+	d := voiceDeps{audio: a, model: m, tts: fakeSpeech{}, hub: h, lang: "zh-CN",
+		endOfSpeech: 80 * time.Millisecond, quietBeforeNotice: 50 * time.Millisecond, watchEvery: 30 * time.Millisecond}
+	for _, f := range tweak {
+		f(&d)
+	}
+	c := newVoiceCall(v, d)
 	v.call = c
 	_ = a.Start("zh-CN", c)
 	c.begin()
@@ -202,6 +215,10 @@ func TestVoiceCallPassesWorkOnAndSaysSo(t *testing.T) {
 	c.Heard("把登录那个", false)
 	c.Heard("把登录那个 bug 修了", true)
 	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "交给后端了") })
+	// It said a few words before it acted, not only after.
+	if !has(v, vAssistant, "好，我跟它说。好，交给后端了") {
+		t.Fatalf("no word before acting: %+v", lines(v))
+	}
 	h.mu.Lock()
 	told := append([]string(nil), h.told...)
 	h.mu.Unlock()
@@ -382,7 +399,7 @@ func TestVoiceModelTakesTheWholeEndpoint(t *testing.T) {
 	}))
 	defer srv.Close()
 	m := &openAIModel{base: srv.URL + "/v1/chat/completions", model: "fast", key: "k", session: "myco-voice-1"}
-	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil)
+	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil, nil)
 	if err != nil || out.Content != "好" || path != "/v1/chat/completions" || session != "myco-voice-1" {
 		t.Fatalf("got %q %v at %s (session %q)", out.Content, err, path, session)
 	}
@@ -439,5 +456,133 @@ func TestVoiceListAndPreview(t *testing.T) {
 	keys.m[voiceTTSSecret] = "kept-key"
 	if code, _ := srv("POST", "/app/voice/preview", `{"lang":"en"}`); code != 200 || gotKey != "kept-key" || gotSpeaker != defaultVoiceSpeaker || gotText != voiceSampleLines["zh"] {
 		t.Fatalf("kept key: %d %q %q %q", code, gotKey, gotSpeaker, gotText)
+	}
+}
+
+// Words the model says before a tool are enough: no second line is added.
+func TestVoiceCallAckOnlyWhenSilent(t *testing.T) {
+	send := toolCall{ID: "c1", Type: "function"}
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"加一个暗色模式"}`
+	m := &scriptModel{replies: []chatMsg{
+		{Role: "assistant", Content: "好，让它加暗色模式。", ToolCalls: []toolCall{send}},
+		{Role: "assistant", Content: "转过去了。"},
+	}}
+	v, c, _ := newTestCall(t, m, &fakeHub{})
+	c.Heard("加个暗色模式", true)
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
+	if has(v, vAssistant, "我跟它说") {
+		t.Fatalf("an ack on top of the model's own words: %+v", lines(v))
+	}
+	if toolAck("en-US", "stop_agent") != "OK, I'll stop it. " || toolAck("zh-CN", "check_agent") != "我看一眼。" {
+		t.Fatal("toolAck")
+	}
+}
+
+// A long task is not minutes of silence: now and then the call says it is
+// still going, with its newest progress note (told once).
+func TestVoiceCallSaysALongTaskIsStillGoing(t *testing.T) {
+	send := toolCall{ID: "c1", Type: "function"}
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"把整个项目的测试跑一遍","what":"跑全部测试"}`
+	m := &scriptModel{replies: []chatMsg{
+		{Role: "assistant", ToolCalls: []toolCall{send}},
+		{Role: "assistant", Content: "转过去了。"},
+	}}
+	h := &fakeHub{news: taskNews{Status: "acked", Since: time.Now().Add(-6 * time.Minute), Progress: "在跑集成测试"}}
+	v, c, _ := newTestCall(t, m, h, func(d *voiceDeps) { d.stillWorkingEvery = 300 * time.Millisecond })
+	c.Heard("把测试都跑一遍", true)
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
+	c.Played()
+	notice := func() []string {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		var out []string
+		for _, msgs := range m.seen {
+			for _, x := range msgs {
+				if x.Role == "system" && strings.Contains(x.Content, "还在进行") && !contains(out, x.Content) {
+					out = append(out, x.Content)
+				}
+			}
+		}
+		return out
+	}
+	waitFor(t, "a word that it is still going", func() bool { return len(notice()) > 0 })
+	first := notice()[0]
+	if !strings.Contains(first, "跑全部测试") || !strings.Contains(first, "在做") || !strings.Contains(first, "6 分钟") || !strings.Contains(first, "在跑集成测试") {
+		t.Fatalf("notice: %s", first)
+	}
+	c.Played()
+	waitFor(t, "a second word", func() bool { return len(notice()) > 1 })
+	if strings.Contains(notice()[1], "在跑集成测试") {
+		t.Fatalf("the same progress note told twice: %s", notice()[1])
+	}
+}
+
+func contains(xs []string, x string) bool {
+	for _, y := range xs {
+		if y == x {
+			return true
+		}
+	}
+	return false
+}
+
+// A call ended leaves its last lines for the next call with that agent:
+// kept per workspace and agent, word for word, for a day.
+func TestVoiceMemoCarriesTheLastCallOver(t *testing.T) {
+	v := &voice{state: stIdle, changed: make(chan struct{}), memoPath: t.TempDir() + "/voice-memo.json"}
+	var history []chatMsg
+	for i := 0; i < 6; i++ {
+		history = append(history, chatMsg{Role: "user", Content: fmt.Sprintf("第 %d 句", i)},
+			chatMsg{Role: "assistant", ToolCalls: []toolCall{{ID: "x"}}}, chatMsg{Role: "tool", Content: "sent"},
+			chatMsg{Role: "system", Content: "（系统消息）"}, chatMsg{Role: "assistant", Content: fmt.Sprintf("回答 %d", i)})
+	}
+	v.keepMemo(memoKey("h1", "backend"), history)
+	m := v.memo(memoKey("h1", "backend"))
+	if m == nil || len(m.Lines) != memoLines || m.Lines[0].Text != "第 2 句" || m.Lines[7] != (memoLine{Who: "assistant", Text: "回答 5"}) {
+		t.Fatalf("memo: %+v", m)
+	}
+	if v.memo(memoKey("h1", "frontend")) != nil || v.memo(memoKey("h2", "backend")) != nil {
+		t.Fatal("a memo is per workspace and agent")
+	}
+	// A call where nothing was said keeps the memo from before.
+	v.keepMemo(memoKey("h1", "backend"), []chatMsg{{Role: "system", Content: "x"}})
+	if m := v.memo(memoKey("h1", "backend")); m == nil || m.Lines[0].Text != "第 2 句" {
+		t.Fatalf("an empty call wiped the memo: %+v", m)
+	}
+	p := memoPrompt("zh-CN", m)
+	if !strings.Contains(p, "上一通电话（1 分钟前）") || !strings.Contains(p, "- 对方：第 2 句") || !strings.Contains(p, "- 你：回答 5") {
+		t.Fatalf("prompt: %s", p)
+	}
+	if memoPrompt("zh-CN", nil) != "" {
+		t.Fatal("no memo, no words")
+	}
+
+	// A call: the memo goes into its instructions, and what was said is
+	// handed back when it ends.
+	ms := &scriptModel{replies: []chatMsg{{Role: "assistant", Content: "下午再说，记住了。"}}}
+	got := make(chan []chatMsg, 1)
+	_, c, _ := newTestCall(t, ms, &fakeHub{}, func(d *voiceDeps) {
+		d.memo = p
+		d.ended = func(h []chatMsg) { got <- h }
+	})
+	c.Heard("这个先不急，下午再说", true)
+	waitFor(t, "a turn", func() bool { ms.mu.Lock(); defer ms.mu.Unlock(); return len(ms.seen) > 0 })
+	ms.mu.Lock()
+	sys := ms.seen[0][0].Content
+	ms.mu.Unlock()
+	if !strings.Contains(sys, "上一通电话") || !strings.Contains(sys, "回答 5") {
+		t.Fatalf("instructions without the memo: %s", sys)
+	}
+	time.Sleep(100 * time.Millisecond)
+	c.hangUp()
+	select {
+	case h := <-got:
+		if l := memoOf(h); len(l) == 0 || l[0].Text != "这个先不急，下午再说" {
+			t.Fatalf("ended with %+v", h)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the call's end was not handed over")
 	}
 }

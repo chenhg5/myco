@@ -30,6 +30,7 @@ import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/Cha
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
+import { noteChat } from "@/app/recentChats";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -557,6 +558,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   };
   // What each run's trace says (TraceView's pausedRun): stopped (turn over,
   // set aside, silent) or at work. Not known until its trace is read.
+  const [runActivity, setRunActivity] = useState<ReadonlyMap<string, { at: number; ended: boolean }>>(() => new Map());
+  const onActivity = useCallback((taskId: string, at: number, ended: boolean) =>
+    setRunActivity((s) => {
+      const o = s.get(taskId);
+      return o && o.at === at && o.ended === ended ? s : new Map(s).set(taskId, { at, ended });
+    }), []);
   const [runPaused, setRunPaused] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const onPaused = useCallback((taskId: string, paused: boolean) =>
     setRunPaused((s) => (s.get(taskId) === paused ? s : new Map(s).set(taskId, paused))), []);
@@ -707,10 +714,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const offline = row?.st.state === "offline";
   // A task picked up long ago and quiet since: its result may never come
   // back. Said in the chat, with a way out, instead of a spinner.
-  const isStuck = (m: Message): boolean =>
-    possiblyStuck(m, { agent: row?.st.agent, receiving: row?.st.receiving, offline: row?.st.state === "offline" }, now);
+  // When a task of yours last showed signs of life: the task itself, what
+  // it reported (progress) and its steps (TraceView says). And whether it
+  // ended its turn or set the task aside: then it waits (for you, or for
+  // others), it is not stuck.
+  const saidAt = new Map<string, number>();
+  for (const m of messages || []) {
+    if (m.type !== "progress" || !m.reply_to) continue;
+    const t = new Date(m.created_at).getTime();
+    if (t > (saidAt.get(m.reply_to) || 0)) saidAt.set(m.reply_to, t);
+  }
+  const activeAt = (m: Message) => Math.max(lastActivityAt(m) || 0, saidAt.get(m.id) || 0, runActivity.get(m.id)?.at || 0);
+  const isStuck = (m: Message): boolean => {
+    const offline = row?.st.state === "offline";
+    if (!offline && runActivity.get(m.id)?.ended) return false;
+    return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline }, now);
+  };
   const stuckLine = (m: Message): string => {
-    const quiet = quietFor(now, lastActivityAt(m));
+    const quiet = quietFor(now, activeAt(m));
     return L(
       `${quiet}没有动静，可能卡住了（结果可能没送回来）`,
       `No activity for ${quiet}; it may be stuck (the result may not have made it back)`,
@@ -865,6 +886,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const observed = exchange
     ? !isMe(target.agent, row?.hub) && !isMe(target.peer || "", row?.hub)
     : !!messages && messages.length > 0 && !messages.some((m) => isMe(m.from, row?.hub) || isMe(m.to, row?.hub));
+  // Your chat with it, opened: one of the recent ones (⌘K).
+  useEffect(() => {
+    if (exchange && !observed && target.agent && !target.agent.startsWith("@")) noteChat(target.hubId, target.agent);
+  }, [target.hubId, target.agent, exchange, observed]);
   const parties = exchange
     ? [target.agent, target.peer!]
     : observed && messages
@@ -1434,7 +1459,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A task with its run shown under it (yours, or one another member gave
   // the agent you are looking at): its progress is part of that run.
   const inRun = (task?: Message) => !!task && task.type === "task" && !task.e2e
-    && ((isMe(task.from, row?.hub) && !isStuck(task)) || (alsoSet.has(task.from) && task.to === target.agent));
+    && (isMe(task.from, row?.hub) || (alsoSet.has(task.from) && task.to === target.agent));
   const byId = new Map((shown || []).map((m) => [m.id, m]));
   // A supplement is drawn inside the task it names, not as a turn of its
   // own (only one loading/status for the task remains).
@@ -1634,8 +1659,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             the start of its turn, on its side of the conversation. A task that
             went quiet after it was picked up may have lost its result: say so,
             and offer to stop it and send it again. */}
-        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (isStuck(m) ? (
-          <div className="conv-stuck" data-stuck={m.id}>
+        {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (
+          <>
+            {/* (its run stays: what it did and said; the line about being
+                stuck goes under it) */}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+          answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
+            {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
             <span className="conv-stuck-actions">
@@ -1646,9 +1676,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 {resending === m.id ? L("正在重发…", "Resending…") : L("重发", "Resend")}
               </button>
             </span>
-          </div>
-        ) : <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
-          answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />)}
+          </div>)}
+          </>
+        )}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
           <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />

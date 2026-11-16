@@ -30,6 +30,14 @@ type voiceDeps struct {
 	quietBeforeNotice time.Duration
 	// watchEvery: how often handed-out tasks are looked at.
 	watchEvery time.Duration
+	// stillWorkingEvery: how long the call goes without a word about a task
+	// that is not done before it says that it still is (a long task would
+	// otherwise be minutes of silence).
+	stillWorkingEvery time.Duration
+	// memo: the last call's end, for the instructions (voice_memo.go);
+	// ended gets what was said in this one when it ends.
+	memo  string
+	ended func(history []chatMsg)
 }
 
 type voiceCall struct {
@@ -54,6 +62,13 @@ type voiceCall struct {
 	lastSound time.Time
 	notices   []string
 	watched   map[string]*watchedTask
+
+	// The conversation with the agent as last read, so a turn need not
+	// wait for the hub: read again when the person starts talking.
+	convoMu sync.Mutex
+	convo   string
+	convoAt time.Time
+	convoIn chan struct{} // a read under way
 }
 
 type voiceTurn struct {
@@ -68,6 +83,8 @@ type watchedTask struct {
 	what     string // what it was asked, short
 	asked    string // the question it asked last (told once)
 	finished bool
+	toldAt   time.Time // when the person last heard about it
+	progress string    // the progress note told last
 }
 
 func newVoiceCall(v *voice, d voiceDeps) *voiceCall {
@@ -79,6 +96,9 @@ func newVoiceCall(v *voice, d voiceDeps) *voiceCall {
 	}
 	if d.watchEvery == 0 {
 		d.watchEvery = 4 * time.Second
+	}
+	if d.stillWorkingEvery == 0 {
+		d.stillWorkingEvery = 2 * time.Minute
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	return &voiceCall{v: v, d: d, ctx: ctx, stop: stop, in: make(chan func(), 64), watched: map[string]*watchedTask{}}
@@ -110,6 +130,9 @@ func (c *voiceCall) loop() {
 	for {
 		select {
 		case <-c.ctx.Done():
+			if c.d.ended != nil {
+				c.d.ended(c.history)
+			}
 			return
 		case f := <-c.in:
 			f()
@@ -187,6 +210,9 @@ func (c *voiceCall) heard(text string, final bool) {
 	}
 	if c.turn != nil || c.speaking {
 		c.interrupt()
+	}
+	if c.partial == "" {
+		c.readConvo() // ready by the time they finish
 	}
 	c.partial, c.partialAt = text, time.Now()
 	c.lastSound = c.partialAt
@@ -328,13 +354,8 @@ func trimHistory(h []chatMsg) []chatMsg {
 func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg) {
 	defer close(t.done)
 	// The conversation with the agent as it is now (it moves on its own).
-	cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	convo, err := c.d.hub.Context(cctx)
-	cancel()
-	if err != nil && convo == "" {
-		convo = "（这会儿读不到对话：" + err.Error() + "）"
-	}
-	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo)}}, history...)
+	convo := c.conversation(ctx)
+	msgs := append([]chatMsg{{Role: "system", Content: voiceSystemPrompt(c.d.lang, c.d.hub.Name(), convo) + c.d.memo}}, history...)
 	sentences := make(chan string, 16)
 	spoke := make(chan struct{})
 	go func() {
@@ -377,12 +398,24 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 		sentences <- s
 	}
 	var failed error
+	// About to act with nothing said yet: a few words first, so the person
+	// is not left in silence while the model writes the message out.
+	onTool := func(name string) {
+		if strings.TrimSpace(t.said.String()) != "" {
+			return
+		}
+		if rest := split.flush(); rest != "" {
+			emit(rest)
+			return
+		}
+		emit(toolAck(c.d.lang, name))
+	}
 	for round := 0; round < 5 && ctx.Err() == nil; round++ {
 		reply, err := c.d.model.Stream(ctx, msgs, voiceTools, func(delta string) {
 			for _, s := range split.add(delta) {
 				emit(s)
 			}
-		})
+		}, onTool)
 		if err != nil {
 			failed = err
 			break
@@ -395,6 +428,10 @@ func (c *voiceCall) runTurn(ctx context.Context, t *voiceTurn, history []chatMsg
 		if len(reply.ToolCalls) == 0 {
 			break
 		}
+		// What it did shows in the conversation: read it again next time.
+		c.convoMu.Lock()
+		c.convoAt = time.Time{}
+		c.convoMu.Unlock()
 		for _, call := range reply.ToolCalls {
 			out := c.runTool(ctx, call)
 			res := chatMsg{Role: "tool", ToolCallID: call.ID, Content: out}
@@ -482,7 +519,7 @@ func (c *voiceCall) watchTask(ref VoiceTaskRef, what string) {
 			}
 			return
 		}
-		c.watched[ref.ID] = &watchedTask{ref: ref, what: what}
+		c.watched[ref.ID] = &watchedTask{ref: ref, what: what, toldAt: time.Now()}
 	})
 }
 
@@ -524,12 +561,118 @@ func (c *voiceCall) watch() {
 				switch {
 				case st.Finished:
 					w.finished = true
+					w.toldAt = time.Now()
 					c.notices = append(c.notices, fmt.Sprintf("它回复了%s：%s", what, st.Summary))
 				case st.Question != "" && st.Question != w.asked:
 					w.asked = st.Question
+					w.toldAt = time.Now()
 					c.notices = append(c.notices, fmt.Sprintf("它在问你%s：%s（它在等回答；对方回答了就用 tell_agent 转给它）", what, st.Question))
+				case st.Question == "" && c.stillWorkingDue(w):
+					w.toldAt = time.Now()
+					c.notices = append(c.notices, c.stillWorking(what, w, st))
 				}
 			})
 		}
 	}
+}
+
+// toolAck is what is said when the model starts an action before saying
+// anything.
+func toolAck(lang, tool string) string {
+	en := strings.HasPrefix(lang, "en")
+	switch tool {
+	case "tell_agent":
+		if en {
+			return "Sure, I'll tell it. "
+		}
+		return "好，我跟它说。"
+	case "stop_agent":
+		if en {
+			return "OK, I'll stop it. "
+		}
+		return "好，我让它停下。"
+	case "check_agent":
+		if en {
+			return "Let me check. "
+		}
+		return "我看一眼。"
+	}
+	if en {
+		return "One moment. "
+	}
+	return "稍等。"
+}
+
+// readConvo starts reading the conversation with the agent, unless one is
+// under way or the last is a moment old.
+func (c *voiceCall) readConvo() <-chan struct{} {
+	c.convoMu.Lock()
+	defer c.convoMu.Unlock()
+	if c.convoIn != nil {
+		return c.convoIn
+	}
+	done := make(chan struct{})
+	if time.Since(c.convoAt) < 2*time.Second {
+		close(done)
+		return done
+	}
+	c.convoIn = done
+	go func() {
+		ctx, cancel := context.WithTimeout(c.ctx, 4*time.Second)
+		convo, err := c.d.hub.Context(ctx)
+		cancel()
+		if err != nil && convo == "" {
+			convo = "（这会儿读不到对话：" + err.Error() + "）"
+		}
+		c.convoMu.Lock()
+		c.convo, c.convoAt, c.convoIn = convo, time.Now(), nil
+		c.convoMu.Unlock()
+		close(done)
+	}()
+	return done
+}
+
+// conversation is the conversation with the agent for a turn: read when
+// the person started talking (or now, if that was a while ago).
+func (c *voiceCall) conversation(ctx context.Context) string {
+	c.convoMu.Lock()
+	fresh := c.convoIn == nil && time.Since(c.convoAt) < 10*time.Second
+	convo := c.convo
+	c.convoMu.Unlock()
+	if fresh {
+		return convo
+	}
+	select {
+	case <-c.readConvo():
+	case <-ctx.Done():
+	}
+	c.convoMu.Lock()
+	defer c.convoMu.Unlock()
+	return c.convo
+}
+
+// stillWorkingDue: a task not done has gone unmentioned for a while, and
+// the call has been quiet for a good part of it (not in the middle of a
+// conversation about something else).
+func (c *voiceCall) stillWorkingDue(w *watchedTask) bool {
+	every := c.d.stillWorkingEvery
+	return time.Since(w.toldAt) >= every && time.Since(c.lastSound) >= every/2 && c.turn == nil && !c.speaking
+}
+
+// stillWorking is the notice that a task is still going: how it stands,
+// for how long, and its newest progress note if not told yet.
+func (c *voiceCall) stillWorking(what string, w *watchedTask, st taskNews) string {
+	var b strings.Builder
+	b.WriteString("（不是回复，只是让对方知道还在进行）" + what + "：它" + statusWord(st.Status))
+	if !st.Since.IsZero() {
+		if m := int(time.Since(st.Since).Minutes()); m >= 1 {
+			fmt.Fprintf(&b, "，已经 %d 分钟了", m)
+		}
+	}
+	if st.Progress != "" && st.Progress != w.progress {
+		w.progress = st.Progress
+		b.WriteString("；它最新报的进展：" + st.Progress)
+	}
+	b.WriteString("。用一句很短的话告诉对方还在进行（可以带上它在做什么），别说做完了，也不用问对方要不要等。")
+	return b.String()
 }
