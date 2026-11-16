@@ -124,12 +124,17 @@ export function DictateButton({ input, value, onText, disabled }: {
 
   const start = async () => {
     setNote("");
-    focusEnd(input.current);
     if (listening) { live.current?.stop(); return; }
+    // The keyboard in the box (the system's voice typing types where it is).
+    // Not moving the caret when it is there already: Windows voice typing,
+    // still writing, loses track of its words when the caret moves and
+    // writes them all again (a second click, to stop it, did that).
+    if (document.activeElement !== input.current) focusEnd(input.current);
     if (appDictation) {
       try {
         const r = await appApi.startDictation(speechLang());
         if (r.mode !== "listen" || !r.id) return; // the system types it in itself
+        focusEnd(input.current);
         const { write } = begin();
         let ended = false;
         live.current = { wrote: [value], stop: () => { if (!ended) void appApi.stopDictation(r.id!).catch(() => undefined); } };
@@ -154,6 +159,7 @@ export function DictateButton({ input, value, onText, disabled }: {
       return;
     }
     if (!Recog) return;
+    focusEnd(input.current);
     const r = new Recog();
     r.lang = speechLang();
     r.continuous = true;

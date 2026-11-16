@@ -187,7 +187,7 @@ func heard(sid int, text string, final bool) {
 	l := hearingsBy[sid]
 	var all string
 	if l != nil {
-		all = l.u.Add(text)
+		all = l.u.Add(text, final)
 	}
 	hearingsMu.Unlock()
 	if l != nil {

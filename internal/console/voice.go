@@ -30,6 +30,7 @@ import (
 //
 //	GET  /app/voice                 {available, ready, config, has_llm_key, has_tts_key, tts_providers, share, sync, session}
 //	PUT  /app/voice/config          {llm_base_url, llm_model, llm_key?, tts_provider, tts_speaker, tts_key?, share?, clear_*}
+//	POST /app/voice/preview         {tts_provider, tts_speaker, tts_rate, tts_key?, lang?}  a line in that voice (audio/wav)
 //	POST /app/voice/sync            looks at the hubs for newer settings, then answers as GET
 //	POST /app/voice/start           {hub_id, agent, peer?, lang}  starts a call with one agent
 //	POST /app/voice/stop            hangs up
@@ -301,6 +302,7 @@ func (b *Backend) voiceRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/voice", b.getVoice)
 	m.HandleFunc("PUT /app/voice/config", b.putVoiceConfig)
 	m.HandleFunc("POST /app/voice/sync", b.syncVoiceRoute)
+	m.HandleFunc("POST /app/voice/preview", b.previewVoice)
 	m.HandleFunc("POST /app/voice/start", b.startVoice)
 	m.HandleFunc("POST /app/voice/stop", b.stopVoice)
 	m.HandleFunc("POST /app/voice/mute", b.muteVoice)

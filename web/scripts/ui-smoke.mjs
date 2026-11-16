@@ -1107,6 +1107,14 @@ async function runMatrix(browser, size, scheme) {
       if ((ph || "").startsWith("补充给")) throw new Error(`它这一轮停了，输入框不该还是「补充给…」，实际「${ph}」`);
       if (await page.locator(".conv-detail .conv-send.is-stop").count()) throw new Error("它这一轮停了，不该还有停止按钮");
       await shot(page, size, scheme, "chat-waiting");
+      // Meanwhile its session woke only to keep listening (its wait timed
+      // out): no loading again, none of that turn shown.
+      for (let t = 0; t < 30; t++) {
+        if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("它醒来只是重新等消息，不该又冒出 loading");
+        if (await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).count()) break;
+        await page.waitForTimeout(400);
+      }
+      if (await page.locator(".conv-detail .trace", { hasText: "还在等消息" }).count()) throw new Error("只为继续等消息醒来的那一轮不该显示在过程里");
       // The answer comes when the other one is done.
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).waitFor({ timeout: 20_000 });
       await noRound(page);
@@ -2158,6 +2166,22 @@ async function runMatrix(browser, size, scheme) {
       await where.waitFor({ timeout: 10_000 });
       const said = await where.innerText();
       if (!said.includes("已存到") || !said.includes("版本太旧")) throw new Error(`应写明设置存到了哪些工作区，实际「${said}」`);
+      // The voice is picked from the service's list (by language), and tried
+      // before it is saved; one not on the list is typed in under Other.
+      const pick = page.locator("[data-testid=voice-speaker]");
+      if ((await pick.locator("option").count()) < 100) throw new Error("音色应是豆包的列表");
+      await pick.selectOption("zh_female_vv_uranus_bigtts");
+      await clickVisible(page, page.locator("[data-testid=voice-try]"));
+      for (let i = 0; ; i++) {
+        const t = await (await fetch(`http://${HOST}:${mockPort()}/app/voice/tried`)).json();
+        if (t.speaker === "zh_female_vv_uranus_bigtts") break;
+        if (i > 50) throw new Error(`试听应合成选中的音色，实际「${t.speaker}」`);
+        await settle(page, 200);
+      }
+      await page.locator("[data-testid=voice-try]", { hasText: "试听" }).waitFor({ timeout: 5_000 });
+      await pick.selectOption({ label: "其他（填音色 ID）" });
+      await page.locator("input[placeholder='S_…']").waitFor({ timeout: 5_000 });
+      await pick.selectOption("zh_female_vv_uranus_bigtts");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
       // Turned off: nothing says where any more; and back on.

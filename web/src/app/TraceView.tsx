@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Check, ChevronRight, FileText, Globe, Loader2, Pencil, Search, SquareTerminal, Wrench, X } from "lucide-react";
 import { appApi, isOldHub } from "@/appapi";
 import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
@@ -83,13 +83,62 @@ export function pausedRun(events: TraceEvent[], task: Message, reports: Message[
   const ev = events[events.length - 1];
   const report = reports[reports.length - 1];
   const activeAt = Math.max(lastAt(ev?.at), lastAt(report?.created_at));
-  // Its turn over, or its run over (usage ends a runner's run: the answer
-  // is on its way).
-  if ((ev?.data.kind === "turn_end" || ev?.data.kind === "usage") && lastAt(report?.created_at) <= lastAt(ev.at)) return true;
+  // Its run over (usage ends a runner's run: the answer is on its way).
+  if (ev?.data.kind === "usage" && lastAt(report?.created_at) <= lastAt(ev.at)) return true;
+  // Its turn over, and not at work since: after a turn ends, only a step
+  // that does something (not a chore, not only words) or a new report says
+  // it is at it again.
+  let end = -1;
+  for (let k = events.length - 1; k >= 0; k--) if (events[k].data.kind === "turn_end") { end = k; break; }
+  if (end >= 0 && lastAt(report?.created_at) <= lastAt(events[end].at)
+    && !events.slice(end + 1).some((e) => e.data.kind === "tool" && !isChore(e.data.input))) return true;
   if (task.status === "held") return activeAt <= lastAt(task.updated_at);
   if (!activeAt) return false;
   const said = !ev || ev.data.kind === "text" || ev.data.kind === "thinking" || lastAt(report?.created_at) > lastAt(ev.at);
   return said && now - activeAt > QUIET_AFTER_SAY_MS;
+}
+
+/** A command that only keeps a session listening (myco inbox wait/pull,
+ *  myco message ack/done/release, a cd before them): not work on a task.
+ *  (The same as the CLI's isChore, trace_chores.go.) */
+export function isChore(input = ""): boolean {
+  const cmd = input.trim().replace(/^(?:\/\S*\/)?(?:ba|z)?sh\s+-l?c\s+/, "").trim().replace(/^["']+|["']+$/g, "");
+  if (!cmd) return false;
+  let seen = false;
+  for (const part of cmd.split(/&&|\|\||;|\n/)) {
+    const p = part.split("|")[0].trim();
+    if (!p || /^cd(?:\s|$)/.test(p)) continue;
+    if (/^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)/.test(p)) { seen = true; continue; }
+    return false;
+  }
+  return seen;
+}
+
+/** Leaves out the turns a session that receives in its conversation woke
+ *  for only to keep listening (its wait timed out and it started it again):
+ *  newer CLIs do not upload them (turnGate), older ones do. The first turn
+ *  (the one that took the task) is always kept. */
+export function withoutChores(events: TraceEvent[]): TraceEvent[] {
+  const out: TraceEvent[] = [];
+  let turn: TraceEvent[] = [];
+  let first = true;
+  const close = () => {
+    const tools = turn.filter((e) => e.data.kind === "tool");
+    const chores = tools.length > 0 && tools.every((e) => isChore(e.data.input));
+    if (first || !chores) out.push(...turn);
+    else out.push(...turn.filter((e) => e.data.kind === "usage"));
+    first = false;
+    turn = [];
+  };
+  for (const e of events) {
+    turn.push(e);
+    if (e.data.kind === "turn_end") close();
+  }
+  // The turn still going, after one ended: shown once it does something
+  // (until then it may be only that).
+  if (turn.length && (first || turn.some((e) => e.data.kind === "tool" && !isChore(e.data.input)))) out.push(...turn);
+  else out.push(...turn.filter((e) => e.data.kind === "usage")); // (what the run cost stays)
+  return out.length === events.length ? events : out;
 }
 
 const READ = new Set(["Read", "NotebookRead"]);
@@ -240,7 +289,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const asking = running && !!task.asking;
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
-  const [events, setEvents] = useState<TraceEvent[] | null>(() => {
+  const [rawEvents, setEvents] = useState<TraceEvent[] | null>(() => {
     if (running) return null;
     // (one kept before steps were taken once each may hold some twice)
     const kept = recall<TraceEvent[]>(memoKey);
@@ -248,8 +297,10 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   });
   const [gone, setGone] = useState(false);
   const [traceStatus, setTraceStatus] = useState<string>();
-  const last = useRef(events?.length ? events[events.length - 1].seq : 0);
-  const finalLoaded = useRef(!running && events !== null);
+  const last = useRef(rawEvents?.length ? rawEvents[rawEvents.length - 1].seq : 0);
+  const finalLoaded = useRef(!running && rawEvents !== null);
+  // (without the turns it woke for only to keep listening)
+  const events = useMemo(() => rawEvents && withoutChores(rawEvents), [rawEvents]);
   const body = useRef<HTMLDivElement>(null);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {

@@ -203,11 +203,18 @@ func hearingID() string {
 // Utterances keeps what a recognizer heard when it starts over after a
 // pause (Apple's does, on this Mac: after a pause its text is only the new
 // sentence): what came before stays, the new sentence goes after it.
-type Utterances struct{ done, last string }
+type Utterances struct{ done, last, ended string }
 
-// Add takes the recognizer's text now and returns all of it so far.
-func (u *Utterances) Add(text string) string {
-	if u.last != "" && startsOver(u.last, text) {
+// Add takes the recognizer's text now and returns all of it so far. A
+// final text is the sentence as it settled on it, never a new one: when
+// you stop, it may rewrite the first words ("妹那边那妹妹那边…" becomes
+// "妹可那边…"), and taken for a new sentence it would write it all twice.
+func (u *Utterances) Add(text string, final bool) string {
+	// (the settled sentence again, after its session ended)
+	if final && u.last == "" && text == u.ended {
+		return u.done
+	}
+	if u.last != "" && !final && startsOver(u.last, text) {
 		u.done = joinText(u.done, u.last)
 	}
 	u.last = text
@@ -217,6 +224,9 @@ func (u *Utterances) Add(text string) string {
 // Commit ends the current sentence (the recognizer's session ended): what
 // comes next goes after it, even if it starts the same way.
 func (u *Utterances) Commit() {
+	if u.last != "" {
+		u.ended = u.last
+	}
 	u.done = joinText(u.done, u.last)
 	u.last = ""
 }
@@ -231,6 +241,11 @@ func startsOver(prev, next string) bool {
 		same++
 	}
 	if same >= 2 || same == len(p) || same == len(n) {
+		return false
+	}
+	// A new sentence has only just begun: much shorter than the one before.
+	// About as long is the same one, heard again differently.
+	if 2*len(n) > len(p) {
 		return false
 	}
 	// The first word or two may still change as it hears more.

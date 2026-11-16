@@ -32,17 +32,20 @@ type ttsProvider struct {
 	// The voice used when none is chosen, and how to get a key and a voice.
 	DefaultSpeaker string
 	Help, HelpEn   string
-	speech         func(key string, c VoiceConfig) voiceSpeech
+	// The voices to choose from (another may still be typed in).
+	Voices []TTSVoice
+	speech func(key string, c VoiceConfig) voiceSpeech
 }
 
 // VoiceTTSProvider is a speech service as the pages show it.
 type VoiceTTSProvider struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	NameEn         string `json:"name_en"`
-	DefaultSpeaker string `json:"default_speaker,omitempty"`
-	Help           string `json:"help,omitempty"`
-	HelpEn         string `json:"help_en,omitempty"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	NameEn         string     `json:"name_en"`
+	DefaultSpeaker string     `json:"default_speaker,omitempty"`
+	Help           string     `json:"help,omitempty"`
+	HelpEn         string     `json:"help_en,omitempty"`
+	Voices         []TTSVoice `json:"voices,omitempty"`
 	// HasKey: this App holds a key for it.
 	HasKey bool `json:"has_key"`
 }
@@ -52,8 +55,9 @@ const defaultTTSProvider = "doubao"
 var ttsProviders = []ttsProvider{{
 	ID: "doubao", Name: "豆包语音", NameEn: "Doubao Speech",
 	DefaultSpeaker: defaultVoiceSpeaker,
-	Help:           "在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。音色填控制台里的音色 ID（复刻的声音以 S_ 开头）。",
-	HelpEn:         "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key. The voice is a voice ID from the console (cloned voices start with S_).",
+	Help:           "在火山引擎控制台「豆包语音」里开通语音合成 2.0、创建 API Key。音色从列表里选，选好点「试听」；复刻的声音选「其他」，填 S_ 开头的 ID。",
+	HelpEn:         "Turn on speech synthesis 2.0 under Doubao Speech in the Volcengine console and create an API key. Pick a voice from the list and try it; for a cloned voice choose Other and type its ID (it starts with S_).",
+	Voices:         doubaoVoices,
 	speech: func(key string, c VoiceConfig) voiceSpeech {
 		return &doubaoTTS{key: key, speaker: c.TTSSpeaker, rate: c.TTSRate}
 	},
@@ -90,7 +94,7 @@ func (b *Backend) voiceTTSProviders() []VoiceTTSProvider {
 	out := make([]VoiceTTSProvider, 0, len(ttsProviders))
 	for _, p := range ttsProviders {
 		out = append(out, VoiceTTSProvider{ID: p.ID, Name: p.Name, NameEn: p.NameEn, DefaultSpeaker: p.DefaultSpeaker,
-			Help: p.Help, HelpEn: p.HelpEn, HasKey: b.ttsKey(p.ID) != ""})
+			Help: p.Help, HelpEn: p.HelpEn, Voices: p.Voices, HasKey: b.ttsKey(p.ID) != ""})
 	}
 	return out
 }
