@@ -184,24 +184,44 @@ private final class CallLine: @unchecked Sendable {
     }
 
     /// The engine: the microphone tapped for the recognizer, and a player
-    /// for the voice. Built again when the system stops it (headphones on
-    /// or off, another sample rate).
+    /// for the voice. One engine for the whole call: when the system stops
+    /// it, the same one is wired and started again (`restart`).
     private func build() throws {
         let engine = AVAudioEngine()
-        let input = engine.inputNode
         // Echo cancellation and noise suppression: before the formats are read.
         if processing {
             do {
-                try input.setVoiceProcessingEnabled(true)
+                try engine.inputNode.setVoiceProcessingEnabled(true)
             } catch {
                 note("voice processing refused: \(Self.said(error))")
                 processing = false
             }
         }
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        self.engine = engine
+        self.player = player
+        do {
+            try wire()
+        } catch {
+            engine.stop()
+            self.engine = nil
+            self.player = nil
+            throw error
+        }
+    }
+
+    /// Taps the microphone as it is now, connects the player and starts
+    /// the engine: when it is new, and again each time the system stopped it.
+    private func wire() throws {
+        guard let engine, let player, let playFormat else { throw DictationProblem.microphone }
+        let input = engine.inputNode
+        input.removeTap(onBus: 0)
         let format = input.outputFormat(forBus: 0)
-        // No microphone to hear with (a simulator without one): a tap on
-        // such an input does not fail, it crashes.
-        guard format.sampleRate > 0, format.channelCount > 0, let playFormat else {
+        // No microphone to hear with (a simulator without one, or a phone
+        // just after its audio changed): a tap on such an input does not
+        // fail, it crashes.
+        guard format.sampleRate > 0, format.channelCount > 0 else {
             note("no input: \(format.sampleRate) Hz, \(format.channelCount) channels")
             throw DictationProblem.microphone
         }
@@ -212,21 +232,17 @@ private final class CallLine: @unchecked Sendable {
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             self.feed(buffer)
         }
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playFormat)
         engine.prepare()
         do {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
-            engine.stop()
             throw error
         }
         player.play()
-        self.engine = engine
-        self.player = player
-        note("engine on: input \(format.sampleRate) Hz, \(format.channelCount) channels, voice processing \(processing ? "on" : "off")")
+        let audio = AVAudioSession.sharedInstance()
+        note("engine on: input \(format.sampleRate) Hz, \(format.channelCount) channels, voice processing \(processing ? "on" : "off"), session \(audio.sampleRate) Hz, out \(audio.currentRoute.outputs.map(\.portType.rawValue))")
     }
 
     private func feed(_ buffer: AVAudioPCMBuffer) {
@@ -272,51 +288,82 @@ private final class CallLine: @unchecked Sendable {
             self.queue.async {
                 guard !self.closed, let engine = self.engine, which == ObjectIdentifier(engine) else { return }
                 self.note("configuration change: engine running \(engine.isRunning)")
-                // The system says so too while the engine is being set up
-                // (turning voice processing on changes its formats). Only
-                // an engine it has stopped needs building again: building
-                // one for every notice would never end.
+                // Only an engine the system has stopped needs starting
+                // again; a notice for one that runs is an old one.
                 guard !engine.isRunning else { return }
-                self.rebuild()
+                self.restart()
             }
         })
     }
 
-    /// This many rebuilds within a few seconds: the system will not settle.
-    private static let rebuildsAllowed = 6
+    /// This many restarts within a few seconds: the system will not settle.
+    private static let restartsAllowed = 4
 
-    private func rebuild(attempt: Int = 0) {
-        guard !closed else { return }
-        engine?.inputNode.removeTap(onBus: 0)
-        engine?.stop()
-        engine = nil
-        player = nil
-        // What was queued went with the old engine.
+    /// The system stopped the engine: its audio changed (headphones on or
+    /// off, another sample rate), and on a phone always once just after a
+    /// call starts, when voice processing settles in. The same engine is
+    /// wired and started again. A new engine instead would begin without
+    /// voice processing and turn it on, which is such a change itself:
+    /// the phone would stop engine after engine and never settle.
+    private func restart(attempt: Int = 0) {
+        guard !closed, engine != nil else { return }
+        // What was queued went when the engine stopped.
         generation += 1
         if pending > 0 {
             pending = 0
             continuation.yield(.played)
         }
-        let now = Date()
-        rebuilt = rebuilt.filter { now.timeIntervalSince($0) < 5 } + [now]
+        if attempt == 0 {
+            let now = Date()
+            rebuilt = rebuilt.filter { now.timeIntervalSince($0) < 5 } + [now]
+        }
+        guard rebuilt.count <= Self.restartsAllowed else {
+            note("restarted \(rebuilt.count) times in a few seconds")
+            startWithoutProcessing(.other(L("音频设备一直在变，语音聊天结束了", "The audio route keeps changing: the voice chat ended")))
+            return
+        }
         do {
-            guard rebuilt.count <= Self.rebuildsAllowed else { throw DictationProblem.other(L("音频设备一直在变，语音聊天结束了", "The audio route keeps changing: the voice chat ended")) }
-            try build()
+            try wire()
         } catch {
-            note("rebuild \(attempt) failed: \(Self.said(error))")
-            // Just after a change the system may not be ready yet: a few
-            // more tries, a little later each time.
-            guard attempt < 3, rebuilt.count <= Self.rebuildsAllowed else {
-                end(Self.wouldNotOpen(L("音频引擎", "audio engine"), error))
+            note("restart \(attempt) failed: \(Self.said(error))")
+            // Just after a change the microphone may have no format yet: a
+            // few more tries, a little later each time.
+            guard attempt < 5 else {
+                startWithoutProcessing(Self.wouldNotOpen(L("音频引擎", "audio engine"), error))
                 return
             }
-            queue.asyncAfter(deadline: .now() + 0.3 * Double(attempt + 1)) {
-                guard !self.closed, self.engine == nil else { return }
-                self.rebuild(attempt: attempt + 1)
+            queue.asyncAfter(deadline: .now() + 0.2 * Double(attempt + 1)) {
+                guard !self.closed, self.engine?.isRunning == false else { return }
+                self.restart(attempt: attempt + 1)
             }
             return
         }
         // The microphone may give another format now: a new session hears it.
+        hear()
+    }
+
+    /// The engine will not stay up with the system's voice processing: a
+    /// new one without it, once (what the voice says is then told apart
+    /// by its words). If that was tried already, the call ends.
+    private func startWithoutProcessing(_ otherwise: DictationProblem) {
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
+        engine = nil
+        player = nil
+        guard processing else {
+            end(otherwise)
+            return
+        }
+        note("going on without voice processing")
+        processing = false
+        rebuilt = []
+        do {
+            try build()
+        } catch {
+            note("engine failed: \(Self.said(error))")
+            end(Self.wouldNotOpen(L("音频引擎", "audio engine"), error))
+            return
+        }
         hear()
     }
 
@@ -377,7 +424,7 @@ private final class CallLine: @unchecked Sendable {
     /// What was heard has been taken: the next words are a new utterance.
     func startOver() {
         queue.async {
-            guard !self.closed, self.engine != nil else { return }
+            guard !self.closed, self.engine?.isRunning == true else { return }
             self.hear()
         }
     }
@@ -392,6 +439,12 @@ private final class CallLine: @unchecked Sendable {
                   let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)),
                   let out = buffer.floatChannelData?[0]
             else { return }
+            // Stopped by the system and not yet started again: this piece
+            // is not heard (a player may not play on a stopped engine).
+            guard self.engine?.isRunning == true else {
+                if self.pending == 0 { self.continuation.yield(.played) }
+                return
+            }
             buffer.frameLength = AVAudioFrameCount(count)
             samples.withUnsafeBytes { raw in
                 for index in 0..<count {
