@@ -111,6 +111,9 @@ type voiceSync struct {
 	hubs []VoiceSyncHub
 	at   time.Time
 	once sync.Once
+	// One change to the settings at a time: a save (keys, then choices)
+	// and a look at the hubs never see each other half done.
+	changing sync.Mutex
 }
 
 // voiceDoc is what this App has, as the document the hubs keep: the model
@@ -173,6 +176,14 @@ func (b *Backend) adoptVoice(doc api.VoiceSettings) error {
 // turned sharing off. It never fails: a hub that cannot be reached is
 // tried again next time.
 func (b *Backend) syncVoice(ctx context.Context) []VoiceSyncHub {
+	v := b.voiceState()
+	v.sync.changing.Lock()
+	defer v.sync.changing.Unlock()
+	return b.syncVoiceLocked(ctx)
+}
+
+// syncVoiceLocked is syncVoice for whoever holds voiceSync.changing.
+func (b *Backend) syncVoiceLocked(ctx context.Context) []VoiceSyncHub {
 	v := b.voiceState()
 	if !v.stored().shares() || b.Store == nil {
 		v.sync.mu.Lock()
