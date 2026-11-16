@@ -35,7 +35,7 @@ const MAX_ROWS = 5;
 const POLL_MS = 2500;
 export const ISLAND_KEY = "myco-island";
 
-type Busy = { hubId: string; agent: Agent; status: string; since?: string };
+type Busy = { hubId: string; agent: Agent; status: string; since?: string; project?: string };
 
 function enabled(): boolean {
   try { return localStorage.getItem(ISLAND_KEY) !== "off"; } catch { return true; }
@@ -53,6 +53,7 @@ function busyOf(ov: AppOverview): Busy[] {
         agent: st.agent,
         status: st.agent.status_text || task?.body.replace(/\s+/g, " ").trim() || L("在干活", "Working"),
         since: task?.created_at,
+        project: task?.project,
       });
     }
   }
@@ -141,14 +142,32 @@ export function Island() {
     return () => window.removeEventListener("island-hover", on);
   });
 
+  // (a press can come twice: from the page, and from the app, which sees
+  // it even when the page does not)
+  const lastOpen = useRef(0);
   const openMember = (b: Busy) => {
+    if (Date.now() - lastOpen.current < 600) return;
+    lastOpen.current = Date.now();
     setOpen(false);
     void fetch("app/island/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hub: b.hubId, agent: b.agent.name }),
+      body: JSON.stringify({ hub: b.hubId, agent: b.agent.name, project: b.project || "" }),
     }).catch(() => undefined);
   };
+  // A press the app saw (island_darwin.go): the row under it.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ x: number; y: number }>).detail;
+      const row = d && (document.elementFromPoint(d.x, d.y) as HTMLElement | null)?.closest<HTMLElement>(".isl-row");
+      const b = row ? busyRef.current[Number(row.dataset.i)] : undefined;
+      if (b) openMember(b);
+    };
+    window.addEventListener("island-click", on);
+    return () => window.removeEventListener("island-click", on);
+  });
 
   const pillW = !shown ? Math.max(NW, 40) : open ? OPEN_W : COMPACT_W;
   const pillH = open ? openH : NH;
@@ -177,11 +196,12 @@ export function Island() {
           </span>
         </div>
         <div className="isl-list">
-          {busy.slice(0, MAX_ROWS).map((b) => (
+          {busy.slice(0, MAX_ROWS).map((b, i) => (
             <button
               key={`${b.hubId}/${b.agent.name}`}
               type="button"
               className="isl-row"
+              data-i={i}
               // On press (a panel that is not in front may not see a whole
               // click), once; then the island folds back into the notch.
               onMouseDown={(e) => { e.preventDefault(); openMember(b); }}

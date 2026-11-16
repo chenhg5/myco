@@ -433,6 +433,37 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-home");
     });
 
+    // A name picked in the notch's island (the Mac app): a chat already on
+    // screen stays as it is (its pane is pointed out); a member of the
+    // project you look at opens beside the coordinator; from elsewhere
+    // (Settings), the app goes to it.
+    if (!narrow) await step("灵动岛 · 打开成员", async () => {
+      const pick = (agent, project) => page.evaluate(async ({ agent, project }) => {
+        const ov = await (await fetch("/app/overview")).json();
+        const hub = ov.hubs.find((h) => (h.overview?.agents || []).some((a) => a.agent.name === agent));
+        window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId: hub.id, agent, project } }));
+      }, { agent, project });
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+      // The coordinator, on screen: nothing moves, its pane is pointed out.
+      await pick("pm-codex", "website");
+      await page.locator(".sp-home.is-called").waitFor({ timeout: 5_000 });
+      if (await page.locator(".sp-pane-right").count()) throw new Error("协调者已经在屏幕上，不该再打开别的栏");
+      // A member of this project: beside the coordinator.
+      await pick("docs-claude", "website");
+      const right = page.locator(".sp-pane-right");
+      await right.locator(".conv-head h2", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      if (!(await page.locator(".sp-pane-left .sp-home").isVisible())) throw new Error("打开成员时，协调者应还在左边");
+      // Again, while it shows: it stays, pointed out.
+      await pick("docs-claude", "website");
+      await page.locator(".sp-pane-right.is-called").waitFor({ timeout: 5_000 });
+      // From Settings: the app goes to it.
+      await go(page, "设置", narrow);
+      await pick("docs-claude", "website");
+      await page.locator(".sp-pane-right .conv-head h2", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".sp-pane-right").getByRole("button", { name: "关掉这一栏" }));
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
     // The members column folds to a strip of faces, and stays so.
     if (!narrow) await step("项目 · 成员栏收起", async () => {
       await page.getByRole("button", { name: "收起成员" }).click();

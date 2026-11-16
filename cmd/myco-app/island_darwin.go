@@ -34,6 +34,27 @@ static NSRect mycoNoConstrain(id self, SEL _cmd, NSRect r, NSScreen *s) { return
 // non-activating panel that leaves the app you are in active.
 static BOOL mycoCanBecomeKey(id self, SEL _cmd) { return YES; }
 
+extern void mycoIslandClick(double x, double y);
+
+// A press on the island, seen before the web view: a panel that is not key
+// (the island never activates the app) gets its first click eaten by the
+// web view, which then only makes it key, so a name pointed at and clicked
+// did nothing. Watched here, the press is passed to the page (at its point,
+// from the top left), which opens what is under it.
+static id mycoClickMonitor = nil;
+static void mycoWatchClicks(NSWindow *window) {
+	if (mycoClickMonitor) return;
+	mycoClickMonitor = [[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *e) {
+		if (e.window == window && window.contentView) {
+			NSView *cv = window.contentView;
+			NSPoint p = [cv convertPoint:e.locationInWindow fromView:nil];
+			double y = cv.isFlipped ? p.y : cv.bounds.size.height - p.y;
+			mycoIslandClick(p.x, y);
+		}
+		return e;
+	}] retain];
+}
+
 // The island's window: borderless (no frame, corners or edge of its own),
 // non-activating, and free to sit over the menu bar. Only this window's
 // class is changed: the app's main window is a different class.
@@ -50,6 +71,7 @@ static void mycoIslandFree(NSWindow *window) {
 	if ([window isKindOfClass:[NSPanel class]]) mask |= NSWindowStyleMaskNonactivatingPanel;
 	if (window.styleMask != mask) window.styleMask = mask;
 	if (window.contentView) mycoClearBackgrounds(window.contentView);
+	mycoWatchClicks(window);
 }
 
 // Whether the pointer is on the pill: pw×ph points, at the top centre of
@@ -143,7 +165,7 @@ import (
 type island struct {
 	mu   sync.Mutex
 	win  *application.WebviewWindow
-	open func(hub, agent string)
+	open func(hub, agent, project string)
 	// While shown the window keeps one size (as big as the open island):
 	// resizing it as the pill springs made the page blink. Clicks pass
 	// through it except on the pill (pw×ph), which the page reports; the
@@ -166,7 +188,7 @@ func notchSize() (w, h float64) {
 
 // newIsland creates the window; its page grows it when someone is at work,
 // through the handler below.
-func newIsland(app *application.App, open func(hub, agent string)) *island {
+func newIsland(app *application.App, open func(hub, agent, project string)) *island {
 	w, h := notchSize()
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      "island",
@@ -198,8 +220,22 @@ func newIsland(app *application.App, open func(hub, agent string)) *island {
 		},
 	})
 	is := &island{win: win, open: open}
+	theIsland = is
 	go is.watchPointer()
 	return is
+}
+
+// theIsland receives the presses the native monitor sees (one island).
+var theIsland *island
+
+// click passes a press on the island to its page, at that point.
+func (is *island) click(x, y float64) {
+	is.mu.Lock()
+	shown := is.shown
+	is.mu.Unlock()
+	if shown {
+		is.win.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("island-click",{detail:{x:%f,y:%f}}))`, x, y))
+	}
 }
 
 // watchPointer lets clicks through except on the pill, and tells the page
@@ -227,7 +263,8 @@ func (is *island) watchPointer() {
 // handler serves the island page's two requests, everything else as before:
 //
 //	POST /app/island/frame {w, h, visible}: its size, and whether to show it
-//	POST /app/island/open {hub, agent}: open the app at that member
+//	POST /app/island/open {hub, agent, project}: open the app at that member
+//	(project: the one its work is in, when known)
 func (is *island) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || !strings.HasPrefix(r.URL.Path, "/app/island/") {
@@ -247,13 +284,13 @@ func (is *island) handler(next http.Handler) http.Handler {
 			}
 			is.frame(in.W, in.H, in.PW, in.PH, in.Visible)
 		case "open":
-			var in struct{ Hub, Agent string }
+			var in struct{ Hub, Agent, Project string }
 			if json.NewDecoder(r.Body).Decode(&in) != nil {
 				http.Error(w, "bad target", http.StatusBadRequest)
 				return
 			}
 			if is.open != nil {
-				is.open(in.Hub, in.Agent)
+				is.open(in.Hub, in.Agent, in.Project)
 			}
 		default:
 			http.NotFound(w, r)

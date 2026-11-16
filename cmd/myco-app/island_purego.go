@@ -12,7 +12,7 @@ import (
 // there is none.
 type island struct{}
 
-func newIsland(*application.App, func(hub, agent string)) *island { return &island{} }
+func newIsland(*application.App, func(hub, agent, project string)) *island { return &island{} }
 
 func (*island) handler(next http.Handler) http.Handler { return next }
 
