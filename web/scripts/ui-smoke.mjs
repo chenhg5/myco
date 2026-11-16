@@ -2134,14 +2134,53 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-permission");
       await clickVisible(page, view.getByRole("button", { name: "好" }));
       await view.waitFor({ state: "hidden", timeout: 5_000 });
+      // Who may use a computer, which projects have it, and removing it are
+      // in one place, a click from its row.
+      // (The folder added in the project step, at full width; else the first.)
+      const pcRow = narrow ? page.locator(".pc-row").first() : page.locator(".pc-row", { hasText: `wsl-${size.width}-${scheme}` });
+      await clickVisible(page, pcRow.getByRole("button", { name: "设置" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await set.locator(".pcs-agent").first().waitFor({ timeout: 10_000 });
+      if (!narrow) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.locator(".pcs-agent").last());
+      await clickVisible(page, set.getByRole("button", { name: "保存" }));
+      await set.getByText("已保存").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-settings");
+      if (!narrow) {
+        await clickVisible(page, set.getByRole("button", { name: "移除这台电脑" }));
+        const sure = page.locator(".app-modal.app-confirm");
+        await sure.waitFor({ timeout: 5_000 });
+        await clickVisible(page, sure.getByRole("button", { name: "移除", exact: true }));
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+        await pcRow.waitFor({ state: "detached", timeout: 10_000 });
+      } else {
+        await clickVisible(page, set.getByRole("button", { name: "好" }));
+        await set.waitFor({ state: "hidden", timeout: 5_000 });
+      }
       // A folder's terminal opens from here.
-      await clickVisible(page, page.locator(".pc-row .app-btn-small"));
+      await clickVisible(page, page.locator(".pc-row").first().getByRole("button", { name: "打开", exact: true }));
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      // And the terminal's header opens its settings too.
+      await clickVisible(page, page.locator("[data-testid=computer-settings-open]").first());
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
     // The sidebar lists the computers too: one click opens a terminal.
     await step("电脑 · 边栏直达终端", async () => {
       await sidebar(page, true);
+      // ⋯ on hover: its settings, without opening the terminal first.
+      const wrap = page.locator(".sp-nav-pc-wrap").first();
+      await wrap.hover();
+      await clickVisible(page, wrap.locator(".sp-nav-more"));
+      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目、移除…" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
       await clickVisible(page, page.locator(".sp-nav-pc").first());
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });

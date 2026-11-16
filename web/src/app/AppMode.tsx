@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Plus, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Plus, Search, WifiOff } from "lucide-react";
+import { ComputerSettings } from "@/app/ComputerSettings";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
@@ -166,6 +167,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
+  // A computer's settings: who may use it, its projects, removing it.
+  const [pcSettings, setPcSettings] = useState<{ hubId: string; name: string } | null>(null);
+  useEffect(() => {
+    // The terminal's header asks for them too.
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; name: string }>).detail; if (d) setPcSettings(d); };
+    window.addEventListener("myco-computer-settings", on);
+    return () => window.removeEventListener("myco-computer-settings", on);
+  }, []);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
@@ -611,17 +620,28 @@ export default function AppMode({ initialHubs, initialInfo }: {
               </div>
               {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                 const dot = workDot([r]);
+                const menu = [
+                  { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
+                  { label: L("谁能用、项目、移除…", "Who can use it, projects, remove…"), onSelect: () => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name }) },
+                ];
                 return (
-                  <button key={r.st.agent.name} type="button" {...computerSort.bind(r.st.agent.name)}
-                    className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
-                    onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
-                    <Avatar agent={r.st.agent} size={20} badge={false} />
-                    <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
-                    {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
-                    )}
-                  </button>
+                  <div key={r.st.agent.name} className="sp-nav-pc-wrap">
+                    <button type="button" {...computerSort.bind(r.st.agent.name)}
+                      className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
+                      onClick={() => chatWithMember(r)} onContextMenu={(e) => navMenu.open(e, menu)}
+                      title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                      <Avatar agent={r.st.agent} size={20} badge={false} />
+                      <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
+                      {dot && (
+                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                          title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                      )}
+                    </button>
+                    <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
+                      title={L("谁能用、项目、移除", "Who can use it, projects, remove")} onClick={(e) => navMenu.openUnder(e.currentTarget, menu)}>
+                      <MoreHorizontal />
+                    </button>
+                  </div>
                 );
               })}
               {computers.length > NAV_COMPUTERS && (
@@ -726,6 +746,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
               onAddComputer={() => hub && setAddWorkspace({ hubId: hub.id, loose: true })}
+              onSettings={(r) => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name })}
               onChanged={() => void refresh()} />
           </div>
         )}
@@ -771,6 +792,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
+      <ComputerSettings row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
+        rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
+        onOpenTerminal={(r) => chatWithMember(r)} />
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
