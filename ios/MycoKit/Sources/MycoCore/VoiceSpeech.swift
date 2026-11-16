@@ -103,8 +103,8 @@ public struct SpeechService: Sendable, Hashable, Identifiable {
     public static let doubao = SpeechService(
         id: "doubao", name: "豆包语音", englishName: "Doubao Speech",
         defaultSpeaker: "zh_male_wennuanahu_uranus_bigtts",
-        help: "在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。音色填控制台里的音色 ID（复刻的声音以 S_ 开头）。",
-        englishHelp: "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key. The voice is a voice ID from the console (cloned voices start with S_).")
+        help: "在火山引擎控制台「豆包语音」里开通语音合成 2.0、创建 API Key。音色从列表里选，选好点「试听」；复刻的声音在列表最下面填 S_ 开头的 ID。",
+        englishHelp: "Turn on speech synthesis 2.0 under Doubao Speech in the Volcengine console and create an API key. Pick a voice from the list and try it; for a cloned voice, type its ID (it starts with S_) at the end of the list.")
 
     /// Every service this app can speak with.
     public static let all: [SpeechService] = [.doubao]
@@ -114,6 +114,13 @@ public struct SpeechService: Sendable, Hashable, Identifiable {
     /// newer desktop app).
     public static func named(_ id: String) -> SpeechService? {
         all.first { $0.id == (id.isEmpty ? standard : id) }
+    }
+
+    /// The voices to choose from; none when the service has no list (the
+    /// voice is then typed in). Another may always be typed in, like a
+    /// cloned one.
+    public var voices: [SpeechVoice] {
+        id == Self.doubao.id ? SpeechVoice.doubao : []
     }
 
     /// Makes its voice, with its key and what was chosen for it.

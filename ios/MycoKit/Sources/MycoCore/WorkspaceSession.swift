@@ -84,6 +84,17 @@ public final class WorkspaceSession {
         return model
     }
 
+    /// What `agent` and `other` said to each other, to read (a handoff
+    /// card opens it): `other`'s conversation with `agent`, from which
+    /// nothing is sent.
+    public func exchange(of agent: String, with other: String) -> ConversationModel {
+        let key = agent + "|~|" + other
+        if let known = conversations[key] { return known }
+        let model = ConversationModel(session: self, agent: agent, observed: other)
+        conversations[key] = model
+        return model
+    }
+
     /// - Parameter snapshots: where what it showed last is kept, so the
     ///   next launch opens on it at once; nil keeps nothing.
     ///   - files: the folder its messages' files are kept in once

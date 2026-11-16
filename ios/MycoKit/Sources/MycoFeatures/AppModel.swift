@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import Observation
 import MycoAPI
@@ -134,6 +135,9 @@ public final class AppModel {
     /// How each workspace stood with the settings kept on it, at the last
     /// look: its name, and whether it has them.
     public private(set) var voiceSync: [VoiceSyncLine] = []
+    /// The voice being tried in Settings, while it plays.
+    @ObservationIgnored private var trial: AVAudioPlayer?
+
     /// A save and a look at the workspaces, one at a time.
     @ObservationIgnored private let voiceTurns = VoiceSharing.Turns()
 
@@ -220,6 +224,40 @@ public final class AppModel {
         local.settings = settings
         await keepVoice(local)
         await syncVoiceNow()
+    }
+
+    /// Says one line in the voice chosen, to hear it before it is kept:
+    /// with the key typed, else the one this device has. (The desktop
+    /// app's "Try it".)
+    public func tryVoice(_ settings: VoiceSettings, speechKey typed: String) async throws {
+        let service = settings.service
+        var key = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty { key = await secret(VoiceSettings.speechKey(of: service.id)) }
+        let stand = doors.voice?()
+        guard stand != nil || !key.isEmpty else { throw VoiceFailure(L("先填 API Key", "Type the API key first")) }
+        let speech = stand?.speech ?? service.speech(key: key, settings: settings)
+        let heard = Heard()
+        try await speech.speak(VoiceSample.line(for: settings.speakerInUse, in: service, language: AppLanguage.current)) { samples, rate in
+            heard.samples.append(samples)
+            heard.rate = rate
+        }
+        // (A script has no sound to play.)
+        guard stand == nil else { return }
+        guard !heard.samples.isEmpty, heard.rate > 0 else {
+            throw VoiceFailure(L("语音合成服务没有返回声音", "The speech service sent no audio"))
+        }
+        trial?.stop()
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        let player = try AVAudioPlayer(data: VoiceSample.wav(heard.samples, rate: heard.rate))
+        trial = player
+        player.play()
+    }
+
+    /// What a voice being tried has said so far.
+    @MainActor private final class Heard {
+        var samples = Data()
+        var rate = 0
     }
 
     /// Brings this device and its workspaces to the newest voice settings
@@ -641,6 +679,7 @@ extension View {
                 switch route {
                 case .project(let name): ProjectScreen(name: name)
                 case .agent(let name, let focus): AgentScreen(name: name, focus: focus)
+                case .exchange(let agent, let other, let focus): ExchangeScreen(agent: agent, other: other, focus: focus)
                 case .projectInfo(let name): ProjectInfoScreen(name: name)
                 }
             }

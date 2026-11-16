@@ -24,7 +24,7 @@ let package = Package(
         .target(name: "MycoAPI"),
         .target(name: "MycoCrypto"),
         .target(name: "MycoStore"),
-        .target(name: "MycoCore", dependencies: ["MycoAPI", "MycoCrypto", "MycoStore"]),
+        .target(name: "MycoCore", dependencies: ["MycoAPI", "MycoCrypto", "MycoStore"], resources: [.process("Resources")]),
         .target(name: "MycoFake", dependencies: ["MycoAPI"]),
         .target(name: "MycoUI"),
         .target(name: "MycoFeatures", dependencies: ["MycoCore", "MycoUI", "MycoAPI", "MycoStore"]),
