@@ -162,4 +162,39 @@ struct VoiceSharingTests {
         #expect(VoiceSharing.stamp(after: Self.now, now: at) == Self.now.addingTimeInterval(1))
         #expect(VoiceSharing.stamp(after: Self.now.addingTimeInterval(90), now: at) == Self.now.addingTimeInterval(91))
     }
+
+    @Test func aServicesVoicesAreAListToChooseFrom() {
+        let voices = SpeechService.doubao.voices
+        // The list the app ships: the desktop app's file.
+        #expect(voices.count >= 200)
+        #expect(Set(voices.map(\.id)).count == voices.count)
+        #expect(voices.contains { $0.id == SpeechService.doubao.defaultSpeaker }, "the default voice is on it")
+        #expect(voices.allSatisfy { $0.gender == "female" || $0.gender == "male" })
+        // Chinese first, then English, then the rest as the list has them.
+        let groups = SpeechVoice.groups(voices)
+        #expect(groups.prefix(2).map(\.lang) == ["zh", "en"])
+        #expect(groups.map(\.voices.count).reduce(0, +) == voices.count)
+        #expect(SpeechVoice.groups([]).isEmpty)
+        AppLanguage.$forced.withValue(.en) {
+            #expect(SpeechVoice.languageName("ja") == "Japanese")
+            #expect(SpeechVoice.languageName("xx") == "xx")
+            #expect(SpeechVoice(id: "a", name: "团子", lang: "zh", gender: "female").label == "团子 · female")
+        }
+
+        // What a voice says when tried is in its own language: by the list,
+        // else by its id's prefix, else in the app's language.
+        let english = voices.first { $0.lang == "en" }?.id ?? ""
+        #expect(VoiceSample.line(for: english, in: .doubao, language: .zh).hasPrefix("Hi,"))
+        #expect(VoiceSample.line(for: "ja_someone_new", in: .doubao, language: .zh).hasPrefix("こんにちは"))
+        #expect(VoiceSample.line(for: "S_cloned", in: .doubao, language: .zh).hasPrefix("你好"))
+        #expect(VoiceSample.line(for: "S_cloned", in: .doubao, language: .en).hasPrefix("Hi,"))
+
+        // The sound as a file a player takes: a 44-byte header, then the samples.
+        let wav = VoiceSample.wav(Data([1, 0, 2, 0]), rate: 24_000)
+        #expect(wav.count == 48)
+        #expect(String(decoding: wav.prefix(4), as: UTF8.self) == "RIFF")
+        #expect(String(decoding: wav[8..<16], as: UTF8.self) == "WAVEfmt ")
+        #expect(wav[24..<28].elementsEqual([0xC0, 0x5D, 0x00, 0x00]), "24000 a second")
+        #expect(wav.suffix(4).elementsEqual([1, 0, 2, 0]))
+    }
 }

@@ -132,6 +132,48 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAVoiceIsPickedFromTheListAndTried() {
+        // (A scripted voice: trying it needs no key that works and makes no sound.)
+        let app = launch(["-myco-voice", "scripted"])
+        XCTAssertTrue(app.buttons["workspace.button"].waitForExistence(timeout: 15))
+        app.buttons["workspace.button"].tap()
+        app.buttons["Settings"].tap()
+        let voice = app.descendants(matching: .any)["settings.voice"]
+        XCTAssertTrue(app.switches["settings.notifications"].waitForExistence(timeout: 5))
+        for _ in 0..<4 where !voice.exists { app.swipeUp() }
+        XCTAssertTrue(voice.waitForExistence(timeout: 5))
+        voice.tap()
+        // With a key for the speech service, its voice is chosen from a list.
+        let key = app.secureTextFields["voice.speechKey"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5))
+        key.tap()
+        key.typeText("k")
+        let row = app.descendants(matching: .any)["voice.speaker"]
+        for _ in 0..<2 where !row.exists { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the voice is a row that opens the list")
+        XCTAssertTrue(row.label.contains("温暖阿虎"), "the default voice goes by its name: \(row.label)")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Chinese"].waitForExistence(timeout: 5), "voices are grouped by language")
+        shot("voice-list")
+        let vivi = app.buttons["voice.pick.zh_female_vv_uranus_bigtts"]
+        XCTAssertTrue(vivi.waitForExistence(timeout: 5))
+        vivi.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label CONTAINS 'Vivi'"), evaluatedWith: row)
+        waitForExpectations(timeout: 5)
+        // One line in that voice, before anything is kept.
+        let trial = app.buttons["voice.try"]
+        XCTAssertTrue(trial.exists)
+        trial.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["voice.tryProblem"].waitForExistence(timeout: 2), "it could be tried")
+        shot("voice-picked")
+        // (Nothing of this test's key is kept.)
+        for _ in 0..<2 where !key.isHittable { app.swipeDown() }
+        key.tap()
+        key.typeText(XCUIKeyboardKey.delete.rawValue)
+    }
+
+    @MainActor
     func testAMessageQueuedBehindARunningTaskWaitsAboveTheInput() {
         let app = launch(["-myco-route", "agent:studio-codex-e07b"])
         let input = app.descendants(matching: .any)["composer.input"]

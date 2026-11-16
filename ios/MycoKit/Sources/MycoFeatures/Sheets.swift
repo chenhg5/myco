@@ -455,6 +455,9 @@ struct VoiceSettingsScreen: View {
     @State private var forgetModelKey = false
     @State private var forgetSpeechKey = false
     @State private var read = false
+    /// Trying the voice: while it is being made, and why it could not be.
+    @State private var trying = false
+    @State private var tryProblem: String?
 
     private var hasModelKey: Bool { app.voiceHasModelKey && !forgetModelKey }
     /// (The key on this device is the one of the service in use.)
@@ -509,8 +512,11 @@ struct VoiceSettingsScreen: View {
                 Picker(L("服务", "Service"), selection: Binding(
                     get: { service.id },
                     set: { id in
+                        // Another service has other voices and another key.
+                        if id != service.id { settings.speaker = "" }
                         settings.provider = id
                         speechKey = ""
+                        tryProblem = nil
                     })) {
                     ForEach(SpeechService.all) { one in
                         Text(AppLanguage.current == .zh ? one.name : one.englishName).tag(one.id)
@@ -519,10 +525,39 @@ struct VoiceSettingsScreen: View {
                 .accessibilityIdentifier("voice.service")
                 key($speechKey, saved: hasSpeechKey, forget: $forgetSpeechKey, id: "voice.speechKey")
                 if hasSpeechKey || !speechKey.isEmpty {
-                    TextField(L("音色，留空用默认的", "Voice id; empty uses the default"), text: $settings.speaker)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    if service.voices.isEmpty {
+                        TextField(L("音色，留空用默认的", "Voice id; empty uses the default"), text: $settings.speaker)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    } else {
+                        // The voice, from the service's list (or an ID typed in).
+                        NavigationLink {
+                            VoicePickerScreen(service: service, speaker: $settings.speaker)
+                        } label: {
+                            LabeledContent(L("音色", "Voice"), value: voiceName)
+                        }
+                        .accessibilityIdentifier("voice.speaker")
+                    }
                     Stepper(value: $settings.rate, in: -50...100, step: 10) {
                         LabeledContent(L("语速", "Speed"), value: settings.rate == 0 ? L("正常", "Normal") : (settings.rate > 0 ? "+\(settings.rate)" : "\(settings.rate)"))
+                    }
+                    // One line in that voice, before anything is kept.
+                    Button {
+                        tryVoice()
+                    } label: {
+                        HStack {
+                            Text(trying ? L("合成中…", "Speaking…") : L("试听", "Try it"))
+                            if trying {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(trying)
+                    .tint(MycoColor.accent)
+                    .accessibilityIdentifier("voice.try")
+                    if let tryProblem {
+                        Text(tryProblem).font(.footnote).foregroundStyle(MycoColor.amber)
+                            .accessibilityIdentifier("voice.tryProblem")
                     }
                 }
             } header: {
@@ -590,6 +625,27 @@ struct VoiceSettingsScreen: View {
         }
     }
 
+    /// The chosen voice by its name on the list; an ID typed in, as it is.
+    private var voiceName: String {
+        let id = settings.speakerInUse
+        return service.voices.first { $0.id == id }?.name ?? id
+    }
+
+    private func tryVoice() {
+        let chosen = settings
+        let typed = speechKey
+        trying = true
+        tryProblem = nil
+        Task {
+            do {
+                try await app.tryVoice(chosen, speechKey: typed)
+            } catch {
+                tryProblem = error.localizedDescription
+            }
+            trying = false
+        }
+    }
+
     /// A key's field: what is saved is never shown, only that it is.
     @ViewBuilder private func key(_ text: SwiftUI.Binding<String>, saved: Bool, forget: SwiftUI.Binding<Bool>, id: String) -> some View {
         HStack {
@@ -602,6 +658,84 @@ struct VoiceSettingsScreen: View {
                     .buttonStyle(.borderless)
             }
         }
+    }
+}
+
+/// The voices of a speech service, by language, to pick one; or an ID
+/// typed in, for a voice that is not on the list (a cloned one).
+struct VoicePickerScreen: View {
+    let service: SpeechService
+    @SwiftUI.Binding var speaker: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var typed = ""
+
+    /// The voice in use: the one chosen, or the service's default.
+    private var chosen: String {
+        let id = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? service.defaultSpeaker : id
+    }
+
+    private var onList: Bool { service.voices.contains { $0.id == chosen } }
+
+    private var groups: [(lang: String, voices: [SpeechVoice])] {
+        let wanted = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let voices = wanted.isEmpty ? service.voices : service.voices.filter {
+            $0.name.lowercased().contains(wanted) || $0.id.lowercased().contains(wanted)
+                || SpeechVoice.languageName($0.lang).lowercased().contains(wanted)
+        }
+        return SpeechVoice.groups(voices)
+    }
+
+    var body: some View {
+        List {
+            ForEach(groups, id: \.lang) { group in
+                Section(SpeechVoice.languageName(group.lang)) {
+                    ForEach(group.voices) { voice in
+                        Button {
+                            speaker = voice.id
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(voice.label).foregroundStyle(MycoColor.fg)
+                                Spacer()
+                                if voice.id == chosen {
+                                    Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.accent)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("voice.pick." + voice.id)
+                    }
+                }
+            }
+            if search.isEmpty {
+                Section {
+                    HStack {
+                        TextField("S_…", text: $typed)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .font(.body.monospaced())
+                            .accessibilityIdentifier("voice.pick.typed")
+                        if !onList, typed.trimmingCharacters(in: .whitespaces) == chosen {
+                            Image(systemName: "checkmark").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.accent)
+                        }
+                    }
+                    Button(L("用这个音色 ID", "Use this voice ID")) {
+                        speaker = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+                        dismiss()
+                    }
+                    .disabled(typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .tint(MycoColor.accent)
+                } header: {
+                    Text(L("其他（填音色 ID）", "Other (type a voice ID)"))
+                } footer: {
+                    Text(L("不在列表里的音色，比如复刻的声音（以 S_ 开头），填它的 ID。", "For a voice that is not on the list, like a cloned one (it starts with S_), type its ID."))
+                }
+            }
+        }
+        .searchable(text: $search, prompt: L("搜索音色", "Search voices"))
+        .navigationTitle(L("音色", "Voice"))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if !onList { typed = chosen } }
     }
 }
 
