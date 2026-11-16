@@ -6781,3 +6781,80 @@ body.is-resizing {
 .vc-bar-lines > .app-error-text, .vc-bar-lines > .app-btn { margin-left: 30px; }
 .vc-action::before { content: "→ "; }
 .conv-voice-tag { display: inline-flex; align-items: center; gap: 3px; margin-right: 4px; }
+
+/* What two agents said to each other, in your chat with one of them
+   (Handoff.tsx): one card per exchange, not bubbles. A line (who gave what
+   to whom, how it is going), and once something came back, its first line
+   under it. A click opens their whole exchange. */
+.handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: fit-content;
+  max-width: min(100%, 560px);
+  margin: 6px auto 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+.handoff:hover {
+  background: var(--nav-hover);
+}
+.handoff-line,
+.handoff-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.handoff-label {
+  flex: none;
+  color: var(--muted);
+}
+.handoff-who {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.handoff-text,
+.handoff-result-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.handoff-state {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 17px;
+}
+.handoff-state.is-done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.handoff-state.is-failed { color: var(--red); background: var(--red-soft); }
+.handoff-state.is-working { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.handoff-time {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.handoff-result {
+  padding-top: 3px;
+  border-top: 1px dashed var(--line);
+}
+.handoff-back {
+  flex: none;
+  color: var(--green);
+}

@@ -158,7 +158,7 @@ func (r *MessageRepo) ListOpenSteers(ctx context.Context, id string, consume boo
 }
 
 func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domain.Message, error) {
-	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, id`, threadID)
+	return r.many(ctx, r.db, `WHERE thread_id=? ORDER BY created_at, rowid`, threadID)
 }
 
 // The hub's hot queries only ever look at open messages (the few that are

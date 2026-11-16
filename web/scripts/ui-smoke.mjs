@@ -396,9 +396,18 @@ async function runMatrix(browser, size, scheme) {
       // The project's head says where you are: the chat has no second header.
       if (await page.locator(".sp-home .conv-head").count()) throw new Error("项目首页的对话不该再有自己的标题栏（和项目标题重复）");
       if (!(await page.locator(".sp-home .conv-compose").first().isVisible())) throw new Error("项目首页应能直接和协调者说话");
-      await page.locator(".sp-dispatch").first().waitFor({ timeout: 20_000 });
-      const card = compactText(await page.locator(".sp-dispatch").first().innerText());
+      await page.locator(".sp-home .handoff").first().waitFor({ timeout: 20_000 });
+      const card = compactText(await page.locator(".sp-home .handoff").first().innerText());
       if (!card.startsWith("派给")) throw new Error(`派活卡片应写明派给谁，实际是「${card}」`);
+      // What came back is under it, one line.
+      const back = compactText(await page.locator(".sp-home .handoff", { hasText: "升级注意事项" }).locator(".handoff-result").innerText());
+      if (!back.includes("改好了")) throw new Error(`交回的结果应在派活卡片下面一行，实际是「${back}」`);
+      // What a member sent the coordinator is a card too (it was not shown at all).
+      const sent = page.locator(".sp-home .handoff.is-in", { hasText: "先别让 release 装" });
+      await sent.waitFor({ timeout: 10_000 });
+      const sentText = compactText(await sent.innerText());
+      if (!/^docs-claude\s*发来/.test(sentText)) throw new Error(`成员发给协调者的应写「X 发来」，实际是「${sentText}」`);
+      if (!sentText.includes("等你补完")) throw new Error("协调者回它的那句应在卡片下面一行");
       if (!narrow) await page.locator(".sp-side .sp-role", { hasText: "协调者" }).waitFor({ timeout: 10_000 });
       // The coordinator heads the members; whoever is at work comes next.
       if (!narrow) {
@@ -442,9 +451,11 @@ async function runMatrix(browser, size, scheme) {
     // coordinator asked (named) and its answers, with yours, at that task.
     await step("项目 · 派出的活", async () => {
       const text = "升级注意事项";
-      await clickVisible(page, page.locator(".sp-dispatch", { hasText: text }));
+      await clickVisible(page, page.locator(".sp-home .handoff", { hasText: text }));
       const right = page.locator(".sp-pane-right");
-      await right.locator(".conv-msg.is-other", { hasText: text }).first().waitFor({ timeout: 20_000 });
+      // Their whole exchange, to read: the task, its answer, the notes.
+      await right.locator(".conv-msg", { hasText: text }).first().waitFor({ timeout: 20_000 });
+      await right.locator(".conv-msg", { hasText: "等你补完" }).first().waitFor({ timeout: 10_000 });
       await page.waitForFunction((t) => {
         const box = document.querySelector(".sp-pane-right .conv-scroll")?.getBoundingClientRect();
         const el = [...document.querySelectorAll(".sp-pane-right .conv-msg")].find((m) => (m.textContent || "").includes(t));
@@ -453,7 +464,7 @@ async function runMatrix(browser, size, scheme) {
         return r.bottom > box.top && r.top < box.bottom;
       }, text, { timeout: 10_000 });
       const head = compactText(await right.locator(".conv-head h2").innerText());
-      if (!/docs-claude/.test(head)) throw new Error(`派活卡片应打开接活的成员，实际是「${head}」`);
+      if (!/docs-claude/.test(head) || !/PM/.test(head)) throw new Error(`派活卡片应打开它们俩的往来，实际是「${head}」`);
       // Wide enough, the coordinator stays on the left.
       if (!narrow && !(await page.locator(".sp-pane-left .sp-home").isVisible())) throw new Error("打开成员时，和协调者的对话应该还在左边");
       // Side by side, the two headers are one height: their lines meet.
@@ -480,6 +491,26 @@ async function runMatrix(browser, size, scheme) {
       if (hb) await page.screenshot({ path: path.join(OUT, `${size.width}x${size.height}-${scheme}-project-member-head.png`), clip: { x: hb.x + hb.width - 220, y: hb.y, width: 220, height: hb.height } });
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // In a member's chat, what it and the others said to each other is a
+    // card each, not bubbles in your conversation; a card opens theirs.
+    if (!narrow) await step("项目 · 成员之间的往来", async () => {
+      await clickVisible(page, page.locator(".sp-side .sp-member", { hasText: "docs-claude" }).first());
+      const right = page.locator(".sp-pane-right");
+      const note = right.locator(".handoff.is-out", { hasText: "先别让 release 装" });
+      await note.waitFor({ timeout: 20_000 });
+      const line = compactText(await note.innerText());
+      if (!line.startsWith("发给")) throw new Error(`它发给别人的应写「发给 X」，实际是「${line}」`);
+      await right.locator(".handoff.is-in", { hasText: "升级注意事项" }).waitFor({ timeout: 10_000 });
+      if (await right.locator(".conv-msg", { hasText: "先别让 release 装" }).count()) throw new Error("成员之间的往来不该画成你对话里的气泡");
+      if (await right.locator(".conv-msg", { hasText: "升级注意事项" }).count()) throw new Error("别人派给它的活不该画成你对话里的气泡");
+      await settle(page, 300);
+      await shot(page, size, scheme, "project-member-handoffs");
+      await clickVisible(page, note);
+      await right.locator(".conv-head h2", { hasText: "PM" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 

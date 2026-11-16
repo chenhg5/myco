@@ -127,6 +127,12 @@ const dispatchRelease = [
   makeMessage({ thread_id: "th_dispatch_release", project: "website", from: "pm-codex", to: "release-cloud", type: "task", status: "acked", body: "在预发环境装一遍 v0.16.8，确认下载页的链接都能下到对的文件。", created_at: iso(6600), updated_at: iso(240) }),
   makeMessage({ thread_id: "th_dispatch_release", project: "website", from: "release-cloud", to: "pm-codex", type: "progress", status: "done", body: "macOS 和 Linux 的包都下好了，正在核对 Windows 的。", created_at: iso(240), updated_at: iso(240) }),
 ];
+// A member writing to the coordinator on its own: a note, and the
+// coordinator's answer (a handoff card on the home and in the member's chat).
+const memberNote = [
+  makeMessage({ thread_id: "th_member_note", project: "website", from: "docs-claude", to: "pm-codex", type: "note", status: "done", body: "先别让 release 装：升级说明里 Windows 的安装步骤还没改完，我在补。", created_at: iso(6300), updated_at: iso(6300) }),
+  makeMessage({ thread_id: "th_member_note", project: "website", from: "pm-codex", to: "docs-claude", type: "note", status: "done", body: "好，等你补完我再让 release 那边装。", created_at: iso(6250), updated_at: iso(6250) }),
+];
 const coordThread = [
   coordT1, coordT2, coordT3,
   coordSays("progress", coordT1, "已拉下 PR 128，正在看 handler 和权限检查。", 1300),
@@ -385,7 +391,7 @@ const state = {
       ok: true,
       hub_version: "0.19.5",
       update_available: true,
-      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, ...consoleThreads },
+      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",

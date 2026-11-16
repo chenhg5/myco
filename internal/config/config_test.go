@@ -179,6 +179,18 @@ func TestApplyEnvAndRedacted(t *testing.T) {
 	if c.Hub != "https://env-hub" || c.Token != "myco_env" || c.Agent != "a" {
 		t.Fatalf("ApplyEnv: %+v", c)
 	}
+	// A saved identity keeps its hub against MYCO_HUB alone (a cloud
+	// environment's default workspace); without a saved token it applies.
+	saved := &Config{Hub: "https://hub/w/team-b", Token: "myco_saved"}
+	saved.ApplyEnv(func(k string) string { return map[string]string{EnvHub: "https://hub"}[k] })
+	if saved.Hub != "https://hub/w/team-b" || saved.Token != "myco_saved" {
+		t.Fatalf("MYCO_HUB alone moved a saved identity: %+v", saved)
+	}
+	fresh := &Config{}
+	fresh.ApplyEnv(func(k string) string { return map[string]string{EnvHub: "https://hub"}[k] })
+	if fresh.Hub != "https://hub" {
+		t.Fatalf("MYCO_HUB should apply without a saved identity: %+v", fresh)
+	}
 	c2 := &Config{Hub: "h", Token: "t"}
 	c2.ApplyEnv(func(string) string { return "" })
 	if c2.Hub != "h" || c2.Token != "t" {

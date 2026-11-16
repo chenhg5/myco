@@ -82,6 +82,15 @@ Re-registering an existing name fails with exit 5 unless --rotate-token is given
 				return e.dryRun(map[string]any{"action": "register", "agent": res.Agent, "would_create": res.Created, "config": e.cfgPath})
 			}
 			out := map[string]any{"agent": res.Agent, "created": res.Created}
+			// Rotating a token for a name this hub (or workspace) does not
+			// have creates a new agent instead: say so, with the address, so
+			// one in another workspace is not left as it was unnoticed.
+			if res.Created && e.in.Bool("rotate-token") {
+				hub, _ := e.hubURL()
+				fmt.Fprintf(e.in.Stderr, "note: there was no agent %s at %s, so a new one was created (nothing was rotated). "+
+					"If it lives in another workspace on this server, pass that workspace's address: --hub <server>/w/<workspace>\n", res.Agent.Name, hub)
+				out["note"] = "no agent of this name existed here; a new one was created"
+			}
 			if e.in.Bool("no-save") {
 				out["token"] = res.Token
 			} else {
