@@ -33,16 +33,3 @@ func (c *Client) UpdateHidden(ctx context.Context, in api.HiddenUpdate) (*api.Hi
 	var out api.HiddenList
 	return &out, c.do(ctx, http.MethodPost, "/v1/console/hidden", nil, in, &out)
 }
-
-// Reads answers how far the caller (a person, by console token) has read
-// each of their conversations. A hub from before this answers 404.
-func (c *Client) Reads(ctx context.Context) (*api.ReadMarks, error) {
-	var out api.ReadMarks
-	return &out, c.do(ctx, http.MethodGet, "/v1/console/reads", nil, nil, &out)
-}
-
-// MarkRead moves the caller's read marks forward and answers them all.
-func (c *Client) MarkRead(ctx context.Context, marks map[string]string) (*api.ReadMarks, error) {
-	var out api.ReadMarks
-	return &out, c.do(ctx, http.MethodPost, "/v1/console/reads", nil, api.ReadMarks{Reads: marks}, &out)
-}

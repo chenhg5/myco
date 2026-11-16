@@ -15,7 +15,6 @@ import { useAutoGrow } from "@/app/autogrow";
 import { draftOf, groupDraftKey, keepDraft } from "@/app/drafts";
 import { Mushroom, useVerb } from "@/app/Working";
 import { HandoffCard, handoffsOfHome } from "@/app/Handoff";
-import { isUnread, useUnread } from "@/app/unread";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -94,7 +93,6 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   /** start a project (from chat) */
   onNewProject?: () => void;
 }) {
-  useUnread(); // (the red dots on its members)
   const hubId = space.hubId;
   const loose = isLoose(space);
   const hubRows = rows.filter((r) => r.hub.id === hubId);
@@ -342,7 +340,6 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         <button key={r.st.agent.name} type="button" className="sp-strip-face" title={nodeName(r.st.agent, r.hub)}
           onClick={() => open(r)}>
           <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
-          {isUnread(r.hub.id, r.st.agent.name) && <span className="unread-dot is-on-face" aria-label={L("有未读", "Unread")} />}
         </button>
       ))}
       <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
@@ -1073,7 +1070,6 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   projects?: Project[];
   onPutIn?: (r: AgentRow, p: Project) => void;
 }) {
-  useUnread();
   const menu = useContextMenu();
   // Who is in front: the coordinator always first, then whoever is at
   // work (the latest to start first), then those with work queued, the
@@ -1155,7 +1151,6 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
           <span className="sp-member-name">
             <span className="sp-member-name-text">{nodeName(a, r.hub)}</span>
             {a.name === coordinator && <span className="sp-role">{L("协调者", "Coordinator")}</span>}
-            {isUnread(r.hub.id, a.name) && <span className="unread-dot" title={L("有未读", "Unread")} aria-label={L("有未读", "Unread")} />}
           </span>
           {ws ? <span className="sp-member-sub">{whereOf(r)}</span> : (() => {
             const line = liveLine(r, nameOf, now);

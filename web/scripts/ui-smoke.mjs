@@ -1454,32 +1454,6 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
-    // An answer that comes while you are elsewhere is unread: a red count on
-    // 聊天, a dot on the member, a number on the Dock icon; opening the chat
-    // reads it.
-    if (!narrow) await step("未读红点", async () => {
-      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      await noRound(page);
-      const box = page.locator(".conv-detail .conv-compose-input");
-      await box.fill("未读测试：稍后回我");
-      await box.press("Enter");
-      await page.locator(".conv-detail .conv-msg.is-me", { hasText: "未读测试：稍后回我" }).last().waitFor({ timeout: 10_000 });
-      // Away, in a project, while it answers.
-      await go(page, "官网改版", narrow);
-      await page.locator(".sp-home").waitFor({ timeout: 10_000 });
-      await page.locator(".sp-nav-chat .sp-nav-unread").waitFor({ timeout: 40_000 });
-      await page.waitForFunction(async () => (await (await fetch("/app/mock/badge")).json()).max > 0, null, { timeout: 10_000 });
-      await settle(page, 200);
-      await shot(page, size, scheme, "unread-sidebar");
-      // In 聊天, the member it is from has a dot; its chat reads it.
-      await go(page, "聊天", narrow);
-      const row = page.locator(".sp-side .sp-member:visible", { hasText: "Review (Codex 云端)" });
-      await row.locator(".unread-dot").waitFor({ timeout: 10_000 });
-      await clickVisible(page, row);
-      await page.locator(".conv-detail .conv-head h2", { hasText: "Review" }).waitFor({ timeout: 10_000 });
-      await row.locator(".unread-dot").waitFor({ state: "detached", timeout: 10_000 });
-    });
-
     // Links one after another with Chinese commas are each a link of their own.
     await step("单聊 · 中文标点隔开的链接", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");

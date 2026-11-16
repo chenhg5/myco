@@ -270,8 +270,6 @@ export interface AppInfo {
   pick_image?: boolean;
   /** the desktop app opens links in the default browser (POST /app/open-url) */
   open_url?: boolean;
-  /** the app can put a number on its icon (POST /app/badge) */
-  badge?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -450,11 +448,6 @@ export const appApi = {
   /** Messages taken out of your own view (删除), kept on the workspace. */
   hiddenMessages: (hubId: string) => request<{ ids: string[] }>("GET", `app/hubs/${enc(hubId)}/hidden`),
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
-  /** how far you have read each conversation (by agent), kept on the hub */
-  reads: (hubId: string) => request<{ reads: Record<string, string> }>("GET", `app/hubs/${enc(hubId)}/reads`),
-  markRead: (hubId: string, reads: Record<string, string>) => request<{ reads: Record<string, string> }>("POST", `app/hubs/${enc(hubId)}/reads`, { reads }),
-  /** the number on the Mac app's Dock icon (unread conversations) */
-  setBadge: (count: number) => request<{ ok: boolean }>("POST", "app/badge", { count }),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
   openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
   translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),

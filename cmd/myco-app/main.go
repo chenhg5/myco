@@ -84,10 +84,6 @@ func main() {
 			return pickImage()
 		}
 	}
-	// Unread chats as a number on the app's icon (the Mac app).
-	if setBadge != nil {
-		b.SetBadge = setBadge
-	}
 	// A link in a chat opens in the default browser (set by runGUI).
 	b.OpenURL = func(u string) error {
 		if openURL == nil { // not yet: the app is starting

@@ -1117,15 +1117,6 @@ type HiddenUpdate struct {
 	Show []string `json:"show,omitempty"`
 }
 
-// ReadMarks is GET and POST /v1/console/reads: how far the caller (a
-// person) has read each of their conversations, by the agent's name: the
-// time of the newest message they have seen there (RFC 3339). POST moves
-// marks forward (an older one changes nothing; 500 at most at a time) and
-// answers them all.
-type ReadMarks struct {
-	Reads map[string]string `json:"reads"`
-}
-
 // VoiceSettings is GET and PUT /v1/console/voice: what the caller (a
 // person) set for voice chats, kept on the hub so every device of theirs
 // has it. It holds API keys: the hub hands it only to that person's own
