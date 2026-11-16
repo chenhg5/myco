@@ -4982,6 +4982,8 @@ button.app-label:hover { filter: brightness(0.95); }
 .sp-nav-pc-wrap:hover .sp-nav-more, .sp-nav-more:focus-visible { opacity: 1; }
 .sp-nav-pc-wrap:hover .sp-nav-busy { visibility: hidden; }
 /* A computer's settings (ComputerSettings.tsx). */
+.pcs-name { display: flex; align-items: center; gap: 8px; }
+.pcs-name .app-input { flex: 1; min-width: 0; }
 .pcs-agents { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; margin-top: 4px; }
 .pcs-agent { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
 .pcs-agent:hover { background: var(--nav-hover); }

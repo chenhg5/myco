@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Terminal, Trash2 } from "lucide-react";
 import type { Project } from "@/api";
 import { appApi } from "@/appapi";
@@ -19,9 +19,11 @@ type Projects = { hubId: string; p: Project }[];
  * it, its terminal, and removing it. Opened from the sidebar (right click,
  * or the ⋯ on hover), the Computers page, and the terminal's header.
  */
-export function ComputerSettings({ row, rows, projects, onClose, onChanged, onOpenTerminal }: {
+export function ComputerSettings({ row, focus, rows, projects, onClose, onChanged, onOpenTerminal }: {
   /** the computer; none: closed */
   row: AgentRow | null;
+  /** what it was opened for (the sidebar's menu): its name, or removing it */
+  focus?: "name" | "remove";
   rows: AgentRow[];
   projects: Projects;
   onClose: () => void;
@@ -40,14 +42,20 @@ export function ComputerSettings({ row, rows, projects, onClose, onChanged, onOp
   const [saved, setSaved] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [adding, setAdding] = useState("");
+  const [title, setTitle] = useState("");
+  const [named, setNamed] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
   const key = a ? `${hubId}/${a.name}` : "";
   useEffect(() => {
     if (!a) return;
     setAllow(a.allow_from.filter((n) => n !== "*" && !isNobody(n)));
     setError(null);
     setSaved(false);
-    setRemoving(false);
+    setRemoving(focus === "remove");
     setAdding("");
+    setTitle(a.display_name || "");
+    setNamed(false);
+    if (focus === "name") setTimeout(() => { nameRef.current?.focus(); nameRef.current?.select(); }, 50);
     // Only when another computer is opened: a refresh must not undo ticks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -88,6 +96,8 @@ export function ComputerSettings({ row, rows, projects, onClose, onChanged, onOp
     setAdding("");
   });
   const leave = (name: string) => run(() => appApi.removeProjectMember(hubId, name, a.name));
+  // Its name as people see it (the address stays).
+  const rename = () => run(() => appApi.updateProfile(hubId, a.name, { display_name: title.trim() })).then((ok) => ok && setNamed(true));
   const remove = () => run(() => appApi.removeAgent(hubId, a.name)).then((ok) => { if (ok) { setRemoving(false); onClose(); } });
 
   return (
@@ -96,6 +106,15 @@ export function ComputerSettings({ row, rows, projects, onClose, onChanged, onOp
         description={[whereOf(row), row.st.state === "offline" ? L("不在线", "Away") : L("在线", "Online")].filter(Boolean).join(" · ")}
         className="pcs">
         <div data-testid="computer-settings">
+          <form className="app-field" onSubmit={(e) => { e.preventDefault(); void rename(); }}>
+            <span className="app-field-label">{L("名字", "Name")}</span>
+            <div className="pcs-name">
+              <input ref={nameRef} className="app-input" value={title} onChange={(e) => { setTitle(e.target.value); setNamed(false); }}
+                placeholder={a.name} disabled={busy} aria-label={L("名字", "Name")} maxLength={60} />
+              <button type="submit" className="app-btn app-btn-small" disabled={busy || title.trim() === (a.display_name || "")}>{L("改名", "Rename")}</button>
+              {named && title.trim() === (a.display_name || "") && <span className="tr-tried">{L("已改", "Renamed")}</span>}
+            </div>
+          </form>
           <div className="app-field">
             <span className="app-field-label">{L("谁能在这里跑命令", "Who can run commands here")}</span>
             {anyone && <div className="app-small-note">{L("现在任何 agent 都能用它。勾选几个，就只给它们用。", "Any agent can use it now. Tick some to keep it to them.")}</div>}
@@ -155,7 +174,7 @@ export function ComputerSettings({ row, rows, projects, onClose, onChanged, onOp
           </div>
         </div>
       </Modal>
-      <ConfirmDialog open={removing} onOpenChange={(o) => !o && setRemoving(false)}
+      <ConfirmDialog open={removing} onOpenChange={(o) => { if (!o) { setRemoving(false); if (focus === "remove") onClose(); } }}
         title={L("移除这台电脑？", "Remove this computer?")}
         subject={<><Avatar agent={a} size={24} badge={false} /><span>{nodeName(a, row.hub)}</span></>}
         description={L("agent 就不能再在这里跑命令了。文件夹里的东西不会动，聊过的内容都保留。", "Agents can no longer run commands here. Nothing in the folder is touched, and the conversations are kept.")}

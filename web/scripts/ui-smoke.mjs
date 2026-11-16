@@ -2212,14 +2212,46 @@ async function runMatrix(browser, size, scheme) {
       const wrap = page.locator(".sp-nav-pc-wrap").first();
       await wrap.hover();
       await clickVisible(page, wrap.locator(".sp-nav-more"));
-      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目、移除…" }));
+      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目…" }));
       const set = page.locator("[data-testid=computer-settings]");
       await set.waitFor({ timeout: 10_000 });
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await set.waitFor({ state: "hidden", timeout: 5_000 });
+      // Right click: rename it in place, or go straight to removing it.
+      const last = page.locator(".sp-nav-pc").last();
+      const oldName = (await last.locator(".app-nav-label").innerText()).trim();
+      await last.click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名…" }));
+      await set.waitFor({ timeout: 10_000 });
+      const nameBox = set.getByRole("textbox", { name: "名字" });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "名字", null, { timeout: 5_000 });
+      const newName = `电脑 ${size.width} ${scheme}`;
+      await nameBox.fill(newName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-rename");
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: newName }).waitFor({ timeout: 20_000 });
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "移除这台电脑…" }));
+      const sure = page.locator(".app-modal.app-confirm");
+      await sure.waitFor({ timeout: 5_000 });
+      if (await set.isVisible()) throw new Error("从右键直接移除时只该出现确认框");
+      await clickVisible(page, sure.getByRole("button", { name: "取消" }));
+      await sure.waitFor({ state: "hidden", timeout: 5_000 });
+      // Back to its name for the steps after this one.
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名…" }));
+      await set.waitFor({ timeout: 10_000 });
+      await nameBox.fill(oldName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: oldName }).waitFor({ timeout: 20_000 });
       await clickVisible(page, page.locator(".sp-nav-pc").first());
       if (narrow) await sidebar(page, false);
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.locator(".conv-detail").first().waitFor({ timeout: 20_000 });
     });
 
     // A command another agent left on a computer: the sidebar dot turns
