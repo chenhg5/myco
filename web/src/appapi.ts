@@ -157,10 +157,19 @@ export interface SpawnResult {
   /** The new session's first reply. */
   reply: string;
 }
-export interface JoinLinkInput { uses?: number; expires_hours?: number }
+export interface JoinLinkInput {
+  uses?: number; expires_hours?: number;
+  /** the computer that runs the command also lets agents open terminals on it
+   *  (myco machine join --allow-shell): running it there is that computer's consent */
+  allow_shell?: boolean;
+}
 export interface JoinLink {
   join_url: string;
   command: string;
+  /** the same for Windows PowerShell (newer App backends) */
+  ps_command?: string;
+  /** the command also lets that computer run terminals (?shell=1) */
+  allow_shell?: boolean;
   /** the hub's join script ends with the agent's last step, and
    *  join_url + "/" + project joins that project too (older hubs: absent) */
   agent_guide?: boolean;

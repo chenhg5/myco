@@ -648,6 +648,18 @@ async function runMatrix(browser, size, scheme) {
         await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
         // What it means is said calmly (no red block).
         if (await dialog.locator(".app-warn").count()) throw new Error("加电脑的弹窗不该有红色警告块");
+        // A computer that has not allowed terminals says so before anything is
+        // filled in, with the command to run on it; it cannot be added yet.
+        const office = dialog.locator(".ws-computer", { hasText: "Office PC" });
+        await office.locator(".ws-computer-sub", { hasText: "还没允许" }).waitFor({ timeout: 10_000 });
+        await clickVisible(page, office);
+        await dialog.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 5_000 });
+        await dialog.locator("input.app-input").fill("~/code/office");
+        if (await dialog.locator("button[type=submit]").isEnabled()) throw new Error("没允许开终端的电脑不该能点添加");
+        await settle(page, 200);
+        await shot(page, size, scheme, "add-workspace-not-allowed");
+        await dialog.locator("input.app-input").fill("");
+        await clickVisible(page, dialog.locator(".ws-computer").first());
         const folder = `~/code/smoke-${size.width}-${scheme}`;
         await dialog.locator("input.app-input").fill(folder);
         await settle(page, 300);
@@ -2085,6 +2097,17 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
+      // A computer that has not allowed terminals is marked, and says how to
+      // allow it: on that computer, never from here.
+      const office = page.locator(".pc-machine", { hasText: "Office PC" });
+      await office.locator(".pc-machine-tag", { hasText: "没允许开终端" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, office);
+      const view = page.locator("[data-testid=machine-view]");
+      await view.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-permission");
+      await clickVisible(page, view.getByRole("button", { name: "好" }));
+      await view.waitFor({ state: "hidden", timeout: 5_000 });
       // A folder's terminal opens from here.
       await clickVisible(page, page.locator(".pc-row .app-btn-small"));
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -2144,8 +2167,10 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-machine", { hasText: "临时 Mac" }));
+      const view = page.locator("[data-testid=machine-view]");
+      await view.waitFor({ timeout: 10_000 });
+      await clickVisible(page, view.getByRole("button", { name: "移除这台电脑" }));
       const dialog = page.locator(".app-modal");
-      await dialog.waitFor({ timeout: 10_000 });
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       const dialogText = compactText(await dialog.innerText());
       for (const want of ["2 个 agent 和电脑会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
@@ -2372,6 +2397,16 @@ async function runMatrix(browser, size, scheme) {
       await connected.waitFor({ timeout: 20_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "dialog-add-computer-same-server");
+      // The join link lets that computer open terminals unless unticked: the
+      // command it gives carries that (running it there is its consent).
+      const allow = add.locator("[data-testid=join-allow-shell] input");
+      if (!(await allow.isChecked())) throw new Error("入网链接默认应允许开终端");
+      await clickVisible(page, add.getByRole("button", { name: "生成入网链接" }));
+      const cmd = await add.locator(".app-command code").innerText();
+      if (!cmd.includes("?shell=1")) throw new Error(`允许开终端的入网命令应带 ?shell=1，实际「${cmd}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "dialog-join-allow-shell");
+
       await clickVisible(page, connected.getByRole("button", { name: "选一个文件夹" }));
       await add.waitFor({ state: "hidden", timeout: 5_000 });
       await pick.locator(".ws-computer.active", { hasText: /Studio Mac|这台电脑/ }).waitFor({ timeout: 10_000 });

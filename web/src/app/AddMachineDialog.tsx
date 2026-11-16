@@ -27,6 +27,9 @@ export function AddMachineDialog({ open, onOpenChange, hubs, machines, onAdded, 
   const [error, setError] = useState<unknown>(null);
   const [nearby, setNearby] = useState<ServerMachine[]>([]);
   const [adding, setAdding] = useState("");
+  // Whether the computer that runs the command lets agents open terminals
+  // on it (decided there, by running it; changed later on it too).
+  const [allowShell, setAllowShell] = useState(true);
   const [added, setAdded] = useState<string[]>([]);
   // The computers there when the dialog opened; any other is new.
   const before = useRef<Set<string> | null>(null);
@@ -92,7 +95,7 @@ export function AddMachineDialog({ open, onOpenChange, hubs, machines, onAdded, 
     setBusy(true);
     setError(null);
     try {
-      setLink(await appApi.createJoinLink(hubId, { uses: 1, expires_hours: 24 }));
+      setLink(await appApi.createJoinLink(hubId, { uses: 1, expires_hours: 24, allow_shell: allowShell }));
     } catch (e) {
       setError(e);
     } finally {
@@ -182,6 +185,13 @@ export function AddMachineDialog({ open, onOpenChange, hubs, machines, onAdded, 
               <div className="app-hint">
                 {L("生成一条入网链接，在要添加的电脑上运行它。链接只能用一次，24 小时内有效。", "Create a join link and run it on the computer you want to add. The link works once and expires in 24 hours.")}
               </div>
+              <label className="app-check-line" data-testid="join-allow-shell">
+                <input type="checkbox" checked={allowShell} onChange={(e) => setAllowShell(e.target.checked)} disabled={busy} />
+                <span>
+                  {L("允许 agent 在这台电脑上开终端", "Let agents open terminals on that computer")}
+                  <small>{L("它们能用你的身份在那台电脑上跑命令、读写文件。之后可以在那台电脑上改：", "They can run commands and read or write files there as you. Change it later on that computer: ")}<code className="mono">myco machine shell-access</code></small>
+                </span>
+              </label>
               <ErrorText error={error} />
               <div className="app-actions">
                 <button
@@ -201,6 +211,9 @@ export function AddMachineDialog({ open, onOpenChange, hubs, machines, onAdded, 
                 <CopyButton value={link.command} />
               </div>
               <div className="app-hint">
+                {allowShell
+                  ? L("运行它也就允许了 agent 在那台电脑上开终端。", "Running it also lets agents open terminals on that computer. ")
+                  : L("运行它不会允许 agent 在那台电脑上开终端。", "Running it does not let agents open terminals there. ")}
                 {onConnected
                   ? L("在那台电脑的终端里运行这一行。连上以后这里会出现它，接着选一个文件夹。", "Run this in a terminal on that computer. Once it connects it shows up here; then pick a folder on it.")
                   : L("在那台电脑的终端里运行这一行。装好以后，给项目加电脑时就能选它了。", "Run this command in a terminal on the computer or server you want to add. It installs myco and joins the machine to the Hub; it then shows up on the Machines page.")}

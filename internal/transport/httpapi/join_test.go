@@ -71,6 +71,13 @@ func TestJoinPageValidLink(t *testing.T) {
 		{"Windows PowerShell 5.1", "", map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-CN) WindowsPowerShell/5.1.26100"}, "text/plain", []string{"install-client.ps1"}},
 		{"format=ps1", "?format=ps1", nil, "text/plain", []string{"install-client.ps1"}},
 		{"guide has the Windows command", "?format=md", nil, "text/markdown", []string{"irm '" + h.url + path + "?format=ps1' | iex"}},
+		// ?shell=1: the computer also lets agents open a terminal.
+		{"shell=1 script allows terminals", "?format=sh&shell=1", nil, "text/x-shellscript", []string{"machine join --format text --allow-shell"}},
+		{"shell=1 PowerShell allows terminals", "?format=ps1&shell=1", nil, "text/plain", []string{"machine join --format text --allow-shell"}},
+		{"shell=1 guide keeps the query", "?format=md&shell=1", nil, "text/markdown",
+			[]string{"curl -fsSL '" + h.url + path + "?shell=1' | bash", "irm '" + h.url + path + "?format=ps1&shell=1' | iex", "shell-access --deny"}},
+		{"shell=1 page keeps the query", "?shell=1", map[string]string{"Accept": "text/html"}, "text/html",
+			[]string{"curl -fsSL &#39;" + h.url + path + "?shell=1&#39; | bash", "允许 agent 在这台电脑上开终端"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,6 +109,13 @@ func TestJoinPageValidLink(t *testing.T) {
 		})
 	}
 	h.t = t
+	// Only shell=1 turns it on, and nothing of the query reaches the script.
+	for _, q := range []string{"", "?format=sh&shell=0", "?format=sh&shell=true", "?format=sh&shell=1%27%3Becho+pwned"} {
+		r := h.doReq("GET", path+q, "", nil, map[string]string{"User-Agent": "curl/8"}).want(t, 200)
+		if strings.Contains(string(r.raw), "--allow-shell") || strings.Contains(string(r.raw), "pwned") {
+			t.Fatalf("%q: %s", q, r.raw)
+		}
+	}
 	// Viewing the page does not use up the link.
 	r := h.do("GET", "/v1/enrollments", adminToken, nil).want(t, 200)
 	for _, e := range r.body["enrollments"].([]any) {

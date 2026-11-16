@@ -639,6 +639,11 @@ spawn:
 - 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
 - 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。
 - **shell 节点**（别的节点给它发命令，它在指定目录里运行并把输出发回去，也就是 exec 节点）：在 App 里"添加节点 → 在机器上新建 → 类型：Shell 节点"，选目录和"谁能发命令"。只有 Hub 管理员（App）能添加：Hub 为这次添加生成一个只能用一次、10 分钟内有效的 exec 入网令牌，那台机器用它登记节点。被选中的节点能在那台机器上运行任何命令，所以只有那台机器的 `spawn.max_access` 是 `full` 时才允许。那台机器就是你正在用 App 的这台电脑时，App 里直接点「在这台电脑上允许…」，确认后写入 `spawn.max_access: full`，也可以在同一处点「不再允许」改回去（v0.18.13 起；改了立即生效，不用重启 runner，已添加的 Shell 节点要在节点页删除）。别的电脑要在它自己那里打开。
+- **让一台电脑允许开终端**（下一版起）：电脑只有自己同意，agent 才能在上面开终端（shell 节点，App 里叫「电脑」），这个开关只能在那台电脑上改，App 不会远程替它打开。三种做法：
+  - 连电脑时就定：App 里生成入网命令时打开「允许在上面开终端」，命令变成 `curl -fsSL '<链接>?shell=1' | bash`（PowerShell：`irm '<链接>?format=ps1&shell=1' | iex`），在那台电脑上运行它就等于同意，脚本会执行 `myco machine join --allow-shell`；
+  - 那台电脑上开着 myco App：「这台电脑」那里点允许 / 不再允许；
+  - 那台电脑上运行 `myco machine shell-access --allow`，关掉用 `myco machine shell-access --deny`（都支持 `--dry-run`）。
+  改了以后 runner 在 20 秒内报给工作区，App 里就能看到这台电脑能不能开终端，不用重启。关掉只影响以后新开的，已经开着的终端要在 App 里删掉。
 - 列出所有机器节点：`myco agent list --selector harness=machine`。
 - **用环境变量登录的 CLI**（比如 Claude Code 用 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` 接第三方服务）：后台 runner 不读 shell 配置，要在那台机器上、能正常用 claude 的终端里给机器节点抓一次变量：
   ```bash

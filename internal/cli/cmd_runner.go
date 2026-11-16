@@ -213,6 +213,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	var rep *runtimeReporter
 	if !sh.once {
 		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, log)
+		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
 	}
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {

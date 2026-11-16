@@ -204,17 +204,20 @@ func machineCommands() *Command {
 agents machine=<name>, and installs the background runner service. Safe to re-run: the same machine
 gets its credentials back without using up the link. Afterwards run "myco join" inside each agent
 session that should be reachable. Links created with --exec instead turn this machine into an exec
-node right away.`,
+node right away. --allow-shell also lets agents open a terminal (shell node) here, as
+"myco machine shell-access --allow" does (a join link's script passes it when the link ends in ?shell=1).`,
 		Examples: []string{
 			"curl -fsSL https://hub.example.com/j/<token> | bash      # the usual way",
 			"myco machine join --link https://hub.example.com/j/<token>",
 			"myco machine join --link https://hub.example.com/j/<token> --machine glenn-mac --no-service",
+			"myco machine join --link https://hub.example.com/j/<token> --allow-shell",
 		},
 		Flags: []Flag{
 			{Name: "link", Kind: String, Help: "Join link URL (default: MYCO_HUB + MYCO_JOIN_TOKEN, as set by the link's script)"},
 			{Name: "machine", Kind: String, Help: "Machine name (default: this host's name; \"cloud\" in claude.ai)"},
 			{Name: "workdir", Kind: String, Help: "Exec links only: where commands run (default: your home directory)"},
 			{Name: "no-service", Kind: Bool, Help: "Do not install the background runner service"},
+			{Name: "allow-shell", Kind: Bool, Help: "Also let agents open a terminal (shell node) on this computer (spawn.max_access: full)"},
 		},
 		Run: handler(func(e *env) error {
 			hub, tok := strings.TrimRight(e.in.Getenv(config.EnvHub), "/"), e.in.Getenv(config.EnvJoinToken)
@@ -234,7 +237,7 @@ node right away.`,
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineRemoveCommand())
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's
@@ -268,6 +271,13 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	}
 	out := map[string]any{"machine": m.Machine, "hub": hub, "created": res.Created, "labels": res.Labels,
 		"config": config.MachinePath(e.defaultPath)}
+	// Whoever ran the join here chose to let agents open a terminal too.
+	if e.in.Bool("allow-shell") {
+		if _, err := config.SetShellAccess(e.defaultPath, true); err != nil {
+			return err
+		}
+		out["max_access"] = config.ShellAccessFull
+	}
 
 	var notes []string
 	if extra != nil {

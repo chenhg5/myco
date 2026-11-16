@@ -525,7 +525,12 @@ const state = {
         }),
         makeAgent({
           name: "studio-mac-machine", display_name: "Studio Mac", kind: "machine", machine_id: "m_studio",
-          labels: ["machine=studio-mac"], binding: { harness: "machine" },
+          labels: ["machine=studio-mac"], binding: { harness: "machine" }, runtime: { cli: "machine", max_access: "full" },
+        }),
+        // Office PC has not allowed terminals (spawn.max_access: workspace).
+        makeAgent({
+          name: "office-pc-machine", display_name: "Office PC", kind: "machine", machine_id: "m_office",
+          labels: ["machine=office-pc"], binding: { harness: "machine" }, runtime: { cli: "machine", max_access: "workspace" },
         }),
         makeAgent({
           name: "bench-01-machine", display_name: "Bench Linux", kind: "machine", machine_id: "m_bench",
@@ -2300,7 +2305,7 @@ const server = http.createServer(async (req, res) => {
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
       return send(res, 200, {
         join_url: joinUrl,
-        command: `curl -fsSL ${joinUrl} | bash`,
+        command: body?.allow_shell ? `curl -fsSL '${joinUrl}?shell=1' | bash` : `curl -fsSL ${joinUrl} | bash`,
         agent_guide: true,
         uses,
         expires_hours: hours,

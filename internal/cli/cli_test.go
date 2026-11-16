@@ -976,6 +976,15 @@ func TestJoinLinks(t *testing.T) {
 	if _, out, _ := admin.run("link", "list", "--format", "json"); !strings.Contains(out, `"uses": 1`) || !strings.Contains(out, `"machine": "test-box"`) {
 		t.Fatalf("re-joining must not use up the link: %s", out)
 	}
+	// Joining lets no agent open a terminal here unless asked to (the
+	// script of a ?shell=1 link passes --allow-shell).
+	dpath := filepath.Join(home, ".myco", "config.yaml")
+	if config.ShellAllowed(dpath) {
+		t.Fatal("a plain join allowed terminals")
+	}
+	if code, out, e := m.run("machine", "join", "--machine", "Test Box.local", "--no-service", "--allow-shell", "--format", "json"); code != 0 || !strings.Contains(out, `"max_access": "full"`) || !config.ShellAllowed(dpath) {
+		t.Fatalf("machine join --allow-shell: %d %s %s", code, out, e)
+	}
 
 	// Sessions join with zero arguments: Claude Code...
 	sess := &harnessT{t, map[string]string{"CLAUDE_CODE_SESSION_ID": "abcd-1234-ef56"}}

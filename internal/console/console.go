@@ -1016,6 +1016,10 @@ func (b *Backend) Handler() http.Handler {
 		var in struct {
 			Uses         int `json:"uses"`
 			ExpiresHours int `json:"expires_hours"`
+			// AllowShell: the computer that runs the command also lets
+			// agents open a terminal there (?shell=1 → machine join
+			// --allow-shell). Running it on that computer is the consent.
+			AllowShell bool `json:"allow_shell"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -1032,9 +1036,20 @@ func (b *Backend) Handler() http.Handler {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"join_url": res.JoinURL, "command": "curl -fsSL " + res.JoinURL + " | bash", "agent_guide": res.AgentGuide})
+		writeJSON(w, http.StatusOK, joinLinkOut(res.JoinURL, res.AgentGuide, in.AllowShell))
 	}))
 	return m
+}
+
+// joinLinkOut is a join link as the App shows it: the command to run on the
+// computer (and its Windows PowerShell form), with ?shell=1 when that
+// computer is also to let agents open a terminal.
+func joinLinkOut(joinURL string, guide any, allowShell bool) map[string]any {
+	cmd, ps := "curl -fsSL "+joinURL+" | bash", "irm '"+joinURL+"?format=ps1' | iex"
+	if allowShell {
+		cmd, ps = "curl -fsSL '"+joinURL+"?shell=1' | bash", "irm '"+joinURL+"?format=ps1&shell=1' | iex"
+	}
+	return map[string]any{"join_url": joinURL, "command": cmd, "ps_command": ps, "agent_guide": guide, "allow_shell": allowShell}
 }
 
 // withHub resolves {id} to a hub client and bounds the call.

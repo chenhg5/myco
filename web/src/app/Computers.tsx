@@ -3,7 +3,8 @@ import { Info, Plus, Trash2 } from "lucide-react";
 import { appApi, type LocalState } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { machinesOfHub, nodeName } from "@/app/nodes";
+import { machineShell, machinesOfHub, nodeName } from "@/app/nodes";
+import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { agentQuotaHint } from "@/app/quota";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { projectsOf } from "@/app/Members";
@@ -56,6 +57,10 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
   const [local, setLocal] = useState<LocalState | null>(null);
   const [removing, setRemoving] = useState<AgentRow | null>(null);
   const [dropping, setDropping] = useState<Machine | null>(null);
+  // A connected computer looked at: what it allows, and removing it.
+  const [viewing, setViewing] = useState<Machine | null>(null);
+  const hubOf = (m: Machine) => rows.find((r) => (r.hub.overview?.machines || []).some((x) => x.id === m.id))?.hub;
+  const shellOf = (m: Machine) => { const h = hubOf(m); return h ? machineShell(h, m.id) : "unknown"; };
   const [error, setError] = useState<unknown>(null);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
   const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
@@ -119,14 +124,30 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onAddComputer
         {machines.map((m, i) => (
           <span key={m.id} className="pc-machine-wrap">
             {i > 0 && <span className="pc-sep">·</span>}
-            <button type="button" className={cn("pc-machine", !m.online && "is-away")} onClick={() => setDropping(m)}
-              title={L(`${m.online ? "在线" : "不在线"} · 点一下可以移除这台电脑`, `${m.online ? "Online" : "Away"} · click to remove this computer`)}>
+            <button type="button" className={cn("pc-machine", !m.online && "is-away")} onClick={() => setViewing(m)}
+              title={L(`${m.online ? "在线" : "不在线"} · 点一下看它允许什么，或移除`, `${m.online ? "Online" : "Away"} · click to see what it allows, or remove it`)}>
               {m.name}{isHere(m) && L("（这台电脑）", " (this computer)")}
+              {shellOf(m) === "no" && <span className="pc-machine-tag">{L("没允许开终端", "no terminals")}</span>}
             </button>
           </span>
         ))}
       </div>
 
+      <Modal open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}
+        title={viewing ? viewing.name + (isHere(viewing) ? L("（这台电脑）", " (this computer)") : "") : ""}
+        description={viewing ? (viewing.online ? L("在线。", "Online.") : L("不在线。", "Away.")) + " " + L("它自己决定 agent 能不能在上面开终端：只能在它上面改。", "It decides for itself whether agents may open terminals on it: that is changed on it only.") : ""}>
+        {viewing && (
+          <div data-testid="machine-view">
+            <LocalShellAccess machine={viewing} what="shell" shell={shellOf(viewing)} onChange={async () => onChanged()} />
+            <div className="app-modal-actions">
+              <button type="button" className="app-btn app-btn-quiet" onClick={() => { setDropping(viewing); setViewing(null); }}>
+                <Trash2 />{L("移除这台电脑", "Remove this computer")}
+              </button>
+              <button type="button" className="app-btn app-btn-primary" onClick={() => setViewing(null)}>{L("好", "OK")}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
       <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); onChanged(); }} />
       <ConfirmDialog
         open={!!removing}
