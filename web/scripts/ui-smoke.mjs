@@ -1355,6 +1355,20 @@ async function runMatrix(browser, size, scheme) {
       await cp.waitFor({ state: "detached", timeout: 5_000 });
     });
 
+    // Links one after another with Chinese commas are each a link of their own.
+    await step("单聊 · 中文标点隔开的链接", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("三个链接：https://a.example/x，https://b.example/y，https://c.example/z 看看");
+      await box.press("Enter");
+      const bubble = page.locator(".conv-detail .conv-msg.is-me", { hasText: "三个链接" }).last();
+      await bubble.waitFor({ timeout: 10_000 });
+      const hrefs = await bubble.locator("a").evaluateAll((els) => els.map((a) => a.getAttribute("href")));
+      if (hrefs.join(" ") !== "https://a.example/x https://b.example/y https://c.example/z") throw new Error(`中文逗号隔开的应是三个链接，实际 ${JSON.stringify(hrefs)}`);
+      await noRound(page);
+    });
+
     // Translating what an agent wrote: nothing until a service has a key
     // (Settings › 翻译); then by hand from its time, the original a click away.
     await step("翻译", async () => {
