@@ -3665,6 +3665,28 @@ html.shell-mac .fp-panel.is-full .fp-head {
 .fp-panel.is-full {
   width: calc(100% - 32px);
 }
+/* Beside the chat (a wide window, not full screen): a pane like the App's
+   main area, whose right edge moves over to make room (--fp-w: the
+   panel's width, set while it is open). */
+.fp-panel.is-docked {
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 10px;
+  box-shadow: var(--panel-shadow);
+  animation: none;
+}
+html.fp-docked .app-main {
+  margin-right: calc(var(--fp-w, 0px) + 16px);
+}
+/* (the chat keeps the room it has: the members column steps aside; the
+   sidebar and ⌘K still reach everyone) */
+html.fp-docked .app-main .sp-side {
+  display: none;
+}
+.app-main {
+  transition: margin-right 0.18s ease-out;
+}
 .fp-panel.is-dragging {
   transition: none;
   user-select: none;

@@ -1094,6 +1094,20 @@ async function runMatrix(browser, size, scheme) {
       const h1 = await doc.evaluate((el) => el.getBoundingClientRect().height);
       if (Math.abs(h1 - h0) > 1) throw new Error(`文件面板打开后不该变高（${h0} → ${h1}）`);
       await shot(page, size, scheme, "file-preview");
+      // Wide enough, it sits beside the chat (the App makes room): you can
+      // read it and go on writing; working in the chat does not close it.
+      if (!narrow) {
+        const gap = await page.evaluate(() => document.querySelector(".fp-panel").getBoundingClientRect().left - document.querySelector(".app-main").getBoundingClientRect().right);
+        if (gap < 0) throw new Error(`文件面板应在对话旁边，不该盖住对话（重叠 ${Math.round(-gap)}px）`);
+        if (await page.locator(".fp-scrim").count()) throw new Error("文件在对话旁边时不该有遮罩");
+        const chatBox = page.locator(".conv-detail .conv-compose-input");
+        await chatBox.click();
+        await chatBox.fill("边看文件边聊");
+        await page.waitForTimeout(200);
+        if (!(await doc.isVisible())) throw new Error("一边看文件一边在聊天框里打字，文件面板不该关掉");
+        await chatBox.fill("");
+        await doc.locator(".fp-head").click();
+      }
       // Full screen, and back (a narrow window has it all already: no
       // button there).
       const fullBtn = doc.getByRole("button", { name: "全屏" });

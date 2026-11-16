@@ -140,6 +140,9 @@ const WIDTH_KEY = "myco-preview-width";
 const keptWidth = () => { try { return Number(localStorage.getItem(WIDTH_KEY)) || 0; } catch { return 0; } };
 const keepWidth = (w: number) => { try { localStorage.setItem(WIDTH_KEY, String(Math.round(w))); } catch { /* not kept */ } };
 const MIN_WIDTH = 380;
+// A file goes beside the chat when each can have this much of what the
+// sidebar leaves.
+const DOCK_HALF = 420;
 const keptFull = () => { try { return localStorage.getItem(FULL_KEY) === "1"; } catch { return false; } };
 const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1" : "0"); } catch { /* not kept */ } };
 
@@ -191,6 +194,54 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const prev = version?.prev;
   const toggleFull = () => setFull((f) => { keepFull(!f); return !f; });
 
+  // Beside the chat, not over it: in a window wide enough, the panel takes
+  // its place on the right and the App's main area makes room, so you can
+  // read the file and go on with the chat (scroll it, write, send). Full
+  // screen, or a narrow window, it covers the App as before.
+  // (what the sidebar leaves: half for the chat, half for the file)
+  const room = () => (typeof window === "undefined" ? 0
+    : window.innerWidth - (document.querySelector(".app-sidebar")?.getBoundingClientRect().width || 0) - 24);
+  const [avail, setAvail] = useState(room);
+  useEffect(() => {
+    if (!open) return;
+    const on = () => setAvail(room());
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, [open]);
+  const docked = open && !full && avail >= 2 * DOCK_HALF;
+  const dockWidth = Math.min(620, Math.round(avail / 2));
+  useEffect(() => {
+    if (!docked) return;
+    const root = document.documentElement;
+    const el = panel.current;
+    root.classList.add("fp-docked");
+    // (its layout width, as the App's own sizes are: not the zoomed one)
+    const set = () => { if (panel.current) root.style.setProperty("--fp-w", `${panel.current.offsetWidth}px`); };
+    set();
+    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(set) : null;
+    if (ro && el) ro.observe(el);
+    // (the panel mounts a moment after: measure again then)
+    const t = window.setTimeout(set, 50);
+    return () => {
+      window.clearTimeout(t);
+      ro?.disconnect();
+      root.classList.remove("fp-docked");
+      root.style.removeProperty("--fp-w");
+    };
+  }, [docked]);
+  // One file beside the chat at a time: opening another closes this one.
+  const token = useRef({});
+  useEffect(() => {
+    if (!open) return;
+    const mine = token.current;
+    window.dispatchEvent(new CustomEvent("myco-fp-open", { detail: mine }));
+    const on = (e: Event) => { if ((e as CustomEvent).detail !== mine) onOpenChange(false); };
+    window.addEventListener("myco-fp-open", on);
+    return () => window.removeEventListener("myco-fp-open", on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -217,11 +268,15 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const about = [bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ");
   const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={!docked}>
       <Dialog.Portal>
-        <Dialog.Overlay className="app-portal fp-scrim" />
-        <Dialog.Content ref={panel} className={cn("app-portal fp-panel", full && "is-full", dragging && "is-dragging")}
-          style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : undefined}>
+        {!docked && <Dialog.Overlay className="app-portal fp-scrim" />}
+        <Dialog.Content ref={panel} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging")}
+          style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
+          // Beside the chat, working in the chat does not close it; Esc
+          // does, from the panel only (in the chat's box it is the box's).
+          onInteractOutside={(e) => { if (docked) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (docked && !panel.current?.contains(document.activeElement)) e.preventDefault(); }}>
           {!full && (
             <div className="fp-edge" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
               title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} {...edge} onPointerCancel={edge.onPointerUp} />
