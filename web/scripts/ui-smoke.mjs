@@ -932,6 +932,31 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape");
       await big.waitFor({ state: "detached", timeout: 5_000 });
       if ((await box.locator(".att-chip").count()) !== 2) throw new Error("看完大图，待发的文件应还在");
+      // A tall picture (a long screenshot) fits the window, in the middle.
+      await page.locator(".conv-compose-input").evaluate(async (el) => {
+        const c = document.createElement("canvas");
+        c.width = 300; c.height = 3000;
+        const g = c.getContext("2d"); g.fillStyle = "#4a8"; g.fillRect(0, 0, 300, 3000);
+        const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
+        const dt = new DataTransfer();
+        dt.items.add(new File([blob], "长截图.png", { type: "image/png" }));
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      });
+      await box.locator(".att-chip").nth(2).waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
+      await box.locator(".att-chip.is-picture .att-thumb-btn").last().click();
+      await big.waitFor({ timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".lightbox-img")?.naturalHeight || 0) > 0, null, { timeout: 5_000 });
+      const fit = await page.locator(".lightbox-img").evaluate((img) => {
+        const r = img.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2, h: window.innerHeight };
+      });
+      if (fit.top < 0 || fit.bottom > fit.h) throw new Error(`长图应整张在窗口里，实际 ${Math.round(fit.top)}–${Math.round(fit.bottom)} / ${fit.h}`);
+      if (Math.abs(fit.mid - (56 + (fit.h - 88) / 2)) > 4) throw new Error(`长图应上下居中，中线在 ${Math.round(fit.mid)}`);
+      await page.keyboard.press("Escape");
+      await big.waitFor({ state: "detached", timeout: 5_000 });
+      await box.locator(".att-chip").nth(2).locator(".att-x").click();
+      await page.waitForFunction(() => document.querySelectorAll(".conv-compose-box .att-chip").length === 2, null, { timeout: 5_000 });
       await page.locator(".conv-compose-input").focus();
       await page.locator(".conv-compose-input").press("Enter");
       const sent = page.locator(".conv-msg.is-me", { hasText: "发来 2 个文件" }).last();
