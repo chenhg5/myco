@@ -288,6 +288,8 @@ public struct RecentItem: Codable, Sendable, Hashable, Identifiable {
     public var threadId: String
     public var updatedAt: Date
     public var last: Message
+    /// The message the thread began with.
+    public var first: Message?
     public var task: Message?
     public var answer: Message?
     /// The newest task not finished yet (hubs from v0.18.40).

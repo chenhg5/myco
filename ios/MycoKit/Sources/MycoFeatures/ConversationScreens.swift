@@ -9,7 +9,7 @@ import MycoUI
 /// An agent's conversation, as its own page.
 struct AgentScreen: View {
     let name: String
-    /// A task to land on (from a capsule on a project's page).
+    /// A message to land on.
     var focus: String?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
@@ -33,6 +33,44 @@ struct AgentScreen: View {
                     .accessibilityIdentifier("conversation.title")
                 }
             }
+    }
+}
+
+/// What two agents said to each other, to read: opened from a handoff
+/// card. The one that gave the work is on the right, as I am in my own
+/// conversations; the one that did it on the left, with how it worked.
+/// There is no input: it is their conversation.
+struct ExchangeScreen: View {
+    let agent: String
+    let other: String
+    var focus: String?
+    @Environment(WorkspaceSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        let model = session.exchange(of: agent, with: other)
+        let front = scenePhase != .background
+        ZStack {
+            MycoColor.bg.ignoresSafeArea()
+            ConversationBody(model: model, focus: focus)
+        }
+        .task(id: front) {
+            if front { await model.run() }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .solidTopBar()
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 1) {
+                    Text(session.displayName(of: other) + " → " + session.displayName(of: agent))
+                        .font(.headline).foregroundStyle(MycoColor.fg).lineLimit(1)
+                    Text(L("它们之间的往来 · 只读", "What they said to each other · read-only"))
+                        .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("exchange.title")
+            }
+        }
     }
 }
 
@@ -440,7 +478,9 @@ struct ConversationBody: View {
             if !revealed { withAnimation(.easeOut(duration: 0.15)) { waiting = true } }
         }
         .overlay {
-            if model.loaded, model.items.isEmpty, model.outgoing.isEmpty {
+            if model.loaded, model.items.isEmpty, model.outgoing.isEmpty, model.readOnly {
+                EmptyState(symbol: "bubble.left.and.bubble.right", title: L("它们之间还没有说过什么", "They have not said anything to each other yet"))
+            } else if model.loaded, model.items.isEmpty, model.outgoing.isEmpty {
                 EmptyState(
                     face: session.agent(model.agent).map(AvatarView.Face.of),
                     title: model.project == nil
@@ -449,7 +489,8 @@ struct ConversationBody: View {
                     note: L("一句话就行，它会自己想办法。", "One sentence is enough. It will work out the rest."))
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+        // (Two agents' exchange is read, not written into.)
+        .safeAreaInset(edge: .bottom, spacing: 0) { if !model.readOnly { bottom } }
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             if model.unreachable != nil {
@@ -758,7 +799,7 @@ struct ConversationBody: View {
         case (_, .time): return Space.xl
         case (.mine, .mine): return Space.s
         case (_, .mine): return Space.xl
-        case (.dispatch, .dispatch): return Space.s
+        case (.handoff, .handoff): return Space.s
         case (.progress, .progress): return 0
         case (.process, .reply), (.pastProgress, .reply), (.progress, .reply): return Space.m
         case (.mine, .plan), (.plan, .process), (.plan, .progress): return Space.m
@@ -859,17 +900,54 @@ struct ConversationBody: View {
             ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
                 AnyView(files(attachments, trailing: trailing))
             }
-        case .dispatch(let dispatch):
-            // Work the coordinator gave a member: one line, leading to
-            // that member's page.
-            let name = session.displayName(of: dispatch.to)
-            let stateText = Words.state(dispatch.state)
-            DispatchCapsule(
-                face: session.agent(dispatch.to).map(AvatarView.Face.of) ?? .computer,
-                name: name, text: dispatch.firstLine, stateText: stateText,
-                tone: StatusTone.of(dispatch.state) ?? .idle,
-                spoken: L("派给 \(name)：\(dispatch.firstLine)，\(stateText)", "To \(name): \(dispatch.firstLine), \(stateText)"),
-                action: { router.push(.agent(dispatch.to, focus: dispatch.taskID)) })
+        case .handoff(let handoff):
+            // What the agent and another agent handed each other: one
+            // card, leading to their whole exchange.
+            let name = session.displayName(of: handoff.other)
+            let label = Self.label(of: handoff)
+            let stateText = Self.words(for: handoff)
+            let line = handoff.outgoing ? "\(label) \(name)" : "\(name) \(label)"
+            HandoffCard(
+                face: session.agent(handoff.other).map(AvatarView.Face.of) ?? .computer,
+                name: name, label: label, labelFirst: handoff.outgoing, text: handoff.text, stateText: stateText,
+                tone: Self.tone(of: handoff), result: handoff.result,
+                spoken: line + L("：", ": ") + handoff.text + L("，", ", ") + stateText
+                    + (handoff.result.map { L("。交回：", ". Came back: ") + $0 } ?? ""),
+                // The one that gave the work on the right, the one that
+                // did it on the left with its steps.
+                action: {
+                    router.push(.exchange(
+                        agent: handoff.outgoing ? handoff.other : model.agent,
+                        with: handoff.outgoing ? model.agent : handoff.other, focus: handoff.id))
+                })
+            .accessibilityIdentifier("handoff." + handoff.id)
+        }
+    }
+
+    /// "To" / "From", by what was handed over: work, or a note.
+    static func label(of handoff: Handoff) -> String {
+        if handoff.outgoing { return handoff.isTask ? L("派给", "To") : L("发给", "To") }
+        return handoff.isTask ? L("派来", "gave") : L("发来", "wrote")
+    }
+
+    /// Where a handoff stands. Done by the other one is "handed back";
+    /// done by the agent itself is "done".
+    static func words(for handoff: Handoff) -> String {
+        switch handoff.state {
+        case .note: return L("备注", "Note")
+        case .queued: return L("排队中", "Queued")
+        case .working: return L("在做", "Working")
+        case .failed: return L("没做成", "Didn't work")
+        case .done: return handoff.outgoing ? L("交回了", "Handed back") : L("做完了", "Done")
+        }
+    }
+
+    static func tone(of handoff: Handoff) -> StatusTone {
+        switch handoff.state {
+        case .working: return .working
+        case .failed: return .failed
+        case .queued: return .away
+        case .done, .note: return .idle
         }
     }
 
@@ -886,13 +964,16 @@ struct ConversationBody: View {
 
     /// Takes a message out of my view (the agents and other people keep
     /// it); for a few seconds it can be taken back.
-    private func deleteButton(_ id: String) -> some View {
-        Button(L("删除（只从你这边去掉）", "Delete (from your view only)"), systemImage: "trash", role: .destructive) {
-            deleted = [id]
-            Task {
-                await model.setHidden([id])
-                try? await Task.sleep(for: .seconds(6))
-                if deleted == [id] { withAnimation(.easeOut(duration: 0.2)) { deleted = nil } }
+    @ViewBuilder private func deleteButton(_ id: String) -> some View {
+        // (Two agents' exchange is theirs: nothing is taken out of it here.)
+        if !model.readOnly {
+            Button(L("删除（只从你这边去掉）", "Delete (from your view only)"), systemImage: "trash", role: .destructive) {
+                deleted = [id]
+                Task {
+                    await model.setHidden([id])
+                    try? await Task.sleep(for: .seconds(6))
+                    if deleted == [id] { withAnimation(.easeOut(duration: 0.2)) { deleted = nil } }
+                }
             }
         }
     }

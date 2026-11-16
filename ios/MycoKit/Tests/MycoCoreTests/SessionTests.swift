@@ -97,40 +97,41 @@ struct SessionTests {
     }
 
     @Test func aMessageTakenOutOfMyViewIsGoneOnEveryDevice() async throws {
-        let hub = FakeHub()
+        let hub = FakeHub(scenario: .waiting)
         let session = WorkspaceSession(id: "hide", name: "Demo", hub: hub)
         await session.refresh()
-        // The backend engineer reported on its task to the coordinator.
-        let model = session.conversation(with: "studio-codex-7f3a")
+        // The coordinator reported on a task of mine.
+        let model = session.conversation(with: "cloud-lead", project: "myco-ios")
         await model.reload()
-        #expect(model.items.contains { $0.id == "d1" })
-        // Its updates are part of its run.
-        func reported(_ id: String) -> Bool {
-            model.run(of: "d1").contains { part in
+        #expect(model.items.contains { $0.id == "m3" })
+        // Its update shows: a row, or part of its run.
+        func reported(_ model: ConversationModel, _ id: String) -> Bool {
+            model.items.contains { $0.id == id } || model.run(of: "m3").contains { part in
                 if case .reports(_, let reports) = part { return reports.contains { $0.id == id } } else { return false }
             }
         }
-        #expect(reported("d1p3"))
-        #expect(!model.items.contains { $0.id == "d1p3" })
+        #expect(reported(model, "m3p"))
 
         // The task goes, and its updates with it; nothing is deleted.
-        await model.setHidden(["d1"])
-        #expect(!model.items.contains { $0.id.hasPrefix("d1") })
-        #expect(await hub.allMessages().contains { $0.id == "d1" })
-        #expect(try await hub.hidden() == ["d1"])
+        await model.setHidden(["m3"])
+        #expect(!model.items.contains { $0.id == "m3" || $0.id.hasPrefix("m3.") })
+        #expect(!reported(model, "m3p"))
+        #expect(await hub.allMessages().contains { $0.id == "m3" })
+        #expect(try await hub.hidden() == ["m3"])
 
         // Another device of mine sees the same.
         let phone = WorkspaceSession(id: "hide-2", name: "Demo", hub: hub)
         await phone.refresh()
-        #expect(phone.hidden == ["d1"])
-        let there = phone.conversation(with: "studio-codex-7f3a")
+        #expect(phone.hidden == ["m3"])
+        let there = phone.conversation(with: "cloud-lead", project: "myco-ios")
         await there.reload()
-        #expect(!there.items.contains { $0.id.hasPrefix("d1") })
+        #expect(!there.items.contains { $0.id == "m3" || $0.id.hasPrefix("m3.") })
+        #expect(!reported(there, "m3p"))
 
         // Taken back within a moment: all of it is there again.
-        await model.setHidden(["d1"], hidden: false)
-        #expect(model.items.contains { $0.id == "d1" })
-        #expect(reported("d1p3"))
+        await model.setHidden(["m3"], hidden: false)
+        #expect(model.items.contains { $0.id == "m3" })
+        #expect(reported(model, "m3p"))
     }
 
     @Test func anOlderWorkspaceKeepsWhatIHidOnThisDevice() async throws {
