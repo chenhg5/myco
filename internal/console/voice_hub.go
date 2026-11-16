@@ -40,6 +40,9 @@ type taskNews struct {
 	Finished bool
 	Summary  string // the answer (or why it failed), short
 	Question string // the question it is waiting on
+	Status   string // the task's status (acked: at work)
+	Since    time.Time
+	Progress string // its newest progress note, short
 }
 
 // hubActions is a call's myco side: the person (peer, their console
@@ -247,10 +250,13 @@ func (h *hubActions) TaskNews(ctx context.Context, ref VoiceTaskRef) (taskNews, 
 	if m == nil {
 		return taskNews{}, fmt.Errorf("task %s not found", ref.ID)
 	}
-	var news taskNews
+	news := taskNews{Status: m.Status, Since: m.CreatedAt}
 	for _, x := range thread {
 		if x.ReplyTo == m.ID && x.Type == "reply" {
 			news.Finished, news.Summary = true, clipRunes(x.Body, 800)
+		}
+		if x.ReplyTo == m.ID && x.Type == "progress" && !x.Ask && strings.TrimSpace(x.Body) != "" {
+			news.Progress = clipRunes(strings.TrimSpace(x.Body), 200) // the thread is oldest first
 		}
 		if m.Asking != "" && x.ID == m.Asking {
 			news.Question = clipRunes(x.Body, 400)

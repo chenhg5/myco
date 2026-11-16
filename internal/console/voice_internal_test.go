@@ -158,12 +158,16 @@ func (h *fakeHub) TaskNews(context.Context, VoiceTaskRef) (taskNews, error) {
 	return h.news, nil
 }
 
-func newTestCall(t *testing.T, m *scriptModel, h *fakeHub) (*voice, *voiceCall, *fakeAudio) {
+func newTestCall(t *testing.T, m *scriptModel, h *fakeHub, tweak ...func(*voiceDeps)) (*voice, *voiceCall, *fakeAudio) {
 	t.Helper()
 	v := &voice{state: stIdle, changed: make(chan struct{})}
 	a := &fakeAudio{}
-	c := newVoiceCall(v, voiceDeps{audio: a, model: m, tts: fakeSpeech{}, hub: h, lang: "zh-CN",
-		endOfSpeech: 80 * time.Millisecond, quietBeforeNotice: 50 * time.Millisecond, watchEvery: 30 * time.Millisecond})
+	d := voiceDeps{audio: a, model: m, tts: fakeSpeech{}, hub: h, lang: "zh-CN",
+		endOfSpeech: 80 * time.Millisecond, quietBeforeNotice: 50 * time.Millisecond, watchEvery: 30 * time.Millisecond}
+	for _, f := range tweak {
+		f(&d)
+	}
+	c := newVoiceCall(v, d)
 	v.call = c
 	_ = a.Start("zh-CN", c)
 	c.begin()
@@ -473,4 +477,53 @@ func TestVoiceCallAckOnlyWhenSilent(t *testing.T) {
 	if toolAck("en-US", "stop_agent") != "OK, I'll stop it. " || toolAck("zh-CN", "check_agent") != "我看一眼。" {
 		t.Fatal("toolAck")
 	}
+}
+
+// A long task is not minutes of silence: now and then the call says it is
+// still going, with its newest progress note (told once).
+func TestVoiceCallSaysALongTaskIsStillGoing(t *testing.T) {
+	send := toolCall{ID: "c1", Type: "function"}
+	send.Function.Name = "tell_agent"
+	send.Function.Arguments = `{"text":"把整个项目的测试跑一遍","what":"跑全部测试"}`
+	m := &scriptModel{replies: []chatMsg{
+		{Role: "assistant", ToolCalls: []toolCall{send}},
+		{Role: "assistant", Content: "转过去了。"},
+	}}
+	h := &fakeHub{news: taskNews{Status: "acked", Since: time.Now().Add(-6 * time.Minute), Progress: "在跑集成测试"}}
+	v, c, _ := newTestCall(t, m, h, func(d *voiceDeps) { d.stillWorkingEvery = 300 * time.Millisecond })
+	c.Heard("把测试都跑一遍", true)
+	waitFor(t, "the answer", func() bool { return has(v, vAssistant, "转过去了") })
+	c.Played()
+	notice := func() []string {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		var out []string
+		for _, msgs := range m.seen {
+			for _, x := range msgs {
+				if x.Role == "system" && strings.Contains(x.Content, "还在进行") && !contains(out, x.Content) {
+					out = append(out, x.Content)
+				}
+			}
+		}
+		return out
+	}
+	waitFor(t, "a word that it is still going", func() bool { return len(notice()) > 0 })
+	first := notice()[0]
+	if !strings.Contains(first, "跑全部测试") || !strings.Contains(first, "在做") || !strings.Contains(first, "6 分钟") || !strings.Contains(first, "在跑集成测试") {
+		t.Fatalf("notice: %s", first)
+	}
+	c.Played()
+	waitFor(t, "a second word", func() bool { return len(notice()) > 1 })
+	if strings.Contains(notice()[1], "在跑集成测试") {
+		t.Fatalf("the same progress note told twice: %s", notice()[1])
+	}
+}
+
+func contains(xs []string, x string) bool {
+	for _, y := range xs {
+		if y == x {
+			return true
+		}
+	}
+	return false
 }

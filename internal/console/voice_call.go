@@ -30,6 +30,10 @@ type voiceDeps struct {
 	quietBeforeNotice time.Duration
 	// watchEvery: how often handed-out tasks are looked at.
 	watchEvery time.Duration
+	// stillWorkingEvery: how long the call goes without a word about a task
+	// that is not done before it says that it still is (a long task would
+	// otherwise be minutes of silence).
+	stillWorkingEvery time.Duration
 }
 
 type voiceCall struct {
@@ -75,6 +79,8 @@ type watchedTask struct {
 	what     string // what it was asked, short
 	asked    string // the question it asked last (told once)
 	finished bool
+	toldAt   time.Time // when the person last heard about it
+	progress string    // the progress note told last
 }
 
 func newVoiceCall(v *voice, d voiceDeps) *voiceCall {
@@ -86,6 +92,9 @@ func newVoiceCall(v *voice, d voiceDeps) *voiceCall {
 	}
 	if d.watchEvery == 0 {
 		d.watchEvery = 4 * time.Second
+	}
+	if d.stillWorkingEvery == 0 {
+		d.stillWorkingEvery = 2 * time.Minute
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	return &voiceCall{v: v, d: d, ctx: ctx, stop: stop, in: make(chan func(), 64), watched: map[string]*watchedTask{}}
@@ -503,7 +512,7 @@ func (c *voiceCall) watchTask(ref VoiceTaskRef, what string) {
 			}
 			return
 		}
-		c.watched[ref.ID] = &watchedTask{ref: ref, what: what}
+		c.watched[ref.ID] = &watchedTask{ref: ref, what: what, toldAt: time.Now()}
 	})
 }
 
@@ -545,10 +554,15 @@ func (c *voiceCall) watch() {
 				switch {
 				case st.Finished:
 					w.finished = true
+					w.toldAt = time.Now()
 					c.notices = append(c.notices, fmt.Sprintf("它回复了%s：%s", what, st.Summary))
 				case st.Question != "" && st.Question != w.asked:
 					w.asked = st.Question
+					w.toldAt = time.Now()
 					c.notices = append(c.notices, fmt.Sprintf("它在问你%s：%s（它在等回答；对方回答了就用 tell_agent 转给它）", what, st.Question))
+				case st.Question == "" && c.stillWorkingDue(w):
+					w.toldAt = time.Now()
+					c.notices = append(c.notices, c.stillWorking(what, w, st))
 				}
 			})
 		}
@@ -628,4 +642,30 @@ func (c *voiceCall) conversation(ctx context.Context) string {
 	c.convoMu.Lock()
 	defer c.convoMu.Unlock()
 	return c.convo
+}
+
+// stillWorkingDue: a task not done has gone unmentioned for a while, and
+// the call has been quiet for a good part of it (not in the middle of a
+// conversation about something else).
+func (c *voiceCall) stillWorkingDue(w *watchedTask) bool {
+	every := c.d.stillWorkingEvery
+	return time.Since(w.toldAt) >= every && time.Since(c.lastSound) >= every/2 && c.turn == nil && !c.speaking
+}
+
+// stillWorking is the notice that a task is still going: how it stands,
+// for how long, and its newest progress note if not told yet.
+func (c *voiceCall) stillWorking(what string, w *watchedTask, st taskNews) string {
+	var b strings.Builder
+	b.WriteString("（不是回复，只是让对方知道还在进行）" + what + "：它" + statusWord(st.Status))
+	if !st.Since.IsZero() {
+		if m := int(time.Since(st.Since).Minutes()); m >= 1 {
+			fmt.Fprintf(&b, "，已经 %d 分钟了", m)
+		}
+	}
+	if st.Progress != "" && st.Progress != w.progress {
+		w.progress = st.Progress
+		b.WriteString("；它最新报的进展：" + st.Progress)
+	}
+	b.WriteString("。用一句很短的话告诉对方还在进行（可以带上它在做什么），别说做完了，也不用问对方要不要等。")
+	return b.String()
 }
