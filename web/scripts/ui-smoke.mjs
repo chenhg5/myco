@@ -2045,6 +2045,36 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // An agent offers the next step with its answer: the empty input shows
+    // it, Tab fills it in.
+    await step("单聊 · Tab 填入 agent 建议的下一步", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("改好登录页，然后告诉我下一步");
+      await box.press("Enter");
+      await page.locator(".conv-detail .conv-msg", { hasText: "登录页改好了" }).waitFor({ timeout: 15_000 });
+      await page.waitForFunction(() => (document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || "") === "再跑一遍完整测试", null, { timeout: 15_000 });
+      await box.focus();
+      await settle(page, 200);
+      await shot(page, size, scheme, "compose-suggestion");
+      await box.press("Tab");
+      if ((await box.inputValue()) !== "再跑一遍完整测试") throw new Error(`Tab 应填入建议，实际「${await box.inputValue()}」`);
+      // A long one shows on one line, cut with "…"; Tab still takes all of it.
+      await box.fill("还是登录页，下一步给个长建议");
+      await box.press("Enter");
+      await page.waitForFunction(() => {
+        const ph = document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || "";
+        return ph.startsWith("把注册页") && ph.endsWith("…");
+      }, null, { timeout: 15_000 });
+      const ph = await box.getAttribute("placeholder");
+      if (ph.length > 60) throw new Error(`长建议应截短到一行，实际 ${ph.length} 字`);
+      await box.focus();
+      await box.press("Tab");
+      if (!(await box.inputValue()).endsWith("再跑一遍完整测试")) throw new Error(`Tab 应填入完整的建议，实际「${await box.inputValue()}」`);
+      await box.fill("");
+    });
+
     // Voice chat with one agent, in its chat (as in ChatGPT and Claude): the
     // round button, with nothing typed, docks a bar above the box; what it passes on
     // is in the chat as a task marked 经语音 (the trailer hidden); mute and
@@ -2115,10 +2145,27 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "设置", narrow);
       if (narrow) await sidebar(page, true);
       await clickVisible(page, page.locator("button", { hasText: /^语音$/ }).first());
-      await page.locator(".app-setting-group", { hasText: "豆包" }).waitFor({ timeout: 10_000 });
+      // The speech service is one of those the backend lists, not a fixed
+      // one: the heading names none, and the service is a choice.
+      await page.locator(".app-setting-group", { hasText: /^语音合成$/ }).waitFor({ timeout: 10_000 });
+      if (await page.locator(".app-setting-group", { hasText: "豆包" }).count()) throw new Error("语音合成的标题不该写死豆包");
+      const services = page.locator(".vs-services .seg-btn");
+      if ((await services.count()) < 1 || !(await services.first().innerText()).includes("豆包语音")) throw new Error("语音合成服务应来自后端的列表");
       if (await page.locator("input[type=password]").evaluateAll((els) => els.some((e) => e.value))) throw new Error("密钥不应显示出来");
+      // Kept on the workspaces for the person's other devices, and it says
+      // where: one hub has them, one is too old to.
+      const where = page.locator("[data-testid=voice-sync]");
+      await where.waitFor({ timeout: 10_000 });
+      const said = await where.innerText();
+      if (!said.includes("已存到") || !said.includes("版本太旧")) throw new Error(`应写明设置存到了哪些工作区，实际「${said}」`);
       await settle(page, 200);
       await shot(page, size, scheme, "settings-voice");
+      // Turned off: nothing says where any more; and back on.
+      const share = page.getByRole("tablist", { name: "把这些设置存到工作区" });
+      await clickVisible(page, share.getByRole("tab", { name: "关" }));
+      await where.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, share.getByRole("tab", { name: "开" }));
+      await where.waitFor({ timeout: 5_000 });
       if (narrow) await sidebar(page, false);
     });
 

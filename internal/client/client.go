@@ -722,6 +722,22 @@ func (c *Client) Progress(ctx context.Context, id, body string, dry bool) (*api.
 	return c.ProgressWith(ctx, id, body, nil, dry)
 }
 
+// Suggest sets what task id's sender may want to say next (the app offers
+// it in the input; "" clears it), sealed for them when end-to-end
+// encryption is on. Hubs before v0.19.15 answer 404.
+func (c *Client) Suggest(ctx context.Context, id, text string, dry bool) (*api.Message, error) {
+	sealed, err := c.sealAbout(ctx, id, false, "suggest", text, nil)
+	if err != nil {
+		return nil, err
+	}
+	var out api.MessageResult
+	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+esc(id)+"/suggest", dryQuery(dry), api.SuggestRequest{Text: sealed}, &out); err != nil {
+		return nil, err
+	}
+	c.open(ctx, &out.Message)
+	return &out.Message, nil
+}
+
 // Ask asks task id's sender to decide (body: the question, then the
 // choices as a numbered list) and holds the task until they answer. On a
 // hub before questions (it refuses the field) it reports the question as

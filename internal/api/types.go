@@ -236,6 +236,10 @@ type Message struct {
 	Ask     bool   `json:"ask,omitempty"`
 	Asking  string `json:"asking,omitempty"`
 	Answers string `json:"answers,omitempty"`
+	// Suggest, on a task: what its recipient thinks the sender may want to
+	// say next (POST /v1/messages/{id}/suggest, v0.19.15+); the app offers
+	// it in the input and Tab takes it.
+	Suggest string `json:"suggest,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -450,6 +454,12 @@ type MessageList struct {
 // AgentList wraps a list of agents.
 type AgentList struct {
 	Agents []Agent `json:"agents"`
+}
+
+// SuggestRequest is the body of POST /v1/messages/{id}/suggest: what the
+// task's sender may want to say next ("" clears it).
+type SuggestRequest struct {
+	Text string `json:"text"`
 }
 
 // ReplyRequest is the body of POST /v1/messages/{id}/reply.
@@ -1105,6 +1115,28 @@ type HiddenList struct {
 type HiddenUpdate struct {
 	Hide []string `json:"hide,omitempty"`
 	Show []string `json:"show,omitempty"`
+}
+
+// VoiceSettings is GET and PUT /v1/console/voice: what the caller (a
+// person) set for voice chats, kept on the hub so every device of theirs
+// has it. It holds API keys: the hub hands it only to that person's own
+// devices and never logs it. UpdatedAt is when the person changed it, by
+// the device they changed it on: the newest wins (a PUT older than what
+// the hub holds changes nothing, and the answer is what it holds).
+type VoiceSettings struct {
+	// The model the voice thinks with: an OpenAI-compatible chat API.
+	LLMBaseURL string `json:"llm_base_url,omitempty"`
+	LLMModel   string `json:"llm_model,omitempty"`
+	LLMKey     string `json:"llm_key,omitempty"`
+	// The speech service it speaks with ("doubao", ...), the voice chosen
+	// there and how fast it talks (-50..100, 0 is normal).
+	TTSProvider string `json:"tts_provider,omitempty"`
+	TTSSpeaker  string `json:"tts_speaker,omitempty"`
+	TTSRate     int    `json:"tts_rate,omitempty"`
+	// The speech services' keys, by service.
+	TTSKeys map[string]string `json:"tts_keys,omitempty"`
+	// Zero on GET when nothing was ever set.
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Workspace is one workspace of a hub that serves several: its own members,

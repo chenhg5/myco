@@ -670,6 +670,23 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   };
   // Slow startup and live blocks for the conversation streaming smoke cases.
   const preview = hub.threads[threadId]?.find((m) => m.id === taskId);
+  // An agent that offers the next step (myco message reply --suggest): the
+  // task carries it, the app's input shows it, Tab takes it.
+  if (preview && /下一步/.test(preview.body)) {
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(1500, () => {
+      replyTimers.delete(taskId);
+      const msgs = hub.threads[threadId];
+      if (!msgs || preview.status === "failed") return;
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "登录页改好了，表单校验也加上了。", created_at: iso(0), updated_at: iso(0) }));
+      const suggest = /长建议/.test(preview.body)
+        ? "把注册页、找回密码页和个人设置页也按同样的方式检查一遍，顺便补上缺的表单校验和错误提示，再跑一遍完整测试"
+        : "再跑一遍完整测试";
+      Object.assign(preview, { status: "done", suggest, updated_at: iso(0) });
+      releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
   if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
     const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
     const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";
@@ -1378,7 +1395,13 @@ const server = http.createServer(async (req, res) => {
   // lines and states change.
   if (parts[0] === "app" && parts[1] === "voice") {
     const v = (state.voice ||= { cfg: { tts_speaker: "zh_male_wennuanahu_uranus_bigtts" }, llmKey: true, ttsKey: true, on: false, muted: false, st: "idle", seq: 0, lines: [], timers: [] });
-    const info = () => ({ available: true, ready: v.llmKey && v.ttsKey, config: v.cfg, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
+    // The speech services come from the backend; the settings are kept on
+    // the workspaces' hubs unless sharing is off (one hub here is too old).
+    const providers = () => [{ id: "doubao", name: "豆包语音", name_en: "Doubao Speech", default_speaker: "zh_male_wennuanahu_uranus_bigtts",
+      help: "在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。", help_en: "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key.", has_key: !!v.ttsKey }];
+    const sync = () => (v.share === false ? [] : state.hubs.map((h, i) => ({ id: h.id, name: h.name, state: i === 1 ? "unsupported" : "synced" })));
+    const info = () => ({ available: true, ready: v.llmKey && v.ttsKey, config: { tts_provider: "doubao", ...v.cfg }, has_llm_key: v.llmKey, has_tts_key: v.ttsKey,
+      tts_providers: providers(), share: v.share !== false, sync: sync(),
       session: { on: v.on, state: v.on ? v.st : "idle", muted: v.muted, ...(v.on ? { hub_id: v.hubId, agent: v.agent } : {}) } });
     const line = (kind, text, extra = {}) => {
       v.seq += 1;
@@ -1391,17 +1414,20 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 2 && method === "GET") return send(res, 200, info());
     if (parts[2] === "config" && method === "PUT") {
       const b = await readBody(req);
-      for (const k of ["llm_base_url", "llm_model", "tts_speaker", "tts_rate"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      if (b?.tts_provider && b.tts_provider !== "doubao") return fail(res, 400, "invalid_argument", "unknown speech service " + b.tts_provider);
+      for (const k of ["llm_base_url", "llm_model", "tts_provider", "tts_speaker", "tts_rate"]) if (b?.[k] !== undefined) v.cfg[k] = b[k];
+      if (typeof b?.share === "boolean") v.share = b.share;
       if (b?.llm_key) v.llmKey = true;
       if (b?.tts_key) v.ttsKey = true;
       if (b?.clear_llm_key) v.llmKey = false;
       if (b?.clear_tts_key) v.ttsKey = false;
       return send(res, 200, info());
     }
+    if (parts[2] === "sync" && method === "POST") return send(res, 200, info());
     if (parts[2] === "start" && method === "POST") {
       const b = await readBody(req);
       if (!b?.agent) return fail(res, 400, "invalid_argument", "agent is required: a voice call is with one agent");
-      if (!v.llmKey || !v.ttsKey) return fail(res, 400, "not_configured", "add a Doubao speech key", "设置 › 语音");
+      if (!v.llmKey || !v.ttsKey) return fail(res, 400, "not_configured", "add the speech service's key (doubao)", "设置 › 语音");
       const hub = state.hubs.find((h) => h.id === b.hub_id);
       const agent = (hub?.agents || []).find((a) => a.name === b.agent);
       if (!hub || !agent) return fail(res, 404, "not_found", `没有 ${b.agent}`);

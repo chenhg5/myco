@@ -69,7 +69,9 @@ final class WalkthroughTests: XCTestCase {
         expectation(for: isStop, evaluatedWith: submit)
         waitForExpectations(timeout: 5)
 
-        // Typing turns it into adding to the open task.
+        // Typing turns it into adding to the open task. (Sending put the
+        // keyboard away: a tap in the input brings it back.)
+        input.tap()
         input.typeText("British spelling")
         XCTAssertEqual(submit.label, "Add")
         submit.tap()
@@ -82,6 +84,22 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Stopped"].waitForExistence(timeout: 5), "stopping says so")
         expectation(for: NSPredicate(format: "label == %@", "Send"), evaluatedWith: submit)
         waitForExpectations(timeout: 5)
+    }
+
+    @MainActor
+    func testPullingAListDownReadsItAgain() {
+        // (Every answer takes a moment here, as on a real connection.)
+        let app = launch(["-myco-latency", "600"])
+        let chat = app.buttons["chat.project:myco-ios"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 30))
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        // The system's spinner turns under the search field while the
+        // workspace is asked. (This test cannot see it: the pull only
+        // returns once the app is still again. `RefreshTests` covers the
+        // refresh itself.)
+        shot("refresh-list")
+        XCTAssertTrue(chat.waitForExistence(timeout: 30), "the list is there after the refresh")
     }
 
     @MainActor
@@ -101,7 +119,16 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(app.textFields["voice.model"].exists)
         XCTAssertTrue(app.secureTextFields["voice.modelKey"].exists, "keys are typed blind")
         XCTAssertTrue(app.secureTextFields["voice.speechKey"].exists)
+        // The speech service is a choice, not a fixed one.
+        XCTAssertTrue(app.descendants(matching: .any)["voice.service"].exists, "the speech service is chosen from a list")
+        XCTAssertFalse(app.staticTexts["Voice (Doubao speech synthesis)"].exists, "no service is written into the heading")
         shot("voice-settings")
+        // The settings can be kept on the workspaces for the other devices.
+        let share = app.switches["voice.share"]
+        for _ in 0..<3 where !share.exists { app.swipeUp() }
+        XCTAssertTrue(share.waitForExistence(timeout: 5), "sharing with the person's other devices is a switch")
+        XCTAssertEqual(share.value as? String, "1", "on unless turned off")
+        shot("voice-settings-share")
     }
 
     @MainActor
@@ -117,6 +144,7 @@ final class WalkthroughTests: XCTestCase {
 
         // Something typed while it runs: a long press on the button offers
         // to send it after this one.
+        input.tap()
         input.typeText("Then the changelog")
         submit.press(forDuration: 1.0)
         let after = app.buttons["Send after this one"]

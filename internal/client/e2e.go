@@ -304,6 +304,7 @@ func (c *Client) open(ctx context.Context, m *api.Message) {
 		return
 	}
 	s.remember(m)
+	c.openSuggest(ctx, m)
 	if !e2e.IsSealed(m.Body) {
 		return
 	}
@@ -369,6 +370,37 @@ func (c *Client) open(ctx context.Context, m *api.Message) {
 		for _, f := range p.Files {
 			m.Attachments = append(m.Attachments, api.Attachment{FileID: f.FileID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, ContentType: f.ContentType})
 		}
+	}
+}
+
+// openSuggest decrypts a task's suggested next input, sealed by its
+// recipient for its sender; one this client cannot read is dropped (it is
+// only an offer).
+func (c *Client) openSuggest(ctx context.Context, m *api.Message) {
+	if !e2e.IsSealed(m.Suggest) {
+		return
+	}
+	sealed := m.Suggest
+	m.Suggest = ""
+	s := c.Sealer
+	if s == nil || s.ID == nil {
+		return
+	}
+	keys, err := c.keysOf(ctx, m.To)
+	if err != nil {
+		return
+	}
+	signer := e2e.Signer(sealed)
+	for _, h := range keys {
+		if e2e.KeyID(h.SignKey) != signer {
+			continue
+		}
+		pt, err := e2e.Open(s.ID, e2e.Header{From: m.To, To: m.From, Type: "suggest"}, sealed, h.SignKey)
+		var p payload
+		if err == nil && json.Unmarshal(pt, &p) == nil {
+			m.Suggest = p.Body
+		}
+		return
 	}
 }
 

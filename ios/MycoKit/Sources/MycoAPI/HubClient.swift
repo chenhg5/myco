@@ -21,13 +21,18 @@ public struct HubClient: HubAPI {
     }
 
     public func overview() async throws -> Overview {
-        try await get("/v1/overview", ["recent": "0"])
+        try await get("/v1/overview", ["recent": "0"], timeout: Self.pollTimeout)
     }
 
     public func projects() async throws -> [Project] {
-        let envelope: ProjectsEnvelope = try await get("/v1/projects")
+        let envelope: ProjectsEnvelope = try await get("/v1/projects", timeout: Self.pollTimeout)
         return envelope.projects
     }
+
+    /// How long what is asked for again and again may take (the lists, a
+    /// conversation's messages). The next asking is seconds away, so one
+    /// that hangs on a bad connection is given up early.
+    static let pollTimeout: TimeInterval = 12
 
     public func recent(_ scope: RecentScope) async throws -> [RecentItem] {
         var query = ["limit": "100"]
@@ -40,7 +45,7 @@ public struct HubClient: HubAPI {
         case .everything:
             break
         }
-        let envelope: RecentEnvelope = try await get("/v1/console/recent", query)
+        let envelope: RecentEnvelope = try await get("/v1/console/recent", query, timeout: Self.pollTimeout)
         return envelope.items
     }
 
@@ -48,7 +53,7 @@ public struct HubClient: HubAPI {
         var query = ["a": a, "b": b, "limit": String(Self.pageSize)]
         // The hub pages by time in milliseconds.
         if let before { query["before"] = String(Int64((before.timeIntervalSince1970 * 1000).rounded(.down))) }
-        let envelope: ExchangeEnvelope = try await get("/v1/console/exchanges", query)
+        let envelope: ExchangeEnvelope = try await get("/v1/console/exchanges", query, timeout: Self.pollTimeout)
         return MessagePage(messages: envelope.messages, more: envelope.more ?? false)
     }
 
@@ -106,6 +111,15 @@ public struct HubClient: HubAPI {
         return try Self.decode(HiddenEnvelope.self, from: data).ids
     }
 
+    public func voiceSettings() async throws -> VoiceDocument {
+        try await get("/v1/console/voice", timeout: Self.pollTimeout)
+    }
+
+    public func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument {
+        let data = try await call("PUT", "/v1/console/voice", body: HubJSON.encoder().encode(document), timeout: Self.pollTimeout)
+        return try Self.decode(VoiceDocument.self, from: data)
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -133,8 +147,8 @@ public struct HubClient: HubAPI {
 
     // MARK: Plumbing
 
-    private func get<T: Decodable>(_ path: String, _ query: [String: String] = [:]) async throws -> T {
-        try Self.decode(T.self, from: try await call("GET", path, query: query))
+    private func get<T: Decodable>(_ path: String, _ query: [String: String] = [:], timeout: TimeInterval = 20) async throws -> T {
+        try Self.decode(T.self, from: try await call("GET", path, query: query, timeout: timeout))
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult, type VoiceInfo,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -1027,13 +1027,18 @@ function TranslateSection() {
 }
 
 /** Voice calls: the model the voice assistant talks with (by default the
- *  translation's OpenAI-compatible one), Doubao's key and voice. Keys go to
- *  the system keychain and are never shown. */
+ *  translation's OpenAI-compatible one) and the speech service it speaks
+ *  with, one of those the backend lists (voice_sync.go). Keys go to the
+ *  system keychain and are never shown. The settings are the person's: kept
+ *  on the workspaces' hubs too, so their other devices have them. */
+const DOUBAO: VoiceTTSProvider = { id: "doubao", name: "豆包语音", name_en: "Doubao Speech", default_speaker: "zh_male_wennuanahu_uranus_bigtts", has_key: false };
+
 function VoiceSection() {
   const [info, setInfo] = useState<VoiceInfo | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [llmKey, setLlmKey] = useState("");
+  const [provider, setProvider] = useState("doubao");
   const [speaker, setSpeaker] = useState("");
   const [rate, setRate] = useState(0);
   const [ttsKey, setTtsKey] = useState("");
@@ -1043,14 +1048,25 @@ function VoiceSection() {
   const load = (v: VoiceInfo) => {
     setInfo(v);
     setBaseUrl(v.config.llm_base_url || ""); setModel(v.config.llm_model || "");
+    setProvider(v.config.tts_provider || "doubao");
     setSpeaker(v.config.tts_speaker || ""); setRate(v.config.tts_rate || 0);
   };
-  useEffect(() => { appApi.voice().then(load, setError); }, []);
-  const save = async (extra: { clear_llm_key?: boolean; clear_tts_key?: boolean } = {}) => {
+  useEffect(() => {
+    let off = false;
+    // What this computer has, at once; then what another device may have
+    // changed since (the hubs keep the settings).
+    appApi.voice().then((v) => {
+      if (off) return;
+      load(v);
+      appApi.voiceSync().then((n) => { if (!off) { load(n); window.dispatchEvent(new Event("myco-voice-changed")); } }, () => undefined);
+    }, setError);
+    return () => { off = true; };
+  }, []);
+  const save = async (extra: { clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean } = {}) => {
     setBusy(true); setError(null); setSaved(false);
     try {
       const v = await appApi.putVoiceConfig({
-        llm_base_url: baseUrl.trim(), llm_model: model.trim(), tts_speaker: speaker.trim(), tts_rate: rate,
+        llm_base_url: baseUrl.trim(), llm_model: model.trim(), tts_provider: provider, tts_speaker: speaker.trim(), tts_rate: rate,
         ...(llmKey.trim() ? { llm_key: llmKey.trim() } : {}), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}), ...extra,
       });
       load(v); setLlmKey(""); setTtsKey(""); setSaved(true);
@@ -1058,6 +1074,17 @@ function VoiceSection() {
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
   if (!info) return <ErrorText error={error} />;
+  const providers = info.tts_providers?.length ? info.tts_providers : [DOUBAO];
+  const svc = providers.find((p) => p.id === provider) || providers[0];
+  const svcName = lang() === "en" ? svc.name_en : svc.name;
+  const svcHelp = lang() === "en" ? svc.help_en : svc.help;
+  // The key shown as kept is the chosen service's.
+  const hasTtsKey = info.tts_providers ? svc.has_key : info.has_tts_key;
+  const share = info.share !== false;
+  const sync = info.sync || [];
+  const behind = sync.filter((h) => h.state === "unsupported");
+  const away = sync.filter((h) => h.state === "unreachable");
+  const kept = sync.filter((h) => h.state === "synced");
   return (
     <>
       <section className="app-setting-card app-setting-lines">
@@ -1065,9 +1092,9 @@ function VoiceSection() {
           <div className="app-setting-line-text">
             <b>{L("和 agent 语音聊天", "Voice chat with an agent")}</b>
             <span>{info.available
-              ? L("配好下面的模型和声音后，对话里输入框空着时，右边的圆按钮就是语音聊天。你说的话转给这个 agent（有活就补充，空着就是新任务），它的回复和提问挑空档说给你听；你一开口它就停下来听。录音不保存。",
-                "Once the model and the voice below are set up, the round button beside an empty box starts a voice chat with that agent. What you ask goes to it (added to its task at work, or a new task); its answers and questions are told in a pause; it stops as soon as you speak. No recordings are kept.")
-              : L("语音聊天目前只在 Mac 版 App 里有。", "Voice chat is in the Mac app for now.")}</span>
+              ? L("配好下面的模型和语音合成后，对话里输入框空着时，右边的圆按钮就是语音聊天。你说的话转给这个 agent（有活就补充，空着就是新任务），它的回复和提问挑空档说给你听；你一开口它就停下来听。录音不保存。",
+                "Once the model and the speech service below are set up, the round button beside an empty box starts a voice chat with that agent. What you ask goes to it (added to its task at work, or a new task); its answers and questions are told in a pause; it stops as soon as you speak. No recordings are kept.")
+              : L("语音聊天目前只在 Mac 版 App 和手机 App 里有。这里的设置会同步过去。", "Voice chat is in the Mac app and the phone app for now. What is set here is shared with them.")}</span>
           </div>
         </div>
       </section>
@@ -1089,14 +1116,21 @@ function VoiceSection() {
           {info.has_llm_key && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_llm_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
         </div>
       </section>
-      <h4 className="app-setting-group">{L("声音（豆包语音合成）", "Voice (Doubao speech)")}</h4>
+      <h4 className="app-setting-group">{L("语音合成", "Speech")}</h4>
       <section className="app-setting-card app-setting-lines">
-        <div className="app-setting-line">
-          <p className="tr-note">{L("在火山引擎控制台「豆包语音」里开通语音合成、创建 API Key。音色填控制台里的音色 ID（复刻的声音以 S_ 开头）。",
-            "Turn on speech synthesis under Doubao Speech in the Volcengine console and create an API key. The voice is a voice ID from the console (cloned voices start with S_).")}</p>
+        <div className="app-setting-line tr-services">
+          <div className="seg vs-services" role="tablist" aria-label={L("语音合成服务", "Speech service")}>
+            {providers.map((p) => (
+              <button key={p.id} type="button" role="tab" aria-selected={svc.id === p.id} className={cn("seg-btn", svc.id === p.id && "active")}
+                onClick={() => { setProvider(p.id); setTtsKey(""); setSaved(false); setError(null); }}>
+                {lang() === "en" ? p.name_en : p.name}
+              </button>
+            ))}
+          </div>
+          <p className="tr-note">{svcHelp || L("它把语音助手的话说出来。", "It says what the assistant answers out loud.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
-          <label>{L("音色", "Voice")}<input className="app-input mono" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder="zh_male_wennuanahu_uranus_bigtts" spellCheck={false} /></label>
+          <label>{L("音色", "Voice")}<input className="app-input mono" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder={svc.default_speaker || ""} spellCheck={false} /></label>
           <label>{L("语速", "Speed")}
             <input className="app-input" type="number" min={-50} max={100} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value) || 0)} />
           </label>
@@ -1104,15 +1138,39 @@ function VoiceSection() {
         <div className="app-setting-line tr-fields">
           <label>{L("API Key", "API key")}
             <input className="app-input mono" type="password" value={ttsKey} onChange={(e) => setTtsKey(e.target.value)} autoComplete="off" spellCheck={false}
-              placeholder={info.has_tts_key ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L("粘贴豆包语音的 API Key", "Paste the Doubao speech API key")} />
+              placeholder={hasTtsKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L(`粘贴${svcName}的 API Key`, `Paste the ${svcName} API key`)} />
           </label>
-          {info.has_tts_key && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_tts_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
+          {hasTtsKey && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_tts_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
         </div>
         <div className="app-setting-line tr-actions">
           <button type="button" className="app-btn app-btn-primary" disabled={busy} onClick={() => void save()}>{L("保存", "Save")}</button>
           {saved && <span className="tr-tried"><Check />{L("已保存", "Saved")}</span>}
         </div>
         <ErrorText error={error} />
+      </section>
+      <h4 className="app-setting-group">{L("多设备同步", "On your other devices")}</h4>
+      <section className="app-setting-card app-setting-lines">
+        <div className="app-setting-line">
+          <div className="app-setting-line-text">
+            <b>{L("把这些设置存到工作区", "Keep these settings on the workspaces")}</b>
+            <span>{L("打开后，上面的设置和密钥存在你连着的工作区（Hub）里，你的手机和别的电脑不用再填一遍；哪台设备后改的算数。密钥只给你自己的设备，但 Hub 所在机器的管理员读得到它的数据库：不是你自己的 Hub，介意就关掉。",
+              "With this on, the settings above and their keys are kept on the workspaces (hubs) you are signed in to, so your phone and other computers need not be set up again; the device that changed them last wins. The keys are handed only to your own devices, but whoever administers a hub's machine can read its database: turn this off for a hub that is not yours, if that matters.")}</span>
+            {share && sync.length > 0 && (
+              <span className="vs-sync" data-testid="voice-sync">
+                {kept.length > 0 && L(`已存到：${kept.map((h) => h.name).join("、")}。`, `Kept on: ${kept.map((h) => h.name).join(", ")}. `)}
+                {behind.length > 0 && L(`${behind.map((h) => h.name).join("、")} 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。`, `${behind.map((h) => h.name).join(", ")}: the hub is too old to keep them; update its myco. `)}
+                {away.length > 0 && L(`${away.map((h) => h.name).join("、")} 现在连不上，下次再试。`, `${away.map((h) => h.name).join(", ")}: not reachable now; tried again next time.`)}
+              </span>
+            )}
+          </div>
+          <div className="seg" role="tablist" aria-label={L("把这些设置存到工作区", "Keep these settings on the workspaces")}>
+            {[false, true].map((on) => (
+              <button key={String(on)} type="button" role="tab" aria-selected={share === on} disabled={busy} className={cn("seg-btn", share === on && "active")} onClick={() => { if (share !== on) void save({ share: on }); }}>
+                {on ? L("开", "On") : L("关", "Off")}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
     </>
   );

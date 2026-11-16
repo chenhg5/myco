@@ -106,7 +106,9 @@ A phone has no local backend, so the loop the desktop runs in Go (`internal/cons
 | Thinking (`VoiceModel`) | `OpenAIChat`: any OpenAI-compatible chat API, streamed, with tools; the desktop's prompt | `ScriptedVoiceModel` |
 | Speaking (`VoiceSpeech`) | `DoubaoSpeech` (the desktop's API and default voice); with no Doubao key, `SystemSpeech`: the phone's own voice, played through the same engine | `SilentSpeech` |
 
-Settings › Voice chat takes the model's address, name and key, and optionally a Doubao key, voice and speed. Keys go to the keychain (`voice:llm`, `voice:tts`), are never shown again and never reach the workspace; the desktop's keys are in the Mac's keychain and cannot be read from here, so they are typed once more. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
+Settings › Voice chat takes the model's address, name and key, and the speech service: one of `SpeechService.all` (Doubao today; another is added to that list and nowhere else), with its key, voice and speed. On this phone the keys are in the keychain (`voice:llm`, and `voice:tts` or `voice:tts:<service>`) and are never shown again.
+
+The settings are the person's, not the phone's (`VoiceSharing`): unless "Keep on the workspaces" is turned off, they are kept, keys and all, on every workspace this device joined (`GET`/`PUT /v1/console/voice`), so what was set in the desktop app is here without typing it again, and the other way round. The newest change wins, by the time the person made it. The app looks at the workspaces when it starts, when the settings page opens, and before a call that is not set up; a change goes out when the page is left. The page says where the settings are kept, which workspace's hub is too old to keep them (they stay on this device then), and which could not be reached. The keys are handed only to the person's own devices, but they are in the hub's database as they are: whoever administers the hub's machine can read them, which the page says. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
 
 What differs from the desktop: the call hangs up when the conversation is left, when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
 
@@ -117,7 +119,7 @@ The rules are the desktop's (`web/src/app/ConversationDetail.tsx`, `TraceView.ts
 - What is added to a running task is a plain bubble: no label.
 - A message put behind another and taken back before its turn (edited or withdrawn) was never sent: it is not in the conversation. Editing one puts its words and its files back in the box; the files are not uploaded again.
 - A task the agent set aside (held) does not take what is typed: that is a new task, unless it was set aside to ask a question.
-- A run that is open but not at work does not look at work: its turn ended, it was set aside, or it said something and has been silent for two minutes. The mushroom stands and the line says what it waits for ("Waiting for the tester", "Set aside; it answers later", "Waiting; no answer yet").
+- A task reads as a message, not as a state (the desktop's rule, `docs/design/app-ui.md`). A run that is open but not at work (its turn ended, it handed work out, it was set aside) gets no line saying so: what it said last stands, as in any chat. A task of mine that has not started has a few words under the message instead, like a receipt (`TaskReceipt`): "Not opened yet", "Queued behind the current one", "Offline; it reads it when back", "Its session is busy elsewhere", or, set aside, "Will answer later"; gone once it starts. Only a run really at work shows the mushroom; one that may be stuck still has its own line, because it carries something to do (Stop). And when the run has stopped or the task was set aside, the input is a plain message box again ("Message X", no stop button): what is typed is a new message, until the agent is at work again; one that asks me something still takes the answer (`ConversationBuilder.openTask`).
 - Thinking is part of the steps ("thought, ran 2 commands"), there on a tap.
 - A long press on a message offers Delete: it leaves this person's view on all their devices (`/v1/console/hidden`; on this device only with a workspace before v0.19.9), with Undo for a few seconds. Nothing is deleted for anyone else.
 
@@ -134,6 +136,14 @@ Push that arrives the moment a task is done needs Apple's push service: the hub 
 ## Loading
 
 Nothing pops in. A list that waits for its first answer shows rows in its shape (`SkeletonRows`), breathing, and the list fades in over them. A conversation is laid out and scrolled to where it opens before it is shown, then fades in whole; one that takes longer than a moment shows `ConversationSkeleton` meanwhile, and one kept on the device opens before that. Its parts (what was asked, how it was worked on, the agent's other work) are asked for together and shown together; only after 1.5 seconds is the part that is here shown first. What comes once a page is open (a new message, an older page) arrives with `Arrival`: it fades in and rises a little, and the page glides to follow it.
+
+## Staying fresh
+
+An open conversation asks for its messages every two seconds and shows them as soon as they come. How the tasks were worked on (their steps) and what surrounds the conversation (the agent's work with colleagues) are fetched alongside, one round at a time, and shown when they come: one slow answer among them never keeps back a message that is already here (`ConversationModel.load`). The lists ask every five seconds. What is asked again and again is given up after 12 seconds, since the next asking is seconds away.
+
+Leaving the app stops the asking; coming back starts it over at once, for the lists and for the conversation on screen alike, so the page never waits for an answer that was cut off when the app left the front.
+
+The person can ask too: pulling a list down (the system's refresh; it runs in a task of its own, since SwiftUI gives up a `refreshable` task as soon as the list is drawn again, which its first answer does, and the spinner then never showed), or pulling a conversation up past its end (new messages come at the end, so that is where one pulls): a spinner turns in the room under the last message while the conversation and the lists are read again. When the workspace does not answer twice in a row, or when a refresh that was asked for fails, a line across the top of the conversation says that what is shown may not be the latest, as the lists do.
 
 ## Rules
 

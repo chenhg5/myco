@@ -162,6 +162,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "body", Kind: String, Help: "Reply text"},
 			{Name: "body-file", Kind: String, Help: "Read the reply from a file ('-' = stdin)"},
 			{Name: "anyway", Kind: Bool, Help: "Reply even if unread corrections from the sender remain"},
+			suggestFlag,
 			attachFlag,
 		},
 		Run: handler(func(e *env) error {
@@ -190,6 +191,13 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			if err != nil {
 				return err
 			}
+			// The next input it offers the sender first (an old hub has
+			// no place for it: the reply still goes).
+			if sg := strings.TrimSpace(e.in.String("suggest")); sg != "" && !dry {
+				if _, err := c.Suggest(e.in.Ctx, e.in.String("id"), clipSuggest(sg), false); err != nil {
+					fmt.Fprintf(e.in.Stderr, "note: the suggestion was not kept: %v\n", err)
+				}
+			}
 			m, err := c.ReplyWith(e.in.Ctx, e.in.String("id"), body, atts, dry)
 			if err != nil {
 				return err
@@ -198,6 +206,38 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 				return e.dryRun(map[string]any{"action": "reply", "reply": m})
 			}
 			return e.p.Print(map[string]any{"reply": m}, func(w io.Writer) { fmt.Fprintf(w, "replied %s -> %s\n", m.ID, m.To) })
+		}),
+	}
+
+	suggest := &Command{
+		Name:     "suggest",
+		Summary:  "Offer the task's sender what they may want to say next (Tab takes it in the app)",
+		Mutating: true,
+		Long: "When there is an obvious next step the person may want (\"also update the docs\", \"ship it\"), offer it as one short line: " +
+			"the app shows it in the empty input and Tab fills it in. They can change it or ignore it. Give none when there is no clear next step. " +
+			"Usually given with myco message reply --suggest; this sets it on its own (also while still working). An empty --text clears it.",
+		Examples: []string{
+			`myco message suggest --text "Also add the same check to the signup page"   # inside a runner, --id is $MYCO_MESSAGE_ID`,
+			`myco message reply --body "Fixed the login page." --suggest "Run the full test suite"`,
+		},
+		Flags: []Flag{idFlag, {Name: "text", Kind: String, Help: "The suggested next message, in the sender's language: one short line, at most 80 characters (cut beyond)"}},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("id"); err != nil {
+				return err
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			dry := e.in.Bool("dry-run")
+			m, err := c.Suggest(e.in.Ctx, e.in.String("id"), clipSuggest(e.in.String("text")), dry)
+			if err != nil {
+				return err
+			}
+			if dry {
+				return e.dryRun(map[string]any{"action": "suggest", "message": m})
+			}
+			return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "suggested on %s\n", m.ID) })
 		}),
 	}
 
@@ -519,7 +559,7 @@ choices by number; --body says it in words (or adds to the choice).`,
 	}
 
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
-		send, get, wait, progress, ask, answer, steer, reply, fail, release, stopMessageCommand(),
+		send, get, wait, progress, ask, answer, steer, reply, suggest, fail, release, stopMessageCommand(),
 		transition("ack", "Start work on a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Accept a task but answer later (runner will not auto-reply)", "myco message hold --id $MYCO_MESSAGE_ID"),
 		transition("done", "Close a message without replying (also one still queued, to drop it unread)", "myco message done --id msg_abc123"),
@@ -759,6 +799,22 @@ func (e *env) waited(reply *api.Message, progress []api.Message) map[string]any 
 		out["last_progress"] = progress[n-1]
 	}
 	return out
+}
+
+// suggestFlag offers the sender a next message along with a reply.
+var suggestFlag = Flag{Name: "suggest", Kind: String, Help: "Also offer the sender what they may want to say next: one short line (at most 80 characters, cut beyond) the app shows in the empty input (Tab takes it); only when there is an obvious next step"}
+
+// maxSuggestRunes keeps a suggestion to what fits on the input's one line.
+const maxSuggestRunes = 80
+
+// clipSuggest keeps a suggestion to one line of at most maxSuggestRunes
+// characters (cut with "…").
+func clipSuggest(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > maxSuggestRunes {
+		s = string(r[:maxSuggestRunes-1]) + "…"
+	}
+	return s
 }
 
 func printReply(w io.Writer, m *api.Message) {

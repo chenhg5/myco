@@ -147,6 +147,8 @@ export interface Message {
   ask?: boolean;
   /** on a task: the question it waits on */
   asking?: string;
+  /** On a task: what its recipient thinks you may want to say next (v0.19.15+); the input offers it, Tab takes it. */
+  suggest?: string;
   /** on a steer: the question it answers */
   answers?: string;
   /** end-to-end encrypted (decrypted by the app when it may read it) */

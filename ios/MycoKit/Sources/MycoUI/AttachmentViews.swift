@@ -318,8 +318,12 @@ struct AttachmentTray: View {
     let files: [TrayFile]
     let removeLabel: String
     let retryLabel: String
+    /// What VoiceOver calls looking at one before it goes.
+    var openLabel = ""
     let onRemove: (String) -> Void
     let onRetry: (String) -> Void
+    /// A tap on a tile: look at it, to be sure it is the right one.
+    var onOpen: (String) -> Void = { _ in }
 
     static let side: CGFloat = 64
 
@@ -327,7 +331,9 @@ struct AttachmentTray: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(files) { file in
-                    TrayTile(file: file, removeLabel: removeLabel, retryLabel: retryLabel, onRemove: { onRemove(file.id) }, onRetry: { onRetry(file.id) })
+                    TrayTile(
+                        file: file, removeLabel: removeLabel, retryLabel: retryLabel, openLabel: openLabel,
+                        onRemove: { onRemove(file.id) }, onRetry: { onRetry(file.id) }, onOpen: { onOpen(file.id) })
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
             }
@@ -343,8 +349,10 @@ private struct TrayTile: View {
     let file: TrayFile
     let removeLabel: String
     let retryLabel: String
+    let openLabel: String
     let onRemove: () -> Void
     let onRetry: () -> Void
+    let onOpen: () -> Void
     @State private var image: UIImage?
 
     private var side: CGFloat { AttachmentTray.side }
@@ -378,6 +386,16 @@ private struct TrayTile: View {
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(MycoColor.line, lineWidth: 0.5) }
+        // A tap opens it full size (one that did not go up offers to try
+        // again instead).
+        .overlay {
+            if file.state != .failed {
+                Button(action: onOpen) { Color.clear.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(openLabel + " " + file.name)
+                    .accessibilityIdentifier("composer.file.open")
+            }
+        }
         .overlay(alignment: .topTrailing) {
             Button(action: onRemove) {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)

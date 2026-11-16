@@ -4117,6 +4117,15 @@ html.shell-mac .fp-panel.is-full .fp-head {
 .conv-compose-box:focus-within .conv-compose-hint {
   visibility: visible;
 }
+/* A key in the hint (Tab takes the agent's suggestion). */
+.conv-kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font: 10px/16px ui-monospace, Menlo, monospace;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
 .conv-compose-ago {
   margin-left: auto;
   font-size: 11px;
@@ -6560,6 +6569,12 @@ body.is-resizing {
 .tr-actions {
   justify-content: flex-start;
   gap: 8px;
+}
+/* Settings › Voice: where the settings are kept (a line under the note). */
+.vs-sync {
+  display: block;
+  margin-top: 6px;
+  color: var(--fg-2);
 }
 .tr-tried {
   display: inline-flex;
