@@ -1031,6 +1031,41 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     };
   })();
 
+  // An agent in one long session (it receives in its conversation) picks up
+  // what you send next and goes on, while its steps and progress still go
+  // to the task it took first, which stays open. In time, then: a run shows
+  // what came before your next message (until), and the one for that next
+  // message shows what the earlier ones still open got since (borrow).
+  // (A runner's agent starts the next one only after the first is done.)
+  const untilOf = new Map<string, string>();
+  const borrowOf = new Map<string, { ids: string[]; since: string }>();
+  {
+    const mine = (shown || []).filter((m) => m.type === "task" && !m.e2e && isMe(m.from, row?.hub))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    mine.forEach((t, i) => {
+      const st = traceStatuses.get(t.id) || t.status;
+      const taken = (st !== "queued" && st !== "delivered") || !!progressOf.get(t.id)?.length;
+      if (!taken) return;
+      const ids = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id)).map((p) => p.id);
+      if (!ids.length) return;
+      borrowOf.set(t.id, { ids, since: t.created_at });
+      for (const id of ids) if (!untilOf.has(id)) untilOf.set(id, t.created_at);
+      // (and this one's own window ends where a later one takes over)
+      const next = mine[i + 1];
+      if (next && !untilOf.has(t.id)) untilOf.set(t.id, next.created_at);
+    });
+  }
+  // What each run shows of what was reported, by the same windows.
+  const saidIn = (taskId: string): Message[] | undefined => {
+    const until = untilOf.get(taskId);
+    const borrow = borrowOf.get(taskId);
+    const own = (progressOf.get(taskId) || []).filter((m) => !until || m.created_at < until);
+    const more = borrow ? borrow.ids.flatMap((id) => progressOf.get(id) || [])
+      .filter((m) => m.created_at >= borrow.since && (!until || m.created_at < until)) : [];
+    const all = more.length ? [...own, ...more].sort((a, b) => a.created_at.localeCompare(b.created_at)) : own;
+    return all.length ? all : undefined;
+  };
+
   // One loading in the chat, the newest: of the runs at work (acknowledged,
   // or reporting progress), only the newest one moves; an older one still
   // open says quietly that it is not finished. Someone else's task at the
@@ -1663,7 +1698,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />

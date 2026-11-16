@@ -725,6 +725,55 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     });
     return;
   }
+  // An agent in one long session (it receives in its conversation): the
+  // first task gets a few steps, then it is set aside (held) for you to do
+  // something. You write again; it picks that up and goes on, but its steps
+  // and progress still go to the first task (the one it took first). The
+  // App shows them under your second message, in time.
+  if (preview && /长会话：/.test(preview.body)) {
+    const msgs = hub.threads[threadId] || [];
+    // (the smoke test's windows run at once: each pair carries its own tag;
+    // a new message may start a thread of its own)
+    const tag = (b) => /（([^）]+)）/.exec(b || "")?.[1] || "";
+    const first = Object.values(hub.threads).flat().find((m) => m !== preview && m.type === "task" && /长会话：/.test(m.body || "") && m.status === "held" && tag(m.body) === tag(preview.body));
+    const firstMsgs = first ? hub.threads[first.thread_id] || msgs : msgs;
+    const stamp = (steps, from, gap) => steps.map((d, i) => ({ ...d, at: new Date(from + i * gap).toISOString() }));
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    if (!first) {
+      preview.trace = stamp([
+        { kind: "thinking", text: "先看看授权状态。" },
+        { kind: "tool", tool: "Bash", id: "l1", input: "lark-cli auth status" },
+        { kind: "tool_result", id: "l1", output: "not logged in" },
+        { kind: "text", text: "需要你在会话里允许授权，开通后告诉我。" },
+        { kind: "turn_end" },
+        { kind: "turn_end" },
+      ], Date.now(), 300);
+      preview.trace_pace = 300;
+      later(2500, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
+      return;
+    }
+    // The second: picked up, nothing of its own; it all goes to the first.
+    preview.trace = [];
+    later(1200, () => {
+      const at = Date.now();
+      first.trace = [...first.trace.slice(0, -1), ...stamp([
+        { kind: "thinking", text: "授权开通了，接着拉群消息。" },
+        { kind: "tool", tool: "Bash", id: "l2", input: "lark-cli im chats list" },
+        { kind: "tool_result", id: "l2", output: "12 chats" },
+        { kind: "text", text: "授权已生效，开始拉群消息。" },
+      ], at, 100), { kind: "turn_end" }];
+      first.trace_pace = 1;
+      firstMsgs.push(makeMessage({ thread_id: first.thread_id, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: first.id, body: "授权已生效，开始只读收集群消息。", created_at: iso(0), updated_at: iso(0) }));
+    });
+    later(6000, () => {
+      replyTimers.delete(taskId);
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "群消息拉完了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+      firstMsgs.push(makeMessage({ thread_id: first.thread_id, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: first.id, body: "授权这件事好了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(first, { status: "done", updated_at: iso(0) });
+    });
+    return;
+  }
   if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
     const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
     const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";
@@ -2237,7 +2286,7 @@ const server = http.createServer(async (req, res) => {
       const started = m.status !== "queued" && m.status !== "delivered";
       const shown = !started ? [] : running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / (m.trace_pace || 2000)))) : steps;
       const after = Number(url.searchParams.get("after") || 0);
-      const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d })).filter((e) => e.seq > after);
+      const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d, ...(d.at ? { at: d.at } : {}) })).filter((e) => e.seq > after);
       return send(res, 200, { message: m.id, status: m.status, events });
     }
     // /app/hubs/{id}/agents/cleanup — offline nodes (demo: every offline one).

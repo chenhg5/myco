@@ -1392,6 +1392,42 @@ async function runMatrix(browser, size, scheme) {
       await cp.waitFor({ state: "detached", timeout: 5_000 });
     });
 
+    // An agent in one long session goes on with what you sent next, its
+    // steps and progress still filed under the first task (still open):
+    // they show under your newer message, in time, not up above.
+    await step("单聊 · 长会话按时间显示", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const tag = `${size.width}-${scheme}`;
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(`长会话：先查授权（${tag}）`);
+      await box.press("Enter");
+      await page.locator(".conv-detail .trace-say", { hasText: "需要你在会话里允许授权" }).last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 15_000 });
+      await box.fill(`长会话：接着拉群消息（${tag}）`);
+      await box.press("Enter");
+      const second = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长会话：接着拉群消息（${tag}）` }).last();
+      await second.waitFor({ timeout: 10_000 });
+      const said = page.locator(".conv-detail .trace-say", { hasText: "授权已生效，开始拉群消息" }).last();
+      await said.waitFor({ timeout: 15_000 });
+      const report = page.locator(".conv-detail .trace-report", { hasText: "授权已生效，开始只读收集" }).last();
+      await report.waitFor({ timeout: 15_000 });
+      const below = await second.evaluate((el, ts) => {
+        const y = el.getBoundingClientRect().bottom;
+        return ts.map((t) => {
+          const hit = [...document.querySelectorAll(".conv-detail .trace-say, .conv-detail .trace-report")].filter((x) => (x.textContent || "").includes(t)).pop();
+          return !!hit && hit.getBoundingClientRect().top >= y - 1;
+        });
+      }, ["授权已生效，开始拉群消息", "授权已生效，开始只读收集"]);
+      if (below.some((b) => !b)) throw new Error("它接着做的步骤和进展应在你后发的那条消息下面，不该跑到上面去");
+      if (await page.locator(".conv-detail .trace-say", { hasText: "授权已生效，开始拉群消息" }).count() !== 1) throw new Error("接着做的步骤应只出现一次");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-long-session");
+      // Both are answered: nothing left open for the steps after this one.
+      await page.locator(".conv-detail .conv-msg", { hasText: "授权这件事好了" }).last().waitFor({ timeout: 15_000 });
+      await noRound(page);
+    });
+
     // Links one after another with Chinese commas are each a link of their own.
     await step("单聊 · 中文标点隔开的链接", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
