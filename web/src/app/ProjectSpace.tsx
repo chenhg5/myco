@@ -76,7 +76,9 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   /** your name as a sender on this hub (@console:you), when known */
   me?: string;
   /** open the chat with this member (n: each request anew) */
-  openChat?: { agent: string; n: number; focus?: string };
+  /** reveal: from the notch's island; if that chat is on screen already,
+   *  it stays (the pane is pointed out), nothing moves */
+  openChat?: { agent: string; n: number; focus?: string; reveal?: boolean };
   /** bumped when the space is picked again: back to its group */
   home?: number;
   onAddAgent: () => void;
@@ -270,6 +272,24 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     // shows its home, not the chat asked for back then.
     if (!openChat || openChat.n <= openedChatN) return;
     openedChatN = openChat.n;
+    // Asked from the island: if you can see that chat already, it stays
+    // where it is (you may be reading back in it); the pane is pointed out.
+    if (openChat.reveal) {
+      const agent = openChat.agent;
+      const yours = (p?: string) => !p || p === me || isMe(p, hubRows[0]?.hub);
+      const pane = view.kind === "home" && side && side.agent === agent && yours(side.peer) && only !== "left" ? ".sp-pane-right"
+        : view.kind === "home" && agent === coordinator && only !== "right" ? ".sp-home"
+        : view.kind === "chat" && view.agent === agent && yours(view.peer) ? ".sp-main > .conv-detail"
+        : "";
+      const el = pane ? spRef.current?.querySelector<HTMLElement>(pane) : null;
+      if (el) {
+        el.classList.remove("is-called");
+        void el.offsetWidth; // (again, if it still was)
+        el.classList.add("is-called");
+        window.setTimeout(() => el.classList.remove("is-called"), 1200);
+        return;
+      }
+    }
     // At a message (found by search): that conversation, there.
     if (openChat.focus) { void chatWith(openChat.agent, openChat.focus); return; }
     const r = hubRows.find((x) => x.st.agent.name === openChat.agent);

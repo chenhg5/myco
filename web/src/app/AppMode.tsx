@@ -137,7 +137,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
-  const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string } | null>(null);
+  const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
   // ⌘K / Ctrl+K: find anything (CommandPalette).
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [projectReload, setProjectReload] = useState(0);
@@ -312,21 +312,25 @@ export default function AppMode({ initialHubs, initialInfo }: {
     });
   };
   // A member's chat opens in a project it is in (else among the loose).
-  const chatWithMember = (r: AgentRow) => {
+  const chatWithMember = (r: AgentRow, where?: SpaceRef, reveal?: boolean) => {
     const p = liveProjects.find((x) => x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
-    const s: SpaceRef = p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true };
+    const s: SpaceRef = where || (p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true });
     setProfile(null);
     setSpace(s);
     setPage("space");
-    setChatWith({ space: s, agent: r.st.agent.name, n: Date.now() });
+    setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), reveal });
   };
+  // Whether a space has this member (a project's members, or the loose).
+  const spaceHas = (s: SpaceRef, r: AgentRow) => (isLoose(s)
+    ? s.hubId === r.hub.id && loose.some((x) => x.hub.id === r.hub.id && x.st.agent.name === r.st.agent.name)
+    : s.hubId === r.hub.id && !!liveProjects.find((x) => x.hubId === s.hubId && x.p.name === s.name)?.p.members.some((m) => m.name === r.st.agent.name));
 
   // The notch's island opens the app at a member: its workspace first,
   // then (once its rows are there) its chat.
-  const [toOpen, setToOpen] = useState<{ hubId: string; agent: string } | null>(null);
+  const [toOpen, setToOpen] = useState<{ hubId: string; agent: string; project?: string } | null>(null);
   useEffect(() => {
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ hubId: string; agent: string }>).detail;
+      const d = (e as CustomEvent<{ hubId: string; agent: string; project?: string }>).detail;
       if (!d?.hubId || !d.agent) return;
       setHubPick(d.hubId);
       setToOpen(d);
@@ -339,7 +343,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const r = rows.find((x) => x.hub.id === toOpen.hubId && x.st.agent.name === toOpen.agent);
     if (!r) return;
     setToOpen(null);
-    chatWithMember(r);
+    // Where: the space you are looking at, when it is in it (no jumping
+    // away); else the project its work is in; else one it is in. Shown
+    // already, it stays as it is (ProjectSpace: reveal).
+    const here = page === "space" && shown && spaceHas(shown, r) ? shown : undefined;
+    const work: SpaceRef | undefined = toOpen.project ? { hubId: r.hub.id, name: toOpen.project } : undefined;
+    chatWithMember(r, here || (work && spaceHas(work, r) ? work : undefined), true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toOpen, rows]);
 
@@ -644,7 +653,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             rows={rows}
             now={now}
             me={meOn(shown.hubId)}
-            openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n, focus: chatWith.focus } : undefined}
+            openChat={chatWith && spaceKey(chatWith.space) === spaceKey(shown) ? { agent: chatWith.agent, n: chatWith.n, focus: chatWith.focus, reveal: chatWith.reveal } : undefined}
             home={spaceTap}
             onAddAgent={() => setAddAgent(shown)}
             onAddWorkspace={() => setAddWorkspace(shown)}

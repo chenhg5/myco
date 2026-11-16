@@ -88,10 +88,10 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { show() })
 	// While agents work, the notch grows to show them; a name in it opens
 	// the app at that member.
-	isl = newIsland(app, func(hub, agent string) {
+	isl = newIsland(app, func(hub, agent, project string) {
 		show()
 		activateApp()
-		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent})
+		detail, _ := json.Marshal(map[string]string{"hubId": hub, "agent": agent, "project": project})
 		window.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("myco-open-member",{detail:%s}))`, detail))
 	})
 	// myco://add-hub?link=… (an app link's "open in the app" button): the
