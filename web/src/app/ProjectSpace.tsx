@@ -14,6 +14,7 @@ import { addToProject } from "@/app/AddToProject";
 import { useAutoGrow } from "@/app/autogrow";
 import { draftOf, groupDraftKey, keepDraft } from "@/app/drafts";
 import { Mushroom, useVerb } from "@/app/Working";
+import { HandoffCard, handoffsOfHome } from "@/app/Handoff";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -219,6 +220,16 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
     }
     setView({ kind: "chat", agent, peer: await peerFor(agent), focus, also: project ? othersOf(agent) : undefined });
   };
+  // What two members said to each other (a handoff card): their exchange,
+  // read-only, at that message; beside the coordinator when there is room.
+  const openExchange = (agent: string, other: string, focus?: string) => {
+    if (split && view.kind === "home") {
+      setSide({ agent, peer: other, focus });
+      if (only === "left") setOnly("right");
+      return;
+    }
+    setView({ kind: "pair", agent, peer: other, focus });
+  };
   // A voice chat from the project's box: the chat with that agent, the
   // call on (the coordinator's too, not the home view).
   const callWith = async (agent: string) => {
@@ -321,6 +332,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent, peer) => (peer ? setView({ kind: "pair", agent, peer }) : void chatWith(agent))}
+            onOpenExchange={(agent, other, focus) => setView({ kind: "pair", agent, peer: other, focus })}
             onRefresh={onRefresh}
           />
         ) : project && coordinator && view.kind === "home" ? (
@@ -343,7 +355,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
                 items={feed.items || []}
                 rowOf={rowOf}
                 nameOf={nameOf}
-                onOpenTask={(agent, id) => void chatWith(agent, id)}
+                onOpenExchange={openExchange}
                 onActivity={() => setView({ kind: "activity" })}
                 onAbout={onAbout}
                 onRefresh={onRefresh}
@@ -363,6 +375,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
                 headActions={actions}
                 onNewConversation={(_h, agent) => void chatWith(agent)}
                 onOpen={(_h, agent) => void chatWith(agent)}
+                onOpenExchange={(agent, other, focus) => setSide({ agent, peer: other, focus })}
                 onRefresh={onRefresh}
               />
             )}
@@ -506,7 +519,7 @@ function useFeed(hubId: string, project: Project | undefined, memberNames: Set<s
  * were given, with how each is going; a card opens that member's work at
  * that task.
  */
-function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items, rowOf, nameOf, onOpenTask, onActivity, onAbout, onRefresh, strip, fullToggle }: {
+function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items, rowOf, nameOf, onOpenExchange, onActivity, onAbout, onRefresh, strip, fullToggle }: {
   hubId: string;
   hubName: string;
   project: Project;
@@ -517,7 +530,9 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   items: RecentItem[];
   rowOf: (n: string) => AgentRow | undefined;
   nameOf: (n: string) => string;
-  onOpenTask: (agent: string, taskId: string) => void;
+  /** opens what two agents said to each other, at that message (the
+   *  first is shown on the right) */
+  onOpenExchange: (agent: string, other: string, focus?: string) => void;
   onActivity: () => void;
   onAbout?: () => void;
   /** a node's work changed (a command on its computer was stopped) */
@@ -527,27 +542,18 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   /** with a member open beside it: take the whole width, or give it back */
   fullToggle?: React.ReactNode;
 }) {
-  const inserts = items.flatMap((it) => {
-    const task = it.task || it.first;
-    if (it.kind !== "thread" || !task || task.type !== "task" || task.from !== coordinator || task.to === coordinator || task.to.startsWith("@")) return [];
-    const to = task.to;
-    const r = rowOf(to);
-    const state = it.state || "";
-    return [{
-      id: task.id,
-      at: task.created_at,
-      node: (
-        <button type="button" className="sp-dispatch" onClick={() => onOpenTask(to, task.id)} title={L("看它怎么做的", "See how it goes")}>
-          <span className="sp-dispatch-label">{L("派给", "To")}</span>
-          {r && <Avatar agent={r.st.agent} size={18} badge={false} />}
-          <span className="sp-dispatch-who">{nameOf(to)}</span>
-          <span className="sp-dispatch-text">{task.body.replace(/\s+/g, " ").trim()}</span>
-          <span className={cn("sp-dispatch-state", `is-${state || "none"}`)}>{dispatchWord(state)}</span>
-          <span className="sp-dispatch-time">{timeAgo(it.updated_at, now)}</span>
-        </button>
-      ),
-    }];
-  });
+  // What the coordinator handed out, and what the members sent it: a card
+  // each, at the time, with what came back (Handoff.tsx).
+  const you = rows.find((r) => r.hub.id === hubId)?.hub;
+  // (you: this App, or the member you talk to it as)
+  // Only between agents: a person is someone you talk to, not a handoff.
+  const person = (n: string) => { const r = rowOf(n); return !!r && agentKind(r.st.agent) === "human"; };
+  const inserts = handoffsOfHome(items, coordinator, (n) => isMe(n, you) || (!!peer && n === peer) || person(n)).map((h) => ({
+    id: h.id,
+    at: h.at,
+    node: <HandoffCard h={h} row={rowOf(h.other)} name={nameOf(h.other)} now={now}
+      onOpen={() => onOpenExchange(h.dir === "out" ? h.other : coordinator, h.dir === "out" ? coordinator : h.other, h.id)} />,
+  }));
   return (
     <div className="sp-home">
       <header className="sp-head">
@@ -658,11 +664,6 @@ function SplitPanes({ side, only, cramped, onOnly, onCloseSide, left, right }: {
       )}
     </div>
   );
-}
-
-function dispatchWord(state: string): string {
-  return state === "done" ? L("做完了", "Done") : state === "failed" ? L("没做成", "Didn't work")
-    : state === "working" ? L("在做", "Working") : state === "queued" ? L("排队中", "Queued") : L("已发出", "Sent");
 }
 
 function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, nameOf, now, onOpenThread, onAddAgent, onAddWorkspace, onNewProject, onAbout, onSent, onCall, strip, feed, activity, onBack }: {

@@ -3,11 +3,12 @@ import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
+import { agentKind, canManage, isInbox, isMe, lastActivityAt, machineOfRow, personLabel, possiblyStuck, quietFor, runnerAway, sessionBusy, nodeName } from "@/app/nodes";
 import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
+import { HandoffCard, handoffsFrom } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
 import { ErrorText } from "@/app/dialogs";
@@ -206,7 +207,7 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
-export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
+export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
    *  chat asks about it */
@@ -233,6 +234,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   onNewConversation: (hubId: string, agent: string) => void;
   /** Opens your conversation with another node (a copy just made). */
   onOpen?: (hubId: string, agent: string, peer: string) => void;
+  /** a handoff card: what agent and other said to each other, at that
+   *  message (read-only) */
+  onOpenExchange?: (agent: string, other: string, focus?: string) => void;
   /** The node's work changed outside this conversation (a command on its
    *  computer was stopped): refresh the rows it came from. */
   onRefresh?: () => void;
@@ -635,9 +639,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
 
   // Everything shown: in the exchange view, older pages before the newest.
-  const shown: Message[] | null = messages === null ? null : (exchange
+  const alsoSet = new Set(target.also || []);
+  // In a member's chat (a project): what it and the other members said to
+  // each other is not drawn as messages here (it would read as if it were
+  // talking to you), only as a handoff card per exchange (Handoff.tsx).
+  // (between agents only: a person writing to it is a message, named)
+  const person = (n: string) => {
+    if (n.startsWith("@")) return true;
+    const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === n);
+    return !!r && agentKind(r.st.agent) === "human";
+  };
+  const sideOf = (m: Message) => alsoSet.size > 0 && !isMe(m.from, row?.hub) && !isMe(m.to, row?.hub)
+    && (alsoSet.has(m.from) || alsoSet.has(m.to)) && !person(m.from) && !person(m.to);
+  const loaded: Message[] | null = messages === null ? null : (exchange
     ? [...older.filter((o) => !messages.some((m) => m.id === o.id)), ...messages]
     : messages).filter((m) => !hiddenMessage(m));
+  const shown: Message[] | null = loaded && (alsoSet.size ? loaded.filter((m) => !sideOf(m)) : loaded);
+  const handoffs = alsoSet.size && loaded ? handoffsFrom(loaded.filter(sideOf), target.agent) : [];
 
   const consoleTasks = (messages || []).filter((m) => m.type === "task" && isMe(m.from, row?.hub) && !hiddenMessage(m));
   const lastTask = consoleTasks[consoleTasks.length - 1];
@@ -858,7 +876,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     sentTexts((messages || []).filter((m) => (m.type === "task" || m.type === "steer") && isMe(m.from, row?.hub) && !hiddenMessage(m) && !m.unreadable).map((m) => m.body)),
     draft, (v) => writeDraft(v));
 
-  const alsoSet = new Set(target.also || []);
   const nameOf = (from: string): string => {
     if (isConsole(from)) return personLabel(from, row?.hub);
     const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === from);
@@ -887,6 +904,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // together): the foot of the conversation shows it at work. Your own
   // tasks show their run as it goes (TraceView) instead.
   const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
+  // (the handoff cards, with the rest of what goes between the messages)
+  const allInserts = handoffs.length
+    ? [...(inserts || []), ...handoffs.map((h) => ({
+      id: h.id,
+      at: h.at,
+      node: <HandoffCard h={h} row={rowOf(h.other)} name={nameOf(h.other)} now={now}
+        onOpen={() => (onOpenExchange ? onOpenExchange(target.agent, h.other, h.id) : onOpen?.(target.hubId, target.agent, h.other))} />,
+    }))]
+    : inserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -994,7 +1020,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
   const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
     m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
-    || (inserts || []).some((x) => x.at > shown![liveIndex].created_at));
+    || (allInserts || []).some((x) => x.at > shown![liveIndex].created_at));
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(id)}"]`);
@@ -1390,7 +1416,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const between = (task: Message, s: Message) => (shown || []).some((m) =>
     at(m) > at(task) && at(m) < at(s) && m.id !== task.id && m.type !== "progress"
       && !(m.type === "steer" && (m.reply_to === task.id || m.answers)))
-    || (inserts || []).some((x) => new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
+    || (allInserts || []).some((x) => new Date(x.at).getTime() > at(task) && new Date(x.at).getTime() < at(s));
   // A task whose run is shown: what you added goes into the run at the time
   // you sent it, so what the agent did after it is under it (as in Claude
   // Code and Codex), and the loading stays last.
@@ -1447,7 +1473,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     // appear all at once when you write); only while older messages are
     // still to load, the ones from before what is loaded wait for them.
     const start = exchange && more && visible.length ? new Date(visible[0].created_at).getTime() : -Infinity;
-    const ins = [...(inserts || [])]
+    const ins = [...(allInserts || [])]
       .filter((x) => new Date(x.at).getTime() >= start)
       .sort((a, b) => a.at.localeCompare(b.at));
     let k = 0;
