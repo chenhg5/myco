@@ -2205,6 +2205,22 @@ async function runMatrix(browser, size, scheme) {
       await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
+    // A task the hub gave up on (taken, never started on) says so in words,
+    // not the hub's reason, and is sent again with one click.
+    await step("单聊 · 没送到可以重新发送", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const failed = page.locator("[data-failed]").last();
+      await failed.waitFor({ timeout: 20_000 });
+      const said = compactText(await failed.innerText());
+      if (!said.includes("没送到") || /delivery attempts|acknowledged/.test(said)) throw new Error(`没送到的说明应该是人话，实际「${said}」`);
+      if (/delivery attempts/.test(await page.locator(".conv-detail").first().innerText())) throw new Error("气泡下不该再出现英文原因");
+      await settle(page, 200);
+      await shot(page, size, scheme, "failed-retry");
+      const before = await page.locator(".conv-msg.is-me", { hasText: "README 的截图换成新版的。" }).count();
+      await clickVisible(page, failed.getByRole("button", { name: "重新发送" }));
+      await page.waitForFunction((n) => [...document.querySelectorAll(".conv-msg.is-me")].filter((x) => (x.textContent || "").includes("README 的截图换成新版的。")).length > n, before, { timeout: 10_000 });
+    });
+
     // The sidebar lists the computers too: one click opens a terminal.
     await step("电脑 · 边栏直达终端", async () => {
       await sidebar(page, true);

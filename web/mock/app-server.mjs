@@ -236,6 +236,21 @@ const grokPulledTask = makeMessage({
   updated_at: iso(3 * 60 * 60 - 60),
 });
 
+// Taken several times by the same node and never started on: the hub gave
+// up on it (the app explains it and offers to send it again).
+const grokExhaustedTask = makeMessage({
+  id: "msg_grok_exhausted",
+  thread_id: "th_grok_exhausted",
+  from: CONSOLE,
+  to: "grok-agent-7c2e",
+  type: "task",
+  status: "failed",
+  error: "delivery attempts exhausted: recipient pulled but never acknowledged",
+  body: "README 的截图换成新版的。",
+  created_at: iso(5 * 60 * 60),
+  updated_at: iso(4 * 60 * 60),
+});
+
 // A machine the smoke test deletes, with two nodes and its own machine node.
 // POST /app/mock/machine puts them back between widths and themes.
 const deletableMachine = () => ({
@@ -358,6 +373,8 @@ const consoleThreads = {
   th_console_stuck_stopped: [stuckOlderTask, stoppedAfterTask],
   // An inbox node pulled this task but never acknowledged it: still queued.
   th_grok_pull: [grokPulledTask],
+  // An earlier one it took several times and never started on: given up on.
+  th_grok_exhausted: [grokExhaustedTask],
 };
 
 // Claude Code / Codex transcripts on this computer, newest first. Two are
@@ -1331,6 +1348,8 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
     hub.threads.th_console_stuck_stopped = keep("th_console_stuck_stopped", [stuckOlderTask, stoppedAfterTask]);
+    // The task it never started on, without what was sent again since.
+    hub.threads.th_grok_exhausted = [grokExhaustedTask];
     // What the previous pass sent legacy-codex (resends, the text-only and
     // tool-call tasks) goes too, so each window size starts the same.
     for (const [id, msgs] of Object.entries(hub.threads || {})) {
