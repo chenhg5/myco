@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Plus, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Plus, Search, WifiOff } from "lucide-react";
+import { ComputerSettings } from "@/app/ComputerSettings";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import type { Project } from "@/api";
-import { AddMachineDialog } from "@/app/AddMachineDialog";
 import { ConnectHubDialog } from "@/app/ConnectHubDialog";
 import { NamePrompt } from "@/app/NamePrompt";
 import { recall, remember } from "@/lib/memo";
@@ -146,7 +146,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectPrefill, setConnectPrefill] = useState("");
-  const [addMachineOpen, setAddMachineOpen] = useState(false);
   const [newLocalOpen, setNewLocalOpen] = useState(false);
   const [newServerOpen, setNewServerOpen] = useState(false);
   // The desktop app's tray menu speaks the pages' language: say it when
@@ -168,8 +167,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [addAgent, setAddAgent] = useState<SpaceRef | null>(null);
   const [addWorkspace, setAddWorkspace] = useState<SpaceRef | null>(null);
-  // A computer just connected, to pick in that dialog.
-  const [addWsPick, setAddWsPick] = useState<string | undefined>(undefined);
+  // A computer's settings: who may use it, its projects, removing it.
+  const [pcSettings, setPcSettings] = useState<{ hubId: string; name: string } | null>(null);
+  useEffect(() => {
+    // The terminal's header asks for them too.
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; name: string }>).detail; if (d) setPcSettings(d); };
+    window.addEventListener("myco-computer-settings", on);
+    return () => window.removeEventListener("myco-computer-settings", on);
+  }, []);
   const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
@@ -464,7 +469,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "sidebar": toggleSidebar(); break;
       case "new-project": setNewProjectOpen(true); break;
       case "connect": setConnectOpen(true); break;
-      case "add-computer": setAddMachineOpen(true); break;
+      case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
     }
   };
@@ -615,17 +620,28 @@ export default function AppMode({ initialHubs, initialInfo }: {
               </div>
               {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                 const dot = workDot([r]);
+                const menu = [
+                  { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
+                  { label: L("谁能用、项目、移除…", "Who can use it, projects, remove…"), onSelect: () => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name }) },
+                ];
                 return (
-                  <button key={r.st.agent.name} type="button" {...computerSort.bind(r.st.agent.name)}
-                    className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
-                    onClick={() => chatWithMember(r)} title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
-                    <Avatar agent={r.st.agent} size={20} badge={false} />
-                    <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
-                    {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
-                    )}
-                  </button>
+                  <div key={r.st.agent.name} className="sp-nav-pc-wrap">
+                    <button type="button" {...computerSort.bind(r.st.agent.name)}
+                      className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
+                      onClick={() => chatWithMember(r)} onContextMenu={(e) => navMenu.open(e, menu)}
+                      title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                      <Avatar agent={r.st.agent} size={20} badge={false} />
+                      <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
+                      {dot && (
+                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                          title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                      )}
+                    </button>
+                    <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
+                      title={L("谁能用、项目、移除", "Who can use it, projects, remove")} onClick={(e) => navMenu.openUnder(e.currentTarget, menu)}>
+                      <MoreHorizontal />
+                    </button>
+                  </div>
                 );
               })}
               {computers.length > NAV_COMPUTERS && (
@@ -730,6 +746,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               onOpen={chatWithMember}
               onProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })}
               onAddComputer={() => hub && setAddWorkspace({ hubId: hub.id, loose: true })}
+              onSettings={(r) => setPcSettings({ hubId: r.hub.id, name: r.st.agent.name })}
               onChanged={() => void refresh()} />
           </div>
         )}
@@ -775,6 +792,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
       </div>
 
       {navMenu.element}
+      <ComputerSettings row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
+        rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
+        onOpenTerminal={(r) => chatWithMember(r)} />
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
@@ -782,16 +802,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <AddAgentDialog open={!!addAgent} hub={namedHubs.find((h) => h.id === addAgent?.hubId)} project={addAgentProject} projects={hubProjects.map((x) => x.p)} rows={rows}
         onClose={() => setAddAgent(null)} onAdded={() => { setProjectReload((n) => n + 1); void refresh(); }} />
       <AddWorkspaceDialog open={!!addWorkspace} hub={namedHubs.find((h) => h.id === addWorkspace?.hubId)} project={addWsProject} rows={rows}
-        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)} pick={addWsPick}
-        onClose={() => { setAddWorkspace(null); setAddWsPick(undefined); }} onAdded={() => void refresh()} onNewComputer={() => setAddMachineOpen(true)} />
-      <AddMachineDialog open={addMachineOpen} onOpenChange={setAddMachineOpen} hubs={hub ? [hub] : []} onAdded={() => void refresh()}
-        machines={hub ? namedOv?.hubs.find((h) => h.id === hub.id)?.overview?.machines : undefined}
-        onConnected={(id) => {
-          // On to the folder: in the dialog it was opened from, else a new one.
-          setAddMachineOpen(false);
-          setAddWsPick(id);
-          if (!addWorkspace && hub) setAddWorkspace({ hubId: hub.id, loose: true });
-        }} />
+        workspace={namedOv?.hubs.find((h) => h.id === addWorkspace?.hubId)}
+        onClose={() => setAddWorkspace(null)} onAdded={() => void refresh()} />
       <NewWorkspaceDialog open={newLocalOpen} onOpenChange={setNewLocalOpen}
         taken={localWorkspaces(local).map((w) => w.name)} onStart={startAnotherLocal} />
       <NewWorkspaceDialog open={newServerOpen} onOpenChange={setNewServerOpen} server={serverWs ? hostName(serverWs.server) : undefined}

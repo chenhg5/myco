@@ -162,6 +162,10 @@ export interface JoinLinkInput {
   /** the computer that runs the command also lets agents open terminals on it
    *  (myco machine join --allow-shell): running it there is that computer's consent */
   allow_shell?: boolean;
+  /** a shell-node link: the folder the command is run in becomes a computer
+   *  (exec node) that these agents may send commands to */
+  shell_node?: boolean;
+  allow_from?: string[];
 }
 export interface JoinLink {
   join_url: string;

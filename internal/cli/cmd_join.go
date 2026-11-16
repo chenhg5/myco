@@ -215,7 +215,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 		Flags: []Flag{
 			{Name: "link", Kind: String, Help: "Join link URL (default: MYCO_HUB + MYCO_JOIN_TOKEN, as set by the link's script)"},
 			{Name: "machine", Kind: String, Help: "Machine name (default: this host's name; \"cloud\" in claude.ai)"},
-			{Name: "workdir", Kind: String, Help: "Exec links only: where commands run (default: your home directory)"},
+			{Name: "workdir", Kind: String, Help: "Shell-node (exec) links only: the folder that becomes the node, where commands run (default: your home directory; a link's script passes the folder it runs in)"},
 			{Name: "no-service", Kind: Bool, Help: "Do not install the background runner service"},
 			{Name: "allow-shell", Kind: Bool, Help: "Also let agents open a terminal (shell node) on this computer (spawn.max_access: full)"},
 		},
@@ -353,14 +353,14 @@ func detectCLIs() []string {
 
 // joinExecNode enrolls this user on this machine as the machine's exec node.
 func (e *env) joinExecNode(m config.MachineHub, workdir string) (*api.Agent, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
 	if workdir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
 		workdir = home
 	}
-	name := m.NamePrefix + "shell"
+	name := execNodeName(m.NamePrefix, workdir, home)
 	b, err := execBinding(e, name, workdir)
 	if err != nil {
 		return nil, err
@@ -371,6 +371,46 @@ func (e *env) joinExecNode(m config.MachineHub, workdir string) (*api.Agent, err
 		return nil, err
 	}
 	return &res.Agent, nil
+}
+
+// execNodeName names the exec node for a folder: <prefix>shell for the home
+// directory (as before, so re-joining recovers it), else
+// <prefix><folder>-shell, so each folder on a machine is a node of its own.
+func execNodeName(prefix, workdir, home string) string {
+	abs, err := filepath.Abs(workdir)
+	if err != nil {
+		abs = workdir
+	}
+	if home != "" {
+		// Both absolute, so a drive letter (Windows) does not tell them apart.
+		if h, err := filepath.Abs(home); err == nil {
+			home = h
+		}
+		if filepath.Clean(abs) == filepath.Clean(home) {
+			return prefix + "shell"
+		}
+	}
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(filepath.Base(abs)) {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+			b.WriteRune(r)
+			dash = false
+		case b.Len() > 0 && !dash:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	slug := strings.Trim(b.String(), "-")
+	// The whole name stays within an agent name's 63 characters.
+	if room := 63 - len(prefix) - len("-shell"); len(slug) > room {
+		slug = strings.Trim(slug[:max(room, 0)], "-")
+	}
+	if slug == "" {
+		return prefix + "shell"
+	}
+	return prefix + slug + "-shell"
 }
 
 // execBinding is the identity of an exec node: this user on this machine
@@ -789,6 +829,14 @@ func (e *env) joinHubAs(ctx context.Context, hub, tok, name string) (config.Mach
 	}
 	if mf == nil {
 		mf = &config.Machine{}
+	}
+	// A shell-node link adds a folder to a machine that may already be in
+	// this hub: its enrollment only creates that node (which keeps its own
+	// credentials), and the membership already here stays as it is.
+	if res.Harness == execnode.Name {
+		if _, ok := mf.For(hub); ok {
+			return m, res, nil
+		}
 	}
 	mf.Put(m)
 	return m, res, config.SaveMachine(e.defaultPath, mf)

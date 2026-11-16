@@ -263,3 +263,32 @@ func TestJoinWithLink(t *testing.T) {
 	h.do("POST", "/v1/join", tok, map[string]any{"machine": "box"}).wantErr(t, 403, "permission_denied")
 	h.do("DELETE", "/v1/enrollments/enr_nope", adminToken, nil).wantErr(t, 404, "not_found")
 }
+
+// A shell-node (exec) link is run in the folder the agents should use: its
+// scripts join with that folder as the node's working directory, and its
+// page and guide say so. Other links do not pass a folder.
+func TestJoinPageExecLinkUsesTheCurrentFolder(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	tok, _, _ := h.createLink(map[string]any{"harness": "exec", "allow_from": []string{"backend"}})
+	path := "/j/" + tok
+	for _, tc := range []struct{ q, want string }{
+		{"?format=sh", `machine join --format text --workdir "$PWD"`},
+		{"?format=ps1", `machine join --format text --workdir (Get-Location).Path`},
+		{"?format=md", "run it in the folder the agents should"},
+	} {
+		r := h.doReq("GET", path+tc.q, "", nil, nil).want(t, 200)
+		if !strings.Contains(string(r.raw), tc.want) {
+			t.Errorf("%s lacks %q:\n%s", tc.q, tc.want, r.raw)
+		}
+	}
+	r := h.doReq("GET", path, "", nil, map[string]string{"Accept": "text/html"}).want(t, 200)
+	if !strings.Contains(string(r.raw), "要给 agent 用的文件夹") {
+		t.Errorf("page does not say where to run it:\n%s", r.raw)
+	}
+	plain, _, _ := h.createLink(nil)
+	for _, q := range []string{"?format=sh", "?format=ps1"} {
+		if r := h.doReq("GET", "/j/"+plain+q, "", nil, nil).want(t, 200); strings.Contains(string(r.raw), "--workdir") {
+			t.Fatalf("a machine link passes a folder (%s):\n%s", q, r.raw)
+		}
+	}
+}

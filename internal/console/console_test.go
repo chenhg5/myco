@@ -323,6 +323,25 @@ func TestBackendMachinesAndLinks(t *testing.T) {
 		m["ps_command"] != "irm '"+m["join_url"].(string)+"?format=ps1&shell=1' | iex" || m["allow_shell"] != true {
 		t.Fatalf("links with allow_shell: %d %v", code, m)
 	}
+	// A shell-node link: run in a folder there, that folder becomes a
+	// computer for the agents named; it needs no ?shell=1, and names them.
+	if code, m, _ := r.do("POST", "/app/hubs/"+id+"/links", map[string]any{"shell_node": true}); code != 400 || m["error"] != "invalid_argument" {
+		t.Fatalf("shell node without allow_from: %d %v", code, m)
+	}
+	code, m, _ = r.do("POST", "/app/hubs/"+id+"/links", map[string]any{"shell_node": true, "allow_shell": true, "allow_from": []string{"backend"}})
+	if code != 200 || m["shell_node"] != true || m["command"] != "curl -fsSL "+m["join_url"].(string)+" | bash" ||
+		m["ps_command"] != "irm '"+m["join_url"].(string)+"?format=ps1' | iex" || m["allow_shell"] != false {
+		t.Fatalf("shell-node link: %d %v", code, m)
+	}
+	resp, err := http.Get(m["join_url"].(string) + "?format=sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(script), `--workdir "$PWD"`) {
+		t.Fatalf("the shell-node link's script does not use the folder it runs in:\n%s", script)
+	}
 	if code, m, _ := r.do("DELETE", "/app/hubs/"+id+"/machines/"+ms[0].ID+"?dry_run=true", nil); code != 200 || m["dry_run"] != true {
 		t.Fatalf("remove machine preview: %d %v", code, m)
 	}

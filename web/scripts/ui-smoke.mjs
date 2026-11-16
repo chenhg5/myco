@@ -642,14 +642,42 @@ async function runMatrix(browser, size, scheme) {
 
     if (!narrow) {
       await step("项目 · 添加工作空间", async () => {
+        // Adding a computer is one command, as adding an agent is: run it in
+        // the folder on that computer, and the dialog ticks itself; from a
+        // project, the folder is in the project at once.
         await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
         const dialog = page.locator(".app-modal-add");
         await dialog.waitFor();
-        await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
+        const box = dialog.locator("[data-testid=computer-command]");
+        await box.waitFor({ timeout: 10_000 });
         // What it means is said calmly (no red block).
         if (await dialog.locator(".app-warn").count()) throw new Error("加电脑的弹窗不该有红色警告块");
-        // A computer that has not allowed terminals says so before anything is
-        // filled in, with the command to run on it; it cannot be added yet.
+        const cmd = box.locator(".app-command code");
+        await cmd.filter({ hasText: "curl -fsSL" }).waitFor({ timeout: 10_000 });
+        if (/shell=1|machine\.yaml|max_access/.test(await cmd.innerText())) throw new Error("一条命令就够，不该再带权限开关或让人改文件");
+        await clickVisible(page, box.getByRole("tab", { name: "Windows（PowerShell）" }));
+        await cmd.filter({ hasText: "irm " }).waitFor({ timeout: 5_000 });
+        await clickVisible(page, box.getByRole("tab", { name: "Mac / Linux / WSL" }));
+        await box.locator(".ws-command-wait").waitFor({ timeout: 5_000 });
+        await settle(page, 300);
+        await shot(page, size, scheme, "add-workspace");
+        // "Running" it there: the folder shows up, in the project.
+        const ran = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir: `~/code/wsl-${size.width}-${scheme}` }) });
+        if (!ran.ok) throw new Error(`mock run-join: ${ran.status}`);
+        await box.locator("[data-testid=computer-arrived]", { hasText: `~/code/wsl-${size.width}-${scheme}` }).waitFor({ timeout: 20_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "add-workspace-done");
+        await clickVisible(page, box.getByRole("button", { name: "完成" }));
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+        await page.locator(".sp-side .sp-member", { hasText: `wsl-${size.width}-${scheme}` }).waitFor({ timeout: 20_000 });
+
+        // A folder on a computer already connected can still be picked; a
+        // computer that has not allowed terminals says so there, with the
+        // command to run on it, and cannot be added yet.
+        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
+        await dialog.waitFor();
+        await clickVisible(page, dialog.getByRole("button", { name: "用已经连上的电脑选文件夹" }));
+        await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
         const office = dialog.locator(".ws-computer", { hasText: "Office PC" });
         await office.locator(".ws-computer-sub", { hasText: "还没允许" }).waitFor({ timeout: 10_000 });
         await clickVisible(page, office);
@@ -662,8 +690,6 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, dialog.locator(".ws-computer").first());
         const folder = `~/code/smoke-${size.width}-${scheme}`;
         await dialog.locator("input.app-input").fill(folder);
-        await settle(page, 300);
-        await shot(page, size, scheme, "add-workspace");
         await dialog.locator("button[type=submit]").click();
         await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 20_000 });
         const shell = `smoke-${size.width}-${scheme}-shell`;
@@ -2144,14 +2170,53 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-permission");
       await clickVisible(page, view.getByRole("button", { name: "好" }));
       await view.waitFor({ state: "hidden", timeout: 5_000 });
+      // Who may use a computer, which projects have it, and removing it are
+      // in one place, a click from its row.
+      // (The folder added in the project step, at full width; else the first.)
+      const pcRow = narrow ? page.locator(".pc-row").first() : page.locator(".pc-row", { hasText: `wsl-${size.width}-${scheme}` });
+      await clickVisible(page, pcRow.getByRole("button", { name: "设置" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await set.locator(".pcs-agent").first().waitFor({ timeout: 10_000 });
+      if (!narrow) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.locator(".pcs-agent").last());
+      await clickVisible(page, set.getByRole("button", { name: "保存" }));
+      await set.getByText("已保存").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-settings");
+      if (!narrow) {
+        await clickVisible(page, set.getByRole("button", { name: "移除这台电脑" }));
+        const sure = page.locator(".app-modal.app-confirm");
+        await sure.waitFor({ timeout: 5_000 });
+        await clickVisible(page, sure.getByRole("button", { name: "移除", exact: true }));
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+        await pcRow.waitFor({ state: "detached", timeout: 10_000 });
+      } else {
+        await clickVisible(page, set.getByRole("button", { name: "好" }));
+        await set.waitFor({ state: "hidden", timeout: 5_000 });
+      }
       // A folder's terminal opens from here.
-      await clickVisible(page, page.locator(".pc-row .app-btn-small"));
+      await clickVisible(page, page.locator(".pc-row").first().getByRole("button", { name: "打开", exact: true }));
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      // And the terminal's header opens its settings too.
+      await clickVisible(page, page.locator("[data-testid=computer-settings-open]").first());
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
     // The sidebar lists the computers too: one click opens a terminal.
     await step("电脑 · 边栏直达终端", async () => {
       await sidebar(page, true);
+      // ⋯ on hover: its settings, without opening the terminal first.
+      const wrap = page.locator(".sp-nav-pc-wrap").first();
+      await wrap.hover();
+      await clickVisible(page, wrap.locator(".sp-nav-more"));
+      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目、移除…" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
       await clickVisible(page, page.locator(".sp-nav-pc").first());
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
@@ -2413,44 +2478,20 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".sp-switch .app-hub-name", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
-      // Adding a computer to the new workspace, outside any project: pick a
-      // computer and a folder, and it is in the sidebar. None is connected
-      // yet, so it is connected first: the server's other computers are
-      // offered, one click each; once one is in, the folder is next.
+      // Adding a computer to the new workspace, outside any project: the
+      // same one command; the folder it is run in is in the sidebar after.
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "加一台电脑" }));
       const pick = page.locator(".app-modal-add");
       await pick.waitFor({ timeout: 10_000 });
       if (!(await pick.locator("h3").first().innerText()).includes("加一台电脑")) throw new Error("工作区里加电脑不该说「给项目」");
-      await pick.getByText("还没有连上的电脑").waitFor({ timeout: 10_000 });
-      await clickVisible(page, pick.getByRole("button", { name: "另一台电脑…" }));
-      const add = page.locator(".app-modal").filter({ hasText: "连上另一台电脑" });
-      const row = add.locator(".app-picker-nearby:not([data-testid=machine-connected]) .app-picker-row", { has: page.locator(".app-picker-name", { hasText: "Studio Mac" }) }).first();
-      await row.waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("button", { name: "加进来" }));
-      await row.locator(".app-picker-done", { hasText: "已加进来" }).waitFor({ timeout: 10_000 });
-      const connected = add.locator("[data-testid=machine-connected]");
-      await connected.waitFor({ timeout: 20_000 });
-      await settle(page, 200);
-      await shot(page, size, scheme, "dialog-add-computer-same-server");
-      // The join link lets that computer open terminals unless unticked: the
-      // command it gives carries that (running it there is its consent).
-      const allow = add.locator("[data-testid=join-allow-shell] input");
-      if (!(await allow.isChecked())) throw new Error("入网链接默认应允许开终端");
-      await clickVisible(page, add.getByRole("button", { name: "生成入网链接" }));
-      const cmd = await add.locator(".app-command code").innerText();
-      if (!cmd.includes("?shell=1")) throw new Error(`允许开终端的入网命令应带 ?shell=1，实际「${cmd}」`);
-      await settle(page, 200);
-      await shot(page, size, scheme, "dialog-join-allow-shell");
-
-      await clickVisible(page, connected.getByRole("button", { name: "选一个文件夹" }));
-      await add.waitFor({ state: "hidden", timeout: 5_000 });
-      await pick.locator(".ws-computer.active", { hasText: /Studio Mac|这台电脑/ }).waitFor({ timeout: 10_000 });
-      await pick.locator("input.app-input").fill("~/code/team-b");
-      await settle(page, 200);
-      await shot(page, size, scheme, "dialog-add-computer-folder");
-      await pick.locator("button[type=submit]").click();
-      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 20_000 });
+      const box = pick.locator("[data-testid=computer-command]");
+      await box.locator(".app-command code", { hasText: "curl -fsSL" }).waitFor({ timeout: 10_000 });
+      const ran = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir: "~/code/team-b" }) });
+      if (!ran.ok) throw new Error(`mock run-join: ${ran.status}`);
+      await box.locator("[data-testid=computer-arrived]").waitFor({ timeout: 20_000 });
+      await clickVisible(page, box.getByRole("button", { name: "完成" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
       // It is a computer of the workspace now: in the sidebar, and on the page.
       if (narrow) await sidebar(page, true);
       await page.locator(".sp-nav-pc", { hasText: "team-b" }).waitFor({ timeout: 20_000 });

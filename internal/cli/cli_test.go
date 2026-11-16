@@ -1108,6 +1108,33 @@ func TestJoinLinks(t *testing.T) {
 		t.Fatalf("exec profile: %v %s", err, b)
 	}
 
+	// Another shell-node link, run in another folder of the same machine:
+	// that folder becomes a node of its own, the machine's membership stays,
+	// and running the command again there is safe.
+	before, err := os.ReadFile(filepath.Join(home2, ".myco", "machine.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ = admin.run("link", "create", "--exec", "--allow-from", "boss", "--uses", "1", "--format", "json")
+	json.Unmarshal([]byte(out), &link)
+	ex2 := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_JOIN_TOKEN": strings.TrimPrefix(link.JoinURL, hub+"/j/"), "USER": "glenn"}}
+	app := filepath.Join(home2, "code", "My App!")
+	if err := os.MkdirAll(app, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		code, out, e = ex2.run("machine", "join", "--machine", "box2", "--no-service", "--workdir", app, "--format", "text")
+		if code != 0 || !strings.Contains(out, "exec node box2-2-my-app-shell ready") || !strings.Contains(out, app) {
+			t.Fatalf("exec link in a folder (run %d): %d %s %s", i+1, code, out, e)
+		}
+	}
+	if after, _ := os.ReadFile(filepath.Join(home2, ".myco", "machine.yaml")); string(after) != string(before) {
+		t.Fatalf("a shell-node link changed the machine's membership:\n%s\n->\n%s", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(home2, ".myco", "agents", "box2-2-my-app-shell.yaml")); err != nil {
+		t.Fatalf("folder node profile: %v", err)
+	}
+
 	// Revoking a link stops new machines but not the ones that joined.
 	_, out, _ = admin.run("link", "list", "--format", "json")
 	admin.run("link", "revoke", "--id", strings.Split(strings.Split(out, `"id": "`)[1], `"`)[0], "--force")

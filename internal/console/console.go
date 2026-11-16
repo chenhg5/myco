@@ -30,6 +30,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -1020,8 +1021,19 @@ func (b *Backend) Handler() http.Handler {
 			// agents open a terminal there (?shell=1 → machine join
 			// --allow-shell). Running it on that computer is the consent.
 			AllowShell bool `json:"allow_shell"`
+			// ShellNode: the command, run in a folder there, makes that
+			// folder a shell node (exec node) that AllowFrom may send
+			// commands to. Running it there is the consent; nothing else
+			// on that computer needs allowing.
+			ShellNode bool     `json:"shell_node"`
+			AllowFrom []string `json:"allow_from"`
 		}
 		if !decode(w, r, &in) {
+			return
+		}
+		if in.ShellNode && len(in.AllowFrom) == 0 {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument",
+				Message: "a shell node needs at least one agent allowed to send it commands", Suggestion: "pass allow_from"})
 			return
 		}
 		if in.Uses <= 0 {
@@ -1030,13 +1042,21 @@ func (b *Backend) Handler() http.Handler {
 		if in.ExpiresHours <= 0 {
 			in.ExpiresHours = 24
 		}
-		res, err := c.CreateEnrollment(r.Context(), api.CreateEnrollmentRequest{Kind: "link", MaxUses: in.Uses,
-			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}, false)
+		req := api.CreateEnrollmentRequest{Kind: "link", MaxUses: in.Uses,
+			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}
+		if in.ShellNode {
+			req.Harness, req.AllowFrom, req.Note = execnode.Name, in.AllowFrom, "myco console: a folder as a computer"
+		}
+		res, err := c.CreateEnrollment(r.Context(), req, false)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, joinLinkOut(res.JoinURL, res.AgentGuide, in.AllowShell))
+		out := joinLinkOut(res.JoinURL, res.AgentGuide, in.AllowShell && !in.ShellNode)
+		if in.ShellNode {
+			out["shell_node"] = true
+		}
+		writeJSON(w, http.StatusOK, out)
 	}))
 	return m
 }

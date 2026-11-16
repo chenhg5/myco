@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -17,7 +17,7 @@ import { useCopy } from "@/app/copy";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
-import { Avatar, whereOf } from "@/app/persona";
+import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
@@ -901,6 +901,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+  // The other side is one of your computers (a folder on one): its header
+  // offers its settings.
+  const computer = !observed && !!row && isWorkspace(row.st.agent);
   // What the agent offers you to say next (on your newest task, once it is
   // not at work any more): the empty input shows it, Tab takes it.
   const suggestion = !shellMode && !openTask && lastTask?.suggest?.trim() && !lastTask.unreadable ? lastTask.suggest.trim() : "";
@@ -1774,8 +1777,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* Find, and the pane's own buttons (full width, close): one group,
             one spacing, one icon size. */}
-        {(!termMode || headActions) && (
+        {(!termMode || headActions || computer) && (
           <span className="conv-head-actions">
+            {/* A computer: who may use it, its projects, removing it. */}
+            {computer && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="computer-settings-open"
+                onClick={() => window.dispatchEvent(new CustomEvent("myco-computer-settings", { detail: { hubId: target.hubId, name: target.agent } }))}
+                title={L("这台电脑：谁能用、项目、移除", "This computer: who can use it, projects, remove")} aria-label={L("这台电脑的设置", "This computer's settings")}>
+                <Settings2 />
+              </button>
+            )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
