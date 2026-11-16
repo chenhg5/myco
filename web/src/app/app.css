@@ -6570,6 +6570,13 @@ body.is-resizing {
   justify-content: flex-start;
   gap: 8px;
 }
+/* Settings › Voice: the voice list is wider than the speed; try it sits beside them. */
+.tr-fields label.vs-voice {
+  flex: 2;
+}
+.tr-fields label.vs-rate {
+  flex: 0 0 88px;
+}
 /* Settings › Voice: where the settings are kept (a line under the note). */
 .vs-sync {
   display: block;

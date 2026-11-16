@@ -30,9 +30,13 @@ export interface VoiceTTSProvider {
   default_speaker?: string;
   help?: string;
   help_en?: string;
+  /** the voices to choose from (another may still be typed in, like a cloned one) */
+  voices?: TTSVoice[];
   /** this App holds a key for it */
   has_key: boolean;
 }
+/** One voice on a speech service's list. lang: zh, en, ja, … (mx = Mexican Spanish, tl = Filipino). */
+export interface TTSVoice { id: string; name: string; lang: string; gender: "female" | "male" }
 /** How one workspace's hub stands with the voice settings kept on it. */
 export interface VoiceSyncHub { id: string; name: string; state: "synced" | "unsupported" | "unreachable" }
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
@@ -646,6 +650,19 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */
+  previewVoice: async (input: { tts_provider: string; tts_speaker: string; tts_rate: number; tts_key?: string; lang: string }): Promise<Blob> => {
+    const r = await fetch("app/voice/preview", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "audio/wav, application/json" }, body: JSON.stringify(input),
+    });
+    if (!r.ok) {
+      let e: { error?: string; message?: string; suggestion?: string } = {};
+      try { e = await r.json(); } catch { /* non-JSON */ }
+      throw new ApiError(e.message || `HTTP ${r.status}`, r.status, e.error, e.suggestion);
+    }
+    return r.blob();
+  },
   /** Looks at the hubs for newer settings (set on another device), then answers as voice(). */
   voiceSync: () => request<VoiceInfo>("POST", "app/voice/sync", {}),
   /** A call with one agent, in the person's chat with it (peer: their address there). */

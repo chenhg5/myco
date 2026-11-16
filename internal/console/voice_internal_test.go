@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -383,5 +385,59 @@ func TestVoiceModelTakesTheWholeEndpoint(t *testing.T) {
 	out, err := m.Stream(context.Background(), []chatMsg{{Role: "user", Content: "嗨"}}, nil, nil)
 	if err != nil || out.Content != "好" || path != "/v1/chat/completions" || session != "myco-voice-1" {
 		t.Fatalf("got %q %v at %s (session %q)", out.Content, err, path, session)
+	}
+}
+
+// The settings offer Doubao's voices, and a voice can be tried before it is
+// saved: one line in its own language, back as a WAV.
+func TestVoiceListAndPreview(t *testing.T) {
+	var gotKey, gotSpeaker, gotText string
+	tts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Req struct {
+				Text    string `json:"text"`
+				Speaker string `json:"speaker"`
+			} `json:"req_params"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		gotKey, gotSpeaker, gotText = r.Header.Get("X-Api-Key"), in.Req.Speaker, in.Req.Text
+		enc := base64.StdEncoding.EncodeToString
+		fmt.Fprintf(w, "{\"code\":0,\"data\":%q}\n{\"code\":20000000}\n", enc([]byte{1, 0, 2, 0}))
+	}))
+	defer tts.Close()
+	was := doubaoTTSURL
+	doubaoTTSURL = tts.URL
+	defer func() { doubaoTTSURL = was }()
+
+	keys := &memKeys{m: map[string]string{}}
+	b := &Backend{Store: NewStore(t.TempDir() + "/hubs.json"), Secrets: keys}
+	srv := httptestServer(t, b)
+	code, body := srv("GET", "/app/voice", "")
+	if code != 200 || !strings.Contains(body, `"id":"zh_female_vv_uranus_bigtts"`) || !strings.Contains(body, `"lang":"ja"`) {
+		t.Fatalf("voices: %d %.300s", code, body)
+	}
+	if len(doubaoVoices) < 100 {
+		t.Fatalf("only %d voices", len(doubaoVoices))
+	}
+	for _, v := range doubaoVoices {
+		if v.ID == "" || v.Name == "" || v.Lang == "" || (v.Gender != "female" && v.Gender != "male") {
+			t.Fatalf("voice %+v", v)
+		}
+	}
+	if code, body := srv("POST", "/app/voice/preview", `{"tts_speaker":"zh_female_vv_uranus_bigtts"}`); code != 400 || !strings.Contains(body, "no_key") {
+		t.Fatalf("no key: %d %s", code, body)
+	}
+	// The key typed (not saved yet) is used, and the line is in the voice's language.
+	code, body = srv("POST", "/app/voice/preview", `{"tts_speaker":"ja_female_x_uranus_bigtts","tts_key":"typed-key"}`)
+	if code != 200 || !strings.HasPrefix(body, "RIFF") || !strings.HasSuffix(body, string([]byte{1, 0, 2, 0})) {
+		t.Fatalf("preview: %d %q", code, body)
+	}
+	if gotKey != "typed-key" || gotSpeaker != "ja_female_x_uranus_bigtts" || gotText != voiceSampleLines["ja"] {
+		t.Fatalf("sent %q %q %q", gotKey, gotSpeaker, gotText)
+	}
+	// Else the kept key; no voice is the default one.
+	keys.m[voiceTTSSecret] = "kept-key"
+	if code, _ := srv("POST", "/app/voice/preview", `{"lang":"en"}`); code != 200 || gotKey != "kept-key" || gotSpeaker != defaultVoiceSpeaker || gotText != voiceSampleLines["zh"] {
+		t.Fatalf("kept key: %d %q %q %q", code, gotKey, gotSpeaker, gotText)
 	}
 }

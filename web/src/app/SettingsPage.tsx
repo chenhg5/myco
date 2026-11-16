@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -1031,6 +1031,31 @@ function TranslateSection() {
  *  with, one of those the backend lists (voice_sync.go). Keys go to the
  *  system keychain and are never shown. The settings are the person's: kept
  *  on the workspaces' hubs too, so their other devices have them. */
+const OTHER = "\u0000other";
+
+/** Voices by language: Chinese first, then English, then the rest in the list's order. */
+function voiceGroups(voices: TTSVoice[]): [string, TTSVoice[]][] {
+  const by = new Map<string, TTSVoice[]>();
+  for (const v of voices) { const g = by.get(v.lang); if (g) g.push(v); else by.set(v.lang, [v]); }
+  const first = ["zh", "en"];
+  return [...by.entries()].sort((a, b) => {
+    const i = first.indexOf(a[0]), j = first.indexOf(b[0]);
+    return (i < 0 ? 9 : i) - (j < 0 ? 9 : j);
+  });
+}
+
+const VOICE_LANGS: Record<string, [string, string]> = {
+  zh: ["中文", "Chinese"], en: ["英语", "English"], ja: ["日语", "Japanese"], ko: ["韩语", "Korean"],
+  es: ["西班牙语", "Spanish"], mx: ["西班牙语（墨西哥）", "Spanish (Mexico)"], pt: ["葡萄牙语（巴西）", "Portuguese (Brazil)"],
+  fr: ["法语", "French"], de: ["德语", "German"], it: ["意大利语", "Italian"], ru: ["俄语", "Russian"],
+  id: ["印尼语", "Indonesian"], ms: ["马来语", "Malay"], th: ["泰语", "Thai"], vi: ["越南语", "Vietnamese"],
+  ar: ["阿拉伯语", "Arabic"], tl: ["菲律宾语", "Filipino"],
+};
+function voiceLangName(code: string): string {
+  const n = VOICE_LANGS[code];
+  return n ? L(n[0], n[1]) : code;
+}
+
 const DOUBAO: VoiceTTSProvider = { id: "doubao", name: "豆包语音", name_en: "Doubao Speech", default_speaker: "zh_male_wennuanahu_uranus_bigtts", has_key: false };
 
 function VoiceSection() {
@@ -1045,11 +1070,32 @@ function VoiceSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
+  // Typing a voice ID (one not on the list, like a cloned voice).
+  const [typing, setTyping] = useState(false);
+  const [trying, setTrying] = useState(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
   const load = (v: VoiceInfo) => {
     setInfo(v);
     setBaseUrl(v.config.llm_base_url || ""); setModel(v.config.llm_model || "");
-    setProvider(v.config.tts_provider || "doubao");
-    setSpeaker(v.config.tts_speaker || ""); setRate(v.config.tts_rate || 0);
+    const pid = v.config.tts_provider || "doubao";
+    setProvider(pid);
+    const sp = v.config.tts_speaker || "";
+    setSpeaker(sp); setRate(v.config.tts_rate || 0);
+    const list = v.tts_providers?.find((p) => p.id === pid)?.voices || [];
+    setTyping(!!sp && list.length > 0 && !list.some((x) => x.id === sp));
+  };
+  useEffect(() => () => { audio.current?.pause(); }, []);
+  const tryVoice = async () => {
+    setTrying(true); setError(null);
+    try {
+      const wav = await appApi.previewVoice({ tts_provider: provider, tts_speaker: speaker.trim(), tts_rate: rate, lang: lang(), ...(ttsKey.trim() ? { tts_key: ttsKey.trim() } : {}) });
+      audio.current?.pause();
+      const url = URL.createObjectURL(wav);
+      const a = new Audio(url);
+      a.onended = () => URL.revokeObjectURL(url);
+      audio.current = a;
+      await a.play();
+    } catch (e) { setError(e); } finally { setTrying(false); }
   };
   useEffect(() => {
     let off = false;
@@ -1076,6 +1122,9 @@ function VoiceSection() {
   if (!info) return <ErrorText error={error} />;
   const providers = info.tts_providers?.length ? info.tts_providers : [DOUBAO];
   const svc = providers.find((p) => p.id === provider) || providers[0];
+  const voices = svc.voices || [];
+  // The voice on the list, or the default one when none is set.
+  const chosen = speaker.trim() || svc.default_speaker || "";
   const svcName = lang() === "en" ? svc.name_en : svc.name;
   const svcHelp = lang() === "en" ? svc.help_en : svc.help;
   // The key shown as kept is the chosen service's.
@@ -1122,7 +1171,7 @@ function VoiceSection() {
           <div className="seg vs-services" role="tablist" aria-label={L("语音合成服务", "Speech service")}>
             {providers.map((p) => (
               <button key={p.id} type="button" role="tab" aria-selected={svc.id === p.id} className={cn("seg-btn", svc.id === p.id && "active")}
-                onClick={() => { setProvider(p.id); setTtsKey(""); setSaved(false); setError(null); }}>
+                onClick={() => { setProvider(p.id); setTtsKey(""); setSpeaker(""); setTyping(false); setSaved(false); setError(null); }}>
                 {lang() === "en" ? p.name_en : p.name}
               </button>
             ))}
@@ -1130,10 +1179,31 @@ function VoiceSection() {
           <p className="tr-note">{svcHelp || L("它把语音助手的话说出来。", "It says what the assistant answers out loud.")}</p>
         </div>
         <div className="app-setting-line tr-fields">
-          <label>{L("音色", "Voice")}<input className="app-input mono" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder={svc.default_speaker || ""} spellCheck={false} /></label>
-          <label>{L("语速", "Speed")}
+          {voices.length > 0 && (
+            <label className="vs-voice">{L("音色", "Voice")}
+              <select className="app-select-field" data-testid="voice-speaker" value={typing ? OTHER : chosen}
+                onChange={(e) => { const other = e.target.value === OTHER; setTyping(other); setSpeaker(other ? "" : e.target.value); setSaved(false); }}>
+                {voiceGroups(voices).map(([lg, vs]) => (
+                  <optgroup key={lg} label={voiceLangName(lg)}>
+                    {vs.map((v) => <option key={v.id} value={v.id}>{v.name} · {v.gender === "female" ? L("女", "female") : L("男", "male")}</option>)}
+                  </optgroup>
+                ))}
+                <option value={OTHER}>{L("其他（填音色 ID）", "Other (type a voice ID)")}</option>
+              </select>
+            </label>
+          )}
+          {(typing || voices.length === 0) && (
+            <label>{voices.length ? L("音色 ID", "Voice ID") : L("音色", "Voice")}
+              <input className="app-input mono" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder={voices.length ? "S_…" : svc.default_speaker || ""} spellCheck={false} />
+            </label>
+          )}
+          <label className="vs-rate">{L("语速", "Speed")}
             <input className="app-input" type="number" min={-50} max={100} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value) || 0)} />
           </label>
+          <button type="button" className="app-btn" data-testid="voice-try" disabled={trying || (!hasTtsKey && !ttsKey.trim()) || (typing && !speaker.trim())}
+            title={!hasTtsKey && !ttsKey.trim() ? L("先填 API Key", "Type the API key first") : undefined} onClick={() => void tryVoice()}>
+            {trying ? L("合成中…", "Speaking…") : L("试听", "Try it")}
+          </button>
         </div>
         <div className="app-setting-line tr-fields">
           <label>{L("API Key", "API key")}
