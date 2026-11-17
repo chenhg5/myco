@@ -2110,7 +2110,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const prev = visible[i - 1];
               const runStart = !prev || !!divider || prev.from !== m.from || prev.type === "event" || m.type === "event";
               const item = renderMessage(m, runStart);
-              return [...(before || []), ...(divider ? [divider, item] : [item])];
+              // Keyed by the message, not its place: older messages loaded
+              // above (or one hidden) would remount everything below, and an
+              // unfolded long message would fold again.
+              return <Fragment key={"m" + m.id}>{before}{divider}{item}</Fragment>;
             })}
             {!shellMode && !execNode && trailing}
             {/* The run at work, when messages sit under it. */}

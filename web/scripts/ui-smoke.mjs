@@ -1886,6 +1886,32 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // A long message starts folded; unfolded, it stays unfolded when the
+    // list above it changes (a message deleted, older ones loaded).
+    await step("单聊 · 展开的长消息不会自己收起", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const tag = `${size.width}-${scheme}`;
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(`先说一句短的（${tag}）`);
+      await box.press("Enter");
+      const short = page.locator(".conv-detail .conv-msg.is-me", { hasText: `先说一句短的（${tag}）` }).last();
+      await short.waitFor({ timeout: 10_000 });
+      await box.fill(Array.from({ length: 40 }, (_, i) => `长消息第 ${i + 1} 行（${tag}）`).join("\n"));
+      await box.press("Enter");
+      const long = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长消息第 1 行（${tag}）` }).last();
+      await long.waitFor({ timeout: 10_000 });
+      await clickVisible(page, long.locator(".md-fold-btn", { hasText: "展开" }));
+      await long.locator(".md-fold-btn", { hasText: "收起" }).waitFor({ timeout: 5_000 });
+      // The short one, above it, goes from your view: the long one stays open.
+      await short.hover();
+      await clickVisible(page, short.locator(".conv-msg-del"));
+      await short.waitFor({ state: "detached", timeout: 5_000 });
+      await settle(page, 800);
+      if (await long.locator(".md-fold-body.is-collapsed").count()) throw new Error("上面的消息变了之后，展开的长消息不该自己收起");
+      await noRound(page);
+    });
+
     // Links one after another with Chinese commas are each a link of their own.
     await step("单聊 · 中文标点隔开的链接", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");

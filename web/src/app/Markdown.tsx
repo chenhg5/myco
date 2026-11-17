@@ -242,6 +242,9 @@ function RenderedBody({ body }: { body: string }) {
   return <Markdown text={body} />;
 }
 
+/** Long bodies unfolded in this window (MessageContent). */
+const unfolded = new Set<string>();
+
 /**
  * A message body: markdown, an exec result, or a JSON object. Bodies longer
  * than 30 lines start folded so one long reply cannot take over the thread.
@@ -249,7 +252,16 @@ function RenderedBody({ body }: { body: string }) {
 export function MessageContent({ body }: { body: string }) {
   const lines = body.split("\n").length;
   const collapsible = lines > COLLAPSE_LINES;
-  const [open, setOpen] = useState(false);
+  // Unfolded stays unfolded while this window is open, even when the
+  // message is drawn anew (a reply that finished growing, a list that
+  // changed above it): kept by its text.
+  const [open, setOpenState] = useState(() => unfolded.has(body));
+  const setOpen = (f: (o: boolean) => boolean) => setOpenState((o) => {
+    const n = f(o);
+    if (n) unfolded.add(body);
+    else unfolded.delete(body);
+    return n;
+  });
   if (!collapsible) return <RenderedBody body={body} />;
   return (
     <div className="md-fold">
