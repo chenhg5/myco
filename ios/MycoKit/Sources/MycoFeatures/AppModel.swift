@@ -808,13 +808,9 @@ struct RootView: View {
         // A call that is on, while its own chat is not the page in front:
         // a strip across the top says how it goes, mutes, hangs up, and
         // leads back to that chat.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let ongoing = app.ongoing, ongoing.call.state != .ended, !callIsInFront(ongoing) {
-                CallStrip(ongoing: ongoing)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.snappy(duration: 0.25), value: app.ongoing?.id)
+        // (Above the pages, not over them: an inset at the top would lie
+        // on the navigation bar, which does not move for it.)
+        .modifier(CallStripAbove(ongoing: app.ongoing.flatMap { $0.call.state != .ended && !callIsInFront($0) ? $0 : nil }))
         // A call keeps the screen on, ends when the app is left (the
         // microphone is not this app's in the background), and is put
         // away when it is over.
@@ -851,6 +847,24 @@ extension RootView {
         case .project(let name): return session.project(name).flatMap { session.coordinator(of: $0) } == ongoing.agent
         default: return false
         }
+    }
+}
+
+/// Puts the call's strip above everything else, pages and their top bars
+/// included; its colour runs up under the status bar.
+private struct CallStripAbove: ViewModifier {
+    let ongoing: AppModel.OngoingCall?
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            if let ongoing {
+                CallStrip(ongoing: ongoing)
+                    .background(MycoColor.accent.ignoresSafeArea(edges: .top))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            content
+        }
+        .animation(.snappy(duration: 0.25), value: ongoing?.id)
     }
 }
 
