@@ -163,6 +163,17 @@ public protocol HubAPI: Sendable {
     /// setting). For whoever owns the agent or manages the workspace. A
     /// workspace from before v0.19.5 answers `not_found`.
     func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// Where this workspace is: its links (a page's address) begin with it.
+    var address: URL? { get }
+    /// `GET /v1/pages/{id}`: a web page an agent published, with its
+    /// versions. A workspace from before v0.19.24 answers `not_found`, as
+    /// for a page that is gone or not mine to see.
+    func page(_ id: String) async throws -> Page
+    /// `GET /v1/pages/{id}/v/{n}/{path}`: one file of a version ("" is the
+    /// file it opens on). For a live page (`version` nil),
+    /// `GET /v1/pages/{id}/live/{path}`: what its server answers, whatever
+    /// the status.
+    func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile
     /// `POST /v1/enrollments` with `kind: "link"` and `harness: "exec"`:
     /// a link for one computer (one use, a day). Its command, run in a
     /// folder there, makes that folder a computer the agents in

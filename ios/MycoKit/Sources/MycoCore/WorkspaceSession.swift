@@ -89,6 +89,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var pagesModel: PagesModel?
+
+    /// The web pages this workspace's messages link to.
+    public var pages: PagesModel {
+        if let pagesModel { return pagesModel }
+        let model = PagesModel(hub: hub)
+        pagesModel = model
+        return model
+    }
+
     /// The agents a task can be sent to, by the name the app shows.
     public var agentsByName: [Agent] {
         statuses.map(\.agent).filter { Naming.kind(of: $0) == .agent }

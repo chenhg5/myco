@@ -53,6 +53,8 @@ public final class Router {
     public var projectsPath: [Route] = []
     public var membersPath: [Route] = []
     public var sheet: SheetRoute?
+    /// A web page an agent published, open over the whole screen.
+    public var page: PageRoute?
 
     public init() {}
 

@@ -31,6 +31,8 @@ public enum Scenario: Sendable {
         var silent: Set<String> = []
         /// What is sent for me on a schedule, or when something calls.
         var automations: [Automation] = []
+        /// Web pages agents published, with their files by path.
+        var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
     }
 
     func build(now: Date) -> World {
@@ -157,6 +159,27 @@ public enum Scenario: Sendable {
             // Having handed the review out, the coordinator ended its turn.
             world.turnEnded = ["m3"]
         }
+        // A page the tester published: its checklist, as a web page.
+        let checklist = Page(
+            id: "pg_checklist", name: "真机验证清单", project: project, publisher: tester.name, version: 2,
+            url: FakeHub.demoAddress.absoluteString + "/pages/pg_checklist",
+            versions: [PageVersion(n: 2, by: tester.name, at: ago(1_100)), PageVersion(n: 1, by: tester.name, at: ago(4_000))],
+            createdAt: ago(4_000), updatedAt: ago(1_100))
+        world.pages = [(checklist, [
+            "index.html": ("text/html; charset=utf-8", """
+            <!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>真机验证清单</title><link rel="stylesheet" href="style.css"></head>
+            <body><h1>真机验证清单</h1><p class="v">第 {{version}} 版</p>
+            <ul><li><label><input type="checkbox" checked> 键盘和输入框</label></li>
+            <li><label><input type="checkbox" checked> 聊天滚动</label></li>
+            <li><label><input type="checkbox"> 导航返回</label></li>
+            <li><label><input type="checkbox"> 运行中补充和停止</label></li></ul>
+            <p><a href="https://github.com/chenhg5/myco">仓库</a></p>
+            <script src="app.js"></script></body></html>
+            """),
+            "style.css": ("text/css; charset=utf-8", "body{font:17px/1.6 -apple-system,sans-serif;margin:24px;color:#1c1c21}h1{font-size:24px}li{list-style:none;margin:10px 0}ul{padding:0}.v{color:#85858d}#n{color:#2f8a68}"),
+            "app.js": ("text/javascript; charset=utf-8", "const p=document.createElement('p');p.id='n';const say=()=>p.textContent=document.querySelectorAll('input:checked').length+' / 4';say();document.body.appendChild(p);document.addEventListener('change',say);"),
+        ])]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {
             world.automations = [
@@ -193,6 +216,11 @@ public enum Scenario: Sendable {
                         createdAt: ago(1_200), updatedAt: ago(600)),
             ]
             world.silent = ["s2", "x1"]
+            // The tester made its checklist a web page, and says where it is.
+            world.messages.append(Message(
+                id: "pgm", from: tester.name, to: me, type: "note",
+                body: "清单做成了一个网页，可以直接勾：\(FakeHub.demoAddress.absoluteString)/pages/pg_checklist\n\n有改动我会再发一版。", status: "done",
+                createdAt: ago(1_050)))
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

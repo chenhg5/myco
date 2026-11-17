@@ -553,6 +553,31 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAPageAnAgentPublishedIsACardThatOpensInTheApp() {
+        // The tester made its checklist a web page and says where it is.
+        let app = launch(["-myco-start", "session", "-myco-route", "agent:studio-claude-55d0"])
+        let card = app.buttons["page.card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 20), "the link has a card under its message")
+        XCTAssertTrue(card.label.contains("真机验证清单"), card.label)
+        XCTAssertTrue(card.label.contains("Version 2"), card.label)
+        XCTAssertTrue(card.label.contains("Published by 测试"), card.label)
+        snap("page-card")
+        card.tap()
+        // Over the whole screen: its name and version, and the page itself.
+        let title = app.descendants(matching: .any)["page.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        XCTAssertTrue(title.label.contains("真机验证清单"), title.label)
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 10))
+        // Its own files came: the words, the style, and the script's count.
+        XCTAssertTrue(web.staticTexts["第 2 版"].waitForExistence(timeout: 15), "the page's first file is shown")
+        XCTAssertTrue(web.staticTexts["2 / 4"].waitForExistence(timeout: 10), "its script ran")
+        snap("page-open")
+        app.buttons["page.close"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "closing it is back in the conversation")
+    }
+
+    @MainActor
     func testAConversationIsExportedAsAFile() {
         let app = launch(["-myco-route", "agent:studio-claude-c41f"])
         let more = app.buttons["conversation.more"]

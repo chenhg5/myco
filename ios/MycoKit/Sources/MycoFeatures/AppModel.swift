@@ -736,6 +736,9 @@ struct RootView: View {
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             }
         }
+        .fullScreenCover(item: $router.page) { page in
+            PageScreen(id: page.id)
+        }
         // Refresh only while the app is in front.
         .task(id: scenePhase) {
             if scenePhase == .active { await session.run() }

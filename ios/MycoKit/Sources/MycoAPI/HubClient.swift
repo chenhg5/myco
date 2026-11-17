@@ -130,6 +130,22 @@ public struct HubClient: HubAPI {
         return try Self.decode(Agent.self, from: data)
     }
 
+    public var address: URL? { baseURL }
+
+    public func page(_ id: String) async throws -> Page {
+        try await get("/v1/pages/\(Self.segment(id))", timeout: Self.pollTimeout)
+    }
+
+    public func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile {
+        let place = version.map { "v/\($0)" } ?? "live"
+        // (the path as it is: `call` escapes what a URL cannot hold)
+        let (data, response) = try await answer(
+            "GET", "/v1/pages/\(Self.segment(id))/\(place)/" + path, timeout: Self.transferTimeout, anyStatus: version == nil)
+        return PageFile(
+            data: data, contentType: response.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream",
+            status: response.statusCode)
+    }
+
     public func computerLink(allowFrom: [String]) async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -223,6 +239,16 @@ public struct HubClient: HubAPI {
         _ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
         contentType: String = "application/json", timeout: TimeInterval = 20
     ) async throws -> Data {
+        try await answer(method, path, query: query, body: body, contentType: contentType, timeout: timeout).0
+    }
+
+    /// One request to the hub: what it answered, and with what.
+    /// - Parameter anyStatus: an answer that is not a success is handed
+    ///   back as it is, not thrown (a live page's own server answered).
+    private func answer(
+        _ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
+        contentType: String = "application/json", timeout: TimeInterval = 20, anyStatus: Bool = false
+    ) async throws -> (Data, HTTPURLResponse) {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw HubError(error: "invalid_argument", message: "The workspace's address is not a URL.")
         }
@@ -253,7 +279,7 @@ public struct HubClient: HubAPI {
             throw HubError.unreachable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw HubError.unreachable("no HTTP response") }
-        guard (200..<300).contains(http.statusCode) else {
+        guard (200..<300).contains(http.statusCode) || anyStatus else {
             if var error = try? HubJSON.decoder().decode(HubError.self, from: data) {
                 error.status = http.statusCode
                 throw error
@@ -265,7 +291,7 @@ public struct HubClient: HubAPI {
                 error: "http_\(http.statusCode)", message: page.isEmpty ? "The workspace answered \(http.statusCode)." : page,
                 status: http.statusCode)
         }
-        return data
+        return (data, http)
     }
 }
 
