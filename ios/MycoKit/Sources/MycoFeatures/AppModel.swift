@@ -374,6 +374,71 @@ public final class AppModel {
             ended: { history in VoiceMemos.keep(history, for: memoKey, in: memos) }))
     }
 
+    // MARK: The one voice call
+
+    /// A voice call that is on: with whom, and in which workspace.
+    public struct OngoingCall: Identifiable {
+        public let id = UUID()
+        public let call: VoiceCall
+        public let workspace: String
+        public let agent: String
+        /// The agent's name as the app showed it when the call began.
+        public let name: String
+    }
+
+    /// The call lives here, not in the page it was started from: going to
+    /// another chat, a project or the settings does not hang up. There is
+    /// one at a time (one microphone, one voice), so calling another agent
+    /// hangs up the call before. The desktop app's rule.
+    public private(set) var ongoing: OngoingCall?
+
+    /// Why the last call ended by itself (no microphone, no permission),
+    /// and with whom: said in that agent's chat.
+    public private(set) var callProblem: (workspace: String, agent: String, problem: DictationProblem)?
+
+    /// How long the microphone is given to be let go by the call before,
+    /// when one call takes another's place.
+    static let betweenCalls: Duration = .milliseconds(600)
+
+    /// The call with this agent, if it is the one that is on.
+    public func call(with agent: String, in workspace: String) -> VoiceCall? {
+        guard let ongoing, ongoing.agent == agent, ongoing.workspace == workspace, ongoing.call.state != .ended else { return nil }
+        return ongoing.call
+    }
+
+    /// Starts a voice call with a conversation's agent, after hanging up
+    /// the one before. False when voice is not set up after all.
+    public func startCall(in conversation: ConversationModel, of session: WorkspaceSession) async -> Bool {
+        guard let new = await call(in: conversation, of: session) else { return false }
+        let before = ongoing
+        before?.call.hangUp()
+        callProblem = nil
+        ongoing = OngoingCall(call: new, workspace: session.id, agent: conversation.agent, name: session.displayName(of: conversation.agent))
+        // In turn: the microphone is the earlier call's for a moment yet.
+        if before != nil { try? await Task.sleep(for: Self.betweenCalls) }
+        // (hung up meanwhile, or yet another call took its place)
+        guard ongoing?.call === new else { return true }
+        new.start()
+        return true
+    }
+
+    public func hangUp() {
+        ongoing?.call.hangUp()
+    }
+
+    /// The call is over (hung up, or it ended by itself): it is put away,
+    /// and why it ended is kept for its chat to say.
+    public func callEnded() {
+        guard let ended = ongoing, ended.call.state == .ended else { return }
+        if let problem = ended.call.problem { callProblem = (ended.workspace, ended.agent, problem) }
+        ongoing = nil
+    }
+
+    /// What was said about the last call has been dealt with.
+    public func forgetCallProblem() {
+        callProblem = nil
+    }
+
     // MARK: Notifications
 
     private let notifier: any Notifier
@@ -701,9 +766,9 @@ public struct AppRootView: View {
 
 /// The three tabs, each with its own stack of pages.
 struct RootView: View {
-    @Environment(Router.self) private var router
+    @Environment(Router.self) fileprivate var router
     @Environment(AppModel.self) private var app
-    @Environment(WorkspaceSession.self) private var session
+    @Environment(WorkspaceSession.self) fileprivate var session
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -740,6 +805,26 @@ struct RootView: View {
         .fullScreenCover(item: $router.page) { page in
             PageScreen(id: page.id)
         }
+        // A call that is on, while its own chat is not the page in front:
+        // a strip across the top says how it goes, mutes, hangs up, and
+        // leads back to that chat.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let ongoing = app.ongoing, ongoing.call.state != .ended, !callIsInFront(ongoing) {
+                CallStrip(ongoing: ongoing)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: app.ongoing?.id)
+        // A call keeps the screen on, ends when the app is left (the
+        // microphone is not this app's in the background), and is put
+        // away when it is over.
+        .onChange(of: app.ongoing?.call.state, initial: true) { _, state in
+            UIApplication.shared.isIdleTimerDisabled = state != nil && state != .ended
+            if state == .ended { app.callEnded() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { app.hangUp() }
+        }
         // Refresh only while the app is in front.
         .task(id: scenePhase) {
             if scenePhase == .active { await session.run() }
@@ -752,6 +837,91 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             // In front, what is on screen is seen and is not announced.
             app.active = phase == .active
+        }
+    }
+}
+
+extension RootView {
+    /// The call's own chat is the page in front: its bar is there, above
+    /// the input, and no strip is needed.
+    fileprivate func callIsInFront(_ ongoing: AppModel.OngoingCall) -> Bool {
+        guard ongoing.workspace == session.id, router.sheet == nil, router.page == nil else { return false }
+        switch router.front {
+        case .agent(let name, _): return name == ongoing.agent
+        case .project(let name): return session.project(name).flatMap { session.coordinator(of: $0) } == ongoing.agent
+        default: return false
+        }
+    }
+}
+
+/// A voice call that goes on while another page is in front: how it goes
+/// and with whom (a tap goes back to that chat), mute, hang up. The
+/// desktop app's chip in the top bar.
+struct CallStrip: View {
+    let ongoing: AppModel.OngoingCall
+    @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
+    @Environment(WorkspaceSession.self) private var session
+
+    var body: some View {
+        let call = ongoing.call
+        HStack(spacing: 10) {
+            Button {
+                Task {
+                    // (its workspace first, when another one is on screen)
+                    if ongoing.workspace != session.id { await app.switchTo(ongoing.workspace) }
+                    router.show([.agent(ongoing.agent, focus: nil)], in: .chats)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: call.muted ? "mic.slash.fill" : "waveform")
+                        .font(.footnote.weight(.semibold))
+                        .symbolEffect(.variableColor.iterative, isActive: !call.muted && call.state != .connecting)
+                    Text(VoiceWords.state(of: call) + " · " + ongoing.name).font(.footnote.weight(.medium)).lineLimit(1)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).opacity(0.7)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("\(VoiceWords.state(of: call))，和 \(ongoing.name) 语音聊天，回到对话", "\(VoiceWords.state(of: call)), voice chat with \(ongoing.name): back to the chat"))
+            .accessibilityIdentifier("call.strip")
+            Button {
+                call.setMuted(!call.muted)
+            } label: {
+                Image(systemName: call.muted ? "mic.slash.fill" : "mic.fill").font(.footnote.weight(.semibold))
+                    .frame(width: 44, height: 36).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(call.muted ? L("取消静音", "Unmute") : L("静音", "Mute"))
+            .accessibilityIdentifier("call.strip.mute")
+            Button {
+                call.hangUp()
+            } label: {
+                Image(systemName: "phone.down.fill").font(.footnote.weight(.semibold))
+                    .frame(width: 44, height: 28)
+                    .background(MycoColor.red, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("挂断", "Hang up"))
+            .accessibilityIdentifier("call.strip.hangup")
+        }
+        .foregroundStyle(.white)
+        .padding(.leading, 16).padding(.trailing, 10)
+        .frame(height: 40)
+        .background(MycoColor.accent)
+    }
+}
+
+/// How a voice call goes, in a word.
+enum VoiceWords {
+    @MainActor
+    static func state(of call: VoiceCall) -> String {
+        switch call.state {
+        case .connecting, .ended: return L("正在接通…", "Connecting…")
+        case .listening: return call.muted ? L("已静音", "Muted") : L("在听", "Listening")
+        case .thinking: return L("在想", "Thinking")
+        case .speaking: return L("在说", "Speaking")
         }
     }
 }

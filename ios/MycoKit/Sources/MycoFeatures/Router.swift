@@ -88,6 +88,15 @@ public final class Router {
     }
 
     /// Closes any sheet and opens the agent's conversation where the person is.
+    /// The page in front, in the tab on screen; nil on a tab's own list.
+    public var front: Route? {
+        switch tab {
+        case .chats: return chatsPath.last
+        case .projects: return projectsPath.last
+        case .members: return membersPath.last
+        }
+    }
+
     public func chat(with agent: String) {
         sheet = nil
         push(.agent(agent, focus: nil))

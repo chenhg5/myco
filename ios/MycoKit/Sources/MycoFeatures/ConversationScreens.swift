@@ -222,10 +222,15 @@ struct ConversationBody: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Speaking instead of typing: made the first time the microphone is tapped.
     @State private var dictation: Dictation?
-    /// A voice call with this agent, while one is on.
-    @State private var call: VoiceCall?
-    /// Why the last call ended by itself (no microphone, no permission).
-    @State private var callProblem: DictationProblem?
+    /// The voice call with this agent, while it is the one that is on.
+    /// It lives in the app, not here: leaving this page does not hang up.
+    private var call: VoiceCall? { app.call(with: model.agent, in: session.id) }
+    /// Why the last call with this agent ended by itself (no microphone,
+    /// no permission).
+    private var callProblem: DictationProblem? {
+        guard let last = app.callProblem, last.agent == model.agent, last.workspace == session.id else { return nil }
+        return last.problem
+    }
     /// A call could not be made from what is set: its settings are open.
     @State private var settingUpVoice = false
     /// A file about to go, opened to look at it first.
@@ -531,22 +536,12 @@ struct ConversationBody: View {
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
+        // (A call goes on when this page is left: the app holds it, and
+        // shows it in a strip at the top meanwhile.)
         .onDisappear {
             dictation?.stop()
-            call?.hangUp()
-            UIApplication.shared.isIdleTimerDisabled = false
         }
-        // A call lasts while this conversation is in front: leaving the
-        // app hangs up, and the screen stays on meanwhile.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { call?.hangUp() }
-        }
-        .onChange(of: call?.state) { _, state in
-            UIApplication.shared.isIdleTimerDisabled = state != nil && state != .ended
-            guard state == .ended, let ended = call else { return }
-            callProblem = ended.problem
-            withAnimation(.snappy(duration: 0.25)) { call = nil }
-        }
+        .animation(.snappy(duration: 0.25), value: call != nil)
         .sheet(isPresented: $settingUpVoice) {
             NavigationStack { VoiceSettingsScreen(closes: true) }
         }
@@ -588,7 +583,7 @@ struct ConversationBody: View {
     // MARK: Speaking
 
     private func toggleDictation() {
-        callProblem = nil
+        app.forgetCallProblem()
         let dictation = dictation ?? Dictation(listener: app.speechListener())
         self.dictation = dictation
         dictation.toggle(typed: { model.draft }, write: { model.draft = $0 })
@@ -641,36 +636,26 @@ struct ConversationBody: View {
 
     private func startCall() {
         dictation?.stop()
-        callProblem = nil
+        app.forgetCallProblem()
         Task {
             guard call == nil else { return }
-            guard let new = await app.call(in: model, of: session) else {
+            // (a call with another agent is hung up first: one at a time)
+            if !(await app.startCall(in: model, of: session)) {
                 // Its key could not be read after all: its settings, then.
                 settingUpVoice = true
-                return
             }
-            withAnimation(.snappy(duration: 0.25)) { call = new }
-            new.start()
         }
     }
 
     private func voiceBar(_ call: VoiceCall) -> some View {
         let stage: VoiceBarView.Stage
-        let words: String
         switch call.state {
-        case .connecting, .ended:
-            stage = .connecting
-            words = L("正在接通…", "Connecting…")
-        case .listening:
-            stage = .listening
-            words = call.muted ? L("已静音", "Muted") : L("在听", "Listening")
-        case .thinking:
-            stage = .thinking
-            words = L("在想", "Thinking")
-        case .speaking:
-            stage = .speaking
-            words = L("在说", "Speaking")
+        case .connecting, .ended: stage = .connecting
+        case .listening: stage = .listening
+        case .thinking: stage = .thinking
+        case .speaking: stage = .speaking
         }
+        let words = VoiceWords.state(of: call)
         // The talk, last few lines: what I said, what it said, what it did.
         // (An answer not begun yet shows only while it is the last line.)
         let newest = call.lines.last?.id
@@ -1169,8 +1154,9 @@ struct ConversationBody: View {
                 files: trayFiles, fileNote: fileNote,
                 attachLabel: L("加图片或文件", "Add pictures or files"), removeLabel: L("不发这个", "Remove"), retryLabel: L("再传一次", "Try again"),
                 attachChoices: attachChoices,
-                // The microphone is the call's while one is on.
-                mic: call == nil ? micState : nil,
+                // The microphone is the call's while one is on, with
+                // this agent or another.
+                mic: app.ongoing == nil ? micState : nil,
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
                 openLabel: L("看一下", "Look at"),
@@ -1211,7 +1197,13 @@ struct ConversationBody: View {
     }
 
     private var submitLabel: String {
-        if canCall { return L("语音聊天", "Voice chat") }
+        if canCall {
+            // A call with someone else is on: this one takes its place.
+            if let other = app.ongoing, other.call.state != .ended {
+                return L("挂断和 \(other.name) 的通话，改和 \(name) 语音聊天", "Hang up with \(other.name) and voice chat with \(name)")
+            }
+            return L("语音聊天", "Voice chat")
+        }
         switch model.action {
         case .send: return L("发送", "Send")
         case .steer: return L("补充", "Add")
