@@ -1484,10 +1484,10 @@ async function runMatrix(browser, size, scheme) {
 
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
-    await step("设置 · 网络代理", async () => {
+    await step("设置 · 代理", async () => {
       await go(page, "设置", narrow);
-      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "网络代理" }));
-      const card = page.locator(".app-setting-card", { hasText: "网络代理" });
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "代理" }));
+      const card = page.locator(".app-setting-card", { hasText: "代理" });
       await card.getByRole("tab", { name: "跟系统环境", selected: true }).waitFor({ timeout: 10_000 });
       await card.getByRole("tab", { name: "手动设置" }).click();
       await card.getByRole("tab", { name: "SOCKS5" }).click();

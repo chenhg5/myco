@@ -461,7 +461,7 @@ export const appApi = {
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
   openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
-  /** the App's network proxy (Settings › 网络代理) */
+  /** the App's network proxy (Settings › 代理) */
   proxy: () => request<ProxySetting>("GET", "app/proxy"),
   putProxy: (p: ProxyInput) => request<ProxySetting>("PUT", "app/proxy", p),
   testProxy: (p: ProxyInput & { url?: string }) => request<{ ok: boolean; ms?: number; reason?: string; error?: string }>("POST", "app/proxy/test", p),
