@@ -634,3 +634,37 @@ func TestBackendAutomations(t *testing.T) {
 		t.Fatalf("gone: %d", code)
 	}
 }
+
+// 「换一个来接着做」 from the App: a one-time command is made, the handover
+// waits for it, another session takes the node over with it, and the
+// handover is done; the hub's own errors come through as they are.
+func TestBackendHandovers(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	if _, err := r.admin.Register(ctx, api.RegisterRequest{Name: "worker", Binding: api.Binding{Harness: "claude", SessionID: "s-old", Workdir: "/w"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	code, m, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("test-mac")})
+	if code != 201 {
+		t.Fatalf("add hub: %d %v", code, m)
+	}
+	base := "/app/hubs/" + m["id"].(string) + "/agents/worker"
+	code, m, raw := r.do("POST", base+"/handover-link", map[string]any{"note": "new account"})
+	if code != 201 || !strings.Contains(m["url"].(string), "/h/myco_takeover_") || !strings.Contains(m["command"].(string), "curl") {
+		t.Fatalf("link: %d %s", code, raw)
+	}
+	url := m["url"].(string)
+	if code, _, raw := r.do("GET", base+"/handovers", nil); code != 200 || !strings.Contains(string(raw), `"state":"waiting"`) || strings.Contains(string(raw), "myco_takeover_") {
+		t.Fatalf("list while waiting (never the token): %d %s", code, raw)
+	}
+	anon, _ := client.New(r.hubURL, "")
+	if _, err := anon.TakeOver(ctx, api.TakeOverRequest{Token: url[strings.LastIndex(url, "/")+1:], Binding: api.Binding{Harness: "codex", SessionID: "s-new"}}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, raw := r.do("GET", base+"/handovers", nil); code != 200 || !strings.Contains(string(raw), `"state":"done"`) || !strings.Contains(string(raw), `"note":"new account"`) {
+		t.Fatalf("list once taken: %d %s", code, raw)
+	}
+	if code, m, raw := r.do("POST", base+"/handover", map[string]any{"machine": "nowhere", "cli": "codex"}); code != 404 || m["error"] != "not_found" {
+		t.Fatalf("an unknown computer is the hub's error: %d %s", code, raw)
+	}
+}
