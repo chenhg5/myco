@@ -302,7 +302,12 @@ public final class AutomationsModel {
     /// Creates one, or changes one that exists. Throws when the workspace refuses.
     public func save(_ draft: AutomationDraft, changing existing: Automation? = nil) async throws -> AutomationSaved {
         let request = draft.request(changing: existing)
-        let saved = try await existing.map { try await hub.updateAutomation($0.id, request) } ?? hub.createAutomation(request)
+        let saved: AutomationSaved
+        if let existing {
+            saved = try await hub.updateAutomation(existing.id, request)
+        } else {
+            saved = try await hub.createAutomation(request)
+        }
         await load()
         return saved
     }
