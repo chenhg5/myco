@@ -418,7 +418,7 @@ struct SettingsScreen: View {
                 NavigationLink {
                     ProxySettingsScreen()
                 } label: {
-                    LabeledContent(L("网络代理", "Proxy"), value: ProxySettingsScreen.word(for: app.proxy))
+                    LabeledContent(L("代理", "Proxy"), value: ProxySettingsScreen.word(for: app.proxy))
                 }
                 .accessibilityIdentifier("settings.proxy")
             } header: {
@@ -673,7 +673,7 @@ struct VoiceSettingsScreen: View {
     }
 }
 
-/// Settings › 网络代理: as the system has it, none, or a proxy set here,
+/// Settings › 代理: as the system has it, none, or a proxy set here,
 /// tried before it is saved. The desktop app's page, on the phone.
 struct ProxySettingsScreen: View {
     @Environment(AppModel.self) private var app
@@ -754,7 +754,7 @@ struct ProxySettingsScreen: View {
     var body: some View {
         Form {
             Section {
-                Picker(L("网络代理", "Proxy"), selection: $settings.mode) {
+                Picker(L("代理", "Proxy"), selection: $settings.mode) {
                     Text(L("跟系统", "System")).tag(ProxySettings.Mode.system)
                     Text(L("不用代理", "Off")).tag(ProxySettings.Mode.none)
                     Text(L("手动设置", "Set here")).tag(ProxySettings.Mode.manual)
@@ -845,7 +845,7 @@ struct ProxySettingsScreen: View {
                 }
             }
         }
-        .navigationTitle(L("网络代理", "Proxy"))
+        .navigationTitle(L("代理", "Proxy"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !read else { return }

@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-/// The app's network proxy (Settings › 网络代理): how it reaches its
+/// The app's network proxy (Settings › 代理): how it reaches its
 /// workspaces and the voice services. As the system has it (the iPhone's
 /// Wi-Fi proxy and VPN, the default), none, or one set here: SOCKS5, HTTP
 /// or HTTPS, with a user and password if it needs them (the password in
