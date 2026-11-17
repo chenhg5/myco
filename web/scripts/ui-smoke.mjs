@@ -741,7 +741,8 @@ async function runMatrix(browser, size, scheme) {
           await settle(page, 300);
           await chip.click({ button: "right" });
           const it = page.locator(".conv-menu").getByRole("menuitem", { name: item });
-          if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)) { await it.click(); return; }
+          if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)
+            && await it.click({ timeout: 1_500 }).then(() => true, () => false)) return;
           if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
         }
       };
