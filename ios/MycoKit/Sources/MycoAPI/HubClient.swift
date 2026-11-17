@@ -130,6 +130,28 @@ public struct HubClient: HubAPI {
         return try Self.decode(Agent.self, from: data)
     }
 
+    public func handovers(of agent: String) async throws -> [Handover] {
+        let envelope: HandoversEnvelope = try await get("/v1/agents/\(Self.segment(agent))/handovers", timeout: Self.pollTimeout)
+        return envelope.handovers
+    }
+
+    public func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult {
+        // (the hub waits up to five minutes for the new session)
+        let data = try await call(
+            "POST", "/v1/agents/\(Self.segment(agent))/handover", body: HubJSON.encoder().encode(request), timeout: 330)
+        return try Self.decode(HandoverResult.self, from: data)
+    }
+
+    public func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink {
+        struct Request: Encodable {
+            var note: String?
+            var back: String?
+        }
+        let data = try await call(
+            "POST", "/v1/agents/\(Self.segment(agent))/handover-link", body: HubJSON.encoder().encode(Request(note: note, back: back)))
+        return try Self.decode(HandoverLink.self, from: data)
+    }
+
     public var address: URL? { baseURL }
 
     public func page(_ id: String) async throws -> Page {
@@ -306,6 +328,7 @@ extension HubClient {
     }
 }
 
+struct HandoversEnvelope: Decodable { @LossyList var handovers: [Handover] }
 struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }
 struct RecentEnvelope: Decodable { @LossyList var items: [RecentItem] }

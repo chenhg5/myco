@@ -734,6 +734,7 @@ struct RootView: View {
             case .addAgent: AddAgentSheet()
             case .addComputer(let project): AddComputerSheet(project: project)
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
+            case .handover(let agent, let back): HandoverSheet(agent: agent, backID: back)
             }
         }
         .fullScreenCover(item: $router.page) { page in

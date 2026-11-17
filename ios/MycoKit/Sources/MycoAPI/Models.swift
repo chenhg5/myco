@@ -108,13 +108,22 @@ public struct Machine: Codable, Sendable, Hashable, Identifiable {
     public var hostname: String?
     public var os: String?
     public var online: Bool
+    /// It can start sessions when asked (its machine node is there).
+    public var canSpawn: Bool?
+    /// The myco it runs ("v0.19.24").
+    public var mycoVersion: String?
 
-    public init(id: String, name: String, hostname: String? = nil, os: String? = nil, online: Bool = true) {
+    public init(
+        id: String, name: String, hostname: String? = nil, os: String? = nil, online: Bool = true, canSpawn: Bool? = nil,
+        mycoVersion: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.hostname = hostname
         self.os = os
         self.online = online
+        self.canSpawn = canSpawn
+        self.mycoVersion = mycoVersion
     }
 }
 
@@ -631,5 +640,112 @@ public struct PageFile: Sendable, Hashable {
         self.data = data
         self.contentType = contentType
         self.status = status
+    }
+}
+
+/// One session of a handover: where it ran and what it ran with.
+public struct HandoverSide: Codable, Sendable, Hashable {
+    public var binding: Binding?
+    public var machineId: String?
+    public var machineName: String?
+    public var runtime: Runtime?
+
+    public init(binding: Binding? = nil, machineId: String? = nil, machineName: String? = nil, runtime: Runtime? = nil) {
+        self.binding = binding
+        self.machineId = machineId
+        self.machineName = machineName
+        self.runtime = runtime
+    }
+}
+
+/// One change of the session behind an agent (「换一个来接着做」, hubs
+/// after v0.19.22): its name, conversations and projects stay; the session
+/// that answers for it changes.
+public struct Handover: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var agent: String
+    public var at: Date
+    /// Who started it: a member's name, "admin", or an agent.
+    public var by: String?
+    public var note: String?
+    public var from: HandoverSide?
+    /// Empty while `state` is waiting.
+    public var to: HandoverSide?
+    /// waiting (a command made, nobody ran it yet) | done | expired.
+    public var state: String
+    public var doneAt: Date?
+    /// The tasks that went back to the queue when it was taken.
+    @LossyList public var openTasks: [String]
+    /// The handover this one undid (a switch back), if any.
+    public var back: String?
+
+    public init(
+        id: String, agent: String, at: Date, by: String? = nil, note: String? = nil, from: HandoverSide? = nil, to: HandoverSide? = nil,
+        state: String, doneAt: Date? = nil, openTasks: [String] = [], back: String? = nil
+    ) {
+        self.id = id
+        self.agent = agent
+        self.at = at
+        self.by = by
+        self.note = note
+        self.from = from
+        self.to = to
+        self.state = state
+        self.doneAt = doneAt
+        self.openTasks = openTasks
+        self.back = back
+    }
+}
+
+/// A one-time take-over command (a day). The token is only inside the
+/// commands, shown once: it is as good as the agent's own credential.
+public struct HandoverLink: Codable, Sendable, Hashable {
+    public var handover: Handover
+    public var command: String?
+    public var commandPs1: String?
+
+    public init(handover: Handover, command: String? = nil, commandPs1: String? = nil) {
+        self.handover = handover
+        self.command = command
+        self.commandPs1 = commandPs1
+    }
+}
+
+/// A new session on a computer takes an agent over. `back`: the session
+/// that handover replaced takes it back instead (the rest comes from it).
+public struct HandoverRequest: Codable, Sendable, Hashable {
+    /// A computer's id or name.
+    public var machine: String
+    public var cli: String?
+    public var dir: String?
+    public var note: String?
+    public var back: String?
+
+    public init(machine: String, cli: String? = nil, dir: String? = nil, note: String? = nil, back: String? = nil) {
+        self.machine = machine
+        self.cli = cli
+        self.dir = dir
+        self.note = note
+        self.back = back
+    }
+}
+
+/// What a handover on a computer answers: it is done, and what the new
+/// session said after reading the handover note.
+public struct HandoverResult: Codable, Sendable, Hashable {
+    public struct Spawn: Codable, Sendable, Hashable {
+        public var reply: String?
+
+        public init(reply: String? = nil) {
+            self.reply = reply
+        }
+    }
+
+    public var handover: Handover
+    public var spawn: Spawn?
+
+    public init(handover: Handover, spawn: Spawn? = nil) {
+        self.handover = handover
+        self.spawn = spawn
     }
 }
