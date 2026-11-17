@@ -32,6 +32,17 @@ struct AgentScreen: View {
                     }
                     .accessibilityIdentifier("conversation.title")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: name, project: nil)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel(L("更多", "More"))
+                    .accessibilityIdentifier("conversation.more")
+                }
             }
     }
 }
@@ -117,6 +128,11 @@ struct ProjectScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button(L("项目资料", "About this project"), systemImage: "doc.text") { router.push(.projectInfo(name)) }
+                    if let project = session.project(name), let lead = session.coordinator(of: project) {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: lead, project: name)
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                 }

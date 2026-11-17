@@ -485,6 +485,70 @@ public final class ConversationModel {
         return !page.messages.isEmpty
     }
 
+    // MARK: Export
+
+    /// A conversation written out as a file.
+    public struct Exported: Sendable, Hashable {
+        public var name: String
+        public var text: String
+        public var messages: Int
+    }
+
+    /// The most messages one export reads back to.
+    static let exportLimit = 5_000
+
+    /// The whole conversation as Markdown: every page of it, not only the
+    /// ones on screen (which stay as they are), without what was taken
+    /// back or taken out of my view.
+    /// - Parameters:
+    ///   - steps: fold each task's tool calls under it.
+    ///   - title: the file's heading ("和 X 的对话").
+    ///   - with: whom it is with, for the file's name.
+    ///   - name: a name as the chat shows it.
+    public func export(steps: Bool, title: String, with whom: String, name: (String) -> String) async throws -> Exported {
+        let me = self.me, hub = session.hub
+        var all = known
+        var more = all.isEmpty || hasEarlier
+        while more, all.count < Self.exportLimit {
+            let page = try await hub.exchanges(between: me, and: agent, before: all.values.map(\.createdAt).min())
+            let before = all.count
+            for message in page.messages { all[message.id] = message }
+            more = page.more && all.count > before
+        }
+        let hidden = session.hidden
+        var shown = all.values.filter { message in
+            if withdrawn.contains(message.id) || hidden.contains(message.id) { return false }
+            if message.type == "progress" || message.type == "steer", let task = message.replyTo, hidden.contains(task) { return false }
+            return true
+        }
+        // (what waits behind a task, or was taken back before its turn, is
+        // not part of the conversation)
+        let waiting = Set(ConversationBuilder.queuedBehind(shown).map(\.id)).union(ConversationBuilder.neverSent(shown, me: me))
+        shown.removeAll { waiting.contains($0.id) }
+        var taken: [String: [ConversationExport.Step]] = [:]
+        if steps {
+            let tasks = shown.filter { $0.type == "task" }.map(\.id)
+            var events = traces.filter { settled.contains($0.key) }
+            // A few at a time: a long conversation has many tasks.
+            let missing = tasks.filter { events[$0] == nil }
+            for start in stride(from: 0, to: missing.count, by: 6) {
+                let batch = Array(missing[start..<min(start + 6, missing.count)])
+                // (a task without a run has no steps: not a failure)
+                let fetched = await Self.gather(batch) { id in try? await hub.trace(of: id, after: 0) }
+                for (id, trace) in fetched { events[id] = trace.events }
+                try Task.checkCancellation()
+            }
+            for id in tasks {
+                let list = ConversationExport.steps(of: events[id] ?? [])
+                if !list.isEmpty { taken[id] = list }
+            }
+        }
+        return Exported(
+            name: ConversationExport.fileName(with: whom),
+            text: ConversationExport.markdown(shown, title: title, name: name, steps: taken),
+            messages: shown.count)
+    }
+
     /// Someone who is not an agent: what such a one says is a message,
     /// never a handoff card.
     private func isPerson(_ name: String) -> Bool {

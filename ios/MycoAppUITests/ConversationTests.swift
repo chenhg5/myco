@@ -522,11 +522,19 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(run.label.contains("GPT-6 Sol · High"), run.label)
         snap("run-choice")
         run.tap()
-        let other = app.buttons["GPT-6"]
-        XCTAssertTrue(other.waitForExistence(timeout: 5), "a tap offers the models")
-        XCTAssertTrue(app.buttons["Follow this computer"].exists)
-        XCTAssertTrue(app.buttons["Very high"].exists, "and the efforts")
+        // Two rows that open: the model, and the effort.
+        let models = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Model")).firstMatch
+        XCTAssertTrue(models.waitForExistence(timeout: 5), "a tap offers to switch the model")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Effort")).firstMatch.exists, "and the effort")
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "applies from its next run")).firstMatch.exists,
+            "with what it runs on now, and when a switch applies")
         snap("run-choice-menu")
+        models.tap()
+        let other = app.buttons["GPT-6"]
+        XCTAssertTrue(other.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Follow this computer"].exists)
+        snap("run-choice-models")
         other.tap()
         expectation(for: NSPredicate(format: "label CONTAINS %@", "GPT-6 · High"), evaluatedWith: run)
         waitForExpectations(timeout: 10)
@@ -542,6 +550,29 @@ final class ConversationTests: XCTestCase {
         let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "/model")).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 5), "a tap says where it is switched")
         snap("run-choice-note")
+    }
+
+    @MainActor
+    func testAConversationIsExportedAsAFile() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let more = app.buttons["conversation.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20))
+        more.tap()
+        let entry = app.buttons["Export the conversation"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        let submit = app.buttons["export.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["export.steps"].exists, "the agents' steps can go along")
+        snap("export-sheet")
+        submit.tap()
+        // Written, and handed to the system's share sheet.
+        let done = app.staticTexts["export.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        XCTAssertTrue(done.label.contains("Exported 2 messages"), done.label)
+        XCTAssertTrue(done.label.hasSuffix(".md"), done.label)
+        sleep(2)
+        snap("export-share")
     }
 
     @MainActor

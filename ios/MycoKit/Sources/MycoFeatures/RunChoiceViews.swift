@@ -19,25 +19,27 @@ struct RunChoiceButton: View {
         Group {
             if choice.kind == .mine {
                 Menu {
-                    Section(L("模型", "Model")) {
-                        Picker(L("模型", "Model"), selection: model) {
-                            Text(L("跟随电脑设置", "Follow this computer")).tag("")
-                            ForEach(choice.models, id: \.self) { Text(RunChoice.short($0)).tag($0) }
-                        }
-                        .pickerStyle(.inline)
-                        .labelsHidden()
+                    // Two rows that open, each saying what is chosen: the
+                    // lists are too long to lay out one under the other.
+                    Picker(selection: model) {
+                        Text(L("跟随电脑设置", "Follow this computer")).tag("")
+                        ForEach(choice.models, id: \.self) { Text(RunChoice.short($0)).tag($0) }
+                    } label: {
+                        Label(L("模型", "Model"), systemImage: "cpu")
                     }
-                    Section(L("推理强度", "Effort")) {
-                        Picker(L("推理强度", "Effort"), selection: effort) {
-                            Text(L("默认", "Default")).tag("")
-                            ForEach(choice.efforts, id: \.self) { Text(RunChoice.effortLabel($0)).tag($0) }
-                        }
-                        .pickerStyle(.inline)
-                        .labelsHidden()
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("composer.run.model")
+                    Picker(selection: effort) {
+                        Text(L("默认", "Default")).tag("")
+                        ForEach(choice.efforts, id: \.self) { Text(RunChoice.effortLabel($0)).tag($0) }
+                    } label: {
+                        Label(L("推理强度", "Effort"), systemImage: "gauge.with.dots.needle.33percent")
                     }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("composer.run.effort")
                     // What it runs with now, and when a switch applies.
                     Section {
-                        Button(choice.note) {}.disabled(true)
+                        Text(choice.note)
                     }
                 } label: {
                     label

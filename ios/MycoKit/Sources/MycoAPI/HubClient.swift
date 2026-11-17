@@ -130,6 +130,39 @@ public struct HubClient: HubAPI {
         return try Self.decode(Agent.self, from: data)
     }
 
+    public func automations() async throws -> [Automation] {
+        let envelope: AutomationsEnvelope = try await get("/v1/console/automations", timeout: Self.pollTimeout)
+        return envelope.automations
+    }
+
+    public func automation(_ id: String) async throws -> AutomationDetail {
+        try await get("/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("POST", "/v1/console/automations", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("PATCH", "/v1/console/automations/\(Self.segment(id))", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func deleteAutomation(_ id: String) async throws {
+        _ = try await call("DELETE", "/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func runAutomation(_ id: String) async throws -> AutomationRun {
+        let data = try await call("POST", "/v1/console/automations/\(Self.segment(id))/run")
+        return try Self.decode(AutomationRun.self, from: data)
+    }
+
+    /// An id as one segment of a path.
+    private static func segment(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? id
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -230,6 +263,7 @@ extension HubClient {
     }
 }
 
+struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }
 struct RecentEnvelope: Decodable { @LossyList var items: [RecentItem] }
 struct ExchangeEnvelope: Decodable {

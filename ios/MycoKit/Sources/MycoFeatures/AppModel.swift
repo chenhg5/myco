@@ -732,6 +732,7 @@ struct RootView: View {
             case .workspace: WorkspaceSheet()
             case .memberCard(let name): MemberCardSheet(name: name)
             case .addAgent: AddAgentSheet()
+            case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             }
         }
         // Refresh only while the app is in front.
