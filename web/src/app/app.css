@@ -7730,30 +7730,28 @@ body.is-resizing {
 /* Tucked away (收起): the page panel stays (its pages keep going), hidden;
    a small button in the corner brings it back. */
 .fp-panel[data-state="closed"] { display: none; }
-.pg-restore {
-  position: fixed;
-  right: 16px;
-  bottom: 96px;
-  z-index: 50;
+/* The page panel's toggle, at the top bar's right end (the panel is one
+   for the whole App): quiet; pressed while the panel shows. */
+.pg-toggle {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  max-width: 260px;
-  height: 34px;
-  padding: 0 12px 0 10px;
+  gap: 5px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 8px;
   border: 0;
-  border-radius: 999px;
-  background: var(--card);
-  box-shadow: var(--pop-shadow);
-  color: var(--fg);
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
+  opacity: 0.85;
   cursor: default;
-  animation: ms-in 0.18s ease-out;
 }
-.pg-restore:hover { box-shadow: var(--pop-shadow), 0 0 0 1px var(--line); }
-.pg-restore:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.pg-restore-icon { display: inline-flex; color: var(--green); }
-.pg-restore-icon svg { width: 14px; height: 14px; }
-.pg-restore-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pg-restore-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--pill); color: var(--fg-2); font-size: 11px; line-height: 18px; text-align: center; }
+.pg-toggle svg { width: 15px; height: 15px; }
+.pg-toggle:hover { background: var(--nav-hover); color: var(--fg-2); opacity: 1; }
+.pg-toggle.is-on { background: var(--pill); color: var(--fg); opacity: 1; }
+.pg-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pg-toggle-count { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--pill); color: var(--fg-2); font-size: 10.5px; line-height: 16px; text-align: center; }
+.pg-toggle.is-on .pg-toggle-count { background: var(--card); }
