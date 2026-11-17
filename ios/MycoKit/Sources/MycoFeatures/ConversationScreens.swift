@@ -494,7 +494,9 @@ struct ConversationBody: View {
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             if model.unreachable != nil {
-                StaleBanner(L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."))
+                StaleBanner(
+                    L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
+                    details: .of(model.unreachableDetail))
                     .accessibilityIdentifier("conversation.stale")
             }
         }
@@ -1029,9 +1031,8 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
-            if let problem = model.problem {
-                Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let failure = model.failure {
+                FailureLine(failure: failure)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             if let ids = deleted {

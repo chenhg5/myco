@@ -91,9 +91,14 @@ public final class AppModel {
     /// Why joining did not work, in words for the person.
     public struct JoinFailure: Error, Sendable {
         public var message: String
+        /// What to do about it, and the raw reason, when there are any.
+        public var advice: String?
+        public var detail: String?
 
-        public init(message: String) {
+        public init(message: String, advice: String? = nil, detail: String? = nil) {
             self.message = message
+            self.advice = advice
+            self.detail = detail
         }
     }
 
@@ -534,7 +539,13 @@ public final class AppModel {
         } catch JoinError.notALink {
             throw JoinFailure(message: L("这不是添加设备的链接。它应该像 https://你的工作区/c/myco_pair_…", "This is not an \"add a device\" link. It looks like https://your-workspace/c/myco_pair_…"))
         } catch JoinError.refused(let reason) {
-            throw JoinFailure(message: L("工作区没有接受这个链接：\(reason)", "The workspace did not accept this link: \(reason)"))
+            throw JoinFailure(message: L("工作区没有接受这个链接：\(reason)", "The workspace did not accept this link: \(reason)")) catch JoinError.unreachable(let detail) {
+            // Not a bad link: the workspace did not answer.
+            throw JoinFailure(
+                message: L("暂时连不上这个工作区，或者它响应太慢。", "Cannot reach this workspace right now, or it is answering too slowly."),
+                advice: L("链接还没用掉，等一下再点「加入」。一直这样的话，看看手机的网络，或者到设置 ›「代理」里看看。",
+                          "The link was not used up: tap Join again in a moment. If it keeps happening, check this phone's network, or look at Settings › Proxy."),
+                detail: detail)
         }
         guard let hub = await book.hub(of: record.id) else {
             throw JoinFailure(message: L("加入了，但没能保存在这台设备上。", "Joined, but it could not be saved on this device."))

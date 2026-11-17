@@ -966,7 +966,8 @@ struct AddAgentSheet: View {
     @Environment(WorkspaceSession.self) private var session
     @State private var copied = false
     @State private var link: JoinLink?
-    @State private var problem: String?
+    @State private var failure: Failure?
+    @State private var attempt = 0
 
     /// What to tell an agent so it joins: one command when the workspace
     /// guides agents itself, the steps spelled out for older ones.
@@ -1004,8 +1005,14 @@ struct AddAgentSheet: View {
             Group {
                 if link != nil {
                     Text(sentence).textSelection(.enabled)
-                } else if let problem {
-                    Text(problem).foregroundStyle(MycoColor.red)
+                } else if let failure {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("没能拿到加入链接。", "Could not make a join link.")).foregroundStyle(MycoColor.fg)
+                        FailureLine(failure: failure) {
+                            self.failure = nil
+                            attempt += 1
+                        }
+                    }
                 } else {
                     // The sentence's shape while the workspace makes the link.
                     Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
@@ -1043,11 +1050,14 @@ struct AddAgentSheet: View {
         // As tall as what is in it: the buttons sit near the bottom edge.
         .fittedSheet()
         .sensoryFeedback(.success, trigger: copied) { _, now in now }
-        .task {
+        // (and again each time "重试" is tapped)
+        .task(id: attempt) {
             do {
                 link = try await session.hub.joinLink()
+            } catch is CancellationError {
+                // the sheet was closed
             } catch {
-                problem = L("没能拿到加入链接：", "Could not make a join link: ") + ((error as? HubError)?.message ?? error.localizedDescription)
+                failure = Failure.of(error, canRetry: true)
             }
         }
     }
@@ -1094,7 +1104,7 @@ struct JoinSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var link = ""
     @State private var working = false
-    @State private var problem: String?
+    @State private var problem: Failure?
 
     var body: some View {
         NavigationStack {
@@ -1118,7 +1128,7 @@ struct JoinSheet: View {
                     .tint(MycoColor.button)
                 }
                 if let problem {
-                    Text(problem).font(.footnote).foregroundStyle(MycoColor.red).accessibilityIdentifier("join.problem")
+                    FailureLine(failure: problem, id: "join.problem")
                 }
                 Button(working ? L("正在加入…", "Joining…") : L("加入", "Join")) { join() }
                     .buttonStyle(PrimaryButtonStyle())
@@ -1148,9 +1158,9 @@ struct JoinSheet: View {
                 try await app.join(link: link)
                 dismiss()
             } catch let failure as AppModel.JoinFailure {
-                problem = failure.message
+                problem = Failure(failure.message, advice: failure.advice, detail: failure.detail)
             } catch {
-                problem = L("没能加入，请再试一次。", "Could not join. Try again.")
+                problem = Failure(L("没能加入，请再试一次。", "Could not join. Try again."))
             }
             working = false
         }

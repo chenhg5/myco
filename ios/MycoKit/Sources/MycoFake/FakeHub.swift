@@ -350,8 +350,20 @@ public actor FakeHub: HubAPI {
         return agents[index].agent
     }
 
+    /// How many times a join link is refused as a gateway in front of the
+    /// hub would (502), before one is made.
+    private var linkFailures = 0
+
+    public func setJoinLinkFailures(_ count: Int) {
+        linkFailures = count
+    }
+
     public func joinLink() async throws -> JoinLink {
         try await check()
+        if linkFailures > 0 {
+            linkFailures -= 1
+            throw HubError(error: "http_502", message: "502 Bad Gateway nginx", status: 502)
+        }
         return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
     }
 

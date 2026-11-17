@@ -54,6 +54,8 @@ public final class ConversationModel {
     /// Why the last look at the workspace failed; nil while it answers.
     /// What is on the page is then from before.
     public private(set) var unreachable: String?
+    /// The same, with the raw reason for whoever wants to see it.
+    public private(set) var unreachableDetail: String?
     /// A refresh the person asked for is under way.
     public private(set) var refreshing = false
 
@@ -75,8 +77,11 @@ public final class ConversationModel {
     /// they are simply there, they do not arrive.
     public private(set) var placed: Set<String> = []
     private var sends = 0
-    /// Why the last send, steer or stop did not go through.
-    public private(set) var problem: String?
+    /// Why the last send, steer or stop did not go through: in words,
+    /// with the raw reason for whoever wants it.
+    public private(set) var failure: Failure?
+    /// The same, as one string.
+    public var problem: String? { failure?.text }
     /// A message waiting for the open task to finish.
     public struct Waiting: Identifiable, Hashable, Sendable {
         public var id: String
@@ -202,10 +207,10 @@ public final class ConversationModel {
             let sent = try await session.hub.send(SendRequest(
                 to: task.to, body: task.body, threadId: task.threadId, attachments: task.attachments.map(\.fileId)))
             known[sent.id] = sent
-            problem = nil
+            failure = nil
             show(cards: cards)
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
     }
 
@@ -263,7 +268,7 @@ public final class ConversationModel {
 
     /// Something picked could not be read on this device: said under the input.
     public func couldNotRead(_ name: String) {
-        problem = L("读不了「\(name)」", "Could not read \"\(name)\"")
+        failure = Failure(L("读不了「\(name)」", "Could not read \"\(name)\""))
     }
 
     /// Takes a file off the next message.
@@ -375,6 +380,7 @@ public final class ConversationModel {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
             failures = 0
             unreachable = nil
+            unreachableDetail = nil
             for message in page.messages { known[message.id] = message }
             if !wentBack { hasEarlier = page.more }
             newestPage = page.messages
@@ -409,6 +415,7 @@ public final class ConversationModel {
             failures += 1
             if failures >= 2 || refreshing {
                 unreachable = (error as? HubError)?.message ?? error.localizedDescription
+                unreachableDetail = Failure.of(error).detail ?? unreachable
             }
             loaded = true
         }
@@ -726,7 +733,7 @@ public final class ConversationModel {
             case .stop:
                 if let task = openTask { try await session.hub.stop(task.id) }
             }
-            problem = nil
+            failure = nil
             if action != .stop { dropSentPayloads() }
             // The workspace has it: the real message takes the place of
             // the one shown as being sent (`show`), with no wait between.
@@ -738,7 +745,7 @@ public final class ConversationModel {
             // Give it all back: nothing typed or picked is lost to a failed send.
             outgoing.removeAll { $0.id == going }
             if action != .stop { giveBack(text, files) }
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -837,9 +844,9 @@ public final class ConversationModel {
         sending = true
         do {
             try await session.hub.stop(task.id)
-            problem = nil
+            failure = nil
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -862,14 +869,14 @@ public final class ConversationModel {
         sending = true
         do {
             _ = try await session.hub.send(request(body, after: task.id, attachments: attachments))
-            problem = nil
+            failure = nil
             dropSentPayloads()
         } catch let error as HubError where error.error == "invalid_argument" {
             queued.append(Queued(body: body, files: files.filter { if case .ready = $0.state { return true } else { return false } }))
             dropSentPayloads()
         } catch {
             giveBack(text, files)
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -883,9 +890,9 @@ public final class ConversationModel {
             do {
                 try await session.hub.stop(item.id)
                 withdrawn.insert(item.id)
-                problem = nil
+                failure = nil
             } catch {
-                problem = (error as? HubError)?.message ?? error.localizedDescription
+                failure = Failure.of(error)
                 return
             }
             if edit { restore(item.files) }
@@ -927,9 +934,9 @@ public final class ConversationModel {
     public func setHidden(_ ids: [String], hidden: Bool = true) async {
         do {
             try await session.setHidden(ids, hidden: hidden)
-            problem = nil
+            failure = nil
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         show(cards: cards)
     }
@@ -944,7 +951,7 @@ public final class ConversationModel {
             queued.removeFirst()
             return true
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
             return false
         }
     }

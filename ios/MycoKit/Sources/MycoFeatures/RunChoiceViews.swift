@@ -19,17 +19,26 @@ struct RunChoiceButton: View {
         Group {
             if choice.kind == .mine {
                 Menu {
-                    Picker(L("模型", "Model"), selection: model) {
-                        Text(L("跟随电脑设置", "Follow this computer")).tag("")
-                        ForEach(choice.models, id: \.self) { Text(RunChoice.short($0)).tag($0) }
+                    Section(L("模型", "Model")) {
+                        Picker(L("模型", "Model"), selection: model) {
+                            Text(L("跟随电脑设置", "Follow this computer")).tag("")
+                            ForEach(choice.models, id: \.self) { Text(RunChoice.short($0)).tag($0) }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
                     }
-                    .pickerStyle(.inline)
-                    Picker(L("推理强度", "Effort"), selection: effort) {
-                        Text(L("默认", "Default")).tag("")
-                        ForEach(choice.efforts, id: \.self) { Text(RunChoice.effortLabel($0)).tag($0) }
+                    Section(L("推理强度", "Effort")) {
+                        Picker(L("推理强度", "Effort"), selection: effort) {
+                            Text(L("默认", "Default")).tag("")
+                            ForEach(choice.efforts, id: \.self) { Text(RunChoice.effortLabel($0)).tag($0) }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
                     }
-                    .pickerStyle(.inline)
-                    Section(choice.note) {}
+                    // What it runs with now, and when a switch applies.
+                    Section {
+                        Button(choice.note) {}.disabled(true)
+                    }
                 } label: {
                     label
                 }

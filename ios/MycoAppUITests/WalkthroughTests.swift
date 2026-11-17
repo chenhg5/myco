@@ -431,4 +431,31 @@ final class WalkthroughTests: XCTestCase {
         XCTAssertTrue(sentence.waitForExistence(timeout: 5), "the sentence carries the workspace's join link")
         XCTAssertTrue(app.buttons["Copy"].isEnabled)
     }
+
+    @MainActor
+    func testARequestThatFailsSaysWhyAndCanBeTriedAgain() {
+        // The first join link fails as a gateway in front of the workspace
+        // would: said in words, the raw reason one tap away, and a button
+        // to try again.
+        let app = launch(["-myco-trouble", "links"])
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        app.buttons["Add an agent"].firstMatch.tap()
+        let words = app.staticTexts["failure.words"]
+        XCTAssertTrue(words.waitForExistence(timeout: 5))
+        XCTAssertEqual(words.label, "Cannot reach the workspace right now, or it is answering too slowly.")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Bad Gateway")).firstMatch.exists, "the raw reason is not what is said")
+        XCTAssertFalse(app.buttons["Copy"].isEnabled, "there is no link to copy yet")
+        app.buttons["failure.details"].tap()
+        let raw = app.staticTexts["failure.detail"]
+        XCTAssertTrue(raw.waitForExistence(timeout: 3), "but it is one tap away")
+        XCTAssertTrue(raw.label.contains("HTTP 502"), raw.label)
+        XCTAssertTrue(raw.label.contains("502 Bad Gateway nginx"), raw.label)
+        XCTAssertTrue(app.buttons["failure.copy"].exists, "to copy and pass on")
+        shot("failure-details")
+        app.buttons["failure.retry"].tap()
+        let sentence = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "curl -fsSL https://demo.myco.example/j/")).firstMatch
+        XCTAssertTrue(sentence.waitForExistence(timeout: 5), "trying again got the link")
+        XCTAssertFalse(words.exists)
+        XCTAssertTrue(app.buttons["Copy"].isEnabled)
+    }
 }

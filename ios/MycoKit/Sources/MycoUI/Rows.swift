@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A row of a list: a face, two lines, and on the right a time and a state.
 public struct PersonRow: View {
@@ -95,21 +96,89 @@ public struct AvatarStack: View {
 /// A thin strip under the top bar: the workspace cannot be reached, and
 /// what is shown is from earlier.
 public struct StaleBanner: View {
-    let text: String
+    /// The raw reason, one tap away, and what its buttons are called.
+    public struct Details {
+        let text: String
+        let show: String
+        let hide: String
+        let copy: String
 
-    public init(_ text: String) {
+        public init(_ text: String, show: String, hide: String, copy: String) {
+            self.text = text
+            self.show = show
+            self.hide = hide
+            self.copy = copy
+        }
+    }
+
+    let text: String
+    let details: Details?
+    @State private var open = false
+
+    public init(_ text: String, details: Details? = nil) {
         self.text = text
+        self.details = details
     }
 
     public var body: some View {
-        HStack(spacing: 8) {
-            StatusDot(.failed, size: 7)
-            Text(text).font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(2)
-            Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                StatusDot(.failed, size: 7)
+                Text(text).font(.footnote).foregroundStyle(MycoColor.fg2).lineLimit(2)
+                Spacer(minLength: 0)
+                if let details {
+                    Button(open ? details.hide : details.show) { withAnimation(.snappy(duration: 0.2)) { open.toggle() } }
+                        .font(.footnote).foregroundStyle(MycoColor.muted)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("failure.details")
+                }
+            }
+            if open, let details {
+                RawReason(details.text, copyLabel: details.copy)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(MycoColor.redSoft)
+    }
+}
+
+/// Why something failed, as it came (status, code, message): small, in a
+/// fixed-width face, with a button that copies it to pass on.
+public struct RawReason: View {
+    let text: String
+    let copyLabel: String
+    @State private var copied = false
+
+    public init(_ text: String, copyLabel: String) {
+        self.text = text
+        self.copyLabel = copyLabel
+    }
+
+    public var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(text).font(.caption.monospaced()).foregroundStyle(MycoColor.fg2)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("failure.detail")
+            Button {
+                UIPasteboard.general.string = text
+                copied = true
+            } label: {
+                Image(systemName: copied ? "checkmark" : "square.on.square")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(copied ? MycoColor.green : MycoColor.muted)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(copyLabel)
+            .accessibilityIdentifier("failure.copy")
+        }
+        .padding(.leading, 10).padding(.trailing, 4).padding(.vertical, 6)
+        .background(MycoColor.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .sensoryFeedback(.success, trigger: copied) { _, now in now }
     }
 }
 

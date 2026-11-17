@@ -30,6 +30,8 @@ public final class WorkspaceSession {
     public private(set) var loadedAt: Date?
     /// Why it cannot be reached now; what is shown is from `loadedAt`.
     public private(set) var problem: String?
+    /// The raw reason (status, code, message), for whoever wants to see it.
+    public private(set) var problemDetail: String?
 
     /// Messages this person took out of their own view (删除): kept by
     /// the workspace, so all their devices agree; by this device alone
@@ -187,6 +189,7 @@ public final class WorkspaceSession {
             self.recent = r
             loadedAt = Date()
             problem = nil
+            problemDetail = nil
             await loadHidden()
             refreshed?(self)
             if readBaseline == nil {
@@ -197,10 +200,12 @@ public final class WorkspaceSession {
             await save()
         } catch let error as HubError {
             problem = error.message
+            problemDetail = Failure.of(error).detail ?? error.message
         } catch is CancellationError {
             // leaving the page is not a problem to report
         } catch {
             problem = error.localizedDescription
+            problemDetail = problem
         }
     }
 
