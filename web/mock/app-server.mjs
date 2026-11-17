@@ -195,6 +195,27 @@ let proxySetting = { mode: "system" };
 let proxyPassword = "";
 // Links the App asked to open in the browser (/app/open-url).
 const openedLinks = [];
+// Pages agents published (/app/hubs/{id}/pages), and the keys the page
+// panel opened them under (served on this port at /p/<key>/…).
+const pageFiles = (n) => ({
+  "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
+<div id="bars"></div>
+<section><h2>新功能</h2><ul><li>对话页支持 Markdown 表格与代码块</li><li>本机会话一键接入</li></ul></section>
+<section><h2>修复</h2><ul><li>runner 断线后重连</li></ul></section>
+<p><a href="https://github.com/chenhg5/myco/releases" id="out">看完整的变更记录</a></p></main>
+<script src="app.js"></script></body></html>`,
+  "style.css": "body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:640px;margin:0 auto;padding:28px 24px}h1{margin:0;font-size:24px}.sub{color:#85858d;margin:4px 0 20px}.bar{display:flex;align-items:center;gap:10px;margin:6px 0}.bar i{display:block;height:14px;border-radius:4px;background:#3a9a78}h2{font-size:16px;margin:22px 0 6px}a{color:#2f8a68}",
+  "app.js": `const data=[["新功能",${n + 5}],["修复",${n + 2}],["文档",3]];document.getElementById("bars").innerHTML=data.map(([k,v])=>'<div class="bar"><span style="width:56px">'+k+'</span><i style="width:'+v*24+'px"></i><b>'+v+'</b></div>').join("");`,
+});
+const pages = new Map([["pg_release", {
+  id: "pg_release", name: "v0.16.8 发布说明", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_release", created_at: iso(19000), updated_at: iso(19000), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 3, size: 2048, sha256: "a1", by: "release-cloud", at: iso(19000) }],
+}]]);
+const pageKeys = new Map();
+const pageHelperJS = `(function(){function out(u){try{var x=new URL(u,location.href);return x.origin!==location.origin&&/^(https?|mailto):$/.test(x.protocol)?x.href:""}catch(e){return""}}
+document.addEventListener("click",function(e){if(e.defaultPrevented||e.button!==0)return;var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var u=out(a.getAttribute("href"));if(!u)return;e.preventDefault();parent.postMessage({myco:"open-url",url:u},"*")},true)})();`;
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -347,6 +368,12 @@ const consoleThreads = {
       }, null, 2),
       created_at: iso(8700), updated_at: iso(8700),
     }),
+  ],
+  // A page an agent published (myco page publish): its link in the reply
+  // shows as a card and opens in the page panel.
+  th_console_page: [
+    makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "reply", status: "done", body: "做好了，发布说明的网页在这里：http://192.168.1.20:7780/pages/pg_release\n\n按「新功能 / 修复 / 文档」分了三栏，图表是页面里自己画的。", created_at: iso(19000), updated_at: iso(19000) }),
   ],
   th_console_fail: [
     makeMessage({ thread_id: "th_console_fail", from: CONSOLE, to: "docs-claude", type: "task", status: "done", body: "把 README 里的截图更新一下。", created_at: iso(15000), updated_at: iso(15000) }),
@@ -1577,6 +1604,48 @@ const server = http.createServer(async (req, res) => {
     // (port 9 stands for a proxy that is not there)
     if (body.port === 9) return send(res, 200, { ok: false, reason: "refused", error: "connection refused" });
     return send(res, 200, { ok: true, ms: 42, status: 200 });
+  }
+  // A page's files, on this port (another origin than the App's).
+  if (parts[0] === "__myco" && parts[1] === "page.js") {
+    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+    return res.end(pageHelperJS);
+  }
+  if (parts[0] === "p" && parts.length >= 2) {
+    const k = pageKeys.get(parts[1]);
+    if (!k) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
+    const file = parts.slice(2).join("/") || "index.html";
+    const body = pageFiles(k.version)[file];
+    if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
+    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : "text/javascript";
+    const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
+    res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
+    return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);
+  }
+  // /app/hubs/{id}/pages… — pages agents published (v0.19.23).
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "pages") {
+    const mine = parts[2] === "hub_studio";
+    if (parts.length === 4 && method === "GET") return send(res, 200, { pages: mine ? [...pages.values()] : [] });
+    const p = mine ? pages.get(parts[4]) : undefined;
+    if (!p) return fail(res, 404, "not_found", `page ${parts[4]} not found`);
+    if (parts.length === 5 && method === "GET") return send(res, 200, p);
+    if (parts.length === 5 && method === "DELETE") { pages.delete(p.id); res.writeHead(204); return res.end(); }
+    if (parts.length === 6 && parts[5] === "open" && method === "POST") {
+      const body = (await readBody(req)) || {};
+      const version = body.version || p.version;
+      const key = `k${Math.random().toString(36).slice(2, 12)}`;
+      pageKeys.set(key, { page: p.id, version });
+      return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/index.html`, version, latest: p.version, name: p.name, entry: "index.html" });
+    }
+    return fail(res, 404, "not_found", "no such route");
+  }
+  // (the smoke test publishes a new version, as an agent would)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "publish" && method === "POST") {
+    const p = pages.get(parts[3]);
+    if (!p) return fail(res, 404, "not_found", "no such page");
+    p.version += 1;
+    p.updated_at = iso(0);
+    p.versions.unshift({ n: p.version, entry: "index.html", files: 3, size: 2100, sha256: `a${p.version}`, by: "release-cloud", at: iso(0) });
+    return send(res, 200, p);
   }
   // /app/open-url: the desktop app opens a link in the default browser;
   // here it is only noted (GET /app/mock/opened lists them, for the smoke test).

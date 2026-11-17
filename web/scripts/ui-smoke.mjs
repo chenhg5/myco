@@ -488,6 +488,47 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // A page an agent published: its link in the reply is a card; it opens
+    // in the page panel (beside the chat when there is room), from another
+    // origin; a link in it goes to the browser; a newer version is said.
+    await step("网页 · agent 做的网页", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const card = chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" });
+      await card.waitFor({ timeout: 15_000 });
+      if (!(await card.innerText()).includes("Release (Claude 云端) 发布")) throw new Error("卡片上应写由谁发布");
+      await card.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-card");
+      await clickVisible(page, card);
+      const panel = page.locator(".pg-panel");
+      await panel.waitFor({ timeout: 10_000 });
+      const frame = page.frameLocator(".pg-frame");
+      await frame.locator("h1", { hasText: "发布说明" }).waitFor({ timeout: 15_000 });
+      if ((await frame.locator(".bar").count()) !== 3) throw new Error("网页里的脚本应该跑起来，画出三条");
+      const src = await page.locator(".pg-frame").getAttribute("src");
+      if (!src || new URL(src).origin === new URL(page.url()).origin) throw new Error(`网页应该在另一个源里打开：${src}`);
+      if (!narrow && !(await page.evaluate(() => document.documentElement.classList.contains("fp-docked")))) throw new Error("宽窗口里网页应停在对话旁边");
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-panel");
+      // A link out of the page: the browser.
+      await frame.locator("#out").dispatchEvent("click");
+      await page.waitForFunction(async () => {
+        const r = await (await fetch("/app/mock/opened")).json();
+        return r.urls.includes("https://github.com/chenhg5/myco/releases");
+      }, null, { timeout: 5_000 });
+      // A newer version: said at the top; shown when asked.
+      const v = await page.evaluate(async () => (await (await fetch("/app/mock/pages/pg_release/publish", { method: "POST" })).json()).version);
+      await panel.locator(".pg-new", { hasText: `第 ${v} 版` }).waitFor({ timeout: 25_000 });
+      await clickVisible(page, panel.locator(".pg-new").getByRole("button", { name: "看新版本" }));
+      await frame.locator(".sub", { hasText: `第 ${v} 版` }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere

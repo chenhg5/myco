@@ -1,6 +1,6 @@
 # 内置浏览器：在 App 里打开 agent 做的网页
 
-状态：设计稿，第一步待开工（2026-11-17）。
+状态：第一步（网页面板 + 发布静态网页）已做（2026-11-17，Hub v0.19.23 起）；后面几步待定。
 
 ## 1. 为什么要做
 
@@ -28,7 +28,7 @@
 1. 你让 agent "把这周的数据做成一份能翻页的报告"。
 2. agent 在它的电脑上做好一个文件夹（`index.html`、JS、CSS、图片），运行：
    ```
-   myco page publish ./report --name "周报 · 第 46 周" --project growth
+   myco page publish --dir ./report --name "周报 · 第 46 周" --project growth
    ```
    命令打印出这个网页的地址；agent 在回复里写上它。
 3. 你在对话里看到的不是一串网址，而是一张**网页卡片**：图标、名字、「由 增长分析（Claude Code）发布 · 刚刚」、「打开」。
@@ -69,8 +69,8 @@ agent 写的网页可能有意或无意地想读 App 里的东西（令牌、对
   - `pages`：id、名字、所在项目（可空）、发布者（agent）和它的主人、最新版本号、创建和更新时间、是否删除。
   - `page_versions`：网页 id、版本号、blob、sha256、大小、入口文件（默认 `index.html`）、文件清单、发布者、时间。
 - **限制**：一版最多 50 MB、2000 个文件；单个文件 20 MB；路径不能有 `..`、不能以 `/` 开头；每个工作区默认最多 200 个网页，旧版本保留最近 10 个。
-- **谁能看**：发到项目的，项目里的人和 agent 都能看；没发到项目的，发布者的主人和工作区的管理员能看，另外**收到过带它链接的消息**的人也能看（Hub 在消息里认出网页链接时记一条"分享给谁"，和附件一样）。
-- **谁能改、能删**：发布者、它的主人、管理员；项目里的网页加上项目的编辑者。
+- **谁能看**：发到项目的，能看到这个项目的人和 agent 都能看；没发到项目的，网页的主人（发布它的 agent 的主人，或者发布它的人）、主人的 agent、工作区的所有者和管理员能看。（"收到过带它链接的消息的人也能看"第一版没做：发给别人看就发到项目里。）
+- **谁能改、能删**：发布者、它的主人、主人的 agent、管理员。
 
 接口（`docs/api.md` 里写全；老客户端不受影响，老 Hub 返回 404）：
 
@@ -81,14 +81,14 @@ agent 写的网页可能有意或无意地想读 App 里的东西（令牌、对
 | `GET /v1/pages`、`GET /v1/pages/{id}` | 列出、看一个（版本列表） |
 | `GET /v1/pages/{id}/v/{n}/{path}` | 某一版里的一个文件（`n` 可以是 `latest`） |
 | `DELETE /v1/pages/{id}` | 删掉 |
-| `GET /v1/console/pages…` | console 用的同一套，权限按人算 |
+| （同一套接口） | agent 的令牌和 App 的 console 令牌都能用，权限按身份算 |
 
 `url` 是 `<hub>/pages/<id>`：在 App 里认出来就变成卡片；在别处打开（比如浏览器里），是 Hub 网页版的一页，登录后显示同一个面板。
 
 ## 7. CLI
 
 ```
-myco page publish <文件夹|单个 html> [--name …] [--project p] [--entry index.html] [--page <id>] [--dry-run]
+myco page publish --dir <文件夹|单个 html> [--name …] [--project p] [--entry index.html] [--page <id>] [--dry-run]
 myco page list [--project p]
 myco page get --page <id>
 myco page rm --page <id> [--dry-run]

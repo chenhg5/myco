@@ -35,6 +35,7 @@ import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
+import { PageHost, setPageHubs, setPageNames } from "@/app/pages";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 
@@ -103,6 +104,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, [linksViaApp]);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [hubs, setHubs] = useState<Hub[]>(initialHubs);
+  // (whose a page link is: pages.tsx)
+  setPageHubs(hubs);
   // What the hubs showed last (also from before a restart) until they answer.
   const [ov, setOv] = useState<AppOverview | null>(() => recall<AppOverview>("overview") ?? null);
   const [error, setError] = useState<unknown>(null);
@@ -263,6 +266,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
     rememberAgentHubs(out.map((r) => ({ hubId: r.hub.id, agentId: r.st.agent.id })));
     return out;
   }, [namedOv]);
+  setPageNames((hid, name) => {
+    const r = allRows.find((x) => x.hub.id === hid && x.st.agent.name === name);
+    return r ? nodeName(r.st.agent, r.hub) : name;
+  });
 
   // A workspace removed from the app is not chosen any more: the first one
   // that answers is shown instead.
@@ -824,6 +831,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         taken={(serverWs?.workspaces || []).map((w) => w.name)} onStart={createOnServer} />
 
 
+      <PageHost />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} rows={allRows} hubs={namedOv?.hubs || []} now={now}
         projects={(projects || []).filter((x) => !x.p.archived).map((x) => ({ hubId: x.hubId, name: x.p.name, title: x.p.title || x.p.name, goal: x.p.goal }))}
         onPick={(t) => {

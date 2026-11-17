@@ -144,6 +144,17 @@ export interface AutomationRun {
   trigger: "schedule" | "webhook" | "manual"; outcome: "sent" | "skipped" | "failed";
   message_id?: string; error?: string;
 }
+/** A web page published to a hub (hubs from v0.19.23): a folder of static
+ *  files, in versions, opened in the App's page panel. */
+export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }
+export interface Page {
+  id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
+  versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
+}
+/** What opening a page gives: where its files are served (a loopback origin
+ *  of the App's own), for which version. */
+export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string }
+
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;

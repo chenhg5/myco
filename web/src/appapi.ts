@@ -1,4 +1,4 @@
-import type { Automation, AutomationDetail, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageOpen, Automation, AutomationDetail, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -681,6 +681,11 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // Pages (hubs from v0.19.23; older ones answer 404): agents' web pages
+  pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
+  page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
+  deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   // Automations (hubs from v0.19.22; older ones answer 404)
   automations: (hubId: string) => request<{ automations: Automation[] }>("GET", `app/hubs/${enc(hubId)}/automations`),
   automation: (hubId: string, id: string) => request<AutomationDetail>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),

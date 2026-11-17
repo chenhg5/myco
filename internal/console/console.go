@@ -203,6 +203,9 @@ type Backend struct {
 	translate     *translator
 	proxyOnce     sync.Once
 	proxy         *proxyState
+	// pages opened in the App's panel (pages.go)
+	pagesOnce sync.Once
+	pages     *pageServer
 	// the voice assistant (voice.go)
 	voiceOnce sync.Once
 	voice     *voice
@@ -267,6 +270,7 @@ func (b *Backend) Handler() http.Handler {
 	b.workspaceRoutes(m)
 	b.voiceRoutes(m)
 	b.automationRoutes(m)
+	b.pageRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)

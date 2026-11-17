@@ -7428,3 +7428,71 @@ body.is-resizing {
   color: var(--fg-2);
   font-weight: 500;
 }
+
+/* Web pages agents publish (pages.tsx): a card under the message that
+   links one, and the page panel (the panel files open in). */
+.pg-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pg-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  padding: 8px 10px 8px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.pg-card:hover { background: var(--nav-hover); }
+.pg-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pg-card-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.pg-card-icon svg { width: 16px; height: 16px; }
+.pg-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pg-card-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-card-about { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-card-open {
+  flex: none;
+  padding: 0 9px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.pg-card:hover .pg-card-open { background: var(--pill-hover); color: var(--fg); }
+.pg-body { display: flex; flex-direction: column; }
+.pg-body .pg-frame { flex: 1; height: auto; min-height: 0; }
+.pg-new, .pg-local-note {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--card);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.pg-new span { flex: 1; }
+.pg-local-note { color: var(--muted); }
+.pg-local-note svg { flex: none; width: 13px; height: 13px; }

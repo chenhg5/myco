@@ -10,6 +10,7 @@ import { useReportsOnly } from "@/app/quietRuns";
 import { TranslatableBody } from "@/app/translate";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
+import { PageCards } from "@/app/pages";
 import { AskCard } from "@/app/AskCard";
 import { drafted, grown, Reveal } from "@/app/Reveal";
 
@@ -646,6 +647,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
                 <TranslatableBody id={r.key} body={r.text} />
                 {/* What it showed along the way: a screenshot, a draft. */}
                 {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
+                <PageCards body={r.text} />
               </div>
               {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
             </li>

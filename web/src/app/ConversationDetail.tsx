@@ -23,6 +23,7 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
+import { PageCards } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -1706,6 +1707,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
               : <MessageContent body={m.body} />}
             {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {!m.unreadable && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">
