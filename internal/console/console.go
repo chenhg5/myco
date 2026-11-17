@@ -275,6 +275,7 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)
+	b.pinRoutes(m)
 	// Messages taken out of your own view (删除), kept on the hub.
 	m.HandleFunc("GET /app/hubs/{id}/hidden", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		l, err := c.Hidden(r.Context())

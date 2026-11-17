@@ -2659,6 +2659,41 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
+    // /app/hubs/{id}/pins — what a conversation keeps at hand (置顶), the
+    // same list for both its parties (hubs from v0.20.2; MOCK_OLD_HUB: none).
+    if (parts[3] === "pins" && (parts.length === 4 || parts.length === 5)) {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "", "404 page not found");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = method === "GET" || method === "DELETE" ? null : await readBody(req);
+      const a = (body?.a || url.searchParams.get("a") || CONSOLE), w = body?.with || url.searchParams.get("with") || "";
+      if (!w) return fail(res, 400, "invalid_argument", "with whom: the conversation's other party is required");
+      const key = [a, w].sort().join("\u0000");
+      const all = (hub.pins ||= {});
+      const list = (all[key] ||= []);
+      const out = () => send(res, 200, { a, with: w, pins: list, max: 20 });
+      if (parts.length === 4 && method === "GET") return out();
+      if (parts.length === 4 && method === "POST") {
+        const same = list.find((p) => p.kind === body.kind && (p.target || "") === (body.target || "") && (p.file?.file_id || "") === (body.file?.file_id || ""));
+        if (same) { if (body.title) same.title = body.title; return send(res, 201, same); }
+        if (list.length >= 20) return fail(res, 409, "conflict", "a conversation keeps 20 pins at most");
+        if (body.kind === "link" && !/^https?:\/\/\S+$/.test(body.target || "")) return fail(res, 400, "invalid_argument", "a link is an http or https address");
+        const title = body.title || (body.kind === "link" ? body.target.replace(/^https?:\/\//, "").replace(/\/$/, "") : body.kind === "file" ? body.file?.name : body.target);
+        const p = { id: `pin_${state.counter += 1}`, kind: body.kind, title, ...(body.target ? { target: body.target } : {}), ...(body.file ? { file: body.file } : {}), added_by: body.by || a, at: iso(0) };
+        list.push(p);
+        return send(res, 201, p);
+      }
+      if (parts.length === 5 && parts[4] === "order" && method === "PUT") {
+        const byId = new Map(list.map((p) => [p.id, p]));
+        const first = (body.ids || []).map((id) => byId.get(id)).filter(Boolean);
+        all[key] = [...first, ...list.filter((p) => !first.includes(p))];
+        return send(res, 200, { a, with: w, pins: all[key], max: 20 });
+      }
+      const i = list.findIndex((p) => p.id === parts[4]);
+      if (parts.length === 5 && i < 0) return fail(res, 404, "not_found", `no pin ${parts[4]} in this conversation`);
+      if (parts.length === 5 && method === "PATCH") { list[i].title = body.title; return send(res, 200, list[i]); }
+      if (parts.length === 5 && method === "DELETE") { list.splice(i, 1); res.writeHead(204); return res.end(); }
+    }
+
     // /app/hubs/{id}/hidden — messages taken out of your own view.
     if (parts.length === 4 && parts[3] === "hidden") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");

@@ -1,4 +1,4 @@
-import type { Page, PageOpen, PageState, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageOpen, PageState, Pin, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -694,6 +694,17 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // Pins (hubs from v0.20.2; older ones answer 404): what a conversation
+  // keeps at hand, for both its parties. a: the first party (default you).
+  pins: (hubId: string, withWhom: string, a?: string) =>
+    request<PinList>("GET", `app/hubs/${enc(hubId)}/pins?with=${enc(withWhom)}${a ? `&a=${enc(a)}` : ""}`),
+  addPin: (hubId: string, p: PinCreate) => request<Pin>("POST", `app/hubs/${enc(hubId)}/pins`, p),
+  renamePin: (hubId: string, id: string, withWhom: string, title: string, a?: string) =>
+    request<Pin>("PATCH", `app/hubs/${enc(hubId)}/pins/${enc(id)}`, { with: withWhom, title, ...(a ? { a } : {}) }),
+  removePin: (hubId: string, id: string, withWhom: string, a?: string) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/pins/${enc(id)}?with=${enc(withWhom)}${a ? `&a=${enc(a)}` : ""}`),
+  orderPins: (hubId: string, withWhom: string, ids: string[], a?: string) =>
+    request<PinList>("PUT", `app/hubs/${enc(hubId)}/pins/order`, { with: withWhom, ids, ...(a ? { a } : {}) }),
   // Pages (hubs from v0.19.24; older ones answer 404): agents' web pages
   pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),

@@ -178,6 +178,18 @@ From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publis
 | `GET /v1/pages/{id}/state` | who sees it | The page's shared state (the bridge's `myco.update`): `{state, version, updated_by?, updated_at?}`; `state` is `null` and `version` `0` before anyone wrote. Kept across the page's versions |
 | `PUT /v1/pages/{id}/state` | who sees it | `{state, if_version}`: any JSON up to 256 KB, based on the version read → the new state (`version` + 1). When someone wrote since: `409 conflict` with `latest` (the current state) |
 
+## Pins
+
+From v0.20.2: what a conversation keeps at hand (置顶), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
+
+| Endpoint | Who | What |
+| --- | --- | --- |
+| `GET /v1/pins?with=&a=` | agent or person | `{a, with, pins: [{id, kind, title, target?, file?, added_by, at}], max}` in their order. `target` is the address (`link`) or the message id (`message`); `file` is an attachment `{file_id, name, size, sha256, content_type}` |
+| `POST /v1/pins` | agent or person | `{a?, with, kind, title?, target?, file?}` → `201` the pin. A link is `http`/`https` (2048 characters at most); a title is cut to 80 characters and defaults to the address, the file's name or the message id. `409 conflict` past 20 |
+| `PATCH /v1/pins/{id}` | agent or person | `{a?, with, title}` → the pin |
+| `PUT /v1/pins/order` | agent or person | `{a?, with, ids}` → the list, those named first in that order |
+| `DELETE /v1/pins/{id}?with=&a=` | agent or person | `204` |
+
 ## Automations
 
 An automation sends a task, as its owner, to one agent when its schedule comes round or its webhook is called. It runs on the hub (each workspace's own), so it fires while the owner's computers are off. The message is an ordinary task from the owner's console address (`@console:<member>`) with `automation` set: it wakes the agent as usual, and the answer lands in the owner's chat with that agent. Older hubs answer `404` on these routes.

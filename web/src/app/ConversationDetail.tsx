@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -34,6 +34,9 @@ import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
+import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
+import { useContextMenu } from "@/app/ContextMenu";
+import { isPicture } from "@/app/attachments";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -956,6 +959,35 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // pane is a terminal.
   const termMode = shellMode || !!execNode;
 
+  // 置顶 (pins.tsx): what this conversation keeps at hand, above it; the
+  // same list for both parties (hubs from v0.20.2). Not in a terminal.
+  const pinState = usePins(target.hubId, termMode ? "" : target.agent, target.peer);
+  const pins = pinState.supported ? pinState.pins || [] : null;
+  const [pinAdding, setPinAdding] = useState(false);
+  const pinMenu = useContextMenu();
+  const pinOf = (m: Message) => pins?.find((p) => p.kind === "message" && p.target === m.id);
+  const pinMessage = async (m: Message, el: Element) => {
+    if (!pins) return;
+    const files = (m.attachments || []).filter((f) => !isPicture(f));
+    const one = (body: () => Promise<unknown>) => void body().catch((e) => setSendError(e));
+    const asMessage = () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "message", target: m.id, title: titleOfMessage(m.body) || L("一条消息", "A message") }));
+    const done = pinOf(m);
+    if (done) {
+      one(async () => { await appApi.removePin(target.hubId, done.id, target.agent, target.peer); pinsChanged(target.hubId); });
+      return;
+    }
+    if (!files.length) { asMessage(); return; }
+    // A message with files: the message, or one of its files.
+    pinMenu.openUnder(el, [
+      { label: L("置顶这条消息", "Pin this message"), onSelect: asMessage },
+      "sep",
+      ...files.map((f) => ({ label: L(`置顶文件「${f.name}」`, `Pin the file “${f.name}”`), onSelect: () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "file", file: f, title: f.name })) })),
+    ]);
+  };
+  // A pinned message: brought to the middle; in a long exchange, older
+  // pages load until it turns up (a few at most).
+  const [seek, setSeek] = useState<{ id: string; tries: number } | null>(null);
+
   // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
   const histPos = useRef(-1);
@@ -1194,6 +1226,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return () => cancelAnimationFrame(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown?.length, more, loadingOlder, target.focus]);
+  useEffect(() => {
+    if (!seek || shown === null) return;
+    const t = requestAnimationFrame(() => {
+      if (jumpTo(seek.id)) { setSeek(null); return; }
+      if (exchange && more && !loadingOlder && seek.tries < 10) {
+        setSeek({ id: seek.id, tries: seek.tries + 1 });
+        void loadOlder();
+      } else if (!loadingOlder) {
+        setSeek(null);
+        setSendError(new Error(L("没找到这条消息：可能被删了，或者太早了", "Could not find that message: it may be deleted, or too far back")));
+      }
+    });
+    return () => cancelAnimationFrame(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seek, shown?.length, more, loadingOlder]);
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
@@ -1757,6 +1804,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
+            {pins && !m.unreadable && (() => {
+              const on = !!pinOf(m);
+              return (
+                <button type="button" className={cn("conv-msg-copy conv-msg-pin", on && "is-on")} onClick={(e) => void pinMessage(m, e.currentTarget)}
+                  title={on ? L("取消置顶", "Unpin") : L("置顶：放到对话上方，点一下就到", "Pin: above the conversation, one click away")}
+                  aria-label={on ? L("取消置顶", "Unpin") : L("置顶", "Pin")} aria-pressed={on}>
+                  {on ? <PinOff /> : <PinIcon />}
+                </button>
+              );
+            })()}
             <button type="button" className="conv-msg-copy conv-msg-del" onClick={() => removeMessage(m)}
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
@@ -1866,6 +1923,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Settings2 />
               </button>
             )}
+            {!termMode && pins && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="pin-add"
+                onClick={() => setPinAdding(true)} title={L("置顶一个网址：对话上方多一个标签", "Pin an address: a tab above the conversation")} aria-label={L("置顶一个网址", "Pin an address")}>
+                <PinIcon />
+              </button>
+            )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
@@ -1890,6 +1953,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </span>
         )}
       </header>}
+      {pins && (
+        <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
+          onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
+      )}
+      {pinMenu.element}
       <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
         messages={shown || []} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />
 

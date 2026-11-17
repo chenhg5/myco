@@ -678,6 +678,71 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // 置顶: what a conversation keeps at hand, a row of tabs under its
+    // header. The agent pins (myco pin; here the mock's API), you pin a
+    // message and an address; a tab opens its thing (the message is
+    // brought to the middle, a page opens in the panel); right-click
+    // renames and unpins.
+    await step("置顶 · 对话上方的标签", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      await chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" }).waitFor({ timeout: 15_000 });
+      const api = (method, path, data) => fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/pins${path}`, { method, headers: { "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+      // Start clean (the windows share nothing, but a step may run again).
+      for (const p of (await (await api("GET", "?with=release-cloud")).json()).pins) await api("DELETE", `/${p.id}?with=release-cloud`);
+      await api("POST", "", { with: "release-cloud", kind: "link", target: "http://192.168.1.20:7780/pages/pg_release", title: "发布说明网页", by: "release-cloud" });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
+      const bar = chat.locator("[data-testid=pin-bar]");
+      await bar.locator(".pin-chip", { hasText: "发布说明网页" }).waitFor({ timeout: 10_000 });
+      // You pin a message: the tab is its first words, not its link.
+      const msg = chat.locator(".conv-msg").filter({ has: page.locator(".pg-card", { hasText: "v0.16.8 发布说明" }) }).first();
+      await msg.hover();
+      await clickVisible(page, msg.locator(".conv-msg-pin"));
+      const msgTab = bar.locator(".pin-chip.is-message");
+      await msgTab.waitFor({ timeout: 5_000 });
+      if ((await msgTab.innerText()).includes("http")) throw new Error(`置顶消息的标签不该带链接，实际「${await msgTab.innerText()}」`);
+      await msg.hover();
+      await msg.getByRole("button", { name: "取消置顶" }).waitFor({ timeout: 5_000 });
+      // An address, from the header.
+      await clickVisible(page, chat.locator("[data-testid=pin-add]"));
+      await page.locator("[data-testid=pin-url]").fill("https://example.com/design");
+      await page.locator("[data-testid=pin-title]").fill("设计稿");
+      await clickVisible(page, page.getByRole("button", { name: "置顶", exact: true }));
+      await bar.locator(".pin-chip", { hasText: "设计稿" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "pins");
+      // The message's tab brings it to the middle and lights it up.
+      await chat.locator(".conv-scroll").first().evaluate((el) => { el.scrollTop = el.scrollHeight; }).catch(() => undefined);
+      await clickVisible(page, msgTab);
+      await chat.locator(".is-flash").first().waitFor({ timeout: 5_000 });
+      // The page's tab opens it in the panel.
+      await clickVisible(page, bar.locator(".pin-chip", { hasText: "发布说明网页" }));
+      const panel = page.locator(".pg-panel");
+      await panel.waitFor({ timeout: 10_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      // Right-click: rename, then unpin.
+      const design = bar.locator(".pin-chip", { hasText: "设计稿" });
+      await design.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await design.click({ button: "right" });
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "重命名" }));
+      await page.locator("[data-testid=pin-title]").fill("设计稿 v2");
+      await clickVisible(page, page.getByRole("button", { name: "保存", exact: true }));
+      const renamed = bar.locator(".pin-chip", { hasText: "设计稿 v2" });
+      await renamed.waitFor({ timeout: 5_000 });
+      await renamed.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await renamed.click({ button: "right" });
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "取消置顶" }));
+      await renamed.waitFor({ state: "detached", timeout: 5_000 });
+      const left = (await (await api("GET", "?with=release-cloud")).json()).pins.map((p) => p.title);
+      if (left.length !== 2 || left.includes("设计稿 v2")) throw new Error(`取消置顶后 Hub 上应剩两个，实际 ${left.join(" / ")}`);
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere

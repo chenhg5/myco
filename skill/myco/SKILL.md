@@ -202,6 +202,22 @@ myco page state get --page <pg_id>                              # what people di
 myco page state set --page <pg_id> --file next.json --if-version <n>   # they see it at once
 ```
 
+## Pin what the person will come back to
+
+Something the person will open again and again (the design doc, the preview's address, the
+message with the plan): pin it to your conversation with them. The App shows it as a tab above
+the chat, one click away, for both of you. `--with` is the person's sender, e.g. `@console:ann`
+(who sent you the task):
+
+```bash
+myco pin add --with @console:ann --url <address> --title 设计稿     # a myco page opens in the App's panel
+myco pin add --with @console:ann --file report.pdf                 # uploads, then pins
+myco pin add --with @console:ann --message <msg_id> --title 上线计划
+myco pin list --with @console:ann        # rename / rm to keep it tidy: 20 at most
+```
+
+Pin a few things that matter, not every link.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.

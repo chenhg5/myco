@@ -160,6 +160,21 @@ export interface PageOpen { url: string; version: number; latest: number; name: 
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 
+/** What a conversation keeps at hand (置顶; hubs from v0.20.2): a web
+ *  address, a file, or one of its messages. Both parties see the same. */
+export interface Pin {
+  id: string;
+  kind: "link" | "file" | "message";
+  title: string;
+  /** the address (link), the message's id (message) */
+  target?: string;
+  file?: Attachment;
+  added_by: string;
+  at: string;
+}
+export interface PinList { a: string; with: string; pins: Pin[]; max: number }
+export interface PinCreate { a?: string; with: string; kind: Pin["kind"]; title?: string; target?: string; file?: Attachment }
+
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;

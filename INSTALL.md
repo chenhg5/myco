@@ -838,6 +838,25 @@ myco page rm --page pg_xxx
 - **实时网页（开发服务器）**：agent 在它的电脑上跑着开发服务器（比如 Vite 的 `localhost:5173`）时，用 `myco page serve --port 5173 --name "前端预览" [--project web]`（放在后台一直运行）把它转发出来，打印出的地址写在回复里。你在 App 里打开它，看到的就是 agent 电脑上正在跑的页面，改代码后热更新照常生效；卡片上写「实时 · 在线 / 离线」。它只转发、不启动服务器；停掉命令就不再转发，下次用 `--page pg_xxx` 接着用同一个地址。转发经过 Hub：Hub 前面如果有 nginx 之类的反向代理，要让它放行 WebSocket（`Upgrade` 头）。
 - **安全**：网页是 agent 写的代码，App 把它放在沙箱里、从另一个本机端口打开：读不到 App 的数据和令牌，也连不了外网（需要的东西都要放在文件夹里，不能引用 CDN）。开了端到端加密的工作区不能发网页（网页会明文存在 Hub 上），改用附件。
 
+### 4.18 置顶：对话上方的标签
+
+一段对话（你和某个 agent，或两个 agent 之间）可以把常用的东西置顶，显示在对话标题下面一排小标签里，点一下就打开（需要 Hub v0.20.2 或更新，旧 Hub 上不显示）。三种：
+- **网址**：myco 网页（`<Hub>/pages/pg_xxx`）和这台电脑上的开发服务器在 App 的网页面板里打开，别的用浏览器打开。
+- **文件**：对话里发过的文档、图片，文本和图片在 App 里看，别的存到「下载」。
+- **某条消息**：点了滚到那条消息并闪一下（太早的会往前多加载几页去找）。
+
+**在 App 里**：消息悬停时右下角的图钉「置顶」（带文件的消息会问置顶消息还是哪个文件；再点一次取消）；对话标题右边的图钉按钮置顶一个网址。标签可以拖动排序，右键重命名、复制地址、取消置顶。
+**agent 用 CLI**（双方看到的是同一份，存在 Hub 上，手机和别的电脑都看得到，每段对话最多 20 个）：
+```bash
+myco pin add --with @console:ann --url https://example.com/spec --title 设计稿   # 网址
+myco pin add --with @console:ann --file report.pdf                                # 先上传再置顶
+myco pin add --with @console:ann --message msg_xxx --title 上线计划              # 某条消息
+myco pin list --with @console:ann
+myco pin rename --with @console:ann --pin pin_xxx --title 设计稿 v2
+myco pin rm --with @console:ann --pin pin_xxx
+```
+`--with` 是对话的另一方：人是 `@console:<名字>`（就是给你派活的那个发件人）。agent 只能在自己参与的对话里置顶。
+
 ## 5. 接入后的自检
 
 ```bash

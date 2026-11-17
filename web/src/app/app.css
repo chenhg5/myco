@@ -7811,3 +7811,56 @@ body.is-resizing {
 @media (max-width: 560px) {
   .vc-chip-state { display: none; }
 }
+
+/* 置顶 (pins.tsx): what the conversation keeps at hand, a row of small
+   tabs under its header; drag to order, right-click to rename or unpin. */
+.pin-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0 6px 16px;
+  border-bottom: 1px solid var(--line-2);
+}
+.pin-bar-mark { flex: none; width: 14px; height: 14px; color: var(--faint); }
+.pin-bar-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* more to the right than fits: it fades out at the edge */
+  padding-right: 16px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+}
+.pin-bar-list::-webkit-scrollbar { display: none; }
+.pin-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.pin-chip:hover { background: var(--pill-hover); color: var(--fg); }
+.pin-chip:active { background: color-mix(in srgb, var(--fg) 8%, var(--pill-hover)); }
+.pin-chip:focus-visible { outline: 3px solid var(--ring); outline-offset: 0; }
+.pin-chip svg { flex: none; width: 13px; height: 13px; color: var(--muted); }
+.pin-chip.is-link svg { color: var(--accent); }
+.pin-chip-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-chip.is-add { width: 24px; padding: 0; justify-content: center; background: none; }
+.pin-chip.is-add:hover { background: var(--nav-hover); }
+.pin-bar-error { padding: 4px 16px 0; }
+.pin-edit { display: flex; flex-direction: column; gap: 12px; }
+.conv-msg-pin.is-on { color: var(--accent); }
