@@ -13,6 +13,7 @@
 //
 // Environment:
 //   UI_SMOKE_PORT        first port of the App servers (default 5173; one each)
+//   UI_SMOKE_SCALE       screenshots' device scale (default 1; 2 for ones people see)
 //   UI_SMOKE_EXECUTABLE  a Chromium/Chrome binary to drive, if Playwright's
 //                        own browser is not downloaded on this machine
 //
@@ -378,7 +379,7 @@ async function runMatrix(browser, size, scheme) {
     viewport: size,
     colorScheme: scheme,
     locale: "zh-CN",
-    deviceScaleFactor: 1,
+    deviceScaleFactor: Number(process.env.UI_SMOKE_SCALE) || 1,
   });
   await context.addInitScript(({ scheme }) => {
     try {
@@ -909,6 +910,9 @@ async function runMatrix(browser, size, scheme) {
         await cmd.filter({ hasText: "irm " }).waitFor({ timeout: 5_000 });
         await clickVisible(page, box.getByRole("tab", { name: "Mac / Linux / WSL" }));
         await box.locator(".ws-command-wait").waitFor({ timeout: 5_000 });
+        // Or the agent on that computer runs it: the sentence carries this command.
+        const way = box.locator("[data-testid=computer-agent-way] .add-sentence-text");
+        if (!(await way.innerText()).includes("这台电脑加进 myco 工作区") || !(await way.innerText()).includes((await cmd.innerText()).trim())) throw new Error("加电脑的弹窗里应有发给 agent 的那句话，带着同一条命令");
         await settle(page, 300);
         await shot(page, size, scheme, "add-workspace");
         // "Running" it there: the folder shows up, in the project.
@@ -3154,6 +3158,22 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-settings").waitFor({ timeout: 20_000 });
       await settle(page);
       await shot(page, size, scheme, "settings");
+      // No hub of your own yet: a server's command, or a sentence for your agent.
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }).first());
+      const add = page.getByRole("button", { name: "添加工作区" });
+      await add.first().waitFor({ timeout: 10_000 });
+      {
+        await clickVisible(page, add.first());
+        const dlg = page.locator(".app-modal");
+        await clickVisible(page, dlg.getByRole("button", { name: "还没有链接？" }));
+        const way = dlg.locator("[data-testid=connect-agent-way] .add-sentence-text");
+        await way.waitFor({ timeout: 5_000 });
+        if (!(await way.innerText()).includes("agent-setup.md")) throw new Error("添加工作区里应有让 agent 帮你装的那句话");
+        await settle(page, 200);
+        await shot(page, size, scheme, "connect-agent");
+        await page.keyboard.press("Escape");
+        await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      }
     });
   } finally {
     await context.close().catch(() => undefined);

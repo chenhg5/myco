@@ -25,3 +25,15 @@ export function debugPrompt(detail: string): string {
     `myco shows an error: "${raw}". Read the 排错 (troubleshooting) section of ${SETUP_GUIDE} (if it does not load, ${SETUP_GUIDE_MIRROR}), find the cause and fix it; ask me before using sudo or changing system settings.`,
   );
 }
+
+/**
+ * Add a computer with one's agent: the agent there runs the one-line
+ * command (a credential: the sentence says so) in the folder its person
+ * names, and reads the guide if myco is new to it.
+ */
+export function computerPrompt(command: string, workspace: string): string {
+  return L(
+    `帮我把这台电脑加进 myco 工作区「${workspace}」：先问我要给 agent 用哪个文件夹，进到那里运行 ${command} ，看到加好了再告诉我。不熟悉 myco 就先读 ${SETUP_GUIDE} 。这条命令等同凭据，不要发到别处。`,
+    `Add this computer to the myco workspace "${workspace}": ask me which folder agents should use, run ${command} in it, and tell me once it has joined. New to myco? Read ${SETUP_GUIDE} first. The command is a credential: do not post it anywhere else.`,
+  );
+}

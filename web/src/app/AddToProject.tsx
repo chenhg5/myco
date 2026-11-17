@@ -7,6 +7,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, machineShell, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
+import { computerPrompt } from "@/app/agentSetup";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { Elapsed, Mushroom } from "@/app/Working";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -695,6 +696,17 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
               : L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在那里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")}
             {" "}{L("运行命令就是那台电脑同意了：agent 能用你的身份在这个文件夹里跑命令。", "Running it is that computer's consent: agents can run commands in that folder as you.")}
           </div>
+          {link && !arrived && (
+            // The same, done by the agent already on that computer.
+            <div className="add-agent-way" data-testid="computer-agent-way">
+              <div className="app-field-label">{L("或者把这句话发给那台电脑上的 agent，它会帮你装好：", "Or send this to the agent on that computer; it sets it up for you:")}</div>
+              <div className="add-sentence">
+                <p className="add-sentence-text">{computerPrompt(os === "ps" ? link.ps_command || `irm '${link.join_url}?format=ps1' | iex` : link.command, hub?.name || "")}</p>
+                <div className="add-sentence-actions"><CopyButton value={computerPrompt(os === "ps" ? link.ps_command || `irm '${link.join_url}?format=ps1' | iex` : link.command, hub?.name || "")} /></div>
+              </div>
+              <div className="app-small-note">{L("句子里的命令等同凭据，只发给你自己的 agent。", "The command in it is a credential: send it only to your own agent.")}</div>
+            </div>
+          )}
           <div className="app-modal-actions">
             {machines.length > 0 && !arrived && (
               <button type="button" className="app-btn app-btn-quiet ws-switch" onClick={() => setMode("pick")}>{L("用已经连上的电脑选文件夹", "Pick a folder on a connected computer")}</button>

@@ -835,6 +835,8 @@
   background: var(--pill);
 }
 .add-sentence-text {
+  /* Commands and links in it: no "1x7" drawn as "1×7". */
+  font-feature-settings: "calt" 0;
   margin: 0 !important;
   font-size: 12.5px !important;
   line-height: 1.65 !important;
@@ -2711,4 +2713,15 @@ body.is-sorting * {
     animation: none;
     box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
   }
+}
+.add-agent-way {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.add-agent-way .add-sentence {
+  margin-top: 6px;
+}
+.add-agent-way .app-small-note {
+  margin-top: 6px;
 }

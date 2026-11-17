@@ -4,6 +4,7 @@ import { confirmNameLater } from "@/app/NamePrompt";
 import { appApi, type Hub } from "@/appapi";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
+import { setupPrompt } from "@/app/agentSetup";
 import { L, lang } from "@/lib/i18n";
 
 const INSTALL_COMMAND =
@@ -102,7 +103,7 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
             <button type="button" className="app-linklike" onClick={() => { setScreen("command"); setError(null); }}>
               {L("还没有链接？", "No link yet?")}
             </button>
-            <span>{L("自己在服务器上搭一个", "Install a Hub on a server first")}</span>
+            <span>{L("自己在服务器上搭一个，或者让 agent 帮你装", "Install a Hub on a server, or let your agent do it")}</span>
           </div>
 
           <details className="app-advanced">
@@ -182,6 +183,14 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
             {lang() === "zh"
               ? <>已经装过 Hub？在服务器上运行 <code>sudo myco console link</code> 生成新链接。</>
               : <>Already installed a Hub? Run <code>sudo myco console link</code> on the server to make a new link.</>}
+          </div>
+          {/* Or the agent the person already has does all of it. */}
+          <div className="add-agent-way" data-testid="connect-agent-way">
+            <div className="app-field-label">{L("或者把这句话发给你的 agent，它会帮你装好、连上这个 App：", "Or send this to your agent; it installs everything and connects this App:")}</div>
+            <div className="add-sentence">
+              <p className="add-sentence-text">{setupPrompt()}</p>
+              <div className="add-sentence-actions"><CopyButton value={setupPrompt()} /></div>
+            </div>
           </div>
           <div className="app-modal-actions">
             <button type="button" className="app-btn" onClick={() => { setScreen("link"); setError(null); }}>
