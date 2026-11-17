@@ -251,6 +251,22 @@ async function settle(page, ms = 700) {
   await page.evaluate(async () => { await document.fonts?.ready; }).catch(() => undefined);
 }
 
+// The App at rest uses little CPU: a render loop (a state set on every
+// render) keeps the main thread busy without showing anything wrong.
+async function staysIdle(page, what, ms = 2000) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Performance.enable");
+    const busy = async () => (await cdp.send("Performance.getMetrics")).metrics.find((x) => x.name === "TaskDuration").value;
+    const a = await busy();
+    await page.waitForTimeout(ms);
+    const share = (await busy() - a) / (ms / 1000);
+    if (share > 0.5) throw new Error(`${what}时 App 应该闲着，实际主线程忙了 ${Math.round(share * 100)}%（可能在一直重新渲染）`);
+  } finally {
+    await cdp.detach().catch(() => undefined);
+  }
+}
+
 async function shot(page, size, scheme, slug) {
   const name = `${size.width}x${size.height}-${scheme}-${slug}.png`;
   await page.screenshot({ path: path.join(OUT, name) });
@@ -608,6 +624,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
       await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
       if ((await panel.locator(".pg-tab").count()) !== 2) throw new Error("开着的网页再点一次不该多一个标签");
+      await staysIdle(page, "开着两个网页");
       // Closing a tab; the last one closes the panel.
       await clickVisible(page, panel.locator(".pg-tab", { hasText: "下载页" }).getByRole("button", { name: /关闭/ }));
       await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
@@ -2606,7 +2623,12 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, start.locator(".au-template", { hasText: "CI 失败时排查" }));
       const ed = page.locator("[data-testid=automation-editor]");
       await ed.waitFor({ timeout: 10_000 });
-      if (!(await ed.locator("textarea").inputValue()).includes("{{payload}}")) throw new Error("模板应带好要它做什么");
+      // The template fills the editor as it opens: wait for it rather than read at once.
+      const body = ed.locator("textarea").first();
+      for (let i = 0; !(await body.inputValue()).includes("{{payload}}"); i++) {
+        if (i >= 50) throw new Error("模板应带好要它做什么");
+        await page.waitForTimeout(100);
+      }
       await ed.locator(".au-kind.is-on", { hasText: "Webhook" }).waitFor({ timeout: 5_000 });
       await clickVisible(page, ed.getByRole("button", { name: "取消" }));
       await ed.waitFor({ state: "detached", timeout: 5_000 });

@@ -5,18 +5,20 @@
 ## 0. 准备（第一次）
 
 - 仓库在 `~/code/myco-team/release`，只用于发版，不在这里写功能。
-- UI 冒烟测试要 Playwright 模块和它的 Chromium（装一次就行，不改仓库依赖）：`npm install -g playwright && npx playwright install --with-deps chromium`。找不到浏览器时，用 `UI_SMOKE_EXECUTABLE=<Chromium 路径>` 指过去。
+- 要有 `curl` 和 `python3`（查 GitHub 的状态用）。
+- 不用在本地跑界面冒烟：它在 GitHub CI 里跑（`ci` 的 `ui` 任务，四种窗口组合各一台机器）。想在本地跑的话，需要 Playwright 和它的 Chromium：`npm install -g playwright && npx playwright install --with-deps chromium`。
 
-## 1. 检查
+## 1. 检查：main 的 CI 是绿的
+
+每个改动推上 main 时，CI 都已经检查过了（Go 的 vet、测试、smoke，Windows，Mac App，网页 dist 是否最新，界面冒烟）。发版前不再在本地重跑，只确认 main 最新的提交 CI 全过：
 
 ```bash
 git checkout main && git pull --rebase origin main
-make check                     # vet + 测试 + smoke，必须全过
-make web && git status --short # dist 不能有变化；有变化说明有人改了 web/src 没重新生成，停下来报告
-cd web && npm run typecheck && npm run test:ui && cd ..
+scripts/release-status.sh "$(git rev-parse HEAD)" ci --wait   # 退出码 0 才继续
 ```
 
-`test:ui` 前如果 7781 端口被占用，先结束残留的 mock 和 vite 进程。任何一步失败：不发版，报告失败的输出。
+- 失败（退出码 1）：不发版，打开输出里的链接，报告是哪个任务、哪个测试失败。
+- 刚有人推了新提交、CI 还在跑：`--wait` 会每 30 秒查一次，等它结束。
 
 ## 2. 版本号和 CHANGELOG
 
@@ -25,57 +27,49 @@ cd web && npm run typecheck && npm run test:ui && cd ..
 - 在 `CHANGELOG.md` 最上面加一节 `## vX.Y.Z`：用中文写用户能感知的变化，每条一句或几句，重要的加粗开头；纯内部的改动（测试、重构）和 iOS（不在发版产物里）不写。写法照前几节。
 - 本地预览这一节：`scripts/changelog-section.sh vX.Y.Z`。
 
-## 3. 提交并推送
+## 3. 提交、推送，马上开始 Mac 签名
 
 ```bash
 echo vX.Y.Z > VERSION
 git add CHANGELOG.md VERSION
 git commit -m "Release vX.Y.Z"
-git pull --rebase origin main   # 有新提交进来时，看看是什么（git log）：只是 ios/ 或文档就继续；有代码改动就回到第 1 步重新检查
+git pull --rebase origin main   # 有新提交进来：只是 ios/ 或文档就继续；有代码改动，先等新的 HEAD 的 CI 过了（第 1 步）再推
 git push origin HEAD:main
-git rev-parse HEAD              # 记下这个 sha
+sha=$(git rev-parse HEAD)       # 记下这个 sha
+myco exec --to mac-exec --cmd "~/code/myco-release.sh start vX.Y.Z $sha"
 ```
 
-`VERSION` 和 `CHANGELOG.md` 必须在同一个提交里：发版流水线会把这一节当作 GitHub Release 的说明。
+- `VERSION` 和 `CHANGELOG.md` 必须在同一个提交里：发版流水线会把这一节当作 GitHub Release 的说明。
+- Mac 签名推送后马上开始，和 GitHub 同时进行。签名的细节都在 Mac 上的脚本里，这里只调用它。它签好、公证好以后，会等 GitHub 的 Release 出来再上传（最多等 30 分钟）。
+- `mac-exec` 不在线（Mac 睡着了）：告诉维护者把 Mac 唤醒并解锁，等它在线再执行上面最后一行。
 
 ## 4. 等 GitHub
 
-每隔一分钟查一次，直到 `ci` 和 `release` 都结束：
-
 ```bash
-curl -s "https://api.github.com/repos/chenhg5/myco/actions/runs?head_sha=<sha>" \
-  | python3 -c 'import sys,json; print(" ".join(f"{r[\"name\"]}={r[\"status\"]}/{r[\"conclusion\"]}" for r in json.load(sys.stdin)["workflow_runs"]))'
+scripts/release-status.sh "$sha" all --wait
 ```
 
-- 两个都是 `completed/success` 才继续。
-- `release` 失败：发版没成功，报告失败的步骤和日志。
-- `ci` 失败但 `release` 成功：Release 已经发出去了，找出失败的测试，修好（通常是测试在 Windows 上的问题），推一个修复提交，并在报告里说明。
-- 确认 Release 的说明是 CHANGELOG 那一节：`curl -s https://api.github.com/repos/chenhg5/myco/releases/tags/vX.Y.Z`。
+- `ci` 和 `release` 都是 `completed/success`（退出码 0）才继续。通常 `release` 2 分钟左右，`ci` 稍长一些（界面冒烟）。
+- `release` 失败：发版没成功，报告失败的步骤和日志；Mac 那边会等不到 Release，30 分钟后自己报 FAILED。
+- `ci` 失败但 `release` 成功：Release 已经发出去了。找出失败的测试，修好（通常是 Windows 上的测试问题），推一个修复提交，并在报告里说明。
 
-## 5. Mac 签名、公证、上传
-
-Mac 上有现成的脚本，签名的细节都在里面，这里只调用：
+## 5. 等 Mac 上传
 
 ```bash
-myco exec --to mac-exec --cmd "~/code/myco-release.sh start vX.Y.Z <sha>"
-# 然后每分钟查一次，直到出现 UPLOADED 或 FAILED（通常 5–15 分钟）：
 myco exec --to mac-exec --cmd "~/code/myco-release.sh status"
 ```
 
-- `mac-exec` 不在线（Mac 睡着了）：告诉维护者把 Mac 唤醒并解锁，等它在线再继续。
+每分钟查一次，直到出现 `UPLOADED` 或 `FAILED`（推送后通常 3–5 分钟，公证慢时 15 分钟）。
+
 - 出现 FAILED，或者公证一直卡在 In Progress 超过 30 分钟：停下来，把日志的最后几行报给维护者。
 
 ## 6. 核对
 
 ```bash
-d=$(mktemp -d) && cd "$d"
-for f in myco.dmg myco-app-darwin-universal.zip SHA256SUMS; do
-  curl -fsSL -o "$f" "https://github.com/chenhg5/myco/releases/download/vX.Y.Z/$f"
-done
-grep -E ' (myco.dmg|myco-app-darwin-universal.zip)$' SHA256SUMS | sha256sum -c
+scripts/release-verify.sh vX.Y.Z
 ```
 
-两行都是 `OK` 才算发完。
+两个文件都是 `OK`、最后一行是 `notes: the CHANGELOG section` 才算发完。
 
 ## 7. 报告
 

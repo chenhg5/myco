@@ -94,3 +94,34 @@ jobs:
             echo "::error::internal/web/dist is stale: run 'make web' and commit the result"
             exit 1
           fi
+
+  ui:
+    # The App UI smoke test (web/scripts/ui-smoke.mjs): every page and the
+    # main dialogs against the mock backend, one window size and theme per
+    # runner, so a release no longer has to run it on a laptop first.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: [1200-light, 1200-dark, 760-light, 760-dark]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Dependencies, Playwright and Chromium (with CJK fonts)
+        run: |
+          cd web && npm ci
+          npm install -g playwright@1
+          node "$(npm root -g)/playwright/cli.js" install --with-deps chromium
+          sudo apt-get install -y -q fonts-noto-cjk >/dev/null
+      - name: UI smoke (${{ matrix.combo }})
+        run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-smoke-${{ matrix.combo }}
+          path: web/ui-smoke/
+          retention-days: 7

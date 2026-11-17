@@ -23,12 +23,13 @@ check: vet test smoke
 vet:
 	gofmt -l . | (! grep .) && go vet ./...
 
+# The CLI for six platforms, built at the same time; fails if any build does.
 cross:
-	@for os in linux darwin windows; do for arch in amd64 arm64; do \
+	@pids=; for os in linux darwin windows; do for arch in amd64 arm64; do \
 		ext=; [ $$os = windows ] && ext=.exe; \
 		echo "building $$os/$$arch"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags '$(LDFLAGS)' -o bin/myco-$$os-$$arch$$ext ./cmd/myco || exit 1; \
-	done; done
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags '$(LDFLAGS)' -o bin/myco-$$os-$$arch$$ext ./cmd/myco & pids="$$pids $$!"; \
+	done; done; ok=1; for p in $$pids; do wait $$p || ok=; done; [ -n "$$ok" ]
 
 clean:
 	rm -rf bin
