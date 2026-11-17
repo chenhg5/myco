@@ -41,6 +41,12 @@ func TestPageServeForwardsALocalServer(t *testing.T) {
 			_ = c.Write(r.Context(), typ, append([]byte("echo:"), msg...))
 		}
 	})
+	// (a large file: a dev server's client script, a bundle)
+	big := strings.Repeat("0123456789abcdef", 1<<17) // 2 MB
+	dev.HandleFunc("/big.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript")
+		io.WriteString(w, big)
+	})
 	dev.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		sawAuth, sawHost = r.Header.Get("Authorization"), r.Host
@@ -101,6 +107,9 @@ func TestPageServeForwardsALocalServer(t *testing.T) {
 	}
 	if code, body := get("/v1/pages/"+id+"/live/src/main.ts?v=1", "admin-token-123456"); code != 200 || body != "<h1>dev /src/main.ts?v=1</h1>" {
 		t.Fatalf("forwarded: %d %s", code, body)
+	}
+	if code, body := get("/v1/pages/"+id+"/live/big.js", "admin-token-123456"); code != 200 || body != big {
+		t.Fatalf("a large file: %d, %d bytes of %d", code, len(body), len(big))
 	}
 	mu.Lock()
 	auth, host := sawAuth, sawHost
