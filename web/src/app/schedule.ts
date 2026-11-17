@@ -67,3 +67,39 @@ export function localZone(): string {
 }
 
 export const dayNames = () => (L("zh", "en") === "zh" ? DAYS_ZH : DAYS_EN);
+
+/**
+ * When a schedule next sends, on this computer's clock (a schedule in this
+ * computer's time zone; else null, as for a cron of its own).
+ */
+export function nextRun(e: Every, from: Date): Date | null {
+  if (e.kind === "cron") return null;
+  const t = new Date(from.getTime());
+  t.setSeconds(0, 0);
+  for (let i = 0; i < 8 * 24 * 60; i += 1) {
+    t.setMinutes(t.getMinutes() + 1);
+    const h = t.getHours(), m = t.getMinutes(), d = t.getDay();
+    switch (e.kind) {
+      case "daily": if (h === e.hour && m === e.minute) return t; break;
+      case "weekdays": if (d >= 1 && d <= 5 && h === e.hour && m === e.minute) return t; break;
+      case "weekly": if (d === e.day && h === e.hour && m === e.minute) return t; break;
+      case "hours": if (m === e.minute && h % e.every === 0) return t; break;
+    }
+  }
+  return null;
+}
+
+/** A moment soon, as people say it: 今天 16:40, 明天 09:00, 周五 09:00, 12月3日 09:00. */
+export function soonLabel(at: Date, now: Date): string {
+  const time = hm(at.getHours(), at.getMinutes());
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(at) - day(now)) / 86400e3);
+  if (days === 0) return L(`今天 ${time}`, `today ${time}`);
+  if (days === 1) return L(`明天 ${time}`, `tomorrow ${time}`);
+  if (days === -1) return L(`昨天 ${time}`, `yesterday ${time}`);
+  if (days > 1 && days < 7) return L(`${DAYS_ZH[at.getDay()]} ${time}`, `${DAYS_EN[at.getDay()].slice(0, 3)} ${time}`);
+  return L(`${at.getMonth() + 1}月${at.getDate()}日 ${time}`, `${at.toLocaleDateString("en", { month: "short", day: "numeric" })} ${time}`);
+}
+
+/** The short day names for a row of chips (周一 first, as a week is read here). */
+export const weekChips = () => [1, 2, 3, 4, 5, 6, 0].map((d) => ({ day: d, label: L(DAYS_ZH[d].slice(1), DAYS_EN[d].slice(0, 3)) }));

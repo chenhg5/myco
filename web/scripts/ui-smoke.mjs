@@ -2309,24 +2309,48 @@ async function runMatrix(browser, size, scheme) {
     // says to whom and when; a new one with a webhook shows its address and
     // secret once; running one now sends it, marked 自动 in the chat.
     await step("自动化", async () => {
+      // None yet: what it is for, and a few common ones to start from.
+      const empty = /\/app\/hubs\/[^/]+\/automations$/;
+      await page.route(empty, (r) => (r.request().method() === "GET" ? r.fulfill({ json: { automations: [] } }) : r.continue()));
+      await go(page, "自动化", narrow);
+      const start = page.locator("[data-testid=automations-empty]");
+      await start.waitFor({ timeout: 20_000 });
+      if ((await start.locator(".au-template").count()) < 5) throw new Error("空的自动化页应给几个常用模板和「从空白开始」");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automations-empty");
+      await clickVisible(page, start.locator(".au-template", { hasText: "CI 失败时排查" }));
+      const ed = page.locator("[data-testid=automation-editor]");
+      await ed.waitFor({ timeout: 10_000 });
+      if (!(await ed.locator("textarea").inputValue()).includes("{{payload}}")) throw new Error("模板应带好要它做什么");
+      await ed.locator(".au-kind.is-on", { hasText: "Webhook" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, ed.getByRole("button", { name: "取消" }));
+      await ed.waitFor({ state: "detached", timeout: 5_000 });
+      await page.unroute(empty);
+      await go(page, "聊天", narrow);
+
       await go(page, "自动化", narrow);
       const list = page.locator("[data-testid=automations]");
-      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".pc-row-sub", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
+      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".au-row-what", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "automations");
       await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "新建自动化" }));
-      const ed = page.locator("[data-testid=automation-editor]");
       await ed.waitFor({ timeout: 10_000 });
       const name = `CI 失败时看日志 ${size.width} ${scheme}`;
       await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);
       await ed.locator("textarea").fill("CI 又挂了，看下日志找原因：{{payload}}");
-      await ed.getByRole("combobox", { name: "多久一次" }).selectOption("daily");
-      await ed.getByLabel("几点").fill("08:30");
-      await clickVisible(page, ed.locator(".app-check-line", { hasText: "Webhook" }).locator("input"));
-      await ed.getByText("每天 08:30").waitFor({ timeout: 5_000 });
+      await clickVisible(page, ed.getByRole("radiogroup", { name: "多久一次" }).getByRole("radio", { name: "每天" }));
+      await ed.getByRole("combobox", { name: "几点" }).selectOption("8");
+      await ed.getByRole("combobox", { name: "几分" }).selectOption("30");
+      await clickVisible(page, ed.locator(".au-kind", { hasText: "Webhook" }));
+      await ed.locator(".au-summary", { hasText: "每天 08:30" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "automation-editor");
-      await clickVisible(page, ed.getByRole("button", { name: "创建" }));
+      // The buttons stay in sight however tall the form is.
+      const create = ed.getByRole("button", { name: "创建" });
+      const box = await create.boundingBox();
+      const vh = page.viewportSize().height;
+      if (!box || box.y + box.height > vh) throw new Error("编辑自动化的按钮应在窗口里看得到");
+      await clickVisible(page, create);
       const sec = page.locator("[data-testid=automation-secret]");
       await sec.waitFor({ timeout: 10_000 });
       if (!(await sec.innerText()).includes("/hooks/")) throw new Error("Webhook 地址应该显示出来");
@@ -2335,13 +2359,19 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, sec.getByRole("button", { name: "好了" }));
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
+      await row.hover();
       await clickVisible(page, row.getByRole("button", { name: "立即运行" }));
-      await row.locator(".pc-row-sub", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
-      // Pause and resume.
-      await clickVisible(page, row.getByRole("button", { name: "暂停" }));
-      await row.locator(".pc-row-sub", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("button", { name: "启用" }));
-      await row.getByRole("button", { name: "暂停" }).waitFor({ timeout: 10_000 });
+      await row.locator(".au-row-status", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
+      // Off and on again: a switch.
+      await clickVisible(page, row.getByRole("switch", { name: "暂停" }));
+      await row.locator(".au-row-status", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, row.getByRole("switch", { name: "启用" }));
+      await row.getByRole("switch", { name: "暂停" }).waitFor({ timeout: 10_000 });
+      // Right-click: the same, and delete.
+      await row.click({ button: "right", position: { x: 120, y: 12 } });
+      await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
+      await clickVisible(page, page.locator(".app-modal.app-confirm").getByRole("button", { name: "删除" }));
+      await row.waitFor({ state: "detached", timeout: 10_000 });
     });
 
     // A conversation is exported from its header: Markdown for people or
