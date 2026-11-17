@@ -221,7 +221,7 @@ public struct HubClient: HubAPI {
 
 extension HubClient {
     /// The first words of a page that is not the hub's JSON, without its tags.
-    static func words(ofPage data: Data) -> String {
+    public static func words(ofPage data: Data) -> String {
         guard let text = String(data: data.prefix(4_000), encoding: .utf8) else { return "" }
         let plain = text.replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
