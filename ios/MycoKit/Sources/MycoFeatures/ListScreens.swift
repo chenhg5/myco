@@ -136,6 +136,30 @@ struct MembersScreen: View {
             (L("不在线", "Away"), all.filter { $0.state == "offline" }),
         ]
         List {
+            // What agents do by themselves, on a schedule or on a call:
+            // one row above the people (the desktop app has it under
+            // Members too).
+            if query.isEmpty {
+                Button {
+                    router.push(.automations)
+                } label: {
+                    HStack(spacing: 12) {
+                        AutomationIcon(symbol: "clock", hook: false).frame(width: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("自动化", "Automations")).font(.body.weight(.medium)).foregroundStyle(MycoColor.fg)
+                            Text(automationsNote).font(.footnote).foregroundStyle(MycoColor.muted).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(MycoColor.faint)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(RowButtonStyle())
+                .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                .listRowBackground(MycoColor.bg)
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("members.automations")
+            }
             ForEach(groups.filter { !$0.1.isEmpty }, id: \.0) { title, members in
                 Section {
                     ForEach(members) { status in
@@ -168,7 +192,23 @@ struct MembersScreen: View {
             }
         }
         .workspaceChrome(title: L("成员", "Members"), add: true)
+        // (how many there are, for the row above)
+        .task { await session.automations.load() }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("搜索名字和分工", "Search names and roles"))
+    }
+}
+
+extension MembersScreen {
+    /// Under "自动化": how many there are and how many are on, or what they are for.
+    fileprivate var automationsNote: String {
+        let model = session.automations
+        guard let list = model.list, !list.isEmpty, !model.unsupported else {
+            return L("让 agent 按时自己干活", "Let agents work on their own schedule")
+        }
+        let on = list.filter(\.enabled).count
+        return on == list.count
+            ? L("\(list.count) 个，都开着", list.count == 1 ? "1, on" : "\(list.count), all on")
+            : L("\(list.count) 个，\(on) 个开着", "\(list.count), \(on) on")
     }
 }
 

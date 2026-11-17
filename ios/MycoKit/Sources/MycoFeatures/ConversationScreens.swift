@@ -863,6 +863,15 @@ struct ConversationBody: View {
                     if let voiced {
                         VoiceMark(label: L("经语音", "By voice"), heard: voiced.heard.isEmpty ? "" : L("原话：", "As said: ") + voiced.heard)
                     }
+                    // Sent for me by an automation, not typed just now.
+                    if item.automated {
+                        Label(L("自动", "Auto"), systemImage: "clock")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(MycoColor.muted)
+                            .padding(.horizontal, 6)
+                            .accessibilityIdentifier("message.auto")
+                    }
                 }
                 files(of: item, trailing: true)
                 // Not started yet: a few words under it, like a receipt.
