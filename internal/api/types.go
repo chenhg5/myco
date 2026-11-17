@@ -1327,3 +1327,54 @@ type PageStateConflict struct {
 	Error
 	Latest PageState `json:"latest"`
 }
+
+// Pin is one thing a conversation keeps at hand (置顶), above its messages
+// in the App: a web address (link), a file, or one of its messages. Both
+// parties of the conversation see the same pins; either adds them.
+type Pin struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"` // link, file or message
+	Title string `json:"title"`
+	// Target is the address (link) or the message's id (message).
+	Target string      `json:"target,omitempty"`
+	File   *Attachment `json:"file,omitempty"`
+	// AddedBy is who pinned it: an agent's name or a console sender.
+	AddedBy string    `json:"added_by"`
+	At      time.Time `json:"at"`
+}
+
+// PinList is GET /v1/pins?with=X (and ?a=Y for a console looking at two
+// agents' conversation): the conversation's pins in their order.
+type PinList struct {
+	A    string `json:"a"`
+	With string `json:"with"`
+	Pins []Pin  `json:"pins"`
+	Max  int    `json:"max"`
+}
+
+// PinCreate is POST /v1/pins: pin something to the conversation between A
+// (the caller when empty: the agent itself, or the console's sender) and
+// With. The same thing pinned again is not added twice.
+type PinCreate struct {
+	A      string      `json:"a,omitempty"`
+	With   string      `json:"with"`
+	Kind   string      `json:"kind"`
+	Title  string      `json:"title,omitempty"`
+	Target string      `json:"target,omitempty"`
+	File   *Attachment `json:"file,omitempty"`
+}
+
+// PinUpdate is PATCH /v1/pins/{id}: a new title.
+type PinUpdate struct {
+	A     string `json:"a,omitempty"`
+	With  string `json:"with"`
+	Title string `json:"title"`
+}
+
+// PinOrder is PUT /v1/pins/order: the pins in this order (those not named
+// keep theirs, after); the answer is the PinList.
+type PinOrder struct {
+	A    string   `json:"a,omitempty"`
+	With string   `json:"with"`
+	IDs  []string `json:"ids"`
+}

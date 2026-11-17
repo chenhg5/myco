@@ -59,6 +59,7 @@ type Server struct {
 	tun         tunnels
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
+	pins        *app.PinService
 	voice       *app.VoiceSettingsService
 	activity    sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu   sync.Mutex // serialize alias permission checks with writes
@@ -204,6 +205,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
 	s.pageRoutes(m)
+	s.pinRoutes(m)
 	s.liveRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)

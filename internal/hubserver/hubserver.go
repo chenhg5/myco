@@ -185,6 +185,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetProjects(projectSvc)
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
+	srv.SetPins(app.NewPinService(sqlite.NewSettingRepo(db), ids, clock))
 	srv.SetVoiceSettings(app.NewVoiceSettingsService(sqlite.NewSettingRepo(db)))
 	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
 	srv.SetE2E(e2e)
