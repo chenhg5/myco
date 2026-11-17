@@ -1002,29 +1002,35 @@ struct AddAgentSheet: View {
             Text(L("把这句话发给任何一个 AI 会话（Claude Code、Codex、claude.ai……），它会自己装好 myco 并加入。",
                    "Send this sentence to any AI session (Claude Code, Codex, claude.ai…). It installs myco and joins by itself."))
                 .font(.subheadline).lineSpacing(3).foregroundStyle(MycoColor.fg2)
-            Group {
-                if link != nil {
-                    Text(sentence).textSelection(.enabled)
-                } else if let failure {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("没能拿到加入链接。", "Could not make a join link.")).foregroundStyle(MycoColor.fg)
-                        FailureLine(failure: failure) {
-                            self.failure = nil
-                            attempt += 1
-                        }
+            if link == nil, let failure {
+                // (outside the box below: that one is the sentence's)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("没能拿到加入链接。", "Could not make a join link.")).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg)
+                    FailureLine(failure: failure) {
+                        self.failure = nil
+                        attempt += 1
                     }
-                } else {
-                    // The sentence's shape while the workspace makes the link.
-                    Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else {
+                Group {
+                    if link != nil {
+                        Text(sentence).textSelection(.enabled)
+                    } else {
+                        // The sentence's shape while the workspace makes the link.
+                        Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
+                    }
+                }
+                .font(.callout.monospaced())
+                .lineSpacing(3)
+                .foregroundStyle(MycoColor.fg)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityIdentifier("add.sentence")
             }
-            .font(.callout.monospaced())
-            .lineSpacing(3)
-            .foregroundStyle(MycoColor.fg)
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .accessibilityIdentifier("add.sentence")
             Text(L("链接能用 10 次，一周内有效。", "The link works ten times, for a week."))
                 .font(.footnote).foregroundStyle(MycoColor.muted)
             HStack(spacing: 10) {
