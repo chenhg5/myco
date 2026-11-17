@@ -125,3 +125,21 @@ func TestLaunchdBootstrapRetries(t *testing.T) {
 		t.Fatal("a bootstrap that keeps failing must be reported")
 	}
 }
+
+func TestReachableNeedsTheUsersSystemd(t *testing.T) {
+	ok := &fakeRunner{}
+	if err := Reachable(&Systemd{R: ok}); err != nil {
+		t.Fatalf("reachable: %v", err)
+	}
+	if got := strings.Join(ok.calls[0], " "); got != "systemctl --user show-environment" {
+		t.Fatalf("asked with %q", got)
+	}
+	down := &fakeRunner{fail: map[string]bool{"systemctl --user show-environment": true}}
+	err := Reachable(&Systemd{R: down})
+	if !errors.Is(err, ErrNoUserManager) {
+		t.Fatalf("no bus: %v", err)
+	}
+	if err := Reachable(&Launchd{R: down}); err != nil {
+		t.Fatalf("launchd has no such check: %v", err)
+	}
+}

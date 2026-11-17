@@ -115,9 +115,11 @@ after 24 hours). It signs in as the hub's owner; invite other people with: myco 
 Each device gets its own credential; list and remove them in the app (设置 → 成员 → 我的设备).`,
 		Examples: []string{
 			"sudo myco console link                  # on a server installed with install-hub.sh",
+			"myco console link --open                # the myco app on this computer adds the hub itself",
 		},
 		Flags: []Flag{
 			{Name: "name", Kind: String, Help: "Unused (kept for older scripts): devices are named by the app"},
+			{Name: "open", Kind: Bool, Help: "Hand the link to the myco app on this computer (myco://add-hub): it adds the hub, no pasting (macOS, Windows)"},
 			adminFlag,
 		},
 		Run: handler(func(e *env) error {
@@ -125,14 +127,41 @@ Each device gets its own credential; list and remove them in the app (设置 →
 			if err != nil {
 				return err
 			}
+			hub, _ := e.hubURL()
+			if e.in.Bool("dry-run") {
+				out := map[string]any{"hub": hub, "dry_run": true, "open": e.in.Bool("open")}
+				return e.p.Print(out, func(w io.Writer) {
+					fmt.Fprintf(w, "would make a one-time app link for %s", hub)
+					if e.in.Bool("open") {
+						fmt.Fprint(w, " and hand it to the myco app on this computer")
+					}
+					fmt.Fprintln(w)
+				})
+			}
 			res, err := c.CreatePairing(e.in.Ctx)
 			if err != nil {
 				return err
 			}
-			hub, _ := e.hubURL()
 			// The hub builds the link from its public URL when it knows it.
 			out := map[string]any{"link": res.Link, "hub": hub, "expires_at": res.ExpiresAt}
+			warnLoopbackLink(e, out, res.Link)
+			var openErr error
+			if e.in.Bool("open") {
+				openErr = openAppLink(res.Link)
+				out["opened"] = openErr == nil
+				if openErr != nil {
+					out["open_error"] = openErr.Error()
+				}
+			}
 			return e.p.Print(out, func(w io.Writer) {
+				if e.in.Bool("open") && openErr == nil {
+					fmt.Fprintln(w, "Handed to the myco app on this computer: it asks to add this hub (confirm there).")
+					fmt.Fprintf(w, "If it did not, paste this link into the app (works once, until %s):\n\n  %s\n\n", res.ExpiresAt.Local().Format("2006-01-02 15:04"), res.Link)
+					return
+				}
+				if openErr != nil {
+					fmt.Fprintf(w, "Not opened: %v\n\n", openErr)
+				}
 				fmt.Fprintf(w, "App link (works once, until %s):\n\n  %s\n\n", res.ExpiresAt.Local().Format("2006-01-02 15:04"), res.Link)
 				fmt.Fprintln(w, "Paste it into the myco app (连接已有的 Hub). It signs in as this hub's owner: keep it private.")
 			})

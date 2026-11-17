@@ -160,7 +160,7 @@ export interface PageOpen { url: string; version: number; latest: number; name: 
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 
-/** What a conversation keeps at hand (置顶; hubs from v0.20.2): a web
+/** What a conversation keeps at hand (置顶; hubs from v0.20.3): a web
  *  address, a file, or one of its messages. Both parties see the same. */
 export interface Pin {
   id: string;

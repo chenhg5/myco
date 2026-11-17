@@ -179,11 +179,11 @@ Pinning the same thing again only changes its title. A conversation keeps 20 pin
 // pinErr says what to do on a hub without pins.
 func pinErr(err error) error {
 	if e, ok := client.AsError(err); ok && e.Status == 404 && strings.Contains(e.Message, "does not keep pins") {
-		return errorf("not_supported", ExitNotFound, "the hub needs v0.20.2 or later (sudo myco upgrade on the server); until then, write the link in your reply", "this hub has no pins yet")
+		return errorf("not_supported", ExitNotFound, "the hub needs v0.20.3 or later (sudo myco upgrade on the server); until then, write the link in your reply", "this hub has no pins yet")
 	}
 	// An older hub has no /v1/pins at all.
 	if e, ok := client.AsError(err); ok && e.Status == 404 && e.Code == "" {
-		return errorf("not_supported", ExitNotFound, "the hub needs v0.20.2 or later (sudo myco upgrade on the server); until then, write the link in your reply", "this hub has no pins yet")
+		return errorf("not_supported", ExitNotFound, "the hub needs v0.20.3 or later (sudo myco upgrade on the server); until then, write the link in your reply", "this hub has no pins yet")
 	}
 	return err
 }

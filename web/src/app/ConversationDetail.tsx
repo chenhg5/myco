@@ -960,7 +960,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const termMode = shellMode || !!execNode;
 
   // 置顶 (pins.tsx): what this conversation keeps at hand, above it; the
-  // same list for both parties (hubs from v0.20.2). Not in a terminal.
+  // same list for both parties (hubs from v0.20.3). Not in a terminal.
   const pinState = usePins(target.hubId, termMode ? "" : target.agent, target.peer);
   const pins = pinState.supported ? pinState.pins || [] : null;
   const [pinAdding, setPinAdding] = useState(false);

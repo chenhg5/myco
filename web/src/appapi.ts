@@ -187,8 +187,10 @@ export interface LocalSession {
   last_active: string;
   /** The session's first request, shortened; may be empty. */
   title?: string;
-  /** Set when this session is already an agent somewhere. */
-  joined?: { agent: string; hub: string };
+  /** Set when this session is already an agent somewhere (the first one). */
+  joined?: { agent: string; hub: string; hub_name?: string };
+  /** Every workspace it joined (one session can be an agent of several). */
+  joined_all?: { agent: string; hub: string; hub_name?: string }[];
 }
 export interface LocalJoinInput {
   cli: string;
@@ -694,7 +696,7 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
-  // Pins (hubs from v0.20.2; older ones answer 404): what a conversation
+  // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>
     request<PinList>("GET", `app/hubs/${enc(hubId)}/pins?with=${enc(withWhom)}${a ? `&a=${enc(a)}` : ""}`),

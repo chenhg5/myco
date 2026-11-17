@@ -180,7 +180,7 @@ From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publis
 
 ## Pins
 
-From v0.20.2: what a conversation keeps at hand (置顶), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
+From v0.20.3: what a conversation keeps at hand (置顶), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
 
 | Endpoint | Who | What |
 | --- | --- | --- |

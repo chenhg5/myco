@@ -578,6 +578,9 @@ or they are redelivered. Most agents use 'myco runner start' instead.`,
 			{Name: "wait", Kind: Duration, Default: "0s", Help: "Long-poll up to this long if the inbox is empty (max 60s)"},
 		},
 		Run: handler(func(e *env) error {
+			if ids := e.sessionIdentities(); len(ids) > 1 {
+				return e.inboxPullAll(ids, e.in.Int("limit"), e.in.Duration("wait"))
+			}
 			c, err := e.agentClient()
 			if err != nil {
 				return err
@@ -617,6 +620,9 @@ After every exit, process the inbox and run myco inbox wait again.`,
 		},
 		Flags: []Flag{{Name: "timeout", Kind: Duration, Env: "MYCO_WAIT_TIMEOUT", Help: "Override the automatic wait duration (55m for Claude Code, 10m otherwise); exit 7 on timeout"}},
 		Run: handler(func(e *env) error {
+			if ids := e.sessionIdentities(); len(ids) > 1 {
+				return e.inboxWaitAll(ids)
+			}
 			c, err := e.agentClient()
 			if err != nil {
 				return err

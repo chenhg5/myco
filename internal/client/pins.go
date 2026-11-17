@@ -9,7 +9,7 @@ import (
 )
 
 // Pins lists what the conversation with `with` keeps at hand (from
-// v0.20.2). a is the caller's side ("" for the caller itself).
+// v0.20.3). a is the caller's side ("" for the caller itself).
 func (c *Client) Pins(ctx context.Context, a, with string) (*api.PinList, error) {
 	q := url.Values{"with": {with}}
 	if a != "" {

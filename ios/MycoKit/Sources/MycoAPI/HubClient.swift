@@ -31,10 +31,14 @@ public struct HubClient: HubAPI {
         return envelope.projects
     }
 
-    /// How long what is asked for again and again may take (the lists, a
-    /// conversation's messages). The next asking is seconds away, so one
-    /// that hangs on a bad connection is given up early.
-    static let pollTimeout: TimeInterval = 12
+    /// How long what is asked for again and again (the lists, a
+    /// conversation's messages) may go without a byte before it is given
+    /// up: the time between packets, not the whole request. The next
+    /// asking is seconds away, so one that hangs is given up early; but
+    /// through a slow proxy a look takes several seconds and can stall for
+    /// more than ten, and twelve made the lists say the workspace could not
+    /// be reached while it answered.
+    static let pollTimeout: TimeInterval = 20
 
     public func recent(_ scope: RecentScope) async throws -> [RecentItem] {
         var query = ["limit": "100"]
@@ -298,6 +302,8 @@ public struct HubClient: HubAPI {
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
         } catch {
+            // (only through the app's own sessions: a session given is a test's)
+            if session == nil { AppNetwork.shared.failed(request.url, error) }
             throw HubError.unreachable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw HubError.unreachable("no HTTP response") }

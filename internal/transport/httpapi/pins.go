@@ -25,7 +25,7 @@ func (s *Server) pinRoutes(m *http.ServeMux) {
 func (s *Server) pinParties(r *http.Request, a, with string) (string, string, string, error) {
 	if s.pins == nil {
 		return "", "", "", domain.Errf(domain.CodeNotFound, "this hub does not keep pins").
-			WithSuggestion("upgrade the hub to v0.20.2 or later")
+			WithSuggestion("upgrade the hub to v0.20.3 or later")
 	}
 	if with == "" {
 		return "", "", "", domain.Errf(domain.CodeInvalidArgument, "with whom: the conversation's other party is required").

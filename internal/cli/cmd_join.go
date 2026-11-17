@@ -83,6 +83,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 			cmd := "curl -fsSL " + res.JoinURL + " | bash"
 			out := map[string]any{"link": res.Enrollment, "join_url": res.JoinURL, "command": cmd,
 				"agent_prompt": "接入 myco：" + res.JoinURL}
+			warnLoopbackLink(e, out, res.JoinURL)
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "join link %s: %s, %s\n\n", res.Enrollment.ID, linkValidity(res.Enrollment), linkUses(res.Enrollment))
 				fmt.Fprintf(w, "On each machine to add (macOS / Linux / WSL / VPS), run:\n  %s\n\n", cmd)
@@ -444,6 +445,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			"myco join --harness codex --session-id 0199a1b2-...   # specify a resumable session",
 			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
 			"myco join --fork                                      # join a copy; keep using this session yourself",
+			"myco join --same-session                              # already in another workspace: share this session (not a copy)",
 			"myco join --take-over https://hub.example.com/h/myco_takeover_...  # answer for an existing node from now on",
 			`myco join --project website --display-name "Frontend" # and join a project at once`,
 		},
@@ -456,6 +458,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "session-id", Kind: String, Help: "Session id (default: detected)"},
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
+			{Name: "same-session", Kind: Bool, Help: "When this session is already an agent of another workspace, join it as it is instead of a copy (default: a copy, so each workspace has its own session)"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
 			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
 		},
@@ -519,8 +522,34 @@ Safe to re-run: the same session gets the same agent back.`,
 			if err != nil {
 				return err
 			}
+			// Already an agent of another workspace: a copy joins this one
+			// (each workspace its own session and memory, no two turns on one
+			// transcript), unless --same-session; a copy that joined here
+			// before is found again rather than made anew.
+			elsewhere := sessionElsewhere(e.defaultPath, b.SessionID, hub)
+			sessionMode := ""
+			fork := e.in.Bool("fork")
+			if len(elsewhere) > 0 && !fork {
+				switch {
+				case e.in.Bool("same-session"):
+					sessionMode = "shared"
+				case !forkable(b.Harness):
+					sessionMode = "shared" // inbox-only sessions have nothing to copy
+				default:
+					if cp, ok := copyOnHub(e.defaultPath, b.SessionID, hub); ok {
+						b.SessionID = cp.Config.SessionID
+						how += ", its copy that joined this workspace before"
+					} else {
+						fork = true
+					}
+					sessionMode = "copy"
+				}
+			}
 			forkedFrom := ""
-			if e.in.Bool("fork") && !e.in.Bool("dry-run") {
+			if fork && e.in.Bool("dry-run") && sessionMode == "copy" {
+				how += ", would be copied to a new session"
+			}
+			if fork && !e.in.Bool("dry-run") {
 				// The copy, not this session, becomes the agent: the person
 				// keeps using the original without the runner stepping in.
 				id, err := forkSession(e, b, e.in.String("name"))
@@ -528,6 +557,7 @@ Safe to re-run: the same session gets the same agent back.`,
 					return err
 				}
 				forkedFrom, b.SessionID = b.SessionID, id
+				e.copyOf = forkedFrom
 				how += ", copied to a new session"
 			}
 			name := e.in.String("name")
@@ -550,6 +580,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			project := strings.TrimSpace(e.in.String("project"))
 			if dry {
 				d := map[string]any{"action": "join", "agent": res.Agent, "detected": how}
+				if len(elsewhere) > 0 {
+					d["also_in"], d["session"] = identitiesOf(elsewhere), sessionMode
+				}
 				if project != "" {
 					d["project"] = project
 				}
@@ -565,6 +598,9 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			if len(elsewhere) > 0 {
+				out["also_in"], out["session"] = identitiesOf(elsewhere), sessionMode
+			}
 			if cmd := e.ensureResume(hub, res.Token); cmd != "" {
 				out["resume_command"] = cmd
 			}
@@ -589,6 +625,9 @@ Safe to re-run: the same session gets the same agent back.`,
 					verb = "already joined as"
 				}
 				fmt.Fprintf(w, "%s %s (%s)\n", verb, res.Agent.Name, how)
+				if len(elsewhere) > 0 {
+					fmt.Fprintln(w, alsoInNote(elsewhere, sessionMode, res.Agent.Name))
+				}
 				if cmd, ok := out["resume_command"].(string); ok {
 					fmt.Fprintln(w, "If this sandbox is temporary, save this credential outside it (memory, project instructions or an environment variable). Run it first if myco or its config is missing; keep it private:\n  "+cmd)
 				}

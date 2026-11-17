@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * messages: a web address (a myco page opens in the page panel, a local
  * server too, the rest in the browser), a file (read in the App, or saved),
  * or one of its messages (scrolled to and lit up). Both parties see the
- * same list, kept on the hub (hubs from v0.20.2): the person pins here (a
+ * same list, kept on the hub (hubs from v0.20.3): the person pins here (a
  * message's 置顶, the header's pin button for an address); an agent with
  * `myco pin add`. Older hubs: no strip and no way in.
  */

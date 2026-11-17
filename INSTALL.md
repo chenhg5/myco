@@ -192,12 +192,14 @@ myco hub up --tunnel none                                    # 不穿透：只�
 - claude.ai 云端环境如果使用网络白名单，要把 Hub 的域名加进允许访问的主机。
 - **只在局域网用**（`--tunnel none`，App 里"在这台电脑上开始"默认就是这个）：Hub 监听所有网卡，同一个局域网（同一个 Wi-Fi、同一个公司内网）里的电脑能直接连。在这台电脑上生成的邀请链接、入网链接会自动用本机的局域网地址（如 `http://192.168.1.20:7777/...`），而不是 `127.0.0.1`。注意：
   - 局域网里是明文 HTTP，令牌会在局域网里明文传输，只在信得过的网络里用；跨网络、给云端会话用，请用上面的穿透方式。
-  - 局域网地址由路由器分配，可能会变；变了以后，已加入的机器要用新地址重新加入。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个。
+  - 局域网地址由路由器分配，可能会变；变了以后，已加入的机器要用新地址重新加入。可以在路由器里给这台电脑固定 IP。电脑同时连了好几个网络时，用环境变量 `MYCO_LAN_ADDR=<地址>` 指定用哪个（`MYCO_LAN_ADDR=<地址> myco hub up --tunnel none`，它会带进服务里）。找不到局域网地址时，链接只能写成 `127.0.0.1`（只有本机能用）：`myco link create`、`myco console link`、`myco hub up` 这时会给出警告和这个办法。
   - Mac 第一次会弹出"是否允许 myco 接受传入的网络连接"，要选允许。
   - 只想给本机用：`myco hub up --tunnel none --local-only`（只监听 127.0.0.1）。
   - v0.18.2 及之前用 `--tunnel none` 开的 Hub 只监听 127.0.0.1。打开 v0.18.3 及以后的 App 时会自动处理一次：命令行工具太旧就先 `myco upgrade`，再重新执行 `myco hub up --tunnel none`（用了穿透、或者特意加了 `--local-only` 的不动）。不用 App 的话，自己执行这两条即可。
 - 停止：`myco hub down`（数据保留，`myco hub up` 再次启动）。日志在 `~/.myco/hub/hub.log`。
 - 也可以不用 `hub up`，直接运行：`myco hub serve --tunnel tailscale --admin-token-file ~/.myco/hub/hub.env ...`。
+- 没有可用的 `systemd --user` 的 Linux（容器、用 su/sudo 进来的终端、部分 WSL）：`myco hub up` 装服务前会先检查，报错 `no_user_service`，建议里就是加了 `--no-service` 的同一条命令；它打印的 `myco hub serve …` 自己放到后台跑（`nohup … &`、tmux 或你的进程管理器）。
+- App 就在这台电脑上时，`myco console link --open` 直接把链接交给 App（myco:// 链接），App 会问要不要加上这个工作区，不用复制粘贴。
 
 ---
 
@@ -487,6 +489,7 @@ runner:
 
 ### 注意事项（适用于 4.2 到 4.5）
 
+- **不在 agent 的会话里跑命令时用哪个身份**：每个加入的会话有自己的身份（`~/.myco/agents/<名字>.yaml`），在那个会话里跑 myco 命令自动用它。在普通终端里跑（或者别的程序替你跑）时，`~/.myco/config.yaml` 里没有身份就用这台电脑上唯一的那个 agent；有好几个时，`myco doctor` 全查一遍，其他命令会列出名字，用 `MYCO_AGENT=<名字> myco …` 指定（或 `--config ~/.myco/agents/<名字>.yaml`）。
 - **会话被占用时的行为**：runner 在续接前会查看这个会话的记录文件（Claude 在 `~/.claude/projects/`，Codex 在 `~/.codex/sessions/`）。如果最近 90 秒内有**别人**写过（`--busy-window`），比如你正在交互界面里用它，runner 就把消息放回队列，10 秒后再试，之后逐步加长到最多 2 分钟（`--busy-retry`），**不算失败**。Codex 报 `already has an active writer` 时也按同样的方式处理。runner 自己写入的时间记在 `~/.myco/state/` 下，重启后不会把自己的写入误判成别人在用。
 - runner 自己如果是在某个 Claude Code 会话里启动的，启动 claude 时会清掉继承来的 `CLAUDE*` 会话变量（保留 `CLAUDE_CONFIG_DIR` 和认证相关的），以免 headless claude 连到外层那个会话上。建议在普通终端或 systemd/launchd 里运行 runner。
 - Codex 如果报 `model is not supported when using Codex with a ChatGPT account`，就在 `runner.args` 里指定一个账号可用的模型。
@@ -752,6 +755,17 @@ myco agent handover-link --name docs-claude
 - 加入时顺便进一个项目：`myco join --project <项目>`（能看到的项目才行，比如主人和你是同一个人的项目）；进不去时 join 照样成功，输出里说明原因。App 在项目里「添加 agent」给出的那句话只有一条命令：`curl -fsSL <入网链接>/<项目> | bash`。链接后面加上项目名，脚本装好 myco 以后会在最后告诉 agent 该运行的 `myco join --project <项目> --display-name … --description …`（旧版 Hub 不支持这种链接，App 会改给完整的步骤）。
 - 同名的节点在不同 Hub 上，配置文件会以 `<名字>@<Hub 主机>.yaml` 区分。
 
+### 4.13.1 一个会话加入几个工作区
+
+同一个 Claude Code 或 Codex 会话，可以分别加入不同的工作区（不同的 Hub，或者同一台服务器上的 `/w/<名字>`）。
+- **默认：复制一份加入**。在一个已经加入了工作区 A 的会话里，用工作区 B 的入网链接再运行 `myco join`，加入 B 的是这个会话的一份副本（和 `myco join --fork` 一样）。这样每个工作区各有自己的会话和记忆，runner 也不会同时续同一个会话。输出里会写明「这个会话已经是 A 的 某某，加入 B 的是一份副本」，JSON 里有 `also_in` 和 `session: "copy"`。之后在同一个会话里再 join B，找到的还是那份副本，不会再复制。
+- **想让同一个会话同时为两边干活**：`myco join --same-session`。这时：
+  - 在会话里挂着的 `myco inbox wait` 同时等两个工作区，谁有消息就说是哪个工作区的哪个 agent（JSON 里是 `for`）；`myco inbox pull` 把两边的消息都取回来，每条标着它是给谁的（`as`）。
+  - 对某条消息的命令（`message ack|progress|reply|…` 带 `--id`）会自动用收到这条消息的那个身份。
+  - 其他命令用按文件名排第一的那个身份，并在 stderr 说一句还有哪些；用 `MYCO_AGENT=<agent 名字>` 指定。
+  - runner 唤醒时一次只续这个会话的一轮：另一个工作区的消息先排队，等这一轮做完再处理。
+- App 的「添加 agent → 这台电脑上的」会列出一个会话加入过的所有工作区：「已经加入了：<工作区> 的 <agent>、…」。
+
 ### 4.14 几个人共用一个 Hub（团队）
 
 一个 Hub 可以有好几个人，每个人在自己的 App 里用自己的身份：
@@ -840,7 +854,7 @@ myco page rm --page pg_xxx
 
 ### 4.18 置顶：对话上方的标签
 
-一段对话（你和某个 agent，或两个 agent 之间）可以把常用的东西置顶，显示在对话标题下面一排小标签里，点一下就打开（需要 Hub v0.20.2 或更新，旧 Hub 上不显示）。三种：
+一段对话（你和某个 agent，或两个 agent 之间）可以把常用的东西置顶，显示在对话标题下面一排小标签里，点一下就打开（需要 Hub v0.20.3 或更新，旧 Hub 上不显示）。三种：
 - **网址**：myco 网页（`<Hub>/pages/pg_xxx`）和这台电脑上的开发服务器在 App 的网页面板里打开，别的用浏览器打开。
 - **文件**：对话里发过的文档、图片，文本和图片在 App 里看，别的存到「下载」。
 - **某条消息**：点了滚到那条消息并闪一下（太早的会往前多加载几页去找）。
@@ -861,6 +875,7 @@ myco pin rm --with @console:ann --pin pin_xxx
 
 ```bash
 myco doctor                          # Hub 连通性、身份、本 agent 的 CLI、工作目录、会话记录（不消耗额度）
+myco doctor                          # 检查本机的 agent（不在 agent 会话里时：本机唯一的那个；有好几个就全查）
 myco doctor --all                    # 检查本机所有 agent
 ```
 有失败项时退出码为 1，每一项都附带修复建议。

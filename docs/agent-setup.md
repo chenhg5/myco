@@ -86,7 +86,7 @@ myco hub up --tunnel cloudflare                               # 临时地址，�
 
 - 先用 `--dry-run` 看它会做什么。
 - 它会装成后台服务（macOS 用 launchd，Linux 用 `systemd --user`），开机自启。再跑一次也安全，令牌和数据都会保留。数据在 `~/.myco/hub/`。
-- 没有 `systemd --user` 的 Linux（容器、部分 WSL）：加 `--no-service`，它会打印一条 `myco hub serve …` 命令。用 `nohup <那条命令> > ~/.myco/hub/hub.log 2>&1 &` 放到后台跑，并告诉用户：重启后要再跑一次。
+- 没有 `systemd --user` 的 Linux（容器、部分 WSL、用 su/sudo 进来的终端）：`myco hub up` 会先检查，报错 `no_user_service`，建议里给出加了 `--no-service` 的同一条命令。照着跑，它会打印一条 `myco hub serve …` 命令；用 `nohup <那条命令> > ~/.myco/hub/hub.log 2>&1 &` 放到后台跑，并告诉用户：重启后要再跑一次。
 - macOS 第一次会弹出「是否允许 myco 接受传入的网络连接」，让用户点「允许」，否则局域网里的其他电脑连不上。
 - 这台电脑要一直开着、不能睡眠。Mac 上提醒用户在「系统设置 → 电池 / 能源」里关掉自动睡眠。
 
@@ -146,19 +146,10 @@ myco workspace create --name side-project   # 本机 Hub；服务器上加 sudo
 myco console link        # 打印 http(s)://<hub>/c/<一次性代码>：只能用一次，24 小时内有效
 ```
 
-- **App 就装在你所在的这台电脑上**：直接让 App 打开它，用户不用粘贴任何东西：
+- **App 就装在你所在的这台电脑上**：加 `--open`，链接直接交给 App，App 会问用户要不要加上这个工作区，用户不用粘贴任何东西：
 
   ```bash
-  # macOS
-  link='<上面打印的链接>'
-  enc=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$link")
-  open "myco://add-hub?link=$enc"
-  ```
-
-  ```powershell
-  # Windows（PowerShell）
-  $link = '<上面打印的链接>'
-  Start-Process ("myco://add-hub?link=" + [uri]::EscapeDataString($link))
+  myco console link --open     # 输出里 opened: true 就是交过去了；没打开时会说原因，链接照样打印出来
   ```
 
   （App 只有 Mac 和 Windows 版；Linux 上没有 App，把链接交给用户在他的 Mac 或 Windows 上用。）
@@ -218,14 +209,15 @@ myco join --display-name "<用户能认出的名字>" --description "<你负责�
 ## 6. 自检
 
 ```bash
-myco doctor --all     # 这台电脑上每个身份的检查：Hub 通不通、版本、身份、runner、CLI
+myco doctor           # 这台电脑上 agent 的检查：Hub 通不通、版本、身份、runner、CLI
+myco doctor --all     # 每个身份都查一遍（包括这台电脑本身的节点）
 myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
 ```
 
 - `OK`：正常。
 - `WARN`：能用，但有提醒，比如这台电脑没装 Claude Code 或 Codex，别人就没法在这里开新会话。
 - `FAIL`：看箭头后面的建议，再对照「排错」。
-- 只用 `myco doctor`（不带 `--all`）时，检查的是当前会话的身份。不在 agent 会话里跑时，可能报「no hub configured」。这不是故障，用 `--all` 就好。
+- 不在 agent 会话里跑时，`myco doctor`、`myco agent list` 这些命令会自动用这台电脑上唯一的那个 agent 身份。有好几个时，`myco doctor` 会全查一遍；其他命令会报错并列出名字，用 `MYCO_AGENT=<名字> myco …` 指定是哪个。
 
 ---
 
@@ -247,7 +239,7 @@ myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
 
 先收集信息，再动手：
 
-- `myco version`、`myco doctor --all`；
+- `myco version`、`myco doctor`（有好几个身份时加 `--all`）；
 - Hub 在本机时：`myco hub list` 和 `tail -50 ~/.myco/hub/hub.log`；
 - Hub 在服务器上时：`sudo bash install-hub.sh --check`、`systemctl status myco-hub`、`journalctl -u myco-hub -n 50`；
 - App 出错时：请用户点提示下面的「详细信息」，把原文发给你。
@@ -257,6 +249,8 @@ myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
 | App 显示「暂时连不上，或者响应太慢」；原文是 `i/o timeout`、`deadline exceeded` | Hub 没在运行；网络不通；**代理把局域网地址也接走了** | 在 App 所在的电脑上 `curl -sS -m 5 <hub>/v1/health`；看有没有开 Clash、Surge、公司 VPN；`env \| grep -i _proxy` | Hub 没运行就启动它。开了代理就用直连试：请用户关掉代理或 TUN 模式试一次，或者把 Hub 地址加进代理的直连规则或 `NO_PROXY`（改之前先问）。App v0.19.24 起局域网地址一律直连，旧版本先升级 App |
 | `connection refused` | Hub 没在运行，或者端口不对 | `myco hub list`、`curl http://127.0.0.1:7777/v1/health`、`ss -ltnp \| grep 7777`（macOS 用 `lsof -iTCP:7777 -sTCP:LISTEN`） | 本机：`myco hub up --tunnel none` 再跑一次。服务器：`sudo systemctl restart myco-hub`，看 `journalctl -u myco-hub` |
 | 局域网里另一台电脑连不上，本机能连 | macOS 拦截了传入连接；防火墙；Hub 只听 127.0.0.1；两台不在同一个网络 | 在另一台电脑上 `curl <hub>/v1/health`；看 `myco hub list` 的地址是不是 `--local-only` | 请用户在「系统设置 → 网络 → 防火墙」里允许 myco；用 `myco hub up --tunnel none` 重跑（不带 `--local-only`） |
+| `myco hub up` 报 `no_user_service`（或 `Failed to connect to bus`） | 这个用户没有可用的 `systemd --user`（容器、用 su/sudo 进来的终端、部分 WSL） | 报错的建议里有现成的命令 | 照建议加 `--no-service` 重跑，再用 `nohup` 把它打印的 `myco hub serve …` 放到后台；服务器上更好的办法是 `install-hub.sh`（系统服务） |
+| 生成的链接里是 `127.0.0.1`，命令输出有 `warning: this link names 127.0.0.1` | 这台电脑没有找到局域网地址（没连网，或者只有 VPN、虚拟网卡），所以链接只有本机能用 | `ip addr` / `ifconfig`，看有没有 192.168.x.x、10.x.x.x 这类地址 | 用 `MYCO_LAN_ADDR=<这台电脑的地址> myco hub up --tunnel none` 重开 Hub（会重启它），再重新生成链接；要给别的网络或云端会话用，改用隧道（`--tunnel cloudflare` 或 `--tunnel tailscale`） |
 | 链接里的地址变了，或者之前加入的电脑突然都连不上（局域网） | 路由器给这台电脑换了 IP | 对比 `myco hub list` 的地址和本机现在的 IP | 请用户在路由器里给这台电脑固定 IP；电脑连着多个网络时，用 `MYCO_LAN_ADDR=<地址>` 指定。已加入的电脑要用新链接重新 `machine join` |
 | `no such host` | 域名拼错；sslip.io 地址里的 IP 不对；DNS 还没生效 | `getent hosts <域名>`（macOS 用 `dscacheutil -q host -a name <域名>`），对比服务器的公网 IP | 改正域名，或等 DNS 生效；Cloudflare 隧道的话，确认已经把域名指向隧道 |
 | `x509`、`certificate` 错误 | 证书还没签下来，或者签失败了 | `sudo bash install-hub.sh --check`；`journalctl -u caddy -n 50` | 443（和 80）要能从外网访问；云厂商安全组放行 443；修好后再跑一次安装命令 |
@@ -269,6 +263,7 @@ myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
 | 临时隧道（`trycloudflare.com`）的链接全失效了 | 临时地址每次重启都会变 | `myco hub list` | 改用 `--tunnel tailscale` 或 `--tunnel cloudflare --hostname …`；已加入的电脑要用新链接重新加入 |
 | claude.ai 云端会话连不上 Hub | 云端环境的网络白名单里没有 Hub 的域名 | 在会话里 `curl -sS <hub>/v1/health` | 请用户在环境设置里把 Hub 的主机名加进允许访问的主机 |
 | 消息发了，agent 一直没反应 | runner 没在运行；会话开在终端里正被人用；agent 离线 | `myco runner service status`、`myco runner service logs`；在 App 里看那个 agent 的状态 | `myco runner service install` 或 `restart`；会话开着时让它挂着 `myco inbox wait` |
+| 同一个会话加入了两个工作区，只收到其中一个的消息 | 旧版 myco：会话里的命令只认一个身份 | `myco version`；`ls ~/.myco/agents/` 里两个文件的 `session_id` 一样 | 升级 myco（`myco upgrade`）：新版的 `inbox wait`/`inbox pull` 同时服务两个工作区。或者在第二个工作区用副本加入：`myco join`（默认就是副本） |
 | Windows：`myco hub up` 不可用 | 只支持 macOS 和 Linux | | 让用户在 App 里点「在这台电脑上开始」，或者把 Hub 放到服务器或 WSL 里 |
 | 下载 myco 或安装脚本失败 | 访问 GitHub 不稳定 | 看报错 | 见第 2 步：重试、带代理、用 jsDelivr 镜像 |
 

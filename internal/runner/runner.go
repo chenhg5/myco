@@ -67,6 +67,9 @@ type Options struct {
 	// BusyWindow: a session whose transcript changed within this window (and
 	// not by us) is considered in use by someone else (default 90s).
 	BusyWindow time.Duration
+	// SessionLocks, if set, is shared by every runner on this machine: a
+	// session that is the agent of several workspaces runs one turn at a time.
+	SessionLocks *SessionLocks
 	// Slots, if set, is shared by several runners in one process to cap the
 	// number of harness processes running at once.
 	Slots chan struct{}
@@ -407,6 +410,16 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	if busy, last := r.inUseElsewhere(key, sessionID); busy {
 		r.release(ctx, log, m, key, "session transcript changed "+r.opts.Now().Sub(last).Round(time.Second).String()+" ago by someone else")
 		return
+	}
+	// The same session can be this agent and another workspace's: one turn
+	// at a time on it, the other message waits in its queue.
+	if sessionID != "" {
+		unlockSession, ok := r.opts.SessionLocks.TryLock(r.harness.Name() + ":" + sessionID)
+		if !ok {
+			r.release(ctx, log, m, key, "the session is running a turn for another workspace")
+			return
+		}
+		defer unlockSession()
 	}
 	if r.opts.Slots != nil {
 		select {

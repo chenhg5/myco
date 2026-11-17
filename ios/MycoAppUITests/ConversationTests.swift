@@ -183,6 +183,50 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAVoiceChatGoesOnWhenItsChatIsLeft() {
+        let app = launch(["-myco-route", "agent:studio-codex-e07b", "-myco-voice", "scripted"])
+        let submit = app.descendants(matching: .any)["composer.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        submit.tap()
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let strip = app.buttons["call.strip"]
+        XCTAssertFalse(strip.exists, "in its own chat the call is the bar above the input")
+
+        // Leaving the chat does not hang up: a strip at the top says how
+        // the call goes, and with whom.
+        swipeBack(app)
+        XCTAssertTrue(strip.waitForExistence(timeout: 5), "the call goes on, in a strip at the top")
+        XCTAssertTrue(strip.label.contains("翻译"), strip.label)
+        XCTAssertFalse(bar.exists)
+        XCTAssertTrue(app.buttons["call.strip.mute"].exists)
+        XCTAssertTrue(app.buttons["call.strip.hangup"].exists)
+        snap("call-strip")
+
+        // In another chat the round button would take the call's place,
+        // and says so; the microphone is the call's meanwhile.
+        app.buttons["chat.agent:studio-claude-c41f"].tap()
+        XCTAssertTrue(submit.waitForExistence(timeout: 10))
+        XCTAssertTrue(submit.label.hasPrefix("Hang up with 翻译"), submit.label)
+        XCTAssertFalse(app.buttons["composer.mic"].exists)
+        XCTAssertTrue(strip.exists, "still on")
+        snap("call-strip-elsewhere")
+
+        // A tap on the strip goes back to the call's chat: the bar again.
+        strip.tap()
+        XCTAssertTrue(bar.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: strip)
+        waitForExpectations(timeout: 5)
+
+        // Hung up from the strip, elsewhere: it goes.
+        swipeBack(app)
+        XCTAssertTrue(strip.waitForExistence(timeout: 5))
+        app.buttons["call.strip.hangup"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: strip)
+        waitForExpectations(timeout: 5)
+    }
+
+    @MainActor
     func testWithoutVoiceSetUpTheButtonOnlySends() {
         // No key on this simulator: the round button is Send, as always.
         let app = launch(["-myco-route", "agent:studio-codex-e07b"])

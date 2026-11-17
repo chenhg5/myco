@@ -112,7 +112,9 @@ Settings › Voice chat takes the model's address, name and key, and the speech 
 
 The settings are the person's, not the phone's (`VoiceSharing`): unless "Keep on the workspaces" is turned off, they are kept, keys and all, on every workspace this device joined (`GET`/`PUT /v1/console/voice`), so what was set in the desktop app is here without typing it again, and the other way round. The newest change wins, by the time the person made it. The app looks at the workspaces when it starts, when the settings page opens, and before a call that is not set up; a change goes out when the page is left. The page says where the settings are kept, which workspace's hub is too old to keep them (they stay on this device then), and which could not be reached. The keys are handed only to the person's own devices, but they are in the hub's database as they are: whoever administers the hub's machine can read them, which the page says. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
 
-What differs from the desktop: the call hangs up when the conversation is left, when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
+The call lives in the app (`AppModel.ongoing`), not in the page it was started from: going to another chat, a project or the settings does not hang up. In its own chat it is the bar above the input; anywhere else a strip across the top says how it goes and with whom (`CallStrip`: a tap goes back to that chat, also in another workspace), mutes and hangs up. There is one call at a time: starting one with another agent hangs up the call before first (its button says so), and the microphone for dictation is out of the way meanwhile.
+
+What differs from the desktop: the call hangs up when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
 
 ## A conversation, as the desktop app shows it
 
@@ -160,6 +162,8 @@ Nothing pops in. A list that waits for its first answer shows rows in its shape 
 ## Staying fresh
 
 An open conversation asks for its messages every two seconds and shows them as soon as they come. How the tasks were worked on (their steps) and what surrounds the conversation (the agent's work with colleagues) are fetched alongside, one round at a time, and shown when they come: one slow answer among them never keeps back a message that is already here (`ConversationModel.load`). The lists ask every five seconds. What is asked again and again is given up after 12 seconds, since the next asking is seconds away.
+
+A look that fails is a blip: the lists, like a conversation, say the workspace cannot be reached only when the next look fails too, when the person pulled to refresh, or when nothing was ever shown (`WorkspaceSession.refresh`). A look may go 20 seconds without a byte before it is given up (`HubClient.pollTimeout`): through a slow proxy a look takes several seconds and stalls now and then for more than ten. With a proxy set here, a request that cannot get through makes its session again, so the next opens a new tunnel; each such failure is in the system's log (subsystem `dev.myco.ios`, category `network`: the error code, and whether it went through the proxy).
 
 Leaving the app stops the asking; coming back starts it over at once, for the lists and for the conversation on screen alike, so the page never waits for an answer that was cut off when the app left the front.
 

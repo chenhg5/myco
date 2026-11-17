@@ -16,7 +16,7 @@ import (
 
 // serviceEnvKeys are copied into the service definition when set: they
 // decide where CLIs and sessions are found. Tokens are never copied.
-var serviceEnvKeys = []string{"PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", config.EnvConfig}
+var serviceEnvKeys = []string{"PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", config.EnvConfig, "MYCO_LAN_ADDR"}
 
 // proxyEnvKeys are copied too: a service does not read the shell profile
 // that usually sets them, and without them agent CLIs behind a proxy cannot
