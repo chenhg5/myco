@@ -354,6 +354,22 @@ async function go(page, label, narrow) {
   if (narrow) await sidebar(page, false);
 }
 
+// Right-click a row and pick from its menu. Scrolling the row into view
+// fires a scroll a moment later, which closes a menu (as it should for a
+// person scrolling): so again, until the menu stays.
+async function menuPick(page, row, item) {
+  for (let i = 0; ; i++) {
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await row.click({ button: "right" });
+    const it = page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true });
+    if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)
+      && await it.click({ timeout: 1_500 }).then(() => true, () => false)) return;
+    await page.keyboard.press("Escape");
+    if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
+  }
+}
+
 async function closeDialog(page) {
   await page.keyboard.press("Escape");
   await page.locator(".app-modal").waitFor({ state: "hidden" });
@@ -735,17 +751,7 @@ async function runMatrix(browser, size, scheme) {
       await panel.waitFor({ state: "detached", timeout: 5_000 });
       // Right-click: rename, then unpin. (The menu closes on any scroll,
       // and the chat may still be settling after the panel closed: again.)
-      const menuOn = async (chip, item) => {
-        for (let i = 0; ; i++) {
-          await chip.scrollIntoViewIfNeeded();
-          await settle(page, 300);
-          await chip.click({ button: "right" });
-          const it = page.locator(".conv-menu").getByRole("menuitem", { name: item });
-          if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)
-            && await it.click({ timeout: 1_500 }).then(() => true, () => false)) return;
-          if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
-        }
-      };
+      const menuOn = (chip, item) => menuPick(page, chip, item);
       const design = bar.locator(".pin-chip", { hasText: "设计稿" });
       await menuOn(design, "重命名");
       await page.locator("[data-testid=pin-title]").fill("设计稿 v2");
@@ -1131,11 +1137,9 @@ async function runMatrix(browser, size, scheme) {
       // Pinned: on top whatever the order, with a small pin; unpinned again.
       const last = people.last();
       const lastName = compactText(await last.innerText());
-      await last.click({ button: "right" });
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "置顶" }));
+      await menuPick(page, last, "置顶");
       await page.waitForFunction((n) => (document.querySelector(".sp-nav-chat-list .sp-nav-person")?.textContent || "").includes(n), lastName, { timeout: 5_000 });
-      await page.locator(".sp-nav-chat-list .sp-nav-person").first().click({ button: "right" });
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "取消置顶" }));
+      await menuPick(page, page.locator(".sp-nav-chat-list .sp-nav-person").first(), "取消置顶");
       // + adds an agent to talk to.
       await clickVisible(page, page.locator(".sp-nav-chat-add"));
       await page.locator(".app-modal", { hasText: "添加 agent" }).waitFor({ timeout: 5_000 });
