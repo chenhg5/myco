@@ -112,7 +112,9 @@ Settings › Voice chat takes the model's address, name and key, and the speech 
 
 The settings are the person's, not the phone's (`VoiceSharing`): unless "Keep on the workspaces" is turned off, they are kept, keys and all, on every workspace this device joined (`GET`/`PUT /v1/console/voice`), so what was set in the desktop app is here without typing it again, and the other way round. The newest change wins, by the time the person made it. The app looks at the workspaces when it starts, when the settings page opens, and before a call that is not set up; a change goes out when the page is left. The page says where the settings are kept, which workspace's hub is too old to keep them (they stay on this device then), and which could not be reached. The keys are handed only to the person's own devices, but they are in the hub's database as they are: whoever administers the hub's machine can read them, which the page says. Until the model and its key are set there is no voice button: the round button is Send, as always (the desktop's rule; there Doubao's key is needed too).
 
-What differs from the desktop: the call hangs up when the conversation is left, when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
+The call lives in the app (`AppModel.ongoing`), not in the page it was started from: going to another chat, a project or the settings does not hang up. In its own chat it is the bar above the input; anywhere else a strip across the top says how it goes and with whom (`CallStrip`: a tap goes back to that chat, also in another workspace), mutes and hangs up. There is one call at a time: starting one with another agent hangs up the call before first (its button says so), and the microphone for dictation is out of the way meanwhile.
+
+What differs from the desktop: the call hangs up when the app goes to the background, or when a phone call or another app takes the microphone (the screen stays on during a call); and the talk's lines are not kept after the call.
 
 ## A conversation, as the desktop app shows it
 
