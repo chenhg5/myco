@@ -46,6 +46,8 @@ public actor FakeHub: HubAPI {
         turnEnded = world.turnEnded
         silent = world.silent
         automationList = world.automations
+        pageList = world.pages.map(\.page)
+        pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
     }
 
@@ -350,6 +352,41 @@ public actor FakeHub: HubAPI {
         // Kept as chosen; what it runs with changes at its next run.
         agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
         return agents[index].agent
+    }
+
+    // MARK: Pages
+
+    public static let demoAddress = URL(string: "https://demo.myco.example")!
+
+    public nonisolated var address: URL? { Self.demoAddress }
+
+    private var pageList: [Page] = []
+    private var pageFiles: [String: [String: (type: String, text: String)]] = [:]
+
+    public func page(_ id: String) async throws -> Page {
+        try await check()
+        guard let page = pageList.first(where: { $0.id == id }) else {
+            throw HubError(error: "not_found", message: "page \(id) not found", status: 404)
+        }
+        return page
+    }
+
+    public func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile {
+        try await check()
+        guard let files = pageFiles[id], let file = files[path.isEmpty ? "index.html" : path] else {
+            throw HubError(error: "not_found", message: "no such file in page \(id)", status: 404)
+        }
+        // (each version says which it is, to tell them apart)
+        let text = file.text.replacingOccurrences(of: "{{version}}", with: String(version ?? 0))
+        return PageFile(data: Data(text.utf8), contentType: file.type)
+    }
+
+    /// The agent publishes the page again (for tests of "a newer version").
+    public func publishAgain(_ id: String) {
+        guard let index = pageList.firstIndex(where: { $0.id == id }) else { return }
+        pageList[index].version += 1
+        pageList[index].versions.insert(PageVersion(n: pageList[index].version, by: pageList[index].publisher, at: Date()), at: 0)
+        pageList[index].updatedAt = Date()
     }
 
     // MARK: A computer added with one command

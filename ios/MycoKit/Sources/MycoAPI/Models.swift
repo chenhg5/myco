@@ -568,3 +568,68 @@ public struct AutomationDetail: Codable, Sendable, Hashable {
         self.runs = runs
     }
 }
+
+/// One publish of a page.
+public struct PageVersion: Codable, Sendable, Hashable {
+    public var n: Int
+    public var by: String?
+    public var at: Date?
+
+    public init(n: Int, by: String? = nil, at: Date? = nil) {
+        self.n = n
+        self.by = by
+        self.at = at
+    }
+}
+
+/// A web page an agent published to the workspace (`myco page publish`,
+/// hubs from v0.19.24): a folder of files kept by the hub, in versions.
+public struct Page: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var project: String?
+    public var publisher: String
+    /// Its latest version's number.
+    public var version: Int
+    /// Its address on the hub (`<hub>/pages/<id>`).
+    public var url: String?
+    @LossyList public var versions: [PageVersion]
+    public var createdAt: Date?
+    public var updatedAt: Date?
+    /// A server on its publisher's computer, forwarded while that one
+    /// serves it: no versions, no files; `online` says whether it is now.
+    public var live: Bool?
+    public var online: Bool?
+
+    public init(
+        id: String, name: String, project: String? = nil, publisher: String, version: Int = 1, url: String? = nil,
+        versions: [PageVersion] = [], createdAt: Date? = nil, updatedAt: Date? = nil, live: Bool? = nil, online: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.project = project
+        self.publisher = publisher
+        self.version = version
+        self.url = url
+        self.versions = versions
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.live = live
+        self.online = online
+    }
+}
+
+/// One file of a page, as the hub serves it.
+public struct PageFile: Sendable, Hashable {
+    public var data: Data
+    /// Its type, from its extension ("text/html; charset=utf-8").
+    public var contentType: String
+    /// The HTTP status it came with: a live page's server answers as it does.
+    public var status: Int
+
+    public init(data: Data, contentType: String, status: Int = 200) {
+        self.data = data
+        self.contentType = contentType
+        self.status = status
+    }
+}

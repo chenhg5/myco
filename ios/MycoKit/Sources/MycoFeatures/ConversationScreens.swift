@@ -521,6 +521,13 @@ struct ConversationBody: View {
         }
         .sensoryFeedback(.impact(weight: .light), trigger: pulls)
         .quickLookPreview($lookingAt)
+        // A link to a page of this workspace opens in the app, like its
+        // card; any other link goes where links go.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let id = PageLinks.id(of: url.absoluteString, in: session.pages.workspace) else { return .systemAction }
+            router.page = PageRoute(id: id)
+            return .handled
+        })
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
@@ -895,6 +902,8 @@ struct ConversationBody: View {
                 }
                 ReplyText(text)
                 files(of: item, trailing: false)
+                // A web page it published and links to: a card that opens it.
+                PageCards(text: text)
                 // The newest answer carries what can be done with it; the
                 // others keep the page quiet (a long press copies any).
                 if item.id == newestReply {
@@ -910,9 +919,12 @@ struct ConversationBody: View {
                 deleteButton(item.id)
             }
         case .progress(let text, let latest):
-            ProgressLine(
-                text, time: item.at.formatted(date: .omitted, time: .shortened),
-                position: timelinePosition(at: index), latest: latest)
+            VStack(alignment: .leading, spacing: Space.s) {
+                ProgressLine(
+                    text, time: item.at.formatted(date: .omitted, time: .shortened),
+                    position: timelinePosition(at: index), latest: latest)
+                PageCards(text: text)
+            }
         case .plan(let plan, _):
             let done = plan.filter { $0.state == .done }.count
             PlanCard(

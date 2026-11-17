@@ -69,15 +69,20 @@ struct AddComputerSheet: View {
                 // Which project's agents may use it: asked where it was not
                 // opened from one.
                 if project == nil, !session.projects.isEmpty {
-                    Picker(L("放进哪个项目", "Which project"), selection: $chosen) {
-                        ForEach(session.projects, id: \.name) { project in
-                            Text(project.title.isEmpty ? project.name : project.title).tag(project.name)
+                    HStack(spacing: 8) {
+                        Text(L("放进哪个项目", "Into which project")).font(.subheadline).foregroundStyle(MycoColor.fg2)
+                        Spacer(minLength: 0)
+                        Picker(L("放进哪个项目", "Into which project"), selection: $chosen) {
+                            ForEach(session.projects, id: \.name) { project in
+                                Text(project.title.isEmpty ? project.name : project.title).tag(project.name)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .tint(MycoColor.fg)
+                        .disabled(arrived != nil)
+                        .accessibilityIdentifier("computer.project")
                     }
-                    .pickerStyle(.menu)
-                    .tint(MycoColor.fg)
-                    .disabled(arrived != nil)
-                    .accessibilityIdentifier("computer.project")
                 }
                 Picker(L("那台电脑的系统", "That computer's system"), selection: $system) {
                     Text("Mac / Linux / WSL").tag(ComputerCommand.System.shell)
