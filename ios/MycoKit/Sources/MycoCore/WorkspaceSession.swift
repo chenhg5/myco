@@ -209,6 +209,9 @@ public final class WorkspaceSession {
         refreshingByHand = false
     }
 
+    /// Looks in a row that failed.
+    private var failures = 0
+
     public func refresh() async {
         do {
             if me.isEmpty || whoami == nil {
@@ -225,6 +228,7 @@ public final class WorkspaceSession {
             self.projects = p.filter { $0.archived != true }
             self.recent = r
             loadedAt = Date()
+            failures = 0
             problem = nil
             problemDetail = nil
             await loadHidden()
@@ -235,14 +239,22 @@ public final class WorkspaceSession {
                 await saveRead()
             }
             await save()
-        } catch let error as HubError {
-            problem = error.message
-            problemDetail = Failure.of(error).detail ?? error.message
         } catch is CancellationError {
             // leaving the page is not a problem to report
         } catch {
-            problem = error.localizedDescription
-            problemDetail = problem
+            // One look that failed is a blip (through a slow proxy, a look
+            // now and then does): the lists say so when the next fails too,
+            // when the person asked for this one, or when nothing was ever
+            // shown. The conversation's rule.
+            failures += 1
+            guard failures >= 2 || refreshingByHand || loadedAt == nil else { return }
+            if let error = error as? HubError {
+                problem = error.message
+                problemDetail = Failure.of(error).detail ?? error.message
+            } else {
+                problem = error.localizedDescription
+                problemDetail = problem
+            }
         }
     }
 

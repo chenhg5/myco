@@ -55,9 +55,31 @@ struct SessionTests {
         #expect(MemberState.of(backend) == .working(text: nil))
     }
 
+    @Test func aWorkspaceThatAnswersAfterAFailedLookIsNotSaidToBeUnreachable() async {
+        let (session, hub) = await makeSession()
+        // A failed look between two good ones (a slow proxy): no banner.
+        await hub.setUnreachable(true)
+        await session.refresh()
+        await hub.setUnreachable(false)
+        await session.refresh()
+        await hub.setUnreachable(true)
+        await session.refresh()
+        #expect(session.problem == nil, "two failed looks, but not in a row")
+        // Asked for by hand: said at once.
+        await session.refreshByHand(atLeast: .zero)
+        #expect(session.problem != nil)
+        // Nothing ever shown: said at once too.
+        let fresh = WorkspaceSession(id: "w2", name: "Demo", hub: hub)
+        await fresh.refresh()
+        #expect(fresh.problem != nil)
+    }
+
     @Test func anUnreachableWorkspaceKeepsWhatItShowed() async {
         let (session, hub) = await makeSession()
         await hub.setUnreachable(true)
+        await session.refresh()
+        // One look that failed is a blip: nothing is said yet.
+        #expect(session.problem == nil)
         await session.refresh()
         #expect(session.problem != nil)
         #expect(session.members.count == 8)
@@ -167,6 +189,7 @@ struct SessionTests {
         #expect(second.me == FakeHub.me)
         #expect(second.loadedAt != nil)
         #expect(second.chatRows.isEmpty == false)
+        await second.refresh()
         await second.refresh()
         #expect(second.problem != nil)
         #expect(second.members.count == 8)
