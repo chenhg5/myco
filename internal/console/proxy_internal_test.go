@@ -58,6 +58,17 @@ func TestProxyForGoesDirectOnTheLocalNetwork(t *testing.T) {
 			t.Fatalf("%s should go direct, got %s", local, got)
 		}
 	}
+	// The environment's proxy (the default) also leaves the local network alone.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:7890")
+	t.Setenv("NO_PROXY", "")
+	sys := proxyFor(ProxyConfig{Mode: "system"}, "")
+	for _, local := range []string{"http://192.168.1.20:7777/", "http://10.0.0.5/", "http://mac.local/"} {
+		u, _ := url.Parse(local)
+		if p, err := sys(&http.Request{URL: u}); err != nil || p != nil {
+			t.Fatalf("%s should go direct with the environment's proxy, got %v %v", local, p, err)
+		}
+	}
 	none := proxyFor(ProxyConfig{Mode: "none"}, "")
 	if p, _ := none(&http.Request{URL: &url.URL{Scheme: "https", Host: "x.example"}}); p != nil {
 		t.Fatalf("no proxy: %v", p)
