@@ -315,9 +315,13 @@ struct HandoverSheet: View {
                     UIPasteboard.general.string = command
                     copied = true
                 }
-                .buttonStyle(.borderedProminent).tint(MycoColor.button)
-                ShareLink(item: command) { Text(L("发过去", "Send it over")) }
-                    .buttonStyle(.bordered)
+                .buttonStyle(PrimaryButtonStyle())
+                ShareLink(item: command) {
+                    Text(L("发过去", "Send it over")).font(.body.weight(.semibold)).foregroundStyle(MycoColor.fg)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -361,6 +365,8 @@ struct HandoverSheet: View {
             Button(L("完成", "Done")) { dismiss() }
                 .frame(maxWidth: .infinity)
                 .fontWeight(.semibold)
+                .foregroundStyle(MycoColor.fg)
+                .accessibilityIdentifier("handover.close")
         }
     }
 }
@@ -403,7 +409,6 @@ struct HandoverCardSections: View {
                         row(handover, among: model.list)
                     }
                 }
-                .accessibilityIdentifier("member.handovers")
             }
         }
         .task { await model.load() }
