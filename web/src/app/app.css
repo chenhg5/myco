@@ -7661,6 +7661,11 @@ body.is-resizing {
 .pg-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .pg-view.is-hidden { display: none; }
 .pg-view .pg-frame { flex: 1; height: auto; min-height: 0; }
+/* The page reaches past the panel's edges by a pixel (clipped): under the
+   App's zoom its frame lands on a fraction of a pixel, and the panel's
+   white showed through as a thin line beside a dark page. */
+.fp-body.is-page.pg-body { background: var(--card); }
+.pg-view .pg-frame { width: calc(100% + 2px); margin: 0 -1px; }
 .pg-tabs {
   flex: none;
   display: flex;
