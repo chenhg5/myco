@@ -794,6 +794,36 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     });
     return;
   }
+  // Set aside the way the skill says: it hands work out, holds the task,
+  // then says what it waits for (a progress), and stays in its session
+  // (no end of turn). Waiting, not at work: no loading in the App.
+  if (preview && /挂起说明/.test(preview.body)) {
+    const msgs = hub.threads[threadId] || [];
+    const t0 = Date.now();
+    preview.trace = [
+      { kind: "thinking", text: "先派给 release 做，等结果。" },
+      { kind: "tool", tool: "Bash", id: "h1", input: 'myco message send --to release-cloud --body "定时任务和 Webhook 先做第一步"' },
+      { kind: "tool_result", id: "h1", output: "sent" },
+      { kind: "tool", tool: "Bash", id: "h2", input: `myco message hold --id ${taskId}` },
+      { kind: "tool_result", id: "h2", output: "held" },
+      { kind: "tool", tool: "Bash", id: "h3", input: `myco message progress --id ${taskId} --body "已派给 release，等它做完"` },
+      { kind: "tool_result", id: "h3", output: "ok" },
+      { kind: "tool", tool: "Bash", id: "h4", input: "myco inbox wait --timeout 55m --format text" },
+    ].map((d, i) => ({ ...d, at: new Date(t0 + i * 250).toISOString() }));
+    preview.trace_pace = 250;
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(1100, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
+    later(1600, () => {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body: "已派给 release，等它做完再汇总给你。", created_at: iso(0), updated_at: iso(0) }));
+    });
+    later(9000, () => {
+      replyTimers.delete(taskId);
+      if (preview.status !== "held") return;
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "release 那边做完了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+    });
+    return;
+  }
   if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
     const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
     const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";
@@ -2046,6 +2076,61 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, msg);
     }
 
+    // /app/hubs/{id}/automations… — automations on the hub (v0.19.22): the
+    // mock keeps them per hub; a run sends a task from you, marked.
+    if (parts[3] === "automations") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      state.automations ||= {};
+      const list = (state.automations[hub.id] ||= seedAutomations(hub));
+      const find = () => list.find((a) => a.id === parts[4]);
+      const runOnce = (a, trigger) => {
+        state.counter += 1;
+        const run = { id: `run_${state.counter}`, automation_id: a.id, at: iso(0), trigger, outcome: "sent" };
+        const busy = a.skip_if_busy && Object.values(hub.threads || {}).flat().some((m) => m.automation === a.id && ["queued", "delivered", "acked", "held"].includes(m.status));
+        if (busy) { run.outcome = "skipped"; run.error = "the last task it sent is not finished"; }
+        else {
+          const threadId = `th_auto_${state.counter}`;
+          const msg = makeMessage({ thread_id: threadId, from: CONSOLE, to: a.to, type: "task", status: "queued", body: a.body.replace("{{payload}}", ""), automation: a.id, created_at: iso(0), updated_at: iso(0) });
+          (hub.threads ||= {})[threadId] = [msg];
+          hub.recent = [msg, ...(hub.recent || [])].slice(0, 20);
+          scheduleReply(hub, threadId, a.to, msg.id);
+          run.message_id = msg.id;
+        }
+        a.runs = [run, ...(a.runs || [])];
+        a.last_run = run;
+        return run;
+      };
+      const view = (a) => { const { runs, ...rest } = a; return rest; };
+      const apply = (a, b) => {
+        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled"]) if (b?.[k] !== undefined) a[k] = b[k];
+        if (b?.schedule) { a.schedule = b.schedule; a.next_run_at = new Date(Date.now() + 3600e3).toISOString(); }
+        if (b?.clear_schedule) { delete a.schedule; delete a.next_run_at; }
+        let secret;
+        if (b?.webhook !== undefined && b.webhook !== a.webhook) { a.webhook = !!b.webhook; if (a.webhook) secret = "whsec_demo_" + Math.random().toString(36).slice(2, 10); }
+        if (b?.rotate_secret && a.webhook) secret = "whsec_demo_" + Math.random().toString(36).slice(2, 10);
+        a.webhook_url = a.webhook ? `${hub.url.replace(/\/+$/, "")}/hooks/${a.id}` : undefined;
+        a.updated_at = iso(0);
+        return secret;
+      };
+      if (parts.length === 4 && method === "GET") return send(res, 200, { automations: list.map(view) });
+      if (parts.length === 4 && method === "POST") {
+        const b = await readBody(req);
+        if (!b?.name || !b?.to || !b?.body || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body and a schedule or webhook are required");
+        state.counter += 1;
+        const a = { id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
+        const secret = apply(a, b);
+        list.unshift(a);
+        return send(res, 201, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) });
+      }
+      const a = find();
+      if (!a) return fail(res, 404, "not_found", "no such automation");
+      if (parts.length === 5 && method === "GET") return send(res, 200, { automation: view(a), runs: a.runs || [] });
+      if (parts.length === 5 && method === "PATCH") { const secret = apply(a, await readBody(req)); return send(res, 200, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) }); }
+      if (parts.length === 5 && method === "DELETE") { list.splice(list.indexOf(a), 1); res.writeHead(204); return res.end(); }
+      if (parts.length === 6 && parts[5] === "run" && method === "POST") return send(res, 201, runOnce(a, "manual"));
+      return fail(res, 404, "not_found", "no such route");
+    }
+
     // /app/hubs/{id}/messages/{mid}/stop — stop an unfinished task.
     if (parts.length === 6 && parts[3] === "messages" && parts[5] === "stop" && method === "POST") {
       // A command one node sent another may not be in a thread the App reads
@@ -2815,4 +2900,17 @@ function toneWav() {
   buf.write("data", 36); buf.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 2000 * Math.min(1, (n - i) / 2000)), 44 + i * 2);
   return buf;
+}
+
+// One automation to start with: a weekday morning summary for the PM.
+function seedAutomations(hub) {
+  if (hub.id !== "hub_studio") return [];
+  return [{
+    id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
+    body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
+    webhook: false, skip_if_busy: true, enabled: true, created_at: iso(7 * 86400), updated_at: iso(86400),
+    next_run_at: new Date(Date.now() + 14 * 3600e3).toISOString(),
+    last_run: { id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" },
+    runs: [{ id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" }],
+  }];
 }

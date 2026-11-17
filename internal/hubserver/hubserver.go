@@ -24,6 +24,9 @@ import (
 	"github.com/chenhg5/myco/internal/release"
 	"github.com/chenhg5/myco/internal/transport/httpapi"
 	"github.com/chenhg5/myco/internal/transport/ingress"
+	// Automations run in their own time zone, also where the system has
+	// no zone database (Windows).
+	_ "time/tzdata"
 )
 
 // Options configures the hub.
@@ -58,6 +61,9 @@ type Options struct {
 	PathPrefix string
 }
 
+// AutomationTick is how often each workspace looks for automations due.
+const AutomationTick = 20 * time.Second
+
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
 	Handler http.Handler
@@ -66,7 +72,9 @@ type Hub struct {
 	Dispatcher *app.Dispatcher
 	Files      *app.FileService
 	Traces     *app.TraceService
-	Close      func() error
+	// Automations runs the workspace's automations (Run).
+	Automations *app.AutomationService
+	Close       func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
 	SetPublicURL func(string)
 	// SetLAN makes links created from this machine use its LAN address.
@@ -186,7 +194,10 @@ func Build(o Options) (*Hub, error) {
 	})
 	traces := app.NewTraceService(sqlite.NewTraceRepo(db), msgRepo, agentsRepo, clock, o.Log)
 	srv.SetTraces(traces)
-	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
+	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
+	srv.SetAutomations(automations)
+	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations,
+		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
 
 // Run serves until ctx is cancelled.
@@ -205,6 +216,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
+	go hub.Automations.Run(ctx, AutomationTick)
 	// The other workspaces this hub serves (under /w/<name>).
 	ws := newWorkspaces(ctx, o, hub)
 	if err := ws.load(); err != nil {

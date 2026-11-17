@@ -1,4 +1,4 @@
-import type { Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Automation, AutomationDetail, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -461,7 +461,7 @@ export const appApi = {
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
   openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
-  /** the App's network proxy (Settings › 网络代理) */
+  /** the App's network proxy (Settings › 代理) */
   proxy: () => request<ProxySetting>("GET", "app/proxy"),
   putProxy: (p: ProxyInput) => request<ProxySetting>("PUT", "app/proxy", p),
   testProxy: (p: ProxyInput & { url?: string }) => request<{ ok: boolean; ms?: number; reason?: string; error?: string }>("POST", "app/proxy/test", p),
@@ -681,6 +681,13 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // Automations (hubs from v0.19.22; older ones answer 404)
+  automations: (hubId: string) => request<{ automations: Automation[] }>("GET", `app/hubs/${enc(hubId)}/automations`),
+  automation: (hubId: string, id: string) => request<AutomationDetail>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),
+  createAutomation: (hubId: string, input: AutomationRequest) => request<AutomationResponse>("POST", `app/hubs/${enc(hubId)}/automations`, input),
+  updateAutomation: (hubId: string, id: string, input: AutomationRequest) => request<AutomationResponse>("PATCH", `app/hubs/${enc(hubId)}/automations/${enc(id)}`, input),
+  deleteAutomation: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),
+  runAutomation: (hubId: string, id: string) => request<AutomationRun>("POST", `app/hubs/${enc(hubId)}/automations/${enc(id)}/run`, {}),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */
