@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 
 /// The app's network proxy (Settings › 代理): how it reaches its
 /// workspaces and the voice services. As the system has it (the iPhone's
@@ -95,6 +96,11 @@ public final class AppNetwork: @unchecked Sendable {
 
     private let lock = NSLock()
     private var settings = ProxySettings()
+    /// The proxy's password, to make its session again (memory only).
+    private var password = ""
+    /// When the sessions were last made again after a failure.
+    private var renewedAt = Date.distantPast
+    private static let log = Logger(subsystem: "dev.myco.ios", category: "network")
     /// What the setting says: the system's way, no proxy, or the one set.
     private var through: URLSession = .shared
     /// No proxy at all: for this device and the local network while a
@@ -112,11 +118,36 @@ public final class AppNetwork: @unchecked Sendable {
         lock.lock()
         let old = [self.through, self.directly].compactMap { $0 }.filter { $0 !== URLSession.shared }
         self.settings = usable
+        self.password = password
         self.through = through
         self.directly = directly
         lock.unlock()
         // What is under way finishes on the session it began on.
         for session in old { session.finishTasksAndInvalidate() }
+        Self.log.notice("proxy in force: \(usable.mode.rawValue, privacy: .public) \(usable.mode == .manual ? usable.kind.rawValue : "", privacy: .public)")
+    }
+
+    /// A request could not get through. Said in the log (what failed, and
+    /// whether through the proxy set here, never where to), and, with a
+    /// proxy set here, its session is made again: the next request opens
+    /// a new tunnel instead of waiting on one the proxy or the network
+    /// dropped. At most every 10 seconds.
+    public func failed(_ url: URL?, _ error: Error) {
+        let code = (error as NSError).code
+        lock.lock()
+        let manual = settings.mode == .manual
+        let local = url?.host().map(ProxySettings.isLocal) ?? false
+        let renew = manual && !local && Date().timeIntervalSince(renewedAt) > 10
+        var old: URLSession?
+        if renew {
+            renewedAt = Date()
+            old = through
+            through = Self.session(settings, password: password)
+        }
+        lock.unlock()
+        old?.finishTasksAndInvalidate()
+        Self.log.error(
+            "request failed: \(code, privacy: .public) \((error as NSError).domain, privacy: .public), proxy \(manual && !local ? "set here" : "not used", privacy: .public)\(renew ? ", made again" : "", privacy: .public)")
     }
 
     /// The setting in force.

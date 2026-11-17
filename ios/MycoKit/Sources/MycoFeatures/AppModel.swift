@@ -543,7 +543,12 @@ public final class AppModel {
     /// What the system lets the app do now and then while it is not in
     /// front: look at every workspace once, and announce what is new.
     public func refreshInBackground() async {
-        if !started { await loadWorkspaces() }
+        // Started by the system for this: the proxy set in Settings is in
+        // force before anything is asked here too.
+        if !started {
+            await applyProxy()
+            await loadWorkspaces()
+        }
         var all = Array(sessions.values)
         if let current = session, sessions[current.id] == nil { all.append(current) }
         for one in all {

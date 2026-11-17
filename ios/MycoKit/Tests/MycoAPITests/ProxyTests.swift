@@ -96,4 +96,30 @@ struct ProxyTests {
             return
         }
     }
+
+    @Test func aFailedRequestThroughTheProxyGetsANewSession() {
+        let network = AppNetwork()
+        let away = URL(string: "https://hub.example.com/v1/overview")!
+        let near = URL(string: "http://192.168.1.5:8080/v1/overview")!
+        // As the system has it: nothing of the app's own to make again.
+        network.failed(away, URLError(.timedOut))
+        #expect(network.session(for: away) === URLSession.shared)
+        network.apply(ProxySettings(mode: .manual, kind: .socks5, host: "192.168.1.10", port: 7891), password: "")
+        let first = network.session(for: away)
+        let direct = network.session(for: near)
+        // A request to the local network went directly: the proxy's
+        // session stays.
+        network.failed(near, URLError(.timedOut))
+        #expect(network.session(for: away) === first)
+        // One through the proxy: the next opens a new tunnel; the direct
+        // one is left alone.
+        network.failed(away, URLError(.timedOut))
+        let second = network.session(for: away)
+        #expect(second !== first)
+        #expect(network.session(for: near) === direct)
+        #expect(second.configuration.proxyConfigurations.count == 1, "the same proxy, made again")
+        // Not again at once: a burst of failures makes one new session.
+        network.failed(away, URLError(.networkConnectionLost))
+        #expect(network.session(for: away) === second)
+    }
 }

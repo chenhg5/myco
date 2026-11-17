@@ -298,6 +298,8 @@ public struct HubClient: HubAPI {
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
         } catch {
+            // (only through the app's own sessions: a session given is a test's)
+            if session == nil { AppNetwork.shared.failed(request.url, error) }
             throw HubError.unreachable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw HubError.unreachable("no HTTP response") }
