@@ -263,6 +263,7 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 	if e.explicitConfig || (b.SessionID == "" && b.Harness != "exec") {
 		e.cfg.Hub, e.cfg.Agent, e.cfg.Token = hub, agent, token
 		e.cfg.Harness, e.cfg.SessionID = b.Harness, b.SessionID
+		e.cfg.Replaced = ""
 		return config.Save(e.cfgPath, e.cfg)
 	}
 	path := profilePathFor(e.defaultPath, hub, agent)
@@ -270,7 +271,13 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Harness != "" && cfg.Harness != b.Harness {
+		// Another kind of session took this name over (a handover from
+		// Claude Code to Codex, say): the old CLI cannot resume it.
+		cfg.Runner.Harness, cfg.Runner.Workdir, cfg.Runner.Provider, cfg.Runner.Model = "", "", "", ""
+	}
 	cfg.Hub, cfg.Agent, cfg.Token, cfg.Harness, cfg.SessionID = hub, agent, token, b.Harness, b.SessionID
+	cfg.Replaced = ""
 	if cfg.Runner.Harness == "" {
 		cfg.Runner.Harness = runnerHarnessFor(b.Harness)
 	}

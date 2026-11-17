@@ -500,7 +500,7 @@ func TestAdminRoutesDistinguish401And403(t *testing.T) {
 // the JSONL events myco parses, keeps one session id, and on resume answers
 // with that id so the test can tell the same session was continued.
 const fakePi = `#!/bin/sh
-sess=pi-sess-1
+sess=${FAKE_PI_SESS:-pi-sess-1}
 case " $* " in
   *" --session "*) printf '{"type":"session","id":"%s"}\n' "$sess"
                    printf '{"type":"message_end","message":{"role":"assistant","content":"resumed %s in %s key=%s"}}\n' "$sess" "$PWD" "$FAKE_PROVIDER_KEY" ;;
@@ -625,6 +625,20 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 	}
 	if _, err := h.client("").SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: "~"}, time.Second); err == nil {
 		t.Fatal("spawn without a token")
+	}
+
+	// Handing box-rev over to a new session on the machine: its first turn
+	// is the handover note; the node keeps its name; from then on the
+	// runner wakes the new session (the old one's runner stops by itself).
+	t.Setenv("FAKE_PI_SESS", "pi-sess-2")
+	ho, err := h.admin().HandOver(c, "box-rev", api.HandoverRequest{Machine: "box", CLI: "pi", Dir: filepath.Join(home, "proj"), Note: "a fresh session"}, 20*time.Second, false)
+	if err != nil || ho.Spawn == nil || ho.Spawn.Agent != "box-rev" || ho.Spawn.SessionID != "pi-sess-2" || ho.Handover.State != "done" ||
+		ho.Handover.To.Binding.SessionID != "pi-sess-2" {
+		t.Fatalf("handover: %v %+v", err, ho)
+	}
+	out = lead.must(c, "message", "send", "--to", "box-rev", "--body", "still there?", "--wait", "20s")
+	if !strings.Contains(out, "resumed pi-sess-2 in "+filepath.Join(home, "proj")) {
+		t.Fatalf("after the handover the runner should wake the new session: %s", out)
 	}
 
 	// Only a machine's own credentials can create a machine node.

@@ -133,6 +133,16 @@ wait_for 20 bash -c "curl -fsS -H 'Authorization: Bearer $ADMIN' '$MYCO_HUB/v1/t
 MYCO_ADMIN_TOKEN="$ADMIN" myco automation remove --id "$AID" >/dev/null || fail "automation remove"
 ok
 
+step "handover: another session takes a node over"
+MYCO_ADMIN_TOKEN="$ADMIN" myco agent register --name scribe --config "$T/scribe-old.yaml" >/dev/null || fail "register scribe"
+HURL="$(MYCO_ADMIN_TOKEN="$ADMIN" myco agent handover-link --name scribe --note "smoke" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')" || fail "handover-link"
+curl -fsS "$HURL" | grep -q "MYCO_TAKEOVER=" || fail "the take-over link serves no script"
+OUT="$(MYCO_TAKEOVER="$HURL" myco join --harness inbox --config "$T/scribe-new.yaml" --format text 2>>"$T/cli.log")" || fail "join --take-over: $OUT"
+grep -q "took over scribe" <<<"$OUT" && grep -q "you now are the agent scribe" <<<"$OUT" || fail "take-over output: $OUT"
+set +e; myco inbox pull --config "$T/scribe-old.yaml" >/dev/null 2>>"$T/cli.log"; CODE=$?; set -e
+[[ "$CODE" == 11 ]] || fail "the replaced session exited $CODE, want 11"
+ok "old session exits 11"
+
 step "join link serves an install script"
 LINK="$(MYCO_ADMIN_TOKEN="$ADMIN" myco link create --uses 1 --expires 1h | grep -o 'http[^" ]*/j/[^" ]*' | head -1)"
 [[ -n "$LINK" ]] || fail "link create printed no link"

@@ -43,6 +43,10 @@ type Config struct {
 	// E2EKey is this agent's private key pair for end-to-end encryption
 	// (internal/e2e), made on first use. Never sent anywhere.
 	E2EKey string `yaml:"e2e_key,omitempty" json:"-"`
+	// Replaced is set when the hub said another session took this node over
+	// (a handover): what it said. The runner no longer wakes it; saving a
+	// new identity here clears it.
+	Replaced string `yaml:"replaced,omitempty" json:"replaced,omitempty"`
 }
 
 // Runner configures `myco runner start`.

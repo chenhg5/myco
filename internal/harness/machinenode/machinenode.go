@@ -71,6 +71,10 @@ type Deps struct {
 	// Enroll registers the new session with the machine's credentials and
 	// writes its runner profile; it returns the agent's final name.
 	Enroll func(ctx context.Context, p Plan, req api.SpawnRequest, sessionID string) (string, error)
+	// TakeOver binds the new session to an existing node with a take-over
+	// link token (a handover) instead of enrolling a new agent, and writes
+	// its runner profile; it returns the node's name. Nil: not offered.
+	TakeOver func(ctx context.Context, p Plan, req api.SpawnRequest, sessionID string) (string, error)
 	// Spawned is called after a successful spawn (the runner starts serving
 	// the new profile right away instead of at its next scan).
 	Spawned func()
@@ -149,6 +153,9 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	h, err := n.Deps.NewHarness(plan.CLI, harness.Options{Access: plan.Access, Model: sr.Model})
 	if err != nil {
 		return failed(plan, "cannot prepare %s: %v", plan.CLI, err)
+	}
+	if sr.TakeOver != "" {
+		return n.takeOver(ctx, h, plan, sr, req.Env)
 	}
 	if _, ok := h.(harness.Forker); sr.ForkFrom != "" && !ok {
 		return denied("%v", harness.ErrForkUnsupported)
@@ -362,6 +369,50 @@ func (n *Node) firstPrompt(from string, p Plan, sr api.SpawnRequest) string {
 	}
 	b.WriteString("\nDo not start any work yet. Reply with one short line confirming you are ready.\n")
 	return b.String()
+}
+
+// takeOver starts (or, switching back, resumes) a session whose first prompt
+// is the handover note, then binds it to the node it takes over.
+func (n *Node) takeOver(ctx context.Context, h harness.Harness, plan Plan, sr api.SpawnRequest, env []string) api.SpawnResult {
+	if n.Deps.TakeOver == nil {
+		return denied("this machine's myco cannot take nodes over; upgrade it (myco upgrade)")
+	}
+	if sr.ForkFrom != "" {
+		return denied("a take-over cannot also copy a session")
+	}
+	timeout := n.FirstTurnTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	turnCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(sr.Brief))
+	fmt.Fprintf(&b, "\n\n[myco] This session runs on machine %s, in %s. Do not start any work in this turn: your tasks arrive as messages next. Reply with one short line confirming you have read the handover note.\n", n.Machine, plan.Workdir)
+	first := harness.Request{Prompt: b.String(), Workdir: plan.Workdir, Env: env, SessionID: sr.ResumeSession}
+	out, err := h.Run(turnCtx, first)
+	if err != nil {
+		if sr.ResumeSession != "" {
+			return failed(plan, "resuming session %s failed: %v", sr.ResumeSession, err)
+		}
+		return failed(plan, "starting the %s session failed: %v", plan.CLI, err)
+	}
+	session := out.SessionID
+	if session == "" {
+		session = sr.ResumeSession
+	}
+	if session == "" {
+		return failed(plan, "%s did not report a session id, so the session could not take the node over", plan.CLI)
+	}
+	name, err := n.Deps.TakeOver(ctx, plan, sr, session)
+	if err != nil {
+		return failed(plan, "the session started (%s) but taking the node over failed: %v", session, err)
+	}
+	if n.Deps.Spawned != nil {
+		n.Deps.Spawned()
+	}
+	return api.SpawnResult{Agent: name, SessionID: session, CLI: plan.CLI, Workdir: plan.Workdir,
+		Access: string(plan.Access), Reply: strings.TrimSpace(out.Output)}
 }
 
 func denied(format string, args ...any) api.SpawnResult {

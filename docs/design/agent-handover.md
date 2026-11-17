@@ -72,7 +72,7 @@
 
 **怎么送到**：
 
-- runner 唤醒的会话：runner 在第一次唤醒的提示前面加上这段（`myco handover show` 也能再看）。
+- 在一台电脑上新开的会话（`myco agent handover`）：交接说明就是它的第一轮提示（这一轮只读、不干活），之后由那台电脑的 runner 照常唤醒。`myco handover show` 能再看。
 - 自己开着的会话（`myco join --take-over`）：命令跑完就打印出来。skill 里加一句：接手之后先读它。
 
 ## 6. 原来的会话回来了
@@ -81,7 +81,7 @@
 
 - 旧令牌被拒，用新的错误码 `replaced`（HTTP 401，不可重试）。消息写「docs-claude 已在 11-17 10:30 由 Mac · Codex 接手」，建议「不要再处理这个节点的消息；要换回来，请主人在 App 里点"换回原来的"」。
 - 自己开着的会话：`inbox wait` / `inbox pull` 用单独的退出码结束。skill 里写明：收到就停下，告诉用户。
-- runner 唤醒的节点：原来那台电脑的 runner 认出 `replaced`，把这个节点在本机标成「已被接替」、不再唤醒（`myco runner status` 里能看到），不删本机的会话文件。
+- runner 唤醒的节点：原来那台电脑的 runner 认出 `replaced`，在本机这个节点的配置里记下 `replaced`（Hub 说的话）、不再唤醒，日志里说明；不删本机的会话文件。新会话也在这台电脑上时（同一个配置文件被新身份覆盖），runner 换新身份接着唤醒。
 - 旧会话对已经还回去的任务再回复，会被拒，也是 `replaced`。
 
 **换回来**就是再接手一次，接上的是原来的那个会话：

@@ -134,6 +134,28 @@ func saveProfile(defaultPath, hub, agent, token string, b api.Binding, rc config
 	return config.Save(path, cfg)
 }
 
+// saveTakenProfile writes the profile of a node this machine just took over
+// (a handover): the new session's identity and runner settings. Settings of
+// an earlier session of the same CLI here are kept, its directory is not.
+func saveTakenProfile(defaultPath, hub, agent, token string, b api.Binding, rc config.Runner) error {
+	path := profilePathFor(defaultPath, hub, agent)
+	cfg, err := config.Load(path)
+	if err != nil {
+		return err
+	}
+	if cfg.Runner.Harness != rc.Harness {
+		cfg.Runner = rc
+	} else {
+		cfg.Runner.Workdir = rc.Workdir
+		if rc.Model != "" {
+			cfg.Runner.Model = rc.Model
+		}
+	}
+	cfg.Hub, cfg.Agent, cfg.Token, cfg.Harness, cfg.SessionID = hub, agent, token, b.Harness, b.SessionID
+	cfg.Replaced = ""
+	return config.Save(path, cfg)
+}
+
 // profilePathFor is agent's profile on hub: <agent>.yaml, or, when that file
 // belongs to an agent of the same name on another hub, <agent>@<hub host>.yaml.
 func profilePathFor(defaultPath, hub, agent string) string {
@@ -232,6 +254,20 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 					rc = config.Runner{Harness: p.CLI, Workdir: p.Workdir}
 				}
 				return res.Agent.Name, saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
+			},
+			TakeOver: func(ctx context.Context, p machinenode.Plan, sr api.SpawnRequest, sessionID string) (string, error) {
+				b := api.Binding{Harness: p.CLI, SessionID: sessionID, Environment: host, Workdir: p.Workdir}
+				tc, err := client.New(m.Hub, "")
+				if err != nil {
+					return "", err
+				}
+				res, err := tc.TakeOver(ctx, api.TakeOverRequest{Token: sr.TakeOver, Binding: b})
+				if err != nil {
+					return "", err
+				}
+				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
+					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
+				return res.Agent.Name, saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
 			},
 			Spawned: func() {
 				if sh.rescan != nil {
