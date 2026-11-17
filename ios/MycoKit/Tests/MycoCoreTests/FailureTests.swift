@@ -65,7 +65,9 @@ struct FailureTests {
         #expect(model.failure?.kind == .transient)
         #expect(model.failure?.detail == "unreachable\nThe workspace did not answer.")
         #expect(model.problem == model.failure?.text)
-        // The lists say what is under "cannot reach" too.
+        // The lists say what is under "cannot reach" too (from the
+        // second look in a row that failed).
+        await session.refresh()
         await session.refresh()
         #expect(session.problem != nil)
         #expect(session.problemDetail == "unreachable\nThe workspace did not answer.")
