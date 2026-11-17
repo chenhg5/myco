@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Download, Maximize2, Minimize2, X } from "lucide-react";
 import { appApi } from "@/appapi";
@@ -152,9 +152,15 @@ const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1
  * the chat: scroll it, write, send), over the App when narrow or full
  * screen. Its left edge drags it wider; one panel at a time.
  */
-export function DockPanel({ open, onOpenChange, title, about, head, tools, bodyClass, className, children }: {
+export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted, title, about, head, tools, bodyClass, className, children }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** its × does this instead of onOpenChange(false) (Esc and a click
+   *  outside still call onOpenChange) */
+  onClose?: () => void;
+  closeLabel?: string;
+  /** closed, it stays (hidden): what it shows keeps going (pages) */
+  keepMounted?: boolean;
   title: string;
   about?: React.ReactNode;
   /** beside the titles (e.g. what to show it as) */
@@ -170,7 +176,11 @@ export function DockPanel({ open, onOpenChange, title, about, head, tools, bodyC
   // to the usual). Measured in the panel's own scale (text size zooms it).
   const [width, setWidth] = useState(keptWidth);
   const [dragging, setDragging] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
+  // (the element itself too: it mounts a moment after the panel opens, and
+  // its size is watched from then on)
+  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
+  const setPanel = useCallback((el: HTMLDivElement | null) => { panel.current = el; setPanelEl(el); }, []);
   const drag = useRef<{ x: number; w: number; scale: number } | null>(null);
   const edge = {
     onPointerDown: (e: React.PointerEvent) => {
@@ -212,24 +222,21 @@ export function DockPanel({ open, onOpenChange, title, about, head, tools, bodyC
   const docked = open && !full && avail >= 2 * DOCK_HALF;
   const dockWidth = Math.min(620, Math.round(avail / 2));
   useEffect(() => {
-    if (!docked) return;
+    if (!docked || !panelEl) return;
     const root = document.documentElement;
-    const el = panel.current;
     root.classList.add("fp-docked");
-    // (its layout width, as the App's own sizes are: not the zoomed one)
-    const set = () => { if (panel.current) root.style.setProperty("--fp-w", `${panel.current.offsetWidth}px`); };
+    // (its layout width, as the App's own sizes are: not the zoomed one;
+    // watched, so dragging its edge moves the chat's edge along)
+    const set = () => root.style.setProperty("--fp-w", `${panelEl.offsetWidth}px`);
     set();
-    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(set) : null;
-    if (ro && el) ro.observe(el);
-    // (the panel mounts a moment after: measure again then)
-    const t = window.setTimeout(set, 50);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(set) : null;
+    ro?.observe(panelEl);
     return () => {
-      window.clearTimeout(t);
       ro?.disconnect();
       root.classList.remove("fp-docked");
       root.style.removeProperty("--fp-w");
     };
-  }, [docked]);
+  }, [docked, panelEl]);
   // One panel beside the chat at a time: opening another closes this one.
   const token = useRef({});
   useEffect(() => {
@@ -244,10 +251,10 @@ export function DockPanel({ open, onOpenChange, title, about, head, tools, bodyC
 
   const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={!docked}>
-      <Dialog.Portal>
-        {!docked && <Dialog.Overlay className="app-portal fp-scrim" />}
-        <Dialog.Content ref={panel} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging", className)}
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={open && !docked}>
+      <Dialog.Portal forceMount={keepMounted || undefined}>
+        {!docked && open && <Dialog.Overlay className="app-portal fp-scrim" />}
+        <Dialog.Content ref={setPanel} forceMount={keepMounted || undefined} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging", className)}
           style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
           // Beside the chat, working in the chat does not close it; Esc
           // does, from the panel only (in the chat's box it is the box's).
@@ -268,9 +275,13 @@ export function DockPanel({ open, onOpenChange, title, about, head, tools, bodyC
               <button type="button" className="app-btn app-btn-plain fp-full-btn" onClick={toggleFull} title={fullLabel} aria-label={fullLabel} aria-pressed={full}>
                 {full ? <Minimize2 /> : <Maximize2 />}
               </button>
-              <Dialog.Close asChild>
-                <button type="button" className="app-btn app-btn-plain" title={L("关闭", "Close")} aria-label={L("关闭", "Close")}><X /></button>
-              </Dialog.Close>
+              {onClose ? (
+                <button type="button" className="app-btn app-btn-plain" onClick={onClose} title={closeLabel || L("关闭", "Close")} aria-label={closeLabel || L("关闭", "Close")}><X /></button>
+              ) : (
+                <Dialog.Close asChild>
+                  <button type="button" className="app-btn app-btn-plain" title={L("关闭", "Close")} aria-label={L("关闭", "Close")}><X /></button>
+                </Dialog.Close>
+              )}
             </div>
           </div>
           <div className={cn("fp-body", bodyClass)}>{children}</div>

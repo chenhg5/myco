@@ -575,6 +575,34 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, panel.locator(".pg-tab", { hasText: "发布说明" }).locator(".pg-tab-main"));
       await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
       if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("切换标签不该重新加载另一个网页");
+      // Tucked away (收起): the pages stay, the chat gets its room back, a
+      // button in the corner brings them back as they were.
+      const mainRight = () => page.evaluate(() => document.querySelector(".app-main").getBoundingClientRect().right);
+      const docked = await mainRight();
+      await clickVisible(page, panel.getByRole("button", { name: "收起" }));
+      const restore = page.locator(".pg-restore");
+      await restore.waitFor({ timeout: 5_000 });
+      if (!(await restore.innerText()).includes("2")) throw new Error("收起后右下角应写着有几个网页");
+      if (await panel.isVisible()) throw new Error("收起后面板应藏起来");
+      if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("收起时网页应保留");
+      await page.waitForFunction((d) => document.querySelector(".app-main").getBoundingClientRect().right > d + 100, docked, { timeout: 5_000 });
+      await settle(page, 250);
+      await shot(page, size, scheme, "page-tucked");
+      await clickVisible(page, restore);
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      await restore.waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForFunction((d) => Math.abs(document.querySelector(".app-main").getBoundingClientRect().right - d) <= 2, docked, { timeout: 5_000 })
+        .catch(() => { throw new Error("展开后对话应回到原来的宽度"); });
+      // Dragging the panel's edge: the chat's edge follows (no gap).
+      const edge = await panel.locator(".fp-edge").boundingBox();
+      await page.mouse.move(edge.x + edge.width / 2, edge.y + 200);
+      await page.mouse.down();
+      for (let x = 0; x <= 120; x += 20) await page.mouse.move(edge.x + edge.width / 2 + x, edge.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+      const gap = await page.evaluate(() => document.querySelector(".pg-panel").getBoundingClientRect().left - document.querySelector(".app-main").getBoundingClientRect().right);
+      if (gap < 0 || gap > 20) throw new Error(`拖动面板后，对话和面板之间应只有一条缝，实际 ${Math.round(gap)}px`);
+      await panel.locator(".fp-edge").dblclick();
       // Opening one already open shows it, no new tab.
       await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
       await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
@@ -583,8 +611,12 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, panel.locator(".pg-tab", { hasText: "下载页" }).getByRole("button", { name: /关闭/ }));
       await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
       if (await panel.locator(".pg-tab").count()) throw new Error("剩一个网页时标签应收起");
-      await clickVisible(page, panel.getByRole("button", { name: "关闭" }).last());
+      // × closes them all.
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭全部 2 个网页" }));
       await panel.waitFor({ state: "detached", timeout: 5_000 });
+      if (await page.locator(".pg-restore").count()) throw new Error("全部关闭后不该留下展开按钮");
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 

@@ -7727,3 +7727,33 @@ body.is-resizing {
 .pg-tab:hover .pg-tab-close, .pg-tab.is-on .pg-tab-close, .pg-tab-close:focus-visible { opacity: 1; }
 .pg-tab-close:hover { background: var(--pill-hover); color: var(--fg); }
 .pg-tab-main:focus-visible, .pg-tab-close:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* Tucked away (收起): the page panel stays (its pages keep going), hidden;
+   a small button in the corner brings it back. */
+.fp-panel[data-state="closed"] { display: none; }
+.pg-restore {
+  position: fixed;
+  right: 16px;
+  bottom: 96px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+  animation: ms-in 0.18s ease-out;
+}
+.pg-restore:hover { box-shadow: var(--pop-shadow), 0 0 0 1px var(--line); }
+.pg-restore:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pg-restore-icon { display: inline-flex; color: var(--green); }
+.pg-restore-icon svg { width: 14px; height: 14px; }
+.pg-restore-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-restore-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--pill); color: var(--fg-2); font-size: 11px; line-height: 18px; text-align: center; }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppWindow, Check, ExternalLink, Link2, Monitor, Radio, RotateCw, X } from "lucide-react";
+import { AppWindow, Check, ExternalLink, Link2, Monitor, PanelRightClose, Radio, RotateCw, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -203,15 +203,14 @@ export function PageHost() {
     document.addEventListener("click", click);
     return () => { window.removeEventListener("myco-open-page", on); document.removeEventListener("click", click); };
   }, []);
-  // Closed, the tabs go with it.
-  const setPanel = (o: boolean) => {
-    setOpen(o);
-    if (!o) { setTabs([]); setActive(""); }
-  };
+  // Tucked away (收起, Esc, a click beside it): the pages stay open, a
+  // small button brings them back. Closed (×): they go.
+  const setPanel = (o: boolean) => setOpen(o);
+  const closeAll = () => { setOpen(false); setTabs([]); setActive(""); };
   const close = (k: string) => {
     const at = tabs.findIndex((x) => x.key === k);
     const rest = tabs.filter((x) => x.key !== k);
-    if (!rest.length) { setPanel(false); return; }
+    if (!rest.length) { closeAll(); return; }
     setTabs(rest);
     if (k === active) setActive(rest[Math.min(at, rest.length - 1)].key);
   };
@@ -229,9 +228,22 @@ export function PageHost() {
   };
   const tabIcon = (x: Tab) => (x.meta.icon === "live" ? <Radio /> : x.meta.icon === "local" ? <Monitor /> : <AppWindow />);
   return (
-    <DockPanel open={open} onOpenChange={setPanel} title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
+    <>
+    {!open && (
+      <button type="button" className="pg-restore" onClick={() => setOpen(true)}
+        title={L("展开收起的网页", "Show the pages tucked away")} aria-label={L("展开收起的网页", "Show the pages tucked away")}>
+        <span className="pg-restore-icon">{tabIcon(cur)}</span>
+        <span className="pg-restore-name">{m.title || L("网页", "Page")}</span>
+        {tabs.length > 1 && <span className="pg-restore-count">{tabs.length}</span>}
+      </button>
+    )}
+    <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted
+      closeLabel={tabs.length > 1 ? L(`关闭全部 ${tabs.length} 个网页`, `Close all ${tabs.length} pages`) : L("关闭", "Close")}
+      title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
+          <button type="button" className="app-btn app-btn-plain" onClick={() => setOpen(false)}
+            title={L("收起（网页保留，右下角点一下展开）", "Tuck away (the pages stay; bring them back from the corner)")} aria-label={L("收起", "Tuck away")}><PanelRightClose /></button>
           <button type="button" className="app-btn app-btn-plain" onClick={() => setTabs((list) => list.map((x) => (x.key === cur.key ? { ...x, reload: x.reload + 1 } : x)))} disabled={!m.loaded}
             title={L("刷新", "Reload")} aria-label={L("刷新", "Reload")}><RotateCw /></button>
           {m.localUrl ? (
@@ -264,6 +276,7 @@ export function PageHost() {
         <PageView key={x.key} target={x.target} open={open} active={x.key === cur.key} reload={x.reload} onMeta={(mm) => meta(x.key, mm)} />
       ))}
     </DockPanel>
+    </>
   );
 }
 
@@ -293,12 +306,12 @@ function PageView({ target, open, active, reload, onMeta }: {
           : (e as Error).message || L("打不开这个网页", "Could not open this page"));
     }
   };
+  // Once for its tab (tucked away and back, it is as it was).
   useEffect(() => {
-    if (!open) return;
     setOpened(null); setPage(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, key]);
+  }, [key]);
 
   // A newer version: said at the top; the page you look at stays as it is.
   useEffect(() => {
