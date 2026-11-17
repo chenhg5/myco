@@ -343,7 +343,7 @@ async function go(page, label, narrow) {
     await clickVisible(page, page.locator(".sp-nav-chat-sort"));
     await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "管理成员" }));
   } else {
-    const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible")
+    const item = label === "电脑" ? page.locator(".sp-nav-pcs-head:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
       : label === "自动化" ? page.locator(".sp-nav-auto:visible")
       : page.locator(".app-nav-item:visible", { hasText: label });
