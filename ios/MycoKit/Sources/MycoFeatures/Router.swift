@@ -16,6 +16,8 @@ public enum Route: Hashable, Sendable {
     /// message to land on. Opened from a handoff card.
     case exchange(agent: String, with: String, focus: String?)
     case projectInfo(String)
+    /// What is sent for me on a schedule, or when something calls.
+    case automations
 }
 
 /// Something that rises from the bottom, over any tab.
@@ -23,12 +25,23 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     case workspace
     case memberCard(String)
     case addAgent
+    /// A command that makes a folder on a computer one agents can use;
+    /// `project`: the project it is added from, if any.
+    case addComputer(project: String?)
+    /// Writing a conversation out as a file: with this agent, in this
+    /// project's page or its own.
+    case export(agent: String, project: String?)
+    /// Another session takes this agent over; `back`: a handover to undo.
+    case handover(agent: String, back: String?)
 
     public var id: String {
         switch self {
         case .workspace: return "workspace"
         case .memberCard(let name): return "member:" + name
         case .addAgent: return "add"
+        case .addComputer(let project): return "computer:" + (project ?? "")
+        case .export(let agent, let project): return "export:" + agent + ":" + (project ?? "")
+        case .handover(let agent, let back): return "handover:" + agent + ":" + (back ?? "")
         }
     }
 }
@@ -43,6 +56,8 @@ public final class Router {
     public var projectsPath: [Route] = []
     public var membersPath: [Route] = []
     public var sheet: SheetRoute?
+    /// A web page an agent published, open over the whole screen.
+    public var page: PageRoute?
 
     public init() {}
 
@@ -89,7 +104,7 @@ public final class Router {
     /// Opens a place named in words, for UI tests and screenshots
     /// (`-myco-route project:myco-ios`): `tab:<name>`, `project:<name>`,
     /// `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:workspace`,
-    /// `sheet:add`. Returns false for anything else.
+    /// `sheet:add`, `sheet:computer`, `page:automations`. Returns false for anything else.
     @discardableResult
     public func open(spec: String) -> Bool {
         let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
@@ -105,10 +120,14 @@ public final class Router {
         case "member":
             show([], in: .members)
             sheet = .memberCard(name)
+        case "page":
+            guard name == "automations" else { return false }
+            show([.automations], in: .members)
         case "sheet":
             switch name {
             case "workspace": sheet = .workspace
             case "add": sheet = .addAgent
+            case "computer": sheet = .addComputer(project: nil)
             default: return false
             }
         default: return false

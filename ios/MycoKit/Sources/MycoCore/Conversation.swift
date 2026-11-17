@@ -37,6 +37,9 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
         /// What the agent and another agent said to each other, as one
         /// card: who gave what to whom, how it stands, what came back.
         case handoff(Handoff)
+        /// Another session took the agent over here: a thin line, not a
+        /// message ("换成 Studio Mac · Codex 接着做（你换的）").
+        case takenOver(text: String)
     }
 
     public var id: String
@@ -46,6 +49,8 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public var files: [Attachment] = []
     /// On a task of mine that has not started: a few words under it.
     public var receipt: TaskReceipt?
+    /// An automation sent it for me (marked 自动).
+    public var automated = false
 }
 
 /// What is said under a task of mine that the agent has not started on,
@@ -134,6 +139,7 @@ public enum ConversationBuilder {
         me: String, agent: String, messages all: [Message], handoffs: [Handoff] = [], processes: Set<String> = [],
         tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
         activity: [String: Date] = [:], ended: Set<String> = [], windows: RunWindows = RunWindows(),
+        takeovers: [(id: String, at: Date, text: String)] = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -215,7 +221,7 @@ public enum ConversationBuilder {
                 }
                 items.append(.init(
                     id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by), files: files(of: m),
-                    receipt: receipt(of: m)))
+                    receipt: receipt(of: m), automated: !(m.automation ?? "").isEmpty))
                 guard m.type == "task" else { continue }
                 let state = state(of: m)
                 if processes.contains(m.id) {
@@ -345,6 +351,13 @@ public enum ConversationBuilder {
         }
         for handoff in handoffs {
             items.append(.init(id: handoff.id + ".handoff", at: handoff.at, kind: .handoff(handoff)))
+        }
+        // Where another session took over: only within what is on the
+        // page (a line above everything would hang there alone).
+        if let first = items.map(\.at).min() {
+            for takeover in takeovers where takeover.at >= first {
+                items.append(.init(id: "handover." + takeover.id, at: takeover.at, kind: .takenOver(text: takeover.text)))
+            }
         }
         return withTimeBreaks(items.sorted { ($0.at, $0.id) < ($1.at, $1.id) })
     }

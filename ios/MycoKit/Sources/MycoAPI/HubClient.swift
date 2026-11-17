@@ -122,6 +122,102 @@ public struct HubClient: HubAPI {
         return try Self.decode(VoiceDocument.self, from: data)
     }
 
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        let safe = agent.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? agent
+        // (no `access`: what it may do on its computer stays as it is)
+        let data = try await call(
+            "PUT", "/v1/agents/\(safe)/run-settings", body: HubJSON.encoder().encode(["model": model, "effort": effort]))
+        return try Self.decode(Agent.self, from: data)
+    }
+
+    public func handovers(of agent: String) async throws -> [Handover] {
+        let envelope: HandoversEnvelope = try await get("/v1/agents/\(Self.segment(agent))/handovers", timeout: Self.pollTimeout)
+        return envelope.handovers
+    }
+
+    public func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult {
+        // (the hub waits up to five minutes for the new session)
+        let data = try await call(
+            "POST", "/v1/agents/\(Self.segment(agent))/handover", body: HubJSON.encoder().encode(request), timeout: 330)
+        return try Self.decode(HandoverResult.self, from: data)
+    }
+
+    public func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink {
+        struct Request: Encodable {
+            var note: String?
+            var back: String?
+        }
+        let data = try await call(
+            "POST", "/v1/agents/\(Self.segment(agent))/handover-link", body: HubJSON.encoder().encode(Request(note: note, back: back)))
+        return try Self.decode(HandoverLink.self, from: data)
+    }
+
+    public var address: URL? { baseURL }
+
+    public func page(_ id: String) async throws -> Page {
+        try await get("/v1/pages/\(Self.segment(id))", timeout: Self.pollTimeout)
+    }
+
+    public func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile {
+        let place = version.map { "v/\($0)" } ?? "live"
+        // (the path as it is: `call` escapes what a URL cannot hold)
+        let (data, response) = try await answer(
+            "GET", "/v1/pages/\(Self.segment(id))/\(place)/" + path, timeout: Self.transferTimeout, anyStatus: version == nil)
+        return PageFile(
+            data: data, contentType: response.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream",
+            status: response.statusCode)
+    }
+
+    public func computerLink(allowFrom: [String]) async throws -> JoinLink {
+        struct Request: Encodable {
+            var kind = "link"
+            var harness = "exec"
+            var allowFrom: [String]
+            var maxUses = 1
+            var ttlSeconds = 24 * 3600
+            var note = "myco ios: a folder as a computer"
+        }
+        let data = try await call("POST", "/v1/enrollments", body: HubJSON.encoder().encode(Request(allowFrom: allowFrom)))
+        return try Self.decode(JoinLink.self, from: data)
+    }
+
+    public func addProjectMember(_ agent: String, to project: String) async throws {
+        _ = try await call("PUT", "/v1/projects/\(Self.segment(project))/members/\(Self.segment(agent))", body: Data("{}".utf8))
+    }
+
+    public func automations() async throws -> [Automation] {
+        let envelope: AutomationsEnvelope = try await get("/v1/console/automations", timeout: Self.pollTimeout)
+        return envelope.automations
+    }
+
+    public func automation(_ id: String) async throws -> AutomationDetail {
+        try await get("/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("POST", "/v1/console/automations", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("PATCH", "/v1/console/automations/\(Self.segment(id))", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func deleteAutomation(_ id: String) async throws {
+        _ = try await call("DELETE", "/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func runAutomation(_ id: String) async throws -> AutomationRun {
+        let data = try await call("POST", "/v1/console/automations/\(Self.segment(id))/run")
+        return try Self.decode(AutomationRun.self, from: data)
+    }
+
+    /// An id as one segment of a path.
+    private static func segment(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? id
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -165,6 +261,16 @@ public struct HubClient: HubAPI {
         _ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
         contentType: String = "application/json", timeout: TimeInterval = 20
     ) async throws -> Data {
+        try await answer(method, path, query: query, body: body, contentType: contentType, timeout: timeout).0
+    }
+
+    /// One request to the hub: what it answered, and with what.
+    /// - Parameter anyStatus: an answer that is not a success is handed
+    ///   back as it is, not thrown (a live page's own server answered).
+    private func answer(
+        _ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
+        contentType: String = "application/json", timeout: TimeInterval = 20, anyStatus: Bool = false
+    ) async throws -> (Data, HTTPURLResponse) {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw HubError(error: "invalid_argument", message: "The workspace's address is not a URL.")
         }
@@ -195,14 +301,35 @@ public struct HubClient: HubAPI {
             throw HubError.unreachable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw HubError.unreachable("no HTTP response") }
-        guard (200..<300).contains(http.statusCode) else {
-            if let error = try? HubJSON.decoder().decode(HubError.self, from: data) { throw error }
-            throw HubError(error: "http_\(http.statusCode)", message: "The workspace answered \(http.statusCode).")
+        guard (200..<300).contains(http.statusCode) || anyStatus else {
+            if var error = try? HubJSON.decoder().decode(HubError.self, from: data) {
+                error.status = http.statusCode
+                throw error
+            }
+            // A gateway's own page (no JSON) still says why: its first
+            // words are kept, for whoever looks at the details.
+            let page = http.statusCode >= 500 ? Self.words(ofPage: data) : ""
+            throw HubError(
+                error: "http_\(http.statusCode)", message: page.isEmpty ? "The workspace answered \(http.statusCode)." : page,
+                status: http.statusCode)
         }
-        return data
+        return (data, http)
     }
 }
 
+extension HubClient {
+    /// The first words of a page that is not the hub's JSON, without its tags.
+    public static func words(ofPage data: Data) -> String {
+        guard let text = String(data: data.prefix(4_000), encoding: .utf8) else { return "" }
+        let plain = text.replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return String(plain.prefix(300))
+    }
+}
+
+struct HandoversEnvelope: Decodable { @LossyList var handovers: [Handover] }
+struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }
 struct RecentEnvelope: Decodable { @LossyList var items: [RecentItem] }
 struct ExchangeEnvelope: Decodable {

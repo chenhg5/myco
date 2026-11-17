@@ -158,6 +158,59 @@ public protocol HubAPI: Sendable {
     /// `PUT /v1/console/voice`: keeps them, unless the hub holds newer
     /// ones; answers what it holds then.
     func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument
+    /// `PUT /v1/agents/{name}/run-settings`: the model and effort its
+    /// runner starts it with from its next run ("" follows its computer's
+    /// setting). For whoever owns the agent or manages the workspace. A
+    /// workspace from before v0.19.5 answers `not_found`.
+    func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `GET /v1/agents/{name}/handovers`: the times another session took
+    /// this agent over, newest first. For whoever owns it or manages the
+    /// workspace. A workspace from before v0.19.23 answers `not_found`.
+    func handovers(of agent: String) async throws -> [Handover]
+    /// `POST /v1/agents/{name}/handover`: a new session on a computer
+    /// takes the agent over (or, with `back`, an earlier one takes it
+    /// back). Answers when the new session has read the handover note:
+    /// that takes minutes.
+    func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult
+    /// `POST /v1/agents/{name}/handover-link`: a one-time command (a day)
+    /// that makes whichever session runs it take the agent over.
+    func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink
+    /// Where this workspace is: its links (a page's address) begin with it.
+    var address: URL? { get }
+    /// `GET /v1/pages/{id}`: a web page an agent published, with its
+    /// versions. A workspace from before v0.19.24 answers `not_found`, as
+    /// for a page that is gone or not mine to see.
+    func page(_ id: String) async throws -> Page
+    /// `GET /v1/pages/{id}/v/{n}/{path}`: one file of a version ("" is the
+    /// file it opens on). For a live page (`version` nil),
+    /// `GET /v1/pages/{id}/live/{path}`: what its server answers, whatever
+    /// the status.
+    func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile
+    /// `POST /v1/enrollments` with `kind: "link"` and `harness: "exec"`:
+    /// a link for one computer (one use, a day). Its command, run in a
+    /// folder there, makes that folder a computer the agents in
+    /// `allowFrom` may run commands in. For the workspace's owner and
+    /// admins only.
+    func computerLink(allowFrom: [String]) async throws -> JoinLink
+    /// `PUT /v1/projects/{name}/members/{agent}`: puts a node in a project.
+    func addProjectMember(_ agent: String, to project: String) async throws
+    /// `GET /v1/console/automations`: mine, or everyone's for whoever
+    /// manages the workspace. A workspace from before v0.19.22 answers
+    /// `not_found`.
+    func automations() async throws -> [Automation]
+    /// `GET /v1/console/automations/{id}`: one, with its last runs.
+    func automation(_ id: String) async throws -> AutomationDetail
+    /// `POST /v1/console/automations`: `name`, `to`, `body`, and a
+    /// schedule or a webhook. It sends from my console address.
+    func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved
+    /// `PATCH /v1/console/automations/{id}`: what is left out stays.
+    func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved
+    /// `DELETE /v1/console/automations/{id}`: its runs go too; what it
+    /// sent stays.
+    func deleteAutomation(_ id: String) async throws
+    /// `POST /v1/console/automations/{id}/run`: sends it once now, also
+    /// when it is turned off.
+    func runAutomation(_ id: String) async throws -> AutomationRun
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink

@@ -2184,6 +2184,21 @@ textarea.app-input {
   height: 32px;
   margin-top: auto;
 }
+.app-welcome-agent {
+  grid-column: 1 / -1;
+}
+.app-welcome-agent p {
+  margin-bottom: 12px;
+}
+.app-welcome-agent .add-sentence {
+  width: 100%;
+  margin-top: 0;
+}
+.app-welcome-agent .add-sentence .app-btn {
+  width: auto;
+  height: auto;
+  margin-top: 0;
+}
 .app-welcome-error {
   width: 100%;
   max-width: 560px;

@@ -29,6 +29,12 @@ public enum Scenario: Sendable {
         /// Tasks with no steps of their own: taken up in a session that
         /// files what it does under an earlier task.
         var silent: Set<String> = []
+        /// What is sent for me on a schedule, or when something calls.
+        var automations: [Automation] = []
+        /// The times another session took an agent over.
+        var handovers: [Handover] = []
+        /// Web pages agents published, with their files by path.
+        var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
     }
 
     func build(now: Date) -> World {
@@ -39,7 +45,11 @@ public enum Scenario: Sendable {
             Agent(
                 id: id, name: name, displayName: display, description: role,
                 binding: Binding(harness: cli, workdir: dir), createdAt: ago(days * 86_400),
-                machineId: "mach_studio", runtime: Runtime(cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5"))
+                // (a session in the cloud runs on no computer of mine)
+                machineId: cli.hasSuffix("-cloud") ? nil : "mach_studio",
+                runtime: Runtime(
+                    cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5", modelSource: "observed",
+                    effort: cli.hasPrefix("codex") ? "high" : nil))
         }
 
         let lead = agent("agt_lead0001", "cloud-lead", "协调者", "拆任务、派活、审查合入", cli: "claude-cloud", dir: "/home/user/myco", days: 12)
@@ -54,7 +64,9 @@ public enum Scenario: Sendable {
         let fresh = agent("agt_new00008", "studio-codex-e07b", "翻译", "中英文互译", cli: "codex", dir: "~/code/site", days: 1)
 
         var world = World()
-        world.machines = [Machine(id: "mach_studio", name: "Studio Mac", hostname: "studio", os: "darwin")]
+        world.machines = [
+            Machine(id: "mach_studio", name: "Studio Mac", hostname: "studio", os: "darwin", canSpawn: true, mycoVersion: "v0.19.25"),
+        ]
         world.agents = [
             AgentStatus(agent: lead, state: "idle", receiving: "session"),
             AgentStatus(agent: backend, state: "working", inProgress: 1),
@@ -151,6 +163,45 @@ public enum Scenario: Sendable {
             // Having handed the review out, the coordinator ended its turn.
             world.turnEnded = ["m3"]
         }
+        // A page the tester published: its checklist, as a web page.
+        let checklist = Page(
+            id: "pg_checklist", name: "真机验证清单", project: project, publisher: tester.name, version: 2,
+            url: FakeHub.demoAddress.absoluteString + "/pages/pg_checklist",
+            versions: [PageVersion(n: 2, by: tester.name, at: ago(1_100)), PageVersion(n: 1, by: tester.name, at: ago(4_000))],
+            createdAt: ago(4_000), updatedAt: ago(1_100))
+        world.pages = [(checklist, [
+            "index.html": ("text/html; charset=utf-8", """
+            <!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>真机验证清单</title><link rel="stylesheet" href="style.css"></head>
+            <body><h1>真机验证清单</h1><p class="v">第 {{version}} 版</p>
+            <ul><li><label><input type="checkbox" checked> 键盘和输入框</label></li>
+            <li><label><input type="checkbox" checked> 聊天滚动</label></li>
+            <li><label><input type="checkbox"> 导航返回</label></li>
+            <li><label><input type="checkbox"> 运行中补充和停止</label></li></ul>
+            <p><a href="https://github.com/chenhg5/myco">仓库</a></p>
+            <script src="app.js"></script></body></html>
+            """),
+            "style.css": ("text/css; charset=utf-8", "body{font:17px/1.6 -apple-system,sans-serif;margin:24px;color:#1c1c21}h1{font-size:24px}li{list-style:none;margin:10px 0}ul{padding:0}.v{color:#85858d}#n{color:#2f8a68}"),
+            "app.js": ("text/javascript; charset=utf-8", "const p=document.createElement('p');p.id='n';const say=()=>p.textContent=document.querySelectorAll('input:checked').length+' / 4';say();document.body.appendChild(p);document.addEventListener('change',say);"),
+        ])]
+        // Two automations, except where the page with none is looked at.
+        if self != .waiting {
+            world.automations = [
+                Automation(
+                    id: "aut_morning", name: "每天早上汇总", owner: "glenn", to: lead.name,
+                    body: "看一下昨天新开的 issue 和 PR，挑出要紧的，在这里回我一份清单。",
+                    schedule: AutomationSchedule(cron: "0 9 * * 1-5", tz: TimeZone.current.identifier), skipIfBusy: true, enabled: true,
+                    nextRunAt: ago(-50_000),
+                    lastRun: AutomationRun(id: "arun_1", automationId: "aut_morning", at: ago(36_000), trigger: "schedule", outcome: "sent", messageId: "m1")),
+                Automation(
+                    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", to: backend.name,
+                    body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
+                    webhook: true, webhookUrl: "https://demo.myco.example/hooks/aut_ci", skipIfBusy: true, enabled: false,
+                    lastRun: AutomationRun(
+                        id: "arun_2", automationId: "aut_ci", at: ago(172_800), trigger: "webhook", outcome: "skipped",
+                        error: "the last task is not finished")),
+            ]
+        }
         if self == .session {
             world.messages += [
                 // The notes helper, in one long session: it took the second
@@ -169,6 +220,19 @@ public enum Scenario: Sendable {
                         createdAt: ago(1_200), updatedAt: ago(600)),
             ]
             world.silent = ["s2", "x1"]
+            // The backend engineer was a cloud session until two days ago:
+            // its subscription ran out, and a session on the Studio Mac
+            // took over.
+            world.handovers = [Handover(
+                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "glenn", note: "原来的订阅到期了",
+                from: HandoverSide(binding: Binding(harness: "claude-cloud", sessionId: "sess_before"), runtime: Runtime(cli: "claude-cloud")),
+                to: HandoverSide(binding: backend.binding, machineId: "mach_studio", machineName: "Studio Mac", runtime: backend.runtime),
+                state: "done", doneAt: ago(172_800), openTasks: [])]
+            // The tester made its checklist a web page, and says where it is.
+            world.messages.append(Message(
+                id: "pgm", from: tester.name, to: me, type: "note",
+                body: "清单做成了一个网页，可以直接勾：\(FakeHub.demoAddress.absoluteString)/pages/pg_checklist\n\n有改动我会再发一版。", status: "done",
+                createdAt: ago(1_050)))
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

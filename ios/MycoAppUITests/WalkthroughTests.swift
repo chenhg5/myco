@@ -426,9 +426,160 @@ final class WalkthroughTests: XCTestCase {
     func testAddingAnAgentGivesASentenceWithARealLink() {
         let app = launch()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        // (the plus offers an agent, or a computer)
+        app.buttons["chrome.add"].firstMatch.tap()
         app.buttons["Add an agent"].firstMatch.tap()
         let sentence = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "curl -fsSL https://demo.myco.example/j/")).firstMatch
         XCTAssertTrue(sentence.waitForExistence(timeout: 5), "the sentence carries the workspace's join link")
+        XCTAssertTrue(app.buttons["Copy"].isEnabled)
+    }
+
+    @MainActor
+    func testAnAgentIsHandedOverToAnotherSession() {
+        // The backend engineer's card, for whoever may manage it: a way
+        // to hand it over, and the time it was (with a way back).
+        let app = launch(["-myco-start", "session", "-myco-route", "member:studio-codex-7f3a"])
+        let entry = app.buttons["member.handover"]
+        for _ in 0..<4 where !entry.exists { app.swipeUp() }
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        let history = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "claude.ai cloud → Studio Mac · Codex")).firstMatch
+        XCTAssertTrue(history.waitForExistence(timeout: 10), "the earlier handover is in its card")
+        XCTAssertTrue(app.buttons["member.handover.back"].exists, "with a way back")
+        shot("handover-card")
+        entry.tap()
+        // Which way, on which computer, and what will happen.
+        let start = app.buttons["handover.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["handover.machine"].firstMatch.label.contains("Studio Mac"))
+        XCTAssertTrue(app.buttons["handover.machine"].firstMatch.label.contains("Where it is now"))
+        XCTAssertTrue(start.isEnabled, "its own computer and folder are there to start with")
+        shot("handover-sheet")
+        for _ in 0..<3 where !app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "The earlier session stops")).firstMatch.exists { app.swipeUp() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "The earlier session stops")).firstMatch.exists, "what will happen is said first")
+        start.tap()
+        // The new session read the handover note and said so.
+        let done = app.staticTexts["handover.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 20))
+        XCTAssertTrue(done.label.contains("Studio Mac · Codex answers for 后端工程师 now"), done.label)
+        XCTAssertTrue(app.staticTexts["handover.reply"].exists)
+        shot("handover-done")
+    }
+
+    @MainActor
+    func testAComputerIsAddedWithOneCommand() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        app.buttons["chrome.add"].firstMatch.tap()
+        app.buttons["Add a computer"].firstMatch.tap()
+        // One line to run on that computer, in the folder agents should use.
+        let command = app.staticTexts["computer.command"]
+        XCTAssertTrue(command.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label BEGINSWITH %@", "curl -fsSL https://demo.myco.example/j/"), evaluatedWith: command)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["computer.waiting"].exists, "it waits for the folder to show up")
+        shot("computer-command")
+        // The other system's line.
+        app.buttons["Windows (PowerShell)"].tap()
+        XCTAssertTrue(command.label.hasPrefix("irm 'https://demo.myco.example/j/"), command.label)
+        XCTAssertTrue(command.label.hasSuffix("?format=ps1' | iex"), command.label)
+        // (The demo runs the command a moment later.) It shows up, and is
+        // put in the project chosen.
+        let arrived = app.staticTexts["computer.arrived"]
+        XCTAssertTrue(arrived.waitForExistence(timeout: 20), "the folder showed up")
+        XCTAssertTrue(arrived.label.contains("myco 手机端"), arrived.label)
+        shot("computer-arrived")
+    }
+
+    @MainActor
+    func testAutomationsAreListedSwitchedAndWritten() {
+        // From the members page: one row above the people.
+        var app = launch(["-myco-route", "tab:members"])
+        let entry = app.buttons["members.automations"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "2, 1 on"), evaluatedWith: entry)
+        waitForExpectations(timeout: 10)
+        entry.tap()
+        let rows = app.buttons.matching(identifier: "automation.row")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(rows.count, 2)
+        // Each says when, to whom, when next and how the last one went.
+        let first = rows.firstMatch.label
+        XCTAssertTrue(first.contains("每天早上汇总"), first)
+        XCTAssertTrue(first.contains("Weekdays at 09:00"), first)
+        XCTAssertTrue(first.contains("协调者"), first)
+        XCTAssertTrue(first.contains("Next "), first)
+        XCTAssertTrue(first.contains("Sent"), first)
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Paused"), rows.element(boundBy: 1).label)
+        shot("automations")
+        // A switch turns one off.
+        let toggle = app.switches.matching(identifier: "automation.switch").firstMatch
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        expectation(for: NSPredicate(format: "value == %@", "0"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+        // A new one: what is missing is said until it can be saved.
+        app.buttons["automations.new"].tap()
+        let name = app.textFields["automation.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["automation.missing"].label, "It needs a name")
+        XCTAssertFalse(app.buttons["automation.save"].isEnabled)
+        name.tap()
+        name.typeText("Nightly check")
+        let body = app.descendants(matching: .any).matching(identifier: "automation.body").firstMatch
+        body.tap()
+        body.typeText("Check the services.")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Weekdays at 09:00")).firstMatch.exists, "the schedule is said in words")
+        shot("automation-editor")
+        XCTAssertFalse(app.staticTexts["automation.missing"].exists)
+        app.buttons["automation.save"].tap()
+        expectation(for: NSPredicate(format: "count == 3"), evaluatedWith: rows)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(rows.firstMatch.label.contains("Nightly check"))
+        app.terminate()
+
+        // None yet: what they are for, and a few to start from.
+        app = launch(["-myco-start", "waiting", "-myco-route", "page:automations"])
+        XCTAssertTrue(app.staticTexts["Let agents work on their own schedule"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons.matching(identifier: "automations.template").count, 4)
+        shot("automations-empty")
+        // One with a webhook ends on its address and secret, shown once.
+        app.buttons.matching(identifier: "automations.template").element(boundBy: 3).tap()
+        XCTAssertTrue(app.buttons["automation.save"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["automation.save"].isEnabled, "a template is ready to save")
+        app.buttons["automation.save"].tap()
+        XCTAssertTrue(app.buttons["automation.secret.done"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "https://demo.myco.example/hooks/")).firstMatch.exists)
+        shot("automation-secret")
+        app.buttons["automation.secret.done"].tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10), "the new one is in the list")
+    }
+
+    @MainActor
+    func testARequestThatFailsSaysWhyAndCanBeTriedAgain() {
+        // The first join link fails as a gateway in front of the workspace
+        // would: said in words, the raw reason one tap away, and a button
+        // to try again.
+        let app = launch(["-myco-trouble", "links"])
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        // (the plus offers an agent, or a computer)
+        app.buttons["chrome.add"].firstMatch.tap()
+        app.buttons["Add an agent"].firstMatch.tap()
+        let words = app.staticTexts["failure.words"]
+        XCTAssertTrue(words.waitForExistence(timeout: 5))
+        XCTAssertEqual(words.label, "Cannot reach the workspace right now, or it is answering too slowly.")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Bad Gateway")).firstMatch.exists, "the raw reason is not what is said")
+        XCTAssertFalse(app.buttons["Copy"].isEnabled, "there is no link to copy yet")
+        app.buttons["failure.details"].tap()
+        let raw = app.staticTexts["failure.detail"]
+        XCTAssertTrue(raw.waitForExistence(timeout: 3), "but it is one tap away")
+        XCTAssertTrue(raw.label.contains("HTTP 502"), raw.label)
+        XCTAssertTrue(raw.label.contains("502 Bad Gateway nginx"), raw.label)
+        XCTAssertTrue(app.buttons["failure.copy"].exists, "to copy and pass on")
+        shot("failure-details")
+        app.buttons["failure.retry"].tap()
+        let sentence = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "curl -fsSL https://demo.myco.example/j/")).firstMatch
+        XCTAssertTrue(sentence.waitForExistence(timeout: 5), "trying again got the link")
+        XCTAssertFalse(words.exists)
         XCTAssertTrue(app.buttons["Copy"].isEnabled)
     }
 }

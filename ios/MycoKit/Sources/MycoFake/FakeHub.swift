@@ -45,6 +45,11 @@ public actor FakeHub: HubAPI {
         files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
         turnEnded = world.turnEnded
         silent = world.silent
+        automationList = world.automations
+        pageList = world.pages.map(\.page)
+        handoverList = world.handovers
+        pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
+        automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
     }
 
     public func setLatency(_ value: Duration) {
@@ -332,8 +337,319 @@ public actor FakeHub: HubAPI {
         return hiddenIDs
     }
 
+    /// Acts like a hub from before run settings.
+    private var tooOldForRunSettings = false
+
+    public func setTooOldForRunSettings(_ value: Bool) {
+        tooOldForRunSettings = value
+    }
+
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        try await check()
+        if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found")
+        }
+        // Kept as chosen; what it runs with changes at its next run.
+        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
+        return agents[index].agent
+    }
+
+    // MARK: Handovers
+
+    private var handoverList: [Handover] = []
+    /// A command was made: "someone runs it" a moment later.
+    private var takeoverComing: (at: Date, id: String)?
+    /// Acts like a hub from before handovers.
+    private var tooOldForHandovers = false
+
+    public func setTooOldForHandovers(_ value: Bool) {
+        tooOldForHandovers = value
+    }
+
+    private func checkHandovers(_ agent: String) async throws -> Int {
+        try await check()
+        if tooOldForHandovers { throw HubError(error: "not_found", message: "no route for /v1/agents/\(agent)/handovers", status: 404) }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found", status: 404)
+        }
+        return index
+    }
+
+    private func side(of agent: Agent) -> HandoverSide {
+        HandoverSide(
+            binding: agent.binding, machineId: agent.machineId,
+            machineName: machines.first { $0.id == agent.machineId }?.name, runtime: agent.runtime)
+    }
+
+    public func handovers(of agent: String) async throws -> [Handover] {
+        _ = try await checkHandovers(agent)
+        advance()
+        return handoverList.filter { $0.agent == agent }.sorted { $0.at > $1.at }
+    }
+
+    /// The new session is there: the agent answers from it now.
+    private func take(over index: Int, with handover: inout Handover, cli: String, dir: String?, machine: String?) {
+        let open = messages.filter { $0.to == agents[index].agent.name && $0.isOpen }.map(\.id)
+        agents[index].agent.binding = Binding(harness: cli, sessionId: "sess_\(handover.id)", workdir: dir ?? agents[index].agent.binding.workdir)
+        agents[index].agent.machineId = machine
+        agents[index].agent.runtime = Runtime(cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5")
+        handover.to = side(of: agents[index].agent)
+        handover.state = "done"
+        handover.doneAt = Date()
+        handover.openTasks = open
+    }
+
+    public func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult {
+        let index = try await checkHandovers(agent)
+        guard let machine = machines.first(where: { $0.id == request.machine || $0.name == request.machine }) else {
+            throw HubError(error: "not_found", message: "machine \(request.machine) not found", status: 404)
+        }
+        // (the new session takes a moment to start and read the note)
+        try? await Task.sleep(for: .milliseconds(1_500))
+        seq += 1
+        var handover = Handover(
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: request.note, from: side(of: agents[index].agent),
+            state: "waiting", back: request.back)
+        if let back = request.back, let earlier = handoverList.first(where: { $0.id == back }) {
+            take(
+                over: index, with: &handover, cli: earlier.from?.binding?.harness ?? "claude", dir: earlier.from?.binding?.workdir,
+                machine: earlier.from?.machineId)
+        } else {
+            take(over: index, with: &handover, cli: request.cli ?? "claude", dir: request.dir, machine: machine.id)
+        }
+        handoverList.append(handover)
+        return HandoverResult(handover: handover, spawn: .init(reply: "读完交接说明了：我接着把推送接口的设计写完，先看上一位留下的草稿。"))
+    }
+
+    public func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink {
+        let index = try await checkHandovers(agent)
+        seq += 1
+        let handover = Handover(
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: note, from: side(of: agents[index].agent),
+            state: "waiting", back: back)
+        handoverList.append(handover)
+        takeoverComing = (Date().addingTimeInterval(4), handover.id)
+        let url = "https://demo.myco.example/h/myco_takeover_demo\(seq)"
+        return HandoverLink(handover: handover, command: "curl -fsSL '\(url)' | sh", commandPs1: "irm '\(url)?format=ps1' | iex")
+    }
+
+    /// The command "was run" in a cloud session: it has the agent now.
+    private func arriveTakeover() {
+        guard let coming = takeoverComing, Date() >= coming.at else { return }
+        takeoverComing = nil
+        guard let place = handoverList.firstIndex(where: { $0.id == coming.id }),
+              let index = agents.firstIndex(where: { $0.agent.name == handoverList[place].agent })
+        else { return }
+        var handover = handoverList[place]
+        take(over: index, with: &handover, cli: "claude-cloud", dir: "/home/user/myco", machine: nil)
+        handoverList[place] = handover
+    }
+
+    // MARK: Pages
+
+    public static let demoAddress = URL(string: "https://demo.myco.example")!
+
+    public nonisolated var address: URL? { Self.demoAddress }
+
+    private var pageList: [Page] = []
+    private var pageFiles: [String: [String: (type: String, text: String)]] = [:]
+
+    public func page(_ id: String) async throws -> Page {
+        try await check()
+        guard let page = pageList.first(where: { $0.id == id }) else {
+            throw HubError(error: "not_found", message: "page \(id) not found", status: 404)
+        }
+        return page
+    }
+
+    public func pageFile(_ id: String, version: Int?, path: String) async throws -> PageFile {
+        try await check()
+        guard let files = pageFiles[id], let file = files[path.isEmpty ? "index.html" : path] else {
+            throw HubError(error: "not_found", message: "no such file in page \(id)", status: 404)
+        }
+        // (each version says which it is, to tell them apart)
+        let text = file.text.replacingOccurrences(of: "{{version}}", with: String(version ?? 0))
+        return PageFile(data: Data(text.utf8), contentType: file.type)
+    }
+
+    /// The agent publishes the page again (for tests of "a newer version").
+    public func publishAgain(_ id: String) {
+        guard let index = pageList.firstIndex(where: { $0.id == id }) else { return }
+        pageList[index].version += 1
+        pageList[index].versions.insert(PageVersion(n: pageList[index].version, by: pageList[index].publisher, at: Date()), at: 0)
+        pageList[index].updatedAt = Date()
+    }
+
+    // MARK: A computer added with one command
+
+    /// A link was made: the folder it is run in shows up a moment later
+    /// (as if someone ran the command), usable by these agents.
+    private var computerComing: (at: Date, allowFrom: [String])?
+    /// Acts as for someone who is not the workspace's owner or an admin.
+    private var mayNotAddComputers = false
+
+    public func setMayNotAddComputers(_ value: Bool) {
+        mayNotAddComputers = value
+    }
+
+    public func computerLink(allowFrom: [String]) async throws -> JoinLink {
+        try await check()
+        if mayNotAddComputers {
+            throw HubError(error: "permission_denied", message: "only the hub's owner or an admin can make a link for a shell node", status: 403)
+        }
+        guard !allowFrom.isEmpty else {
+            throw HubError(error: "invalid_argument", message: "a shell node needs at least one agent allowed to send it commands", status: 400)
+        }
+        computerComing = (Date().addingTimeInterval(4), allowFrom)
+        return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_computer")
+    }
+
+    public func addProjectMember(_ agent: String, to project: String) async throws {
+        try await check()
+        guard let index = projectList.firstIndex(where: { $0.name == project }) else {
+            throw HubError(error: "not_found", message: "project \(project) not found", status: 404)
+        }
+        guard agents.contains(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found", status: 404)
+        }
+        if !projectList[index].members.contains(where: { $0.name == agent }) {
+            projectList[index].members.append(ProjectMember(name: agent, addedAt: Date()))
+        }
+    }
+
+    /// The command "was run": the folder is a node now.
+    private func arriveComputer() {
+        guard let coming = computerComing, Date() >= coming.at else { return }
+        computerComing = nil
+        seq += 1
+        let node = Agent(
+            id: "agt_shell\(seq)", name: "studio-site-shell\(seq)", binding: Binding(harness: "exec", workdir: "~/code/site"),
+            kind: "shell", machineId: "mach_studio")
+        agents.append(AgentStatus(agent: node, state: "idle"))
+    }
+
+    // MARK: Automations
+
+    private var automationList: [Automation] = []
+    private var automationRuns: [String: [AutomationRun]] = [:]
+    /// Acts like a hub from before automations.
+    private var tooOldForAutomations = false
+
+    public func setTooOldForAutomations(_ value: Bool) {
+        tooOldForAutomations = value
+    }
+
+    private func checkAutomations() async throws {
+        try await check()
+        if tooOldForAutomations { throw HubError(error: "not_found", message: "no route for GET /v1/console/automations", status: 404) }
+    }
+
+    private func place(of id: String) throws -> Int {
+        guard let index = automationList.firstIndex(where: { $0.id == id }) else {
+            throw HubError(error: "not_found", message: "automation \(id) not found", status: 404)
+        }
+        return index
+    }
+
+    public func automations() async throws -> [Automation] {
+        try await checkAutomations()
+        return automationList
+    }
+
+    public func automation(_ id: String) async throws -> AutomationDetail {
+        try await checkAutomations()
+        return AutomationDetail(automation: automationList[try place(of: id)], runs: automationRuns[id] ?? [])
+    }
+
+    public func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved {
+        try await checkAutomations()
+        let name = (request.name ?? "").trimmingCharacters(in: .whitespaces), to = request.to ?? "", body = request.body ?? ""
+        guard !name.isEmpty, !to.isEmpty, !body.isEmpty else {
+            throw HubError(error: "invalid_argument", message: "name, to and body are required", status: 400)
+        }
+        guard request.schedule != nil || request.webhook == true else {
+            throw HubError(error: "invalid_argument", message: "an automation needs a schedule or a webhook", status: 400)
+        }
+        seq += 1
+        let id = "aut_fake\(seq)"
+        let hook = request.webhook == true
+        let made = Automation(
+            id: id, name: name, owner: "glenn", to: to, body: body, schedule: request.schedule, webhook: hook,
+            webhookUrl: hook ? "https://demo.myco.example/hooks/\(id)" : nil, skipIfBusy: request.skipIfBusy ?? true,
+            enabled: request.enabled ?? true, nextRunAt: request.schedule == nil ? nil : Date().addingTimeInterval(3_600))
+        automationList.insert(made, at: 0)
+        return AutomationSaved(automation: made, webhookSecret: hook ? "whk_demo_\(seq)" : nil)
+    }
+
+    public func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved {
+        try await checkAutomations()
+        let index = try place(of: id)
+        var one = automationList[index]
+        var secret: String?
+        if let name = request.name { one.name = name }
+        if let to = request.to { one.to = to }
+        if let body = request.body { one.body = body }
+        if let schedule = request.schedule { one.schedule = schedule }
+        if request.clearSchedule == true { one.schedule = nil }
+        if let hook = request.webhook, hook != one.webhook {
+            one.webhook = hook
+            one.webhookUrl = hook ? "https://demo.myco.example/hooks/\(id)" : nil
+            if hook {
+                seq += 1
+                secret = "whk_demo_\(seq)"
+            }
+        }
+        if request.rotateSecret == true, one.webhook {
+            seq += 1
+            secret = "whk_demo_\(seq)"
+        }
+        if let skip = request.skipIfBusy { one.skipIfBusy = skip }
+        if let enabled = request.enabled { one.enabled = enabled }
+        guard one.schedule != nil || one.webhook else {
+            throw HubError(error: "invalid_argument", message: "an automation needs a schedule or a webhook", status: 400)
+        }
+        one.nextRunAt = one.schedule != nil && one.enabled ? Date().addingTimeInterval(3_600) : nil
+        automationList[index] = one
+        return AutomationSaved(automation: one, webhookSecret: secret)
+    }
+
+    public func deleteAutomation(_ id: String) async throws {
+        try await checkAutomations()
+        automationList.remove(at: try place(of: id))
+        automationRuns[id] = nil
+    }
+
+    public func runAutomation(_ id: String) async throws -> AutomationRun {
+        try await checkAutomations()
+        let index = try place(of: id)
+        let one = automationList[index]
+        // An ordinary task from me, marked as the automation's.
+        var sent = Message(id: nextID(), from: Self.me, to: one.to, body: one.body, status: "queued", createdAt: Date())
+        sent.automation = id
+        messages.append(sent)
+        simulated[sent.id] = Date()
+        seq += 1
+        let run = AutomationRun(id: "arun_fake\(seq)", automationId: id, at: Date(), trigger: "manual", outcome: "sent", messageId: sent.id)
+        automationRuns[id, default: []].insert(run, at: 0)
+        automationList[index].lastRun = run
+        return run
+    }
+
+    /// How many times a join link is refused as a gateway in front of the
+    /// hub would (502), before one is made.
+    private var linkFailures = 0
+
+    public func setJoinLinkFailures(_ count: Int) {
+        linkFailures = count
+    }
+
     public func joinLink() async throws -> JoinLink {
         try await check()
+        if linkFailures > 0 {
+            linkFailures -= 1
+            throw HubError(error: "http_502", message: "502 Bad Gateway nginx", status: 502)
+        }
         return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
     }
 
@@ -345,6 +661,8 @@ public actor FakeHub: HubAPI {
     /// Moves what the app sent along: taken on, then answered.
     private func advance() {
         let now = Date()
+        arriveComputer()
+        arriveTakeover()
         for (id, sentAt) in simulated {
             guard let i = messages.firstIndex(where: { $0.id == id }) else { continue }
             // Put after a task that is still open: it waits, as on a hub.

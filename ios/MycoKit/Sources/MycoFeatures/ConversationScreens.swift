@@ -32,6 +32,17 @@ struct AgentScreen: View {
                     }
                     .accessibilityIdentifier("conversation.title")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: name, project: nil)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel(L("更多", "More"))
+                    .accessibilityIdentifier("conversation.more")
+                }
             }
     }
 }
@@ -117,6 +128,14 @@ struct ProjectScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button(L("项目资料", "About this project"), systemImage: "doc.text") { router.push(.projectInfo(name)) }
+                    Button(L("给项目加一台电脑", "Add a computer to the project"), systemImage: "desktopcomputer") {
+                        router.sheet = .addComputer(project: name)
+                    }
+                    if let project = session.project(name), let lead = session.coordinator(of: project) {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: lead, project: name)
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -494,12 +513,21 @@ struct ConversationBody: View {
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             if model.unreachable != nil {
-                StaleBanner(L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."))
+                StaleBanner(
+                    L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
+                    details: .of(model.unreachableDetail))
                     .accessibilityIdentifier("conversation.stale")
             }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: pulls)
         .quickLookPreview($lookingAt)
+        // A link to a page of this workspace opens in the app, like its
+        // card; any other link goes where links go.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let id = PageLinks.id(of: url.absoluteString, in: session.pages.workspace) else { return .systemAction }
+            router.page = PageRoute(id: id)
+            return .handled
+        })
         // Typing or sending while it listens stops it: nothing late is
         // written into a box that was emptied.
         .onChange(of: model.draft) { _, text in dictation?.textChanged(to: text) }
@@ -827,6 +855,10 @@ struct ConversationBody: View {
         switch item.kind {
         case .time(let date):
             TimeBreak(Self.timeText(date))
+        case .takenOver(let text):
+            // Another session answers from here on: a line, not a message.
+            TimeBreak(Self.timeText(item.at) + " · " + text)
+                .accessibilityIdentifier("conversation.handover")
         case .mine(let text, let steer, let by):
             // A colleague's task carries their name; mine needs none.
             VStack(alignment: .trailing, spacing: Space.s) {
@@ -844,6 +876,15 @@ struct ConversationBody: View {
                         }
                     if let voiced {
                         VoiceMark(label: L("经语音", "By voice"), heard: voiced.heard.isEmpty ? "" : L("原话：", "As said: ") + voiced.heard)
+                    }
+                    // Sent for me by an automation, not typed just now.
+                    if item.automated {
+                        Label(L("自动", "Auto"), systemImage: "clock")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(MycoColor.muted)
+                            .padding(.horizontal, 6)
+                            .accessibilityIdentifier("message.auto")
                     }
                 }
                 files(of: item, trailing: true)
@@ -865,6 +906,8 @@ struct ConversationBody: View {
                 }
                 ReplyText(text)
                 files(of: item, trailing: false)
+                // A web page it published and links to: a card that opens it.
+                PageCards(text: text)
                 // The newest answer carries what can be done with it; the
                 // others keep the page quiet (a long press copies any).
                 if item.id == newestReply {
@@ -880,9 +923,12 @@ struct ConversationBody: View {
                 deleteButton(item.id)
             }
         case .progress(let text, let latest):
-            ProgressLine(
-                text, time: item.at.formatted(date: .omitted, time: .shortened),
-                position: timelinePosition(at: index), latest: latest)
+            VStack(alignment: .leading, spacing: Space.s) {
+                ProgressLine(
+                    text, time: item.at.formatted(date: .omitted, time: .shortened),
+                    position: timelinePosition(at: index), latest: latest)
+                PageCards(text: text)
+            }
         case .plan(let plan, _):
             let done = plan.filter { $0.state == .done }.count
             PlanCard(
@@ -1029,9 +1075,8 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
-            if let problem = model.problem {
-                Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let failure = model.failure {
+                FailureLine(failure: failure)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             if let ids = deleted {
@@ -1129,6 +1174,9 @@ struct ConversationBody: View {
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
                 openLabel: L("看一下", "Look at"),
+                // The model and effort it runs with, switched here by
+                // whoever may. Out of the way while a call is on.
+                aside: call == nil ? session.runChoice(of: model.agent).map { AnyView(RunChoiceButton(agent: model.agent, choice: $0)) } : nil,
                 onSubmit: {
                     commits += 1
                     if canCall {

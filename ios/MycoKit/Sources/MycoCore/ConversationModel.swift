@@ -54,6 +54,8 @@ public final class ConversationModel {
     /// Why the last look at the workspace failed; nil while it answers.
     /// What is on the page is then from before.
     public private(set) var unreachable: String?
+    /// The same, with the raw reason for whoever wants to see it.
+    public private(set) var unreachableDetail: String?
     /// A refresh the person asked for is under way.
     public private(set) var refreshing = false
 
@@ -75,8 +77,11 @@ public final class ConversationModel {
     /// they are simply there, they do not arrive.
     public private(set) var placed: Set<String> = []
     private var sends = 0
-    /// Why the last send, steer or stop did not go through.
-    public private(set) var problem: String?
+    /// Why the last send, steer or stop did not go through: in words,
+    /// with the raw reason for whoever wants it.
+    public private(set) var failure: Failure?
+    /// The same, as one string.
+    public var problem: String? { failure?.text }
     /// A message waiting for the open task to finish.
     public struct Waiting: Identifiable, Hashable, Sendable {
         public var id: String
@@ -202,10 +207,10 @@ public final class ConversationModel {
             let sent = try await session.hub.send(SendRequest(
                 to: task.to, body: task.body, threadId: task.threadId, attachments: task.attachments.map(\.fileId)))
             known[sent.id] = sent
-            problem = nil
+            failure = nil
             show(cards: cards)
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
     }
 
@@ -263,7 +268,7 @@ public final class ConversationModel {
 
     /// Something picked could not be read on this device: said under the input.
     public func couldNotRead(_ name: String) {
-        problem = L("读不了「\(name)」", "Could not read \"\(name)\"")
+        failure = Failure(L("读不了「\(name)」", "Could not read \"\(name)\""))
     }
 
     /// Takes a file off the next message.
@@ -375,6 +380,7 @@ public final class ConversationModel {
             let page = try await session.hub.exchanges(between: me, and: agent, before: nil)
             failures = 0
             unreachable = nil
+            unreachableDetail = nil
             for message in page.messages { known[message.id] = message }
             if !wentBack { hasEarlier = page.more }
             newestPage = page.messages
@@ -409,6 +415,7 @@ public final class ConversationModel {
             failures += 1
             if failures >= 2 || refreshing {
                 unreachable = (error as? HubError)?.message ?? error.localizedDescription
+                unreachableDetail = Failure.of(error).detail ?? unreachable
             }
             loaded = true
         }
@@ -476,6 +483,70 @@ public final class ConversationModel {
         for message in page.messages { known[message.id] = message }
         show(cards: cards)
         return !page.messages.isEmpty
+    }
+
+    // MARK: Export
+
+    /// A conversation written out as a file.
+    public struct Exported: Sendable, Hashable {
+        public var name: String
+        public var text: String
+        public var messages: Int
+    }
+
+    /// The most messages one export reads back to.
+    static let exportLimit = 5_000
+
+    /// The whole conversation as Markdown: every page of it, not only the
+    /// ones on screen (which stay as they are), without what was taken
+    /// back or taken out of my view.
+    /// - Parameters:
+    ///   - steps: fold each task's tool calls under it.
+    ///   - title: the file's heading ("和 X 的对话").
+    ///   - with: whom it is with, for the file's name.
+    ///   - name: a name as the chat shows it.
+    public func export(steps: Bool, title: String, with whom: String, name: (String) -> String) async throws -> Exported {
+        let me = self.me, hub = session.hub
+        var all = known
+        var more = all.isEmpty || hasEarlier
+        while more, all.count < Self.exportLimit {
+            let page = try await hub.exchanges(between: me, and: agent, before: all.values.map(\.createdAt).min())
+            let before = all.count
+            for message in page.messages { all[message.id] = message }
+            more = page.more && all.count > before
+        }
+        let hidden = session.hidden
+        var shown = all.values.filter { message in
+            if withdrawn.contains(message.id) || hidden.contains(message.id) { return false }
+            if message.type == "progress" || message.type == "steer", let task = message.replyTo, hidden.contains(task) { return false }
+            return true
+        }
+        // (what waits behind a task, or was taken back before its turn, is
+        // not part of the conversation)
+        let waiting = Set(ConversationBuilder.queuedBehind(shown).map(\.id)).union(ConversationBuilder.neverSent(shown, me: me))
+        shown.removeAll { waiting.contains($0.id) }
+        var taken: [String: [ConversationExport.Step]] = [:]
+        if steps {
+            let tasks = shown.filter { $0.type == "task" }.map(\.id)
+            var events = traces.filter { settled.contains($0.key) }
+            // A few at a time: a long conversation has many tasks.
+            let missing = tasks.filter { events[$0] == nil }
+            for start in stride(from: 0, to: missing.count, by: 6) {
+                let batch = Array(missing[start..<min(start + 6, missing.count)])
+                // (a task without a run has no steps: not a failure)
+                let fetched = await Self.gather(batch) { id in try? await hub.trace(of: id, after: 0) }
+                for (id, trace) in fetched { events[id] = trace.events }
+                try Task.checkCancellation()
+            }
+            for id in tasks {
+                let list = ConversationExport.steps(of: events[id] ?? [])
+                if !list.isEmpty { taken[id] = list }
+            }
+        }
+        return Exported(
+            name: ConversationExport.fileName(with: whom),
+            text: ConversationExport.markdown(shown, title: title, name: name, steps: taken),
+            messages: shown.count)
     }
 
     /// Someone who is not an agent: what such a one says is a message,
@@ -569,6 +640,10 @@ public final class ConversationModel {
             me: me, agent: agent, messages: Array(all.values), handoffs: handoffs,
             processes: Set(shownProcesses.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
             activity: activity, ended: ended, windows: windows,
+            // (my own conversation with it: where another session took over)
+            takeovers: observed != nil ? [] : session.handovers(of: agent).done.map { handover in
+                (handover.id, handover.doneAt ?? handover.at, HandoverWords.line(handover, machines: session.machines, me: session.me))
+            },
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
@@ -616,6 +691,10 @@ public final class ConversationModel {
     private func loadSurroundings() async -> [Handoff] {
         let hub = session.hub
         let agent = agent
+        // The times another session took it over, where I may see them.
+        if observed == nil, let known = session.agent(agent), Naming.kind(of: known) == .agent, session.manages(known) {
+            await session.handovers(of: agent).load()
+        }
         // Which projects to look through: this page's, or the agent's.
         var scanned: [Project] = []
         if let project {
@@ -726,7 +805,7 @@ public final class ConversationModel {
             case .stop:
                 if let task = openTask { try await session.hub.stop(task.id) }
             }
-            problem = nil
+            failure = nil
             if action != .stop { dropSentPayloads() }
             // The workspace has it: the real message takes the place of
             // the one shown as being sent (`show`), with no wait between.
@@ -738,7 +817,7 @@ public final class ConversationModel {
             // Give it all back: nothing typed or picked is lost to a failed send.
             outgoing.removeAll { $0.id == going }
             if action != .stop { giveBack(text, files) }
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -837,9 +916,9 @@ public final class ConversationModel {
         sending = true
         do {
             try await session.hub.stop(task.id)
-            problem = nil
+            failure = nil
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -862,14 +941,14 @@ public final class ConversationModel {
         sending = true
         do {
             _ = try await session.hub.send(request(body, after: task.id, attachments: attachments))
-            problem = nil
+            failure = nil
             dropSentPayloads()
         } catch let error as HubError where error.error == "invalid_argument" {
             queued.append(Queued(body: body, files: files.filter { if case .ready = $0.state { return true } else { return false } }))
             dropSentPayloads()
         } catch {
             giveBack(text, files)
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         sending = false
         await reload()
@@ -883,9 +962,9 @@ public final class ConversationModel {
             do {
                 try await session.hub.stop(item.id)
                 withdrawn.insert(item.id)
-                problem = nil
+                failure = nil
             } catch {
-                problem = (error as? HubError)?.message ?? error.localizedDescription
+                failure = Failure.of(error)
                 return
             }
             if edit { restore(item.files) }
@@ -927,9 +1006,9 @@ public final class ConversationModel {
     public func setHidden(_ ids: [String], hidden: Bool = true) async {
         do {
             try await session.setHidden(ids, hidden: hidden)
-            problem = nil
+            failure = nil
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
         }
         show(cards: cards)
     }
@@ -944,7 +1023,7 @@ public final class ConversationModel {
             queued.removeFirst()
             return true
         } catch {
-            problem = (error as? HubError)?.message ?? error.localizedDescription
+            failure = Failure.of(error)
             return false
         }
     }

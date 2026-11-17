@@ -71,12 +71,15 @@ public struct ComposerView: View {
     /// The keyboard's Return sends instead of breaking the line (a
     /// setting, off unless the person chose it).
     let returnSends: Bool
+    /// Something small and quiet beside the send button (the model the
+    /// agent runs with); nil leaves it out.
+    let aside: AnyView?
 
     public init(
         text: Binding<String>, placeholder: String, mode: Mode, enabled: Bool, submitLabel: String, queueTitle: String,
         files: [TrayFile] = [], fileNote: String? = nil, attachLabel: String, removeLabel: String, retryLabel: String,
         attachChoices: [AttachChoice], mic: MicState? = nil, micLabel: String = "", returnSends: Bool = false,
-        openLabel: String = "",
+        openLabel: String = "", aside: AnyView? = nil,
         onSubmit: @escaping () -> Void, onQueue: @escaping () -> Void,
         onRemoveFile: @escaping (String) -> Void = { _ in }, onRetryFile: @escaping (String) -> Void = { _ in },
         onOpenFile: @escaping (String) -> Void = { _ in },
@@ -104,6 +107,7 @@ public struct ComposerView: View {
         self.micLabel = micLabel
         self.onMic = onMic
         self.returnSends = returnSends
+        self.aside = aside
     }
 
     @FocusState private var focused: Bool
@@ -172,7 +176,8 @@ public struct ComposerView: View {
                 if let mic {
                     MicButton(state: mic, label: micLabel, action: onMic)
                 }
-                Spacer(minLength: Space.l)
+                Spacer(minLength: Space.s)
+                if let aside { aside }
                 submitButton
             }
             .padding(.horizontal, 4)

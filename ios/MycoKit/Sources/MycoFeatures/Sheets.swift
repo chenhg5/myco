@@ -59,6 +59,11 @@ struct MemberCardSheet: View {
                             }
                         }
                     }
+                    // For whoever may manage it: hand it over to another
+                    // session, and the times it was.
+                    if Naming.kind(of: agent) == .agent, session.manages(agent) {
+                        HandoverCardSections(agent: agent)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
@@ -966,7 +971,8 @@ struct AddAgentSheet: View {
     @Environment(WorkspaceSession.self) private var session
     @State private var copied = false
     @State private var link: JoinLink?
-    @State private var problem: String?
+    @State private var failure: Failure?
+    @State private var attempt = 0
 
     /// What to tell an agent so it joins: one command when the workspace
     /// guides agents itself, the steps spelled out for older ones.
@@ -1001,23 +1007,35 @@ struct AddAgentSheet: View {
             Text(L("把这句话发给任何一个 AI 会话（Claude Code、Codex、claude.ai……），它会自己装好 myco 并加入。",
                    "Send this sentence to any AI session (Claude Code, Codex, claude.ai…). It installs myco and joins by itself."))
                 .font(.subheadline).lineSpacing(3).foregroundStyle(MycoColor.fg2)
-            Group {
-                if link != nil {
-                    Text(sentence).textSelection(.enabled)
-                } else if let problem {
-                    Text(problem).foregroundStyle(MycoColor.red)
-                } else {
-                    // The sentence's shape while the workspace makes the link.
-                    Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
+            if link == nil, let failure {
+                // (outside the box below: that one is the sentence's)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("没能拿到加入链接。", "Could not make a join link.")).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg)
+                    FailureLine(failure: failure) {
+                        self.failure = nil
+                        attempt += 1
+                    }
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else {
+                Group {
+                    if link != nil {
+                        Text(sentence).textSelection(.enabled)
+                    } else {
+                        // The sentence's shape while the workspace makes the link.
+                        Text(String(repeating: "加入 myco 的一句话 ", count: 6)).redacted(reason: .placeholder)
+                    }
+                }
+                .font(.callout.monospaced())
+                .lineSpacing(3)
+                .foregroundStyle(MycoColor.fg)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityIdentifier("add.sentence")
             }
-            .font(.callout.monospaced())
-            .lineSpacing(3)
-            .foregroundStyle(MycoColor.fg)
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(MycoColor.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .accessibilityIdentifier("add.sentence")
             Text(L("链接能用 10 次，一周内有效。", "The link works ten times, for a week."))
                 .font(.footnote).foregroundStyle(MycoColor.muted)
             HStack(spacing: 10) {
@@ -1043,11 +1061,14 @@ struct AddAgentSheet: View {
         // As tall as what is in it: the buttons sit near the bottom edge.
         .fittedSheet()
         .sensoryFeedback(.success, trigger: copied) { _, now in now }
-        .task {
+        // (and again each time "重试" is tapped)
+        .task(id: attempt) {
             do {
                 link = try await session.hub.joinLink()
+            } catch is CancellationError {
+                // the sheet was closed
             } catch {
-                problem = L("没能拿到加入链接：", "Could not make a join link: ") + ((error as? HubError)?.message ?? error.localizedDescription)
+                failure = Failure.of(error, canRetry: true)
             }
         }
     }
@@ -1094,7 +1115,7 @@ struct JoinSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var link = ""
     @State private var working = false
-    @State private var problem: String?
+    @State private var problem: Failure?
 
     var body: some View {
         NavigationStack {
@@ -1118,7 +1139,7 @@ struct JoinSheet: View {
                     .tint(MycoColor.button)
                 }
                 if let problem {
-                    Text(problem).font(.footnote).foregroundStyle(MycoColor.red).accessibilityIdentifier("join.problem")
+                    FailureLine(failure: problem, id: "join.problem")
                 }
                 Button(working ? L("正在加入…", "Joining…") : L("加入", "Join")) { join() }
                     .buttonStyle(PrimaryButtonStyle())
@@ -1148,9 +1169,9 @@ struct JoinSheet: View {
                 try await app.join(link: link)
                 dismiss()
             } catch let failure as AppModel.JoinFailure {
-                problem = failure.message
+                problem = Failure(failure.message, advice: failure.advice, detail: failure.detail)
             } catch {
-                problem = L("没能加入，请再试一次。", "Could not join. Try again.")
+                problem = Failure(L("没能加入，请再试一次。", "Could not join. Try again."))
             }
             working = false
         }

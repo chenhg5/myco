@@ -514,6 +514,96 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheModelItRunsWithIsBesideTheSendButtonAndSwitchesThere() {
+        // The backend engineer runs Codex on my computer: mine to switch.
+        var app = launch(["-myco-route", "agent:studio-codex-7f3a"])
+        let run = app.descendants(matching: .any)["composer.run"].firstMatch
+        XCTAssertTrue(run.waitForExistence(timeout: 20), "the model is beside the send button")
+        XCTAssertTrue(run.label.contains("GPT-6 Sol · High"), run.label)
+        snap("run-choice")
+        run.tap()
+        // Two rows that open: the model, and the effort.
+        let models = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Model")).firstMatch
+        XCTAssertTrue(models.waitForExistence(timeout: 5), "a tap offers to switch the model")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Effort")).firstMatch.exists, "and the effort")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Now: GPT-6 Sol · High")).firstMatch.exists,
+            "with what it runs on now, and when a switch applies")
+        snap("run-choice-menu")
+        models.tap()
+        let other = app.buttons["GPT-6"]
+        XCTAssertTrue(other.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Follow this computer"].exists)
+        snap("run-choice-models")
+        other.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "GPT-6 · High"), evaluatedWith: run)
+        waitForExpectations(timeout: 10)
+        snap("run-choice-switched")
+        app.terminate()
+
+        // The coordinator runs in the cloud: its own session decides.
+        app = launch(["-myco-route", "agent:cloud-lead"])
+        let theirs = app.descendants(matching: .any)["composer.run"].firstMatch
+        XCTAssertTrue(theirs.waitForExistence(timeout: 20))
+        XCTAssertTrue(theirs.label.contains("Opus 5.5"), theirs.label)
+        theirs.tap()
+        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "/model")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "a tap says where it is switched")
+        snap("run-choice-note")
+    }
+
+    @MainActor
+    func testAPageAnAgentPublishedIsACardThatOpensInTheApp() {
+        // The tester made its checklist a web page and says where it is.
+        let app = launch(["-myco-start", "session", "-myco-route", "agent:studio-claude-55d0"])
+        let card = app.buttons["page.card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 20), "the link has a card under its message")
+        XCTAssertTrue(card.label.contains("真机验证清单"), card.label)
+        XCTAssertTrue(card.label.contains("Version 2"), card.label)
+        XCTAssertTrue(card.label.contains("Published by 测试"), card.label)
+        snap("page-card")
+        card.tap()
+        // Over the whole screen: its name and version, and the page itself.
+        let title = app.descendants(matching: .any)["page.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        XCTAssertTrue(title.label.contains("真机验证清单"), title.label)
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 10))
+        // Its own files came: the words, the style, and the script's count.
+        XCTAssertTrue(web.staticTexts["第 2 版"].waitForExistence(timeout: 15), "the page's first file is shown")
+        XCTAssertTrue(web.staticTexts["2 / 4"].waitForExistence(timeout: 10), "its script ran")
+        snap("page-open")
+        app.buttons["page.close"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "closing it is back in the conversation")
+    }
+
+    @MainActor
+    func testAConversationIsExportedAsAFile() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let more = app.buttons["conversation.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20))
+        more.tap()
+        let entry = app.buttons["Export the conversation"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        let submit = app.buttons["export.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["export.steps"].exists, "the agents' steps can go along")
+        snap("export-sheet")
+        submit.tap()
+        // Written, and handed to the system's share sheet, which covers
+        // the page until it is closed.
+        sleep(3)
+        snap("export-share")
+        let close = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "header.closeButton", "Close")).firstMatch
+        if close.waitForExistence(timeout: 5) { close.tap() }
+        let done = app.staticTexts["export.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "what was written is said")
+        XCTAssertTrue(done.label.contains("Exported 2 messages"), done.label)
+        XCTAssertTrue(done.label.hasSuffix(".md"), done.label)
+    }
+
+    @MainActor
     func testWhatAgentsHandEachOtherIsACardThatOpensTheirExchange() {
         let app = launch(["-myco-route", "agent:studio-codex-7f3a"])
         // The coordinator's task is not a message in my conversation with

@@ -20,6 +20,8 @@ public final class WorkspaceSession {
 
     /// How messages from this app are signed (`@console:<member>`).
     public private(set) var me = ""
+    /// Who I am here, once the workspace has said (each launch).
+    public private(set) var whoami: Whoami?
     public private(set) var statuses: [AgentStatus] = []
     public private(set) var machines: [Machine] = []
     public private(set) var projects: [Project] = []
@@ -28,6 +30,8 @@ public final class WorkspaceSession {
     public private(set) var loadedAt: Date?
     /// Why it cannot be reached now; what is shown is from `loadedAt`.
     public private(set) var problem: String?
+    /// The raw reason (status, code, message), for whoever wants to see it.
+    public private(set) var problemDetail: String?
 
     /// Messages this person took out of their own view (删除): kept by
     /// the workspace, so all their devices agree; by this device alone
@@ -73,6 +77,43 @@ public final class WorkspaceSession {
     let snapshots: (any SnapshotStore)?
     /// The conversations opened this launch, kept so reopening one is instant.
     private var conversations: [String: ConversationModel] = [:]
+
+    @ObservationIgnored private var automationsModel: AutomationsModel?
+
+    /// What is sent for me on a schedule or on a call: one model for as
+    /// long as the workspace is on screen.
+    public var automations: AutomationsModel {
+        if let automationsModel { return automationsModel }
+        let model = AutomationsModel(hub: hub)
+        automationsModel = model
+        return model
+    }
+
+    @ObservationIgnored private var handoverModels: [String: HandoversModel] = [:]
+
+    /// An agent's handovers: the times another session took it over.
+    public func handovers(of agent: String) -> HandoversModel {
+        if let known = handoverModels[agent] { return known }
+        let model = HandoversModel(hub: hub, agent: agent)
+        handoverModels[agent] = model
+        return model
+    }
+
+    @ObservationIgnored private var pagesModel: PagesModel?
+
+    /// The web pages this workspace's messages link to.
+    public var pages: PagesModel {
+        if let pagesModel { return pagesModel }
+        let model = PagesModel(hub: hub)
+        pagesModel = model
+        return model
+    }
+
+    /// The agents a task can be sent to, by the name the app shows.
+    public var agentsByName: [Agent] {
+        statuses.map(\.agent).filter { Naming.kind(of: $0) == .agent }
+            .sorted { displayName(of: $0.name).localizedStandardCompare(displayName(of: $1.name)) == .orderedAscending }
+    }
 
     /// The conversation with an agent (in a project: with its coordinator).
     /// One model per conversation for as long as the workspace is on screen.
@@ -170,7 +211,11 @@ public final class WorkspaceSession {
 
     public func refresh() async {
         do {
-            if me.isEmpty { me = try await hub.whoami().consoleSender }
+            if me.isEmpty || whoami == nil {
+                let who = try await hub.whoami()
+                whoami = who
+                me = who.consoleSender
+            }
             async let overview = hub.overview()
             async let projects = hub.projects()
             async let recent = hub.recent(.myPairs)
@@ -181,6 +226,7 @@ public final class WorkspaceSession {
             self.recent = r
             loadedAt = Date()
             problem = nil
+            problemDetail = nil
             await loadHidden()
             refreshed?(self)
             if readBaseline == nil {
@@ -191,10 +237,50 @@ public final class WorkspaceSession {
             await save()
         } catch let error as HubError {
             problem = error.message
+            problemDetail = Failure.of(error).detail ?? error.message
         } catch is CancellationError {
             // leaving the page is not a problem to report
         } catch {
             problem = error.localizedDescription
+            problemDetail = problem
+        }
+    }
+
+    // MARK: Model and effort
+
+    /// The workspace answered that it keeps no run settings (before v0.19.5).
+    public private(set) var runSettingsTooOld = false
+
+    /// I own this agent, or manage the workspace. Not known until the
+    /// workspace has said who I am: then no.
+    public func manages(_ agent: Agent) -> Bool {
+        guard let whoami else { return false }
+        if whoami.canManage { return true }
+        guard let mine = whoami.member?.id, !mine.isEmpty else { return false }
+        return agent.ownerId == mine
+    }
+
+    /// The model and effort an agent runs with, as its message box shows them.
+    public func runChoice(of name: String) -> RunChoice? {
+        guard let agent = agent(name) else { return nil }
+        return RunChoice.of(agent, manages: manages(agent), tooOld: runSettingsTooOld)
+    }
+
+    /// Switches an agent's model and effort, from its next run ("" follows
+    /// its computer's setting). Answers why it could not, if it could not.
+    public func setRun(of name: String, model: String, effort: String) async -> String? {
+        do {
+            let agent = try await hub.setRunSettings(of: name, model: model, effort: effort)
+            if let index = statuses.firstIndex(where: { $0.agent.name == name }) { statuses[index].agent = agent }
+            return nil
+        } catch let error as HubError where error.error == "not_found" || error.error == "http_404" || error.error == "http_405" {
+            // A workspace from before this: shown, not switched.
+            runSettingsTooOld = true
+            return runChoice(of: name)?.note ?? error.message
+        } catch let error as HubError {
+            return error.message
+        } catch {
+            return error.localizedDescription
         }
     }
 
