@@ -123,10 +123,17 @@ public enum ConversationBuilder {
     ///   - tracedPlans: the plan each task's steps hold, and when it was written.
     ///   - paused: open tasks whose run has stopped for now (`RunProcess.isPaused`):
     ///     they get no line saying where they stand.
+    ///   - activity: when each open task's steps last moved. With what the
+    ///     task itself says and what it reported, the latest is its last
+    ///     sign of life: how long it has been quiet counts from there.
+    ///   - ended: open tasks whose session ended its turn. Such a task
+    ///     waits (for me, or for others); it is not stuck, unless its node
+    ///     is offline.
     ///   - status: looks up a node's status, to tell working from stuck.
     public static func items(
         me: String, agent: String, messages all: [Message], handoffs: [Handoff] = [], processes: Set<String> = [],
         tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
+        activity: [String: Date] = [:], ended: Set<String> = [],
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -138,6 +145,28 @@ public enum ConversationBuilder {
         let byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let answered = Set(messages.filter { $0.type == "reply" }.compactMap(\.replyTo))
         let reported = Set(messages.filter { $0.type == "progress" }.map { $0.replyTo ?? $0.threadId })
+        /// When each task last reported.
+        var saidAt: [String: Date] = [:]
+        for report in messages where report.type == "progress" {
+            guard let task = report.replyTo else { continue }
+            saidAt[task] = max(saidAt[task] ?? .distantPast, report.createdAt)
+        }
+        /// Where a task stands. Possibly stuck is judged from its last
+        /// sign of life (the task, what it reported, its steps: the
+        /// latest), and a task whose turn is over waits, it is not stuck.
+        /// The desktop app's rule.
+        func state(of task: Message) -> RunState {
+            var task = task
+            let last = max(task.activeAt ?? task.updatedAt, saidAt[task.id] ?? .distantPast, activity[task.id] ?? .distantPast)
+            task.activeAt = last
+            let recipient = status(task.to)
+            let state = RunState.of(task, recipient: recipient, now: now)
+            if case .maybeStuck = state, ended.contains(task.id) {
+                let offline = recipient.map { $0.state == "offline" || !$0.agent.online } ?? false
+                if !offline { return .working(since: last) }
+            }
+            return state
+        }
         /// The task of mine the agent is at work on, if any.
         let atWork = messages
             .filter { $0.from == me && $0.type == "task" && $0.status == "acked" && !answered.contains($0.id) }
@@ -147,7 +176,7 @@ public enum ConversationBuilder {
             guard task.from == me, task.type == "task", task.isOpen, task.e2e != true, !answered.contains(task.id),
                   (task.asking ?? "").isEmpty
             else { return nil }
-            if case .maybeStuck = RunState.of(task, recipient: status(task.to), now: now) { return nil }
+            if case .maybeStuck = state(of: task) { return nil }
             if task.status == "held" { return .later }
             if task.status == "acked" || reported.contains(task.id) { return nil }
             if let recipient = status(task.to) {
@@ -188,7 +217,7 @@ public enum ConversationBuilder {
                     id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by), files: files(of: m),
                     receipt: receipt(of: m)))
                 guard m.type == "task" else { continue }
-                let state = RunState.of(m, recipient: status(m.to), now: now)
+                let state = state(of: m)
                 if processes.contains(m.id) {
                     // Right under what was asked, before anything said later.
                     items.append(.init(
@@ -200,6 +229,9 @@ public enum ConversationBuilder {
                     // My open task's status closes the page (one line,
                     // added below, however many are open); a colleague's
                     // stays with its task.
+                    // Its answer is in the conversation: for whoever
+                    // reads it, it is answered, whatever its status says.
+                    if answered.contains(m.id) { break }
                     if mine {
                         myOpen.append((m, state))
                     } else {
@@ -441,11 +473,14 @@ public enum ConversationBuilder {
     /// input and for the line that says it is working.
     public static func openTask(me: String, messages: [Message], paused: Set<String> = [], moving: Set<String> = []) -> Message? {
         let waiting = Set(queuedBehind(messages).map(\.id))
+        // A task whose answer is in the conversation is not open to the
+        // person, even while its status lags (the desktop app's hasAnswer).
+        let answered = Set(messages.filter { $0.type == "reply" || $0.type == "event" }.compactMap(\.replyTo))
         func atWork(_ task: Message) -> Bool {
             task.status == "held" ? moving.contains(task.id) : !paused.contains(task.id)
         }
         return messages
-            .filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) }
+            .filter { $0.from == me && $0.isOpen && !waiting.contains($0.id) && !answered.contains($0.id) }
             .filter { atWork($0) || !($0.asking ?? "").isEmpty }
             .max { $0.createdAt < $1.createdAt }
     }
