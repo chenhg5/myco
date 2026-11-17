@@ -182,14 +182,41 @@ public final class ConversationModel {
         ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
 
-    /// Sending is off while a send is under way, while a file is still
-    /// going up, or with nothing to send. Files can go without words.
+    /// The failed task being sent again, while it is.
+    public private(set) var resending: String?
+
+    /// Only what I asked can be sent again, and only where I can send.
+    public func canSendAgain(_ taskID: String) -> Bool {
+        guard !readOnly, let task = known[taskID] else { return false }
+        return task.from == me && task.type == "task" && task.status == "failed"
+    }
+
+    /// Sends a task of mine that failed once more: the same words and
+    /// files to the same agent, in the same thread, as a new task. The
+    /// failed one stays, marked. (The desktop app's "重新发送".)
+    public func sendAgain(_ taskID: String) async {
+        guard canSendAgain(taskID), resending == nil, let task = known[taskID] else { return }
+        resending = taskID
+        defer { resending = nil }
+        do {
+            let sent = try await session.hub.send(SendRequest(
+                to: task.to, body: task.body, threadId: task.threadId, attachments: task.attachments.map(\.fileId)))
+            known[sent.id] = sent
+            problem = nil
+            show(cards: cards)
+        } catch {
+            problem = (error as? HubError)?.message ?? error.localizedDescription
+        }
+    }
+
     /// Takes what the agent offered: it is in the input now.
     public func takeSuggestion() {
         guard let suggestion, draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         draft = suggestion
     }
 
+    /// Sending is off while a send is under way, while a file is still
+    /// going up, or with nothing to send. Files can go without words.
     public var canSubmit: Bool {
         guard !sending else { return false }
         if action == .stop { return true }
@@ -490,12 +517,27 @@ public final class ConversationModel {
                         && !isPerson(message.from) && !isPerson(message.to)
                 }, and: agent)
         }
-        // Which open runs have stopped for now: not at work.
+        // A long session's steps and updates, under the message they
+        // came after (see RunWindows).
         let reports = Dictionary(grouping: all.values.filter { $0.type == "progress" }, by: { $0.replyTo ?? $0.threadId })
+        let behind = Set(ConversationBuilder.queuedBehind(Array(all.values)).map(\.id))
+        let windows = RunWindows(
+            tasks: all.values.filter { $0.type == "task" && $0.from == me && $0.to == agent && $0.e2e != true && !behind.contains($0.id) },
+            answered: Set(all.values.filter { $0.type == "reply" }.compactMap(\.replyTo)),
+            reported: Set(reports.keys))
+        var shownProcesses = processes
+        for taskID in windows.windows.keys where traces[taskID] != nil || processes[taskID] != nil {
+            shownProcesses[taskID] = RunProcess(events: windows.events(of: taskID, traces: traces))
+        }
+        // Which open runs have stopped for now: not at work.
         var paused: Set<String> = []
         for task in all.values where task.to == agent && task.isOpen {
-            let said = (reports[task.id] ?? []).sorted { $0.createdAt < $1.createdAt }
-            if RunProcess.isPaused(events: traces[task.id] ?? [], task: task, reports: said, now: Date()) { paused.insert(task.id) }
+            let moved = windows.windows[task.id] != nil
+            let said = all.values
+                .filter { $0.type == "progress" && windows.home(of: $0.replyTo ?? $0.threadId, at: $0.createdAt) == task.id }
+                .sorted { $0.createdAt < $1.createdAt }
+            let events = moved ? windows.events(of: task.id, traces: traces) : traces[task.id] ?? []
+            if RunProcess.isPaused(events: events, task: task, reports: said, now: Date()) { paused.insert(task.id) }
         }
         // Each open task's last step, and whether its session ended its
         // turn: a task is not taken for stuck while its steps still move,
@@ -503,19 +545,20 @@ public final class ConversationModel {
         var activity: [String: Date] = [:]
         var ended: Set<String> = []
         for task in all.values where task.to == agent && task.isOpen {
-            // (without the turns it woke for only to keep listening)
-            let events = RunProcess.withoutChores(traces[task.id] ?? [])
+            // (without the turns it woke for only to keep listening; with
+            // what it did that is filed under an earlier task)
+            let events = windows.activity(of: task.id, traces: traces)
             if let at = events.compactMap(\.at).max() { activity[task.id] = at }
             if let last = events.last?.kind, last == "turn_end" || last == "usage" { ended.insert(task.id) }
         }
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
-        for (taskID, process) in processes {
+        for (taskID, process) in shownProcesses {
             if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
         }
         // Each run with its updates and additions put in where they came.
         var runs: [String: [RunPart]] = [:]
-        for (taskID, process) in processes where process.hasSteps {
-            let extras = ConversationBuilder.runExtras(of: taskID, agent: agent, messages: Array(all.values))
+        for (taskID, process) in shownProcesses where process.hasSteps {
+            let extras = ConversationBuilder.runExtras(of: taskID, agent: agent, messages: Array(all.values), windows: windows)
             runs[taskID] = process.parts(reports: extras.reports, added: extras.added, live: all[taskID]?.isOpen ?? false)
         }
         if runs != self.runs {
@@ -524,8 +567,8 @@ public final class ConversationModel {
         }
         let built = ConversationBuilder.items(
             me: me, agent: agent, messages: Array(all.values), handoffs: handoffs,
-            processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
-            activity: activity, ended: ended,
+            processes: Set(shownProcesses.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
+            activity: activity, ended: ended, windows: windows,
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }

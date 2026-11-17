@@ -477,6 +477,43 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAMessageThatWasNotDeliveredSaysSoAndSendsAgain() {
+        // Ops took my message several times and never began on it.
+        let app = launch(["-myco-start", "session", "-myco-route", "agent:vps-codex-90aa"])
+        let asked = app.staticTexts.matching(NSPredicate(format: "label == %@", "把 Hub 昨天的日志打包发我。"))
+        XCTAssertTrue(asked.firstMatch.waitForExistence(timeout: 20))
+        let why = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Not delivered: it picked this up several times")).firstMatch
+        XCTAssertTrue(why.waitForExistence(timeout: 10), "what happened is said in words")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "exhausted")).firstMatch.exists, "not as the workspace put it")
+        snap("not-delivered")
+        // One tap sends the same message again; the failed one stays.
+        let again = app.buttons["Send again"]
+        XCTAssertTrue(again.exists)
+        XCTAssertEqual(asked.count, 1)
+        again.tap()
+        expectation(for: NSPredicate(format: "count == 2"), evaluatedWith: asked)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(why.exists, "the one that failed still says so")
+        snap("not-delivered-sent-again")
+    }
+
+    @MainActor
+    func testALongSessionShowsWhatItDoesUnderMyNewerMessage() {
+        // The notes helper took my second message and goes on in the same
+        // session: its steps and its update are still filed under the first.
+        let app = launch(["-myco-start", "session", "-myco-route", "agent:studio-claude-c41f"])
+        let second = app.staticTexts["第二场也一起整理，放进同一份里。"]
+        XCTAssertTrue(second.waitForExistence(timeout: 20))
+        let update = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "第二场的录音也拿到了")).firstMatch
+        XCTAssertTrue(update.waitForExistence(timeout: 20), "what it reported since is on the page")
+        XCTAssertGreaterThan(update.frame.minY, second.frame.maxY, "under my newer message, not above it")
+        let summaries = app.buttons.matching(identifier: "steps.summary").allElementsBoundByIndex
+        XCTAssertTrue(summaries.contains { $0.frame.minY > second.frame.maxY }, "and so are the steps it took since")
+        XCTAssertTrue(summaries.contains { $0.frame.maxY < second.frame.minY }, "what it did before stays under the first")
+        snap("long-session")
+    }
+
+    @MainActor
     func testWhatAgentsHandEachOtherIsACardThatOpensTheirExchange() {
         let app = launch(["-myco-route", "agent:studio-codex-7f3a"])
         // The coordinator's task is not a message in my conversation with

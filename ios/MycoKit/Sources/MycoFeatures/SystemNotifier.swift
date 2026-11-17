@@ -51,7 +51,7 @@ public final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterD
     static func words(for notice: Notice) -> String {
         switch notice.kind {
         case .failed:
-            return notice.body.isEmpty ? L("没做成", "Did not finish") : L("没做成：\(notice.body)", "Did not finish: \(notice.body)")
+            return FailureWords.line(notice.body)
         case .asking:
             return L("在问你：\(notice.body)", "Asks you: \(notice.body)")
         case .answered, .said, .progress:
