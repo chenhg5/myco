@@ -237,6 +237,17 @@ export interface RecentItem {
   /** the project the thread belongs to */
   project?: string;
 }
+/** How the App reaches out: the environment's proxy, none, or one set here. */
+export interface ProxySetting {
+  mode: "system" | "none" | "manual";
+  type?: "http" | "https" | "socks5";
+  host?: string;
+  port?: number;
+  user?: string;
+  /** a password is kept in the keychain (never sent back) */
+  has_password?: boolean;
+}
+export type ProxyInput = Omit<ProxySetting, "has_password"> & { password?: string; clear_password?: boolean };
 export interface RecentQuery {
   scope?: "mine"; label?: string; q?: string; before?: number; project?: string;
   /** "pair": one row per pair of parties (hubs before v0.18.28 list threads) */
@@ -450,6 +461,10 @@ export const appApi = {
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
   openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
+  /** the App's network proxy (Settings › 网络代理) */
+  proxy: () => request<ProxySetting>("GET", "app/proxy"),
+  putProxy: (p: ProxyInput) => request<ProxySetting>("PUT", "app/proxy", p),
+  testProxy: (p: ProxyInput & { url?: string }) => request<{ ok: boolean; ms?: number; reason?: string; error?: string }>("POST", "app/proxy/test", p),
   translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>

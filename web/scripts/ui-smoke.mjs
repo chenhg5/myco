@@ -1482,6 +1482,33 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // A proxy for the App: from the environment (as before), none, or one
+    // set here; tried before it is saved, in force once saved.
+    await step("设置 · 网络代理", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "网络代理" }));
+      const card = page.locator(".app-setting-card", { hasText: "网络代理" });
+      await card.getByRole("tab", { name: "跟系统环境", selected: true }).waitFor({ timeout: 10_000 });
+      await card.getByRole("tab", { name: "手动设置" }).click();
+      await card.getByRole("tab", { name: "SOCKS5" }).click();
+      await card.locator("label", { hasText: "地址" }).locator("input").fill("127.0.0.1");
+      await card.locator("label", { hasText: "端口" }).locator("input").fill("9");
+      await card.getByRole("button", { name: "试一下" }).click();
+      await card.locator(".tr-tried.is-error", { hasText: "代理拒绝了连接" }).waitFor({ timeout: 5_000 });
+      await card.locator("label", { hasText: "端口" }).locator("input").fill("1080");
+      await card.getByRole("button", { name: "试一下" }).click();
+      await card.locator(".tr-tried", { hasText: "连通了" }).waitFor({ timeout: 5_000 });
+      await card.getByRole("button", { name: "保存" }).click();
+      await card.locator(".tr-tried", { hasText: "已保存" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-proxy");
+      // Back to the environment's (the other windows share the mock).
+      await card.getByRole("tab", { name: "跟系统环境" }).click();
+      await card.getByRole("button", { name: "保存" }).click();
+      await card.locator(".tr-tried", { hasText: "已保存" }).waitFor({ timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Translating what an agent wrote: nothing until a service has a key
     // (Settings › 翻译); then by hand from its time, the original a click away.
     await step("翻译", async () => {

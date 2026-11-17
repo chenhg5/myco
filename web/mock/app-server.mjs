@@ -190,6 +190,9 @@ const stuckProgress = makeMessage({
   reply_to: "msg_stuck_legacy", body: "整理到一半：已经列出了 3 种旧版 runner 的日志格式。",
   created_at: iso(40 * 60), updated_at: iso(40 * 60),
 });
+// The App's proxy setting (/app/proxy).
+let proxySetting = { mode: "system" };
+let proxyPassword = "";
 // Links the App asked to open in the browser (/app/open-url).
 const openedLinks = [];
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
@@ -1523,6 +1526,26 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac", open_url: true });
+  }
+  // /app/proxy: the App's network proxy (kept here while the mock runs).
+  if (parts[0] === "app" && parts[1] === "proxy" && parts.length === 2) {
+    if (method === "GET") return send(res, 200, { ...proxySetting, has_password: !!proxyPassword });
+    if (method === "PUT") {
+      const body = (await readBody(req)) || {};
+      if (body.mode === "manual" && (!["http", "https", "socks5"].includes(body.type) || !body.host || !(body.port > 0 && body.port < 65536))) {
+        return fail(res, 400, "invalid_argument", "the proxy address is a host name or IP, without http:// or a port");
+      }
+      proxySetting = body.mode === "manual" ? { mode: "manual", type: body.type, host: body.host, port: body.port, user: body.user || "" } : { mode: body.mode === "none" ? "none" : "system" };
+      if (body.clear_password || !body.user) proxyPassword = "";
+      else if (body.password) proxyPassword = body.password;
+      return send(res, 200, { ...proxySetting, has_password: !!proxyPassword });
+    }
+  }
+  if (parts[0] === "app" && parts[1] === "proxy" && parts[2] === "test" && parts.length === 3) {
+    const body = (await readBody(req)) || {};
+    // (port 9 stands for a proxy that is not there)
+    if (body.port === 9) return send(res, 200, { ok: false, reason: "refused", error: "connection refused" });
+    return send(res, 200, { ok: true, ms: 42, status: 200 });
   }
   // /app/open-url: the desktop app opens a link in the default browser;
   // here it is only noted (GET /app/mock/opened lists them, for the smoke test).

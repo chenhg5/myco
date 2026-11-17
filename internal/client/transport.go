@@ -29,6 +29,7 @@ var hubTransport = newTransport(pingAfter, pingTimeout)
 // durations leave them off.
 func newTransport(pingAfter, pingTimeout time.Duration) *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = Proxy // (the environment's, unless SetProxy changed it)
 	t.HTTP2 = &http.HTTP2Config{SendPingTimeout: pingAfter, PingTimeout: pingTimeout}
 	return t
 }

@@ -201,6 +201,8 @@ type Backend struct {
 	// translating messages (translate.go): settings, keys in Secrets
 	translateOnce sync.Once
 	translate     *translator
+	proxyOnce     sync.Once
+	proxy         *proxyState
 	// the voice assistant (voice.go)
 	voiceOnce sync.Once
 	voice     *voice
@@ -233,6 +235,7 @@ func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
+	b.proxyRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
 	})
