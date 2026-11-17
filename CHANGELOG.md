@@ -2,6 +2,21 @@
 
 每次发版在这里加一节（`## vX.Y.Z`，最新的在最上面）。发版时这一节会作为 GitHub Release 的说明。
 
+## v0.20.1
+
+- **让 agent 帮你装 myco**：已经在用 Claude Code、Codex 或别的能跑命令的 AI，就把一句话发给它。它会读一份专门写给 agent 的安装指南（[docs/agent-setup.md](https://github.com/chenhg5/myco/blob/main/docs/agent-setup.md)），帮你开 Hub、连上 App、加电脑和 agent，出了问题自己排查；要你拿主意、要用 sudo 或改系统设置的地方会先问你。这句话放在这些地方：
+  - App 的第一屏（「让 agent 帮我装」）；
+  - 「添加工作区」和「加一台电脑」的弹窗里；
+  - `install-hub.sh` 和 `myco hub up` 装完时；
+  - README 的开头。
+- **出错时让 agent 帮你查**：App 的出错提示里多了「让 agent 帮我查」，会把错误原文和安装指南的「排错」一节一起复制，发给你的 agent 就行。
+- **语音通话离开对话也不挂断**：通话不再跟着对话的输入栏。去别的页面时，顶栏有一个小标记，显示通话状态，可以静音、挂断，点名字回到对话。同一时间只有一通电话，给另一个 agent 打电话会先挂掉前一通。
+- **命令行更顺手**：
+  - **加入后直接能用**：在 agent 自己的会话外面，这台电脑上只有一个 agent 时，`myco doctor`、`myco agent list` 这些命令会直接用它；有好几个时用 `MYCO_AGENT=<名字>` 选。
+  - **App 链接直接打开**：`myco console link --open` 直接让本机的 App（macOS、Windows）加上这个工作区，不用复制粘贴；`--dry-run` 在这条命令上也生效了。
+  - **没有用户级 systemd 时**（容器、部分 VPS）：`myco hub up` 会直接给出能跑的命令（`--no-service`），不再只报「Failed to connect to bus」。
+  - **链接只写着 127.0.0.1 时会警告**：生成的链接别的电脑用不了时会提示，建议用 `MYCO_LAN_ADDR=<地址>` 指定，或者开隧道。
+
 ## v0.20.0
 
 0.19 系列告一段落。最近几版加的主要能力，详见下面各版：
