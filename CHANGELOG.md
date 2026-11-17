@@ -2,6 +2,10 @@
 
 每次发版在这里加一节（`## vX.Y.Z`，最新的在最上面）。发版时这一节会作为 GitHub Release 的说明。
 
+## v0.20.2
+
+- **「这台电脑上的」会话不再缺、不再重复**：添加 agent 时列出的本机 Claude Code、Codex 会话，以前同一段对话可能出现好几次。比如「复制一份加入」留下的副本、fork 出来的会话，或者同一个会话记在两个项目文件夹下，都会各算一个。这些副本还会占满名额，把别的会话挤掉。现在同一段对话只显示一次（最新的那份），任何一份加入过就标「已经加入了」，并写明是哪个 agent。列表最多 60 段对话。新版 Claude Code 放在 `~/.config/claude` 下的会话也能找到了。
+
 ## v0.20.1
 
 - **让 agent 帮你装 myco**：已经在用 Claude Code、Codex 或别的能跑命令的 AI，就把一句话发给它。它会读一份专门写给 agent 的安装指南（[docs/agent-setup.md](https://github.com/chenhg5/myco/blob/main/docs/agent-setup.md)），帮你开 Hub、连上 App、加电脑和 agent，出了问题自己排查；要你拿主意、要用 sudo 或改系统设置的地方会先问你。这句话放在这些地方：
