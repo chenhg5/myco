@@ -179,6 +179,18 @@ var tunnelTransport = func() *http.Transport {
 	t.HTTP2 = nil
 	t.ForceAttemptHTTP2 = false
 	t.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	p := new(http.Protocols)
+	p.SetHTTP1(true)
+	t.Protocols = p
+	// Not offered in the TLS handshake either: a server (Caddy in front of
+	// the hub) that is offered HTTP/2 answers in it.
+	if t.TLSClientConfig != nil {
+		c := t.TLSClientConfig.Clone()
+		c.NextProtos = []string{"http/1.1"}
+		t.TLSClientConfig = c
+	} else {
+		t.TLSClientConfig = &tls.Config{NextProtos: []string{"http/1.1"}}
+	}
 	return t
 }()
 

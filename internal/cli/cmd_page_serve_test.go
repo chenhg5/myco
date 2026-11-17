@@ -58,7 +58,8 @@ func TestPageServeForwardsALocalServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := &http.Server{Handler: dev}
+	// (it drops idle keep-alive connections soon, as Vite does after 5s)
+	srv := &http.Server{Handler: dev, IdleTimeout: 200 * time.Millisecond}
 	go srv.Serve(ln)
 	defer srv.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
@@ -107,6 +108,19 @@ func TestPageServeForwardsALocalServer(t *testing.T) {
 	}
 	if code, body := get("/v1/pages/"+id+"/live/src/main.ts?v=1", "admin-token-123456"); code != 200 || body != "<h1>dev /src/main.ts?v=1</h1>" {
 		t.Fatalf("forwarded: %d %s", code, body)
+	}
+	// After the server dropped its idle connections: the next request does
+	// not hang on one of them.
+	time.Sleep(600 * time.Millisecond)
+	quick := make(chan int, 1)
+	go func() { code, _ := get("/v1/pages/"+id+"/live/again", "admin-token-123456"); quick <- code }()
+	select {
+	case code := <-quick:
+		if code != 200 {
+			t.Fatalf("after idle: %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a request after the server dropped idle connections hangs")
 	}
 	if code, body := get("/v1/pages/"+id+"/live/big.js", "admin-token-123456"); code != 200 || body != big {
 		t.Fatalf("a large file: %d, %d bytes of %d", code, len(body), len(big))

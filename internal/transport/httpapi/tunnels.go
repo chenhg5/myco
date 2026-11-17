@@ -129,10 +129,12 @@ func (s *Server) pageTunnel(w http.ResponseWriter, r *http.Request, c pageCall) 
 func (s *Server) liveProxy(tu *tunnel) *httputil.ReverseProxy {
 	host := "localhost:" + strconv.Itoa(tu.port)
 	tr := &http.Transport{
-		DialContext:         func(context.Context, string, string) (net.Conn, error) { return tu.sess.Open() },
-		MaxIdleConnsPerHost: 16,
-		IdleConnTimeout:     60 * time.Second,
-		DisableCompression:  true,
+		DialContext: func(context.Context, string, string) (net.Conn, error) { return tu.sess.Open() },
+		// A stream for each request (streams are cheap): a dev server
+		// closes idle keep-alive connections after a few seconds, and one
+		// reused after that hangs.
+		DisableKeepAlives:  true,
+		DisableCompression: true,
 	}
 	return &httputil.ReverseProxy{
 		Transport: tr,

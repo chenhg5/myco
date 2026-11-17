@@ -485,15 +485,10 @@ func pipe(st net.Conn, port int) {
 		return
 	}
 	defer local.Close()
+	// Either side ending ends both: a stream left half open (the server
+	// closed an idle keep-alive connection) would hang the next request.
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(local, st); closeWrite(local); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(local, st); done <- struct{}{} }()
 	go func() { _, _ = io.Copy(st, local); done <- struct{}{} }()
 	<-done
-	<-done
-}
-
-func closeWrite(c net.Conn) {
-	if tc, ok := c.(*net.TCPConn); ok {
-		_ = tc.CloseWrite()
-	}
 }
