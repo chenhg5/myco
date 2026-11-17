@@ -7086,3 +7086,149 @@ body.is-resizing {
 .tr-field .seg {
   align-self: flex-start;
 }
+
+/* The model and effort beside the message box (RunSettings' RunPill): a
+   quiet label in the bar, a menu above it to switch (when it may be). */
+.run-pill-wrap {
+  position: relative;
+  min-width: 0;
+}
+.run-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: default;
+}
+.run-pill:hover,
+.run-pill[aria-expanded="true"] {
+  background: var(--nav-hover);
+  color: var(--fg-2);
+}
+.run-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-pill-chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+/* Switched, not in use yet (from its next run): a dot. */
+.run-pill.is-pending .run-pill-text::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--amber);
+  vertical-align: middle;
+}
+.run-pill-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.run-pill-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 41;
+  width: 290px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  color: var(--fg);
+  font-size: 12.5px;
+}
+.run-pill-group {
+  padding: 6px 8px 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.run-pill-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.run-pill-item:hover {
+  background: var(--nav-hover);
+}
+.run-pill-item.is-on {
+  font-weight: 600;
+}
+.run-pill-item::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  color: var(--green);
+}
+.run-pill-item.is-on::before {
+  content: "✓";
+}
+.run-pill-efforts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 8px 4px;
+}
+.run-pill-chip {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+.run-pill-chip:hover {
+  background: var(--nav-hover);
+}
+.run-pill-chip.is-on {
+  border-color: transparent;
+  background: var(--fg);
+  color: var(--bg);
+}
+.run-pill-sub {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+.run-pill-note {
+  margin: 6px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.run-pill-note b {
+  color: var(--fg-2);
+  font-weight: 500;
+}

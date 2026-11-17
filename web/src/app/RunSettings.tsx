@@ -2,7 +2,8 @@ import { useState } from "react";
 import { appApi, isOldHub } from "@/appapi";
 import type { RuntimeAccess } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { accessLabel, agentKind, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
+import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
+import { ChevronDown } from "lucide-react";
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
@@ -261,5 +262,118 @@ export function RunRows({ row, now, mayManage, onRefresh }: {
           if (accessEditable && cap === "full") void save({ model, effort, access: "full" }).then((saved) => { if (saved) setConfirmAccess(false); });
         }} />
     </>
+  );
+}
+
+/** A model's name, short, as a person says it: claude-opus-5-5 → Opus 5.5,
+ *  gpt-6-sol → GPT-6 Sol, opus → Opus. */
+export function modelShort(model?: string): string {
+  if (!model) return "";
+  let m = model.trim().replace(/\[.*\]$/, "").replace(/^claude-/i, "").replace(/-\d{8}$/, "");
+  if (/^gpt-/i.test(m)) {
+    m = m.replace(/^gpt-/i, "GPT-");
+    return m.replace(/-([a-z])/g, (_, c: string) => ` ${c.toUpperCase()}`);
+  }
+  // name-5-5 → Name 5.5; name-4 → Name 4
+  const parts = m.split("-");
+  const words: string[] = [];
+  const nums: string[] = [];
+  for (const p of parts) (/^\d+$/.test(p) ? nums : words).push(p);
+  const name = words.map((w) => (w.length <= 2 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1))).join(" ");
+  return nums.length ? `${name} ${nums.join(".")}` : name;
+}
+
+/**
+ * The model and reasoning effort beside the message box (as Codex and
+ * Claude show theirs at the bottom of their input): small, quiet. For an
+ * agent a runner wakes, those who may manage it switch both here (from its
+ * next run, as in its profile's run block); an agent in its own session (it
+ * receives there, or runs in the cloud) decides itself: shown, and where it
+ * is switched said. Nothing known, nothing shown.
+ */
+export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promise<void> }) {
+  const ag = row.st.agent;
+  const rt = ag.runtime;
+  const cli = rt?.cli || ag.binding.harness || "";
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [old, setOld] = useState(false);
+  const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag) && (cli === "claude" || cli === "codex");
+  const editable = runner && canManage(row.hub, ag.owner_id) && !old && hubAfter0194(row.hub.hub_version);
+  const setModel = ag.run_settings?.model || "";
+  const setEffort = ag.run_settings?.effort || "";
+  const model = setModel || rt?.model || "";
+  const effort = setEffort || rt?.effort || "";
+  if (agentKind(ag) !== "agent" || (!model && !editable)) return null;
+  const label = [modelShort(model) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
+  const save = async (next: { model: string; effort: string }) => {
+    setBusy(true); setError(null);
+    try {
+      await appApi.setRunSettings(row.hub.id, ag.name, next);
+      await onRefresh();
+      setOpen(false);
+    } catch (e) {
+      if (isOldHub(e)) setOld(true); else setError(e);
+    } finally { setBusy(false); }
+  };
+  const models = [...(MODELS[cli] || [])];
+  for (const v of [rt?.model, setModel]) if (v && !models.includes(v)) models.unshift(v);
+  const efforts = [...(EFFORTS[cli] || [])];
+  for (const v of [rt?.effort, setEffort]) if (v && !efforts.includes(v)) efforts.unshift(v);
+  const pending = editable && ((setModel && setModel !== rt?.model) || (setEffort && setEffort !== rt?.effort));
+  const title = editable
+    ? L(`模型和推理强度：${label}（点一下切换，下次唤醒时生效）`, `Model and effort: ${label} (click to switch; from its next run)`)
+    : L(`模型和推理强度：${label}（它自己的会话决定）`, `Model and effort: ${label} (its own session decides)`);
+  return (
+    <span className="run-pill-wrap">
+      <button type="button" className={cn("run-pill", editable && "is-editable", pending && "is-pending")} title={title} aria-label={title}
+        aria-expanded={open} onClick={() => setOpen((o) => !o)} onMouseDown={(e) => e.preventDefault()}>
+        <span className="run-pill-text">{label}</span>
+        {editable && <ChevronDown className="run-pill-chev" aria-hidden />}
+      </button>
+      {open && (
+        <>
+          <span className="run-pill-scrim" onClick={() => setOpen(false)} />
+          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+            {editable ? (
+              <>
+                <div className="run-pill-group">{L("模型", "Model")}</div>
+                {["", ...models].map((m) => (
+                  <button key={`m:${m}`} type="button" role="menuitemradio" aria-checked={setModel === m} className={cn("run-pill-item", setModel === m && "is-on")}
+                    disabled={busy} onClick={() => void save({ model: m, effort: setEffort })}>
+                    <span>{m ? modelShort(m) : L("跟随电脑设置", "Follow this computer")}</span>
+                    {m && m !== modelShort(m) && <span className="run-pill-sub">{m}</span>}
+                  </button>
+                ))}
+                <div className="run-pill-group">{L("推理强度", "Effort")}</div>
+                <div className="run-pill-efforts">
+                  {["", ...efforts].map((x) => (
+                    <button key={`e:${x}`} type="button" role="menuitemradio" aria-checked={setEffort === x} className={cn("run-pill-chip", setEffort === x && "is-on")}
+                      disabled={busy} onClick={() => void save({ model: setModel, effort: x })}
+                      title={x ? undefined : L("跟随电脑设置", "Follow this computer")}>
+                      {x ? effortLabel(x) : L("默认", "Default")}
+                    </button>
+                  ))}
+                </div>
+                <p className="run-pill-note">
+                  {L("现在是：", "In use: ")}{modelShort(rt?.model) || "—"}{rt?.effort ? ` · ${effortLabel(rt.effort)}` : ""}
+                  {L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
+                </p>
+              </>
+            ) : (
+              <p className="run-pill-note">
+                {model && <><b>{model}</b>{effort ? ` · ${effortLabel(effort)}` : ""}<br /></>}
+                {isInbox(ag) || isCloud(ag)
+                  ? cli === "codex" ? L("这是它自己的会话在用的设置，在它的会话里用 /model 切换。", "Its own session's setting: switch it there with /model.")
+                    : L("这是它自己的会话在用的设置，在它的会话里用 /model 切换。", "Its own session's setting: switch it there with /model.")
+                  : L("只有管理它的人能在这里切换。", "Only those who manage it can switch it here.")}
+              </p>
+            )}
+            <ErrorText error={error} />
+          </div>
+        </>
+      )}
+    </span>
   );
 }

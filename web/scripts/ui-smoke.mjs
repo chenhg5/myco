@@ -450,6 +450,27 @@ async function runMatrix(browser, size, scheme) {
       if (page.context().pages().length !== before) throw new Error("链接应交给默认浏览器打开，不该在 App 里开新窗口");
     });
 
+    // The model and effort beside the message box: switched from there for
+    // an agent a runner wakes (from its next run).
+    await step("输入框 · 模型和推理强度", async () => {
+      await go(page, "官网改版", narrow);
+      const pill = page.locator(".sp-home .conv-compose .run-pill");
+      await pill.waitFor({ timeout: 10_000 });
+      const text = compactText(await pill.innerText());
+      if (!/GPT-6 Sol/.test(text) || !/高/.test(text)) throw new Error(`输入框旁应写着模型和推理强度，实际「${text}」`);
+      await pill.click();
+      const menu = page.locator(".sp-home .run-pill-menu");
+      await menu.waitFor({ timeout: 5_000 });
+      await settle(page, 150);
+      await shot(page, size, scheme, "composer-model");
+      await menu.getByRole("menuitemradio", { name: "中", exact: true }).click();
+      await page.waitForFunction(() => /中/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      // (back as it was: the other windows share the mock)
+      await pill.click();
+      await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: "高", exact: true }).click();
+      await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
