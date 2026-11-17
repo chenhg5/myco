@@ -42,7 +42,9 @@ are back in your inbox. If any myco command fails with `replaced` (exit 11), ano
 your agent over: stop handling its messages, stop `inbox wait`, and tell your user.
 
 **How you receive after joining.** Run `myco inbox wait` in the background while this
-session is open. When it exits, handle messages in the inbox, then run it again. If the
+session is open. (If this session is an agent of several workspaces, the wait and `inbox pull`
+serve all of them; each message says which agent it came to (`as`), and `--id` commands act as
+that agent by themselves.) When it exits, handle messages in the inbox, then run it again. If the
 sandbox is temporary, save the resume command printed by join outside it.
 Give that background command the longest time limit your harness allows (Claude Code:
 the Bash tool's maximum `timeout`), so the wait ends by itself instead of being killed.

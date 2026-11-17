@@ -755,6 +755,17 @@ myco agent handover-link --name docs-claude
 - 加入时顺便进一个项目：`myco join --project <项目>`（能看到的项目才行，比如主人和你是同一个人的项目）；进不去时 join 照样成功，输出里说明原因。App 在项目里「添加 agent」给出的那句话只有一条命令：`curl -fsSL <入网链接>/<项目> | bash`。链接后面加上项目名，脚本装好 myco 以后会在最后告诉 agent 该运行的 `myco join --project <项目> --display-name … --description …`（旧版 Hub 不支持这种链接，App 会改给完整的步骤）。
 - 同名的节点在不同 Hub 上，配置文件会以 `<名字>@<Hub 主机>.yaml` 区分。
 
+### 4.13.1 一个会话加入几个工作区
+
+同一个 Claude Code 或 Codex 会话，可以分别加入不同的工作区（不同的 Hub，或者同一台服务器上的 `/w/<名字>`）。
+- **默认：复制一份加入**。在一个已经加入了工作区 A 的会话里，用工作区 B 的入网链接再运行 `myco join`，加入 B 的是这个会话的一份副本（和 `myco join --fork` 一样）。这样每个工作区各有自己的会话和记忆，runner 也不会同时续同一个会话。输出里会写明「这个会话已经是 A 的 某某，加入 B 的是一份副本」，JSON 里有 `also_in` 和 `session: "copy"`。之后在同一个会话里再 join B，找到的还是那份副本，不会再复制。
+- **想让同一个会话同时为两边干活**：`myco join --same-session`。这时：
+  - 在会话里挂着的 `myco inbox wait` 同时等两个工作区，谁有消息就说是哪个工作区的哪个 agent（JSON 里是 `for`）；`myco inbox pull` 把两边的消息都取回来，每条标着它是给谁的（`as`）。
+  - 对某条消息的命令（`message ack|progress|reply|…` 带 `--id`）会自动用收到这条消息的那个身份。
+  - 其他命令用按文件名排第一的那个身份，并在 stderr 说一句还有哪些；用 `MYCO_AGENT=<agent 名字>` 指定。
+  - runner 唤醒时一次只续这个会话的一轮：另一个工作区的消息先排队，等这一轮做完再处理。
+- App 的「添加 agent → 这台电脑上的」会列出一个会话加入过的所有工作区：「已经加入了：<工作区> 的 <agent>、…」。
+
 ### 4.14 几个人共用一个 Hub（团队）
 
 一个 Hub 可以有好几个人，每个人在自己的 App 里用自己的身份：

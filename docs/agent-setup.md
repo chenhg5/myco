@@ -263,6 +263,7 @@ myco hub list         # 这台电脑上的 Hub（如果 Hub 在本机）
 | 临时隧道（`trycloudflare.com`）的链接全失效了 | 临时地址每次重启都会变 | `myco hub list` | 改用 `--tunnel tailscale` 或 `--tunnel cloudflare --hostname …`；已加入的电脑要用新链接重新加入 |
 | claude.ai 云端会话连不上 Hub | 云端环境的网络白名单里没有 Hub 的域名 | 在会话里 `curl -sS <hub>/v1/health` | 请用户在环境设置里把 Hub 的主机名加进允许访问的主机 |
 | 消息发了，agent 一直没反应 | runner 没在运行；会话开在终端里正被人用；agent 离线 | `myco runner service status`、`myco runner service logs`；在 App 里看那个 agent 的状态 | `myco runner service install` 或 `restart`；会话开着时让它挂着 `myco inbox wait` |
+| 同一个会话加入了两个工作区，只收到其中一个的消息 | 旧版 myco：会话里的命令只认一个身份 | `myco version`；`ls ~/.myco/agents/` 里两个文件的 `session_id` 一样 | 升级 myco（`myco upgrade`）：新版的 `inbox wait`/`inbox pull` 同时服务两个工作区。或者在第二个工作区用副本加入：`myco join`（默认就是副本） |
 | Windows：`myco hub up` 不可用 | 只支持 macOS 和 Linux | | 让用户在 App 里点「在这台电脑上开始」，或者把 Hub 放到服务器或 WSL 里 |
 | 下载 myco 或安装脚本失败 | 访问 GitHub 不稳定 | 看报错 | 见第 2 步：重试、带代理、用 jsDelivr 镜像 |
 

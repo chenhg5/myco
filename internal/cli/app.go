@@ -125,6 +125,14 @@ type env struct {
 	explicitConfig bool
 	// defaultPath is ~/.myco/config.yaml (profiles live next to it).
 	defaultPath string
+	// sessionProfiles are every identity of the session this command runs
+	// in (one per workspace it joined); pickedByEnv: MYCO_AGENT chose one.
+	sessionProfiles []config.Profile
+	pickedByEnv     bool
+	// identityChosen: sessionIdentityChoice ran (it says its choice once).
+	identityChosen bool
+	// copyOf: the session joined is a copy of this one (saved in its profile).
+	copyOf string
 }
 
 // handler adapts a func(*env) error into a cmdkit Run func.
@@ -133,13 +141,15 @@ func handler(fn func(*env) error) func(*cmdkit.Invocation) error {
 		path := in.String("config")
 		explicit := path != ""
 		def := config.DefaultPath()
+		var sessionProfiles []config.Profile
+		pickedByEnv := false
 		if !explicit {
 			path = def
 			// Inside a known session, use that session's own identity so
 			// several agents on one machine never share a config.
 			if b := detectBinding(in.Getenv); b.SessionID != "" {
-				if p, ok := config.FindBySession(config.ProfilesDir(def), b.SessionID); ok {
-					path = p.Path
+				if p, all, byEnv := pickSessionProfile(in.Getenv, def, b.SessionID); p != "" {
+					path, sessionProfiles, pickedByEnv = p, all, byEnv
 				}
 			}
 		}
@@ -156,7 +166,8 @@ func handler(fn func(*env) error) func(*cmdkit.Invocation) error {
 			tty = isTerminal(f)
 		}
 		p := &Printer{Format: resolveFormat(map[string][]string{"format": nonEmpty(in.String("format"))}, in.Getenv, tty), Out: in.Stdout, Err: in.Stderr}
-		return fn(&env{in: in, p: p, cfgPath: path, cfg: cfg, explicitConfig: explicit, defaultPath: def})
+		return fn(&env{in: in, p: p, cfgPath: path, cfg: cfg, explicitConfig: explicit, defaultPath: def,
+			sessionProfiles: sessionProfiles, pickedByEnv: pickedByEnv})
 	}
 }
 
@@ -203,6 +214,7 @@ func (e *env) agentClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	e.sessionIdentityChoice()
 	if e.cfg.Token == "" && len(several) > 0 && e.in.Getenv(config.EnvEnrollToken) == "" {
 		return nil, severalAgentsError(several)
 	}
@@ -285,6 +297,9 @@ func (e *env) saveIdentity(hub, agent, token string, b api.Binding) error {
 	}
 	cfg.Hub, cfg.Agent, cfg.Token, cfg.Harness, cfg.SessionID = hub, agent, token, b.Harness, b.SessionID
 	cfg.Replaced = ""
+	if e.copyOf != "" {
+		cfg.CopyOf = e.copyOf
+	}
 	if cfg.Runner.Harness == "" {
 		cfg.Runner.Harness = runnerHarnessFor(b.Harness)
 	}
