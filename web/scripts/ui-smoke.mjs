@@ -2623,7 +2623,12 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, start.locator(".au-template", { hasText: "CI 失败时排查" }));
       const ed = page.locator("[data-testid=automation-editor]");
       await ed.waitFor({ timeout: 10_000 });
-      if (!(await ed.locator("textarea").inputValue()).includes("{{payload}}")) throw new Error("模板应带好要它做什么");
+      // The template fills the editor as it opens: wait for it rather than read at once.
+      const body = ed.locator("textarea").first();
+      for (let i = 0; !(await body.inputValue()).includes("{{payload}}"); i++) {
+        if (i >= 50) throw new Error("模板应带好要它做什么");
+        await page.waitForTimeout(100);
+      }
       await ed.locator(".au-kind.is-on", { hasText: "Webhook" }).waitFor({ timeout: 5_000 });
       await clickVisible(page, ed.getByRole("button", { name: "取消" }));
       await ed.waitFor({ state: "detached", timeout: 5_000 });
