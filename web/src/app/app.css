@@ -5020,30 +5020,6 @@ button.app-label:hover { filter: brightness(0.95); }
 .pcs-add { width: auto; min-width: 140px; }
 .pcs-remove { margin-right: auto; }
 .pc-settings svg { width: 13px; height: 13px; }
-/* Automations (Automations.tsx). */
-.au-row .pc-row-sub span + span::before { content: "·"; margin-right: 6px; color: var(--faint); }
-.au-row .pc-row-sub { gap: 6px; }
-.au-failed { color: var(--red); }
-/* When: a card of rows (schedule, webhook), each with its controls lined
-   up under its words. */
-.au-triggers { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin-top: 6px; }
-.au-trigger { padding: 10px 12px; }
-.au-trigger + .au-trigger { border-top: 1px solid var(--line); }
-.au-trigger .app-check-line { margin: 0; }
-.au-trigger-body { margin: 10px 0 0 24px; }
-.au-summary { margin-top: 6px; font-size: 12px; color: var(--muted); }
-.au-cron { min-width: 180px; }
-.au-note { margin-top: 12px; font-size: 12px; color: var(--muted); }
-.au-when { display: flex; flex-wrap: wrap; gap: 8px; }
-.au-when .app-select-field, .au-when .app-input { width: auto; min-width: 120px; }
-.au-time { max-width: 120px; }
-.au-body { resize: vertical; min-height: 84px; }
-.au-runs { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 180px; overflow-y: auto; }
-.au-run { display: flex; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
-.au-run-when { flex: none; min-width: 120px; color: var(--muted); }
-.au-delete { margin-right: auto; color: var(--red); }
-.au-edit .app-field + .app-field { margin-top: 10px; }
-.conv-auto { padding: 0 5px; border-radius: 4px; background: var(--pill); color: var(--muted); font-size: 11px; }
 /* Adding a computer: one command, run in the folder on that computer. */
 .ws-command { display: flex; flex-direction: column; gap: 10px; }
 .ws-command-os { align-self: flex-start; }
@@ -5056,26 +5032,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-notice .app-command code { white-space: nowrap; overflow-x: auto; }
 .pc-machine-tag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; color: var(--muted); background: var(--pill); }
 .app-check-line { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 2px; font-size: 13px; color: var(--fg); cursor: pointer; }
-.app-check-line input { margin-top: 1px; flex: none; }
-/* The App's own checkbox (not the browser's): a rounded square that fills
-   like the primary button, with a check drawn in it. */
-.app-check-line input[type="checkbox"], .pcs-agent input[type="checkbox"] {
-  appearance: none; -webkit-appearance: none;
-  width: 16px; height: 16px; margin: 1px 0 0; border-radius: 5px;
-  border: 1.5px solid var(--line-2); background: var(--card);
-  display: inline-grid; place-content: center; cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.app-check-line input[type="checkbox"]::before, .pcs-agent input[type="checkbox"]::before {
-  content: ""; width: 9px; height: 7px; background: var(--btn-fg);
-  clip-path: polygon(0 52%, 14% 38%, 38% 62%, 86% 0, 100% 14%, 38% 92%);
-  transform: scale(0); transition: transform 0.12s;
-}
-.app-check-line input[type="checkbox"]:checked, .pcs-agent input[type="checkbox"]:checked { background: var(--btn); border-color: var(--btn); }
-.app-check-line input[type="checkbox"]:checked::before, .pcs-agent input[type="checkbox"]:checked::before { transform: scale(1); }
-.app-check-line input[type="checkbox"]:hover:not(:disabled), .pcs-agent input[type="checkbox"]:hover:not(:disabled) { border-color: var(--muted); }
-.app-check-line input[type="checkbox"]:focus-visible, .pcs-agent input[type="checkbox"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.app-check-line input[type="checkbox"]:disabled, .pcs-agent input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
+.app-check-line input { margin-top: 3px; flex: none; }
 .app-check-line small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 .app-check-line code { font-size: 11.5px; }
 .app-picker-nearby > .app-small-note { display: block; margin-top: 6px; }

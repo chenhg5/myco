@@ -136,32 +136,10 @@ export interface Machine {
   owner?: string; owner_id?: string;
 }
 export interface MachineRemoveResult { machine: Machine; removed: string[]; dry_run: boolean }
-/** Automations (hubs from v0.19.22): a task sent, as its owner, to one
- *  agent on a schedule or when its webhook is called. */
-export interface AutomationSchedule { cron: string; tz?: string }
-export interface AutomationRun {
-  id: string; automation_id: string; at: string;
-  trigger: "schedule" | "webhook" | "manual"; outcome: "sent" | "skipped" | "failed";
-  message_id?: string; error?: string;
-}
-export interface Automation {
-  id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
-  schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
-  created_at: string; updated_at: string; next_run_at?: string; last_run?: AutomationRun;
-}
-export interface AutomationRequest {
-  name?: string; to?: string; project?: string; body?: string;
-  schedule?: AutomationSchedule; clear_schedule?: boolean;
-  webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
-}
-export interface AutomationResponse { automation: Automation; webhook_secret?: string }
-export interface AutomationDetail { automation: Automation; runs: AutomationRun[] }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
   id: string; from: string; to: string; thread_id: string; reply_to?: string; after?: string; type: string; body: string;
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
-  /** the automation that sent it (hubs from v0.19.22) */
-  automation?: string;
   /** the person behind the sender (member name) */
   from_owner?: string;
   /** a progress update asking the task's sender to decide (body: the

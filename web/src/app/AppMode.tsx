@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, MoreHorizontal, Plus, Search, WifiOff } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
-import { AutomationsPage } from "@/app/Automations";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
@@ -60,7 +59,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -115,7 +114,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -519,7 +518,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
-    : page === "automations" ? L("自动化", "Automations")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
     // A project says its own name, larger, just below.
@@ -665,9 +663,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <span className="app-nav-label">{L("成员", "Members")}</span>
                 {people.length > 0 && <AvatarStack agents={people.map((r) => r.st.agent)} size={18} max={3} />}
               </button>
-              <button type="button" className={cn("app-nav-item sp-nav sp-nav-auto", page === "automations" && "active")} onClick={() => setPage("automations")}>
-                <span className="app-nav-label">{L("自动化", "Automations")}</span>
-              </button>
             </div>
           </nav>
 
@@ -745,12 +740,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "members" && (
           <div className="app-scroll">
             <MembersPage rows={rows} projects={hubProjects} now={now} onOpen={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name })} />
-          </div>
-        )}
-
-        {page === "automations" && hub && (
-          <div className="app-scroll">
-            <AutomationsPage key={hub.id} hubId={hub.id} rows={rows} now={now} />
           </div>
         )}
 

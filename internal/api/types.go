@@ -240,8 +240,6 @@ type Message struct {
 	// say next (POST /v1/messages/{id}/suggest, v0.19.15+); the app offers
 	// it in the input and Tab takes it.
 	Suggest string `json:"suggest,omitempty"`
-	// Automation, on a task an automation sent, is its id (v0.19.22+).
-	Automation string `json:"automation,omitempty"`
 	// E2E: the body is end-to-end encrypted (an envelope only the
 	// message's readers can open; see docs/design/e2e-encryption.md).
 	E2E bool `json:"e2e,omitempty"`
@@ -1162,93 +1160,4 @@ type WorkspaceList struct {
 type CreateWorkspaceRequest struct {
 	Name   string `json:"name"`
 	DryRun bool   `json:"dry_run,omitempty"`
-}
-
-// Automations (v0.19.22+): an automation sends a task, as its owner, to one
-// agent when its schedule comes round or its webhook is called. The hub
-// runs it, so it fires while the owner's computers are off.
-
-// AutomationSchedule is a 5-field cron (minute hour day-of-month month
-// day-of-week; numbers, *, a-b, a,b, */n; 0 and 7 are Sunday) in an IANA
-// zone ("" = UTC). Runs are at least 10 minutes apart.
-type AutomationSchedule struct {
-	Cron string `json:"cron"`
-	TZ   string `json:"tz,omitempty"`
-}
-
-// AutomationRun is one time an automation ran.
-type AutomationRun struct {
-	ID           string    `json:"id"`
-	AutomationID string    `json:"automation_id"`
-	At           time.Time `json:"at"`
-	// schedule | webhook | manual
-	Trigger string `json:"trigger"`
-	// sent | skipped | failed
-	Outcome   string `json:"outcome"`
-	MessageID string `json:"message_id,omitempty"`
-	// Why it was skipped or failed (short, English).
-	Error string `json:"error,omitempty"`
-}
-
-// Automation is GET /v1/console/automations' item.
-type Automation struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Owner string `json:"owner"`
-	// From is the address its tasks are sent from ("@console:<name>").
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Project string `json:"project,omitempty"`
-	// Body is the message; "{{payload}}" is replaced by a webhook's body.
-	Body     string              `json:"body"`
-	Schedule *AutomationSchedule `json:"schedule,omitempty"`
-	Webhook  bool                `json:"webhook"`
-	// WebhookURL is where to POST (the secret is not in it).
-	WebhookURL string         `json:"webhook_url,omitempty"`
-	SkipIfBusy bool           `json:"skip_if_busy"`
-	Enabled    bool           `json:"enabled"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	NextRunAt  *time.Time     `json:"next_run_at,omitempty"`
-	LastRun    *AutomationRun `json:"last_run,omitempty"`
-}
-
-// AutomationRequest is POST /v1/console/automations (create) and PATCH
-// /v1/console/automations/{id} (update: absent fields stay as they are).
-type AutomationRequest struct {
-	Name          *string             `json:"name,omitempty"`
-	To            *string             `json:"to,omitempty"`
-	Project       *string             `json:"project,omitempty"`
-	Body          *string             `json:"body,omitempty"`
-	Schedule      *AutomationSchedule `json:"schedule,omitempty"`
-	ClearSchedule bool                `json:"clear_schedule,omitempty"`
-	// Webhook turns the webhook on (a new secret) or off.
-	Webhook *bool `json:"webhook,omitempty"`
-	// RotateSecret gives the webhook a new secret; the old one stops working.
-	RotateSecret bool  `json:"rotate_secret,omitempty"`
-	SkipIfBusy   *bool `json:"skip_if_busy,omitempty"`
-	Enabled      *bool `json:"enabled,omitempty"`
-}
-
-// AutomationResponse answers create and update. WebhookSecret is set only
-// when a secret was just made (shown once).
-type AutomationResponse struct {
-	Automation    Automation `json:"automation"`
-	WebhookSecret string     `json:"webhook_secret,omitempty"`
-}
-
-// AutomationList is GET /v1/console/automations.
-type AutomationList struct {
-	Automations []Automation `json:"automations"`
-}
-
-// AutomationDetail is GET /v1/console/automations/{id}: newest runs first.
-type AutomationDetail struct {
-	Automation Automation      `json:"automation"`
-	Runs       []AutomationRun `json:"runs"`
-}
-
-// WebhookResponse answers POST /hooks/{id}.
-type WebhookResponse struct {
-	Run AutomationRun `json:"run"`
 }

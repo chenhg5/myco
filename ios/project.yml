@@ -27,6 +27,8 @@ targets:
         # local network (myco hub up --tunnel none). Everything else is HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # A workspace on a computer at home, or a proxy set in Settings on one.
+        NSLocalNetworkUsageDescription: "连接局域网里的 myco 工作区，或你在设置里填的局域网代理。 myco connects to workspaces on your local network, and to a proxy there that you set in Settings."
         # Now and then the system lets the app look for new messages while
         # it is not in front, to announce them (MycoApp.refreshTask).
         BGTaskSchedulerPermittedIdentifiers: [dev.myco.ios.refresh]

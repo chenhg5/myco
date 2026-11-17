@@ -39,29 +39,28 @@ type Server struct {
 	lan atomic.Bool
 	// prefix is this workspace's path under the hub ("/w/<name>"), or ""
 	// for the default one: links it makes carry it.
-	prefix      string
-	e2e         *app.E2EService
-	version     string        // this hub's myco build
-	latest      func() string // newest known release ("" = unknown)
-	mux         *http.ServeMux
-	ingress     map[string]Ingress
-	files       *app.FileService
-	overview    *app.OverviewService
-	console     *app.ConsoleService
-	machines    *app.MachineService
-	members     *app.MemberService
-	audit       *app.AuditService
-	projects    *app.ProjectService
-	resume      *app.ResumeService
-	traces      *app.TraceService
-	automations *app.AutomationService
-	hidden      *app.HiddenService
-	voice       *app.VoiceSettingsService
-	activity    sync.Map   // message id -> time.Time; transient task heartbeat
-	aliasesMu   sync.Mutex // serialize alias permission checks with writes
-	namesMu     sync.Mutex
-	names       map[string]string // member id -> name (see ownerName)
-	namesAt     time.Time
+	prefix    string
+	e2e       *app.E2EService
+	version   string        // this hub's myco build
+	latest    func() string // newest known release ("" = unknown)
+	mux       *http.ServeMux
+	ingress   map[string]Ingress
+	files     *app.FileService
+	overview  *app.OverviewService
+	console   *app.ConsoleService
+	machines  *app.MachineService
+	members   *app.MemberService
+	audit     *app.AuditService
+	projects  *app.ProjectService
+	resume    *app.ResumeService
+	traces    *app.TraceService
+	hidden    *app.HiddenService
+	voice     *app.VoiceSettingsService
+	activity  sync.Map   // message id -> time.Time; transient task heartbeat
+	aliasesMu sync.Mutex // serialize alias permission checks with writes
+	namesMu   sync.Mutex
+	names     map[string]string // member id -> name (see ownerName)
+	namesAt   time.Time
 }
 
 // SetMachines enables machine reporting, /v1/machines and machines in the
@@ -199,7 +198,6 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/enroll", s.enrollSession)
 	// A machine joins with a link; /j/{token} serves the link's script/page.
 	m.HandleFunc("POST /v1/join", s.join)
-	s.automationRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
 	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)
 	m.HandleFunc("GET /r/{token}", s.resumePage)

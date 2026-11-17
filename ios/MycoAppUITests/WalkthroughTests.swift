@@ -131,6 +131,104 @@ final class WalkthroughTests: XCTestCase {
         shot("voice-settings-share")
     }
 
+    /// Needs four forwarding proxies listening on this machine (HTTP,
+    /// HTTP with the password me:pw, SOCKS5, SOCKS5 with me:pw, on
+    /// consecutive ports from MYCO_PROXY_PORT) and an https address they
+    /// can reach (MYCO_PROXY_TARGET); skipped without.
+    @MainActor
+    func testAProxySetHereIsTriedAndSaved() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let base = Int(environment["MYCO_PROXY_PORT"] ?? ""), let target = environment["MYCO_PROXY_TARGET"], !target.isEmpty else {
+            throw XCTSkip("no proxies to try (MYCO_PROXY_PORT, MYCO_PROXY_TARGET)")
+        }
+        let app = launch(["-myco-proxy-target", target])
+        XCTAssertTrue(app.buttons["workspace.button"].waitForExistence(timeout: 15))
+        app.buttons["workspace.button"].tap()
+        app.buttons["Settings"].tap()
+        let row = app.descendants(matching: .any)["settings.proxy"]
+        XCTAssertTrue(app.switches["settings.notifications"].waitForExistence(timeout: 5))
+        for _ in 0..<4 where !row.exists { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Settings has a line for the proxy")
+        row.tap()
+        let mode = app.segmentedControls["proxy.mode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["proxy.host"].exists, "as the system has it: nothing to fill in")
+        mode.buttons["Set here"].tap()
+        let host = app.textFields["proxy.host"], port = app.textFields["proxy.port"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        let kind = app.segmentedControls["proxy.kind"]
+        let trial = app.buttons["proxy.try"], tried = app.staticTexts["proxy.tried"]
+        // (Whatever an earlier run left in a field goes first.)
+        func write(_ text: String, into field: XCUIElement) {
+            field.tap()
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40) + text)
+        }
+        write("127.0.0.1", into: host)
+        let user = app.textFields["proxy.user"], password = app.secureTextFields["proxy.password"]
+        for _ in 0..<2 where !user.isHittable { app.swipeUp() }
+        write("", into: user)
+        func setPort(_ number: Int) {
+            for _ in 0..<3 where !port.isHittable { app.swipeDown() }
+            write(String(number), into: port)
+        }
+        func choose(_ name: String) {
+            let segment = kind.buttons[name]
+            // (Clear of the title bar: under it, a tap lands on the bar.)
+            for _ in 0..<4 where !segment.isHittable || segment.frame.minY < 170 { app.swipeDown() }
+            segment.tap()
+            XCTAssertTrue(segment.isSelected, "the proxy's type is \(name)")
+        }
+        func expectTried(_ words: String, _ message: String) {
+            for _ in 0..<3 where !trial.isHittable { app.swipeUp() }
+            trial.tap()
+            XCTAssertTrue(tried.waitForExistence(timeout: 20), message)
+            XCTAssertTrue(tried.label.contains(words), message + ": " + tried.label)
+        }
+        // SOCKS5, then HTTP, each through a proxy that is really there.
+        setPort(base + 2)
+        expectTried("Connected in", "a SOCKS5 proxy is tried before it is saved")
+        shot("proxy-socks5")
+        choose("HTTP")
+        setPort(base)
+        expectTried("Connected in", "an HTTP proxy too")
+        // One that wants a password says so; with it, it connects.
+        setPort(base + 1)
+        expectTried("wants a user name and password", "a proxy that wants a password says so")
+        for _ in 0..<2 where !password.isHittable { app.swipeUp() }
+        write("me", into: user)
+        write("pw", into: password)
+        expectTried("Connected in", "with its user name and password it connects")
+        choose("SOCKS5")
+        setPort(base + 3)
+        expectTried("Connected in", "and so does a SOCKS5 proxy with a password")
+        // Nothing listens there: said in words.
+        setPort(base + 9)
+        for _ in 0..<3 where !trial.isHittable { app.swipeUp() }
+        trial.tap()
+        XCTAssertTrue(tried.waitForExistence(timeout: 20))
+        XCTAssertFalse(tried.label.contains("Connected"), "a proxy that is not there does not connect: \(tried.label)")
+        shot("proxy-refused")
+
+        // Saved: in force at once, and Settings says which.
+        setPort(base + 3)
+        for _ in 0..<3 where !app.buttons["proxy.save"].isHittable { app.swipeUp() }
+        app.buttons["proxy.save"].tap()
+        XCTAssertTrue(app.staticTexts["proxy.saved"].waitForExistence(timeout: 10), "saved, and said to be in effect")
+        shot("proxy-saved")
+        back(app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("SOCKS5 127.0.0.1:\(base + 3)"), row.label)
+        // (Back to the system's, so nothing of this test stays.)
+        row.tap()
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        mode.buttons["System"].tap()
+        app.buttons["proxy.save"].tap()
+        XCTAssertTrue(app.staticTexts["proxy.saved"].waitForExistence(timeout: 10))
+        back(app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("System"), row.label)
+    }
+
     @MainActor
     func testAVoiceIsPickedFromTheListAndTried() {
         // (A scripted voice: trying it needs no key that works and makes no sound.)

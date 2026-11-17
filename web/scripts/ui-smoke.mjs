@@ -1432,27 +1432,6 @@ async function runMatrix(browser, size, scheme) {
       await cp.waitFor({ state: "detached", timeout: 5_000 });
     });
 
-    // Set aside as the skill says (hold, then a progress saying what it
-    // waits for), still in its session: waiting, not at work — no loading,
-    // 稍后回复 under your message, a plain box.
-    await step("单聊 · 挂起后说明在等", async () => {
-      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      await noRound(page);
-      const box = page.locator(".conv-detail .conv-compose-input");
-      await box.fill(`挂起说明：定时和 Webhook 先做第一步（${size.width}-${scheme}）`);
-      await box.press("Enter");
-      await page.locator(".conv-detail .trace-report", { hasText: "已派给 release" }).last().waitFor({ timeout: 15_000 });
-      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 10_000 });
-      await page.waitForTimeout(2500);
-      if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("挂起后只是说明在等什么，不该一直显示 loading");
-      const ph = await box.getAttribute("placeholder");
-      if ((ph || "").startsWith("补充给")) throw new Error(`挂起的任务不该让输入框变成「补充给…」，实际「${ph}」`);
-      await settle(page, 200);
-      await shot(page, size, scheme, "chat-held-waiting");
-      await page.locator(".conv-detail .conv-msg", { hasText: "release 那边做完了" }).last().waitFor({ timeout: 15_000 });
-      await noRound(page);
-    });
-
     // An agent in one long session goes on with what you sent next, its
     // steps and progress still filed under the first task (still open):
     // they show under your newer message, in time, not up above.
@@ -1505,10 +1484,10 @@ async function runMatrix(browser, size, scheme) {
 
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
-    await step("设置 · 代理", async () => {
+    await step("设置 · 网络代理", async () => {
       await go(page, "设置", narrow);
-      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "代理" }));
-      const card = page.locator(".app-setting-card", { hasText: "代理" });
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "网络代理" }));
+      const card = page.locator(".app-setting-card", { hasText: "网络代理" });
       await card.getByRole("tab", { name: "跟系统环境", selected: true }).waitFor({ timeout: 10_000 });
       await card.getByRole("tab", { name: "手动设置" }).click();
       await card.getByRole("tab", { name: "SOCKS5" }).click();
@@ -2265,45 +2244,6 @@ async function runMatrix(browser, size, scheme) {
       await set.waitFor({ timeout: 10_000 });
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await set.waitFor({ state: "hidden", timeout: 5_000 });
-    });
-
-    // Automations: a task sent for you on a schedule or by webhook. The list
-    // says to whom and when; a new one with a webhook shows its address and
-    // secret once; running one now sends it, marked 自动 in the chat.
-    await step("自动化", async () => {
-      await go(page, "自动化", narrow);
-      const list = page.locator("[data-testid=automations]");
-      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".pc-row-sub", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
-      await settle(page, 300);
-      await shot(page, size, scheme, "automations");
-      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "新建自动化" }));
-      const ed = page.locator("[data-testid=automation-editor]");
-      await ed.waitFor({ timeout: 10_000 });
-      const name = `CI 失败时看日志 ${size.width} ${scheme}`;
-      await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);
-      await ed.locator("textarea").fill("CI 又挂了，看下日志找原因：{{payload}}");
-      await ed.getByRole("combobox", { name: "多久一次" }).selectOption("daily");
-      await ed.getByLabel("几点").fill("08:30");
-      await clickVisible(page, ed.locator(".app-check-line", { hasText: "Webhook" }).locator("input"));
-      await ed.getByText("每天 08:30").waitFor({ timeout: 5_000 });
-      await settle(page, 200);
-      await shot(page, size, scheme, "automation-editor");
-      await clickVisible(page, ed.getByRole("button", { name: "创建" }));
-      const sec = page.locator("[data-testid=automation-secret]");
-      await sec.waitFor({ timeout: 10_000 });
-      if (!(await sec.innerText()).includes("/hooks/")) throw new Error("Webhook 地址应该显示出来");
-      await settle(page, 200);
-      await shot(page, size, scheme, "automation-secret");
-      await clickVisible(page, sec.getByRole("button", { name: "好了" }));
-      const row = list.locator(".au-row", { hasText: name });
-      await row.waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("button", { name: "立即运行" }));
-      await row.locator(".pc-row-sub", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
-      // Pause and resume.
-      await clickVisible(page, row.getByRole("button", { name: "暂停" }));
-      await row.locator(".pc-row-sub", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("button", { name: "启用" }));
-      await row.getByRole("button", { name: "暂停" }).waitFor({ timeout: 10_000 });
     });
 
     // A conversation is exported from its header: Markdown for people or

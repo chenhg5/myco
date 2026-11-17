@@ -92,13 +92,7 @@ export function pausedRun(events: TraceEvent[], task: Message, reports: Message[
   for (let k = events.length - 1; k >= 0; k--) if (events[k].data.kind === "turn_end") { end = k; break; }
   if (end >= 0 && lastAt(report?.created_at) <= lastAt(events[end].at)
     && !events.slice(end + 1).some((e) => e.data.kind === "tool" && !isChore(e.data.input))) return true;
-  // Set aside (held): waiting, until a step after it was held does some
-  // work. What it says it waits for (a progress), the work it hands out,
-  // the hold itself: none of these (an agent holds, then says so).
-  if (task.status === "held") {
-    const heldAt = lastAt(task.updated_at);
-    return !events.some((e) => lastAt(e.at) > heldAt && e.data.kind === "tool" && !isWaitStep(e.data.input));
-  }
+  if (task.status === "held") return activeAt <= lastAt(task.updated_at);
   if (!activeAt) return false;
   const said = !ev || ev.data.kind === "text" || ev.data.kind === "thinking" || lastAt(report?.created_at) > lastAt(ev.at);
   return said && now - activeAt > QUIET_AFTER_SAY_MS;
@@ -108,26 +102,13 @@ export function pausedRun(events: TraceEvent[], task: Message, reports: Message[
  *  myco message ack/done/release, a cd before them): not work on a task.
  *  (The same as the CLI's isChore, trace_chores.go.) */
 export function isChore(input = ""): boolean {
-  return onlyMyco(input, /^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)/);
-}
-
-/** A command that only says where things stand or hands work out (myco
- *  message hold/progress/send/ask/answer, or a chore): not work on the task
- *  itself. After a task was set aside (held), such steps do not make it at
- *  work again: the skill has an agent hold and then say what it waits for. */
-export function isWaitStep(input = ""): boolean {
-  return isChore(input) || onlyMyco(input, /^myco\s+(?:message\s+(?:hold|progress|send|ask|answer|ack|done|release)|inbox\s+(?:wait|pull))(?:\s|$)/);
-}
-
-// Every part of the command (a cd before it aside) is one the pattern takes.
-function onlyMyco(input: string, pattern: RegExp): boolean {
   const cmd = input.trim().replace(/^(?:\/\S*\/)?(?:ba|z)?sh\s+-l?c\s+/, "").trim().replace(/^["']+|["']+$/g, "");
   if (!cmd) return false;
   let seen = false;
   for (const part of cmd.split(/&&|\|\||;|\n/)) {
     const p = part.split("|")[0].trim();
     if (!p || /^cd(?:\s|$)/.test(p)) continue;
-    if (pattern.test(p)) { seen = true; continue; }
+    if (/^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)/.test(p)) { seen = true; continue; }
     return false;
   }
   return seen;

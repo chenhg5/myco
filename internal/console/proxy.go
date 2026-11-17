@@ -18,7 +18,7 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// The App's network proxy (Settings › 代理): how it reaches workspaces,
+// The App's network proxy (Settings › 网络代理): how it reaches workspaces,
 // update checks, translation and voice services. By default, as before,
 // the proxy in the environment (HTTPS_PROXY and friends); or none; or one
 // set here, HTTP or SOCKS5, with a user and password if it needs them (the

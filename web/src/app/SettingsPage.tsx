@@ -164,7 +164,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
-  { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
+  { key: "network", get label() { return L("网络代理", "Proxy"); }, icon: Globe },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
@@ -1088,13 +1088,13 @@ function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
     <section className="app-setting-card app-setting-lines">
       <div className="app-setting-line">
         <div className="app-setting-line-text">
-          <b>{L("代理", "Proxy")}</b>
+          <b>{L("网络代理", "Proxy")}</b>
           <span>{L("App 连工作区、检查更新、翻译和语音服务时走的代理。这台电脑和局域网里的地址（比如本机的工作区）总是直连。",
             "The proxy the App uses to reach workspaces, update checks, translation and voice services. Addresses on this computer and the local network (a workspace here, say) are always reached directly.")}</span>
         </div>
       </div>
       <div className="app-setting-line tr-services">
-        <div className="seg" role="tablist" aria-label={L("代理", "Proxy")}>
+        <div className="seg" role="tablist" aria-label={L("网络代理", "Proxy")}>
           {modes.map((x) => (
             <button key={x.key} type="button" role="tab" aria-selected={mode === x.key} className={cn("seg-btn", mode === x.key && "active")}
               onClick={() => { setMode(x.key); setTried(null); setSaved(false); setError(null); }}>{x.label}</button>

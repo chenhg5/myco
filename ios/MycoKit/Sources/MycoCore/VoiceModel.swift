@@ -1,4 +1,5 @@
 import Foundation
+import MycoAPI
 
 // A voice call's "thinking": a fast text model behind any OpenAI-compatible
 // chat API (OpenAI, DeepSeek, OpenRouter, Doubao's ...), streamed, with
@@ -124,9 +125,11 @@ public typealias VoiceLines = @Sendable (URLRequest) async throws -> (status: In
 
 public enum VoiceNetwork {
     /// Lines over the network, as they arrive.
-    public static func lines(_ session: URLSession = .shared) -> VoiceLines {
+    /// - Parameter session: a session of its own (tests); nil is the
+    ///   app's, as its proxy setting has it at that moment.
+    public static func lines(_ session: URLSession? = nil) -> VoiceLines {
         { request in
-            let (bytes, response) = try await session.bytes(for: request)
+            let (bytes, response) = try await (session ?? AppNetwork.shared.session(for: request.url)).bytes(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
             let reading = Task {

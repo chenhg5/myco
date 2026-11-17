@@ -99,9 +99,7 @@ type SendInput struct {
 	// Project puts a new thread in a project; a message in an existing
 	// thread always belongs to the thread's project.
 	Project string
-	// Automation marks a task an automation sent (its id).
-	Automation string
-	DryRun     bool
+	DryRun  bool
 }
 
 // SendOutput reports the stored message; Duplicate is true when an earlier
@@ -186,7 +184,6 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	m.Project = project
-	m.Automation = in.Automation
 	m.After = in.After
 	m.FromOwner = s.ownerName(ctx, sender)
 	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {

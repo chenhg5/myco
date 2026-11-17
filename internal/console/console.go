@@ -266,7 +266,6 @@ func (b *Backend) Handler() http.Handler {
 	m.HandleFunc("GET /app/hubs", b.listHubs)
 	b.workspaceRoutes(m)
 	b.voiceRoutes(m)
-	b.automationRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
 	m.HandleFunc("DELETE /app/hubs/{id}", b.removeHub)
 	m.HandleFunc("GET /app/overview", b.overview)

@@ -82,36 +82,6 @@ CREATE TABLE IF NOT EXISTS file_access (
   agent   TEXT NOT NULL,
   PRIMARY KEY (file_id, agent)
 );
-CREATE TABLE IF NOT EXISTS automations (
-  id           TEXT PRIMARY KEY,
-  name         TEXT NOT NULL,
-  owner        TEXT NOT NULL DEFAULT '',
-  owner_id     TEXT NOT NULL DEFAULT '',
-  from_agent   TEXT NOT NULL,
-  to_agent     TEXT NOT NULL,
-  project      TEXT NOT NULL DEFAULT '',
-  body         TEXT NOT NULL,
-  cron         TEXT NOT NULL DEFAULT '',
-  tz           TEXT NOT NULL DEFAULT '',
-  webhook_hash TEXT NOT NULL DEFAULT '',
-  skip_if_busy INTEGER NOT NULL DEFAULT 0,
-  enabled      INTEGER NOT NULL DEFAULT 1,
-  created_at   INTEGER NOT NULL,
-  updated_at   INTEGER NOT NULL,
-  next_run_at  INTEGER NOT NULL DEFAULT 0,
-  last_task    TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_automations_due ON automations(next_run_at) WHERE enabled = 1 AND next_run_at > 0;
-CREATE TABLE IF NOT EXISTS automation_runs (
-  id            TEXT PRIMARY KEY,
-  automation_id TEXT NOT NULL,
-  at            INTEGER NOT NULL,
-  run_trigger   TEXT NOT NULL,
-  outcome       TEXT NOT NULL,
-  message_id    TEXT NOT NULL DEFAULT '',
-  error         TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_automation_runs ON automation_runs(automation_id, at DESC);
 CREATE TABLE IF NOT EXISTS aliases (
   name       TEXT PRIMARY KEY,
   target     TEXT NOT NULL,
@@ -257,9 +227,7 @@ func Open(path string) (*sql.DB, error) {
 		// the steer answering it.
 		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"},
 		// What a task's recipient suggests its sender says next.
-		{"suggest", "TEXT NOT NULL DEFAULT ''"},
-		// The automation that sent it (v0.19.22).
-		{"automation", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		{"suggest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

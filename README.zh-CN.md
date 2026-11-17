@@ -199,7 +199,6 @@ myco upgrade
 - **接入任意 CLI**：内置 Claude Code、Codex、Pi、Kiro、Cursor、Gemini CLI、OpenCode，其他工具用模板也能接入（[完整列表](#支持的-agent)）。
 - **派活方式灵活**：一对一派任务并用 `--wait` 等结果，或按标签（`group=review,machine=vps`）广播，每个接收方的回复都会被追踪。
 - **exec 节点**：在远端机器上执行命令并返回输出，用起来像 ssh。发送方必须在白名单里，每条命令都有审计记录。
-- **自动化**：Hub 按时间表（cron，按你的时区）或在 webhook 被调用时给 agent 派任务，比如每天的日报、CI 失败后排查，电脑关着也照常。`myco automation create`，或在 App 里设。
 - **附件**：用 `--attach` 传文件，只有收件人能下载，并用 SHA-256 校验。
 - **默认安全**：每个 agent 都有发送方白名单；消息有租约、超时重投和幂等保证。你正在用的会话，myco 不会去打断。
 - **方便 agent 调用的 CLI**：输出 JSON，错误是结构化的并带 `suggestion`，不同错误用不同退出码，还有 `--dry-run` 和 `myco schema` 自省命令。
