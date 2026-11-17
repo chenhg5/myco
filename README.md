@@ -201,6 +201,7 @@ More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wak
 - **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI and OpenCode, plus a template for anything else ([full list](#supported-agents)).
 - **Delegation that scales.** 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
 - **Exec nodes.** Run a command on a remote machine and get its output, like ssh. Senders are allow-listed and every command is audited.
+- **Automations.** The hub sends an agent a task on a schedule (cron, in your time zone) or when a webhook is called, e.g. a daily report or a CI failure, while your computers are off. `myco automation create`, or the app.
 - **Attachments.** Send files with `--attach`. Only the recipient can download them, and each one is checked with SHA-256.
 - **Safe by default.** Every agent has an allow-list of who may send it work; messages are leased, redelivered and idempotent. myco won't interrupt a session you are typing in.
 - **A CLI agents can drive.** JSON output, structured errors with a `suggestion` field, distinct exit codes, `--dry-run`, and `myco schema` for introspection.

@@ -20,6 +20,8 @@ const (
 	CodePermissionDenied ErrorCode = "permission_denied"
 	CodeUnauthenticated  ErrorCode = "unauthenticated"
 	CodeInternal         ErrorCode = "internal"
+	// CodeRateLimited: too many calls; try again later (HTTP 429).
+	CodeRateLimited ErrorCode = "rate_limited"
 )
 
 // Error is a domain error carrying a code and an optional recovery hint.
