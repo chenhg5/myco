@@ -555,6 +555,39 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // Several pages open: a tab each, under the panel's head; opening one
+    // already open shows it; each keeps its page while another is shown.
+    if (!narrow) await step("网页 · 多个标签", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const panel = page.locator(".pg-panel");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" }));
+      await page.frameLocator(".pg-view:not(.is-hidden) .pg-frame").locator("h1").waitFor({ timeout: 15_000 });
+      if (await panel.locator(".pg-tab").count()) throw new Error("只开一个网页时不该有标签");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 10_000 });
+      await page.frameLocator(".pg-view:not(.is-hidden) .pg-frame").locator("h1", { hasText: "下载 myco" }).waitFor({ timeout: 15_000 });
+      if ((await panel.locator(".pg-tab").count()) !== 2) throw new Error("开两个网页应有两个标签");
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-tabs");
+      // Back to the first: its page was kept (one frame each).
+      await clickVisible(page, panel.locator(".pg-tab", { hasText: "发布说明" }).locator(".pg-tab-main"));
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("切换标签不该重新加载另一个网页");
+      // Opening one already open shows it, no new tab.
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
+      if ((await panel.locator(".pg-tab").count()) !== 2) throw new Error("开着的网页再点一次不该多一个标签");
+      // Closing a tab; the last one closes the panel.
+      await clickVisible(page, panel.locator(".pg-tab", { hasText: "下载页" }).getByRole("button", { name: /关闭/ }));
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      if (await panel.locator(".pg-tab").count()) throw new Error("剩一个网页时标签应收起");
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }).last());
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
     // The myco bridge: the page's shared state, written by you, changed by
     // its agent (it comes to the page), and a message to its agent, asked
     // once. (The four windows share the mock: versions are read, not assumed.)

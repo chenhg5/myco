@@ -7656,3 +7656,69 @@ body.is-resizing {
 .pg-live::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
 .pg-live.is-on { color: var(--green); background: var(--green-soft); }
 .pg-live.is-on::before { background: var(--green); }
+/* The page panel's tabs (two or more pages open): a strip under its head;
+   each page stays loaded while another is shown. */
+.pg-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pg-view.is-hidden { display: none; }
+.pg-view .pg-frame { flex: 1; height: auto; min-height: 0; }
+.pg-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--bg);
+}
+.pg-tabs::-webkit-scrollbar { display: none; }
+.pg-tab {
+  flex: 0 1 180px;
+  min-width: 96px;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border-radius: 8px 8px 0 0;
+  color: var(--muted);
+}
+.pg-tab:hover { background: var(--nav-hover); color: var(--fg-2); }
+.pg-tab.is-on { background: var(--card); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); clip-path: inset(-1px -1px 0 -1px); }
+.pg-tab-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+.pg-tab-icon { flex: none; display: inline-flex; }
+.pg-tab-icon svg { width: 13px; height: 13px; }
+.pg-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  opacity: 0;
+  cursor: default;
+}
+.pg-tab-close svg { width: 12px; height: 12px; }
+.pg-tab:hover .pg-tab-close, .pg-tab.is-on .pg-tab-close, .pg-tab-close:focus-visible { opacity: 1; }
+.pg-tab-close:hover { background: var(--pill-hover); color: var(--fg); }
+.pg-tab-main:focus-visible, .pg-tab-close:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

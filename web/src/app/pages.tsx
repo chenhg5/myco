@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { AppWindow, Check, ExternalLink, Link2, Monitor, Radio, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppWindow, Check, ExternalLink, Link2, Monitor, Radio, RotateCw, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -162,11 +162,33 @@ function PageCard({ hubId, id }: { hubId: string; id: string }) {
 }
 
 /** The page panel: one, for the whole App; links and cards open it. */
+type Tab = { key: string; target: PageTarget; reload: number; meta: PageMeta };
+/** What a tab says about itself, for the panel's head and its tab. */
+type PageMeta = { title: string; about: string; icon: "page" | "live" | "local"; copyUrl?: string; localUrl?: string; loaded: boolean };
+const keyOf = (t: PageTarget) => (t.kind === "page" ? `${t.hubId}/${t.id}` : t.url);
+const MAX_TABS = 8;
+
+/** The page panel: one, for the whole App, with a tab for each page open
+ *  in it; links and cards open it. A page already open is shown again. */
 export function PageHost() {
-  const [target, setTarget] = useState<PageTarget | null>(null);
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [active, setActive] = useState("");
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
-    const on = (e: Event) => { setTarget((e as CustomEvent<PageTarget>).detail); setOpen(true); };
+    const on = (e: Event) => {
+      const t = (e as CustomEvent<PageTarget>).detail;
+      const k = keyOf(t);
+      setTabs((list) => {
+        if (list.some((x) => x.key === k)) return list;
+        const next = [...list, { key: k, target: t, reload: 0, meta: { title: "", about: "", icon: t.kind === "local" ? "local" : "page", loaded: false } as PageMeta }];
+        // At most a few: the oldest goes (not the one shown).
+        while (next.length > MAX_TABS) next.splice(next.findIndex((x) => x.key !== k), 1);
+        return next;
+      });
+      setActive(k);
+      setOpen(true);
+    };
     window.addEventListener("myco-open-page", on);
     // A click on a page's link, anywhere (in a browser too, where links
     // otherwise open in a new tab).
@@ -181,16 +203,78 @@ export function PageHost() {
     document.addEventListener("click", click);
     return () => { window.removeEventListener("myco-open-page", on); document.removeEventListener("click", click); };
   }, []);
-  if (!target) return null;
-  return <PagePanel target={target} open={open} onOpenChange={setOpen} />;
+  // Closed, the tabs go with it.
+  const setPanel = (o: boolean) => {
+    setOpen(o);
+    if (!o) { setTabs([]); setActive(""); }
+  };
+  const close = (k: string) => {
+    const at = tabs.findIndex((x) => x.key === k);
+    const rest = tabs.filter((x) => x.key !== k);
+    if (!rest.length) { setPanel(false); return; }
+    setTabs(rest);
+    if (k === active) setActive(rest[Math.min(at, rest.length - 1)].key);
+  };
+  const meta = useCallback((k: string, m: PageMeta) => {
+    setTabs((list) => list.map((x) => (x.key === k && JSON.stringify(x.meta) !== JSON.stringify(m) ? { ...x, meta: m } : x)));
+  }, []);
+  if (!tabs.length) return null;
+  const cur = tabs.find((x) => x.key === active) || tabs[0];
+  const m = cur.meta;
+  const copy = async () => {
+    if (!m.copyUrl) return;
+    await copyText(m.copyUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+  const tabIcon = (x: Tab) => (x.meta.icon === "live" ? <Radio /> : x.meta.icon === "local" ? <Monitor /> : <AppWindow />);
+  return (
+    <DockPanel open={open} onOpenChange={setPanel} title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
+      tools={(
+        <>
+          <button type="button" className="app-btn app-btn-plain" onClick={() => setTabs((list) => list.map((x) => (x.key === cur.key ? { ...x, reload: x.reload + 1 } : x)))} disabled={!m.loaded}
+            title={L("刷新", "Reload")} aria-label={L("刷新", "Reload")}><RotateCw /></button>
+          {m.localUrl ? (
+            <button type="button" className="app-btn app-btn-plain" onClick={() => openOutside(m.localUrl || "")}
+              title={L("用浏览器打开", "Open in the browser")} aria-label={L("用浏览器打开", "Open in the browser")}><ExternalLink /></button>
+          ) : (
+            <button type="button" className="app-btn app-btn-plain" onClick={() => void copy()} disabled={!m.copyUrl}
+              title={copied ? L("已复制链接", "Link copied") : L("复制链接", "Copy link")} aria-label={copied ? L("已复制链接", "Link copied") : L("复制链接", "Copy link")}>
+              {copied ? <Check /> : <Link2 />}
+            </button>
+          )}
+        </>
+      )}>
+      {tabs.length > 1 && (
+        <div className="pg-tabs" role="tablist" aria-label={L("打开的网页", "Open pages")}>
+          {tabs.map((x) => (
+            <div key={x.key} className={cn("pg-tab", x.key === cur.key && "is-on")} title={x.meta.title}
+              onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); close(x.key); } }}>
+              <button type="button" role="tab" aria-selected={x.key === cur.key} className="pg-tab-main" onClick={() => setActive(x.key)}>
+                <span className="pg-tab-icon">{tabIcon(x)}</span>
+                <span className="pg-tab-name">{x.meta.title || L("正在打开…", "Opening…")}</span>
+              </button>
+              <button type="button" className="pg-tab-close" onClick={() => close(x.key)}
+                title={L("关闭这个标签", "Close this tab")} aria-label={L(`关闭 ${x.meta.title || "这个标签"}`, `Close ${x.meta.title || "this tab"}`)}><X /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      {tabs.map((x) => (
+        <PageView key={x.key} target={x.target} open={open} active={x.key === cur.key} reload={x.reload} onMeta={(mm) => meta(x.key, mm)} />
+      ))}
+    </DockPanel>
+  );
 }
 
-function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: boolean; onOpenChange: (o: boolean) => void }) {
+/** One page in the panel (a tab): its frame, its bridge, its notices. It
+ *  stays loaded while another tab is shown. */
+function PageView({ target, open, active, reload, onMeta }: {
+  target: PageTarget; open: boolean; active: boolean; reload: number; onMeta: (m: PageMeta) => void;
+}) {
   const [opened, setOpened] = useState<PageOpen | null>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
-  const [copied, setCopied] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const key = target.kind === "page" ? `${target.hubId}/${target.id}` : target.url;
 
@@ -211,17 +295,17 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
   };
   useEffect(() => {
     if (!open) return;
-    setOpened(null); setPage(null); setCopied(false);
+    setOpened(null); setPage(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, key]);
 
   // A newer version: said at the top; the page you look at stays as it is.
   useEffect(() => {
-    if (!open || target.kind !== "page") return;
+    if (!open || !active || target.kind !== "page") return;
     const t = window.setInterval(() => { pageOf(target.hubId, target.id, true).then(setPage, () => undefined); }, 15_000);
     return () => window.clearInterval(t);
-  }, [open, target]);
+  }, [open, active, target]);
 
   // The page's script (pagebridge.js) asks the App: a link to open in the
   // browser, and the myco bridge's calls. Only from this panel's frame;
@@ -304,10 +388,10 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
     return () => window.removeEventListener("message", on);
   }, [open, target]);
 
-  // While it is open: what others (an agent, another person) change comes
+  // While it is shown: what others (an agent, another person) change comes
   // to the page.
   useEffect(() => {
-    if (!open || target.kind !== "page") return;
+    if (!open || !active || target.kind !== "page") return;
     const t = window.setInterval(() => {
       if (!bridged.current) return;
       appApi.pageState(target.hubId, target.id).then((st) => {
@@ -319,7 +403,7 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
       }, () => undefined);
     }, 2000);
     return () => window.clearInterval(t);
-  }, [open, target]);
+  }, [open, active, target]);
 
   const local = target.kind === "local" ? new URL(target.url) : null;
   const src = local ? target.kind === "local" && target.url : opened?.url;
@@ -330,30 +414,12 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(`第 ${opened.version} 版`, `Version ${opened.version}`) : "", page && target.kind === "page" ? L(`${nameOf(target.hubId, page.publisher)} 发布`, `by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
-  const copy = async () => {
-    if (!page) return;
-    await copyText(page.url);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
+  const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
+  useEffect(() => {
+    onMeta({ title, about, icon, copyUrl: page?.url, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
+  }, [title, about, icon, page?.url, local, target, src, onMeta]);
   return (
-    <>
-    <DockPanel open={open} onOpenChange={onOpenChange} title={title} about={about} className="pg-panel" bodyClass="is-page pg-body"
-      tools={(
-        <>
-          <button type="button" className="app-btn app-btn-plain" onClick={() => setReload((n) => n + 1)} disabled={!src}
-            title={L("刷新", "Reload")} aria-label={L("刷新", "Reload")}><RotateCw /></button>
-          {local ? (
-            <button type="button" className="app-btn app-btn-plain" onClick={() => openOutside(target.kind === "local" ? target.url : "")}
-              title={L("用浏览器打开", "Open in the browser")} aria-label={L("用浏览器打开", "Open in the browser")}><ExternalLink /></button>
-          ) : (
-            <button type="button" className="app-btn app-btn-plain" onClick={() => void copy()} disabled={!page}
-              title={copied ? L("已复制链接", "Link copied") : L("复制链接", "Copy link")} aria-label={copied ? L("已复制链接", "Link copied") : L("复制链接", "Copy link")}>
-              {copied ? <Check /> : <Link2 />}
-            </button>
-          )}
-        </>
-      )}>
+    <div className={cn("pg-view", !active && "is-hidden")} role="tabpanel" aria-hidden={!active}>
       {newer > 0 && (
         <div className="pg-new" role="status">
           <span>{L(`有新版本：第 ${newer} 版`, `A new version: version ${newer}`)}</span>
@@ -366,7 +432,6 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
         : <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame")} title={title} src={src || undefined}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write" />}
-    </DockPanel>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
       title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
@@ -376,6 +441,6 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
         <button type="button" className="app-btn app-btn-primary" onClick={() => asking?.answer(true)}>{L("允许并发送", "Allow and send")}</button>
       </div>
     </Modal>
-    </>
+    </div>
   );
 }
