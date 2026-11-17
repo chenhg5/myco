@@ -44,6 +44,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>拍照片发给你的 agent。 Take photos to send to your agents.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>连接局域网里的 myco 工作区，或你在设置里填的局域网代理。 myco connects to workspaces on your local network, and to a proxy there that you set in Settings.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>只在你点了麦克风或在语音聊天时听：把你说的话变成消息，或者和 agent 通话。 myco listens only after you tap the microphone or during a voice chat you started: to turn what you say into a message, or to talk with an agent.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

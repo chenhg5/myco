@@ -5,12 +5,14 @@ import Foundation
 public struct HubClient: HubAPI {
     public let baseURL: URL
     private let token: String
-    private let session: URLSession
+    /// A session of its own (tests); nil is the app's, as its proxy
+    /// setting has it at the moment of each request.
+    private let session: URLSession?
 
     /// How many rows or messages one call asks for.
     static let pageSize = 100
 
-    public init(baseURL: URL, token: String, session: URLSession = .shared) {
+    public init(baseURL: URL, token: String, session: URLSession? = nil) {
         self.baseURL = baseURL
         self.token = token
         self.session = session
@@ -139,7 +141,7 @@ public struct HubClient: HubAPI {
 
     /// Trades a one-time pairing code for this device's own token
     /// (`POST /v1/console/pair`; the code is the proof, no token needed).
-    public static func pair(hub: URL, code: String, device: String, session: URLSession = .shared) async throws -> PairResponse {
+    public static func pair(hub: URL, code: String, device: String, session: URLSession? = nil) async throws -> PairResponse {
         let client = HubClient(baseURL: hub, token: "", session: session)
         let data = try await client.call("POST", "/v1/console/pair", body: HubJSON.encoder().encode(["code": code, "device": device]))
         return try decode(PairResponse.self, from: data)
@@ -186,7 +188,7 @@ public struct HubClient: HubAPI {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await (session ?? AppNetwork.shared.session(for: request.url)).data(for: request)
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
         } catch {

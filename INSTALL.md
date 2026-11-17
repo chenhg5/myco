@@ -405,7 +405,7 @@ myco runner service uninstall          # 停止并删除
 
 **要走代理才能上网的机器**：后台服务不会读 `~/.zshrc`、`~/.bashrc`，代理只写在那里的话，runner 启动的 claude、codex 连不上模型（报 `Network unreachable`、`request timed out`）。在设置了代理的终端里重新执行一次 `myco runner service install`，就会把 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`、`NO_PROXY`（大小写都算）一起写进服务定义。带用户名或密码的代理地址不会写进去（服务定义其他用户可读），会提示你改放到 agent 的 `env_file` 里。Linux 上如果希望注销后也继续运行，执行 `sudo loginctl enable-linger $USER`。
 
-**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 网络代理」里设：跟系统环境（默认，读 `HTTPS_PROXY` 等环境变量）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。
+**App 走代理**：桌面 App（和它连的工作区、更新检查、翻译、语音服务）的代理在 App 的「设置 › 网络代理」里设：跟系统环境（默认，读 `HTTPS_PROXY` 等环境变量）、不用代理，或者手动填 SOCKS5 / HTTP 代理（比如本机 Clash 的 `127.0.0.1:7890`），可以先「试一下」再保存。本机和局域网里的地址总是直连。这只管 App 自己；runner 启动的 agent 用上面说的服务环境。 iPhone 上的 App 也有「设置 › 网络代理」：默认跟 iPhone 自己的代理和 VPN 设置，也可以不用代理，或手动填一个 SOCKS5 / HTTP 代理（比如电脑上的 Clash，要填电脑在局域网里的地址，并在 Clash 里打开「允许局域网连接」）。
 
 每个 agent 的运行参数写在它自己的身份文件里，比如模型和权限：
 ```yaml

@@ -37,9 +37,9 @@ public struct Workspaces: WorkspaceBook {
     private let secrets: any SecretStore
     /// What this device is called in the member's list of devices.
     private let deviceName: String
-    private let network: URLSession
+    private let network: URLSession?
 
-    public init(records: any WorkspaceStore, secrets: any SecretStore, deviceName: String, network: URLSession = .shared) {
+    public init(records: any WorkspaceStore, secrets: any SecretStore, deviceName: String, network: URLSession? = nil) {
         self.records = records
         self.secrets = secrets
         self.deviceName = deviceName
