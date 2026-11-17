@@ -198,3 +198,25 @@ func TestLocalSessionsCopiesShowOnce(t *testing.T) {
 		t.Fatalf("joined: %+v %+v", got[0].Joined, got[1].Joined)
 	}
 }
+
+// A session that joined two workspaces says both.
+func TestLocalSessionsJoinedTwoWorkspaces(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	id := "dddddddd-0000-0000-0000-000000000005"
+	writeLines(t, filepath.Join(home, ".claude", "projects", "-work", id+".jsonl"),
+		map[string]any{"type": "user", "cwd": work, "timestamp": "2026-11-10T08:00:00.000Z", "message": map[string]any{"content": "两个工作区"}})
+	dir := filepath.Join(home, ".myco", "agents")
+	os.MkdirAll(dir, 0o700)
+	os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("hub: https://hub.example.com\nagent: mac-claude-a\ntoken: t\nharness: claude\nsession_id: "+id+"\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "b.yaml"), []byte("hub: https://hub.example.com/w/team\nagent: mac-claude-b\ntoken: t\nharness: claude\nsession_id: "+id+"\n"), 0o600)
+	got := (&console.Local{Home: home}).LocalSessions(time.Now())
+	if len(got) != 1 || len(got[0].JoinedAll) != 2 || got[0].Joined == nil || got[0].Joined.Agent != "mac-claude-a" {
+		t.Fatalf("sessions: %+v", got)
+	}
+	if got[0].JoinedAll[1].Agent != "mac-claude-b" || got[0].JoinedAll[1].Hub != "https://hub.example.com/w/team" {
+		t.Fatalf("joined_all: %+v", got[0].JoinedAll)
+	}
+}

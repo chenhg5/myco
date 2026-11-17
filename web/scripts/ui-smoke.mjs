@@ -867,6 +867,8 @@ async function runMatrix(browser, size, scheme) {
 
       await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑上的" }));
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().waitFor({ timeout: 10_000 });
+      // A session that joined two workspaces names both.
+      await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 glenn-mac-claude-x9k2、.*tapnow.* 的 glenn-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent");
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().click();

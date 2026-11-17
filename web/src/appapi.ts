@@ -187,8 +187,10 @@ export interface LocalSession {
   last_active: string;
   /** The session's first request, shortened; may be empty. */
   title?: string;
-  /** Set when this session is already an agent somewhere. */
-  joined?: { agent: string; hub: string };
+  /** Set when this session is already an agent somewhere (the first one). */
+  joined?: { agent: string; hub: string; hub_name?: string };
+  /** Every workspace it joined (one session can be an agent of several). */
+  joined_all?: { agent: string; hub: string; hub_name?: string }[];
 }
 export interface LocalJoinInput {
   cli: string;

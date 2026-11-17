@@ -453,7 +453,12 @@ const localSessions = [
     cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     workdir: "/Users/glenn/code/infra", last_active: iso(3600),
     title: "检查 Hub 的隧道配置",
-    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780" },
+    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
+    // The same session is an agent of a second workspace too.
+    joined_all: [
+      { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
+      { agent: "glenn-mac-claude-x9k2-tn", hub: "https://hub.tapnow.example.com/w/tapnow" },
+    ],
   },
   {
     cli: "codex", session_id: "019f0f11-3c2b-7a10-8d4e-9f8a7b6c5d4e",
