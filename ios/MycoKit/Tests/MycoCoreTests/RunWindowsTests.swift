@@ -48,7 +48,12 @@ struct RunWindowsTests {
         ]]
         let first = windows.events(of: "t1", traces: traces)
         #expect(texts(first) == ["start", "looking", "ls", "tool_result:a", "make build", "tool_result:b"])
-        #expect(RunProcess(events: first).segments.count == 2, "what it said, then its steps: the build is done where it shows")
+        // The build is done where it shows, not left running there.
+        if case .steps(_, let steps)? = RunProcess(events: first).segments.last {
+            #expect(steps.map(\.finished) == [true, true])
+        } else {
+            Issue.record("its steps close the first run")
+        }
         let second = windows.events(of: "t2", traces: traces)
         #expect(texts(second) == ["now the second", "make test"])
         // Numbered anew: steps of two runs do not share numbers.
