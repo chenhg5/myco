@@ -2740,19 +2740,60 @@ body.is-sorting * {
   margin-top: 6px;
 }
 
-/* ---------- the sidebar's order: automations (one line, at the top),
-   projects, chat (the height left; it scrolls), computers (foldable) ---- */
-.app-sidebar > .sp-nav-auto {
-  flex: none;
-  width: auto;
-  margin: -4px 10px 2px;
-}
+/* ---------- the sidebar: automations, projects, conversations,
+   computers. One heading style for all four (NavHead): a fold arrow (or
+   its space), the name in one size and weight, the section's buttons on
+   the right. Conversations take the height left and scroll. ---------- */
 .app-nav {
   display: flex;
   flex-direction: column;
 }
-.sp-nav-projects {
+.app-nav > .app-nav-group {
+  margin-top: 10px;
+}
+.app-nav > .app-nav-group:first-child {
+  margin-top: 2px;
+}
+.sp-nav-autos,
+.sp-nav-projects,
+.sp-nav-pcs {
   flex: none;
+}
+.sp-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  height: 28px;
+  padding: 0 2px 0 2px;
+}
+.sp-nav-head .sp-nav-title-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sp-nav-head .sp-nav-title-link:hover,
+.sp-nav-head .sp-nav-title-link.active {
+  color: var(--fg);
+}
+.sp-nav-head .sp-nav-title-link.active {
+  font-weight: 600;
+}
+.sp-nav-head-count {
+  font-weight: 400;
+  color: var(--faint);
+}
+.sp-nav-head-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 .sp-nav-chats {
   flex: 1 1 auto;
@@ -2760,14 +2801,9 @@ body.is-sorting * {
   display: flex;
   flex-direction: column;
 }
-.sp-nav-chat-wrap {
-  position: relative;
+.sp-nav-chats.is-folded {
   flex: none;
-}
-.sp-nav-chat-sort {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+  min-height: 0;
 }
 .sp-nav-chat-list {
   flex: 1;
@@ -2776,23 +2812,21 @@ body.is-sorting * {
   margin: 0 -4px;
   padding: 0 4px;
 }
-.sp-nav-pcs {
+.sp-nav-pinned {
   flex: none;
-}
-.sp-nav-pcs .app-nav-title-row {
-  justify-content: flex-start;
-  gap: 2px;
-}
-.sp-nav-pcs .app-nav-title-row .app-nav-add {
+  width: 12px !important;
+  height: 12px !important;
   margin-left: auto;
+  color: var(--faint) !important;
 }
 .sp-nav-fold {
+  flex: none;
   display: inline-flex;
+  opacity: 0;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
-  margin-left: -4px;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -2800,7 +2834,13 @@ body.is-sorting * {
   color: var(--faint);
   cursor: default;
 }
-.sp-nav-fold:hover {
+/* the fold arrow shows on the heading's hover (always when folded) */
+.sp-nav-head:hover .sp-nav-fold,
+.sp-nav-fold:focus-visible,
+.sp-nav-fold[aria-expanded="false"] {
+  opacity: 1;
+}
+button.sp-nav-fold:hover {
   background: var(--nav-hover);
   color: var(--fg);
 }

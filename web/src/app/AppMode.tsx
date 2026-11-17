@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, MoreHorizontal, Plus, Search, WifiOff, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, MoreHorizontal, Pin, Plus, Search, WifiOff } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import "@/app/app.css";
@@ -346,19 +346,31 @@ export default function AppMode({ initialHubs, initialInfo }: {
   });
   const pickChatSort = (v: ChatSort) => { setChatSort(v); try { localStorage.setItem(CHAT_SORT_KEY, v); } catch { /* not kept */ } };
   const [navChat, setNavChat] = useState<string | null>(null);
+  // Pinned conversations stay on top whatever the order (per workspace,
+  // kept on this computer).
+  const pinKey = `myco-nav-pinned:${hubId}`;
+  const [pinnedByHub, setPinnedByHub] = useState<Record<string, string[]>>({});
+  const pinned = pinnedByHub[pinKey] ?? (() => { try { return JSON.parse(localStorage.getItem(pinKey) || "[]") as string[]; } catch { return []; } })();
+  const pinChat = (name: string, on: boolean) => {
+    const next = on ? [...pinned.filter((n) => n !== name), name] : pinned.filter((n) => n !== name);
+    setPinnedByHub((m) => ({ ...m, [pinKey]: next }));
+    try { localStorage.setItem(pinKey, JSON.stringify(next)); } catch { /* not kept */ }
+  };
   const chatRows = useMemo(() => {
     const at = new Map(recentChats().filter((c) => c.hubId === hubId).map((c) => [c.agent, c.at]));
     const name = (r: AgentRow) => nodeName(r.st.agent, r.hub);
     const busy = (r: AgentRow) => ((r.st.asking || 0) > 0 ? 0 : r.st.state === "working" ? 1 : r.st.state === "offline" ? 3 : 2);
-    return [...people].sort((a, b) => chatSort === "name" ? name(a).localeCompare(name(b))
+    const pin = (r: AgentRow) => { const i = pinned.indexOf(r.st.agent.name); return i < 0 ? Infinity : i; };
+    return [...people].sort((a, b) => (pin(a) === pin(b) ? 0 : pin(a) < pin(b) ? -1 : 1) || (chatSort === "name" ? name(a).localeCompare(name(b))
       : chatSort === "busy" ? busy(a) - busy(b) || name(a).localeCompare(name(b))
-      : (at.get(b.st.agent.name) || 0) - (at.get(a.st.agent.name) || 0) || busy(a) - busy(b) || name(a).localeCompare(name(b)));
+      : (at.get(b.st.agent.name) || 0) - (at.get(a.st.agent.name) || 0) || busy(a) - busy(b) || name(a).localeCompare(name(b))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people.map((r) => `${r.st.agent.name}:${r.st.state}:${r.st.asking || 0}`).join(","), chatSort, hubId, navChat]);
+  }, [people.map((r) => `${r.st.agent.name}:${r.st.state}:${r.st.asking || 0}`).join(","), chatSort, hubId, navChat, pinned.join(",")]);
   useEffect(() => { if (page !== "space") setNavChat(null); }, [page]);
-  // Computers: folded or not (kept on this computer).
-  const [pcFolded, setPcFolded] = useState(() => { try { return localStorage.getItem(PC_FOLD_KEY) === "1"; } catch { return false; } });
-  const foldPcs = (v: boolean) => { setPcFolded(v); try { localStorage.setItem(PC_FOLD_KEY, v ? "1" : "0"); } catch { /* not kept */ } };
+  // The sidebar's lists fold (kept on this computer).
+  const [pcFolded, foldPcs] = useFold(PC_FOLD_KEY);
+  const [projFolded, foldProjects] = useFold("myco-nav-projects-folded");
+  const [chatFolded, foldChats] = useFold("myco-nav-chats-folded");
 
   // The space on show: the one chosen (while it exists), else the newest
   // project, else chat.
@@ -605,23 +617,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <Search /><span>{L("搜索", "Search")}</span><kbd>{modKey()}K</kbd>
           </button>
 
-          <button type="button" className={cn("app-nav-item sp-nav sp-nav-auto", page === "automations" && "active")} onClick={() => setPage("automations")}
-            style={{ ["--wails-draggable" as string]: "no-drag" }}>
-            <Zap />
-            <span className="app-nav-label">{L("自动化", "Automations")}</span>
-          </button>
-
           <nav className="app-nav">
-            {/* Projects first: the work. Then chat: everyone you can talk to,
-                one click into a chat, in the order you pick; it takes the
-                height left and scrolls. Computers last, foldable. */}
+            {/* One heading style for all four: automations (a page, one
+                line), projects first (the work), conversations (everyone you
+                can talk to, one click into a chat, pinned ones first, in the
+                order you pick; the height left, scrolling), computers last.
+                The three lists fold. */}
+            <div className="app-nav-group sp-nav-autos">
+              <NavHead label={L("自动化", "Automations")} active={page === "automations"} className="sp-nav-auto" onOpen={() => { setNavChat(null); setPage("automations"); }} />
+            </div>
             <div className="app-nav-group sp-nav-projects">
-              <div className="app-nav-title app-nav-title-row">
-                <span>{L("项目", "Projects")}</span>
+              <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>
                 <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
                   onClick={() => setNewProjectOpen(true)}><Plus /></button>
-              </div>
-              {navProjects.map((x) => {
+              </NavHead>
+              {!projFolded && navProjects.map((x) => {
                 const ref = { hubId: x.hubId, name: x.p.name };
                 const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
                 const names = new Set(x.p.members.map((m) => m.name));
@@ -644,13 +654,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   </button>
                 );
               })}
-              {projects !== null && liveProjects.length === 0 && (
+              {!projFolded && projects !== null && liveProjects.length === 0 && (
                 <button type="button" className="app-nav-item muted" onClick={() => setNewProjectOpen(true)}>
                   <Plus strokeWidth={1.75} /><span>{L("新建项目", "New project")}</span>
                 </button>
               )}
             </div>
-            <div className="app-nav-group sp-nav-chats">
+            <div className={cn("app-nav-group sp-nav-chats", chatFolded && "is-folded")}>
               {looseHubs.map((id) => {
                 const ref: SpaceRef = { hubId: id, loose: true };
                 const active = page === "space" && !navChat && !!shown && spaceKey(shown) === spaceKey(ref);
@@ -660,39 +670,41 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   { v: "name", label: L("按名字", "By name") },
                 ];
                 return (
-                  <div key={`${id}/*`} className="sp-nav-chat-wrap">
-                    <button type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => { setNavChat(null); openSpace(ref); }}
-                      title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
-                      <span className="app-nav-label">{L("聊天", "Chat")}</span>
-                    </button>
+                  <NavHead key={`${id}/*`} label={L("会话", "Conversations")} className="sp-nav-chat" active={active}
+                    title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}
+                    onOpen={() => { setNavChat(null); openSpace(ref); }} folded={chatFolded} onFold={() => foldChats(!chatFolded)} count={chatRows.length}>
                     <button type="button" className="app-nav-add sp-nav-chat-sort" aria-label={L("排序和成员", "Order and members")} title={L("排序方式、管理成员", "How to order, manage members")}
                       onClick={(e) => navMenu.openUnder(e.currentTarget, [
-                        { header: L("排序", "Order") },
+                        { header: L("排序（置顶的总在最上面）", "Order (pinned ones stay on top)") },
                         ...sorts.map((x) => ({ label: x.label, checked: chatSort === x.v, onSelect: () => pickChatSort(x.v) })),
                         "sep",
                         { label: L("管理成员", "Manage members"), onSelect: () => { setNavChat(null); setPage("members"); } },
                       ])}><ArrowUpDown /></button>
-                  </div>
+                    <button type="button" className="app-nav-add sp-nav-chat-add" aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent：多一个能聊的", "Add an agent: one more to talk to")}
+                      onClick={() => hub && setAddAgent({ hubId: hub.id, loose: true })}><Plus /></button>
+                  </NavHead>
                 );
               })}
-              <div className="sp-nav-chat-list">
+              {!chatFolded && <div className="sp-nav-chat-list">
                 {chatRows.map((r) => {
                   const key = `${r.hub.id}\u0000${r.st.agent.name}`;
                   const dot = workDot([r]);
+                  const isPinned = pinned.includes(r.st.agent.name);
                   return (
-                    <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", page === "space" && navChat === key && "active")}
+                    <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", isPinned && "is-pinned", page === "space" && navChat === key && "active")}
                       onClick={() => { setNavChat(key); chatWithMember(r); }}
                       onContextMenu={(e) => navMenu.open(e, [
                         { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },
+                        { label: isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin to the top"), onSelect: () => pinChat(r.st.agent.name, !isPinned) },
                         { label: L("看它的资料", "Its profile"), onSelect: () => { setNavChat(null); setPage("members"); setProfile({ hubId: r.hub.id, name: r.st.agent.name }); } },
                       ])}
                       title={[nodeName(r.st.agent, r.hub), r.st.agent.description].filter(Boolean).join(" · ")}>
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
-                      {dot && (
+                      {dot ? (
                         <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
                           title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("在干活", "At work")} />
-                      )}
+                      ) : isPinned && <Pin className="sp-nav-pinned" aria-label={L("已置顶", "Pinned")} />}
                     </button>
                   );
                 })}
@@ -701,17 +713,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     <Plus /><span className="app-nav-label">{L("添加 agent", "Add an agent")}</span>
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
             <div className="app-nav-group sp-nav-pcs">
-              <div className="app-nav-title app-nav-title-row">
-                <button type="button" className="sp-nav-fold" aria-expanded={!pcFolded} aria-label={pcFolded ? L("展开电脑", "Show computers") : L("收起电脑", "Hide computers")}
-                  onClick={() => foldPcs(!pcFolded)}><ChevronRight className={cn(!pcFolded && "is-open")} /></button>
-                <button type="button" className={cn("sp-nav-title-link", page === "computers" && "active")} onClick={() => setPage("computers")}
-                  title={L("管理电脑", "Manage computers")}>{L("电脑", "Computers")}{pcFolded && computers.length > 0 ? ` · ${computers.length}` : ""}</button>
+              <NavHead label={L("电脑", "Computers")} className="sp-nav-pcs-head" active={page === "computers"} title={L("管理电脑", "Manage computers")}
+                onOpen={() => { setNavChat(null); setPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
                 <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
                   onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
-              </div>
+              </NavHead>
               {!pcFolded && (<>
               {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
                   const dot = workDot([r]);
@@ -977,4 +986,40 @@ export function keepOffline(fresh: AppOverview, prev: AppOverview | undefined): 
 /** A server's address as people say it: its host name. */
 function hostName(u: string): string {
   try { return new URL(u).host; } catch { return u; }
+}
+
+/** Whether a sidebar list is folded, kept on this computer. */
+function useFold(key: string): [boolean, (v: boolean) => void] {
+  const [v, setV] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  return [v, (n: boolean) => { setV(n); try { localStorage.setItem(key, n ? "1" : "0"); } catch { /* not kept */ } }];
+}
+
+/** A sidebar heading, the same for every section: a fold arrow (or its
+ *  space), the name (it opens the section's page, else folds), how many
+ *  while folded, and the section's buttons on the right. The name lines
+ *  up with the rows under it; the fold arrow comes after it. */
+function NavHead({ label, active, className, title, onOpen, folded, onFold, count, children }: {
+  label: string;
+  active?: boolean;
+  className?: string;
+  title?: string;
+  onOpen?: () => void;
+  folded?: boolean;
+  onFold?: () => void;
+  count?: number;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="app-nav-title-row sp-nav-head">
+      <button type="button" className={cn("sp-nav-title-link", className, active && "active")} title={title} aria-current={active ? "page" : undefined}
+        onClick={onOpen ?? onFold}>
+        {label}{folded && count ? <span className="sp-nav-head-count">{count}</span> : null}
+      </button>
+      {onFold && (
+        <button type="button" className="sp-nav-fold" aria-expanded={!folded} aria-label={folded ? L(`展开${label}`, `Show ${label}`) : L(`收起${label}`, `Hide ${label}`)}
+          onClick={onFold}><ChevronRight className={cn(!folded && "is-open")} /></button>
+      )}
+      {children && <span className="sp-nav-head-tools">{children}</span>}
+    </div>
+  );
 }

@@ -345,6 +345,7 @@ async function go(page, label, narrow) {
   } else {
     const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
+      : label === "自动化" ? page.locator(".sp-nav-auto:visible")
       : page.locator(".app-nav-item:visible", { hasText: label });
     await clickVisible(page, item);
   }
@@ -1095,14 +1096,25 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "聊天", narrow);
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
       const title = compactText(await page.locator(".sp-head h2").innerText());
-      if (title !== "聊天") throw new Error(`这里应该是聊天（不在项目里的 agent），实际标题「${title}」`);
+      if (title !== "会话") throw new Error(`这里应该是会话（不在项目里的 agent），实际标题「${title}」`);
       // The sidebar: automations one line at the top; projects first, then
       // chat with everyone to talk to listed under it (one click into a
       // chat, in the order picked), computers last.
       await sidebar(page, true);
       const order = await page.evaluate(() => [...document.querySelectorAll(".app-nav > .app-nav-group")].map((g) => g.className));
-      if (!order[0]?.includes("sp-nav-projects") || !order[1]?.includes("sp-nav-chats") || !order[2]?.includes("sp-nav-pcs")) throw new Error(`边栏应是项目、聊天、电脑，实际 ${order.join(" / ")}`);
-      if (!(await page.locator(".app-sidebar > .sp-nav-auto:visible").count())) throw new Error("自动化应在边栏最上面一行");
+      if (!order[0]?.includes("sp-nav-autos") || !order[1]?.includes("sp-nav-projects") || !order[2]?.includes("sp-nav-chats") || !order[3]?.includes("sp-nav-pcs")) throw new Error(`边栏应是自动化、项目、会话、电脑，实际 ${order.join(" / ")}`);
+      // The four headings look alike: one size and weight, no icon.
+      const heads = await page.evaluate(() => [...document.querySelectorAll(".app-nav .sp-nav-head .sp-nav-title-link")].map((e) => {
+        const st = getComputedStyle(e);
+        return { text: (e.textContent || "").trim(), size: st.fontSize, icon: !!e.querySelector("svg") };
+      }));
+      if (heads.map((h) => h.text).join("|") !== "自动化|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
+      // Projects fold, and stay folded.
+      await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
+      if (await page.locator(".sp-nav-projects .app-nav-item:visible").count()) throw new Error("项目折叠后不该再列出项目");
+      await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
+      await page.locator(".sp-nav-projects .app-nav-item", { hasText: "官网改版" }).waitFor({ timeout: 5_000 });
       if (await page.locator(".app-nav .app-nav-item:visible", { hasText: /^成员$/ }).count()) throw new Error("成员不该再单独占边栏一行");
       const people = page.locator(".sp-nav-chat-list .sp-nav-person:visible");
       if ((await people.count()) < 2) throw new Error("聊天下面应列出能聊的 agent");
@@ -1115,6 +1127,18 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "sidebar-chats");
       await clickVisible(page, page.locator(".sp-nav-chat-sort"));
       await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "最近聊过的在前" }));
+      // Pinned: on top whatever the order, with a small pin; unpinned again.
+      const last = people.last();
+      const lastName = compactText(await last.innerText());
+      await last.click({ button: "right" });
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "置顶" }));
+      await page.waitForFunction((n) => (document.querySelector(".sp-nav-chat-list .sp-nav-person")?.textContent || "").includes(n), lastName, { timeout: 5_000 });
+      await page.locator(".sp-nav-chat-list .sp-nav-person").first().click({ button: "right" });
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "取消置顶" }));
+      // + adds an agent to talk to.
+      await clickVisible(page, page.locator(".sp-nav-chat-add"));
+      await page.locator(".app-modal", { hasText: "添加 agent" }).waitFor({ timeout: 5_000 });
+      await closeDialog(page);
       // One click into a chat with one of them (a coordinator's is its
       // project's home).
       const who = "Release (Claude 云端)";
@@ -1122,7 +1146,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-head h2", { hasText: who }).first().waitFor({ timeout: 10_000 });
       await sidebar(page, true);
       await clickVisible(page, page.locator(".sp-nav-chat"));
-      await page.locator(".sp-head h2", { hasText: "聊天" }).waitFor({ timeout: 10_000 });
+      await page.locator(".sp-head h2", { hasText: "会话" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await settle(page);
       await shot(page, size, scheme, "loose");
