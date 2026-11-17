@@ -17,7 +17,12 @@ want = sys.argv[1]
 names = ["ci", "release"] if want == "all" else [want]
 runs = {}
 for r in json.load(sys.stdin)["workflow_runs"]:
-    runs.setdefault(r["name"], r)  # newest first: keep the latest attempt
+    # Newest first: keep the latest run, unless an earlier run of the same
+    # workflow on this commit passed (a duplicate run, or one whose macOS
+    # job was cancelled waiting for a runner, does not undo a green one).
+    seen = runs.get(r["name"])
+    if seen is None or (seen["conclusion"] != "success" and r["conclusion"] == "success"):
+        runs[r["name"]] = r
 code = 0
 for n in names:
     r = runs.get(n)

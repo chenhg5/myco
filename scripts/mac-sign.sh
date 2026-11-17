@@ -24,9 +24,11 @@ rm -rf dist && mkdir -p dist
 notarize() {
   id=""
   for try in 1 2 3 4 5; do
-    id=$(xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --output-format json 2>/dev/null |
+    id=$(xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --output-format json 2>dist/notary.err |
       sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p') && [ -n "$id" ] && break
-    echo "submitting $1 failed (try $try); retrying" >&2; sleep 15
+    # Say why (a missing keychain profile, the network, Apple): the reason
+    # decides whether waiting helps or someone has to act on this Mac.
+    echo "submitting $1 failed (try $try): $(tail -n 2 dist/notary.err 2>/dev/null | tr '\n' ' '); retrying" >&2; sleep 15
   done
   [ -n "$id" ] || { echo "could not submit $1 for notarization" >&2; exit 1; }
   echo "submitted $1: $id"
