@@ -539,7 +539,8 @@ public final class AppModel {
         } catch JoinError.notALink {
             throw JoinFailure(message: L("这不是添加设备的链接。它应该像 https://你的工作区/c/myco_pair_…", "This is not an \"add a device\" link. It looks like https://your-workspace/c/myco_pair_…"))
         } catch JoinError.refused(let reason) {
-            throw JoinFailure(message: L("工作区没有接受这个链接：\(reason)", "The workspace did not accept this link: \(reason)")) catch JoinError.unreachable(let detail) {
+            throw JoinFailure(message: L("工作区没有接受这个链接：\(reason)", "The workspace did not accept this link: \(reason)"))
+        } catch JoinError.unreachable(let detail) {
             // Not a bad link: the workspace did not answer.
             throw JoinFailure(
                 message: L("暂时连不上这个工作区，或者它响应太慢。", "Cannot reach this workspace right now, or it is answering too slowly."),
