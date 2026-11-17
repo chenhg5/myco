@@ -2,7 +2,8 @@ import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { L } from "@/lib/i18n";
 import { ApiError, isOldHub, isTransient } from "@/appapi";
-import { CopyButton } from "@/app/copy";
+import { CopyButton, useCopy } from "@/app/copy";
+import { debugPrompt } from "@/app/agentSetup";
 import { cn } from "@/lib/utils";
 
 /** macOS-style centered sheet. Portals carry .app-portal so the scoped tokens apply. */
@@ -88,6 +89,7 @@ function errorDetail(error: unknown): string {
 export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const [details, setDetails] = React.useState(false);
   React.useEffect(() => setDetails(false), [error]);
+  const ask = useCopy(error ? debugPrompt(errorDetail(error)) : "");
   if (!error) return null;
   const transient = isTransient(error);
   const old = isOldHub(error);
@@ -109,9 +111,13 @@ export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => 
     <div className="app-error-text">
       <div>{message}</div>
       {suggestion && <div style={{ color: "var(--muted)", marginTop: 2 }}>{suggestion}</div>}
-      {(onRetry || detail) && (
+      {(onRetry || detail || transient) && (
         <div className="app-error-actions">
           {onRetry && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("重试", "Retry")}</button>}
+          {/* A sentence for the person's own agent: the raw error and where to look. */}
+          <button type="button" className="app-error-more" onClick={() => void ask.copy()} title={L("复制一句话发给你的 agent（Claude Code、Codex…），它会帮你查原因", "Copy a sentence for your agent (Claude Code, Codex…) to look into it")}>
+            {ask.copied ? L("已复制，发给你的 agent", "Copied: send it to your agent") : L("让 agent 帮我查", "Ask my agent")}
+          </button>
           {detail && (
             <button type="button" className="app-error-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
               {details ? L("收起详细信息", "Hide details") : L("详细信息", "Details")}

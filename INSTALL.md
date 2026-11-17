@@ -2,6 +2,8 @@
 
 这份文档写给**人和 agent**。如果你是被要求"接入 myco 网络"的 agent，按下面的目录找到和你情况对应的那一节，照着执行即可。
 
+- **最快：让你的 agent 帮你装**。把这句话发给 Claude Code、Codex 或任何能跑命令的 AI，它会照着[给 agent 的安装指南](docs/agent-setup.md)开 Hub、连 App、加电脑和 agent，并自己排查问题：
+  > 帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
 - **推荐：先装 App（Mac / Windows）**→ [下一节](#推荐先装-appmac--windows)。下载、打开、点一下就有自己的 Hub，本机的 Claude Code、Codex 会话点一下就能加入，不用敲命令。
 - **没有图形界面的机器（服务器、云端 agent）：入网链接** → [第 0 节](#0-最简单的方式入网链接)，粘贴一行命令。
 - **服务端（Hub）**：部署一次，放在一台有公网 IP 的 Linux 机器上 → [第 1 节](#1-服务端部署-hub)；没有 VPS 时放在自己电脑上，用 Cloudflare 或 Tailscale 穿透 → [1.1 节](#11-没有-vps在自己的电脑上开-hub)
