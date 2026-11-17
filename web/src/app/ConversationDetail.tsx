@@ -9,6 +9,7 @@ import { MessageContent } from "@/app/Markdown";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { TraceView } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
+import { RunPill } from "@/app/RunSettings";
 import { HandoffCard, handoffsFrom } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
@@ -2123,6 +2124,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 and voice input later */}
             <div className="conv-compose-tools">
               <AttachButton onFiles={att.add} disabled={busy} />
+              {/* its model and effort, small (RunSettings) */}
+              {!shellMode && !observed && row && <RunPill row={row} onRefresh={async () => { await onRefresh?.(); }} />}
             </div>
             {/* Only what is not obvious: while it works, Enter adds to the
                 task and ⌘↩ queues the next one. */}
