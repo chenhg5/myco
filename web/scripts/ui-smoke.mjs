@@ -723,20 +723,25 @@ async function runMatrix(browser, size, scheme) {
       await panel.waitFor({ timeout: 10_000 });
       await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
       await panel.waitFor({ state: "detached", timeout: 5_000 });
-      // Right-click: rename, then unpin.
+      // Right-click: rename, then unpin. (The menu closes on any scroll,
+      // and the chat may still be settling after the panel closed: again.)
+      const menuOn = async (chip, item) => {
+        for (let i = 0; ; i++) {
+          await chip.scrollIntoViewIfNeeded();
+          await settle(page, 300);
+          await chip.click({ button: "right" });
+          const it = page.locator(".conv-menu").getByRole("menuitem", { name: item });
+          if (await it.waitFor({ timeout: 1_500 }).then(() => true, () => false)) { await it.click(); return; }
+          if (i >= 4) throw new Error(`右键菜单没出现「${item}」`);
+        }
+      };
       const design = bar.locator(".pin-chip", { hasText: "设计稿" });
-      await design.scrollIntoViewIfNeeded();
-      await settle(page, 300);
-      await design.click({ button: "right" });
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "重命名" }));
+      await menuOn(design, "重命名");
       await page.locator("[data-testid=pin-title]").fill("设计稿 v2");
       await clickVisible(page, page.getByRole("button", { name: "保存", exact: true }));
       const renamed = bar.locator(".pin-chip", { hasText: "设计稿 v2" });
       await renamed.waitFor({ timeout: 5_000 });
-      await renamed.scrollIntoViewIfNeeded();
-      await settle(page, 300);
-      await renamed.click({ button: "right" });
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "取消置顶" }));
+      await menuOn(renamed, "取消置顶");
       await renamed.waitFor({ state: "detached", timeout: 5_000 });
       const left = (await (await api("GET", "?with=release-cloud")).json()).pins.map((p) => p.title);
       if (left.length !== 2 || left.includes("设计稿 v2")) throw new Error(`取消置顶后 Hub 上应剩两个，实际 ${left.join(" / ")}`);
