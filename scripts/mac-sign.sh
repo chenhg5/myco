@@ -8,8 +8,9 @@
 #   MYCO_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" scripts/mac-sign.sh v0.17.2
 #
 # Output in dist/: myco.app (stapled), myco-app-darwin-universal.zip, myco.dmg.
-# With MYCO_UPLOAD=1 it adds myco.dmg and the zip to the GitHub release
-# <version> (with gh) and their lines to the release's SHA256SUMS.
+# With MYCO_UPLOAD=1 it waits for the GitHub release <version> (made by
+# release.yml from the same commit), then adds myco.dmg and the zip to it
+# (with gh), with their lines in the release's SHA256SUMS.
 set -eu
 VERSION=${1:?usage: scripts/mac-sign.sh <version>}
 : "${MYCO_SIGN_IDENTITY:?set MYCO_SIGN_IDENTITY to the Developer ID Application identity}"
@@ -45,7 +46,7 @@ notarize() {
 
 # One bundle per architecture, then lipo the two executables together.
 for arch in arm64 amd64; do
-  GOARCH=$arch MYCO_SIGN_IDENTITY= make app VERSION="$VERSION" >/dev/null
+  GOARCH=$arch MYCO_SIGN_IDENTITY='' make app VERSION="$VERSION" >/dev/null
   rm -rf "dist/$arch.app" && ditto bin/myco.app "dist/$arch.app"
 done
 ditto dist/arm64.app dist/myco.app
@@ -83,6 +84,14 @@ spctl --assess --type open --context context:primary-signature -vv dist/myco.dmg
 echo "SIGNED dist/myco.dmg dist/myco-app-darwin-universal.zip"
 
 if [ "${MYCO_UPLOAD:-}" = 1 ]; then
+  # Signing starts when the release commit is pushed, alongside GitHub's
+  # release workflow: wait (up to 30 minutes) for the release it creates.
+  echo "==> waiting for the $VERSION release on GitHub"
+  for i in $(seq 1 120); do
+    gh release view "$VERSION" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx SHA256SUMS && break
+    [ "$i" = 120 ] && { echo "the $VERSION release did not appear within 30 minutes" >&2; exit 1; }
+    sleep 15
+  done
   echo "==> uploading to the $VERSION release"
   gh release download "$VERSION" --pattern SHA256SUMS --dir dist --clobber
   (cd dist && grep -v -e ' myco.dmg$' -e ' myco-app-darwin-universal.zip$' SHA256SUMS > SHA256SUMS.new || true
