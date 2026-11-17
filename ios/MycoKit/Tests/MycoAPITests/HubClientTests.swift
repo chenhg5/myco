@@ -162,12 +162,18 @@ struct HubClientTests {
     @Test func theHubsErrorComesThroughAsItIs() async throws {
         let hub = client()
         Stub.handler = { _ in (404, try! RealAnswersTests.fixture("error")) }
-        await #expect(throws: HubError(error: "not_found", message: "message not found", retryable: false)) {
+        // (with the status it came with, for whoever looks at the details)
+        await #expect(throws: HubError(error: "not_found", message: "message not found", retryable: false, status: 404)) {
             _ = try await hub.trace(of: "msg_nope", after: 0)
         }
-        // Not JSON at all (a proxy's page): still an error, not a crash.
-        Stub.handler = { _ in (502, Data("<html>bad gateway</html>".utf8)) }
-        await #expect(throws: HubError.self) { _ = try await hub.whoami() }
+        // Not JSON at all (a proxy's page): still an error, not a crash,
+        // and its first words are kept.
+        Stub.handler = { _ in (502, Data("<html><h1>502 Bad Gateway</h1><hr>nginx</html>".utf8)) }
+        await #expect(throws: HubError(error: "http_502", message: "502 Bad Gateway nginx", status: 502)) { _ = try await hub.whoami() }
+        // A page that says nothing, or an answer that is no failure of a
+        // gateway: the status alone.
+        Stub.handler = { _ in (403, Data("<html>forbidden</html>".utf8)) }
+        await #expect(throws: HubError(error: "http_403", message: "The workspace answered 403.", status: 403)) { _ = try await hub.whoami() }
     }
 
     @Test func aFileGoesUpAsItIsUnderItsName() async throws {
