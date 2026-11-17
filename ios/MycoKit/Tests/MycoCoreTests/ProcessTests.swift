@@ -90,6 +90,23 @@ struct ProcessTests {
         held.status = "held"
         #expect(paused([event(1, "tool", -850)], held))
         #expect(!paused([event(1, "tool", -30)], held))
+        // Having set it aside, it says what it waits for, hands work out,
+        // keeps listening: still waiting. Only work on it is work.
+        func ran(_ seq: Int, _ command: String, _ seconds: TimeInterval) -> TraceEvent {
+            TraceEvent(seq: seq, kind: "tool", data: TraceStep(tool: "Bash", input: command), at: at(seconds))
+        }
+        #expect(paused([event(1, "tool", -850)], held, [report(-30)]))
+        #expect(paused([ran(1, "myco message hold --id t1", -800), ran(2, "myco message progress --id t1 --body 'waiting for the tester'", -700)], held))
+        #expect(paused([ran(1, "cd /repo && myco message send --to tester --body 'run the suite'", -600), ran(2, "myco inbox wait --timeout 55m", -590)], held))
+        #expect(paused([event(1, "text", -30), event(2, "thinking", -20)], held))
+        #expect(!paused([ran(1, "myco message progress --id t1 --body 'back at it'", -60), ran(2, "go test ./...", -50)], held))
+        for (command, waits) in [
+            "myco message hold --id t1": true, "myco message ask --question 'which?'": true, "myco message answer --id q1 --body yes": true,
+            "myco message send --to coder --body x && myco inbox wait": true, "myco inbox pull": true,
+            "myco message reply --id t1 --body done": false, "make test": false, "myco message progress --body x; make test": false, "": false,
+        ] {
+            #expect(RunProcess.isWaitStep(command) == waits, "\(command)")
+        }
     }
 
     @Test func aTurnThatOnlyKeepsListeningIsNotWork() {
