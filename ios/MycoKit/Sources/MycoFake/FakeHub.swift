@@ -45,6 +45,8 @@ public actor FakeHub: HubAPI {
         files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
         turnEnded = world.turnEnded
         silent = world.silent
+        automationList = world.automations
+        automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
     }
 
     public func setLatency(_ value: Duration) {
@@ -332,8 +334,145 @@ public actor FakeHub: HubAPI {
         return hiddenIDs
     }
 
+    /// Acts like a hub from before run settings.
+    private var tooOldForRunSettings = false
+
+    public func setTooOldForRunSettings(_ value: Bool) {
+        tooOldForRunSettings = value
+    }
+
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        try await check()
+        if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found")
+        }
+        // Kept as chosen; what it runs with changes at its next run.
+        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
+        return agents[index].agent
+    }
+
+    // MARK: Automations
+
+    private var automationList: [Automation] = []
+    private var automationRuns: [String: [AutomationRun]] = [:]
+    /// Acts like a hub from before automations.
+    private var tooOldForAutomations = false
+
+    public func setTooOldForAutomations(_ value: Bool) {
+        tooOldForAutomations = value
+    }
+
+    private func checkAutomations() async throws {
+        try await check()
+        if tooOldForAutomations { throw HubError(error: "not_found", message: "no route for GET /v1/console/automations", status: 404) }
+    }
+
+    private func place(of id: String) throws -> Int {
+        guard let index = automationList.firstIndex(where: { $0.id == id }) else {
+            throw HubError(error: "not_found", message: "automation \(id) not found", status: 404)
+        }
+        return index
+    }
+
+    public func automations() async throws -> [Automation] {
+        try await checkAutomations()
+        return automationList
+    }
+
+    public func automation(_ id: String) async throws -> AutomationDetail {
+        try await checkAutomations()
+        return AutomationDetail(automation: automationList[try place(of: id)], runs: automationRuns[id] ?? [])
+    }
+
+    public func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved {
+        try await checkAutomations()
+        let name = (request.name ?? "").trimmingCharacters(in: .whitespaces), to = request.to ?? "", body = request.body ?? ""
+        guard !name.isEmpty, !to.isEmpty, !body.isEmpty else {
+            throw HubError(error: "invalid_argument", message: "name, to and body are required", status: 400)
+        }
+        guard request.schedule != nil || request.webhook == true else {
+            throw HubError(error: "invalid_argument", message: "an automation needs a schedule or a webhook", status: 400)
+        }
+        seq += 1
+        let id = "aut_fake\(seq)"
+        let hook = request.webhook == true
+        let made = Automation(
+            id: id, name: name, owner: "glenn", to: to, body: body, schedule: request.schedule, webhook: hook,
+            webhookUrl: hook ? "https://demo.myco.example/hooks/\(id)" : nil, skipIfBusy: request.skipIfBusy ?? true,
+            enabled: request.enabled ?? true, nextRunAt: request.schedule == nil ? nil : Date().addingTimeInterval(3_600))
+        automationList.insert(made, at: 0)
+        return AutomationSaved(automation: made, webhookSecret: hook ? "whk_demo_\(seq)" : nil)
+    }
+
+    public func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved {
+        try await checkAutomations()
+        let index = try place(of: id)
+        var one = automationList[index]
+        var secret: String?
+        if let name = request.name { one.name = name }
+        if let to = request.to { one.to = to }
+        if let body = request.body { one.body = body }
+        if let schedule = request.schedule { one.schedule = schedule }
+        if request.clearSchedule == true { one.schedule = nil }
+        if let hook = request.webhook, hook != one.webhook {
+            one.webhook = hook
+            one.webhookUrl = hook ? "https://demo.myco.example/hooks/\(id)" : nil
+            if hook {
+                seq += 1
+                secret = "whk_demo_\(seq)"
+            }
+        }
+        if request.rotateSecret == true, one.webhook {
+            seq += 1
+            secret = "whk_demo_\(seq)"
+        }
+        if let skip = request.skipIfBusy { one.skipIfBusy = skip }
+        if let enabled = request.enabled { one.enabled = enabled }
+        guard one.schedule != nil || one.webhook else {
+            throw HubError(error: "invalid_argument", message: "an automation needs a schedule or a webhook", status: 400)
+        }
+        one.nextRunAt = one.schedule != nil && one.enabled ? Date().addingTimeInterval(3_600) : nil
+        automationList[index] = one
+        return AutomationSaved(automation: one, webhookSecret: secret)
+    }
+
+    public func deleteAutomation(_ id: String) async throws {
+        try await checkAutomations()
+        automationList.remove(at: try place(of: id))
+        automationRuns[id] = nil
+    }
+
+    public func runAutomation(_ id: String) async throws -> AutomationRun {
+        try await checkAutomations()
+        let index = try place(of: id)
+        let one = automationList[index]
+        // An ordinary task from me, marked as the automation's.
+        var sent = Message(id: nextID(), from: Self.me, to: one.to, body: one.body, status: "queued", createdAt: Date())
+        sent.automation = id
+        messages.append(sent)
+        simulated[sent.id] = Date()
+        seq += 1
+        let run = AutomationRun(id: "arun_fake\(seq)", automationId: id, at: Date(), trigger: "manual", outcome: "sent", messageId: sent.id)
+        automationRuns[id, default: []].insert(run, at: 0)
+        automationList[index].lastRun = run
+        return run
+    }
+
+    /// How many times a join link is refused as a gateway in front of the
+    /// hub would (502), before one is made.
+    private var linkFailures = 0
+
+    public func setJoinLinkFailures(_ count: Int) {
+        linkFailures = count
+    }
+
     public func joinLink() async throws -> JoinLink {
         try await check()
+        if linkFailures > 0 {
+            linkFailures -= 1
+            throw HubError(error: "http_502", message: "502 Bad Gateway nginx", status: 502)
+        }
         return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
     }
 

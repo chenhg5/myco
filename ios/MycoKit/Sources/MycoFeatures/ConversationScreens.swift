@@ -32,6 +32,17 @@ struct AgentScreen: View {
                     }
                     .accessibilityIdentifier("conversation.title")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: name, project: nil)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel(L("更多", "More"))
+                    .accessibilityIdentifier("conversation.more")
+                }
             }
     }
 }
@@ -117,6 +128,11 @@ struct ProjectScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button(L("项目资料", "About this project"), systemImage: "doc.text") { router.push(.projectInfo(name)) }
+                    if let project = session.project(name), let lead = session.coordinator(of: project) {
+                        Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
+                            router.sheet = .export(agent: lead, project: name)
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -494,7 +510,9 @@ struct ConversationBody: View {
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
             if model.unreachable != nil {
-                StaleBanner(L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."))
+                StaleBanner(
+                    L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
+                    details: .of(model.unreachableDetail))
                     .accessibilityIdentifier("conversation.stale")
             }
         }
@@ -1029,9 +1047,8 @@ struct ConversationBody: View {
 
     private var bottom: some View {
         VStack(spacing: 0) {
-            if let problem = model.problem {
-                Text(problem).font(.footnote).foregroundStyle(MycoColor.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let failure = model.failure {
+                FailureLine(failure: failure)
                     .padding(.horizontal, Space.page).padding(.top, Space.s)
             }
             if let ids = deleted {
@@ -1129,6 +1146,9 @@ struct ConversationBody: View {
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
                 openLabel: L("看一下", "Look at"),
+                // The model and effort it runs with, switched here by
+                // whoever may. Out of the way while a call is on.
+                aside: call == nil ? session.runChoice(of: model.agent).map { AnyView(RunChoiceButton(agent: model.agent, choice: $0)) } : nil,
                 onSubmit: {
                     commits += 1
                     if canCall {

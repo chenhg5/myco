@@ -26,8 +26,11 @@ public protocol WorkspaceBook: Sendable {
 public enum JoinError: Error, Sendable, Equatable {
     /// The text is not a link that adds a workspace.
     case notALink
-    /// The hub refused (a used or expired link), or could not be reached.
+    /// The hub refused (a used or expired link).
     case refused(String)
+    /// The hub could not be reached, or answered too slowly: the link may
+    /// still be good. `detail`: the raw reason.
+    case unreachable(detail: String)
 }
 
 /// Joining and leaving workspaces: the one place that knows a workspace is
@@ -114,6 +117,7 @@ public struct Workspaces: WorkspaceBook {
             try await records.save(all)
             return record
         } catch let error as HubError {
+            if Failure.isTransient(error) { throw JoinError.unreachable(detail: Failure.of(error).detail ?? error.message) }
             throw JoinError.refused(error.message)
         }
     }

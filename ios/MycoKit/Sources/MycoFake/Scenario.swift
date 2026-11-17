@@ -29,6 +29,8 @@ public enum Scenario: Sendable {
         /// Tasks with no steps of their own: taken up in a session that
         /// files what it does under an earlier task.
         var silent: Set<String> = []
+        /// What is sent for me on a schedule, or when something calls.
+        var automations: [Automation] = []
     }
 
     func build(now: Date) -> World {
@@ -39,7 +41,11 @@ public enum Scenario: Sendable {
             Agent(
                 id: id, name: name, displayName: display, description: role,
                 binding: Binding(harness: cli, workdir: dir), createdAt: ago(days * 86_400),
-                machineId: "mach_studio", runtime: Runtime(cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5"))
+                // (a session in the cloud runs on no computer of mine)
+                machineId: cli.hasSuffix("-cloud") ? nil : "mach_studio",
+                runtime: Runtime(
+                    cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5", modelSource: "observed",
+                    effort: cli.hasPrefix("codex") ? "high" : nil))
         }
 
         let lead = agent("agt_lead0001", "cloud-lead", "协调者", "拆任务、派活、审查合入", cli: "claude-cloud", dir: "/home/user/myco", days: 12)
@@ -150,6 +156,24 @@ public enum Scenario: Sendable {
             ]
             // Having handed the review out, the coordinator ended its turn.
             world.turnEnded = ["m3"]
+        }
+        // Two automations, except where the page with none is looked at.
+        if self != .waiting {
+            world.automations = [
+                Automation(
+                    id: "aut_morning", name: "每天早上汇总", owner: "glenn", to: lead.name,
+                    body: "看一下昨天新开的 issue 和 PR，挑出要紧的，在这里回我一份清单。",
+                    schedule: AutomationSchedule(cron: "0 9 * * 1-5", tz: TimeZone.current.identifier), skipIfBusy: true, enabled: true,
+                    nextRunAt: ago(-50_000),
+                    lastRun: AutomationRun(id: "arun_1", automationId: "aut_morning", at: ago(36_000), trigger: "schedule", outcome: "sent", messageId: "m1")),
+                Automation(
+                    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", to: backend.name,
+                    body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
+                    webhook: true, webhookUrl: "https://demo.myco.example/hooks/aut_ci", skipIfBusy: true, enabled: false,
+                    lastRun: AutomationRun(
+                        id: "arun_2", automationId: "aut_ci", at: ago(172_800), trigger: "webhook", outcome: "skipped",
+                        error: "the last task is not finished")),
+            ]
         }
         if self == .session {
             world.messages += [

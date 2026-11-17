@@ -199,7 +199,7 @@ private struct WorkspaceChrome: ViewModifier {
             // The list fades in over them when it comes.
             .animation(.easeOut(duration: 0.22), value: session.loadedAt == nil)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let problem = session.problem { StaleBanner(staleText(problem)) }
+                if let problem = session.problem { StaleBanner(staleText(problem), details: .of(session.problemDetail)) }
             }
             // The app's own tab bar, one row across; the keyboard covers it
             // while searching.

@@ -23,11 +23,35 @@ public struct Runtime: Codable, Sendable, Hashable {
     public var cli: String?
     public var cliVersion: String?
     public var model: String?
+    /// Where the model comes from: app (its run settings), self (it said
+    /// so itself), configured, observed, default, cli-config, provider.
+    public var modelSource: String?
+    /// The reasoning effort its CLI runs with (hubs from v0.19.5).
+    public var effort: String?
+    public var effortSource: String?
 
-    public init(cli: String? = nil, cliVersion: String? = nil, model: String? = nil) {
+    public init(
+        cli: String? = nil, cliVersion: String? = nil, model: String? = nil, modelSource: String? = nil,
+        effort: String? = nil, effortSource: String? = nil
+    ) {
         self.cli = cli
         self.cliVersion = cliVersion
         self.model = model
+        self.modelSource = modelSource
+        self.effort = effort
+        self.effortSource = effortSource
+    }
+}
+
+/// The model and effort chosen for an agent's runner; "" or absent follows
+/// its computer's own setting (`api.RunSettings`, hubs from v0.19.5).
+public struct RunSettings: Codable, Sendable, Hashable {
+    public var model: String?
+    public var effort: String?
+
+    public init(model: String? = nil, effort: String? = nil) {
+        self.model = model
+        self.effort = effort
     }
 }
 
@@ -45,14 +69,19 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable {
     /// agent | shell | human | machine (older hubs: absent, see the harness).
     public var kind: String?
     public var owner: String?
+    /// The member who added it, by id.
+    public var ownerId: String?
     public var machineId: String?
     public var runtime: Runtime?
+    /// What was chosen for its runner; absent when nothing was.
+    public var runSettings: RunSettings?
     @LossyList public var labels: [String]
 
     public init(
         id: String, name: String, displayName: String? = nil, avatar: String? = nil, statusText: String? = nil,
         description: String = "", binding: Binding = Binding(), online: Bool = true, createdAt: Date = Date(),
-        kind: String? = "agent", owner: String? = nil, machineId: String? = nil, runtime: Runtime? = nil, labels: [String] = []
+        kind: String? = "agent", owner: String? = nil, machineId: String? = nil, runtime: Runtime? = nil, labels: [String] = [],
+        ownerId: String? = nil, runSettings: RunSettings? = nil
     ) {
         self.id = id
         self.name = name
@@ -68,6 +97,8 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable {
         self.machineId = machineId
         self.runtime = runtime
         self.labels = labels
+        self.ownerId = ownerId
+        self.runSettings = runSettings
     }
 }
 
@@ -144,6 +175,8 @@ public struct Message: Codable, Sendable, Hashable, Identifiable {
     /// On a task: what its recipient thinks I may want to say next, one
     /// short line (hubs from v0.19.15); the input offers it.
     public var suggest: String?
+    /// The automation that sent it for its owner, when one did.
+    public var automation: String?
     @LossyList public var attachments: [Attachment]
 
     public init(
@@ -403,5 +436,135 @@ public struct Whoami: Codable, Sendable, Hashable {
     /// How messages sent from this app are signed.
     public var consoleSender: String {
         "@console:" + (member?.name ?? "owner")
+    }
+}
+
+/// When an automation sends: a cron of five fields and its time zone
+/// (an IANA name; empty is UTC).
+public struct AutomationSchedule: Codable, Sendable, Hashable {
+    public var cron: String
+    public var tz: String?
+
+    public init(cron: String, tz: String? = nil) {
+        self.cron = cron
+        self.tz = tz
+    }
+}
+
+/// One time an automation ran.
+public struct AutomationRun: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var automationId: String?
+    public var at: Date
+    /// schedule | webhook | manual
+    public var trigger: String
+    /// sent | skipped | failed
+    public var outcome: String
+    public var messageId: String?
+    /// Why it was skipped or failed (short, English).
+    public var error: String?
+
+    public init(id: String, automationId: String? = nil, at: Date, trigger: String, outcome: String, messageId: String? = nil, error: String? = nil) {
+        self.id = id
+        self.automationId = automationId
+        self.at = at
+        self.trigger = trigger
+        self.outcome = outcome
+        self.messageId = messageId
+        self.error = error
+    }
+}
+
+/// A task sent for its owner to one agent, on a schedule or when an
+/// outside system calls its webhook. It runs on the hub (from v0.19.22).
+public struct Automation: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var owner: String?
+    public var to: String
+    public var project: String?
+    /// The message; `{{payload}}` is replaced by what a webhook call sends.
+    public var body: String
+    public var schedule: AutomationSchedule?
+    public var webhook: Bool
+    /// Where an outside system posts (the secret is not in it).
+    public var webhookUrl: String?
+    public var skipIfBusy: Bool
+    public var enabled: Bool
+    public var nextRunAt: Date?
+    public var lastRun: AutomationRun?
+
+    public init(
+        id: String, name: String, owner: String? = nil, to: String, project: String? = nil, body: String,
+        schedule: AutomationSchedule? = nil, webhook: Bool = false, webhookUrl: String? = nil, skipIfBusy: Bool = true,
+        enabled: Bool = true, nextRunAt: Date? = nil, lastRun: AutomationRun? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.owner = owner
+        self.to = to
+        self.project = project
+        self.body = body
+        self.schedule = schedule
+        self.webhook = webhook
+        self.webhookUrl = webhookUrl
+        self.skipIfBusy = skipIfBusy
+        self.enabled = enabled
+        self.nextRunAt = nextRunAt
+        self.lastRun = lastRun
+    }
+}
+
+/// What creates or changes an automation: a field left out stays as it is.
+public struct AutomationRequest: Codable, Sendable, Hashable {
+    public var name: String?
+    public var to: String?
+    public var body: String?
+    public var schedule: AutomationSchedule?
+    /// Takes its schedule away (a change only).
+    public var clearSchedule: Bool?
+    /// Turns its webhook on (a new secret) or off.
+    public var webhook: Bool?
+    /// A new secret for its webhook; the old one stops working.
+    public var rotateSecret: Bool?
+    public var skipIfBusy: Bool?
+    public var enabled: Bool?
+
+    public init(
+        name: String? = nil, to: String? = nil, body: String? = nil, schedule: AutomationSchedule? = nil, clearSchedule: Bool? = nil,
+        webhook: Bool? = nil, rotateSecret: Bool? = nil, skipIfBusy: Bool? = nil, enabled: Bool? = nil
+    ) {
+        self.name = name
+        self.to = to
+        self.body = body
+        self.schedule = schedule
+        self.clearSchedule = clearSchedule
+        self.webhook = webhook
+        self.rotateSecret = rotateSecret
+        self.skipIfBusy = skipIfBusy
+        self.enabled = enabled
+    }
+}
+
+/// What creating or changing one answers. `webhookSecret` is there only
+/// when a secret was just made: it is shown once.
+public struct AutomationSaved: Codable, Sendable, Hashable {
+    public var automation: Automation
+    public var webhookSecret: String?
+
+    public init(automation: Automation, webhookSecret: String? = nil) {
+        self.automation = automation
+        self.webhookSecret = webhookSecret
+    }
+}
+
+/// An automation with its last runs, newest first.
+public struct AutomationDetail: Codable, Sendable, Hashable {
+    public var automation: Automation
+    @LossyList public var runs: [AutomationRun]
+
+    public init(automation: Automation, runs: [AutomationRun] = []) {
+        self.automation = automation
+        self.runs = runs
     }
 }

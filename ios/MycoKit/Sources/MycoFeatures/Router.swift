@@ -23,12 +23,16 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     case workspace
     case memberCard(String)
     case addAgent
+    /// Writing a conversation out as a file: with this agent, in this
+    /// project's page or its own.
+    case export(agent: String, project: String?)
 
     public var id: String {
         switch self {
         case .workspace: return "workspace"
         case .memberCard(let name): return "member:" + name
         case .addAgent: return "add"
+        case .export(let agent, let project): return "export:" + agent + ":" + (project ?? "")
         }
     }
 }

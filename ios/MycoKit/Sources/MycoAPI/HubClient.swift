@@ -122,6 +122,47 @@ public struct HubClient: HubAPI {
         return try Self.decode(VoiceDocument.self, from: data)
     }
 
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        let safe = agent.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? agent
+        // (no `access`: what it may do on its computer stays as it is)
+        let data = try await call(
+            "PUT", "/v1/agents/\(safe)/run-settings", body: HubJSON.encoder().encode(["model": model, "effort": effort]))
+        return try Self.decode(Agent.self, from: data)
+    }
+
+    public func automations() async throws -> [Automation] {
+        let envelope: AutomationsEnvelope = try await get("/v1/console/automations", timeout: Self.pollTimeout)
+        return envelope.automations
+    }
+
+    public func automation(_ id: String) async throws -> AutomationDetail {
+        try await get("/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("POST", "/v1/console/automations", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved {
+        let data = try await call("PATCH", "/v1/console/automations/\(Self.segment(id))", body: HubJSON.encoder().encode(request))
+        return try Self.decode(AutomationSaved.self, from: data)
+    }
+
+    public func deleteAutomation(_ id: String) async throws {
+        _ = try await call("DELETE", "/v1/console/automations/\(Self.segment(id))")
+    }
+
+    public func runAutomation(_ id: String) async throws -> AutomationRun {
+        let data = try await call("POST", "/v1/console/automations/\(Self.segment(id))/run")
+        return try Self.decode(AutomationRun.self, from: data)
+    }
+
+    /// An id as one segment of a path.
+    private static func segment(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? id
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"
@@ -196,13 +237,33 @@ public struct HubClient: HubAPI {
         }
         guard let http = response as? HTTPURLResponse else { throw HubError.unreachable("no HTTP response") }
         guard (200..<300).contains(http.statusCode) else {
-            if let error = try? HubJSON.decoder().decode(HubError.self, from: data) { throw error }
-            throw HubError(error: "http_\(http.statusCode)", message: "The workspace answered \(http.statusCode).")
+            if var error = try? HubJSON.decoder().decode(HubError.self, from: data) {
+                error.status = http.statusCode
+                throw error
+            }
+            // A gateway's own page (no JSON) still says why: its first
+            // words are kept, for whoever looks at the details.
+            let page = http.statusCode >= 500 ? Self.words(ofPage: data) : ""
+            throw HubError(
+                error: "http_\(http.statusCode)", message: page.isEmpty ? "The workspace answered \(http.statusCode)." : page,
+                status: http.statusCode)
         }
         return data
     }
 }
 
+extension HubClient {
+    /// The first words of a page that is not the hub's JSON, without its tags.
+    public static func words(ofPage data: Data) -> String {
+        guard let text = String(data: data.prefix(4_000), encoding: .utf8) else { return "" }
+        let plain = text.replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return String(plain.prefix(300))
+    }
+}
+
+struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }
 struct RecentEnvelope: Decodable { @LossyList var items: [RecentItem] }
 struct ExchangeEnvelope: Decodable {

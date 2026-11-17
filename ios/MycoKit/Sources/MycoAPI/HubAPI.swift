@@ -158,6 +158,28 @@ public protocol HubAPI: Sendable {
     /// `PUT /v1/console/voice`: keeps them, unless the hub holds newer
     /// ones; answers what it holds then.
     func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument
+    /// `PUT /v1/agents/{name}/run-settings`: the model and effort its
+    /// runner starts it with from its next run ("" follows its computer's
+    /// setting). For whoever owns the agent or manages the workspace. A
+    /// workspace from before v0.19.5 answers `not_found`.
+    func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `GET /v1/console/automations`: mine, or everyone's for whoever
+    /// manages the workspace. A workspace from before v0.19.22 answers
+    /// `not_found`.
+    func automations() async throws -> [Automation]
+    /// `GET /v1/console/automations/{id}`: one, with its last runs.
+    func automation(_ id: String) async throws -> AutomationDetail
+    /// `POST /v1/console/automations`: `name`, `to`, `body`, and a
+    /// schedule or a webhook. It sends from my console address.
+    func createAutomation(_ request: AutomationRequest) async throws -> AutomationSaved
+    /// `PATCH /v1/console/automations/{id}`: what is left out stays.
+    func updateAutomation(_ id: String, _ request: AutomationRequest) async throws -> AutomationSaved
+    /// `DELETE /v1/console/automations/{id}`: its runs go too; what it
+    /// sent stays.
+    func deleteAutomation(_ id: String) async throws
+    /// `POST /v1/console/automations/{id}/run`: sends it once now, also
+    /// when it is turned off.
+    func runAutomation(_ id: String) async throws -> AutomationRun
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink

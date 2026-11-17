@@ -18,7 +18,8 @@ import MycoStore
 /// with files picked for that agent, `-myco-dictation scripted|denied`
 /// replaces the microphone with a script, `-myco-latency <ms>` makes the
 /// demo answer as slowly as a bad connection, `-myco-notifier
-/// recorded` keeps notifications from reaching the system, and
+/// recorded` keeps notifications from reaching the system, `-myco-trouble
+/// links` makes the demo's first join link fail as a gateway would, and
 /// `-myco-voice scripted|denied` makes a voice call a script (a microphone
 /// that hears two sentences, a model that answers them, a silent voice);
 /// `-myco-voice probe` opens a call's real microphone and speaker alone
@@ -104,7 +105,13 @@ struct MycoApp: App {
         // `-myco-latency <ms>`: every answer of the demo takes this long,
         // to see what loading looks like on a slow connection.
         let latency = Duration.milliseconds(UserDefaults.standard.integer(forKey: "myco-latency"))
-        let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: FakeHub(scenario: scenario, latency: latency))
+        let hub = FakeHub(scenario: scenario, latency: latency)
+        // `-myco-trouble links`: the demo's first join link fails as a
+        // gateway in front of the workspace would, to see what is said.
+        if UserDefaults.standard.string(forKey: "myco-trouble") == "links" {
+            Task { await hub.setJoinLinkFailures(1) }
+        }
+        let session = WorkspaceSession(id: AppModel.demoID, name: "演示工作区", hub: hub)
         // `-myco-attach <agent>`: the demo starts with a picture and a
         // file picked for that agent, to see and test the input with files
         // without going through the system's pickers.
