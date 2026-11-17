@@ -11,6 +11,10 @@ public enum Scenario: Sendable {
     /// The team, with runs that are open but not at work: one set aside,
     /// one waiting for work it handed out.
     case waiting
+    /// The team, with an agent in one long session (it took my second
+    /// message and goes on, its steps still filed under the first), and a
+    /// message that was never delivered.
+    case session
     /// Joined, but nobody is here yet.
     case empty
 
@@ -22,6 +26,9 @@ public enum Scenario: Sendable {
         var files: [(file: HubFile, data: Data)] = []
         /// Tasks whose session ended its turn: open, but waiting.
         var turnEnded: Set<String> = []
+        /// Tasks with no steps of their own: taken up in a session that
+        /// files what it does under an earlier task.
+        var silent: Set<String> = []
     }
 
     func build(now: Date) -> World {
@@ -143,6 +150,25 @@ public enum Scenario: Sendable {
             ]
             // Having handed the review out, the coordinator ended its turn.
             world.turnEnded = ["m3"]
+        }
+        if self == .session {
+            world.messages += [
+                // The notes helper, in one long session: it took the second
+                // message and goes on; its steps and what it reports still
+                // go to the first, which stays open.
+                Message(id: "s1", from: me, to: helper.name, body: "把第一场会议的录音整理成结论。", status: "acked",
+                        createdAt: ago(900), updatedAt: ago(880), activeAt: ago(100)),
+                Message(id: "s2", from: me, to: helper.name, body: "第二场也一起整理，放进同一份里。", status: "acked",
+                        createdAt: ago(300), updatedAt: ago(290), activeAt: ago(290)),
+                Message(id: "s1p", from: helper.name, to: me, threadId: "s1", replyTo: "s1", type: "progress",
+                        body: "第二场的录音也拿到了，正在一起整理。", status: "done", createdAt: ago(200)),
+                // Ops took this several times and never began: the
+                // workspace gave up on it.
+                Message(id: "x1", from: me, to: ops.name, body: "把 Hub 昨天的日志打包发我。", status: "failed",
+                        error: "delivery attempts exhausted: recipient pulled but never acknowledged",
+                        createdAt: ago(1_200), updatedAt: ago(600)),
+            ]
+            world.silent = ["s2"]
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,

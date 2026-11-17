@@ -28,6 +28,8 @@ public actor FakeHub: HubAPI {
     private var hiddenIDs: [String] = []
     /// Tasks whose session ended its turn (open, but waiting).
     private var turnEnded: Set<String> = []
+    /// Tasks with no steps of their own (see Scenario.World.silent).
+    private var silent: Set<String> = []
     /// Acts like a hub from before messages could be taken out of view.
     private var tooOldForHidden = false
     /// Acts like a hub from before files could be sent from the app.
@@ -42,6 +44,7 @@ public actor FakeHub: HubAPI {
         messages = world.messages
         files = Dictionary(world.files.map { ($0.file.id, $0) }, uniquingKeysWith: { first, _ in first })
         turnEnded = world.turnEnded
+        silent = world.silent
     }
 
     public func setLatency(_ value: Duration) {
@@ -199,7 +202,7 @@ public actor FakeHub: HubAPI {
         }
         // A task still being worked on shows its steps one by one.
         var shown = Self.script.count
-        if task.status == "queued" {
+        if task.status == "queued" || silent.contains(messageID) {
             shown = 0
         } else if task.isOpen, let sentAt = simulated[messageID] {
             shown = min(shown, Int(max(0, Date().timeIntervalSince(sentAt) - Self.ackAfter) / 0.8))
