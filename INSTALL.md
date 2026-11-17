@@ -710,6 +710,35 @@ myco thread export --id <对话 ID> --as jsonl --steps > chat.jsonl  # JSON Line
 - 开了端到端加密的对话，能解开的消息按明文写进文件，解不开的标成「无法解密」。文件只有自己能读（权限 600），转发前留意内容。
 - 格式是 myco 自己的，不兼容 Claude Code、Codex 的会话文件：那些记录的是一个 agent 的模型和工具调用，myco 记录的是人和 agent 之间的消息。
 
+### 4.16 自动化：定时任务和 webhook
+
+自动化让 Hub 按时间表、或在 webhook 被调用时，以你的名义（`@console:<你>`）给某个 agent 发一条任务。它跑在 Hub 上，你的电脑关着也照常；agent 照常被唤醒，回答出现在你和它的对话里。App 里在侧栏「自动化」设置；命令行用管理员令牌（和 `myco member`、`myco audit` 一样）：
+
+```bash
+# 工作日早上 9 点（上海时间）让 pm 写日报；上一条还没做完就跳过这次
+myco automation create --name 日报 --to pm --body "写今天的日报" --cron "0 9 * * 1-5" --tz Asia/Shanghai --skip-if-busy
+# 一个 webhook：调用时请求体会替换消息里的 {{payload}}
+myco automation create --name "CI 失败" --to dev --body "CI 失败了，看一下原因：{{payload}}" --webhook
+myco automation list
+myco automation show --id <aut_...>      # 最近 50 次运行：发出 / 跳过 / 失败及原因
+myco automation run --id <aut_...>       # 马上跑一次
+myco automation update --id <aut_...> --disabled
+myco automation update --id <aut_...> --rotate-secret   # 换一个 webhook 密钥，旧的立即失效
+myco automation remove --id <aut_...>    # 它发过的消息会保留
+```
+
+`--webhook` 和 `--rotate-secret` 只打印一次 webhook 地址和密钥（`whk_…`），Hub 只存它的哈希，记不住就再换一个。调用方式（比如在 CI 里）：
+
+```bash
+curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bearer $MYCO_WEBHOOK_SECRET" --data-binary @failure.log
+```
+
+- 请求体最多 16 KiB，原样放进消息（JSON 也照原样）；消息里没有 `{{payload}}` 时接在消息末尾。
+- 密钥不对、自动化已关闭或没有 webhook，一律返回 404；每个自动化每小时最多 30 次，超过返回 429，`Retry-After` 是要等的秒数。
+- cron 是 5 段：分 时 日 月 周（0 和 7 都是周日），支持 `*`、`a-b`、`a,b`、`*/n`。相邻两次至少隔 10 分钟。Hub 停机期间错过的时间点，回来后只补跑一次。
+- 每个工作区最多 200 个自动化。成员只能看到和修改自己的，所有者和管理员能看到全部；创建、修改、删除和手动运行都记入审计。
+- 消息由 Hub 生成，所以即使开了端到端加密，自动化发出的消息也是明文。
+
 ## 5. 接入后的自检
 
 ```bash

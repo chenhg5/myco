@@ -130,7 +130,7 @@ func messageDTO(m *domain.Message) api.Message {
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
-		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest,
+		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest, Automation: m.Automation,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
@@ -177,6 +177,7 @@ var statusByCode = map[domain.ErrorCode]int{
 	domain.CodePermissionDenied: http.StatusForbidden,
 	domain.CodeUnauthenticated:  http.StatusUnauthorized,
 	domain.CodeInternal:         http.StatusInternalServerError,
+	domain.CodeRateLimited:      http.StatusTooManyRequests,
 }
 
 func writeError(w http.ResponseWriter, err error) {
@@ -190,7 +191,7 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 	writeJSON(w, status, api.Error{
 		Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion,
-		Retryable: de.Code == domain.CodeInternal,
+		Retryable: de.Code == domain.CodeInternal || de.Code == domain.CodeRateLimited,
 	})
 }
 

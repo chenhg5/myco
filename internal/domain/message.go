@@ -104,9 +104,11 @@ type Message struct {
 	// Suggest, on a task, is what its recipient thinks the sender may want
 	// to say next ("" for none): the app offers it in the input, Tab takes
 	// it. Sealed like a body when end-to-end encryption is on.
-	Suggest   string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Suggest string
+	// Automation is the automation that sent it ("" for none).
+	Automation string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // NewMessage builds a queued message. An empty threadID starts a new thread.

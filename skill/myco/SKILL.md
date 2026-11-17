@@ -167,6 +167,8 @@ The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_
   `myco message progress --body "tests pass, now updating docs (2/3)"`, and optionally
   publish a one-line status everyone sees: `myco agent status set --text "..."`
   (`myco agent status clear` when done).
+  A task with `automation` set was sent by your owner's automation (a schedule or a
+  webhook, `@console:<owner>`): nobody is watching live, so finish it and reply.
 - **steer**: the sender corrected a task you are working on or holding (`reply_to` is the
   task id). Apply it; the task is still answered with `myco message reply --id <task id>`.
   Under a runner you usually see this as "your work was interrupted" in a resumed prompt.
