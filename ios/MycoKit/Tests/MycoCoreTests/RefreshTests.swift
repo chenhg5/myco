@@ -121,6 +121,66 @@ struct RefreshTests {
         #expect(await hub.allMessages().contains { $0.type == "steer" && $0.body == "标题也看看" })
     }
 
+    @Test func aTaskThatWasNotDeliveredCanBeSentAgain() async {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        // The workspace gave up on a task of mine: taken, never started on.
+        let file = try? await hub.upload(Data([1, 2, 3]), name: "p.png", contentType: "image/png")
+        let picture = Attachment(fileId: file?.id ?? "", name: "p.png", size: 3, contentType: "image/png")
+        await hub.add(Message(
+            id: "lost", from: session.me, to: Self.agent, threadId: "lost-thread", body: "把首页的标题改短", status: "failed",
+            error: "delivery attempts exhausted: recipient pulled but never acknowledged", createdAt: Date().addingTimeInterval(-60),
+            attachments: [picture]))
+        let model = session.conversation(with: Self.agent)
+        await model.reload()
+        guard case .failure(let reason)? = model.items.first(where: { $0.id == "lost.failed" })?.kind else {
+            Issue.record("the failed task says so under it")
+            return
+        }
+        // Said in words, not as the workspace put it.
+        AppLanguage.$forced.withValue(.en) {
+            #expect(FailureWords.short(reason) == "Not delivered")
+            #expect(FailureWords.long(reason).hasPrefix("Not delivered: it picked this up several times"))
+            #expect(!FailureWords.long(reason).contains("exhausted"))
+            #expect(FailureWords.short("lease expired") == "Timed out")
+            #expect(FailureWords.long("request timed out after 30s") == "Timed out: request timed out after 30s")
+            #expect(FailureWords.long("the runner crashed") == "Failed: the runner crashed")
+            #expect(FailureWords.long("") == "Failed")
+            #expect(FailureWords.line(reason) == "Not delivered: it picked this up several times but never started on it.")
+            #expect(FailureWords.line("the runner crashed") == "Failed: the runner crashed")
+        }
+
+        // Sent again: the same words and file, to the same agent, in the
+        // same thread, as a new task. The failed one stays, marked.
+        #expect(model.canSendAgain("lost"))
+        let before = await hub.allMessages().count
+        await model.sendAgain("lost")
+        let all = await hub.allMessages()
+        #expect(all.count == before + 1)
+        let again = all.last
+        #expect(again?.id != "lost")
+        #expect(again?.body == "把首页的标题改短")
+        #expect(again?.to == Self.agent)
+        #expect(again?.threadId == "lost-thread")
+        #expect(again?.attachments.map(\.fileId) == [picture.fileId])
+        #expect(model.resending == nil)
+        #expect(model.items.contains { $0.id == "lost.failed" })
+        #expect(model.items.contains { $0.id == again?.id })
+
+        // The workspace does not answer: nothing more is sent, and why is said.
+        await hub.setUnreachable(true)
+        await model.sendAgain("lost")
+        #expect(model.problem != nil)
+        // Nothing that is not a failed task of mine is sent again.
+        await hub.setUnreachable(false)
+        let count = await hub.allMessages().count
+        await model.sendAgain("nope")
+        #expect(!model.canSendAgain("nope"))
+        #expect(!model.canSendAgain(again?.id ?? ""), "the new one has not failed")
+        #expect(await hub.allMessages().count == count)
+    }
+
     @Test func aSendThatFailsGivesTheWordsBack() async {
         let (model, hub) = await makeConversation()
         await hub.setUnreachable(true)

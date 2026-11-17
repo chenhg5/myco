@@ -133,7 +133,7 @@ public enum ConversationBuilder {
     public static func items(
         me: String, agent: String, messages all: [Message], handoffs: [Handoff] = [], processes: Set<String> = [],
         tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:], paused: Set<String> = [],
-        activity: [String: Date] = [:], ended: Set<String> = [],
+        activity: [String: Date] = [:], ended: Set<String> = [], windows: RunWindows = RunWindows(),
         status: (String) -> AgentStatus?, now: Date
     ) -> [ConversationItem] {
         var items: [ConversationItem] = []
@@ -272,8 +272,9 @@ public enum ConversationBuilder {
                     said = split.rest
                 }
                 // Its task's run is shown: the update is in the run, after
-                // the step it came after.
-                if processes.contains(taskID) { continue }
+                // the step it came after. (In a long session that is the
+                // run under my newer message, when it came after that.)
+                if processes.contains(windows.home(of: taskID, at: m.createdAt)) { continue }
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
@@ -528,12 +529,14 @@ public enum ConversationBuilder {
     /// What a task's run takes in besides its steps: the updates the agent
     /// reported for it (without the checklist that is its plan), and what
     /// was added to it, each with when. Oldest first.
-    public static func runExtras(of taskID: String, agent: String, messages: [Message]) -> (reports: [RunReport], added: [RunReport]) {
+    public static func runExtras(
+        of taskID: String, agent: String, messages: [Message], windows: RunWindows = RunWindows()
+    ) -> (reports: [RunReport], added: [RunReport]) {
         var reports: [RunReport] = []
         var added: [RunReport] = []
         for m in messages.sorted(by: { $0.createdAt < $1.createdAt }) {
             switch m.type {
-            case "progress" where m.from == agent && (m.replyTo ?? m.threadId) == taskID:
+            case "progress" where m.from == agent && windows.home(of: m.replyTo ?? m.threadId, at: m.createdAt) == taskID:
                 var said = text(of: m)
                 if let split = RunProcess.splitPlan(m.body) {
                     if split.rest.isEmpty { continue }

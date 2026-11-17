@@ -65,6 +65,7 @@ Before you finish a change, run `make vet` and `make test`. Run `make smoke` whe
 - **App UI.** New pages, components and dialogs in `web/src/app` follow `docs/design/app-ui.md`: use the existing classes and components it lists, and run its checklist (`npm run test:ui`, light and dark, two widths) before you finish.
 - **Releases.** Do not touch `VERSION`. Bumping it on `main` publishes a release. Only maintainers do that, and only when they ask for it.
   When a release is asked for, add its section to `CHANGELOG.md` (`## vX.Y.Z`, newest first, user-facing changes in Chinese) in the same commit as `VERSION`: the release workflow publishes that section as the release notes.
+  The steps are in [docs/release.md](docs/release.md) and the `myco-release` skill (`.claude/skills/myco-release/SKILL.md`).
 - **Windows.** CI builds and tests on native Windows too. Keep OS-specific code in `_unix.go`, `_windows.go` or `_other.go` files. Tests that need a POSIX shell must skip themselves on Windows.
 - **CLI design.**
   - Commands are `noun verb` with long flags.

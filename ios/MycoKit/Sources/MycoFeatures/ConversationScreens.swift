@@ -891,7 +891,17 @@ struct ConversationBody: View {
         case .pastProgress(let texts):
             PastProgress(title: L("\(texts.count) 条进展", texts.count == 1 ? "1 update" : "\(texts.count) updates"), texts: texts)
         case .failure(let reason):
-            NoticeLine(.failed, reason.isEmpty ? L("没做成", "Did not finish") : L("没做成：\(reason)", "Did not finish: \(reason)"))
+            // What happened, in words; and a task of mine that failed can
+            // be sent again with one tap.
+            let taskID = item.id.hasSuffix(".failed") ? String(item.id.dropLast(".failed".count)) : item.id
+            let sending = model.resending == taskID
+            NoticeLine(
+                .failed, FailureWords.long(reason),
+                actions: !model.canSendAgain(taskID) ? [] : [.init(sending ? L("正在发送…", "Sending…") : L("重新发送", "Send again")) {
+                    guard model.resending == nil else { return }
+                    Task { await model.sendAgain(taskID) }
+                }])
+            .accessibilityIdentifier("message.failed")
         case .stopped:
             NoticeLine(.idle, L("已停止", "Stopped"))
         case .status(let state, _):
