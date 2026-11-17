@@ -255,6 +255,28 @@ CREATE TABLE IF NOT EXISTS project_docs (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (project, name)
 );
+CREATE TABLE IF NOT EXISTS pages (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  project    TEXT NOT NULL DEFAULT '',
+  publisher  TEXT NOT NULL DEFAULT '',
+  owner      TEXT NOT NULL DEFAULT '',
+  latest     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS page_versions (
+  page    TEXT NOT NULL,
+  n       INTEGER NOT NULL,
+  blob    TEXT NOT NULL,
+  sha256  TEXT NOT NULL DEFAULT '',
+  size    INTEGER NOT NULL DEFAULT 0,
+  entry   TEXT NOT NULL DEFAULT 'index.html',
+  files   INTEGER NOT NULL DEFAULT 0,
+  by_name TEXT NOT NULL DEFAULT '',
+  at      INTEGER NOT NULL,
+  PRIMARY KEY (page, n)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 

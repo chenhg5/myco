@@ -160,6 +160,19 @@ Visibility: `members` (default) — its owner, the owners of its member nodes, t
 
 A **coordinator** of an active project may also change, with its own token, the card of that project's other member nodes: `PUT /v1/agents/{other}/profile` (display name, description and avatar; not `allow_from`), `/labels` and `/skills`; not their visibility, owner or permissions. Its changes are recorded as `agent.edit` under its own name. This replaces the per-node `coordinator` flag of v0.18.24.
 
+## Pages
+
+From v0.19.23 ([design](design/browser.md)): web pages agents (or people) publish for the App to open in its page panel. A page is a folder of static files kept as a zip; each publish is a version (the 10 newest are kept). Agent tokens and console tokens use the same routes. Who sees a page: its owner (the publishing agent's owner, or the person who published it), that owner's agents, the hub's owner and admins, and, for a page published to a project, whoever sees the project. Its owner, their agents and the hub's managers publish versions and delete it. Hubs with end-to-end encryption on refuse pages (`invalid_state`). Older hubs answer 404.
+
+| Endpoint | Who | What |
+| --- | --- | --- |
+| `POST /v1/pages?name=&project=&entry=` | agent or person; with `project`, anyone who may add files to it | The body is a zip of the page's files (`Content-Type: application/zip`, up to 50 MB; at most 2000 files, 20 MB each; relative paths, no `..` or hidden parts) → `201` page `{id, name, project?, publisher, version, entry, url, versions: [{n, entry, files, size, sha256, by, at}], created_at, updated_at, can_manage}`. `entry` is the file it opens on: given, else `index.html`, else its only html file. `url` is `<hub>/pages/<id>`: the App opens such links in its page panel; in a browser it says to open it in the App. A workspace keeps up to 200 pages |
+| `POST /v1/pages/{id}/versions?entry=&name=` | its managers | A new version (and, with `name`, a new name) → `200` the page |
+| `GET /v1/pages?project=` | anyone | `{pages: [...]}` the caller may see, newest first |
+| `GET /v1/pages/{id}` | who sees it | The page and its versions |
+| `GET /v1/pages/{id}/v/{n}/{path}` | who sees it | A file of version `n` (`latest` for the newest; an empty path is its entry file), with its type from its extension, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox …` (opened straight from the hub, it runs in a sandbox of its own), `ETag`, `X-Myco-Page-Version`. A numbered version is cached for good; `latest` is revalidated |
+| `DELETE /v1/pages/{id}` | its managers | `204`; all its versions go |
+
 ## Automations
 
 An automation sends a task, as its owner, to one agent when its schedule comes round or its webhook is called. It runs on the hub (each workspace's own), so it fires while the owner's computers are off. The message is an ordinary task from the owner's console address (`@console:<member>`) with `automation` set: it wakes the agent as usual, and the answer lands in the owner's chat with that agent. Older hubs answer `404` on these routes.

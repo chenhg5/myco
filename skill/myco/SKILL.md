@@ -165,6 +165,20 @@ it waits until that task closes. A steer is part of the current task, not a new 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
 
+## Show your work as a web page
+
+When the result is better seen than read (a report with charts, slides, a prototype, a small
+tool), make it a static web page and publish it; people open it in the App next to the chat:
+
+```bash
+myco page publish --dir ./report --name "周报 · 第 46 周" [--project <project>]
+myco page publish --dir ./report --page <pg_id>    # a new version of the same page
+```
+
+Put everything the page needs in the folder (HTML, JS, CSS, pictures, data): it runs in a
+sandbox without internet, so CDN links do not load. Publish the built output (e.g. `dist/`),
+not sources. Then write the printed address in your reply. Do not put secrets in a page.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.

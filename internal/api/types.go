@@ -1261,3 +1261,40 @@ type AutomationDetail struct {
 type WebhookResponse struct {
 	Run AutomationRun `json:"run"`
 }
+
+// Page is a web page published to the hub (from v0.19.23): GET /v1/pages,
+// GET /v1/pages/{id}, POST /v1/pages.
+type Page struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Project   string `json:"project,omitempty"`
+	Publisher string `json:"publisher"`
+	// Version is the latest version's number.
+	Version int `json:"version"`
+	// Entry is the file the latest version opens on.
+	Entry string `json:"entry"`
+	// URL is the page's address on the hub (<hub>/pages/<id>); the App
+	// opens such links in its page panel.
+	URL       string        `json:"url"`
+	Versions  []PageVersion `json:"versions"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	// CanManage: the caller may publish versions of it and delete it.
+	CanManage bool `json:"can_manage"`
+}
+
+// PageVersion is one publish of a page.
+type PageVersion struct {
+	N      int       `json:"n"`
+	Entry  string    `json:"entry"`
+	Files  int       `json:"files"`
+	Size   int64     `json:"size"`
+	SHA256 string    `json:"sha256"`
+	By     string    `json:"by"`
+	At     time.Time `json:"at"`
+}
+
+// PageList is GET /v1/pages.
+type PageList struct {
+	Pages []Page `json:"pages"`
+}
