@@ -46,6 +46,8 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public var files: [Attachment] = []
     /// On a task of mine that has not started: a few words under it.
     public var receipt: TaskReceipt?
+    /// An automation sent it for me (marked 自动).
+    public var automated = false
 }
 
 /// What is said under a task of mine that the agent has not started on,
@@ -215,7 +217,7 @@ public enum ConversationBuilder {
                 }
                 items.append(.init(
                     id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: false, by: by), files: files(of: m),
-                    receipt: receipt(of: m)))
+                    receipt: receipt(of: m), automated: !(m.automation ?? "").isEmpty))
                 guard m.type == "task" else { continue }
                 let state = state(of: m)
                 if processes.contains(m.id) {

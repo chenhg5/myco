@@ -78,6 +78,23 @@ public final class WorkspaceSession {
     /// The conversations opened this launch, kept so reopening one is instant.
     private var conversations: [String: ConversationModel] = [:]
 
+    @ObservationIgnored private var automationsModel: AutomationsModel?
+
+    /// What is sent for me on a schedule or on a call: one model for as
+    /// long as the workspace is on screen.
+    public var automations: AutomationsModel {
+        if let automationsModel { return automationsModel }
+        let model = AutomationsModel(hub: hub)
+        automationsModel = model
+        return model
+    }
+
+    /// The agents a task can be sent to, by the name the app shows.
+    public var agentsByName: [Agent] {
+        statuses.map(\.agent).filter { Naming.kind(of: $0) == .agent }
+            .sorted { displayName(of: $0.name).localizedStandardCompare(displayName(of: $1.name)) == .orderedAscending }
+    }
+
     /// The conversation with an agent (in a project: with its coordinator).
     /// One model per conversation for as long as the workspace is on screen.
     public func conversation(with agent: String, project: String? = nil) -> ConversationModel {

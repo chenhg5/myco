@@ -433,6 +433,70 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAutomationsAreListedSwitchedAndWritten() {
+        // From the members page: one row above the people.
+        var app = launch(["-myco-route", "tab:members"])
+        let entry = app.buttons["members.automations"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "2, 1 on"), evaluatedWith: entry)
+        waitForExpectations(timeout: 10)
+        entry.tap()
+        let rows = app.buttons.matching(identifier: "automation.row")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(rows.count, 2)
+        // Each says when, to whom, when next and how the last one went.
+        let first = rows.firstMatch.label
+        XCTAssertTrue(first.contains("每天早上汇总"), first)
+        XCTAssertTrue(first.contains("Weekdays at 09:00"), first)
+        XCTAssertTrue(first.contains("协调者"), first)
+        XCTAssertTrue(first.contains("Next "), first)
+        XCTAssertTrue(first.contains("Sent"), first)
+        XCTAssertTrue(rows.element(boundBy: 1).label.contains("Paused"), rows.element(boundBy: 1).label)
+        shot("automations")
+        // A switch turns one off.
+        let toggle = app.switches.matching(identifier: "automation.switch").firstMatch
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        expectation(for: NSPredicate(format: "value == %@", "0"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+        // A new one: what is missing is said until it can be saved.
+        app.buttons["automations.new"].tap()
+        let name = app.textFields["automation.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["automation.missing"].label, "It needs a name")
+        XCTAssertFalse(app.buttons["automation.save"].isEnabled)
+        name.tap()
+        name.typeText("Nightly check")
+        let body = app.descendants(matching: .any).matching(identifier: "automation.body").firstMatch
+        body.tap()
+        body.typeText("Check the services.")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Weekdays at 09:00")).firstMatch.exists, "the schedule is said in words")
+        shot("automation-editor")
+        XCTAssertFalse(app.staticTexts["automation.missing"].exists)
+        app.buttons["automation.save"].tap()
+        expectation(for: NSPredicate(format: "count == 3"), evaluatedWith: rows)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(rows.firstMatch.label.contains("Nightly check"))
+        app.terminate()
+
+        // None yet: what they are for, and a few to start from.
+        app = launch(["-myco-start", "waiting", "-myco-route", "page:automations"])
+        XCTAssertTrue(app.staticTexts["Let agents work on their own schedule"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons.matching(identifier: "automations.template").count, 4)
+        shot("automations-empty")
+        // One with a webhook ends on its address and secret, shown once.
+        app.buttons.matching(identifier: "automations.template").element(boundBy: 3).tap()
+        XCTAssertTrue(app.buttons["automation.save"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["automation.save"].isEnabled, "a template is ready to save")
+        app.buttons["automation.save"].tap()
+        XCTAssertTrue(app.buttons["automation.secret.done"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "https://demo.myco.example/hooks/")).firstMatch.exists)
+        shot("automation-secret")
+        app.buttons["automation.secret.done"].tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10), "the new one is in the list")
+    }
+
+    @MainActor
     func testARequestThatFailsSaysWhyAndCanBeTriedAgain() {
         // The first join link fails as a gateway in front of the workspace
         // would: said in words, the raw reason one tap away, and a button
