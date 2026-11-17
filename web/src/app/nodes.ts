@@ -54,6 +54,11 @@ export function cliName(a: Agent): string {
   return cli ? CLI_META[cli]?.label || cli : L("未上报", "Not reported");
 }
 
+/** A CLI's name for people ("codex" → Codex); "" for none. */
+export function cliLabel(cli?: string): string {
+  return cli ? CLI_META[cli]?.label || cli : "";
+}
+
 export function cliVersion(a: Agent): string | undefined {
   return a.runtime?.cli_version;
 }

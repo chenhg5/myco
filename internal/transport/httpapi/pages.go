@@ -42,7 +42,7 @@ func (s *Server) pageCaller(h func(http.ResponseWriter, *http.Request, pageCall)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.pages == nil {
 			writeError(w, domain.Errf(domain.CodeNotFound, "pages are not enabled on this hub").
-				WithSuggestion("upgrade the hub to v0.19.23 or later"))
+				WithSuggestion("upgrade the hub to v0.19.24 or later"))
 			return
 		}
 		if s.isAdmin(r) {

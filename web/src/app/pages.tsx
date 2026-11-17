@@ -178,7 +178,7 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
     } catch (e) {
       setOpened(null);
       setError(isOldHub(e) || (e instanceof ApiError && /not enabled/.test(e.message))
-        ? L("这个工作区的 Hub 还不支持网页：在服务器上运行 sudo myco upgrade，升级到 v0.19.23 或更新。", "This workspace's hub has no pages yet: upgrade it to v0.19.23 or later (sudo myco upgrade on the server).")
+        ? L("这个工作区的 Hub 还不支持网页：在服务器上运行 sudo myco upgrade，升级到 v0.19.24 或更新。", "This workspace's hub has no pages yet: upgrade it to v0.19.24 or later (sudo myco upgrade on the server).")
         : e instanceof ApiError && e.status === 404
           ? L("这个网页已经删除了，或者你没有权限看。", "This page was deleted, or you may not see it.")
           : (e as Error).message || L("打不开这个网页", "Could not open this page"));

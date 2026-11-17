@@ -19,7 +19,7 @@ type PageInput struct {
 	Entry   string
 }
 
-// PublishPage uploads a zip of a page's files (from v0.19.23).
+// PublishPage uploads a zip of a page's files (from v0.19.24).
 func (c *Client) PublishPage(ctx context.Context, in PageInput, zip io.Reader, size int64) (*api.Page, error) {
 	path := "/v1/pages"
 	if in.Page != "" {

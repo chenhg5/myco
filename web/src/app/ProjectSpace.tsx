@@ -18,6 +18,7 @@ import { HandoffCard, handoffsOfHome } from "@/app/Handoff";
 import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
+import { handoverItem } from "@/app/Handover";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
@@ -1091,6 +1092,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       { label: ws ? L("打开终端", "Open terminal") : a.name === coordinator ? L("和协调者聊", "Talk to the coordinator") : L("看它在做什么", "See its work"), onSelect: () => onChat(r) },
       ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
+      ...(!ws ? handoverItem(r) : []),
       // Chat: an agent that should work with others goes into a project.
       ...(!ws && onPutIn && projects.length ? [
         "sep" as const,

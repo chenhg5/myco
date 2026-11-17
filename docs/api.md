@@ -162,7 +162,7 @@ A **coordinator** of an active project may also change, with its own token, the 
 
 ## Pages
 
-From v0.19.23 ([design](design/browser.md)): web pages agents (or people) publish for the App to open in its page panel. A page is a folder of static files kept as a zip; each publish is a version (the 10 newest are kept). Agent tokens and console tokens use the same routes. Who sees a page: its owner (the publishing agent's owner, or the person who published it), that owner's agents, the hub's owner and admins, and, for a page published to a project, whoever sees the project. Its owner, their agents and the hub's managers publish versions and delete it. Hubs with end-to-end encryption on refuse pages (`invalid_state`). Older hubs answer 404.
+From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publish for the App to open in its page panel. A page is a folder of static files kept as a zip; each publish is a version (the 10 newest are kept). Agent tokens and console tokens use the same routes. Who sees a page: its owner (the publishing agent's owner, or the person who published it), that owner's agents, the hub's owner and admins, and, for a page published to a project, whoever sees the project. Its owner, their agents and the hub's managers publish versions and delete it. Hubs with end-to-end encryption on refuse pages (`invalid_state`). Older hubs answer 404.
 
 | Endpoint | Who | What |
 | --- | --- | --- |

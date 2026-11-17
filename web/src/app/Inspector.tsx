@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
-import { Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
+import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2, UserCheck, X } from "lucide-react";
 import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
@@ -20,6 +20,7 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
 import { RunRows } from "@/app/RunSettings";
+import { HandoverHistory, handoverEntry, openHandover } from "@/app/Handover";
 
 type Action = null | "profile" | "skills" | "visibility" | "projects" | "allow" | "kick" | "delete" | "owner" | "copy";
 
@@ -661,12 +662,14 @@ function AliasRow({ row, mayManage, onRefresh }: {
   );
 }
 
-export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged, embedded = false }: {
+export function Inspector({ row, now, projects, onClose, onRefresh, onThread, onPeer, onMessage, onOpenMachine, onOpenProject, onProjectsChanged, embedded = false, openDetails = false }: {
   row: AgentRow | null;
   /** inside a member's card: no panel of its own; what the card already
    *  shows (name, description, projects, chat) is left out, and the
    *  technical details fold away */
   embedded?: boolean;
+  /** embedded: start with the details unfolded */
+  openDetails?: boolean;
   now: number;
   onClose: () => void;
   onRefresh: () => Promise<void>;
@@ -713,7 +716,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [row, action, onClose, embedded]);
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState(openDetails);
+  useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
 
   if (!row || !ag) return null;
 
@@ -760,6 +764,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     });
     setCopied(r.agent || copyName);
   }, "stay");
+  const handover = handoverEntry(row);
   const openOwner = () => {
     setNewOwner(ag.owner || "");
     appApi.members(hubId).then((r) => setPeople(r.members)).catch(() => {});
@@ -1094,6 +1099,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                   <Copy />{L("复制一个", "Make a copy")}<span className="app-chev">›</span>
                 </button>
               )}
+              {handover.show && (
+                <button type="button" className="app-action-row" data-testid="handover-open" disabled={!!handover.why}
+                  title={handover.why || L("换一个会话接着做：名字、聊天记录和项目不变，原来的会话停下", "Another session carries on: name, chats and projects stay; the earlier session stops")}
+                  onClick={() => openHandover({ hubId, name: ag.name })}>
+                  <ArrowRightLeft />{L("换一个来接着做", "Hand over to another session")}
+                  {handover.why ? <span className="app-action-value">{handover.why}</span> : <span className="app-chev">›</span>}
+                </button>
+              )}
               {/* Quiet until pointed at: they ask first anyway. */}
               <button type="button" className="app-action-row danger" onClick={() => openAction("kick")} disabled={!mayManage}>
                 <Power />{L("让它下线", "Disconnect")}
@@ -1121,6 +1134,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           {sec_identity}
         </div>
       )}
+      <HandoverHistory row={row} now={now} />
       {sec_actions}
     </div>
   ) : null;
@@ -1154,6 +1168,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           {sec_peers}
           {sec_history}
           {sec_identity}
+          <HandoverHistory row={row} now={now} />
           {sec_actions}
         </div>
       </aside>

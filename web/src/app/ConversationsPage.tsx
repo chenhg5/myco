@@ -4,6 +4,7 @@ import { Copy, Info, ListFilter, Pin, PinOff, Plus, Search, X } from "lucide-rea
 import { IconChat, IconCollapseLeft, IconExchange, IconNewChat, IconPrompt } from "@/components/icons";
 import { copyText } from "@/app/copy";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
+import { handoverItem } from "@/app/Handover";
 import { appApi, type Conversation, type Hub, type RecentItem } from "@/appapi";
 import type { Project } from "@/api";
 import type { ProjectRef } from "@/app/ProjectPage";
@@ -404,6 +405,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
         "sep" as const,
         ...(onInspect ? [{ label: L("查看节点详情", "Node details"), icon: Info, onSelect: () => onInspect(row.hubId, node) }] : []),
         { label: L("复制节点名", "Copy node name"), icon: Copy, onSelect: () => void copyText(node) },
+        ...handoverItem(rows.find((x) => x.hub.id === row.hubId && x.st.agent.name === node)),
       ] : []),
     ];
   };

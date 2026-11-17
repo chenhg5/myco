@@ -169,7 +169,7 @@ otherwise your owner (and the workspace's admins).`,
 // pageErr says what to do on a hub without pages.
 func pageErr(err error) error {
 	if e, ok := client.AsError(err); ok && e.Status == 404 && strings.Contains(e.Message, "not enabled") {
-		return errorf("not_supported", ExitNotFound, "the hub needs v0.19.23 or later (sudo myco upgrade on the server); until then, send the files as attachments", "this hub has no pages yet")
+		return errorf("not_supported", ExitNotFound, "the hub needs v0.19.24 or later (sudo myco upgrade on the server); until then, send the files as attachments", "this hub has no pages yet")
 	}
 	return err
 }

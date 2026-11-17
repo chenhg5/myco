@@ -1262,7 +1262,7 @@ type WebhookResponse struct {
 	Run AutomationRun `json:"run"`
 }
 
-// Page is a web page published to the hub (from v0.19.23): GET /v1/pages,
+// Page is a web page published to the hub (from v0.19.24): GET /v1/pages,
 // GET /v1/pages/{id}, POST /v1/pages.
 type Page struct {
 	ID        string `json:"id"`

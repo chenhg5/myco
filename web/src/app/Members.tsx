@@ -118,8 +118,10 @@ function Section({ title, rows, projects, now, onOpen }: { title?: string; rows:
  * does, chat with it, put it in projects; below, what it is working on,
  * its skills, the technical details (folded) and managing it.
  */
-export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChanged, onRefresh, onOpenProject, onOpenMachine }: {
+export function MemberSheet({ row, details, projects, rows, now, onClose, onChat, onChanged, onRefresh, onOpenProject, onOpenMachine }: {
   row: AgentRow | null;
+  /** open with its details unfolded (its run settings: the provider) */
+  details?: boolean;
   projects: Projects;
   rows: AgentRow[];
   now: number;
@@ -147,7 +149,7 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
   useEffect(() => {
     if (!row) return;
     // A dialog opened from the card closes first.
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector(".app-modal")) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".app-modal")) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [row, onClose]);
@@ -224,7 +226,7 @@ export function MemberSheet({ row, projects, rows, now, onClose, onChat, onChang
         </div>
         {row.st.state === "offline" && <div className="ms-alert"><OfflineCard row={row} now={now} onRefresh={onRefresh} /></div>}
         <ErrorText error={error} />
-        <Inspector embedded row={row} now={now} projects={projects} onClose={onClose} onRefresh={onRefresh}
+        <Inspector embedded openDetails={details} row={row} now={now} projects={projects} onClose={onClose} onRefresh={onRefresh}
           onThread={() => onChat(row)} onPeer={() => undefined} onMessage={onChat}
           onOpenMachine={onOpenMachine} onOpenProject={onOpenProject} onProjectsChanged={onChanged} />
         {menu.element}

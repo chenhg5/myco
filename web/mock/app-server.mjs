@@ -446,13 +446,13 @@ const state = {
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
-      hub_version: "0.19.5",
+      hub_version: "0.19.23",
       update_available: true,
       threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
-          myco_version: "0.16.8", online: true, last_seen_at: iso(5), can_spawn: true,
+          myco_version: "0.19.23", online: true, last_seen_at: iso(5), can_spawn: true,
         },
         {
           id: "m_bench", name: "Bench Linux", hostname: "bench-01", os: "linux", arch: "x86_64",
@@ -1447,6 +1447,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/handovers — the smoke test makes a take-over command (a
+  // waiting handover) and may take one over on a computer; start each width
+  // and theme from the seeded ones.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
+    state.handovers = {};
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/run-settings — the smoke test changes a node's model and
   // effort; put the demo ones back between widths and themes. GET returns
   // the last body the App sent there.
@@ -1621,7 +1629,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
     return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);
   }
-  // /app/hubs/{id}/pages… — pages agents published (v0.19.23).
+  // /app/hubs/{id}/pages… — pages agents published (v0.19.24).
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "pages") {
     const mine = parts[2] === "hub_studio";
     if (parts.length === 4 && method === "GET") return send(res, 200, { pages: mine ? [...pages.values()] : [] });
@@ -2363,6 +2371,49 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { items: list.slice(0, 30), more: list.length > 30 });
     }
 
+    // /app/hubs/{id}/agents/{name}/handovers | handover-link | handover —
+    // 「换一个来接着做」 (hubs after v0.19.22; the others answer 404). pm-codex
+    // was taken over from a claude.ai session two days ago: the line in its
+    // chat, and 「换回这个」 in its profile. A command waits for whoever runs it
+    // (nobody does here); a computer path answers after a moment, with the
+    // new session's first words. The agent itself is left as it is.
+    if (parts.length === 6 && parts[3] === "agents" && ["handovers", "handover-link", "handover"].includes(parts[5])) {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      if (hub.id !== "hub_studio") return fail(res, 404, "not_found", "no such route");
+      const name = parts[4];
+      const agent = hub.agents.find((a) => a.name === name);
+      if (!agent) return fail(res, 404, "not_found", `agent ${name} not found`);
+      state.handovers ||= {};
+      const list = (state.handovers[name] ||= seedHandovers(name));
+      if (parts[5] === "handovers" && method === "GET") return send(res, 200, { handovers: list });
+      if (method !== "POST") return fail(res, 405, "method_not_allowed", "method not allowed");
+      const body = (await readBody(req)) || {};
+      const machineName = (id) => (hub.machines || []).find((m) => m.id === id)?.name;
+      const from = { binding: { ...agent.binding }, machine_id: agent.machine_id, machine_name: machineName(agent.machine_id), runtime: { cli: agent.runtime?.cli || agent.binding?.harness } };
+      const id = "hov_" + Math.random().toString(36).slice(2, 10);
+      if (parts[5] === "handover-link") {
+        const h = { id, agent: name, at: iso(), by: "glenn", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
+        list.unshift(h);
+        const url = `${hub.url.replace(/^http:/, "https:")}/h/myco_takeover_9f3k2demo${id.slice(4)}`;
+        return send(res, 201, { handover: h, url, command: `curl -fsSL '${url}' | sh`, command_ps1: `irm '${url}?format=ps1' | iex` });
+      }
+      const m = (hub.machines || []).find((x) => x.id === body.machine || x.name === body.machine);
+      if (!m) return fail(res, 404, "not_found", `machine ${body.machine} not found`, "list them: myco machine list");
+      if (!/^0\.(19\.(2[3-9]|[3-9]\d)|[2-9]\d)|^[1-9]/.test(m.myco_version || "")) {
+        return fail(res, 409, "invalid_state", `myco on machine ${m.name} (v${m.myco_version}) cannot take a node over`, `upgrade it there: myco upgrade`);
+      }
+      await sleep(1600);
+      const cli = body.cli || agent.runtime?.cli || "claude";
+      const h = {
+        id, agent: name, at: iso(2), by: "glenn", note: body.note || "", from,
+        to: { binding: { harness: cli, session_id: "new-" + id.slice(4), workdir: body.dir || agent.binding?.workdir }, machine_id: m.id, machine_name: m.name, runtime: { cli } },
+        state: "done", done_at: iso(), open_tasks: [], back: body.back || "", expires_at: iso(-86_400),
+      };
+      list.unshift(h);
+      return send(res, 200, { handover: h, spawn: { agent: name, session_id: h.to.binding.session_id, cli, workdir: h.to.binding.workdir, access: "workspace",
+        reply: "读完交接说明了：我现在是 PM (Codex)，接着审查 multihub 分支（还剩 2 个文件），做完先在这里汇报。" } });
+    }
+
     // /app/hubs/{id}/agents/{name}/peers — other nodes it talked to (demo: an exec node).
     if (parts.length === 6 && parts[3] === "agents" && parts[5] === "peers" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
@@ -2973,6 +3024,20 @@ function toneWav() {
 }
 
 // One automation to start with: a weekday morning summary for the PM.
+/** pm-codex's handovers: from a claude.ai session to Codex on the Studio
+ *  Mac, two days ago (done), and an older command nobody ran (expired). */
+function seedHandovers(name) {
+  if (name !== "pm-codex") return [];
+  const cloud = { binding: { harness: "claude-cloud", session_id: "session_01PmCloud7f2", environment: "claude.ai" }, runtime: { cli: "claude-cloud" } };
+  const studio = { binding: { harness: "codex", session_id: "01a1-pm-session", workdir: "~/code/myco" }, machine_id: "m_studio", machine_name: "Studio Mac", runtime: { cli: "codex" } };
+  return [
+    { id: "hov_pm2", agent: name, at: iso(2 * 86_400 + 300), by: "glenn", note: "claude.ai 的订阅到期了，换到 Studio Mac 上用 Codex 继续",
+      from: cloud, to: studio, state: "done", done_at: iso(2 * 86_400), open_tasks: ["m_pm_open"], back: "", expires_at: iso(86_400) },
+    { id: "hov_pm1", agent: name, at: iso(3 * 86_400), by: "glenn", note: "",
+      from: cloud, to: { binding: {} }, state: "expired", open_tasks: [], back: "", expires_at: iso(2 * 86_400) },
+  ];
+}
+
 function seedAutomations(hub) {
   if (hub.id !== "hub_studio") return [];
   return [{

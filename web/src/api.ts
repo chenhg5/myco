@@ -144,7 +144,7 @@ export interface AutomationRun {
   trigger: "schedule" | "webhook" | "manual"; outcome: "sent" | "skipped" | "failed";
   message_id?: string; error?: string;
 }
-/** A web page published to a hub (hubs from v0.19.23): a folder of static
+/** A web page published to a hub (hubs from v0.19.24): a folder of static
  *  files, in versions, opened in the App's page panel. */
 export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }
 export interface Page {
@@ -167,6 +167,27 @@ export interface AutomationRequest {
 }
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
 export interface AutomationDetail { automation: Automation; runs: AutomationRun[] }
+/** Handing a node over to another session (「换一个来接着做」, hubs after
+ *  v0.19.22): the name and conversations stay, the session changes. */
+export interface HandoverSide { binding: Binding; machine_id?: string; machine_name?: string; runtime?: Runtime }
+export interface Handover {
+  id: string; agent: string; at: string; by?: string; note?: string;
+  from: HandoverSide; to: HandoverSide;
+  /** waiting: a command made, nobody ran it yet; expired: not run in time, or another took over */
+  state: "waiting" | "done" | "expired";
+  done_at?: string;
+  /** tasks that went back to the queue when it was taken */
+  open_tasks: string[];
+  /** the handover this one undid (a switch back) */
+  back?: string;
+  expires_at: string;
+}
+export interface HandoverLink { handover: Handover; url?: string; command?: string; command_ps1?: string }
+export interface HandoverRequest { machine: string; cli?: string; dir?: string; model?: string; access?: RuntimeAccess; note?: string; back?: string }
+export interface HandoverResult {
+  handover: Handover;
+  spawn?: { agent: string; session_id: string; cli: string; workdir: string; access: RuntimeAccess; reply: string };
+}
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
   id: string; from: string; to: string; thread_id: string; reply_to?: string; after?: string; type: string; body: string;
