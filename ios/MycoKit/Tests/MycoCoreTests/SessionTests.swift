@@ -499,7 +499,8 @@ struct HandoverTests {
             taken = await model.arrived(link.handover.id)
         }
         #expect(taken?.state == "done")
-        #expect(HandoverWords.side(taken?.to, machines: []) .contains("claude.ai"))
+        let by = HandoverWords.side(taken?.to, machines: [])
+        #expect(by.contains("claude.ai"))
         // A workspace from before handovers: none, and said so.
         await hub.setTooOldForHandovers(true)
         await model.load(force: true)
