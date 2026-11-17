@@ -527,7 +527,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(models.waitForExistence(timeout: 5), "a tap offers to switch the model")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Effort")).firstMatch.exists, "and the effort")
         XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "applies from its next run")).firstMatch.exists,
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Now: GPT-6 Sol · High")).firstMatch.exists,
             "with what it runs on now, and when a switch applies")
         snap("run-choice-menu")
         models.tap()
@@ -566,13 +566,16 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(app.switches["export.steps"].exists, "the agents' steps can go along")
         snap("export-sheet")
         submit.tap()
-        // Written, and handed to the system's share sheet.
+        // Written, and handed to the system's share sheet, which covers
+        // the page until it is closed.
+        sleep(3)
+        snap("export-share")
+        let close = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "header.closeButton", "Close")).firstMatch
+        if close.waitForExistence(timeout: 5) { close.tap() }
         let done = app.staticTexts["export.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "what was written is said")
         XCTAssertTrue(done.label.contains("Exported 2 messages"), done.label)
         XCTAssertTrue(done.label.hasSuffix(".md"), done.label)
-        sleep(2)
-        snap("export-share")
     }
 
     @MainActor

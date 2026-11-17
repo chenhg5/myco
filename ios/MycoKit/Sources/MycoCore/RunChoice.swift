@@ -104,7 +104,8 @@ public struct RunChoice: Sendable, Hashable {
     public var note: String {
         switch kind {
         case .mine:
-            return L("现在是：\(inUse)。切换后下次唤醒时生效。", "In use: \(inUse). A switch applies from its next run.")
+            // (short: a menu shows two lines of it)
+            return L("现在用的是 \(inUse)。切换后下次唤醒时生效。", "Now: \(inUse). A switch applies from its next run.")
         case .unknown:
             return L("它在自己的会话里收消息，还没说用的哪个模型。它的 myco 升级到新版后，会在等消息时自动报上来；也可以让它运行 myco agent runtime set。",
                      "It receives in its own session and has not said which model it runs on. With a newer myco it says so itself while it waits for messages; or ask it to run myco agent runtime set.")
