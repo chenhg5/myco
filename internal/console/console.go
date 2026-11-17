@@ -30,6 +30,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/harness/execnode"
 	"github.com/chenhg5/myco/internal/release"
 )
 
@@ -181,6 +182,9 @@ type Backend struct {
 	// only (the desktop app on macOS, whose web view shows every file for
 	// an <input accept="image/*">); "" when cancelled. Nil elsewhere.
 	PickImage func() (path string, err error)
+	// OpenURL opens a web or mail link in the default browser (the desktop
+	// app, whose web view opens no new windows). Nil elsewhere.
+	OpenURL func(url string) error
 	// Update, when set, enables /app/update (the app updating itself).
 	Update *Updater
 	// Cache, when set, keeps what the pages fetched across restarts
@@ -230,7 +234,7 @@ func (b *Backend) Handler() http.Handler {
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	m.HandleFunc("GET /app/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil})
+		writeJSON(w, http.StatusOK, map[string]any{"version": b.Version, "shell": orStr(b.Shell, "browser"), "dictation": b.Dictate != nil || b.Listen != nil, "pick_image": b.PickImage != nil, "open_url": b.OpenURL != nil})
 	})
 	if b.Update != nil {
 		m.HandleFunc("GET /app/update", b.getUpdate)
@@ -252,6 +256,7 @@ func (b *Backend) Handler() http.Handler {
 	b.dictationRoutes(m)
 	b.translateRoutes(m)
 	m.HandleFunc("POST /app/pick-image", b.pickImage)
+	m.HandleFunc("POST /app/open-url", b.openURL)
 	m.HandleFunc("GET /app/pending-link", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"link": b.takePendingLink()})
 	})
@@ -572,6 +577,33 @@ func (b *Backend) Handler() http.Handler {
 		revealFile(path)
 		writeJSON(w, http.StatusOK, map[string]string{"path": path})
 	}))
+	// A conversation exported from the app (it renders it: it has the
+	// decrypted messages and the names), saved to Downloads and shown.
+	m.HandleFunc("POST /app/export", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name    string `json:"name"`
+			Content string `json:"content"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		ext := strings.ToLower(filepath.Ext(in.Name))
+		if ext != ".md" && ext != ".jsonl" {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "an export is a .md or .jsonl file"})
+			return
+		}
+		if len(in.Content) > maxExport {
+			writeErr(w, &client.Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: "the export is too large"})
+			return
+		}
+		path, err := writeToDownloads(in.Name, strings.NewReader(in.Content))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		revealExport(path)
+		writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	})
 	m.HandleFunc("PUT /app/hubs/{id}/projects/{name}/files/{file}", b.withHubTimeout(5*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		d, err := c.PutProjectFile(r.Context(), r.PathValue("name"), r.PathValue("file"), r.Header.Get("Content-Type"), r.Body, r.ContentLength)
 		if err != nil {
@@ -1012,8 +1044,23 @@ func (b *Backend) Handler() http.Handler {
 		var in struct {
 			Uses         int `json:"uses"`
 			ExpiresHours int `json:"expires_hours"`
+			// AllowShell: the computer that runs the command also lets
+			// agents open a terminal there (?shell=1 → machine join
+			// --allow-shell). Running it on that computer is the consent.
+			AllowShell bool `json:"allow_shell"`
+			// ShellNode: the command, run in a folder there, makes that
+			// folder a shell node (exec node) that AllowFrom may send
+			// commands to. Running it there is the consent; nothing else
+			// on that computer needs allowing.
+			ShellNode bool     `json:"shell_node"`
+			AllowFrom []string `json:"allow_from"`
 		}
 		if !decode(w, r, &in) {
+			return
+		}
+		if in.ShellNode && len(in.AllowFrom) == 0 {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument",
+				Message: "a shell node needs at least one agent allowed to send it commands", Suggestion: "pass allow_from"})
 			return
 		}
 		if in.Uses <= 0 {
@@ -1022,15 +1069,34 @@ func (b *Backend) Handler() http.Handler {
 		if in.ExpiresHours <= 0 {
 			in.ExpiresHours = 24
 		}
-		res, err := c.CreateEnrollment(r.Context(), api.CreateEnrollmentRequest{Kind: "link", MaxUses: in.Uses,
-			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}, false)
+		req := api.CreateEnrollmentRequest{Kind: "link", MaxUses: in.Uses,
+			TTLSeconds: int64(in.ExpiresHours) * 3600, Note: "myco console"}
+		if in.ShellNode {
+			req.Harness, req.AllowFrom, req.Note = execnode.Name, in.AllowFrom, "myco console: a folder as a computer"
+		}
+		res, err := c.CreateEnrollment(r.Context(), req, false)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"join_url": res.JoinURL, "command": "curl -fsSL " + res.JoinURL + " | bash", "agent_guide": res.AgentGuide})
+		out := joinLinkOut(res.JoinURL, res.AgentGuide, in.AllowShell && !in.ShellNode)
+		if in.ShellNode {
+			out["shell_node"] = true
+		}
+		writeJSON(w, http.StatusOK, out)
 	}))
 	return m
+}
+
+// joinLinkOut is a join link as the App shows it: the command to run on the
+// computer (and its Windows PowerShell form), with ?shell=1 when that
+// computer is also to let agents open a terminal.
+func joinLinkOut(joinURL string, guide any, allowShell bool) map[string]any {
+	cmd, ps := "curl -fsSL "+joinURL+" | bash", "irm '"+joinURL+"?format=ps1' | iex"
+	if allowShell {
+		cmd, ps = "curl -fsSL '"+joinURL+"?shell=1' | bash", "irm '"+joinURL+"?format=ps1&shell=1' | iex"
+	}
+	return map[string]any{"join_url": joinURL, "command": cmd, "ps_command": ps, "agent_guide": guide, "allow_shell": allowShell}
 }
 
 // withHub resolves {id} to a hub client and bounds the call.
@@ -1517,6 +1583,12 @@ func filterConversations(cs []api.Conversation, query string) []api.Conversation
 // maxTextPreview bounds a file the app shows as text (longer ones are
 // saved instead).
 const maxTextPreview = 2 << 20
+
+// revealExport shows a saved export (tests replace it: no Finder there).
+var revealExport = revealFile
+
+// maxExport bounds a conversation export the app saves (rendered by it).
+const maxExport = 64 << 20
 
 func inlineImage(contentType string) bool {
 	t, _, _ := mime.ParseMediaType(contentType)

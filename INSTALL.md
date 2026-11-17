@@ -69,7 +69,9 @@ myco join
 ```bash
 sudo /usr/local/bin/myco link create --exec --allow-from cloud-1 --uses 1
 ```
-在目标机器上执行这个链接的命令，那台机器就成为 `<机器名>-shell` 节点。
+在目标机器上**进到要给 agent 用的文件夹**，再执行这个链接的命令，这个文件夹就成为一个 shell 节点（App 里的一台「电脑」）：在家目录里执行叫 `<机器名>-shell`（和以前一样），在别的文件夹里叫 `<机器名>-<文件夹名>-shell`，同一台电脑上的不同文件夹各是一个节点。同一个链接在同一个文件夹里再执行一次是安全的；已经接入过这个 Hub 的电脑执行新的 exec 链接，只会多出这个文件夹的节点，原来的接入不变。用「当前文件夹」需要 Hub 升级到 v0.19.19 以上（`sudo myco upgrade`），更早的 Hub 生成的脚本仍用家目录。
+
+**在 App 里加一台电脑就是这一条命令**：点侧栏「电脑」的 +，弹窗给出一条命令（macOS / Linux / WSL 一条，Windows PowerShell 一条），在那台电脑的终端里 `cd` 到要用的文件夹，粘贴运行：它装好 myco、接入工作区，并把当前文件夹加成一台「电脑」，从项目里加的就给项目里的 agent 用。在那台电脑上、那个文件夹里运行它就算同意了，不用再改 `machine.yaml`，也不用在 App 里手写路径。只有工作区的主人或管理员能生成这种链接。
 
 **管理**：
 ```bash
@@ -94,7 +96,7 @@ sudo bash install-hub.sh --domain auto
 - 如果 80 端口已经被别的程序占用，脚本会自动改成只用 443 申请证书，不会动那个程序。
 - 成功时会输出 `==> hub is healthy` 和 `==> HTTPS is up`，并打印 Hub URL。
 - 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。
-- **一个 Hub 里开多个工作区**（v0.19.9 起，推荐）：`sudo myco workspace create --name team-b`。新工作区和原来的完全隔离（自己的成员、agent、项目、消息、文件，数据在 `/var/lib/myco/workspaces/team-b/`），但用同一个地址、端口、证书和服务，地址是 `https://<你的域名>/w/team-b`。命令会打印新工作区主人的一次性 App 链接，在 App 里「连接已有的 Hub」粘进去，它就作为一个新工作区出现在切换器里；电脑和 agent 用在那个工作区里生成的入网链接加入，和加入任何 Hub 一样。原来的 Hub 就是「默认工作区」，地址、数据、链接都不变。App 里也能建：当前工作区在这台服务器上、你是它的主人时，工作区切换器里有「在 <服务器> 上新建工作区」，建好自动切过去；新工作区「连上另一台电脑」里会列出已经连着这台服务器的电脑，点「加进来」就行（那台电脑的 myco 要 v0.19.9 以上），不用在电脑上跑命令。`myco workspace list` 列出，`myco workspace remove --name team-b` 移除（数据不删，挪到 `workspaces/.removed/`）。只有服务器的主人（hub.env 里的管理令牌，或默认工作区的主人）能建和删。
+- **一个 Hub 里开多个工作区**（v0.19.9 起，推荐）：`sudo myco workspace create --name team-b`。新工作区和原来的完全隔离（自己的成员、agent、项目、消息、文件，数据在 `/var/lib/myco/workspaces/team-b/`），但用同一个地址、端口、证书和服务，地址是 `https://<你的域名>/w/team-b`。命令会打印新工作区主人的一次性 App 链接，在 App 里「连接已有的 Hub」粘进去，它就作为一个新工作区出现在切换器里；电脑和 agent 用在那个工作区里生成的入网链接加入，和加入任何 Hub 一样。原来的 Hub 就是「默认工作区」，地址、数据、链接都不变。App 里也能建：当前工作区在这台服务器上、你是它的主人时，工作区切换器里有「在 <服务器> 上新建工作区」，建好自动切过去；在新工作区里点侧栏「电脑」的 +（或电脑页的「加一台电脑」），选「另一台电脑…」，会列出已经连着这台服务器的电脑，点「加进来」就行（那台电脑的 myco 要 v0.19.9 以上），不用在电脑上跑命令；连上后点「选一个文件夹」，选好它就出现在侧栏的「电脑」里。`myco workspace list` 列出，`myco workspace remove --name team-b` 移除（数据不删，挪到 `workspaces/.removed/`）。只有服务器的主人（hub.env 里的管理令牌，或默认工作区的主人）能建和删。
 - 一台 VPS 也可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
 - 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。
 - **升级**：在这台服务器上执行 `sudo myco upgrade`（v0.16.6 起），或者重新执行同一条安装命令。两种方式都会下载最新版本，令牌和数据库都会保留，数据库结构会自动迁移。详见[第 8 节](#8-升级与版本)。
@@ -639,6 +641,11 @@ spawn:
 - 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
 - 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。
 - **shell 节点**（别的节点给它发命令，它在指定目录里运行并把输出发回去，也就是 exec 节点）：在 App 里"添加节点 → 在机器上新建 → 类型：Shell 节点"，选目录和"谁能发命令"。只有 Hub 管理员（App）能添加：Hub 为这次添加生成一个只能用一次、10 分钟内有效的 exec 入网令牌，那台机器用它登记节点。被选中的节点能在那台机器上运行任何命令，所以只有那台机器的 `spawn.max_access` 是 `full` 时才允许。那台机器就是你正在用 App 的这台电脑时，App 里直接点「在这台电脑上允许…」，确认后写入 `spawn.max_access: full`，也可以在同一处点「不再允许」改回去（v0.18.13 起；改了立即生效，不用重启 runner，已添加的 Shell 节点要在节点页删除）。别的电脑要在它自己那里打开。
+- **让一台电脑允许开终端**（下一版起）：电脑只有自己同意，agent 才能在上面开终端（shell 节点，App 里叫「电脑」），这个开关只能在那台电脑上改，App 不会远程替它打开。三种做法：
+  - 连电脑时就定：App 里生成入网命令时打开「允许在上面开终端」，命令变成 `curl -fsSL '<链接>?shell=1' | bash`（PowerShell：`irm '<链接>?format=ps1&shell=1' | iex`），在那台电脑上运行它就等于同意，脚本会执行 `myco machine join --allow-shell`；
+  - 那台电脑上开着 myco App：「这台电脑」那里点允许 / 不再允许；
+  - 那台电脑上运行 `myco machine shell-access --allow`，关掉用 `myco machine shell-access --deny`（都支持 `--dry-run`）。
+  改了以后 runner 在 20 秒内报给工作区，App 里就能看到这台电脑能不能开终端，不用重启。关掉只影响以后新开的，已经开着的终端要在 App 里删掉。
 - 列出所有机器节点：`myco agent list --selector harness=machine`。
 - **用环境变量登录的 CLI**（比如 Claude Code 用 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` 接第三方服务）：后台 runner 不读 shell 配置，要在那台机器上、能正常用 claude 的终端里给机器节点抓一次变量：
   ```bash
@@ -684,6 +691,22 @@ spawn:
 - **转交**：节点详情里点"主人"可以把节点转给别人（所有者和管理员）；`myco agent owner --name <节点> --owner <成员>`。
 - **审计**：设置 → 审计（所有者和管理员）记录谁在什么时候做了什么：邀请、移除、生成链接、在机器上新建、删除或踢下线节点、从 App 派任务等，不记录消息内容；`myco audit`。
 - agent 收到消息时会知道是谁的：自己主人发的、其他成员从 App 发的、自己主人的其他 agent，还是别人的 agent。要不要先问主人由 agent 自己判断。
+
+### 4.15 导出聊天记录
+
+一段对话可以导出成文件保存或发给别人。在 App 里：打开对话，点顶栏的下载图标「导出这段对话」，选格式、要不要带上过程，文件存到「下载」文件夹（会自动在访达 / 资源管理器里选中）。App 导出的就是你在对话里看到的那些消息（几段任务合在一起），名字用对话里显示的名字。格式有两种：
+- Markdown（默认），给人看。
+- JSON Lines，给程序用，每条消息一行，字段是 myco 自己的：`id`、`thread_id`、`from`、`to`、`type`、`status`、`body`、`attachments`、`created_at`，可选 `steps`。
+
+```bash
+myco thread export --id <对话 ID> --output chat.md                 # Markdown
+myco thread export --id <对话 ID> --as jsonl --steps > chat.jsonl  # JSON Lines，带上每个任务里 agent 做了什么
+```
+
+- `--steps` 只带上这个 agent 能看到的过程，Hub 没有记录的就省略，stderr 会提示。
+- 附件只写文件名和大小，不包含文件本身。
+- 开了端到端加密的对话，能解开的消息按明文写进文件，解不开的标成「无法解密」。文件只有自己能读（权限 600），转发前留意内容。
+- 格式是 myco 自己的，不兼容 Claude Code、Codex 的会话文件：那些记录的是一个 agent 的模型和工具调用，myco 记录的是人和 agent 之间的消息。
 
 ## 5. 接入后的自检
 

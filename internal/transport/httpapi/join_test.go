@@ -71,6 +71,13 @@ func TestJoinPageValidLink(t *testing.T) {
 		{"Windows PowerShell 5.1", "", map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-CN) WindowsPowerShell/5.1.26100"}, "text/plain", []string{"install-client.ps1"}},
 		{"format=ps1", "?format=ps1", nil, "text/plain", []string{"install-client.ps1"}},
 		{"guide has the Windows command", "?format=md", nil, "text/markdown", []string{"irm '" + h.url + path + "?format=ps1' | iex"}},
+		// ?shell=1: the computer also lets agents open a terminal.
+		{"shell=1 script allows terminals", "?format=sh&shell=1", nil, "text/x-shellscript", []string{"machine join --format text --allow-shell"}},
+		{"shell=1 PowerShell allows terminals", "?format=ps1&shell=1", nil, "text/plain", []string{"machine join --format text --allow-shell"}},
+		{"shell=1 guide keeps the query", "?format=md&shell=1", nil, "text/markdown",
+			[]string{"curl -fsSL '" + h.url + path + "?shell=1' | bash", "irm '" + h.url + path + "?format=ps1&shell=1' | iex", "shell-access --deny"}},
+		{"shell=1 page keeps the query", "?shell=1", map[string]string{"Accept": "text/html"}, "text/html",
+			[]string{"curl -fsSL &#39;" + h.url + path + "?shell=1&#39; | bash", "允许 agent 在这台电脑上开终端"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,6 +109,13 @@ func TestJoinPageValidLink(t *testing.T) {
 		})
 	}
 	h.t = t
+	// Only shell=1 turns it on, and nothing of the query reaches the script.
+	for _, q := range []string{"", "?format=sh&shell=0", "?format=sh&shell=true", "?format=sh&shell=1%27%3Becho+pwned"} {
+		r := h.doReq("GET", path+q, "", nil, map[string]string{"User-Agent": "curl/8"}).want(t, 200)
+		if strings.Contains(string(r.raw), "--allow-shell") || strings.Contains(string(r.raw), "pwned") {
+			t.Fatalf("%q: %s", q, r.raw)
+		}
+	}
 	// Viewing the page does not use up the link.
 	r := h.do("GET", "/v1/enrollments", adminToken, nil).want(t, 200)
 	for _, e := range r.body["enrollments"].([]any) {
@@ -248,4 +262,33 @@ func TestJoinWithLink(t *testing.T) {
 	h.do("DELETE", "/v1/enrollments/"+id, adminToken, nil).want(t, 200)
 	h.do("POST", "/v1/join", tok, map[string]any{"machine": "box"}).wantErr(t, 403, "permission_denied")
 	h.do("DELETE", "/v1/enrollments/enr_nope", adminToken, nil).wantErr(t, 404, "not_found")
+}
+
+// A shell-node (exec) link is run in the folder the agents should use: its
+// scripts join with that folder as the node's working directory, and its
+// page and guide say so. Other links do not pass a folder.
+func TestJoinPageExecLinkUsesTheCurrentFolder(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	tok, _, _ := h.createLink(map[string]any{"harness": "exec", "allow_from": []string{"backend"}})
+	path := "/j/" + tok
+	for _, tc := range []struct{ q, want string }{
+		{"?format=sh", `machine join --format text --workdir "$PWD"`},
+		{"?format=ps1", `machine join --format text --workdir (Get-Location).Path`},
+		{"?format=md", "run it in the folder the agents should"},
+	} {
+		r := h.doReq("GET", path+tc.q, "", nil, nil).want(t, 200)
+		if !strings.Contains(string(r.raw), tc.want) {
+			t.Errorf("%s lacks %q:\n%s", tc.q, tc.want, r.raw)
+		}
+	}
+	r := h.doReq("GET", path, "", nil, map[string]string{"Accept": "text/html"}).want(t, 200)
+	if !strings.Contains(string(r.raw), "要给 agent 用的文件夹") {
+		t.Errorf("page does not say where to run it:\n%s", r.raw)
+	}
+	plain, _, _ := h.createLink(nil)
+	for _, q := range []string{"?format=sh", "?format=ps1"} {
+		if r := h.doReq("GET", "/j/"+plain+q, "", nil, nil).want(t, 200); strings.Contains(string(r.raw), "--workdir") {
+			t.Fatalf("a machine link passes a folder (%s):\n%s", q, r.raw)
+		}
+	}
 }

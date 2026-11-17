@@ -4,7 +4,7 @@ import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, ty
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
@@ -497,19 +497,26 @@ function folderOf(dir: string): string {
  * can run commands (a terminal opens on it). Pick the computer, pick the
  * folder; every agent in the project may use it.
  */
-export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded, onNewComputer }: {
+export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, onClose, onAdded }: {
   open: boolean;
   hub?: Hub;
+  /** none: a computer of the workspace, not in a project yet */
   project?: Project;
   rows: AgentRow[];
+  /** the workspace as last read: its computers, and what they allow (else from rows) */
+  workspace?: AgentRow["hub"];
+  /** a computer to pick (one just connected) */
+  pick?: string;
   onClose: () => void;
   onAdded: () => void;
-  /** connect another computer first */
-  onNewComputer: () => void;
+  /** (older callers: connecting another computer is the command here now) */
+  onNewComputer?: () => void;
 }) {
   const hubId = hub?.id || "";
-  const ov = rows.find((r) => r.hub.id === hubId)?.hub;
+  const ov = workspace || rows.find((r) => r.hub.id === hubId)?.hub;
   const machines = useMemo(() => (ov ? machinesOfHub(ov) : []).filter((m) => m.can_spawn), [ov]);
+  // What each computer allows, as it reported.
+  const shellOf = (m: Machine) => (ov ? machineShell(ov, m.id) : "unknown");
   const [local, setLocal] = useState<LocalState | null>(null);
   const [machineId, setMachineId] = useState("");
   // Until a computer is picked by hand, this computer (once known) is it.
@@ -517,13 +524,29 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
   const [dir, setDir] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // One command, run in the folder on that computer (as adding an agent is),
+  // or a folder on a computer already connected, picked here.
+  const [mode, setMode] = useState<"command" | "pick">("command");
+  const [os, setOs] = useState<"sh" | "ps">("sh");
+  const [link, setLink] = useState<JoinLink | null>(null);
+  const [linkError, setLinkError] = useState<unknown>(null);
+  // The workspace's computers when the command was made: any other one that
+  // shows up is the folder it was run in.
+  const before = useRef<Set<string> | null>(null);
+  const [arrived, setArrived] = useState<AgentRow | null>(null);
   useEffect(() => {
     if (!open) return;
     setDir("");
     setError(null);
     setBusy(null);
     setPicked(false);
+    setMode(pick ? "pick" : "command");
+    setLink(null);
+    setLinkError(null);
+    setArrived(null);
+    before.current = null;
     appApi.local().then(setLocal).catch(() => setLocal(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
   // This computer first, then the others online.
@@ -532,10 +555,43 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
     if (open && (!picked || !machines.some((m) => m.id === machineId))) setMachineId(ordered[0]?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, machines.length, local]);
+  // A computer just connected is the one to use.
+  useEffect(() => {
+    if (open && pick && machines.some((m) => m.id === pick)) {
+      setMachineId(pick);
+      setPicked(true);
+    }
+  }, [open, pick, machines]);
   const machine = machines.find((m) => m.id === machineId);
+  const shell = machine ? shellOf(machine) : "unknown";
+  // A computer that said no is not tried (it would only be refused).
+  // (This computer is allowed right here, in the notice.)
+  const blocked = shell === "no" && !!machine && !isHere(machine);
   // The project's agents may use it; without any yet, every agent of yours here.
   const users = (project ? project.members.map((m) => m.name) : [])
     .filter((n) => rows.some((r) => r.hub.id === hubId && r.st.agent.name === n && agentKind(r.st.agent) === "agent"));
+  // The command: a one-off link that makes the folder it is run in a
+  // computer for the project's agents (none yet: a placeholder, swapped for
+  // them when one joins).
+  useEffect(() => {
+    if (!open || mode !== "command" || link || linkError || !hubId) return;
+    let off = false;
+    before.current = new Set(rows.filter((r) => r.hub.id === hubId && isWorkspace(r.st.agent)).map((r) => r.st.agent.name));
+    appApi.createJoinLink(hubId, { uses: 1, expires_hours: 24, shell_node: true, allow_from: users.length ? users : [nobody()] })
+      .then((l) => { if (!off) setLink(l); }, (e) => { if (!off) setLinkError(e); });
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, hubId, link, linkError]);
+  // It shows up: done (and in the project, when it was added from one).
+  useEffect(() => {
+    if (!open || !link || arrived || !before.current) return;
+    const fresh = rows.find((r) => r.hub.id === hubId && isWorkspace(r.st.agent) && !before.current!.has(r.st.agent.name));
+    if (!fresh) return;
+    setArrived(fresh);
+    if (project) void appApi.putProjectMember(hubId, project.name, fresh.st.agent.name).catch(() => undefined);
+    onAdded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, link, arrived, rows]);
   // Folders already used on that computer, one click away.
   const folders = usedFolders(rows, hubId, machineId);
   // The workspace's computers not in this project yet: one click puts one
@@ -576,17 +632,72 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
       onAdded();
       onClose();
     } catch (err) {
-      setError(err);
+      // Refused for its own limit: say it as the notice above does.
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(/spawn\.max_access/.test(msg)
+        ? new Error(L("那台电脑还没允许开终端：按上面的说明在那台电脑上允许，再点添加。", "That computer hasn't allowed terminals yet: allow it there as said above, then Add again."))
+        : err);
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("给项目加一台电脑", "Add a computer to the project")}
-      description={L("选你的一台电脑和其中一个文件夹，项目里的 agent 就能在里面跑命令。你也可以打开它的终端在旁边看着。", "Pick one of your computers and a folder on it, and the project's agents can run commands there. You can open its terminal and watch.")}
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()}
+      title={project ? L("给项目加一台电脑", "Add a computer to the project") : L("加一台电脑", "Add a computer")}
+      description={mode === "command"
+        ? L("一台电脑上的一个文件夹，agent 在里面跑命令，你点开就是它的终端。和加 agent 一样，一条命令就行。", "A folder on a computer: agents run commands in it, and it opens as a terminal for you. Like adding an agent, it takes one command.")
+        : project
+          ? L("选你的一台电脑和其中一个文件夹，项目里的 agent 就能在里面跑命令。你也可以打开它的终端在旁边看着。", "Pick one of your computers and a folder on it, and the project's agents can run commands there. You can open its terminal and watch.")
+          : L("选一台连上的电脑和其中一个文件夹，它就出现在侧栏的「电脑」里，点开是它的终端。把它加进项目，项目里的 agent 就能在里面跑命令。", "Pick a connected computer and a folder on it: it shows under Computers in the sidebar, and opens as a terminal. Put it in a project and the project's agents can run commands there.")}
       className="app-modal-add">
-      {existing.length > 0 && (
+      {mode === "command" && (
+        <div className="ws-command" data-testid="computer-command">
+          <div className="app-field-label">{L("在要用的那台电脑上打开终端，进到要给 agent 用的文件夹，运行这一行：", "On that computer, open a terminal in the folder agents should use, and run:")}</div>
+          <div className="seg ws-command-os" role="tablist" aria-label={L("那台电脑的系统", "That computer's system")}>
+            <button type="button" role="tab" aria-selected={os === "sh"} className={cn("seg-btn", os === "sh" && "active")} onClick={() => setOs("sh")}>{L("Mac / Linux / WSL", "Mac / Linux / WSL")}</button>
+            <button type="button" role="tab" aria-selected={os === "ps"} className={cn("seg-btn", os === "ps" && "active")} onClick={() => setOs("ps")}>{L("Windows（PowerShell）", "Windows (PowerShell)")}</button>
+          </div>
+          {link ? (
+            <div className="app-command">
+              <code>{os === "ps" ? link.ps_command || `irm '${link.join_url}?format=ps1' | iex` : link.command}</code>
+              <CopyButton value={os === "ps" ? link.ps_command || `irm '${link.join_url}?format=ps1' | iex` : link.command} />
+            </div>
+          ) : linkError ? (
+            // Only the workspace's owner or admins may make one (it lets agents run commands).
+            (linkError as { code?: string }).code === "permission_denied"
+              ? <div className="app-small-note" data-testid="computer-command-denied">{L("只有工作区的主人或管理员能用命令加电脑：请他们来加。你也可以用已经连上的电脑选文件夹。", "Only the workspace's owner or admins can add a computer with a command: ask one of them. You can also pick a folder on a connected computer.")}</div>
+              : <ErrorText error={linkError} />
+          ) : (
+            <div className="app-command"><span className="app-spinner" /><code>{L("正在生成…", "Making it…")}</code></div>
+          )}
+          {arrived ? (
+            <div className="ws-command-done" data-testid="computer-arrived">
+              <Check />
+              <span>{L(`加好了：${nodeName(arrived.st.agent, arrived.hub)}`, `Added: ${nodeName(arrived.st.agent, arrived.hub)}`)}
+                {arrived.st.agent.binding.workdir && <span className="mono"> · {arrived.st.agent.binding.workdir}</span>}
+                {project ? L("。项目里的 agent 现在就能在这里跑命令。", ". The project's agents can run commands there now.") : L("。在侧栏「电脑」里，点开是它的终端。", ". It is under Computers in the sidebar; it opens as a terminal.")}</span>
+            </div>
+          ) : link && (
+            <div className="ws-command-wait"><span className="app-spinner" />{L("等它连上…运行完这里会自己打勾。命令 24 小时内有效，只能用一次。", "Waiting for it… this ticks itself once it has run. The command works once, for 24 hours.")}</div>
+          )}
+          <div className="ws-who">
+            {project
+              ? users.length > 0
+                ? L(`项目里的 ${users.length} 个 agent 都能在那里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands there, and so can those who join later.`)
+                : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")
+              : L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在那里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")}
+            {" "}{L("运行命令就是那台电脑同意了：agent 能用你的身份在这个文件夹里跑命令。", "Running it is that computer's consent: agents can run commands in that folder as you.")}
+          </div>
+          <div className="app-modal-actions">
+            {machines.length > 0 && !arrived && (
+              <button type="button" className="app-btn app-btn-quiet ws-switch" onClick={() => setMode("pick")}>{L("用已经连上的电脑选文件夹", "Pick a folder on a connected computer")}</button>
+            )}
+            <button type="button" className={cn("app-btn", arrived && "app-btn-primary")} onClick={onClose}>{arrived ? L("完成", "Done") : L("关闭", "Close")}</button>
+          </div>
+        </div>
+      )}
+      {mode === "pick" && existing.length > 0 && (
         <div className="app-field">
           <span className="app-field-label">{L("已有的电脑", "Computers you already have")}</span>
           <div className="ws-existing">
@@ -606,9 +717,10 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
           <div className="ws-or">{L("或者，用一台电脑上的另一个文件夹", "Or use another folder on a computer")}</div>
         </div>
       )}
-      <form onSubmit={add}>
+      {mode === "pick" && <form onSubmit={add}>
         <div className="app-field">
           <span className="app-field-label">{L("在哪台电脑上", "On which computer")}</span>
+          {ordered.length === 0 && <div className="app-small-note">{L("这个工作区还没有连上的电脑：点「另一台电脑…」先连一台。", "No computer is connected to this workspace yet: connect one with Another computer….")}</div>}
           <div className="ws-computers">
             {ordered.map((m) => {
               const Icon = osInfo(m.os).icon;
@@ -616,11 +728,12 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
                 <button key={m.id} type="button" className={cn("ws-computer", m.id === machineId && "active", !m.online && "is-away")} onClick={() => { setMachineId(m.id); setPicked(true); }} disabled={!!busy}>
                   <Icon />
                   <span className="ws-computer-name">{isHere(m) ? L("这台电脑", "This computer") : m.name}</span>
-                  {!m.online && <span className="ws-computer-sub">{L("不在线", "Away")}</span>}
+                  {!m.online ? <span className="ws-computer-sub">{L("不在线", "Away")}</span>
+                    : shellOf(m) === "no" && <span className="ws-computer-sub">{L("还没允许", "Not allowed yet")}</span>}
                 </button>
               );
             })}
-            <button type="button" className="ws-computer is-new" onClick={onNewComputer} disabled={!!busy}>
+            <button type="button" className="ws-computer is-new" onClick={() => setMode("command")} disabled={!!busy}>
               <span className="ws-computer-name">{L("另一台电脑…", "Another computer…")}</span>
             </button>
           </div>
@@ -635,21 +748,25 @@ export function AddWorkspaceDialog({ open, hub, project, rows, onClose, onAdded,
           </div>
         )}
         <div className="ws-who">
-          {users.length > 0
-            ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
-            : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
+          {!project
+            ? L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在这里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")
+            : users.length > 0
+              ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
+              : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
-        {machine && <LocalShellAccess machine={machine} what="shell" />}
+        {machine && <LocalShellAccess machine={machine} what="shell" shell={shell} />}
         <ErrorText error={error} />
         {busy ? (
           <div className="app-convpick-starting"><Mushroom /><span>{L("正在准备", "Setting it up")} · <Elapsed since={busy} /></span></div>
         ) : (
           <div className="app-modal-actions">
+            <button type="button" className="app-btn app-btn-quiet ws-switch" onClick={() => setMode("command")}>{L("用一条命令加", "Add with one command")}</button>
             <button type="button" className="app-btn" onClick={onClose}>{L("取消", "Cancel")}</button>
-            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim()}>{L("添加", "Add")}</button>
+            <button type="submit" className="app-btn app-btn-primary" disabled={!machine || !dir.trim() || blocked}
+              title={blocked ? L("那台电脑还没允许开终端", "That computer hasn't allowed terminals yet") : undefined}>{L("添加", "Add")}</button>
           </div>
         )}
-      </form>
+      </form>}
     </Modal>
   );
 }

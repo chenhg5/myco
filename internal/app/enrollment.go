@@ -134,7 +134,7 @@ func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinI
 		return nil, err
 	}
 	for _, e := range all {
-		if e.Kind == domain.EnrollmentMachine && e.ParentID == link.ID && e.Machine == machine && e.RevokedAt.IsZero() {
+		if e.Kind == domain.EnrollmentMachine && e.ParentID == link.ID && sameMachineName(e.Machine, machine) && e.RevokedAt.IsZero() {
 			if in.DryRun {
 				return &JoinOutput{Machine: e, Link: link}, nil
 			}
@@ -186,6 +186,26 @@ func (s *EnrollmentService) Join(ctx context.Context, linkToken string, in JoinI
 		return nil, err
 	}
 	return &JoinOutput{Machine: e, Link: link, Token: plain, Created: true}, nil
+}
+
+// sameMachineName: the machine name an enrollment got (have) is the one
+// asked for (want), or that name with the number added when another link's
+// machine had it already ("box2-2" for "box2"): the same machine running
+// the same link again.
+func sameMachineName(have, want string) bool {
+	if have == want {
+		return true
+	}
+	n, ok := strings.CutPrefix(have, want+"-")
+	if !ok || n == "" {
+		return false
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *EnrollmentService) issueEnrollToken() (string, error) {

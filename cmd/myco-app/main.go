@@ -84,6 +84,13 @@ func main() {
 			return pickImage()
 		}
 	}
+	// A link in a chat opens in the default browser (set by runGUI).
+	b.OpenURL = func(u string) error {
+		if openURL == nil { // not yet: the app is starting
+			return fmt.Errorf("not ready")
+		}
+		return openURL(u)
+	}
 	// The pages' language changed: the tray menu (when there is one) follows.
 	b.OnUILang = func(l string) {
 		if f := uiLangHook; f != nil {
@@ -99,6 +106,9 @@ func main() {
 // pickImage opens the system's panel for a picture (set by runGUI where
 // the web view's own panel cannot keep to pictures).
 var pickImage func() (string, error)
+
+// openURL opens a link in the default browser (set by runGUI).
+var openURL func(string) error
 
 // uiLangHook, when the tray menu is up, redraws it in the pages' language.
 var uiLangHook func(lang string)

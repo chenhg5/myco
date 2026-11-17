@@ -190,6 +190,8 @@ const stuckProgress = makeMessage({
   reply_to: "msg_stuck_legacy", body: "整理到一半：已经列出了 3 种旧版 runner 的日志格式。",
   created_at: iso(40 * 60), updated_at: iso(40 * 60),
 });
+// Links the App asked to open in the browser (/app/open-url).
+const openedLinks = [];
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -232,6 +234,21 @@ const grokPulledTask = makeMessage({
   body: "把 release 分支的 Go 测试跑一遍，结果贴在这个会话里。",
   created_at: iso(3 * 60 * 60),
   updated_at: iso(3 * 60 * 60 - 60),
+});
+
+// Taken several times by the same node and never started on: the hub gave
+// up on it (the app explains it and offers to send it again).
+const grokExhaustedTask = makeMessage({
+  id: "msg_grok_exhausted",
+  thread_id: "th_grok_exhausted",
+  from: CONSOLE,
+  to: "grok-agent-7c2e",
+  type: "task",
+  status: "failed",
+  error: "delivery attempts exhausted: recipient pulled but never acknowledged",
+  body: "README 的截图换成新版的。",
+  created_at: iso(5 * 60 * 60),
+  updated_at: iso(4 * 60 * 60),
 });
 
 // A machine the smoke test deletes, with two nodes and its own machine node.
@@ -356,6 +373,8 @@ const consoleThreads = {
   th_console_stuck_stopped: [stuckOlderTask, stoppedAfterTask],
   // An inbox node pulled this task but never acknowledged it: still queued.
   th_grok_pull: [grokPulledTask],
+  // An earlier one it took several times and never started on: given up on.
+  th_grok_exhausted: [grokExhaustedTask],
 };
 
 // Claude Code / Codex transcripts on this computer, newest first. Two are
@@ -523,7 +542,12 @@ const state = {
         }),
         makeAgent({
           name: "studio-mac-machine", display_name: "Studio Mac", kind: "machine", machine_id: "m_studio",
-          labels: ["machine=studio-mac"], binding: { harness: "machine" },
+          labels: ["machine=studio-mac"], binding: { harness: "machine" }, runtime: { cli: "machine", max_access: "full" },
+        }),
+        // Office PC has not allowed terminals (spawn.max_access: workspace).
+        makeAgent({
+          name: "office-pc-machine", display_name: "Office PC", kind: "machine", machine_id: "m_office",
+          labels: ["machine=office-pc"], binding: { harness: "machine" }, runtime: { cli: "machine", max_access: "workspace" },
         }),
         makeAgent({
           name: "bench-01-machine", display_name: "Bench Linux", kind: "machine", machine_id: "m_bench",
@@ -606,6 +630,29 @@ function demoNotes(n) {
     ...(n > 1 ? ["- 文件预览：Markdown 直接在 App 里看"] : []),
     "",
     "升级前请先跑一遍 `make check`。",
+    "",
+    "### 升级步骤",
+    "",
+    "1. 停掉 runner：`myco runner stop`",
+    "2. 换上新版本，再启动",
+    "3. 看一眼 `myco status`，节点都在线就好",
+    "",
+    "> 已经在跑的任务不受影响：runner 重启后会接着上报进展。",
+    "",
+    "| 平台 | 安装包 | 大小 |",
+    "| --- | --- | --- |",
+    "| macOS | myco.dmg | 38 MB |",
+    "| Windows | myco-setup.exe | 41 MB |",
+    "",
+    "```bash",
+    "myco runner stop && myco upgrade && myco runner start",
+    "```",
+    "",
+    "---",
+    "",
+    "#### 已知问题",
+    "",
+    "- 旧版 App 连新版 Hub 时，头像要刷新一次才显示",
     "",
   ].join("\n");
 }
@@ -692,6 +739,55 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
         : "再跑一遍完整测试";
       Object.assign(preview, { status: "done", suggest, updated_at: iso(0) });
       releaseAfter(hub, threadId, taskId);
+    });
+    return;
+  }
+  // An agent in one long session (it receives in its conversation): the
+  // first task gets a few steps, then it is set aside (held) for you to do
+  // something. You write again; it picks that up and goes on, but its steps
+  // and progress still go to the first task (the one it took first). The
+  // App shows them under your second message, in time.
+  if (preview && /长会话：/.test(preview.body)) {
+    const msgs = hub.threads[threadId] || [];
+    // (the smoke test's windows run at once: each pair carries its own tag;
+    // a new message may start a thread of its own)
+    const tag = (b) => /（([^）]+)）/.exec(b || "")?.[1] || "";
+    const first = Object.values(hub.threads).flat().find((m) => m !== preview && m.type === "task" && /长会话：/.test(m.body || "") && m.status === "held" && tag(m.body) === tag(preview.body));
+    const firstMsgs = first ? hub.threads[first.thread_id] || msgs : msgs;
+    const stamp = (steps, from, gap) => steps.map((d, i) => ({ ...d, at: new Date(from + i * gap).toISOString() }));
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    if (!first) {
+      preview.trace = stamp([
+        { kind: "thinking", text: "先看看授权状态。" },
+        { kind: "tool", tool: "Bash", id: "l1", input: "lark-cli auth status" },
+        { kind: "tool_result", id: "l1", output: "not logged in" },
+        { kind: "text", text: "需要你在会话里允许授权，开通后告诉我。" },
+        { kind: "turn_end" },
+        { kind: "turn_end" },
+      ], Date.now(), 300);
+      preview.trace_pace = 300;
+      later(2500, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
+      return;
+    }
+    // The second: picked up, nothing of its own; it all goes to the first.
+    preview.trace = [];
+    later(1200, () => {
+      const at = Date.now();
+      first.trace = [...first.trace.slice(0, -1), ...stamp([
+        { kind: "thinking", text: "授权开通了，接着拉群消息。" },
+        { kind: "tool", tool: "Bash", id: "l2", input: "lark-cli im chats list" },
+        { kind: "tool_result", id: "l2", output: "12 chats" },
+        { kind: "text", text: "授权已生效，开始拉群消息。" },
+      ], at, 100), { kind: "turn_end" }];
+      first.trace_pace = 1;
+      firstMsgs.push(makeMessage({ thread_id: first.thread_id, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: first.id, body: "授权已生效，开始只读收集群消息。", created_at: iso(0), updated_at: iso(0) }));
+    });
+    later(6000, () => {
+      replyTimers.delete(taskId);
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "群消息拉完了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+      firstMsgs.push(makeMessage({ thread_id: first.thread_id, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: first.id, body: "授权这件事好了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(first, { status: "done", updated_at: iso(0) });
     });
     return;
   }
@@ -1194,6 +1290,35 @@ const server = http.createServer(async (req, res) => {
   // the app at a member; the mock just says yes.
   if (parts[0] === "app" && parts[1] === "island" && method === "POST") return send(res, 200, { ok: true });
 
+  // /app/export — the App saves a conversation it rendered; the mock keeps
+  // the last one for the UI smoke (GET /app/mock/last-export).
+  if (parts[0] === "app" && parts[1] === "export" && parts.length === 2 && method === "POST") {
+    const b = await readBody(req);
+    if (!/\.(md|jsonl)$/.test(b?.name || "")) return fail(res, 400, "invalid_argument", "an export is a .md or .jsonl file");
+    state.lastExport = { name: b.name, content: String(b.content || "") };
+    return send(res, 200, { path: `/Users/glenn/Downloads/${b.name}` });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
+
+  // /app/mock/run-join — the UI smoke "runs" the last shell-node command on a
+  // computer: the folder it ran in shows up as a computer of the workspace.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-join" && parts.length === 3 && method === "POST") {
+    const j = state.pendingJoin;
+    const hub = j && state.hubs.find((h) => h.id === j.hubId);
+    if (!hub) return fail(res, 404, "not_found", "no shell-node command to run");
+    state.pendingJoin = null;
+    state.counter += 1;
+    const body = await readBody(req);
+    const dir = (typeof body?.dir === "string" && body.dir) || "~/code/wsl-app";
+    const base = dir.split("/").filter(Boolean).pop() || "shell";
+    const agent = makeAgent({
+      name: `wsl-${base}-shell`, kind: "shell", machine_id: "", created_at: iso(0), last_seen_at: iso(0),
+      labels: ["machine=wsl"], binding: { harness: "exec", environment: "WSL Ubuntu", workdir: dir }, allow_from: j.allow,
+    });
+    hub.agents.push(agent);
+    return send(res, 200, { agent: agent.name });
+  }
+
   // /app/mock/stuck — the smoke test puts the stale demo task back: it stops
   // and resends it, and the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
@@ -1233,6 +1358,8 @@ const server = http.createServer(async (req, res) => {
     stoppedAfterTask.created_at = iso(2 * 60 * 60);
     stoppedAfterTask.updated_at = iso(2 * 60 * 60);
     hub.threads.th_console_stuck_stopped = keep("th_console_stuck_stopped", [stuckOlderTask, stoppedAfterTask]);
+    // The task it never started on, without what was sent again since.
+    hub.threads.th_grok_exhausted = [grokExhaustedTask];
     // What the previous pass sent legacy-codex (resends, the text-only and
     // tool-call tasks) goes too, so each window size starts the same.
     for (const [id, msgs] of Object.entries(hub.threads || {})) {
@@ -1395,7 +1522,19 @@ const server = http.createServer(async (req, res) => {
   // /app/info
   if (parts[0] === "app" && parts[1] === "info" && parts.length === 2) {
     if (method !== "GET") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
-    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac" });
+    return send(res, 200, { version: SHOWCASE ? "v0.18.39" : "v0.16.8-demo", shell: SHELL, dictation: SHELL === "mac", open_url: true });
+  }
+  // /app/open-url: the desktop app opens a link in the default browser;
+  // here it is only noted (GET /app/mock/opened lists them, for the smoke test).
+  if (parts[0] === "app" && parts[1] === "open-url" && parts.length === 2) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    if (!/^(https?:\/\/[^/]|mailto:)/i.test(body?.url || "")) return fail(res, 400, "invalid_argument", "only http, https and mailto links open in the browser");
+    openedLinks.push(body.url);
+    return send(res, 200, { ok: true });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "opened" && parts.length === 3) {
+    return send(res, 200, { urls: openedLinks });
   }
   // /app/ui-lang: the pages' language, for the desktop app's tray menu.
   if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {
@@ -2195,7 +2334,7 @@ const server = http.createServer(async (req, res) => {
       const started = m.status !== "queued" && m.status !== "delivered";
       const shown = !started ? [] : running ? steps.slice(0, Math.min(steps.length - 1, Math.floor((Date.now() - new Date(m.created_at).getTime()) / (m.trace_pace || 2000)))) : steps;
       const after = Number(url.searchParams.get("after") || 0);
-      const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d })).filter((e) => e.seq > after);
+      const events = shown.map((d, i) => ({ seq: i + 1, kind: d.kind, data: d, ...(d.at ? { at: d.at } : {}) })).filter((e) => e.seq > after);
       return send(res, 200, { message: m.id, status: m.status, events });
     }
     // /app/hubs/{id}/agents/cleanup — offline nodes (demo: every offline one).
@@ -2284,9 +2423,13 @@ const server = http.createServer(async (req, res) => {
       const hours = Number.isInteger(body?.expires_hours) ? body.expires_hours : 24;
       state.counter += 1;
       const joinUrl = `${hub.url.replace(/\/+$/, "")}/j/myco_enroll_demo${state.counter}x7k2m9q4w8`;
+      // A shell-node link: the UI smoke "runs" it with /app/mock/run-join.
+      if (body?.shell_node) state.pendingJoin = { hubId: hub.id, allow: Array.isArray(body.allow_from) ? body.allow_from : [] };
       return send(res, 200, {
         join_url: joinUrl,
-        command: `curl -fsSL ${joinUrl} | bash`,
+        command: body?.allow_shell && !body?.shell_node ? `curl -fsSL '${joinUrl}?shell=1' | bash` : `curl -fsSL ${joinUrl} | bash`,
+        ps_command: `irm '${joinUrl}?format=ps1' | iex`,
+        shell_node: !!body?.shell_node,
         agent_guide: true,
         uses,
         expires_hours: hours,
@@ -2336,7 +2479,7 @@ const server = http.createServer(async (req, res) => {
         const dir = typeof body.dir === "string" ? body.dir.trim() : "";
         if (!Array.isArray(body.allow_from) || body.allow_from.length === 0) return fail(res, 400, "invalid_argument", "a shell node needs at least one agent allowed to send it commands");
         if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
-        if (machine.id !== "m_studio") { // only Studio Mac allows full access in the mock
+        if (!machine.id.startsWith("m_studio")) { // only Studio Mac (in any workspace) allows full access in the mock
           return fail(res, 403, "permission_denied", `a shell node runs commands with full rights, but machine ${machine.name} allows at most workspace; the machine's owner can allow it with spawn.max_access: full in ~/.myco/machine.yaml`);
         }
         await sleep(1200);

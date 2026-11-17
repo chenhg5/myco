@@ -141,6 +141,8 @@ export function withoutChores(events: TraceEvent[]): TraceEvent[] {
   return out.length === events.length ? events : out;
 }
 
+const msOf = (iso?: string) => (iso ? new Date(iso).getTime() || 0 : 0);
+
 const READ = new Set(["Read", "NotebookRead"]);
 const EDIT = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SEARCH = new Set(["Grep", "Glob", "LS"]);
@@ -248,7 +250,7 @@ function usageLine(u?: TraceStep): string {
  * as one line that opens, as the runner reported them. Live while the task
  * runs: the newest steps say what it is doing now.
  */
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus }: {
   hubId: string; task: Message; onGrow?: () => void;
   cli?: string;
   onStatus?: (taskId: string, status: string) => void;
@@ -276,6 +278,11 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   /** told when its last step was, and whether it ended its turn or set the
    *  task aside (then it waits; it is not stuck) */
   onActivity?: (taskId: string, at: number, ended: boolean) => void;
+  /** your next message: steps after it show under that one, not here */
+  until?: string;
+  /** earlier tasks still open whose steps since this one was sent (since)
+   *  show here (an agent in one long session goes on under the first) */
+  borrow?: { ids: string[]; since: string };
   /** what you added to the task (steer): in the run at the time you sent
    *  it, so what it did after is under it */
   steers?: Message[];
@@ -303,7 +310,52 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const last = useRef(rawEvents?.length ? rawEvents[rawEvents.length - 1].seq : 0);
   const finalLoaded = useRef(!running && rawEvents !== null);
   // (without the turns it woke for only to keep listening)
-  const events = useMemo(() => rawEvents && withoutChores(rawEvents), [rawEvents]);
+  const ownEvents = useMemo(() => rawEvents && withoutChores(rawEvents), [rawEvents]);
+  // An agent in one long session (it receives in its conversation) picks up
+  // what you sent next and goes on, its steps still filed under the task it
+  // took first, which is still open. Shown in time: this run shows its own
+  // steps up to your next message (until), and the steps filed under those
+  // earlier tasks since this one was sent (borrow); not all above.
+  const borrowKey = borrow ? borrow.ids.join(",") : "";
+  const [borrowed, setBorrowed] = useState<Record<string, TraceEvent[]>>({});
+  useEffect(() => {
+    if (!borrow || !borrow.ids.length) return;
+    let off = false;
+    const after: Record<string, number> = {};
+    const load = async () => {
+      for (const id of borrow.ids) {
+        try {
+          const r = await appApi.trace(hubId, id, after[id] || 0);
+          if (off || !r.events.length) continue;
+          after[id] = Math.max(after[id] || 0, r.events[r.events.length - 1].seq);
+          setBorrowed((b) => {
+            const have = new Set((b[id] || []).map((e) => e.seq));
+            const fresh = r.events.filter((e) => !have.has(e.seq));
+            return fresh.length ? { ...b, [id]: [...(b[id] || []), ...fresh] } : b;
+          });
+        } catch { /* that run is not readable: its own place shows why */ }
+      }
+    };
+    void load();
+    if (!running) return () => { off = true; };
+    const t = window.setInterval(() => void load(), POLL_MS);
+    return () => { off = true; window.clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubId, borrowKey, running]);
+  const since = borrow?.since;
+  const extra = useMemo(() => {
+    const s = msOf(since);
+    return Object.values(borrowed).flatMap((list) => withoutChores(list)).filter((e) => e.at && msOf(e.at) >= s);
+  }, [borrowed, since]);
+  const events = useMemo(() => {
+    if (!ownEvents) return ownEvents;
+    const u = msOf(until) || Infinity;
+    const own = until ? ownEvents.filter((e) => !e.at || msOf(e.at) < u) : ownEvents;
+    const more = extra.filter((e) => msOf(e.at) < u);
+    if (!more.length) return own;
+    // (in time, numbered anew: steps of two runs do not share numbers)
+    return [...own, ...more].sort((a, b) => msOf(a.at) - msOf(b.at) || a.seq - b.seq).map((e, i) => ({ ...e, seq: i + 1 }));
+  }, [ownEvents, extra, until]);
   const body = useRef<HTMLDivElement>(null);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
@@ -375,12 +427,14 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const paused = running && !asking && !gone && pausedRun(events || [], task, said || [], now);
   useEffect(() => { onPaused?.(task.id, paused); }, [onPaused, task.id, paused]);
   useEffect(() => {
-    if (!onActivity || !running || !events) return;
+    if (!onActivity || !running || !ownEvents) return;
+    // (all it did: its own steps, cut or not, and the ones shown here)
+    const all = extra.length ? [...ownEvents, ...extra].sort((a, b) => msOf(a.at) - msOf(b.at)) : ownEvents;
     let at = 0;
-    for (const e of events) at = Math.max(at, e.at ? new Date(e.at).getTime() || 0 : 0);
-    const last = events[events.length - 1]?.data.kind;
+    for (const e of all) at = Math.max(at, msOf(e.at));
+    const last = all[all.length - 1]?.data.kind;
     onActivity(task.id, at, (traceStatus || task.status) === "held" || last === "turn_end" || last === "usage");
-  }, [onActivity, task.id, running, events, traceStatus, task.status]);
+  }, [onActivity, task.id, running, ownEvents, extra, traceStatus, task.status]);
   const verb = useVerb(running && !quiet && !paused && !footed);
   // 只看进度 (Settings): only what it reported, not its steps.
   const onlyReports = useReportsOnly();
@@ -390,11 +444,11 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const movingHere = moving && !footed;
   // A finished run's time, tokens and cost go with its answer.
   useEffect(() => {
-    if (!onUsage || running || !events) return;
-    const u = rowsOf(events).usage;
+    if (!onUsage || running || !ownEvents) return;
+    const u = rowsOf(ownEvents).usage;
     if (u) onUsage(task.id, usageLine(u));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, running, task.id]);
+  }, [ownEvents, running, task.id]);
 
   // Not started yet (queued or delivered but not acknowledged: the node is
   // offline, its session is busy, or it has only pulled the task): a quiet

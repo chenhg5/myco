@@ -29,11 +29,34 @@ function displayWidth(s: string): number {
   return w;
 }
 
+// A bare link ends at Chinese (and other full-width) punctuation: GFM ends
+// one only at a space, so "https://a，https://b" read as one link. (Where
+// there is none, marked's own rule decides.)
+const WIDE_PUNCT = /[\u3000-\u303f\uff00-\uffef\u2018-\u201f\u2026]/;
+export function bareLinkEnd(src: string): string | null {
+  const m = /^(?:https?:\/\/|www\.)[^\s<]+/i.exec(src);
+  if (!m) return null;
+  const cut = m[0].search(WIDE_PUNCT);
+  if (cut < 0) return null;
+  // what GFM leaves out at the end: trailing punctuation, an unmatched ")"
+  let raw = m[0].slice(0, cut).replace(/[?!.,:;*_~'"]+$/, "");
+  while (raw.endsWith(")") && (raw.match(/\(/g) || []).length < (raw.match(/\)/g) || []).length) raw = raw.slice(0, -1);
+  return /^(?:https?:\/\/[^/?#\s]|www\.\S)/i.test(raw) ? raw : null;
+}
+
 // Code blocks carry their own copy button so every block gets one, without
 // mounting a React tree inside the rendered HTML. Links open outside the App.
 const md = new Marked({
   gfm: true,
   breaks: true,
+  tokenizer: {
+    url(src) {
+      const raw = bareLinkEnd(src);
+      if (!raw) return false;
+      const href = /^www\./i.test(raw) ? `http://${raw}` : raw;
+      return { type: "link", raw, text: raw, href, tokens: [{ type: "text", raw, text: raw }] };
+    },
+  },
   renderer: {
     // A checklist's boxes, drawn as the plan card's (no form control).
     checkbox({ checked }) {

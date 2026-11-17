@@ -157,10 +157,23 @@ export interface SpawnResult {
   /** The new session's first reply. */
   reply: string;
 }
-export interface JoinLinkInput { uses?: number; expires_hours?: number }
+export interface JoinLinkInput {
+  uses?: number; expires_hours?: number;
+  /** the computer that runs the command also lets agents open terminals on it
+   *  (myco machine join --allow-shell): running it there is that computer's consent */
+  allow_shell?: boolean;
+  /** a shell-node link: the folder the command is run in becomes a computer
+   *  (exec node) that these agents may send commands to */
+  shell_node?: boolean;
+  allow_from?: string[];
+}
 export interface JoinLink {
   join_url: string;
   command: string;
+  /** the same for Windows PowerShell (newer App backends) */
+  ps_command?: string;
+  /** the command also lets that computer run terminals (?shell=1) */
+  allow_shell?: boolean;
   /** the hub's join script ends with the agent's last step, and
    *  join_url + "/" + project joins that project too (older hubs: absent) */
   agent_guide?: boolean;
@@ -255,6 +268,8 @@ export interface AppInfo {
   dictation?: boolean;
   /** the desktop app asks for a face's picture with its own panel (macOS) */
   pick_image?: boolean;
+  /** the desktop app opens links in the default browser (POST /app/open-url) */
+  open_url?: boolean;
 }
 /** Everything the boot probe needs to decide the mode and lay out the shell. */
 export interface AppBootstrap { hubs: Hub[]; info: AppInfo }
@@ -434,6 +449,7 @@ export const appApi = {
   hiddenMessages: (hubId: string) => request<{ ids: string[] }>("GET", `app/hubs/${enc(hubId)}/hidden`),
   updateHidden: (hubId: string, u: { hide?: string[]; show?: string[] }) => request<{ ids: string[] }>("POST", `app/hubs/${enc(hubId)}/hidden`, u),
   pickImage: () => request<{ cancelled?: boolean; name?: string; type?: string; data?: string }>("POST", "app/pick-image"),
+  openUrl: (url: string) => request<{ ok: boolean }>("POST", "app/open-url", { url }),
   translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>
@@ -650,6 +666,8 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
+  saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */
   previewVoice: async (input: { tts_provider: string; tts_speaker: string; tts_rate: number; tts_key?: string; lang: string }): Promise<Blob> => {
     const r = await fetch("app/voice/preview", {

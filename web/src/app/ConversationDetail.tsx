@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Loader2, Lock, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -17,7 +18,7 @@ import { useCopy } from "@/app/copy";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, locale } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
-import { Avatar, whereOf } from "@/app/persona";
+import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
@@ -227,6 +228,24 @@ function LoadingSkeleton({ shell }: { shell: boolean }) {
   );
 }
 
+/**
+ * Why a message failed, in words: short beside its time, long under it.
+ * Known hub reasons are explained; anything else is shown as it came.
+ */
+function failureWords(err: string): { short: string; long: string } {
+  if (/delivery attempts exhausted/.test(err)) {
+    return {
+      short: L("没送到", "Not delivered"),
+      long: L("没送到：它取走了几次，都没开始处理。它那边的会话可能没在运行，或者卡住了。可以重新发送，或者先看看它在不在线。",
+        "Not delivered: it picked this up several times but never started on it. Its session may not be running, or may be stuck. Send it again, or check that it is online first."),
+    };
+  }
+  if (/lease expired|timed out|timeout/i.test(err)) {
+    return { short: L("超时了", "Timed out"), long: L(`超时了：${err}`, `Timed out: ${err}`) };
+  }
+  return { short: L("失败了", "Failed"), long: L(`失败了：${err}`, `Failed: ${err}`) };
+}
+
 export function ConversationDetail({ target, rows, now, onBack, onNewConversation, onOpen, onOpenExchange, onRefresh, showBack = true, backLabel, role, inserts, headActions, projectTitle, bare }: {
   target: ConversationTarget;
   /** the project this chat is the home of (its coordinator's): the empty
@@ -264,6 +283,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Seen before in this window: shown from the first frame (no empty
   // flash while the cache is read in an effect).
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
+  // Exporting this conversation (Markdown or JSON Lines, to Downloads).
+  const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
   // What was typed and not sent stays with the conversation (drafts.ts).
@@ -901,6 +922,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const execNode = [target.agent, target.peer, ...parties].find((n) => isExecNode(n));
   // Your own session with a shell node: you type at a prompt, as in a terminal.
   const shellMode = !observed && isExecNode(target.agent);
+  // The other side is one of your computers (a folder on one): its header
+  // offers its settings.
+  const computer = !observed && !!row && isWorkspace(row.st.agent);
   // What the agent offers you to say next (on your newest task, once it is
   // not at work any more): the empty input shows it, Tab takes it.
   const suggestion = !shellMode && !openTask && lastTask?.suggest?.trim() && !lastTask.unreadable ? lastTask.suggest.trim() : "";
@@ -1030,6 +1054,41 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       status: said?.length ? said[said.length - 1].body.split("\n")[0] : rowOf(task.to)?.st.agent.status_text,
     };
   })();
+
+  // An agent in one long session (it receives in its conversation) picks up
+  // what you send next and goes on, while its steps and progress still go
+  // to the task it took first, which stays open. In time, then: a run shows
+  // what came before your next message (until), and the one for that next
+  // message shows what the earlier ones still open got since (borrow).
+  // (A runner's agent starts the next one only after the first is done.)
+  const untilOf = new Map<string, string>();
+  const borrowOf = new Map<string, { ids: string[]; since: string }>();
+  {
+    const mine = (shown || []).filter((m) => m.type === "task" && !m.e2e && isMe(m.from, row?.hub))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    mine.forEach((t, i) => {
+      const st = traceStatuses.get(t.id) || t.status;
+      const taken = (st !== "queued" && st !== "delivered") || !!progressOf.get(t.id)?.length;
+      if (!taken) return;
+      const ids = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id)).map((p) => p.id);
+      if (!ids.length) return;
+      borrowOf.set(t.id, { ids, since: t.created_at });
+      for (const id of ids) if (!untilOf.has(id)) untilOf.set(id, t.created_at);
+      // (and this one's own window ends where a later one takes over)
+      const next = mine[i + 1];
+      if (next && !untilOf.has(t.id)) untilOf.set(t.id, next.created_at);
+    });
+  }
+  // What each run shows of what was reported, by the same windows.
+  const saidIn = (taskId: string): Message[] | undefined => {
+    const until = untilOf.get(taskId);
+    const borrow = borrowOf.get(taskId);
+    const own = (progressOf.get(taskId) || []).filter((m) => !until || m.created_at < until);
+    const more = borrow ? borrow.ids.flatMap((id) => progressOf.get(id) || [])
+      .filter((m) => m.created_at >= borrow.since && (!until || m.created_at < until)) : [];
+    const all = more.length ? [...own, ...more].sort((a, b) => a.created_at.localeCompare(b.created_at)) : own;
+    return all.length ? all : undefined;
+  };
 
   // One loading in the chat, the newest: of the runs at work (acknowledged,
   // or reporting progress), only the newest one moves; an older one still
@@ -1364,6 +1423,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // A task that failed: the same message to the same node again, in the same
+  // conversation, as a fresh task (the failed one stays, marked).
+  const sendAgain = async (task: Message) => {
+    if (resending) return;
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const fresh = await appApi.sendMessage(target.hubId, { to: task.to, body: task.body, thread_id: task.thread_id });
+      setMessages((prev) => [...(prev || []), fresh]);
+      atBottom.current = true;
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+
   // Messages waiting behind this round, in order: on the hub (v0.19.2) or
   // here. Both are one list above the box, with edit and withdraw.
   type QueueItem = { key: string; body: string; server?: Message; local?: Queued };
@@ -1597,7 +1673,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const usage = answers ? usageOf[answers] : undefined;
       const voiced = m.unreadable ? null : viaVoice(m.body);
       const failedNote = m.status === "failed" && m.error === STOPPED ? L("已停止", "Stopped")
-        : m.status === "failed" && m.error ? L(`失败：${m.error}`, `Failed: ${m.error}`) : "";
+        : m.status === "failed" && m.error ? failureWords(m.error).short : "";
+      // A task of yours that failed (not one you stopped): what happened, in
+      // words, and sending it again is one click.
+      const retry = m.type === "task" && m.status === "failed" && !!m.error && m.error !== STOPPED && isMe(m.from, row?.hub) && !observed;
       const receipt = receiptOf(m);
       return (
         <Fragment key={m.id}>
@@ -1655,6 +1734,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
         </div>
+        {retry && (
+          <div className="conv-stuck is-failed" data-failed={m.id}>
+            <span className="dot failed" aria-hidden />
+            <span className="conv-stuck-text">{failureWords(m.error!).long}</span>
+            <span className="conv-stuck-actions">
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void sendAgain(m)}>
+                {resending === m.id ? L("正在发送…", "Sending…") : L("重新发送", "Send again")}
+              </button>
+            </span>
+          </div>
+        )}
         {/* What the agent did for a task you gave it (its runner reports it):
             the start of its turn, on its side of the conversation. A task that
             went quiet after it was picked up may have lost its result: say so,
@@ -1663,7 +1753,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} onStatus={onTraceStatus} onGrow={followBottom} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} onActivity={onActivity} until={untilOf.get(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
@@ -1739,18 +1829,34 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* Find, and the pane's own buttons (full width, close): one group,
             one spacing, one icon size. */}
-        {(!termMode || headActions) && (
+        {(!termMode || headActions || computer) && (
           <span className="conv-head-actions">
+            {/* A computer: who may use it, its projects, removing it. */}
+            {computer && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="computer-settings-open"
+                onClick={() => window.dispatchEvent(new CustomEvent("myco-computer-settings", { detail: { hubId: target.hubId, name: target.agent } }))}
+                title={L("这台电脑：谁能用、项目、移除", "This computer: who can use it, projects, remove")} aria-label={L("这台电脑的设置", "This computer's settings")}>
+                <Settings2 />
+              </button>
+            )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
               </button>
             )}
+            {!observed && (shown?.length || 0) > 0 && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="export-open"
+                onClick={() => setExporting(true)} title={L("导出这段对话", "Export this conversation")} aria-label={L("导出这段对话", "Export this conversation")}>
+                <Download />
+              </button>
+            )}
             {headActions}
           </span>
         )}
       </header>}
+      <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
+        messages={shown || []} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />
 
       {/* The terminal shows only your own commands; ones other nodes sent to
           this computer may be stuck with nothing on screen. Say so above it,

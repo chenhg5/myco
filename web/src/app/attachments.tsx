@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, X } from "lucide-react";
+import { useState } from "react";
+import { Check, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Attachment } from "@/api";
 import { bytes } from "@/app/attach";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { FilePreview, isText, useVersion, type Version } from "@/app/preview";
+import { Lightbox } from "@/app/lightbox";
 
 /*
  * The files a message carries, as chat apps show them: pictures as
@@ -49,7 +49,8 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
         </div>
       )}
       {open !== null && pictures[open] && (
-        <Lightbox hubId={hubId} items={pictures} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />
+        <Lightbox items={pictures.map((a) => ({ name: a.name, src: appApi.attachmentUrl(hubId, a.file_id), save: () => appApi.saveAttachment(hubId, a.file_id) }))}
+          index={open} onIndex={setOpen} onClose={() => setOpen(null)} />
       )}
     </>
   );
@@ -114,43 +115,3 @@ function SaveRow({ hubId, a, version }: { hubId: string; a: Attachment; version?
   );
 }
 
-/** A picture full size over the app: Esc or a click outside closes it;
- *  ← → go through the message's pictures. */
-function Lightbox({ hubId, items, index, onIndex, onClose }: {
-  hubId: string; items: Attachment[]; index: number; onIndex: (i: number) => void; onClose: () => void;
-}) {
-  const a = items[index];
-  const [saved, setSaved] = useState(false);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight" && index < items.length - 1) onIndex(index + 1);
-      else if (e.key === "ArrowLeft" && index > 0) onIndex(index - 1);
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [index, items.length, onClose, onIndex]);
-  useEffect(() => setSaved(false), [index]);
-  const save = async () => {
-    try { await appApi.saveAttachment(hubId, a.file_id); setSaved(true); } catch { /* the row's way shows why */ }
-  };
-  return createPortal(
-    <div className="app-portal lightbox" role="dialog" aria-label={a.name} onClick={onClose}>
-      <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-        <span className="lightbox-name">{a.name}{items.length > 1 && <span className="lightbox-count">{index + 1} / {items.length}</span>}</span>
-        <button type="button" className="lightbox-btn" onClick={() => void save()} title={L("存到「下载」文件夹", "Save to Downloads")}>
-          {saved ? <Check /> : <Download />}{saved ? L("已保存", "Saved") : L("保存", "Save")}
-        </button>
-        <button type="button" className="lightbox-btn is-icon" onClick={onClose} aria-label={L("关闭", "Close")} title={L("关闭（Esc）", "Close (Esc)")}><X /></button>
-      </div>
-      {index > 0 && (
-        <button type="button" className="lightbox-nav is-prev" onClick={(e) => { e.stopPropagation(); onIndex(index - 1); }} aria-label={L("上一张", "Previous")}><ChevronLeft /></button>
-      )}
-      <img className="lightbox-img" src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} onClick={(e) => e.stopPropagation()} draggable={false} />
-      {index < items.length - 1 && (
-        <button type="button" className="lightbox-nav is-next" onClick={(e) => { e.stopPropagation(); onIndex(index + 1); }} aria-label={L("下一张", "Next")}><ChevronRight /></button>
-      )}
-    </div>,
-    document.body,
-  );
-}

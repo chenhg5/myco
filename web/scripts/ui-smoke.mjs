@@ -435,6 +435,21 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-home");
     });
 
+    // A link in a chat opens in the default browser (the desktop app's web
+    // view opens no new windows): the App hands it over, no tab of its own.
+    await step("链接用浏览器打开", async () => {
+      const link = page.locator(".sp-home .conv-timeline a", { hasText: "发布页" }).first();
+      await link.scrollIntoViewIfNeeded();
+      const before = page.context().pages().length;
+      await link.click();
+      await page.waitForFunction(async () => {
+        const r = await (await fetch("/app/mock/opened")).json();
+        return r.urls.includes("https://example.com/releases/v0.16.8");
+      }, null, { timeout: 5_000 });
+      await page.waitForTimeout(300);
+      if (page.context().pages().length !== before) throw new Error("链接应交给默认浏览器打开，不该在 App 里开新窗口");
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
@@ -627,16 +642,54 @@ async function runMatrix(browser, size, scheme) {
 
     if (!narrow) {
       await step("项目 · 添加工作空间", async () => {
+        // Adding a computer is one command, as adding an agent is: run it in
+        // the folder on that computer, and the dialog ticks itself; from a
+        // project, the folder is in the project at once.
         await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
         const dialog = page.locator(".app-modal-add");
         await dialog.waitFor();
-        await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
+        const box = dialog.locator("[data-testid=computer-command]");
+        await box.waitFor({ timeout: 10_000 });
         // What it means is said calmly (no red block).
         if (await dialog.locator(".app-warn").count()) throw new Error("加电脑的弹窗不该有红色警告块");
-        const folder = `~/code/smoke-${size.width}-${scheme}`;
-        await dialog.locator("input.app-input").fill(folder);
+        const cmd = box.locator(".app-command code");
+        await cmd.filter({ hasText: "curl -fsSL" }).waitFor({ timeout: 10_000 });
+        if (/shell=1|machine\.yaml|max_access/.test(await cmd.innerText())) throw new Error("一条命令就够，不该再带权限开关或让人改文件");
+        await clickVisible(page, box.getByRole("tab", { name: "Windows（PowerShell）" }));
+        await cmd.filter({ hasText: "irm " }).waitFor({ timeout: 5_000 });
+        await clickVisible(page, box.getByRole("tab", { name: "Mac / Linux / WSL" }));
+        await box.locator(".ws-command-wait").waitFor({ timeout: 5_000 });
         await settle(page, 300);
         await shot(page, size, scheme, "add-workspace");
+        // "Running" it there: the folder shows up, in the project.
+        const ran = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir: `~/code/wsl-${size.width}-${scheme}` }) });
+        if (!ran.ok) throw new Error(`mock run-join: ${ran.status}`);
+        await box.locator("[data-testid=computer-arrived]", { hasText: `~/code/wsl-${size.width}-${scheme}` }).waitFor({ timeout: 20_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "add-workspace-done");
+        await clickVisible(page, box.getByRole("button", { name: "完成" }));
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+        await page.locator(".sp-side .sp-member", { hasText: `wsl-${size.width}-${scheme}` }).waitFor({ timeout: 20_000 });
+
+        // A folder on a computer already connected can still be picked; a
+        // computer that has not allowed terminals says so there, with the
+        // command to run on it, and cannot be added yet.
+        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
+        await dialog.waitFor();
+        await clickVisible(page, dialog.getByRole("button", { name: "用已经连上的电脑选文件夹" }));
+        await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
+        const office = dialog.locator(".ws-computer", { hasText: "Office PC" });
+        await office.locator(".ws-computer-sub", { hasText: "还没允许" }).waitFor({ timeout: 10_000 });
+        await clickVisible(page, office);
+        await dialog.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 5_000 });
+        await dialog.locator("input.app-input").fill("~/code/office");
+        if (await dialog.locator("button[type=submit]").isEnabled()) throw new Error("没允许开终端的电脑不该能点添加");
+        await settle(page, 200);
+        await shot(page, size, scheme, "add-workspace-not-allowed");
+        await dialog.locator("input.app-input").fill("");
+        await clickVisible(page, dialog.locator(".ws-computer").first());
+        const folder = `~/code/smoke-${size.width}-${scheme}`;
+        await dialog.locator("input.app-input").fill(folder);
         await dialog.locator("button[type=submit]").click();
         await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 20_000 });
         const shell = `smoke-${size.width}-${scheme}-shell`;
@@ -907,6 +960,42 @@ async function runMatrix(browser, size, scheme) {
       if (!file || !file.name.endsWith(".txt") || !file.name.includes("…")) throw new Error(`长文件名应从中间省略、保留扩展名，实际「${file?.name}」`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-attach");
+      // A picture not sent yet opens full size, to see what it was; no
+      // Save (it is yours already); Esc closes it and it is still there.
+      await box.locator(".att-chip.is-picture .att-thumb-btn").first().click();
+      const big = page.locator(".lightbox");
+      await big.waitFor({ timeout: 5_000 });
+      if (!(await big.locator(".lightbox-img").getAttribute("src"))?.startsWith("blob:") && !(await big.locator(".lightbox-img").getAttribute("src"))?.startsWith("data:")) throw new Error("没发出去的图片应能看大图");
+      if (await big.locator(".lightbox-btn", { hasText: "保存" }).count()) throw new Error("没发出去的图片不该有「保存」");
+      await page.keyboard.press("Escape");
+      await big.waitFor({ state: "detached", timeout: 5_000 });
+      if ((await box.locator(".att-chip").count()) !== 2) throw new Error("看完大图，待发的文件应还在");
+      // A tall picture (a long screenshot) fits the window, in the middle.
+      await page.locator(".conv-compose-input").evaluate(async (el) => {
+        const c = document.createElement("canvas");
+        c.width = 300; c.height = 3000;
+        const g = c.getContext("2d"); g.fillStyle = "#4a8"; g.fillRect(0, 0, 300, 3000);
+        const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
+        const dt = new DataTransfer();
+        dt.items.add(new File([blob], "长截图.png", { type: "image/png" }));
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      });
+      await box.locator(".att-chip").nth(2).waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => !document.querySelector(".conv-compose-box .att-spin"), null, { timeout: 10_000 });
+      await box.locator(".att-chip.is-picture .att-thumb-btn").last().click();
+      await big.waitFor({ timeout: 5_000 });
+      await page.waitForFunction(() => (document.querySelector(".lightbox-img")?.naturalHeight || 0) > 0, null, { timeout: 5_000 });
+      const fit = await page.locator(".lightbox-img").evaluate((img) => {
+        const r = img.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2, h: window.innerHeight };
+      });
+      if (fit.top < 0 || fit.bottom > fit.h) throw new Error(`长图应整张在窗口里，实际 ${Math.round(fit.top)}–${Math.round(fit.bottom)} / ${fit.h}`);
+      if (Math.abs(fit.mid - (56 + (fit.h - 88) / 2)) > 4) throw new Error(`长图应上下居中，中线在 ${Math.round(fit.mid)}`);
+      await page.keyboard.press("Escape");
+      await big.waitFor({ state: "detached", timeout: 5_000 });
+      await box.locator(".att-chip").nth(2).locator(".att-x").click();
+      await page.waitForFunction(() => document.querySelectorAll(".conv-compose-box .att-chip").length === 2, null, { timeout: 5_000 });
+      await page.locator(".conv-compose-input").focus();
       await page.locator(".conv-compose-input").press("Enter");
       const sent = page.locator(".conv-msg.is-me", { hasText: "发来 2 个文件" }).last();
       await sent.waitFor({ timeout: 20_000 });
@@ -1005,6 +1094,20 @@ async function runMatrix(browser, size, scheme) {
       const h1 = await doc.evaluate((el) => el.getBoundingClientRect().height);
       if (Math.abs(h1 - h0) > 1) throw new Error(`文件面板打开后不该变高（${h0} → ${h1}）`);
       await shot(page, size, scheme, "file-preview");
+      // Wide enough, it sits beside the chat (the App makes room): you can
+      // read it and go on writing; working in the chat does not close it.
+      if (!narrow) {
+        const gap = await page.evaluate(() => document.querySelector(".fp-panel").getBoundingClientRect().left - document.querySelector(".app-main").getBoundingClientRect().right);
+        if (gap < 0) throw new Error(`文件面板应在对话旁边，不该盖住对话（重叠 ${Math.round(-gap)}px）`);
+        if (await page.locator(".fp-scrim").count()) throw new Error("文件在对话旁边时不该有遮罩");
+        const chatBox = page.locator(".conv-detail .conv-compose-input");
+        await chatBox.click();
+        await chatBox.fill("边看文件边聊");
+        await page.waitForTimeout(200);
+        if (!(await doc.isVisible())) throw new Error("一边看文件一边在聊天框里打字，文件面板不该关掉");
+        await chatBox.fill("");
+        await doc.locator(".fp-head").click();
+      }
       // Full screen, and back (a narrow window has it all already: no
       // button there).
       const fullBtn = doc.getByRole("button", { name: "全屏" });
@@ -1043,7 +1146,9 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "首页.html" }).last().click();
       const frame = doc.locator(".fp-body.is-page iframe.fp-frame");
       await frame.waitFor({ timeout: 5_000 });
-      if ((await frame.getAttribute("sandbox")) !== "") throw new Error("HTML 预览的框不该允许运行脚本");
+      // (same origin only so its links can be opened from the App; no scripts)
+      const sandbox = (await frame.getAttribute("sandbox")) ?? "missing";
+      if (sandbox === "missing" || /allow-scripts|allow-popups|allow-top-navigation/.test(sandbox)) throw new Error(`HTML 预览的框不该允许运行脚本，实际 sandbox="${sandbox}"`);
       if (!((await frame.getAttribute("srcdoc")) || "").includes("新版首页")) throw new Error("HTML 预览应显示这个页面");
       await doc.getByRole("tab", { name: "源码" }).click();
       await doc.locator(".fp-code", { hasText: "<h1>新版首页</h1>" }).waitFor({ timeout: 5_000 });
@@ -1325,6 +1430,56 @@ async function runMatrix(browser, size, scheme) {
       if (!firstItem.includes("Review")) throw new Error(`最近聊的应排第一，实际「${firstItem}」`);
       await page.keyboard.press("Escape");
       await cp.waitFor({ state: "detached", timeout: 5_000 });
+    });
+
+    // An agent in one long session goes on with what you sent next, its
+    // steps and progress still filed under the first task (still open):
+    // they show under your newer message, in time, not up above.
+    await step("单聊 · 长会话按时间显示", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const tag = `${size.width}-${scheme}`;
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(`长会话：先查授权（${tag}）`);
+      await box.press("Enter");
+      await page.locator(".conv-detail .trace-say", { hasText: "需要你在会话里允许授权" }).last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 15_000 });
+      await box.fill(`长会话：接着拉群消息（${tag}）`);
+      await box.press("Enter");
+      const second = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长会话：接着拉群消息（${tag}）` }).last();
+      await second.waitFor({ timeout: 10_000 });
+      const said = page.locator(".conv-detail .trace-say", { hasText: "授权已生效，开始拉群消息" }).last();
+      await said.waitFor({ timeout: 15_000 });
+      const report = page.locator(".conv-detail .trace-report", { hasText: "授权已生效，开始只读收集" }).last();
+      await report.waitFor({ timeout: 15_000 });
+      const below = await second.evaluate((el, ts) => {
+        const y = el.getBoundingClientRect().bottom;
+        return ts.map((t) => {
+          const hit = [...document.querySelectorAll(".conv-detail .trace-say, .conv-detail .trace-report")].filter((x) => (x.textContent || "").includes(t)).pop();
+          return !!hit && hit.getBoundingClientRect().top >= y - 1;
+        });
+      }, ["授权已生效，开始拉群消息", "授权已生效，开始只读收集"]);
+      if (below.some((b) => !b)) throw new Error("它接着做的步骤和进展应在你后发的那条消息下面，不该跑到上面去");
+      if (await page.locator(".conv-detail .trace-say", { hasText: "授权已生效，开始拉群消息" }).count() !== 1) throw new Error("接着做的步骤应只出现一次");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-long-session");
+      // Both are answered: nothing left open for the steps after this one.
+      await page.locator(".conv-detail .conv-msg", { hasText: "授权这件事好了" }).last().waitFor({ timeout: 15_000 });
+      await noRound(page);
+    });
+
+    // Links one after another with Chinese commas are each a link of their own.
+    await step("单聊 · 中文标点隔开的链接", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("三个链接：https://a.example/x，https://b.example/y，https://c.example/z 看看");
+      await box.press("Enter");
+      const bubble = page.locator(".conv-detail .conv-msg.is-me", { hasText: "三个链接" }).last();
+      await bubble.waitFor({ timeout: 10_000 });
+      const hrefs = await bubble.locator("a").evaluateAll((els) => els.map((a) => a.getAttribute("href")));
+      if (hrefs.join(" ") !== "https://a.example/x https://b.example/y https://c.example/z") throw new Error(`中文逗号隔开的应是三个链接，实际 ${JSON.stringify(hrefs)}`);
+      await noRound(page);
     });
 
     // Translating what an agent wrote: nothing until a service has a key
@@ -2018,17 +2173,150 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
+      // A computer that has not allowed terminals is marked, and says how to
+      // allow it: on that computer, never from here.
+      const office = page.locator(".pc-machine", { hasText: "Office PC" });
+      await office.locator(".pc-machine-tag", { hasText: "没允许开终端" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, office);
+      const view = page.locator("[data-testid=machine-view]");
+      await view.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-permission");
+      await clickVisible(page, view.getByRole("button", { name: "好" }));
+      await view.waitFor({ state: "hidden", timeout: 5_000 });
+      // Who may use a computer, which projects have it, and removing it are
+      // in one place, a click from its row.
+      // (The folder added in the project step, at full width; else the first.)
+      const pcRow = narrow ? page.locator(".pc-row").first() : page.locator(".pc-row", { hasText: `wsl-${size.width}-${scheme}` });
+      await clickVisible(page, pcRow.getByRole("button", { name: "设置" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await set.locator(".pcs-agent").first().waitFor({ timeout: 10_000 });
+      if (!narrow) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.locator(".pcs-agent").last());
+      await clickVisible(page, set.getByRole("button", { name: "保存" }));
+      await set.getByText("已保存").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-settings");
+      if (!narrow) {
+        await clickVisible(page, set.getByRole("button", { name: "移除这台电脑" }));
+        const sure = page.locator(".app-modal.app-confirm");
+        await sure.waitFor({ timeout: 5_000 });
+        await clickVisible(page, sure.getByRole("button", { name: "移除", exact: true }));
+        await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+        await pcRow.waitFor({ state: "detached", timeout: 10_000 });
+      } else {
+        await clickVisible(page, set.getByRole("button", { name: "好" }));
+        await set.waitFor({ state: "hidden", timeout: 5_000 });
+      }
       // A folder's terminal opens from here.
-      await clickVisible(page, page.locator(".pc-row .app-btn-small"));
+      await clickVisible(page, page.locator(".pc-row").first().getByRole("button", { name: "打开", exact: true }));
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      // And the terminal's header opens its settings too.
+      await clickVisible(page, page.locator("[data-testid=computer-settings-open]").first());
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
+    });
+
+    // A conversation is exported from its header: Markdown for people or
+    // JSON Lines for programs, saved to Downloads.
+    await step("单聊 · 导出对话", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await clickVisible(page, page.locator("[data-testid=export-open]").first());
+      const dlg = page.locator("[data-testid=export-chat]");
+      await dlg.waitFor({ timeout: 10_000 });
+      await clickVisible(page, dlg.getByRole("checkbox"));
+      await settle(page, 200);
+      await shot(page, size, scheme, "export-chat");
+      await clickVisible(page, page.getByRole("button", { name: "导出", exact: true }));
+      await dlg.locator("[data-testid=export-saved]").waitFor({ timeout: 20_000 });
+      const md = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/last-export`)).json();
+      if (!/\.md$/.test(md.name) || !md.name.includes("Myco (Grok)")) throw new Error(`导出的文件名不对：「${md.name}」`);
+      for (const want of ["# 和 Myco (Grok) 的对话", "**你** → Myco (Grok)", "把 release 分支的 Go 测试跑一遍"]) {
+        if (!md.content.includes(want)) throw new Error(`导出的 Markdown 里应有「${want}」`);
+      }
+      // JSON Lines: one message per line, each a whole object.
+      await clickVisible(page, dlg.getByRole("tab", { name: "JSONL" }));
+      await clickVisible(page, page.getByRole("button", { name: "导出", exact: true }));
+      await page.waitForFunction(async () => true);
+      for (let i = 0; ; i++) {
+        const j = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/last-export`)).json();
+        if (/\.jsonl$/.test(j.name || "")) {
+          const rows = j.content.trim().split("\n").map((l) => JSON.parse(l));
+          if (!rows.length || !rows.every((r) => r.id && r.from && r.to && "body" in r)) throw new Error("JSONL 每行应是一条完整的消息");
+          break;
+        }
+        if (i > 50) throw new Error("没导出 JSONL");
+        await settle(page, 200);
+      }
+      await clickVisible(page, dlg.getByRole("button", { name: "好" }));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+    });
+
+    // A task the hub gave up on (taken, never started on) says so in words,
+    // not the hub's reason, and is sent again with one click.
+    await step("单聊 · 没送到可以重新发送", async () => {
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      const failed = page.locator("[data-failed]").last();
+      await failed.waitFor({ timeout: 20_000 });
+      const said = compactText(await failed.innerText());
+      if (!said.includes("没送到") || /delivery attempts|acknowledged/.test(said)) throw new Error(`没送到的说明应该是人话，实际「${said}」`);
+      if (/delivery attempts/.test(await page.locator(".conv-detail").first().innerText())) throw new Error("气泡下不该再出现英文原因");
+      await settle(page, 200);
+      await shot(page, size, scheme, "failed-retry");
+      const before = await page.locator(".conv-msg.is-me", { hasText: "README 的截图换成新版的。" }).count();
+      await clickVisible(page, failed.getByRole("button", { name: "重新发送" }));
+      await page.waitForFunction((n) => [...document.querySelectorAll(".conv-msg.is-me")].filter((x) => (x.textContent || "").includes("README 的截图换成新版的。")).length > n, before, { timeout: 10_000 });
     });
 
     // The sidebar lists the computers too: one click opens a terminal.
     await step("电脑 · 边栏直达终端", async () => {
       await sidebar(page, true);
+      // ⋯ on hover: its settings, without opening the terminal first.
+      const wrap = page.locator(".sp-nav-pc-wrap").first();
+      await wrap.hover();
+      await clickVisible(page, wrap.locator(".sp-nav-more"));
+      await clickVisible(page, page.getByRole("menuitem", { name: "谁能用、项目" }));
+      const set = page.locator("[data-testid=computer-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await set.waitFor({ state: "hidden", timeout: 5_000 });
+      // Right click: rename it in place, or go straight to removing it.
+      const last = page.locator(".sp-nav-pc").last();
+      const oldName = (await last.locator(".app-nav-label").innerText()).trim();
+      await last.click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await set.waitFor({ timeout: 10_000 });
+      const nameBox = set.getByRole("textbox", { name: "名字" });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "名字", null, { timeout: 5_000 });
+      const newName = `电脑 ${size.width} ${scheme}`;
+      await nameBox.fill(newName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-rename");
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: newName }).waitFor({ timeout: 20_000 });
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "移除这台电脑" }));
+      const sure = page.locator(".app-modal.app-confirm");
+      await sure.waitFor({ timeout: 5_000 });
+      if (await set.isVisible()) throw new Error("从右键直接移除时只该出现确认框");
+      await clickVisible(page, sure.getByRole("button", { name: "取消" }));
+      await sure.waitFor({ state: "hidden", timeout: 5_000 });
+      // Back to its name for the steps after this one.
+      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
+      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await set.waitFor({ timeout: 10_000 });
+      await nameBox.fill(oldName);
+      await nameBox.press("Enter");
+      await set.getByText("已改").waitFor({ timeout: 10_000 });
+      await clickVisible(page, set.getByRole("button", { name: "好" }));
+      await page.locator(".sp-nav-pc", { hasText: oldName }).waitFor({ timeout: 20_000 });
       await clickVisible(page, page.locator(".sp-nav-pc").first());
       if (narrow) await sidebar(page, false);
-      await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
+      await page.locator(".conv-detail").first().waitFor({ timeout: 20_000 });
     });
 
     // A command another agent left on a computer: the sidebar dot turns
@@ -2077,8 +2365,10 @@ async function runMatrix(browser, size, scheme) {
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-machine", { hasText: "临时 Mac" }));
+      const view = page.locator("[data-testid=machine-view]");
+      await view.waitFor({ timeout: 10_000 });
+      await clickVisible(page, view.getByRole("button", { name: "移除这台电脑" }));
       const dialog = page.locator(".app-modal");
-      await dialog.waitFor({ timeout: 10_000 });
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       const dialogText = compactText(await dialog.innerText());
       for (const want of ["2 个 agent 和电脑会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
@@ -2285,21 +2575,28 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "新建并切换" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 30_000 });
       await page.locator(".sp-switch .app-hub-name", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
-      // The new workspace offers the server's computers.
+      // Adding a computer to the new workspace, outside any project: the
+      // same one command; the folder it is run in is in the sidebar after.
       await go(page, "电脑", narrow);
-      await clickVisible(page, page.getByRole("button", { name: "连上另一台电脑" }));
-      const add = page.locator(".app-modal");
-      await add.locator(".app-picker-row").first().waitFor({ timeout: 10_000 });
-      const offered = add.locator(".app-picker-row", { has: page.getByRole("button", { name: "加进来" }) }).first();
-      await offered.waitFor({ timeout: 10_000 });
-      const machineName = (await offered.locator(".app-picker-name").innerText()).trim();
-      const row = add.locator(".app-picker-row", { has: page.locator(".app-picker-name", { hasText: machineName }) }).first();
-      await clickVisible(page, row.getByRole("button", { name: "加进来" }));
-      await row.locator(".app-picker-done", { hasText: "已加进来" }).waitFor({ timeout: 10_000 });
-      await settle(page, 200);
-      await shot(page, size, scheme, "dialog-add-computer-same-server");
-      await page.keyboard.press("Escape");
-      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "加一台电脑" }));
+      const pick = page.locator(".app-modal-add");
+      await pick.waitFor({ timeout: 10_000 });
+      if (!(await pick.locator("h3").first().innerText()).includes("加一台电脑")) throw new Error("工作区里加电脑不该说「给项目」");
+      const box = pick.locator("[data-testid=computer-command]");
+      await box.locator(".app-command code", { hasText: "curl -fsSL" }).waitFor({ timeout: 10_000 });
+      const ran = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir: "~/code/team-b" }) });
+      if (!ran.ok) throw new Error(`mock run-join: ${ran.status}`);
+      await box.locator("[data-testid=computer-arrived]").waitFor({ timeout: 20_000 });
+      await clickVisible(page, box.getByRole("button", { name: "完成" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
+      // It is a computer of the workspace now: in the sidebar, and on the page.
+      if (narrow) await sidebar(page, true);
+      await page.locator(".sp-nav-pc", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      if (narrow) await sidebar(page, false);
+      await page.locator(".pc-row", { hasText: "team-b" }).waitFor({ timeout: 20_000 });
+      if (narrow) await sidebar(page, true);
+      await settle(page, 300);
+      await shot(page, size, scheme, "workspace-computer-added");
       if (narrow) await sidebar(page, false);
     });
 
