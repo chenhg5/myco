@@ -28,7 +28,7 @@ import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
 import { DictateButton } from "@/app/Dictate";
-import { takePendingCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
+import { startCall, takePendingCall, useVoiceCall, useVoiceReady, VoiceBar, VoiceMark, viaVoice } from "@/app/VoiceBar";
 import { ChatSearch, markActivePane, ownsFind, type SearchItem } from "@/app/ChatSearch";
 import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
@@ -295,9 +295,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
-  // A voice chat with this agent (VoiceBar); another chat hangs it up.
-  const [voiceOn, setVoiceOn] = useState(false);
-  useEffect(() => { setVoiceOn(takePendingCall(target.hubId, target.agent)); }, [target.hubId, target.agent, target.peer]);
+  // A voice chat (VoiceBar): its bar is here when it is with this agent;
+  // it goes on when you go elsewhere.
+  const { call: voiceCall } = useVoiceCall();
+  const voiceOn = !!voiceCall && voiceCall.hubId === target.hubId && voiceCall.agent === target.agent;
   const draftKeyRef = useRef(draftKey);
   draftKeyRef.current = draftKey;
   const writeDraft = (v: string) => {
@@ -378,6 +379,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const row = rows.find((r) => r.hub.id === target.hubId && r.st.agent.name === target.agent);
   const agent = row?.st.agent;
   const agentName = agent && row ? nodeName(agent, row.hub) : target.agent;
+  const callHim = () => startCall({ hubId: target.hubId, agent: target.agent, peer: target.peer, agentName });
+  const callHimRef = useRef(callHim);
+  callHimRef.current = callHim;
+  // A call asked for from the project's box starts when this opens.
+  useEffect(() => { if (takePendingCall(target.hubId, target.agent)) callHimRef.current(); }, [target.hubId, target.agent, target.peer]);
 
   const exchange = !!target.peer;
   // Exchange view: older pages loaded so far (oldest first) and whether more exist.
@@ -2118,7 +2124,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {queueRows.length > 0 && <ErrorText error={queueError} />}
         {voiceOn && !shellMode && (
-          <VoiceBar hubId={target.hubId} agent={target.agent} peer={target.peer} agentName={agentName} onClose={() => setVoiceOn(false)} />
+          <VoiceBar />
         )}
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
@@ -2178,8 +2184,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <button
                 type="button"
                 className="conv-send is-call"
-                onClick={(e) => { e.stopPropagation(); setVoiceOn(true); }}
-                title={L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`)}
+                onClick={(e) => { e.stopPropagation(); callHim(); }}
+                title={voiceCall ? L(`挂断和 ${voiceCall.agentName} 的通话，改和 ${agentName} 语音聊天`, `Hang up on ${voiceCall.agentName} and voice chat with ${agentName}`)
+                  : L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`)}
                 aria-label={L("语音聊天", "Voice chat")}
                 disabled={busy}
               >

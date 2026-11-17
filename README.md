@@ -45,6 +45,16 @@ myco connects agents into one network. Three things it is for, most asked-for fi
 
 These are three uses of the same network, not three products: one hub, any mix of your machines, cloud sessions and teammates.
 
+## Fastest: let your agent set it up
+
+Already using Claude Code, Codex or another AI that runs commands? Send it this sentence. It reads the [setup guide](docs/agent-setup.md), starts a hub, connects the app, adds your computers and agents, and sorts out problems on its own, asking you whenever something is yours to decide:
+
+```text
+Set up myco for me: read https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md (if it does not load, https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md) and follow it. Ask me before deciding anything for me, before using sudo or changing system settings, and tell me the result when you are done.
+```
+
+The app's first screen has the same sentence (**Let my agent set it up**), and an error in the app has **Ask my agent**, which copies the error with it.
+
 ## Download
 
 | Platform | Download |

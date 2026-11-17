@@ -36,6 +36,7 @@ import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
 import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { VoiceChip } from "@/app/VoiceBar";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
@@ -380,6 +381,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("space");
     setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), reveal });
   };
+  // The top bar's call (VoiceChip): back to the chat with whom it is with.
+  const toCallRef = useRef<(hubId: string, agent: string) => void>(() => undefined);
+  toCallRef.current = (hubId, agent) => {
+    const r = allRows.find((x) => x.hub.id === hubId && x.st.agent.name === agent);
+    if (r) { setHubPick(hubId); chatWithMember(r); }
+  };
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; agent: string }>).detail; toCallRef.current(d.hubId, d.agent); };
+    window.addEventListener("myco-voice-open", on);
+    return () => window.removeEventListener("myco-voice-open", on);
+  }, []);
   // Whether a space has this member (a project's members, or the loose).
   const spaceHas = (s: SpaceRef, r: AgentRow) => (isLoose(s)
     ? s.hubId === r.hub.id && loose.some((x) => x.hub.id === r.hub.id && x.st.agent.name === r.st.agent.name)
@@ -717,6 +729,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             </button>
           )}
           <h1 className="app-title">{title}</h1>
+          <VoiceChip />
           <PageToggle />
         </header>
 

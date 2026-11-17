@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Laptop, Link2 } from "lucide-react";
+import { Bot, Laptop, Link2 } from "lucide-react";
+import { setupPrompt } from "@/app/agentSetup";
+import { CopyButton } from "@/app/copy";
 import { ErrorText } from "@/app/dialogs";
 import { Logo } from "@/components/brand";
 import { L } from "@/lib/i18n";
@@ -56,6 +58,17 @@ export function Welcome({ onStartLocal, onConnect }: {
             <button type="button" className="app-btn app-btn-lg" onClick={onConnect}>
               {L("粘贴链接加入", "Join with a link")}
             </button>
+          </section>
+
+          {/* The third way: the agent people already have sets it all up. */}
+          <section className="app-welcome-card app-welcome-agent" data-testid="welcome-agent">
+            <div className="app-welcome-icon"><Bot strokeWidth={1.75} /></div>
+            <h2>{L("让 agent 帮我装", "Let my agent set it up")}</h2>
+            <p>{L("把这句话发给 Claude Code、Codex 或任何能跑命令的 AI：它会读完安装说明，帮你开工作区、连上这个 App、加电脑和 agent，出了问题自己排查；要你拿主意的地方会先问你。", "Send this to Claude Code, Codex or any AI that runs commands: it reads the setup guide, opens a workspace, connects this App, adds computers and agents, and sorts out problems itself, asking you whenever something is yours to decide.")}</p>
+            <div className="add-sentence">
+              <p className="add-sentence-text">{setupPrompt()}</p>
+              <div className="add-sentence-actions"><CopyButton value={setupPrompt()} /></div>
+            </div>
           </section>
         </div>
 

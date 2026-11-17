@@ -45,6 +45,16 @@ myco 把 agent 连成一张网，主要解决三件事，按大家最常遇到�
 
 这是同一张网的三种用法，不是三个产品：一个 Hub，你的电脑、服务器、云端会话和同事，按需要接进来就行。
 
+## 最快的方式：让 agent 帮你装
+
+已经在用 Claude Code、Codex 或别的能跑命令的 AI？把这句话发给它。它会读[安装指南](docs/agent-setup.md)，开好 Hub、连上 App、加好电脑和 agent，出了问题自己排查；要你拿主意的地方会先问你：
+
+```text
+帮我装好 myco：先读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md （打不开就读 https://cdn.jsdelivr.net/gh/chenhg5/myco@main/docs/agent-setup.md ），照着做。要我决定的先问我，用 sudo 或改系统设置前也先问我，装完告诉我结果。
+```
+
+App 的第一屏也有这句话（**让 agent 帮我装**）；App 里出错时点 **让 agent 帮我查**，会连同错误原文一起复制。
+
 ## 下载
 
 | 平台 | 下载 |
