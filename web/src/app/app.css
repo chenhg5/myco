@@ -1649,6 +1649,44 @@ textarea.app-input {
   font-size: 12px;
   line-height: 1.5;
 }
+.app-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.app-error-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.app-error-more:hover { color: var(--fg); }
+.app-error-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--muted);
+}
+.app-error-detail pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
 .app-hint {
   margin-top: 12px;
   padding: 8px 10px;
@@ -5020,29 +5058,221 @@ button.app-label:hover { filter: brightness(0.95); }
 .pcs-add { width: auto; min-width: 140px; }
 .pcs-remove { margin-right: auto; }
 .pc-settings svg { width: 13px; height: 13px; }
-/* Automations (Automations.tsx). */
-.au-row .pc-row-sub span + span::before { content: "·"; margin-right: 6px; color: var(--faint); }
-.au-row .pc-row-sub { gap: 6px; }
-.au-failed { color: var(--red); }
-/* When: a card of rows (schedule, webhook), each with its controls lined
-   up under its words. */
-.au-triggers { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin-top: 6px; }
-.au-trigger { padding: 10px 12px; }
-.au-trigger + .au-trigger { border-top: 1px solid var(--line); }
-.au-trigger .app-check-line { margin: 0; }
-.au-trigger-body { margin: 10px 0 0 24px; }
-.au-summary { margin-top: 6px; font-size: 12px; color: var(--muted); }
-.au-cron { min-width: 180px; }
-.au-note { margin-top: 12px; font-size: 12px; color: var(--muted); }
-.au-when { display: flex; flex-wrap: wrap; gap: 8px; }
-.au-when .app-select-field, .au-when .app-input { width: auto; min-width: 120px; }
-.au-time { max-width: 120px; }
-.au-body { resize: vertical; min-height: 84px; }
-.au-runs { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 180px; overflow-y: auto; }
-.au-run { display: flex; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
-.au-run-when { flex: none; min-width: 120px; color: var(--muted); }
+/* Automations (Automations.tsx): a row says what one does (when, to whom,
+   when next, how the last went), a switch turns it off, ▷ sends it now.
+   With none, a few common ones to start from. */
+.au-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.au-icon svg { width: 16px; height: 16px; }
+.au-icon.is-hook { background: var(--amber-soft); color: var(--amber); }
+.au-icon.is-blank { background: var(--pill); color: var(--muted); }
+
+.au-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 9px;
+}
+.au-row:hover { background: var(--nav-hover); }
+.au-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 6px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.au-row-main .au-icon { margin-top: 1px; }
+.au-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.au-row-name { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-row-what, .au-row-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.au-row-status { font-size: 11.5px; color: var(--muted); }
+.au-row-to { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.au-row-to b { font-weight: 500; color: var(--fg-2); }
+.au-row-to .pa { flex: none; }
+.au-row.is-off .au-row-name, .au-row.is-off .au-row-what { color: var(--muted); }
+.au-row.is-off .au-icon { background: var(--pill); color: var(--muted); }
+.au-run-now { opacity: 0; }
+.au-row:hover .au-run-now, .au-run-now:focus-visible { opacity: 1; }
+@media (hover: none) { .au-run-now { opacity: 1; } }
+/* How a run went: a dot (green sent, grey skipped, red not sent). */
+.au-last { display: inline-flex; align-items: center; gap: 5px; }
+.au-last > i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.au-last.is-ok > i { background: var(--green); }
+.au-last.is-bad { color: var(--red); }
+.au-last.is-bad > i { background: var(--red); }
+
+/* An on/off switch. */
+.app-switch {
+  flex: none;
+  position: relative;
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--seg-track);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  cursor: default;
+  transition: background 0.15s;
+}
+.app-switch.is-on { background: var(--green); box-shadow: none; }
+.app-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+.app-switch.is-on .app-switch-knob { transform: translateX(12px); }
+.app-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.app-switch:disabled { opacity: 0.5; }
+
+/* None yet: what it is for, and a few to start from. */
+.au-start { max-width: 620px; margin: 0 auto; }
+.au-empty { margin-top: 5vh; }
+.au-empty p { margin-bottom: 20px; }
+.au-templates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.au-template {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.au-template:hover { background: var(--nav-hover); box-shadow: 0 0 0 0.5px var(--faint); }
+.au-template:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.au-template.is-blank { grid-column: 1 / -1; align-items: center; padding: 8px 12px; background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.au-template.is-blank .au-icon { width: 26px; height: 26px; border-radius: 8px; }
+.au-template.is-blank .au-template-text { flex-direction: row; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.au-template-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.au-template-name { font-size: 13.5px; font-weight: 500; }
+.au-template-hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
+@media (max-width: 640px) { .au-templates { grid-template-columns: minmax(0, 1fr); } }
+
+/* The editor: to whom, what, when; its buttons stay in sight. */
+.au-edit { max-width: 480px; padding-bottom: 0; }
+.au-edit .app-field + .app-field, .au-edit .app-field + .au-skip { margin-top: 12px; }
+.au-to { display: flex; align-items: center; gap: 8px; }
+.au-to .pa { flex: none; }
+.au-body { resize: vertical; min-height: 68px; line-height: 1.5; }
+.au-payload { display: block; margin-top: 4px; }
+.au-token {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: 11.5px var(--font-mono, ui-monospace, monospace);
+  cursor: default;
+}
+.au-token:hover:not(:disabled) { background: var(--pill-hover); color: var(--fg); }
+.au-token:disabled { opacity: 1; }
+.au-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.au-kind {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.au-kind .au-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--pill); color: var(--muted); }
+.au-kind b { display: block; font-size: 13px; font-weight: 500; }
+.au-kind small { display: block; font-size: 11.5px; color: var(--muted); }
+.au-kind:hover { background: var(--nav-hover); }
+.au-kind.is-on { box-shadow: inset 0 0 0 1.5px var(--fg-2); }
+.au-kind.is-on .au-icon { background: var(--green-soft); color: var(--green); }
+.au-kind.is-on .au-icon.is-hook { background: var(--amber-soft); color: var(--amber); }
+.au-kind:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.au-sched {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+.au-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.au-chip {
+  min-width: 34px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+.au-chip:hover:not(:disabled) { background: var(--pill-hover); color: var(--fg); }
+.au-chip.is-on { background: var(--btn); color: var(--btn-fg); }
+.au-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.au-time { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--fg-2); }
+.au-time .app-select-field { width: 64px; }
+.au-cron { max-width: 220px; }
+.au-summary { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--fg-2); }
+.au-summary span { color: var(--muted); }
+.au-hook-note { margin-top: 8px; color: var(--muted); }
+.au-skip { margin-top: 14px; }
+.au-runs { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 150px; overflow-y: auto; }
+.au-run { display: flex; gap: 8px; font-size: 12.5px; color: var(--fg-2); }
+.au-run-when { flex: none; min-width: 110px; color: var(--muted); }
+.au-actions {
+  position: sticky;
+  bottom: 0;
+  margin: 16px -18px 0;
+  padding: 12px 18px;
+  background: var(--card);
+  border-top: 1px solid var(--line-2);
+}
+.au-actions .app-modal-hint { margin-right: auto; }
 .au-delete { margin-right: auto; color: var(--red); }
-.au-edit .app-field + .app-field { margin-top: 10px; }
+.au-delete ~ .app-modal-hint { margin-right: 0; }
+.au-note { margin-top: 12px; font-size: 11.5px; color: var(--muted); }
 .conv-auto { padding: 0 5px; border-radius: 4px; background: var(--pill); color: var(--muted); font-size: 11px; }
 /* Adding a computer: one command, run in the folder on that computer. */
 .ws-command { display: flex; flex-direction: column; gap: 10px; }
@@ -7123,6 +7353,10 @@ body.is-resizing {
   width: 12px;
   height: 12px;
 }
+/* Not said yet: fainter still. */
+.run-pill.is-unknown:not([aria-expanded="true"]):not(:hover) {
+  opacity: 0.7;
+}
 /* Switched, not in use yet (from its next run): a dot. */
 .run-pill.is-pending .run-pill-text::after {
   content: "";
@@ -7232,3 +7466,294 @@ body.is-resizing {
   color: var(--fg-2);
   font-weight: 500;
 }
+
+/* Web pages agents publish (pages.tsx): a card under the message that
+   links one, and the page panel (the panel files open in). */
+.pg-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pg-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  padding: 8px 10px 8px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.pg-card:hover { background: var(--nav-hover); }
+.pg-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pg-card-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.pg-card-icon svg { width: 16px; height: 16px; }
+.pg-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pg-card-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-card-about { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-card-open {
+  flex: none;
+  padding: 0 9px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.pg-card:hover .pg-card-open { background: var(--pill-hover); color: var(--fg); }
+.pg-body { display: flex; flex-direction: column; }
+.pg-body .pg-frame { flex: 1; height: auto; min-height: 0; }
+.pg-new, .pg-local-note {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--card);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.pg-new span { flex: 1; }
+.pg-local-note { color: var(--muted); }
+.pg-local-note svg { flex: none; width: 13px; height: 13px; }
+/* 「换一个来接着做」 (Handover.tsx): the dialog, the profile's 接手记录, and
+   the line in a conversation where another session took over. */
+.ho-body { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.ho-body .app-field { margin-top: 0; }
+.ho-body .app-field-label { margin-bottom: 6px; }
+.ho-body .app-modal-actions { margin-top: 4px; }
+.ho-body .app-convpick-folders { margin-top: -6px; }
+.ho-ways { align-self: flex-start; }
+.ho-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 10px;
+  background: var(--pill);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ho-account > span { flex: 1; min-width: 0; }
+.ho-account .app-btn { flex: none; }
+.ho-what {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ho-what li::marker { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.ho-reply-wrap { display: flex; flex-direction: column; gap: 6px; }
+.ho-reply {
+  padding-left: 10px;
+  box-shadow: inset 2px 0 0 var(--line);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+}
+.ho-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+.ho-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ho-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.ho-arrow { color: var(--muted); }
+.ho-row-sub {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+.ho-row-sub > span { flex: none; white-space: nowrap; }
+.ho-row-sub > .ho-note { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ho-row .app-btn { flex: none; }
+.conv-handover {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.conv-handover::before,
+.conv-handover::after {
+  content: "";
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.conv-handover > span { flex: 0 1 auto; min-width: 0; }
+/* A page asks to send a message as you (the bridge's myco.send). */
+.pg-ask-text {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font-size: 13px;
+  white-space: pre-wrap;
+  max-height: 140px;
+  overflow: auto;
+}
+/* A live page (a dev server on an agent's computer, forwarded). */
+.pg-card-icon.is-live { background: var(--amber-soft); color: var(--amber); }
+.pg-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 6px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.pg-live::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+.pg-live.is-on { color: var(--green); background: var(--green-soft); }
+.pg-live.is-on::before { background: var(--green); }
+/* The page panel's tabs (two or more pages open): a strip under its head;
+   each page stays loaded while another is shown. */
+.pg-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pg-view.is-hidden { display: none; }
+.pg-view .pg-frame { flex: 1; height: auto; min-height: 0; }
+/* The page reaches past the panel's edges by a pixel (clipped): under the
+   App's zoom its frame lands on a fraction of a pixel, and the panel's
+   white showed through as a thin line beside a dark page. */
+.fp-body.is-page.pg-body { background: var(--card); }
+.pg-view .pg-frame { width: calc(100% + 2px); margin: 0 -1px; }
+.pg-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--bg);
+}
+.pg-tabs::-webkit-scrollbar { display: none; }
+.pg-tab {
+  flex: 0 1 180px;
+  min-width: 96px;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border-radius: 8px 8px 0 0;
+  color: var(--muted);
+}
+.pg-tab:hover { background: var(--nav-hover); color: var(--fg-2); }
+.pg-tab.is-on { background: var(--card); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); clip-path: inset(-1px -1px 0 -1px); }
+.pg-tab-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+.pg-tab-icon { flex: none; display: inline-flex; }
+.pg-tab-icon svg { width: 13px; height: 13px; }
+.pg-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  opacity: 0;
+  cursor: default;
+}
+.pg-tab-close svg { width: 12px; height: 12px; }
+.pg-tab:hover .pg-tab-close, .pg-tab.is-on .pg-tab-close, .pg-tab-close:focus-visible { opacity: 1; }
+.pg-tab-close:hover { background: var(--pill-hover); color: var(--fg); }
+.pg-tab-main:focus-visible, .pg-tab-close:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* Tucked away (收起): the page panel stays (its pages keep going), hidden;
+   a small button in the corner brings it back. */
+.fp-panel[data-state="closed"] { display: none; }
+.pg-restore {
+  position: fixed;
+  right: 16px;
+  bottom: 96px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--pop-shadow);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+  animation: ms-in 0.18s ease-out;
+}
+.pg-restore:hover { box-shadow: var(--pop-shadow), 0 0 0 1px var(--line); }
+.pg-restore:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pg-restore-icon { display: inline-flex; color: var(--green); }
+.pg-restore-icon svg { width: 14px; height: 14px; }
+.pg-restore-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-restore-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--pill); color: var(--fg-2); font-size: 11px; line-height: 18px; text-align: center; }

@@ -10,3 +10,10 @@ func IsCredentialRejected(err error) bool {
 }
 
 func rejectedHubCredential(err error) bool { return IsCredentialRejected(err) }
+
+// IsReplaced reports that another session took this node over (a
+// handover): its old session must stop, for good.
+func IsReplaced(err error) bool {
+	e, ok := client.AsError(err)
+	return ok && e.Code == "replaced"
+}

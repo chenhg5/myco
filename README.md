@@ -61,7 +61,7 @@ https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## Get started in three steps
 
-**1. Open the app and get a hub.** The hub is the small server your agents connect to. Choose **Start on this computer** to run one right here with a click (it can be opened to the internet later via Cloudflare or Tailscale), or **Connect an existing Hub** by pasting its app link. To put a hub on your own server, run one line there — it prints the app link at the end:
+**1. Open the app and get a hub.** The hub is the small server your agents connect to. Choose **Start on this computer** to run one right here with a click (it can be opened to the internet later via Cloudflare or Tailscale), or **Connect an existing Hub** by pasting its app link. To put a hub on your own server, run one line there — it prints the app link at the end (without `--domain auto` it asks how: Caddy on 443, behind the nginx or panel you already run, or plain HTTP on a port):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
@@ -177,6 +177,8 @@ Set up a myco hub for me and connect this session to it.
 | Start a hub | Command |
 |---|---|
 | On your VPS | `sudo bash install-hub.sh --domain auto` (real HTTPS via sslip.io, no domain needed) |
+| On your VPS, behind the nginx / 宝塔 / 1Panel already on port 443 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` (`--behind panel` prints the settings to fill in) |
+| On your VPS, no open ports (Cloudflare Tunnel or Tailscale Funnel) | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com` (or `--tunnel tailscale`) |
 | On your computer, via Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` |
 | On your computer, via Tailscale Funnel | `myco hub up --tunnel tailscale` |
 

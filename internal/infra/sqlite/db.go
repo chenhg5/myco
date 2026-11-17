@@ -32,6 +32,40 @@ CREATE TABLE IF NOT EXISTS agent_resumes (
   last_used_at  INTEGER NOT NULL DEFAULT 0,
   last_used_env TEXT NOT NULL DEFAULT ''
 );
+-- Handovers (v0.19.23): the session behind a node replaced by another.
+CREATE TABLE IF NOT EXISTS agent_handovers (
+  id              TEXT PRIMARY KEY,
+  agent           TEXT NOT NULL,
+  at              INTEGER NOT NULL,
+  by_who          TEXT NOT NULL DEFAULT '',
+  note            TEXT NOT NULL DEFAULT '',
+  from_binding    TEXT NOT NULL DEFAULT '{}',
+  from_machine_id TEXT NOT NULL DEFAULT '',
+  from_runtime    TEXT NOT NULL DEFAULT '{}',
+  to_binding      TEXT NOT NULL DEFAULT '{}',
+  to_machine_id   TEXT NOT NULL DEFAULT '',
+  to_runtime      TEXT NOT NULL DEFAULT '{}',
+  state           TEXT NOT NULL,
+  done_at         INTEGER NOT NULL DEFAULT 0,
+  open_tasks      TEXT NOT NULL DEFAULT '[]',
+  back_to         TEXT NOT NULL DEFAULT '',
+  expires_at      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_agent_handovers ON agent_handovers(agent, at DESC);
+CREATE TABLE IF NOT EXISTS handover_links (
+  token_hash  TEXT PRIMARY KEY,
+  handover_id TEXT NOT NULL,
+  agent       TEXT NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  used_at     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS agent_retired_tokens (
+  token_hash  TEXT PRIMARY KEY,
+  agent       TEXT NOT NULL,
+  handover_id TEXT NOT NULL,
+  retired_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_retired_tokens ON agent_retired_tokens(agent, retired_at DESC);
 CREATE TABLE IF NOT EXISTS messages (
   id              TEXT PRIMARY KEY,
   from_agent      TEXT NOT NULL,
@@ -221,6 +255,37 @@ CREATE TABLE IF NOT EXISTS project_docs (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (project, name)
 );
+CREATE TABLE IF NOT EXISTS pages (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  project    TEXT NOT NULL DEFAULT '',
+  publisher  TEXT NOT NULL DEFAULT '',
+  owner      TEXT NOT NULL DEFAULT '',
+  latest     INTEGER NOT NULL DEFAULT 0,
+  live       INTEGER NOT NULL DEFAULT 0,
+  port       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS page_versions (
+  page    TEXT NOT NULL,
+  n       INTEGER NOT NULL,
+  blob    TEXT NOT NULL,
+  sha256  TEXT NOT NULL DEFAULT '',
+  size    INTEGER NOT NULL DEFAULT 0,
+  entry   TEXT NOT NULL DEFAULT 'index.html',
+  files   INTEGER NOT NULL DEFAULT 0,
+  by_name TEXT NOT NULL DEFAULT '',
+  at      INTEGER NOT NULL,
+  PRIMARY KEY (page, n)
+);
+CREATE TABLE IF NOT EXISTS page_state (
+  page       TEXT PRIMARY KEY,
+  state      TEXT NOT NULL DEFAULT '',
+  version    INTEGER NOT NULL DEFAULT 0,
+  updated_by TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -248,6 +313,11 @@ func Open(path string) (*sql.DB, error) {
 	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"},
 		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
 		{"owner", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	// Live pages (a dev server forwarded): from the same release as pages.
+	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

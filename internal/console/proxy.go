@@ -144,7 +144,15 @@ func proxyFor(c ProxyConfig, password string) func(*http.Request) (*url.URL, err
 			return u, nil
 		}
 	}
-	return http.ProxyFromEnvironment
+	// The environment's proxy, but not for this computer or the local
+	// network: a proxy app's HTTPS_PROXY without NO_PROXY would otherwise
+	// send a workspace at 192.168.x.x through it, and that usually fails.
+	return func(r *http.Request) (*url.URL, error) {
+		if direct(r.URL.Hostname()) {
+			return nil, nil
+		}
+		return http.ProxyFromEnvironment(r)
+	}
 }
 
 func (b *Backend) proxyPassword() string {

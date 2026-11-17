@@ -368,3 +368,33 @@ func TestJoinAnotherWorkspaceOfTheSameServer(t *testing.T) {
 		t.Errorf("without JoinHub: %+v", res)
 	}
 }
+
+// A take-over (a handover): the first prompt is the handover note, the
+// session takes the existing node over instead of enrolling a new one;
+// switching back resumes the old session.
+func TestSpawnTakesANodeOver(t *testing.T) {
+	r := newRig(t)
+	req := api.SpawnRequest{CLI: "codex", Dir: "~/code/app", Name: "docs", TakeOver: "myco_takeover_x", Brief: "[myco] Handover: you now are the agent docs."}
+	if res := r.run(t, "lead", req); !res.Denied || !strings.Contains(res.Error, "cannot take nodes over") {
+		t.Fatalf("an older machine (no TakeOver): %+v", res)
+	}
+	var took []string
+	r.node.Deps.TakeOver = func(_ context.Context, p Plan, sr api.SpawnRequest, sid string) (string, error) {
+		took = append(took, sr.TakeOver+" "+sid)
+		return "docs", nil
+	}
+	res := r.run(t, "lead", req)
+	if res.Denied || res.Error != "" || res.Agent != "docs" || res.SessionID != "sess-1" || len(r.enrolled) != 0 || r.spawned != 1 {
+		t.Fatalf("take-over: %+v (enrolled %d)", res, len(r.enrolled))
+	}
+	if !strings.HasPrefix(r.cli.got.Prompt, req.Brief) || !strings.Contains(r.cli.got.Prompt, "Do not start any work") || r.cli.got.SessionID != "" {
+		t.Fatalf("first turn: %+v", r.cli.got)
+	}
+	// Switching back: the old session resumes.
+	req.ResumeSession = "sess-old"
+	r.cli.out.SessionID = ""
+	res = r.run(t, "lead", req)
+	if res.Error != "" || res.SessionID != "sess-old" || r.cli.got.SessionID != "sess-old" || took[len(took)-1] != "myco_takeover_x sess-old" {
+		t.Fatalf("switch back: %+v / %+v / %v", res, r.cli.got, took)
+	}
+}

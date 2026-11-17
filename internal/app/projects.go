@@ -594,3 +594,25 @@ func (s *ProjectService) ForgetAgent(ctx context.Context, agent domain.AgentName
 func (s *ProjectService) Rights(by Actor, v *ProjectView) (edit, manage bool) {
 	return s.edits(by, v), s.manages(by, v)
 }
+
+// MayAddFiles checks that by may add material (files, pages) to a project,
+// as PutFile does, and returns the project's name.
+func (s *ProjectService) MayAddFiles(ctx context.Context, by Actor, name string) (string, error) {
+	v, err := s.Get(ctx, by, name)
+	if err != nil {
+		return "", err
+	}
+	if !s.edits(by, v) && !s.involved(ctx, by, v) {
+		return "", denied("add to project " + v.Project.Name + " (its members and editors can)")
+	}
+	if v.Project.Archived {
+		return "", domain.Errf(domain.CodeInvalidState, "project %s is archived", v.Project.Name)
+	}
+	return v.Project.Name, nil
+}
+
+// Sees reports whether by may see the project.
+func (s *ProjectService) Sees(ctx context.Context, by Actor, name string) bool {
+	_, err := s.Get(ctx, by, name)
+	return err == nil
+}

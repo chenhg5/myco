@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Download, Maximize2, Minimize2, X } from "lucide-react";
 import { appApi } from "@/appapi";
@@ -146,26 +146,41 @@ const DOCK_HALF = 420;
 const keptFull = () => { try { return localStorage.getItem(FULL_KEY) === "1"; } catch { return false; } };
 const keepFull = (on: boolean) => { try { localStorage.setItem(FULL_KEY, on ? "1" : "0"); } catch { /* not kept */ } };
 
-/** A text file read in the App, with Save, and what changed since its
- *  previous version when there is one. */
-export function FilePreview({ hubId, file, version, open, onOpenChange }: {
-  hubId: string;
-  file: Attachment;
-  version?: Version;
+/**
+ * The panel a file or a page opens in: beside the chat in a window wide
+ * enough (the App's main area makes room, so you can read and go on with
+ * the chat: scroll it, write, send), over the App when narrow or full
+ * screen. Its left edge drags it wider; one panel at a time.
+ */
+export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted, title, about, head, tools, bodyClass, className, children }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** its × does this instead of onOpenChange(false) (Esc and a click
+   *  outside still call onOpenChange) */
+  onClose?: () => void;
+  closeLabel?: string;
+  /** closed, it stays (hidden): what it shows keeps going (pages) */
+  keepMounted?: boolean;
+  title: string;
+  about?: React.ReactNode;
+  /** beside the titles (e.g. what to show it as) */
+  head?: React.ReactNode;
+  /** its own buttons, before full screen and close */
+  tools?: React.ReactNode;
+  bodyClass?: string;
+  className?: string;
+  children: React.ReactNode;
 }) {
-  const [text, setText] = useState<string | null>(null);
-  const [prevText, setPrevText] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [view, setView] = useState<"file" | "source" | "changes">("file");
-  const [saved, setSaved] = useState(false);
   const [full, setFull] = useState(keptFull);
   // Its left edge: drag to make it wider or narrower (double-click: back
   // to the usual). Measured in the panel's own scale (text size zooms it).
   const [width, setWidth] = useState(keptWidth);
   const [dragging, setDragging] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
+  // (the element itself too: it mounts a moment after the panel opens, and
+  // its size is watched from then on)
+  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
+  const setPanel = useCallback((el: HTMLDivElement | null) => { panel.current = el; setPanelEl(el); }, []);
   const drag = useRef<{ x: number; w: number; scale: number } | null>(null);
   const edge = {
     onPointerDown: (e: React.PointerEvent) => {
@@ -191,14 +206,9 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     },
     onDoubleClick: () => { setWidth(0); keepWidth(0); },
   };
-  const prev = version?.prev;
   const toggleFull = () => setFull((f) => { keepFull(!f); return !f; });
 
-  // Beside the chat, not over it: in a window wide enough, the panel takes
-  // its place on the right and the App's main area makes room, so you can
-  // read the file and go on with the chat (scroll it, write, send). Full
-  // screen, or a narrow window, it covers the App as before.
-  // (what the sidebar leaves: half for the chat, half for the file)
+  // (what the sidebar leaves: half for the chat, half for the panel)
   const room = () => (typeof window === "undefined" ? 0
     : window.innerWidth - (document.querySelector(".app-sidebar")?.getBoundingClientRect().width || 0) - 24);
   const [avail, setAvail] = useState(room);
@@ -212,25 +222,22 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   const docked = open && !full && avail >= 2 * DOCK_HALF;
   const dockWidth = Math.min(620, Math.round(avail / 2));
   useEffect(() => {
-    if (!docked) return;
+    if (!docked || !panelEl) return;
     const root = document.documentElement;
-    const el = panel.current;
     root.classList.add("fp-docked");
-    // (its layout width, as the App's own sizes are: not the zoomed one)
-    const set = () => { if (panel.current) root.style.setProperty("--fp-w", `${panel.current.offsetWidth}px`); };
+    // (its layout width, as the App's own sizes are: not the zoomed one;
+    // watched, so dragging its edge moves the chat's edge along)
+    const set = () => root.style.setProperty("--fp-w", `${panelEl.offsetWidth}px`);
     set();
-    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(set) : null;
-    if (ro && el) ro.observe(el);
-    // (the panel mounts a moment after: measure again then)
-    const t = window.setTimeout(set, 50);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(set) : null;
+    ro?.observe(panelEl);
     return () => {
-      window.clearTimeout(t);
       ro?.disconnect();
       root.classList.remove("fp-docked");
       root.style.removeProperty("--fp-w");
     };
-  }, [docked]);
-  // One file beside the chat at a time: opening another closes this one.
+  }, [docked, panelEl]);
+  // One panel beside the chat at a time: opening another closes this one.
   const token = useRef({});
   useEffect(() => {
     if (!open) return;
@@ -241,6 +248,64 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     return () => window.removeEventListener("myco-fp-open", on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={open && !docked}>
+      <Dialog.Portal forceMount={keepMounted || undefined}>
+        {!docked && open && <Dialog.Overlay className="app-portal fp-scrim" />}
+        <Dialog.Content ref={setPanel} forceMount={keepMounted || undefined} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging", className)}
+          style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
+          // Beside the chat, working in the chat does not close it; Esc
+          // does, from the panel only (in the chat's box it is the box's).
+          onInteractOutside={(e) => { if (docked) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (docked && !panel.current?.contains(document.activeElement)) e.preventDefault(); }}>
+          {!full && (
+            <div className="fp-edge" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
+              title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} {...edge} onPointerCancel={edge.onPointerUp} />
+          )}
+          <div className="fp-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) toggleFull(); }}>
+            <div className="fp-titles">
+              <Dialog.Title asChild><h3 title={title}>{title}</h3></Dialog.Title>
+              <Dialog.Description asChild><p>{about}</p></Dialog.Description>
+            </div>
+            {head}
+            <div className="fp-tools">
+              {tools}
+              <button type="button" className="app-btn app-btn-plain fp-full-btn" onClick={toggleFull} title={fullLabel} aria-label={fullLabel} aria-pressed={full}>
+                {full ? <Minimize2 /> : <Maximize2 />}
+              </button>
+              {onClose ? (
+                <button type="button" className="app-btn app-btn-plain" onClick={onClose} title={closeLabel || L("关闭", "Close")} aria-label={closeLabel || L("关闭", "Close")}><X /></button>
+              ) : (
+                <Dialog.Close asChild>
+                  <button type="button" className="app-btn app-btn-plain" title={L("关闭", "Close")} aria-label={L("关闭", "Close")}><X /></button>
+                </Dialog.Close>
+              )}
+            </div>
+          </div>
+          <div className={cn("fp-body", bodyClass)}>{children}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/** A text file read in the App, with Save, and what changed since its
+ *  previous version when there is one. */
+export function FilePreview({ hubId, file, version, open, onOpenChange }: {
+  hubId: string;
+  file: Attachment;
+  version?: Version;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const [prevText, setPrevText] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [view, setView] = useState<"file" | "source" | "changes">("file");
+  const [saved, setSaved] = useState(false);
+  const prev = version?.prev;
 
   useEffect(() => {
     if (!open) return;
@@ -266,66 +331,38 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
   };
 
   const about = [bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ");
-  const fullLabel = full ? L("退出全屏", "Exit full screen") : L("全屏", "Full screen");
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={!docked}>
-      <Dialog.Portal>
-        {!docked && <Dialog.Overlay className="app-portal fp-scrim" />}
-        <Dialog.Content ref={panel} className={cn("app-portal fp-panel", full && "is-full", docked && "is-docked", dragging && "is-dragging")}
-          style={!full && width ? { width: `min(${width}px, calc(100% - 32px))` } : docked ? { width: dockWidth } : undefined}
-          // Beside the chat, working in the chat does not close it; Esc
-          // does, from the panel only (in the chat's box it is the box's).
-          onInteractOutside={(e) => { if (docked) e.preventDefault(); }}
-          onEscapeKeyDown={(e) => { if (docked && !panel.current?.contains(document.activeElement)) e.preventDefault(); }}>
-          {!full && (
-            <div className="fp-edge" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
-              title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} {...edge} onPointerCancel={edge.onPointerUp} />
-          )}
-          <div className="fp-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) toggleFull(); }}>
-            <div className="fp-titles">
-              <Dialog.Title asChild><h3 title={file.name}>{file.name}</h3></Dialog.Title>
-              <Dialog.Description asChild><p>{about}</p></Dialog.Description>
-            </div>
-            {views.length > 1 && text !== null && (
-              <div className="seg seg-sm fp-views" role="tablist" aria-label={L("看什么", "Show")}>
-                {views.map((v) => (
-                  <button key={v.key} type="button" role="tab" aria-selected={view === v.key} className={cn("seg-btn", view === v.key && "active")} onClick={() => setView(v.key)}>
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="fp-tools">
-              <button type="button" className="app-btn app-btn-plain" onClick={() => void save()}
-                title={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}
-                aria-label={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}>
-                {saved ? <Check /> : <Download />}
-              </button>
-              <button type="button" className="app-btn app-btn-plain fp-full-btn" onClick={toggleFull} title={fullLabel} aria-label={fullLabel} aria-pressed={full}>
-                {full ? <Minimize2 /> : <Maximize2 />}
-              </button>
-              <Dialog.Close asChild>
-                <button type="button" className="app-btn app-btn-plain" title={L("关闭", "Close")} aria-label={L("关闭", "Close")}><X /></button>
-              </Dialog.Close>
-            </div>
-          </div>
-          <div className={cn("fp-body", md && view === "file" && "is-doc", html && view === "file" && "is-page")}>
-            {error ? <p className="fp-note">{error}</p>
-              : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
-              : changes ? (
-                <pre className="fp-diff">{changes.map((l, k) => (
-                  <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
-                ))}</pre>
-              ) : md && view === "file" ? <div className="fp-doc"><Markdown text={text} /></div>
-              // A page as a page, in a frame of its own that runs nothing.
-              : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={pageDoc(text)}
-                  // (no scripts run in it; same origin only so its links
-                  // can be opened from here: the sandbox lets none open)
-                  onLoad={(e) => e.currentTarget.contentDocument?.addEventListener("click", (ev) => { handleLinkClick(ev); })} />
-              : <pre className="fp-code">{text}</pre>}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <DockPanel open={open} onOpenChange={onOpenChange} title={file.name} about={about}
+      bodyClass={cn(md && view === "file" && "is-doc", html && view === "file" && "is-page")}
+      head={views.length > 1 && text !== null && (
+        <div className="seg seg-sm fp-views" role="tablist" aria-label={L("看什么", "Show")}>
+          {views.map((v) => (
+            <button key={v.key} type="button" role="tab" aria-selected={view === v.key} className={cn("seg-btn", view === v.key && "active")} onClick={() => setView(v.key)}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
+      tools={(
+        <button type="button" className="app-btn app-btn-plain" onClick={() => void save()}
+          title={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}
+          aria-label={saved ? L("已存到「下载」", "Saved to Downloads") : L("存到「下载」", "Save to Downloads")}>
+          {saved ? <Check /> : <Download />}
+        </button>
+      )}>
+      {error ? <p className="fp-note">{error}</p>
+        : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
+        : changes ? (
+          <pre className="fp-diff">{changes.map((l, k) => (
+            <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
+          ))}</pre>
+        ) : md && view === "file" ? <div className="fp-doc"><Markdown text={text} /></div>
+        // A page as a page, in a frame of its own that runs nothing.
+        : html && view === "file" ? <iframe className="fp-frame" title={file.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={pageDoc(text)}
+            // (no scripts run in it; same origin only so its links
+            // can be opened from here: the sandbox lets none open)
+            onLoad={(e) => e.currentTarget.contentDocument?.addEventListener("click", (ev) => { handleLinkClick(ev); })} />
+        : <pre className="fp-code">{text}</pre>}
+    </DockPanel>
   );
 }

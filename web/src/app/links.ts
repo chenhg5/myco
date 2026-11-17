@@ -8,6 +8,13 @@ import { appApi } from "@/appapi";
  */
 
 let viaApp = false;
+// Links the App opens itself (a page of a workspace, a server on this
+// computer: pages.tsx); true when it did.
+let inApp: ((href: string) => boolean) | null = null;
+
+export function setInAppLinks(f: (href: string) => boolean) {
+  inApp = f;
+}
 
 /** The desktop app can open links in the default browser (/app/info). */
 export function setOpenLinksViaApp(on: boolean) {
@@ -32,7 +39,12 @@ export function openOutside(href: string) {
 export function handleLinkClick(e: MouseEvent): boolean {
   if (e.defaultPrevented || e.button !== 0) return false;
   const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-  if (!a || !isOutside(a.href)) return false;
+  if (!a) return false;
+  if (inApp && /^https?:/i.test(a.href) && inApp(a.href)) {
+    e.preventDefault();
+    return true;
+  }
+  if (!isOutside(a.href)) return false;
   e.preventDefault();
   openOutside(a.href);
   return true;

@@ -305,8 +305,11 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const setEffort = ag.run_settings?.effort || "";
   const model = setModel || rt?.model || "";
   const effort = setEffort || rt?.effort || "";
-  if (agentKind(ag) !== "agent" || (!model && !editable)) return null;
-  const label = [modelShort(model) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
+  // In its own session and not said yet: shown as unknown, and how it comes to be known.
+  const unknown = !model && !editable && (isInbox(ag) || isCloud(ag));
+  if (agentKind(ag) !== "agent" || (!model && !editable && !unknown)) return null;
+  const label = unknown ? L("模型未知", "Model unknown")
+    : [modelShort(model) || L("默认模型", "Default model"), effort ? effortLabel(effort) : ""].filter(Boolean).join(" · ");
   const save = async (next: { model: string; effort: string }) => {
     setBusy(true); setError(null);
     try {
@@ -324,10 +327,11 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const pending = editable && ((setModel && setModel !== rt?.model) || (setEffort && setEffort !== rt?.effort));
   const title = editable
     ? L(`模型和推理强度：${label}（点一下切换，下次唤醒时生效）`, `Model and effort: ${label} (click to switch; from its next run)`)
-    : L(`模型和推理强度：${label}（它自己的会话决定）`, `Model and effort: ${label} (its own session decides)`);
+    : unknown ? L("它还没说自己用的哪个模型", "It has not said which model it runs on")
+      : L(`模型和推理强度：${label}（它自己的会话决定）`, `Model and effort: ${label} (its own session decides)`);
   return (
     <span className="run-pill-wrap">
-      <button type="button" className={cn("run-pill", editable && "is-editable", pending && "is-pending")} title={title} aria-label={title}
+      <button type="button" className={cn("run-pill", editable && "is-editable", pending && "is-pending", unknown && "is-unknown")} title={title} aria-label={title}
         aria-expanded={open} onClick={() => setOpen((o) => !o)} onMouseDown={(e) => e.preventDefault()}>
         <span className="run-pill-text">{label}</span>
         {editable && <ChevronDown className="run-pill-chev" aria-hidden />}
@@ -361,6 +365,12 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
                   {L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}
                 </p>
               </>
+            ) : unknown ? (
+              <p className="run-pill-note">
+                {L("它在自己的会话里收消息，还没说用的哪个模型。它的 myco 升级到新版后，会在等消息时自动报上来；也可以让它运行 ",
+                  "It receives in its own session and has not said which model it runs on. With a newer myco it says so itself while it waits for messages; or ask it to run ")}
+                <code>myco agent runtime set</code>{L("。", ".")}
+              </p>
             ) : (
               <p className="run-pill-note">
                 {model && <><b>{model}</b>{effort ? ` · ${effortLabel(effort)}` : ""}<br /></>}

@@ -1,4 +1,4 @@
-import type { Automation, AutomationDetail, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageOpen, PageState, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -328,6 +328,8 @@ export interface StartLocalHubResult {
 /** An error returned by the App backend or a hub (same shape as the hub API). */
 export class ApiError extends Error {
   status: number;
+  /** what a conflict answers with (a page's latest state) */
+  latest?: unknown;
   code?: string;
   suggestion?: string;
   constructor(message: string, status: number, code?: string, suggestion?: string) {
@@ -393,8 +395,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string };
-    throw new ApiError(e.message || `HTTP ${r.status}`, r.status, e.error, e.suggestion);
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown };
+    // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
+    const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {});
   }
   return data as T;
 }
@@ -622,6 +626,15 @@ export const appApi = {
   removeAgent: (hubId: string, name: string) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}`),
 
+  /** Another session takes a node over (「换一个来接着做」); older hubs 404. */
+  handovers: (hubId: string, name: string) =>
+    request<{ handovers: Handover[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handovers`),
+  /** A one-time command (24 hours) that whoever runs it takes the node over with. */
+  handoverLink: (hubId: string, name: string, input: { note?: string; back?: string } = {}) =>
+    request<HandoverLink>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover-link`, input),
+  /** A new session on a computer takes the node over; waits for its first turn. */
+  handOver: (hubId: string, name: string, input: HandoverRequest) =>
+    request<HandoverResult>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover`, input),
   /** Starts a session on a machine; the machine may take up to two minutes. */
   spawn: (hubId: string, machineId: string, input: SpawnInput) =>
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
@@ -681,6 +694,22 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // Pages (hubs from v0.19.24; older ones answer 404): agents' web pages
+  pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
+  page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
+  deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
+  /** Writes a page's shared state based on version; when someone wrote
+   *  first, ok is false and the latest comes back. */
+  putPageState: async (hubId: string, id: string, state: unknown, version: number): Promise<PageState & { ok: boolean }> => {
+    try {
+      return { ok: true, ...(await request<PageState>("PUT", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`, { state, if_version: version })) };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && e.latest) return { ok: false, ...(e.latest as PageState) };
+      throw e;
+    }
+  },
   // Automations (hubs from v0.19.22; older ones answer 404)
   automations: (hubId: string) => request<{ automations: Automation[] }>("GET", `app/hubs/${enc(hubId)}/automations`),
   automation: (hubId: string, id: string) => request<AutomationDetail>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),

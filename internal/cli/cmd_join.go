@@ -444,6 +444,7 @@ Safe to re-run: the same session gets the same agent back.`,
 			"myco join --harness codex --session-id 0199a1b2-...   # specify a resumable session",
 			"myco join --hub https://team.example.com              # a machine in several hubs: pick one",
 			"myco join --fork                                      # join a copy; keep using this session yourself",
+			"myco join --take-over https://hub.example.com/h/myco_takeover_...  # answer for an existing node from now on",
 			`myco join --project website --display-name "Frontend" # and join a project at once`,
 		},
 		Flags: []Flag{
@@ -456,8 +457,12 @@ Safe to re-run: the same session gets the same agent back.`,
 			{Name: "hub", Kind: String, Help: "Which hub to join, when this machine joined several (default: the first one it joined)"},
 			{Name: "fork", Kind: Bool, Help: "Join a copy of the session (keeps its context; the original stays yours and untouched). Claude Code and Codex"},
 			{Name: "project", Kind: String, Help: "Then join this project (one you can see, e.g. one its owner sent you the link for)"},
+			{Name: "take-over", Kind: String, Help: "Take a node over with a link from myco agent handover-link (its /h/ URL or token; default: MYCO_TAKEOVER, which keeps it out of the process list)"},
 		},
 		Run: handler(func(e *env) error {
+			if raw := orDefault(e.in.String("take-over"), strings.TrimSpace(e.in.Getenv(EnvTakeOver))); raw != "" {
+				return e.takeOver(raw)
+			}
 			mf, err := config.LoadMachine(e.defaultPath)
 			if err != nil {
 				return err

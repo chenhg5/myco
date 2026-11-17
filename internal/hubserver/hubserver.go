@@ -3,6 +3,7 @@
 package hubserver
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"log/slog"
@@ -185,7 +186,8 @@ func Build(o Options) (*Hub, error) {
 	enroll.SetDefaultVisibility(defaultVisibility)
 	srv.SetHidden(app.NewHiddenService(sqlite.NewSettingRepo(db)))
 	srv.SetVoiceSettings(app.NewVoiceSettingsService(sqlite.NewSettingRepo(db)))
-	srv.SetE2E(app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock))
+	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
+	srv.SetE2E(e2e)
 	messages.SetMemberNames(func(ctx context.Context, id string) string {
 		if m, err := members.Get(ctx, id); err == nil {
 			return m.Name
@@ -196,6 +198,13 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)
+	pages.SetEncrypted(e2e.Enabled)
+	srv.SetPages(pages)
+	handovers := app.NewHandoverService(sqlite.NewHandoverRepo(db), agentsRepo, msgRepo, security.Tokens{}, ids, clock)
+	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
+	srv.SetHandovers(handovers)
+	messages.SetCredentialCheck(handovers.StillCurrent)
 	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations,
 		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
@@ -280,6 +289,18 @@ type statusRecorder struct {
 
 func (s *statusRecorder) WriteHeader(code int) { s.status = code; s.ResponseWriter.WriteHeader(code) }
 
+// Unwrap lets http.ResponseController reach the connection (a WebSocket, a
+// forwarded live page, streaming).
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// Hijack: for handlers that ask the writer itself (WebSocket libraries).
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(s.ResponseWriter).Hijack()
+}
+
+// Flush passes streaming on.
+func (s *statusRecorder) Flush() { _ = http.NewResponseController(s.ResponseWriter).Flush() }
+
 func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -291,6 +312,9 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		}
 		if strings.HasPrefix(path, "/j/") {
 			path = "/j/<redacted>" // join links carry a credential
+		}
+		if strings.HasPrefix(path, "/h/") {
+			path = "/h/<redacted>" // take-over links carry a credential
 		}
 		if strings.HasPrefix(path, "/c/") {
 			path = "/c/<redacted>" // app links carry a console token

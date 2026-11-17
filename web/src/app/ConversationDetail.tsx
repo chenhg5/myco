@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -23,6 +23,7 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
+import { PageCards } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -40,7 +41,8 @@ const revealed = new Set<string>();
 const firstSeen = new Map<string, number>();
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
-import { hubAtLeast } from "@/app/hubVersion";
+import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
+import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
 
 export interface ConversationTarget {
   hubId: string;
@@ -286,6 +288,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
+  // (a reply done growing in shows its attachments: one more render)
+  const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
   // What was typed and not sent stays with the conversation (drafts.ts).
@@ -926,6 +930,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The other side is one of your computers (a folder on one): its header
   // offers its settings.
   const computer = !observed && !!row && isWorkspace(row.st.agent);
+  // Another session took it over (「换一个来接着做」): a line where it did,
+  // and the header offers it to whoever may.
+  const handoverOk = !observed && !!row && agentKind(row.st.agent) === "agent" && hubHasHandover(row.hub.hub_version);
+  const handovers = useHandovers(target.hubId, target.agent, handoverOk);
+  const hoEntry = handoverOk ? handoverEntry(row || undefined) : { show: false, why: undefined };
   // What the agent offers you to say next (on your newest task, once it is
   // not at work any more): the empty input shows it, Tab takes it.
   const suggestion = !shellMode && !openTask && lastTask?.suggest?.trim() && !lastTask.unreadable ? lastTask.suggest.trim() : "";
@@ -980,7 +989,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // tasks show their run as it goes (TraceView) instead.
   const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   // (the handoff cards, with the rest of what goes between the messages)
-  const allInserts = handoffs.length
+  const baseInserts = handoffs.length
     ? [...(inserts || []), ...handoffs.map((h) => ({
       id: h.id,
       at: h.at,
@@ -988,6 +997,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         onOpen={() => (onOpenExchange ? onOpenExchange(target.agent, h.other, h.id) : onOpen?.(target.hubId, target.agent, h.other))} />,
     }))]
     : inserts;
+  const handoverLines = row ? handovers.filter((h) => h.state === "done").map((h) => ({
+    id: "ho_" + h.id, at: h.done_at || h.at, node: <HandoverDivider h={h} hub={row.hub} />,
+  })) : [];
+  const allInserts = handoverLines.length ? [...(baseInserts || []), ...handoverLines] : baseInserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -1625,6 +1638,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // showName: the first of a run of messages from one sender (watching two
   // nodes, names are shown once per run, as a chat groups them).
+  // The newest message shown: one above it still growing in finishes at
+  // once (it would read out of order).
+  const newestId = visible[visible.length - 1]?.id;
   const renderMessage = (m: Message, showName = true) => {
       if (m.type === "progress") {
         const line = (
@@ -1701,11 +1717,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
+              : growsIn(m) ? <Reveal body={m.body} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
               : <MessageContent body={m.body} />}
-            {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {/* (after its text has grown in: pictures first, then the
+                words filling in above them, reads oddly) */}
+            {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {!growsIn(m) && !m.unreadable && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">
@@ -1845,6 +1864,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
+              </button>
+            )}
+            {hoEntry.show && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="handover-head"
+                disabled={!!hoEntry.why} onClick={() => openHandover({ hubId: target.hubId, name: target.agent })}
+                title={hoEntry.why || L("换一个来接着做：另一个会话接手，聊天记录都在", "Hand over: another session carries on, the chat stays")}
+                aria-label={L("换一个来接着做", "Hand over to another session")}>
+                <ArrowRightLeft />
               </button>
             )}
             {!observed && (shown?.length || 0) > 0 && (

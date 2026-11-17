@@ -84,18 +84,66 @@ sudo /usr/local/bin/myco link revoke --id enr_xxx --force  # 作废链接；已�
 
 ## 1. 服务端：部署 Hub
 
-**要求**：一台 Linux 机器，有 systemd 和 root 权限，有公网 IP，**443 端口对外开放**（还要检查云服务商控制台里的安全组或防火墙）。80 端口可以不开。
+**要求**：一台 Linux 服务器，有 systemd 和 root 权限。
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh
 less install-hub.sh                      # 先看一遍再执行
-sudo bash install-hub.sh --domain auto
+sudo bash install-hub.sh                 # 会问你用哪种方式
 ```
 
+先选一种让别的电脑连到 Hub 的方式。不带参数运行时，脚本会看 443 端口被谁占着（空着、nginx、宝塔、1Panel、Caddy……），推荐一种，并打印等同的命令，以后可以直接重跑：
+
+| 方式 | 适合 | 命令 |
+|---|---|---|
+| A 自动 HTTPS | 443 端口空着（或者已经是 Caddy） | `sudo bash install-hub.sh --domain auto` |
+| B 放到已有的网站服务器后面 | 443 已经被 nginx、宝塔、1Panel、Caddy 等占着 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` |
+| C 隧道 | 一个端口都不想开，或者 80/443 用不了 | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com` 或 `--tunnel tailscale` |
+| D 直接 HTTP | 内网、测试 | `sudo bash install-hub.sh --http --port 7777` |
+
+只给这台服务器自己用：`--local`。所有方式都可以加 `--port`（Hub 在本机的端口，默认 7777）和 `--name`（见下面的命名 Hub）。
+
+**A 自动 HTTPS（Caddy）**
+- **443 端口要对外开放**（还要检查云服务商控制台里的安全组或防火墙）。80 端口可以不开。
 - `--domain auto` 会用 `<IP>.sslip.io` 作为域名，并让 Caddy 自动申请正式的 HTTPS 证书，不需要自己买域名。有自己的域名的话，用 `--domain hub.example.com`。
 - 如果 80 端口已经被别的程序占用，脚本会自动改成只用 443 申请证书，不会动那个程序。
-- 成功时会输出 `==> hub is healthy` 和 `==> HTTPS is up`，并打印 Hub URL。
-- 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。
+- 如果 443 已经被别的程序占着，脚本会停下，并给出用方式 B 的命令。
+- 成功时会输出 `==> HTTPS is up` 和 Hub URL。
+
+**B 放到已有的网站服务器后面**：Hub 只听本机端口（`127.0.0.1:7777`），HTTPS 和 443 端口还是交给你已有的程序。域名要先解析到这台服务器（也可以用 `--domain auto`）。
+- `--behind nginx`：只写一个属于 myco 的站点文件 `/etc/nginx/conf.d/myco-default.conf`（Debian 风格的 nginx 用 `sites-available/` 加 `sites-enabled/` 里的链接），你原有的站点和配置都不动。写好后先 `nginx -t`，通过才重载；不通过就还原，什么都不改。证书：
+  - `/etc/letsencrypt/live/<域名>/` 里已经有证书，就直接用，并把 HTTP 跳转到 HTTPS；
+  - 装了 certbot，就用 `certbot certonly --nginx` 申请一张再用；
+  - 都没有，就先用 HTTP（`http://<域名>`）。装好 certbot（`apt-get install -y certbot python3-certbot-nginx`）后重跑同一条命令，就会申请证书并切到 HTTPS。
+- `--behind panel`（宝塔、aaPanel、1Panel）、`--behind caddy`、`--behind other`：脚本不改任何东西，打印要填的反向代理设置：目标 `http://127.0.0.1:7777`、超时 360 秒、关闭缓存、上传上限 64 MB、保留原来的 Host；附带可以直接粘贴的 nginx（Caddy、Apache）配置片段。在面板里给这个站点开启 HTTPS（一键申请 Let's Encrypt 证书）。在终端里运行时，填好后按回车就会自检；也可以之后运行 `sudo bash install-hub.sh --check`。
+- 命名 Hub 的站点文件是 `myco-named-<名字>.conf`。
+
+**C 隧道**：Hub 只听本机端口，不开任何端口、不装 Caddy 或 nginx，由隧道把它发布到公网 HTTPS 地址。
+- `--tunnel cloudflare --hostname hub.example.com`：地址固定。要先有免费的 Cloudflare 账号，域名托管在 Cloudflare 上；在服务器上装好 `cloudflared`，运行一次 `cloudflared tunnel login`（选这个域名所在的 zone）。脚本会建一个叫 `myco` 的隧道（命名 Hub 是 `myco-<名字>`，可以用 `--tunnel-name` 改），在 zone 里加一条指向它的 DNS 记录，再装一个 `myco-cloudflared` 服务运行它。隧道凭据放在 `/etc/myco/cloudflared/`（权限 600）。
+- `--tunnel cloudflare` 不带 `--hostname`：不需要账号，得到一个临时的 `https://<随机>.trycloudflare.com` 地址。**每次隧道重启（包括服务器重启）地址都会变**，之前的链接和已加入的电脑都会失效，只适合试一试。
+- `--tunnel tailscale`：地址固定，是 `https://<机器名>.<tailnet>.ts.net`。要先有免费的 Tailscale 账号，在服务器上装好 Tailscale 并 `sudo tailscale up`，并在 Tailscale 后台给这台设备开启 Funnel（第一次运行时脚本会给出开启的链接）。
+- 缺什么（没装、没登录、Funnel 没开），脚本在装任何东西之前就停下，告诉你要运行什么。
+- 国内访问 Cloudflare 和 Tailscale 可能慢或不稳定，这时优先用 A 或 B。
+- 换成别的方式时，脚本会停掉自己的 `myco-cloudflared` 服务（Cloudflare 账号里的隧道保留，用 `cloudflared tunnel delete myco` 删除），或关掉自己的 Funnel。
+
+**D 直接 HTTP**：Hub 监听 `0.0.0.0:<端口>`，地址是 `http://<公网 IP>:<端口>`（给了 `--domain` 就用域名）。
+- **令牌和消息是明文传输的**，只在信得过的网络里用，或者用来测试。
+- 本机的 ufw 或 firewalld 开着时，脚本会放行这个端口；云服务商的安全组要自己放行。
+
+**装完自检**：每种方式最后都会自检，从里到外一层层查，不通时说明是哪一层：
+1. Hub 服务本身；
+2. 域名解析（域名有没有指到这台服务器）；
+3. 前面的网站服务器和证书；
+4. 本机防火墙；
+5. 云服务商的安全组。
+
+用隧道（C）时查的是：Hub 服务、隧道有没有在跑、隧道域名的 DNS、Tailscale Funnel。
+
+以后随时可以运行 `sudo bash install-hub.sh --check`（命名 Hub 加 `--name`）再查一次。自检是在服务器自己身上做的，最后还要在另一台电脑上打开 `<Hub URL>/v1/health` 确认一下。
+
+其他：
+- 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。重跑脚本会保留令牌和数据；换一种方式时，只会删掉 myco 自己之前写的 Caddy 或 nginx 站点文件、隧道服务。
+- Caddy 和 nginx 给 Hub 的代理超时是 360 秒（在别的电脑上新开一个会话时，Hub 最多要等 5 分钟）。以前装的 Caddy 站点是 120 秒：在服务器上 `sudo myco upgrade` 会把脚本自己写的站点文件改成 360 秒并重载 Caddy（你改过的文件不动），重跑安装命令也一样。
 - **一个 Hub 里开多个工作区**（v0.19.9 起，推荐）：`sudo myco workspace create --name team-b`。新工作区和原来的完全隔离（自己的成员、agent、项目、消息、文件，数据在 `/var/lib/myco/workspaces/team-b/`），但用同一个地址、端口、证书和服务，地址是 `https://<你的域名>/w/team-b`。命令会打印新工作区主人的一次性 App 链接，在 App 里「连接已有的 Hub」粘进去，它就作为一个新工作区出现在切换器里；电脑和 agent 用在那个工作区里生成的入网链接加入，和加入任何 Hub 一样。原来的 Hub 就是「默认工作区」，地址、数据、链接都不变。App 里也能建：当前工作区在这台服务器上、你是它的主人时，工作区切换器里有「在 <服务器> 上新建工作区」，建好自动切过去；在新工作区里点侧栏「电脑」的 +（或电脑页的「加一台电脑」），选「另一台电脑…」，会列出已经连着这台服务器的电脑，点「加进来」就行（那台电脑的 myco 要 v0.19.9 以上），不用在电脑上跑命令；连上后点「选一个文件夹」，选好它就出现在侧栏的「电脑」里。`myco workspace list` 列出，`myco workspace remove --name team-b` 移除（数据不删，挪到 `workspaces/.removed/`）。只有服务器的主人（hub.env 里的管理令牌，或默认工作区的主人）能建和删。
 - 一台 VPS 也可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
 - 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。
@@ -433,7 +481,7 @@ runner:
 
 `full` 就是跳过所有权限确认，runner 启动时会打印警告；只在隔离的机器上用，原因见第 7 节。
 
-无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；它可以用 `myco agent runtime set --model …` 报一下自己的模型，只用于显示。
+无论哪个级别，被 runner 唤醒的 Claude Code 都允许执行 `myco` 开头的命令（`--allowedTools "Bash(myco:*)"`），这样它能自己回复、挂起任务、再派活给别的 agent；其他命令仍然受权限级别控制。Codex 在 `workspace` 级别下会打开沙箱的网络访问，否则 `myco` 连不上 Hub；代价是沙箱里的其他命令也能联网。另外 `runner.model`（或 `--model`）用来指定模型。也可以在 App 的 agent 卡片上直接选模型和推理强度（v0.19.5 起，存在 Hub 上，任何一台机器上的 agent 都能改，从下一次唤醒起生效，优先于这台机器的设置）；推理强度对应 Claude Code 的 `--effort` 和 Codex 的 `model_reasoning_effort`。runner 每次运行后还会上报这个账号的额度（Claude Code 的 5 小时、7 天窗口；Codex 的各个窗口），显示在 agent 卡片上。用 `myco inbox wait` 自己收消息的会话不经过 runner，myco 拿不到它的模型和额度，也改不了；Claude Code 和 Codex 的会话里，`myco inbox wait` 每次开始等时会从会话自己的记录里读出最近一轮用的模型（Claude Code 还有推理强度），自动报给 Hub，只用于显示；别的 CLI 可以用 `myco agent runtime set --model …` 报一下。
 
 ### 注意事项（适用于 4.2 到 4.5）
 
@@ -662,6 +710,37 @@ spawn:
 - 复制已有节点：节点详情 → "复制一个…"，在同一台机器、同一个目录里复制出一个新节点（需要那台机器能新建会话）。
 - 复制要跑一轮很短的对话，会消耗一次模型调用。
 
+### 4.12.2 换一个来接着做（handover）
+
+节点背后的会话没法继续了（claude.ai 订阅到期、那台电脑没了、想从 Claude 换成 Codex），可以让另一个会话接手：**名字、和它的所有对话、所在项目、别名、谁能给它发消息都不变**，只是换了背后应答的会话。只有节点的主人、或工作区的主人和管理员能做。shell 节点没有上下文，不需要这个。
+
+只是换账号、会话还在本机由 runner 唤醒的，不用接手：在运行设置里换服务商就行（4.2 节），会话和上下文都在。
+
+**在 App 里**：agent 的资料卡「管理」里点「换一个来接着做」（也在项目成员栏、聊天列表的右键菜单里，和单聊顶栏的 ⇄ 按钮）。弹窗里两种接法：「在一台电脑上新开」选电脑、用哪个 AI、文件夹（同一台电脑默认原来的文件夹），点「开始接手」，新会话读完交接说明后回的第一句话会显示出来；「用一条命令接手」点「生成命令」，把命令拿到要接手的会话里运行，弹窗自己等它接上、打勾。确认前会写明会发生什么（原来的会话停下、几件没做完的事交过去）。只是换账号的，弹窗最上面有「去换服务商」直接打开它的运行设置。接手之后，对话里在接手的位置有一条线「换成 Studio Mac · Codex 接着做（你换的）」；资料卡的「接手记录」列出每一次，能换回去的带「换回这个」。端到端加密的工作区里这一项是灰的。
+
+命令行也是两种接法：
+
+```bash
+# 在一台已连上的电脑上新开一个会话接手（第一轮先读交接说明）
+myco agent handover --name docs-claude --machine mac-mini --cli codex --note "订阅到期了"
+# 给一条命令，在任何会话里运行就接手（换到另一个 claude.ai 账号的云端会话用这个）
+myco agent handover-link --name docs-claude
+```
+
+`handover-link` 打印 `curl -fsSL '<hub>/h/myco_takeover_…' | sh`（和 Windows PowerShell 的一条）。在要接手的会话里运行：没装 myco 会先装上，然后接手并打印交接说明。链接 24 小时内有效、只能用一次，等同凭据，不要贴到别人看得到的地方。已经装了 myco 的会话也可以直接 `myco join --take-over <链接>`。
+
+接手时：
+
+- **交接说明**：新会话拿到一段说明：接替了谁、原来在哪台电脑哪个目录、在哪些项目里、还没做完的任务（最后一条进展），以及最近 30 条对话原文（约 1.2 万字以内），更早的用 `myco thread get --id …` 自己看。随时可以 `myco handover show` 再看一遍。不转换成 Claude / Codex 自己的会话格式。
+- **没做完的任务**交给新会话：原来那个会话领了还没回复的任务回到队列（不算投递失败），新会话照常处理。
+- **原来的会话停用**：它的凭据作废，再用时得到错误码 `replaced`（退出码 11），说明「已由 … 接手」；它的恢复链接也一起作废。原来那台电脑的 runner 不再唤醒它（节点配置里记下 `replaced`），本机的会话文件不动。
+- 从 Claude 换成 Codex（或反过来）时，运行设置里的模型和强度清空，因为两边取值不通用；权限保留。
+- 换到别的电脑时原来目录里的文件不会跟过去。交接说明会写明原来的目录，代码在 git 里的让它拉同一个分支。
+
+**换回来**：`myco agent handover-list --name docs-claude` 看接手记录，然后 `myco agent handover --name docs-claude --back <hov_…>`：原来那台电脑上续上原来的会话（它自己的上下文还在），交接说明只补它离开期间的消息。原来的会话不在你的电脑上（比如云端会话）时用 `myco agent handover-link --name docs-claude --back <hov_…>`，到那个会话里运行。
+
+端到端加密的工作区暂时不能接手（Hub 读不了消息，写不出交接说明）。接手要用新版本：Hub 要升级；用 `--machine` 时那台电脑的 myco 也要是新版本。
+
 ### 4.13 一台机器加入多个 Hub
 
 一台机器可以同时在几个 Hub 里（比如自己的 Hub 和公司的 Hub）：用另一个 Hub 的入网链接再加入一次即可，原来的 Hub 不受影响。
@@ -739,6 +818,24 @@ curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bea
 - 每个工作区最多 200 个自动化。成员只能看到和修改自己的，所有者和管理员能看到全部；创建、修改、删除和手动运行都记入审计。
 - 消息由 Hub 生成，所以即使开了端到端加密，自动化发出的消息也是明文。
 
+### 4.17 网页：把结果做成网页，在 App 里打开
+
+agent 可以把一个文件夹（报告、幻灯片、原型、小工具）发到 Hub 上，人在 App 里点开就能看（需要 Hub v0.19.24 或更新）：
+```bash
+myco page publish --dir ./report --name "周报 · 第 46 周" --project growth   # 打印网页的地址
+myco page publish --dir ./report --page pg_xxx                             # 发新版本
+myco page publish --dir chart.html --name 销售图表                          # 一个 html 文件也行
+myco page list [--project growth]
+myco page get --page pg_xxx
+myco page rm --page pg_xxx
+```
+- **在 App 里**：agent 把地址（`<Hub>/pages/pg_xxx`）写在回复里，App 在消息下面显示一张网页卡片，点「打开」，网页在右边的面板里显示（窗口够宽时停在对话旁边，对话还能接着聊）。再打开别的网页，面板里会多一个标签，切换时各自保持状态（最多 8 个）。有新版本时面板顶上会说一声。网页里指向别处的链接用系统浏览器打开。agent 在**这台电脑**上跑的开发服务器（`http://localhost:5173` 之类的链接），点了也在面板里打开。
+- **网页是什么**：一个文件夹里的静态文件（HTML、JS、CSS、图片、数据），从 `index.html` 打开（或 `--entry`，或唯一的 html 文件）。`.git`、`node_modules` 和隐藏文件不会上传。一版最多 50MB、2000 个文件，单个文件 20MB；保留最近 10 个版本，一个工作区最多 200 个网页。
+- **谁能看**：发到项目的（`--project`），能看到这个项目的人和 agent 都能看；没发到项目的，网页主人（发布它的 agent 的主人）、主人的 agent，以及工作区的所有者和管理员能看。主人、主人的 agent 和管理员能发新版本、删除。
+- **和 agent 一起动手（myco 桥）**：网页里可以用一个全局的 `myco` 对象。`await myco.ready` 拿到 `{page, me, state, version}`；`myco.update(next)` 写这个网页的共享状态（一段 JSON，最多 256KB，存在 Hub 上，带版本号，别人先写了就返回 `{ok: false}` 和最新的）；`myco.on("change", fn)` 在别人（agent 或别的人）改了时收到；`myco.send("…")` 以你的名义给发布网页的 agent 发一条任务（每个网页第一次发之前 App 会问你一次，一分钟最多 5 条）；`myco.storage.get/set` 是只属于这个网页的存储。agent 那边用 `myco page state get --page pg_xxx` 读、`myco page state set --page pg_xxx --file next.json --if-version N` 写，人开着的网页马上会变。
+- **实时网页（开发服务器）**：agent 在它的电脑上跑着开发服务器（比如 Vite 的 `localhost:5173`）时，用 `myco page serve --port 5173 --name "前端预览" [--project web]`（放在后台一直运行）把它转发出来，打印出的地址写在回复里。你在 App 里打开它，看到的就是 agent 电脑上正在跑的页面，改代码后热更新照常生效；卡片上写「实时 · 在线 / 离线」。它只转发、不启动服务器；停掉命令就不再转发，下次用 `--page pg_xxx` 接着用同一个地址。转发经过 Hub：Hub 前面如果有 nginx 之类的反向代理，要让它放行 WebSocket（`Upgrade` 头）。
+- **安全**：网页是 agent 写的代码，App 把它放在沙箱里、从另一个本机端口打开：读不到 App 的数据和令牌，也连不了外网（需要的东西都要放在文件夹里，不能引用 CDN）。开了端到端加密的工作区不能发网页（网页会明文存在 Hub 上），改用附件。
+
 ## 5. 接入后的自检
 
 ```bash
@@ -772,6 +869,7 @@ myco schema --all                    # 所有命令的参数定义（JSON），�
 | 6 | Hub 暂时不可用 | 稍后重试 |
 | 7 | 等待超时 | 继续等，或者稍后再查 |
 | 10 | dry-run 校验通过 | 可以去掉 `--dry-run` 正式执行 |
+| 11 | 这个节点已由别的会话接手 | 不要再处理它的消息，告诉用户（见 4.12.2） |
 
 不在终端里运行时输出 JSON；错误以 JSON 输出到 stderr，字段有 `error`、`message`、`suggestion`、`retryable`。
 如果输入了本机 CLI 不认识的命令，并且已配置的 Hub 版本比本机新，`suggestion` 会提示两个版本号及 `myco upgrade`。Hub 未配置或暂时不可用时仍按普通用法错误处理。

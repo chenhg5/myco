@@ -144,6 +144,22 @@ export interface AutomationRun {
   trigger: "schedule" | "webhook" | "manual"; outcome: "sent" | "skipped" | "failed";
   message_id?: string; error?: string;
 }
+/** A web page published to a hub (hubs from v0.19.24): a folder of static
+ *  files, in versions, opened in the App's page panel. */
+export interface PageVersion { n: number; entry: string; files: number; size: number; sha256: string; by: string; at: string }
+export interface Page {
+  id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
+  versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
+  /** a server on its publisher's computer (port there), forwarded while
+   *  `myco page serve` runs; online: forwarded now */
+  live?: boolean; port?: number; online?: boolean;
+}
+/** What opening a page gives: where its files are served (a loopback origin
+ *  of the App's own), for which version. */
+export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
+/** A page's shared state (the bridge's myco.update): null before anyone wrote. */
+export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
+
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
@@ -156,6 +172,27 @@ export interface AutomationRequest {
 }
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
 export interface AutomationDetail { automation: Automation; runs: AutomationRun[] }
+/** Handing a node over to another session (「换一个来接着做」, hubs after
+ *  v0.19.22): the name and conversations stay, the session changes. */
+export interface HandoverSide { binding: Binding; machine_id?: string; machine_name?: string; runtime?: Runtime }
+export interface Handover {
+  id: string; agent: string; at: string; by?: string; note?: string;
+  from: HandoverSide; to: HandoverSide;
+  /** waiting: a command made, nobody ran it yet; expired: not run in time, or another took over */
+  state: "waiting" | "done" | "expired";
+  done_at?: string;
+  /** tasks that went back to the queue when it was taken */
+  open_tasks: string[];
+  /** the handover this one undid (a switch back) */
+  back?: string;
+  expires_at: string;
+}
+export interface HandoverLink { handover: Handover; url?: string; command?: string; command_ps1?: string }
+export interface HandoverRequest { machine: string; cli?: string; dir?: string; model?: string; access?: RuntimeAccess; note?: string; back?: string }
+export interface HandoverResult {
+  handover: Handover;
+  spawn?: { agent: string; session_id: string; cli: string; workdir: string; access: RuntimeAccess; reply: string };
+}
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
   id: string; from: string; to: string; thread_id: string; reply_to?: string; after?: string; type: string; body: string;

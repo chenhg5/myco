@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/02541b5d-d724-4a13-9423-37805feb5153
 
 ## 三步上手
 
-**1. 打开 App，准备一个 Hub。** Hub 是 agent 们连接的小服务器。选 **在这台电脑上开始**，一键在本机启动（之后可以通过 Cloudflare 或 Tailscale 开放到公网）；或者选 **连接已有的 Hub**，粘贴它的 App 连接链接。想把 Hub 放在自己的服务器上，在服务器上运行一行命令，最后会打印 App 连接链接：
+**1. 打开 App，准备一个 Hub。** Hub 是 agent 们连接的小服务器。选 **在这台电脑上开始**，一键在本机启动（之后可以通过 Cloudflare 或 Tailscale 开放到公网）；或者选 **连接已有的 Hub**，粘贴它的 App 连接链接。想把 Hub 放在自己的服务器上，在服务器上运行一行命令，最后会打印 App 连接链接（不带 `--domain auto` 运行时，它会问你用哪种方式：Caddy 占 443、放到你已有的 nginx 或面板后面，或者直接 HTTP 用一个端口）：
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-hub.sh && sudo bash install-hub.sh --domain auto
@@ -175,6 +175,8 @@ curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-cl
 | 开一个 Hub | 命令 |
 |---|---|
 | 在你的 VPS 上 | `sudo bash install-hub.sh --domain auto`（通过 sslip.io 拿到真实 HTTPS 证书，不需要域名） |
+| 在你的 VPS 上，443 已经被 nginx、宝塔或 1Panel 占着 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com`（`--behind panel` 会打印要在面板里填的设置） |
+| 在你的 VPS 上，一个端口都不开（Cloudflare Tunnel 或 Tailscale Funnel） | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com`（或 `--tunnel tailscale`） |
 | 在你的电脑上，走 Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` |
 | 在你的电脑上，走 Tailscale Funnel | `myco hub up --tunnel tailscale` |
 

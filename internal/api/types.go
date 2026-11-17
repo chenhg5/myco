@@ -689,6 +689,15 @@ type SpawnRequest struct {
 	// into the new agent instead of starting an empty one: it keeps the
 	// original's context, and the original is left untouched.
 	ForkFrom string `json:"fork_from,omitempty"`
+	// TakeOver, from the hub only (POST /v1/agents/{name}/handover): a
+	// take-over link token. The new session takes that node over instead of
+	// joining as a new agent; Brief is its first prompt (the handover note).
+	// ResumeSession continues that session (a switch back) instead of
+	// starting one. Machines older than the hub's handover support are
+	// refused by the hub before it sends this.
+	TakeOver      string `json:"take_over,omitempty"`
+	Brief         string `json:"brief,omitempty"`
+	ResumeSession string `json:"resume_session,omitempty"`
 	// JoinLink, instead of starting a session, adds this machine to another
 	// workspace of the same hub server with that workspace's join link
 	// (<hub>/w/<name>/j/<token>): it reuses the machine's way to the server,
@@ -1251,4 +1260,70 @@ type AutomationDetail struct {
 // WebhookResponse answers POST /hooks/{id}.
 type WebhookResponse struct {
 	Run AutomationRun `json:"run"`
+}
+
+// Page is a web page published to the hub (from v0.19.24): GET /v1/pages,
+// GET /v1/pages/{id}, POST /v1/pages.
+type Page struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Project   string `json:"project,omitempty"`
+	Publisher string `json:"publisher"`
+	// Version is the latest version's number.
+	Version int `json:"version"`
+	// Entry is the file the latest version opens on.
+	Entry string `json:"entry"`
+	// URL is the page's address on the hub (<hub>/pages/<id>); the App
+	// opens such links in its page panel.
+	URL       string        `json:"url"`
+	Versions  []PageVersion `json:"versions"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	// CanManage: the caller may publish versions of it and delete it.
+	CanManage bool `json:"can_manage"`
+	// Live: a server on its publisher's computer (on Port there), forwarded
+	// while `myco page serve` runs; Online says whether it is now.
+	Live   bool `json:"live,omitempty"`
+	Port   int  `json:"port,omitempty"`
+	Online bool `json:"online,omitempty"`
+}
+
+// PageVersion is one publish of a page.
+type PageVersion struct {
+	N      int       `json:"n"`
+	Entry  string    `json:"entry"`
+	Files  int       `json:"files"`
+	Size   int64     `json:"size"`
+	SHA256 string    `json:"sha256"`
+	By     string    `json:"by"`
+	At     time.Time `json:"at"`
+}
+
+// PageList is GET /v1/pages.
+type PageList struct {
+	Pages []Page `json:"pages"`
+}
+
+// PageState is a page's shared state (GET/PUT /v1/pages/{id}/state, from
+// v0.19.24): JSON people (through the page's myco bridge) and agents read
+// and write. State is null before anyone wrote; Version counts writes.
+type PageState struct {
+	State     json.RawMessage `json:"state"`
+	Version   int             `json:"version"`
+	UpdatedBy string          `json:"updated_by,omitempty"`
+	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
+}
+
+// PageStateRequest is PUT /v1/pages/{id}/state: the new state, and the
+// version it was based on (0 when there was none). A 409 answers with the
+// latest in "latest".
+type PageStateRequest struct {
+	State     json.RawMessage `json:"state"`
+	IfVersion int             `json:"if_version"`
+}
+
+// PageStateConflict is PUT /v1/pages/{id}/state's 409.
+type PageStateConflict struct {
+	Error
+	Latest PageState `json:"latest"`
 }

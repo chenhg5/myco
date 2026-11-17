@@ -33,10 +33,12 @@ type MessageService struct {
 	ids      IDGenerator
 	clock    Clock
 	policy   MessagePolicy
-	observer DeliveryObserver
-	files    domain.FileRepository // nil: attachments disabled
-	aliases  domain.AliasRepository
-	presence *Presence // nil: no session/runner arbitration
+	// credential re-checks a waiting pull's credential (nil: never).
+	credential func(ctx context.Context, a *domain.Agent) error
+	observer   DeliveryObserver
+	files      domain.FileRepository // nil: attachments disabled
+	aliases    domain.AliasRepository
+	presence   *Presence // nil: no session/runner arbitration
 	// memberName resolves a member id to their name (nil: no members).
 	memberName func(ctx context.Context, id string) string
 	projects   domain.ProjectRepository // nil: no projects
@@ -74,6 +76,12 @@ func (s *MessageService) SetFiles(repo domain.FileRepository) { s.files = repo }
 // NewMessageService wires the messaging use cases.
 func NewMessageService(agents domain.AgentRepository, messages domain.MessageRepository, n Notifier, ids IDGenerator, clock Clock, p MessagePolicy) *MessageService {
 	return &MessageService{agents: agents, messages: messages, notifier: n, ids: ids, clock: clock, policy: p, observer: noopObserver{}}
+}
+
+// SetCredentialCheck sets the check a long pull makes after waiting: the
+// agent's credential is still the one it authenticated with.
+func (s *MessageService) SetCredentialCheck(fn func(ctx context.Context, a *domain.Agent) error) {
+	s.credential = fn
 }
 
 // SetObserver registers the component told about inbox activity (the
@@ -331,6 +339,13 @@ func (s *MessageService) pull(ctx context.Context, agent *domain.Agent, limit in
 		}
 		fired := wait(ctx, ch, remaining)
 		cancel()
+		if s.credential != nil {
+			// The credential may have been replaced while this pull waited
+			// (a handover): the old session must not claim the new one's mail.
+			if err := s.credential(ctx, agent); err != nil {
+				return nil, err
+			}
+		}
 		if !fired {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()

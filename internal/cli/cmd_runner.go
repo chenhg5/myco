@@ -337,6 +337,9 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	dir := config.ProfilesDir(e.defaultPath)
 	var (
 		wg      sync.WaitGroup
+		mu      sync.Mutex            // started: a runner ends by itself when its node is taken over
+		said    = map[string]bool{}   // replaced profiles already logged (path + token)
+		refused = map[string]string{} // profile -> the credential the hub refused
 		started = map[string]bool{}
 		failed  = map[string]string{} // profile -> last start error
 		machine = false               // machine nodes ensured
@@ -353,8 +356,25 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		if err != nil {
 			log.Warn("reading profiles failed", "dir", dir, "err", err)
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		for _, p := range profiles {
 			if started[p.Path] {
+				continue
+			}
+			if tok, ok := refused[p.Path]; ok {
+				if tok == p.Config.Token {
+					continue // still the refused credential: its runner said why
+				}
+				delete(refused, p.Path) // a new identity was saved here
+			}
+			if p.Config.Replaced != "" {
+				// Another session took this node over: not woken here any
+				// more (until a new identity is saved in this profile).
+				if k := p.Path + "\x00" + p.Config.Token; !said[k] {
+					said[k] = true
+					log.Info("skipping agent taken over by another session", "profile", p.Path, "agent", p.Config.Agent)
+				}
 				continue
 			}
 			if p.Config.Harness == "inbox" {
@@ -369,8 +389,14 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			}
 			r, err := e.buildRunner(p.Path, p.Config, sh, runnerOverrides{}, log)
 			if err != nil {
+				if runner.IsReplaced(err) {
+					markReplaced(p.Path, p.Config.Token, err)
+					refused[p.Path] = p.Config.Token
+					log.Info("skipping agent taken over by another session", "profile", p.Path, "agent", p.Config.Agent)
+					continue
+				}
 				if runner.IsCredentialRejected(err) {
-					started[p.Path] = true
+					refused[p.Path] = p.Config.Token
 					log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", p.Config.Hub, "profile", p.Path, "err", err)
 					continue
 				}
@@ -389,7 +415,26 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			}
 			started[p.Path] = true
 			wg.Add(1)
-			go func() { defer wg.Done(); _ = r.Run(e.in.Ctx) }()
+			path, token := p.Path, p.Config.Token
+			go func() {
+				defer wg.Done()
+				if err := r.Run(e.in.Ctx); runner.IsCredentialRejected(err) {
+					// Taken over (a handover) or its credential replaced:
+					// look again, as a new identity may have been saved in
+					// this profile (a new session on this machine).
+					if runner.IsReplaced(err) {
+						markReplaced(path, token, err)
+					}
+					mu.Lock()
+					delete(started, path)
+					refused[path] = token
+					mu.Unlock()
+					select {
+					case sh.rescan <- struct{}{}:
+					default:
+					}
+				}
+			}()
 		}
 		return len(profiles)
 	}
@@ -422,6 +467,22 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			scan()
 		}
 	}
+}
+
+// markReplaced records in a profile that the hub said its session was
+// taken over, unless the profile already holds another identity (the new
+// session took it over on this machine).
+func markReplaced(path, token string, err error) {
+	cfg, lerr := config.Load(path)
+	if lerr != nil || cfg.Token != token {
+		return
+	}
+	msg := err.Error()
+	if ae, ok := client.AsError(err); ok {
+		msg = ae.Message
+	}
+	cfg.Replaced = msg
+	_ = config.Save(path, cfg)
 }
 
 // cachedAllowFrom returns the agent's current allow_from, asking the hub at

@@ -195,6 +195,54 @@ let proxySetting = { mode: "system" };
 let proxyPassword = "";
 // Links the App asked to open in the browser (/app/open-url).
 const openedLinks = [];
+// Pages agents published (/app/hubs/{id}/pages), and the keys the page
+// panel opened them under (served on this port at /p/<key>/…).
+const checklistPage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>上线清单</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>上线清单</h1><p class="sub" id="who">正在连上 myco…</p><ul id="list"></ul>
+<p><button id="hand">交给 agent</button> <span id="note"></span></p></main>
+<script src="app.js"></script></body></html>`;
+const checklistCss = "body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:560px;margin:0 auto;padding:28px 24px}h1{margin:0;font-size:22px}.sub{color:#85858d;margin:4px 0 16px}ul{list-style:none;padding:0}li{padding:6px 0}label{display:flex;gap:8px;align-items:center}li.done span{color:#85858d;text-decoration:line-through}button{font:inherit;padding:4px 12px;border-radius:7px;border:1px solid #d0d0d6;background:#fff}#note{color:#2f8a68;font-size:13px}";
+const checklistJs = `const items=["升级说明已更新","Windows 安装包已签名","预发环境装过一遍","发布说明已发"];
+function draw(state){const done=(state&&state.done)||[];document.getElementById("list").innerHTML=items.map((t,i)=>'<li class="'+(done.includes(i)?"done":"")+'"><label><input type="checkbox" data-i="'+i+'"'+(done.includes(i)?" checked":"")+'><span>'+t+'</span></label></li>').join("");}
+draw(null);
+myco.ready.then((c)=>{document.getElementById("who").textContent=(c.me&&c.me.name?c.me.name+" · ":"")+"状态第 "+c.version+" 版";draw(c.state);},()=>{document.getElementById("who").textContent="（不在 myco App 里：只能看）";});
+myco.on("change",(c)=>{draw(c.state);document.getElementById("who").textContent=(c.by?c.by+" 改了 · ":"")+"状态第 "+c.version+" 版";});
+document.addEventListener("change",async(e)=>{const i=Number(e.target.dataset.i);const done=new Set((myco.state&&myco.state.done)||[]);e.target.checked?done.add(i):done.delete(i);const r=await myco.update({done:[...done].sort()});draw(r.state);document.getElementById("who").textContent=(r.ok?"已保存":"别人先改了，已刷新")+" · 状态第 "+r.version+" 版";});
+document.getElementById("hand").addEventListener("click",async()=>{try{const n=((myco.state&&myco.state.done)||[]).length;await myco.send("清单勾完了 "+n+" 项，剩下的交给你。");document.getElementById("note").textContent="已发给 agent";}catch(err){document.getElementById("note").textContent=err.message;}});`;
+const livePage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>下载页</title><style>body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:560px;margin:0 auto;padding:32px 24px}h1{margin:0 0 6px;font-size:24px}.dl{display:flex;gap:8px;margin-top:18px}.dl a{padding:8px 14px;border-radius:9px;background:#26262c;color:#fff;text-decoration:none;font-size:14px}.tag{font-size:12px;color:#b45309}</style></head>
+<body><main><p class="tag">vite dev server · localhost:5173</p><h1>下载 myco</h1><p>Mac、Windows、Linux 都有。</p><div class="dl"><a href="#mac">macOS</a><a href="#win">Windows</a><a href="#linux">Linux</a></div></main></body></html>`;
+const pageFilesOf = (id, n) => (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : pageFiles(n));
+const pageFiles = (n) => ({
+  "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
+<div id="bars"></div>
+<section><h2>新功能</h2><ul><li>对话页支持 Markdown 表格与代码块</li><li>本机会话一键接入</li></ul></section>
+<section><h2>修复</h2><ul><li>runner 断线后重连</li></ul></section>
+<p><a href="https://github.com/chenhg5/myco/releases" id="out">看完整的变更记录</a></p></main>
+<script src="app.js"></script></body></html>`,
+  "style.css": "body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:640px;margin:0 auto;padding:28px 24px}h1{margin:0;font-size:24px}.sub{color:#85858d;margin:4px 0 20px}.bar{display:flex;align-items:center;gap:10px;margin:6px 0}.bar i{display:block;height:14px;border-radius:4px;background:#3a9a78}h2{font-size:16px;margin:22px 0 6px}a{color:#2f8a68}",
+  "app.js": `const data=[["新功能",${n + 5}],["修复",${n + 2}],["文档",3]];document.getElementById("bars").innerHTML=data.map(([k,v])=>'<div class="bar"><span style="width:56px">'+k+'</span><i style="width:'+v*24+'px"></i><b>'+v+'</b></div>').join("");`,
+});
+const pages = new Map([["pg_release", {
+  id: "pg_release", name: "v0.16.8 发布说明", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_release", created_at: iso(19000), updated_at: iso(19000), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 3, size: 2048, sha256: "a1", by: "release-cloud", at: iso(19000) }],
+}]]);
+pages.set("pg_checklist", {
+  id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 3, size: 3100, sha256: "c1", by: "release-cloud", at: iso(18500) }],
+});
+pages.set("pg_live", {
+  id: "pg_live", name: "下载页（实时）", project: "website", publisher: "release-cloud", version: 0, entry: "",
+  url: "http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200), can_manage: true,
+  versions: [], live: true, port: 5173, online: true,
+});
+// Pages' shared states (the bridge's myco.update).
+const pageStates = new Map([["pg_checklist", { state: { done: [0] }, version: 1, updated_by: "release-cloud", updated_at: iso(18000) }]]);
+const pageKeys = new Map();
+// The helper and the myco bridge, as the App serves them.
+const pageHelperJS = readFileSync(new URL("../../internal/console/pagebridge.js", import.meta.url), "utf8");
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -348,6 +396,14 @@ const consoleThreads = {
       created_at: iso(8700), updated_at: iso(8700),
     }),
   ],
+  // A page an agent published (myco page publish): its link in the reply
+  // shows as a card and opens in the page panel.
+  th_console_page: [
+    makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "下载页的改动在我电脑上跑着，实时预览（改了会自己刷新）：http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "上线前的检查也做成了一页清单，大家可以在上面勾：http://192.168.1.20:7780/pages/pg_checklist\n\n勾完了点页面下面的「交给 agent」，我接着往下做。", created_at: iso(18500), updated_at: iso(18500) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "reply", status: "done", body: "做好了，发布说明的网页在这里：http://192.168.1.20:7780/pages/pg_release\n\n按「新功能 / 修复 / 文档」分了三栏，图表是页面里自己画的。", created_at: iso(19000), updated_at: iso(19000) }),
+  ],
   th_console_fail: [
     makeMessage({ thread_id: "th_console_fail", from: CONSOLE, to: "docs-claude", type: "task", status: "done", body: "把 README 里的截图更新一下。", created_at: iso(15000), updated_at: iso(15000) }),
     makeMessage({
@@ -419,13 +475,13 @@ const state = {
       url: "http://192.168.1.20:7780",
       token: "myco_console_demo_studio",
       ok: true,
-      hub_version: "0.19.5",
+      hub_version: "0.19.23",
       update_available: true,
       threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
-          myco_version: "0.16.8", online: true, last_seen_at: iso(5), can_spawn: true,
+          myco_version: "0.19.23", online: true, last_seen_at: iso(5), can_spawn: true,
         },
         {
           id: "m_bench", name: "Bench Linux", hostname: "bench-01", os: "linux", arch: "x86_64",
@@ -508,7 +564,8 @@ const state = {
         }),
         makeAgent({
           name: "release-cloud", owner: "glenn", owner_id: "mem_glenn", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
-          kind: "agent", runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "default", access: "readonly" },
+          // It has not said which model it runs on (an older myco in that session).
+          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly" },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),
@@ -699,7 +756,8 @@ function consoleReply() {
     };
   }
   return {
-    body: "跑完了，截图和日志在附件里。最后一行是 BUILD SUCCESSFUL。",
+    // (long enough to grow in: its pictures come after its words)
+    body: "跑完了，截图和日志在附件里。最后一行是 BUILD SUCCESSFUL。\n\n首页在三种宽度下都看过了，导航栏在窄屏下会收起成一个菜单按钮，下载按钮的位置没有变。发布说明按新功能、修复、文档三类整理好了，你看一下措辞合不合适。",
     attachments: [
       { file_id: `f_demo_shot_${replySeq}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
       { file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" },
@@ -1419,6 +1477,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/handovers — the smoke test makes a take-over command (a
+  // waiting handover) and may take one over on a computer; start each width
+  // and theme from the seeded ones.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
+    state.handovers = {};
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/run-settings — the smoke test changes a node's model and
   // effort; put the demo ones back between widths and themes. GET returns
   // the last body the App sent there.
@@ -1576,6 +1642,91 @@ const server = http.createServer(async (req, res) => {
     // (port 9 stands for a proxy that is not there)
     if (body.port === 9) return send(res, 200, { ok: false, reason: "refused", error: "connection refused" });
     return send(res, 200, { ok: true, ms: 42, status: 200 });
+  }
+  // A page's files, on this port (another origin than the App's).
+  if (parts[0] === "__myco" && parts[1] === "page.js") {
+    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+    return res.end(pageHelperJS);
+  }
+  if (parts[0] === "p" && parts.length >= 2) {
+    const k = pageKeys.get(parts[1]);
+    if (!k) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
+    const file = parts.slice(2).join("/") || "index.html";
+    const body = pageFilesOf(k.page, k.version)[file];
+    if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
+    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : "text/javascript";
+    const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
+    res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
+    return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);
+  }
+  // /app/hubs/{id}/pages… — pages agents published (v0.19.24).
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "pages") {
+    const mine = parts[2] === "hub_studio";
+    if (parts.length === 4 && method === "GET") return send(res, 200, { pages: mine ? [...pages.values()] : [] });
+    const p = mine ? pages.get(parts[4]) : undefined;
+    if (!p) return fail(res, 404, "not_found", `page ${parts[4]} not found`);
+    if (parts.length === 5 && method === "GET") return send(res, 200, p);
+    if (parts.length === 5 && method === "DELETE") { pages.delete(p.id); res.writeHead(204); return res.end(); }
+    if (parts.length === 6 && parts[5] === "state") {
+      const cur = pageStates.get(p.id) || { state: null, version: 0 };
+      if (method === "GET") return send(res, 200, cur);
+      if (method === "PUT") {
+        const body = (await readBody(req)) || {};
+        if ((body.if_version || 0) !== cur.version) return send(res, 409, { error: "conflict", message: "the page's state changed", latest: cur });
+        const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "glenn", updated_at: iso(0) };
+        pageStates.set(p.id, next);
+        return send(res, 200, next);
+      }
+    }
+    if (parts.length === 6 && parts[5] === "open" && method === "POST") {
+      const body = (await readBody(req)) || {};
+      const version = body.version || p.version;
+      const key = `k${Math.random().toString(36).slice(2, 12)}`;
+      pageKeys.set(key, { page: p.id, version });
+      if (p.live) return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/`, version: 0, latest: 0, name: p.name, entry: "", live: true, online: p.online, port: p.port });
+      return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/index.html`, version, latest: p.version, name: p.name, entry: "index.html" });
+    }
+    return fail(res, 404, "not_found", "no such route");
+  }
+  // (the smoke test: two answers land a moment apart in your chat with an
+  // agent, the second with pictures; both long enough to grow in)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "replies" && method === "POST") {
+    const body = (await readBody(req)) || {};
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    const agent = body.agent || "review-cloud";
+    const threads = Object.entries(hub.threads).filter(([, ms]) => ms.some((m) => m.from === CONSOLE && m.to === agent));
+    let [threadId, msgs] = threads.sort((a, b) => b[1].at(-1).created_at.localeCompare(a[1].at(-1).created_at))[0] || [];
+    if (!msgs) {
+      // (no chat yet: one, with a task already answered)
+      threadId = `th_mock_order_${(state.counter += 1)}`;
+      msgs = hub.threads[threadId] = [makeMessage({ thread_id: threadId, from: CONSOLE, to: agent, type: "task", status: "done", body: "把首页改好，截图给我。", created_at: iso(60), updated_at: iso(30) })];
+    }
+    if (body.prepare) return send(res, 200, { ok: true, thread: threadId });
+    const long = (n) => `第 ${n} 段回答：改动已经合进去了，构建和测试都通过。\n\n首页在三种宽度下都看过了，导航栏在窄屏下收起成菜单按钮，下载按钮的位置没变。\n\n发布说明按新功能、修复、文档三类整理好了，措辞你再看一眼。`;
+    const tag = String(body.tag || "");
+    msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(1)}${tag}`, created_at: iso(0), updated_at: iso(0) }));
+    setTimeout(() => {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(2)}${tag}`, created_at: iso(0), updated_at: iso(0),
+        attachments: [{ file_id: `f_demo_shot_order_${(state.counter += 1)}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" }] }));
+    }, Number(body.gap) || 600);
+    return send(res, 200, { ok: true, thread: threadId });
+  }
+  // (the smoke test writes a page's state, as its agent would)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "state" && method === "POST") {
+    const cur = pageStates.get(parts[3]) || { state: null, version: 0 };
+    const body = (await readBody(req)) || {};
+    const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "release-cloud", updated_at: iso(0) };
+    pageStates.set(parts[3], next);
+    return send(res, 200, next);
+  }
+  // (the smoke test publishes a new version, as an agent would)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "publish" && method === "POST") {
+    const p = pages.get(parts[3]);
+    if (!p) return fail(res, 404, "not_found", "no such page");
+    p.version += 1;
+    p.updated_at = iso(0);
+    p.versions.unshift({ n: p.version, entry: "index.html", files: 3, size: 2100, sha256: `a${p.version}`, by: "release-cloud", at: iso(0) });
+    return send(res, 200, p);
   }
   // /app/open-url: the desktop app opens a link in the default browser;
   // here it is only noted (GET /app/mock/opened lists them, for the smoke test).
@@ -2293,6 +2444,49 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { items: list.slice(0, 30), more: list.length > 30 });
     }
 
+    // /app/hubs/{id}/agents/{name}/handovers | handover-link | handover —
+    // 「换一个来接着做」 (hubs after v0.19.22; the others answer 404). pm-codex
+    // was taken over from a claude.ai session two days ago: the line in its
+    // chat, and 「换回这个」 in its profile. A command waits for whoever runs it
+    // (nobody does here); a computer path answers after a moment, with the
+    // new session's first words. The agent itself is left as it is.
+    if (parts.length === 6 && parts[3] === "agents" && ["handovers", "handover-link", "handover"].includes(parts[5])) {
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      if (hub.id !== "hub_studio") return fail(res, 404, "not_found", "no such route");
+      const name = parts[4];
+      const agent = hub.agents.find((a) => a.name === name);
+      if (!agent) return fail(res, 404, "not_found", `agent ${name} not found`);
+      state.handovers ||= {};
+      const list = (state.handovers[name] ||= seedHandovers(name));
+      if (parts[5] === "handovers" && method === "GET") return send(res, 200, { handovers: list });
+      if (method !== "POST") return fail(res, 405, "method_not_allowed", "method not allowed");
+      const body = (await readBody(req)) || {};
+      const machineName = (id) => (hub.machines || []).find((m) => m.id === id)?.name;
+      const from = { binding: { ...agent.binding }, machine_id: agent.machine_id, machine_name: machineName(agent.machine_id), runtime: { cli: agent.runtime?.cli || agent.binding?.harness } };
+      const id = "hov_" + Math.random().toString(36).slice(2, 10);
+      if (parts[5] === "handover-link") {
+        const h = { id, agent: name, at: iso(), by: "glenn", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
+        list.unshift(h);
+        const url = `${hub.url.replace(/^http:/, "https:")}/h/myco_takeover_9f3k2demo${id.slice(4)}`;
+        return send(res, 201, { handover: h, url, command: `curl -fsSL '${url}' | sh`, command_ps1: `irm '${url}?format=ps1' | iex` });
+      }
+      const m = (hub.machines || []).find((x) => x.id === body.machine || x.name === body.machine);
+      if (!m) return fail(res, 404, "not_found", `machine ${body.machine} not found`, "list them: myco machine list");
+      if (!/^0\.(19\.(2[3-9]|[3-9]\d)|[2-9]\d)|^[1-9]/.test(m.myco_version || "")) {
+        return fail(res, 409, "invalid_state", `myco on machine ${m.name} (v${m.myco_version}) cannot take a node over`, `upgrade it there: myco upgrade`);
+      }
+      await sleep(1600);
+      const cli = body.cli || agent.runtime?.cli || "claude";
+      const h = {
+        id, agent: name, at: iso(2), by: "glenn", note: body.note || "", from,
+        to: { binding: { harness: cli, session_id: "new-" + id.slice(4), workdir: body.dir || agent.binding?.workdir }, machine_id: m.id, machine_name: m.name, runtime: { cli } },
+        state: "done", done_at: iso(), open_tasks: [], back: body.back || "", expires_at: iso(-86_400),
+      };
+      list.unshift(h);
+      return send(res, 200, { handover: h, spawn: { agent: name, session_id: h.to.binding.session_id, cli, workdir: h.to.binding.workdir, access: "workspace",
+        reply: "读完交接说明了：我现在是 PM (Codex)，接着审查 multihub 分支（还剩 2 个文件），做完先在这里汇报。" } });
+    }
+
     // /app/hubs/{id}/agents/{name}/peers — other nodes it talked to (demo: an exec node).
     if (parts.length === 6 && parts[3] === "agents" && parts[5] === "peers" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
@@ -2903,6 +3097,20 @@ function toneWav() {
 }
 
 // One automation to start with: a weekday morning summary for the PM.
+/** pm-codex's handovers: from a claude.ai session to Codex on the Studio
+ *  Mac, two days ago (done), and an older command nobody ran (expired). */
+function seedHandovers(name) {
+  if (name !== "pm-codex") return [];
+  const cloud = { binding: { harness: "claude-cloud", session_id: "session_01PmCloud7f2", environment: "claude.ai" }, runtime: { cli: "claude-cloud" } };
+  const studio = { binding: { harness: "codex", session_id: "01a1-pm-session", workdir: "~/code/myco" }, machine_id: "m_studio", machine_name: "Studio Mac", runtime: { cli: "codex" } };
+  return [
+    { id: "hov_pm2", agent: name, at: iso(2 * 86_400 + 300), by: "glenn", note: "claude.ai 的订阅到期了，换到 Studio Mac 上用 Codex 继续",
+      from: cloud, to: studio, state: "done", done_at: iso(2 * 86_400), open_tasks: ["m_pm_open"], back: "", expires_at: iso(86_400) },
+    { id: "hov_pm1", agent: name, at: iso(3 * 86_400), by: "glenn", note: "",
+      from: cloud, to: { binding: {} }, state: "expired", open_tasks: [], back: "", expires_at: iso(2 * 86_400) },
+  ];
+}
+
 function seedAutomations(hub) {
   if (hub.id !== "hub_studio") return [];
   return [{

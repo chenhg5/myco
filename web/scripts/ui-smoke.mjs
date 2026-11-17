@@ -356,6 +356,8 @@ async function runMatrix(browser, size, scheme) {
   // The run step changes a node's model and effort; put the demo ones back.
   const resetRun = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`, { method: "POST" });
   if (!resetRun.ok) throw new Error(`重置模型设置失败：HTTP ${resetRun.status}`);
+  const resetHandovers = await fetch(`http://${HOST}:${mockPort()}/app/mock/handovers`, { method: "POST" });
+  if (!resetHandovers.ok) throw new Error(`重置接手记录失败：HTTP ${resetHandovers.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -469,6 +471,193 @@ async function runMatrix(browser, size, scheme) {
       await pill.click();
       await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: "高", exact: true }).click();
       await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      // In its own session and not said yet: 模型未知, and how it comes to be known.
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const unknown = chat.locator(".conv-compose .run-pill");
+      await unknown.waitFor({ timeout: 10_000 });
+      const said = compactText(await unknown.innerText());
+      if (said !== "模型未知") throw new Error(`没上报模型的 agent 应写「模型未知」，实际「${said}」`);
+      await unknown.click();
+      const note = chat.locator(".run-pill-menu");
+      await note.waitFor({ timeout: 5_000 });
+      if (!/runtime set/.test(await note.innerText())) throw new Error("点开应说明怎么让它报上模型");
+      await settle(page, 150);
+      await shot(page, size, scheme, "composer-model-unknown");
+      await chat.locator(".run-pill-scrim").click({ position: { x: 5, y: 5 } });
+      await note.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    // A page an agent published: its link in the reply is a card; it opens
+    // in the page panel (beside the chat when there is room), from another
+    // origin; a link in it goes to the browser; a newer version is said.
+    await step("网页 · agent 做的网页", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const card = chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" });
+      await card.waitFor({ timeout: 15_000 });
+      if (!(await card.innerText()).includes("Release (Claude 云端) 发布")) throw new Error("卡片上应写由谁发布");
+      await card.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-card");
+      await clickVisible(page, card);
+      const panel = page.locator(".pg-panel");
+      await panel.waitFor({ timeout: 10_000 });
+      const frame = page.frameLocator(".pg-frame");
+      await frame.locator("h1", { hasText: "发布说明" }).waitFor({ timeout: 15_000 });
+      if ((await frame.locator(".bar").count()) !== 3) throw new Error("网页里的脚本应该跑起来，画出三条");
+      const src = await page.locator(".pg-frame").getAttribute("src");
+      if (!src || new URL(src).origin === new URL(page.url()).origin) throw new Error(`网页应该在另一个源里打开：${src}`);
+      if (!narrow && !(await page.evaluate(() => document.documentElement.classList.contains("fp-docked")))) throw new Error("宽窗口里网页应停在对话旁边");
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-panel");
+      // A link out of the page: the browser.
+      await frame.locator("#out").dispatchEvent("click");
+      await page.waitForFunction(async () => {
+        const r = await (await fetch("/app/mock/opened")).json();
+        return r.urls.includes("https://github.com/chenhg5/myco/releases");
+      }, null, { timeout: 5_000 });
+      // A newer version: said at the top; shown when asked.
+      const v = await page.evaluate(async () => (await (await fetch("/app/mock/pages/pg_release/publish", { method: "POST" })).json()).version);
+      await panel.locator(".pg-new", { hasText: `第 ${v} 版` }).waitFor({ timeout: 25_000 });
+      await clickVisible(page, panel.locator(".pg-new").getByRole("button", { name: "看新版本" }));
+      await frame.locator(".sub", { hasText: `第 ${v} 版` }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    // A live page: a dev server on the agent's computer, forwarded; its
+    // card says so and whether it is on.
+    await step("网页 · 实时预览", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const card = chat.locator(".pg-card", { hasText: "下载页（实时）" });
+      await card.waitFor({ timeout: 15_000 });
+      await card.locator(".pg-live.is-on", { hasText: "实时 · 在线" }).waitFor({ timeout: 5_000 });
+      if (!(await card.innerText()).includes("5173 端口")) throw new Error("实时网页的卡片应写是哪台电脑的哪个端口");
+      await clickVisible(page, card);
+      const panel = page.locator(".pg-panel");
+      await page.frameLocator(".pg-frame").locator("h1", { hasText: "下载 myco" }).waitFor({ timeout: 15_000 });
+      if (!(await panel.locator(".fp-titles").innerText()).includes("实时")) throw new Error("面板上应写这是实时的");
+      const src = await page.locator(".pg-frame").getAttribute("src");
+      if (!src || !/\/$/.test(new URL(src).pathname)) throw new Error(`实时网页应从根路径打开：${src}`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-live");
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    // Several pages open: a tab each, under the panel's head; opening one
+    // already open shows it; each keeps its page while another is shown.
+    if (!narrow) await step("网页 · 多个标签", async () => {
+      await go(page, "官网改版", narrow);
+      await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const panel = page.locator(".pg-panel");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" }));
+      await page.frameLocator(".pg-view:not(.is-hidden) .pg-frame").locator("h1").waitFor({ timeout: 15_000 });
+      if (await panel.locator(".pg-tab").count()) throw new Error("只开一个网页时不该有标签");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 10_000 });
+      await page.frameLocator(".pg-view:not(.is-hidden) .pg-frame").locator("h1", { hasText: "下载 myco" }).waitFor({ timeout: 15_000 });
+      if ((await panel.locator(".pg-tab").count()) !== 2) throw new Error("开两个网页应有两个标签");
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-tabs");
+      // Back to the first: its page was kept (one frame each).
+      await clickVisible(page, panel.locator(".pg-tab", { hasText: "发布说明" }).locator(".pg-tab-main"));
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("切换标签不该重新加载另一个网页");
+      // Tucked away (收起): the pages stay, the chat gets its room back, a
+      // button in the corner brings them back as they were.
+      const mainRight = () => page.evaluate(() => document.querySelector(".app-main").getBoundingClientRect().right);
+      const docked = await mainRight();
+      await clickVisible(page, panel.getByRole("button", { name: "收起" }));
+      const restore = page.locator(".pg-restore");
+      await restore.waitFor({ timeout: 5_000 });
+      if (!(await restore.innerText()).includes("2")) throw new Error("收起后右下角应写着有几个网页");
+      if (await panel.isVisible()) throw new Error("收起后面板应藏起来");
+      if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("收起时网页应保留");
+      await page.waitForFunction((d) => document.querySelector(".app-main").getBoundingClientRect().right > d + 100, docked, { timeout: 5_000 });
+      await settle(page, 250);
+      await shot(page, size, scheme, "page-tucked");
+      await clickVisible(page, restore);
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      await restore.waitFor({ state: "detached", timeout: 5_000 });
+      await page.waitForFunction((d) => Math.abs(document.querySelector(".app-main").getBoundingClientRect().right - d) <= 2, docked, { timeout: 5_000 })
+        .catch(() => { throw new Error("展开后对话应回到原来的宽度"); });
+      // Dragging the panel's edge: the chat's edge follows (no gap).
+      const edge = await panel.locator(".fp-edge").boundingBox();
+      await page.mouse.move(edge.x + edge.width / 2, edge.y + 200);
+      await page.mouse.down();
+      for (let x = 0; x <= 120; x += 20) await page.mouse.move(edge.x + edge.width / 2 + x, edge.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+      const gap = await page.evaluate(() => document.querySelector(".pg-panel").getBoundingClientRect().left - document.querySelector(".app-main").getBoundingClientRect().right);
+      if (gap < 0 || gap > 20) throw new Error(`拖动面板后，对话和面板之间应只有一条缝，实际 ${Math.round(gap)}px`);
+      await panel.locator(".fp-edge").dblclick();
+      // Opening one already open shows it, no new tab.
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab.is-on", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
+      if ((await panel.locator(".pg-tab").count()) !== 2) throw new Error("开着的网页再点一次不该多一个标签");
+      // Closing a tab; the last one closes the panel.
+      await clickVisible(page, panel.locator(".pg-tab", { hasText: "下载页" }).getByRole("button", { name: /关闭/ }));
+      await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
+      if (await panel.locator(".pg-tab").count()) throw new Error("剩一个网页时标签应收起");
+      // × closes them all.
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "下载页（实时）" }));
+      await panel.locator(".pg-tab", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭全部 2 个网页" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      if (await page.locator(".pg-restore").count()) throw new Error("全部关闭后不该留下展开按钮");
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
+    // The myco bridge: the page's shared state, written by you, changed by
+    // its agent (it comes to the page), and a message to its agent, asked
+    // once. (The four windows share the mock: versions are read, not assumed.)
+    await step("网页 · 和 agent 一起动手", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "上线清单" }));
+      const panel = page.locator(".pg-panel");
+      const frame = page.frameLocator(".pg-frame");
+      await frame.locator("#who", { hasText: "状态第" }).waitFor({ timeout: 15_000 });
+      const st = () => page.evaluate(async () => (await (await fetch("/app/hubs/hub_studio/pages/pg_checklist/state")).json()));
+      // You tick an item: it is saved on the hub.
+      const before = await st();
+      const box = frame.locator('input[data-i="3"]');
+      await box.dispatchEvent("click");
+      await page.waitForFunction(async (v) => (await (await fetch("/app/hubs/hub_studio/pages/pg_checklist/state")).json()).version > v, before.version, { timeout: 10_000 });
+      // Its agent writes: the page shows it.
+      const mark = 100 + Math.floor(Math.random() * 1000);
+      await page.evaluate(async (m) => { await fetch("/app/mock/pages/pg_checklist/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: { done: [0, 1, 2], mark: m } }) }); }, mark);
+      await frame.locator("#who", { hasText: "Release (Claude 云端) 改了" }).waitFor({ timeout: 10_000 });
+      if (!(await frame.locator('input[data-i="2"]').isChecked())) throw new Error("agent 改的状态应推到网页里");
+      if ((await st()).state.mark !== mark) throw new Error("agent 写的状态应是最新的");
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-bridge");
+      // A message to its agent: asked once.
+      await frame.locator("#hand").dispatchEvent("click");
+      const ask = page.locator(".pg-ask");
+      await ask.waitFor({ timeout: 5_000 });
+      await settle(page, 250);
+      await shot(page, size, scheme, "page-bridge-ask");
+      await clickVisible(page, ask.getByRole("button", { name: "允许并发送" }));
+      await frame.locator("#note", { hasText: "已发给 agent" }).waitFor({ timeout: 10_000 });
+      await chat.locator(".conv-msg.is-me", { hasText: "来自网页「上线清单」" }).first().waitFor({ timeout: 10_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
     // A name picked in the notch's island (the Mac app): a chat already on
@@ -503,6 +692,28 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // The members column folds to a strip of faces, and stays so.
+    // Where another session took the coordinator over, its chat has a quiet
+    // line saying so; its menu in the members column offers it again.
+    await step("项目 · 换过会话的地方有一条线", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      const line = page.locator(".sp-home [data-testid=handover-divider]").first();
+      await line.waitFor({ state: "attached", timeout: 10_000 });
+      const said = compactText(await line.innerText());
+      if (!said.includes("换成 Studio Mac · Codex 接着做") || !said.includes("你换的")) throw new Error(`分隔线的字不对：「${said}」`);
+      const sc = page.locator(".sp-home .conv-scroll").first();
+      const box = await sc.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, -600); await page.waitForTimeout(50); }
+      await settle(page, 300);
+      await shot(page, size, scheme, "handover-divider");
+      if (!narrow) {
+        await page.locator(".sp-side .sp-member:visible", { hasText: "PM (Codex)" }).first().click({ button: "right" });
+        await page.getByRole("menuitem", { name: "换一个来接着做" }).waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+      }
+    });
+
     if (!narrow) await step("项目 · 成员栏收起", async () => {
       await page.getByRole("button", { name: "收起成员" }).click();
       await page.locator(".sp-side.is-folded").waitFor({ timeout: 5_000 });
@@ -1065,6 +1276,47 @@ async function runMatrix(browser, size, scheme) {
 
     // A picture an agent sends shows as a thumbnail and opens full size; a
     // file that is not one saves to Downloads.
+    // Replies that grow in while you watch: their pictures wait for their
+    // words, and one still growing finishes at once when a newer message
+    // comes below it (several answers arriving together read in order).
+    await step("单聊 · 回复长出来的顺序", async () => {
+      const replies = (extra) => fetch(`http://${HOST}:${mockPort()}/app/mock/replies`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "review-cloud", ...extra }) });
+      await replies({ prepare: true });
+      await page.reload();
+      await page.locator(".app-shell").waitFor({ timeout: 20_000 });
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await page.waitForTimeout(2500);
+      await page.evaluate(() => {
+        const w = window;
+        w.__revealBad = [];
+        w.__revealSeen = 0;
+        const check = () => {
+          for (const chat of document.querySelectorAll(".conv-detail")) {
+            const msgs = [...chat.querySelectorAll(".conv-msg")];
+            msgs.forEach((m, i) => {
+              if (!m.querySelector(".reveal.is-growing")) return;
+              w.__revealSeen++;
+              if (m.querySelector(".conv-attach")) w.__revealBad.push("图片先于文字出来");
+              if (i < msgs.length - 1) w.__revealBad.push("新消息出来了，旧消息还在长");
+            });
+          }
+        };
+        // (a moment after each change: a newer message and the older one
+        // finishing land in the same breath)
+        let last = "";
+        w.__revealTimer = window.setInterval(() => {
+          const now = [...document.querySelectorAll(".conv-detail .conv-msg")].map((m) => (m.querySelector(".reveal.is-growing") ? "g" : "-")).join("");
+          if (now !== last) { last = now; window.setTimeout(check, 120); }
+        }, 40);
+      });
+      await replies({ gap: 700, tag: `（${size.width} ${scheme}）` });
+      await page.waitForTimeout(6_000);
+      const r = await page.evaluate(() => { window.clearInterval(window.__revealTimer); return { bad: [...new Set(window.__revealBad)], seen: window.__revealSeen }; });
+      if (r.bad.length) throw new Error(`回复长出来的顺序不对：${r.bad.join("；")}`);
+      if (!r.seen) throw new Error("两段长回答应该长出来（不是一下子出现）");
+    });
+
     await step("单聊 · 图片附件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
@@ -2064,6 +2316,55 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // 「换一个来接着做」: PM was taken over from a claude.ai session; its card
+    // lists that, with a way back, and the dialog offers a new session on a
+    // computer (old computers need an update first) or a one-time command.
+    await step("成员 · 换一个来接着做", async () => {
+      await go(page, "成员", narrow);
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      const history = page.locator(".ms [data-testid=handover-history]");
+      await history.waitFor({ timeout: 10_000 });
+      const said = compactText(await history.innerText());
+      for (const want of ["claude.ai 云端", "Studio Mac · Codex", "换回这个", "没用上"]) {
+        if (!said.includes(want)) throw new Error(`接手记录里应有「${want}」，实际「${said}」`);
+      }
+      await history.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-handovers");
+      await clickVisible(page, page.locator(".ms [data-testid=handover-open]"));
+      const dlg = page.locator(".app-modal", { hasText: "换一个来接着做" });
+      await dlg.waitFor({ timeout: 5_000 });
+      const form = compactText(await dlg.innerText());
+      for (const want of ["只是换个账号", "Studio Mac", "要先升级", "原来的会话会停下", "最近 30 条"]) {
+        if (!form.includes(want)) throw new Error(`接手弹窗里应有「${want}」，实际「${form}」`);
+      }
+      // The folder of the computer it is on now is filled in.
+      if ((await dlg.locator("input.mono").inputValue()) !== "~/code/myco") throw new Error("同一台电脑上应默认原来的文件夹");
+      await settle(page, 200);
+      await shot(page, size, scheme, "handover-machine");
+      await clickVisible(page, dlg.locator("[data-testid=handover-way-link]"));
+      await clickVisible(page, dlg.locator("[data-testid=handover-start]"));
+      const cmd = dlg.locator("[data-testid=handover-command]");
+      await cmd.waitFor({ timeout: 5_000 });
+      const line = (await cmd.locator(".app-command code").innerText()).trim();
+      if (!line.startsWith("curl -fsSL") || !line.includes("/h/myco_takeover_")) throw new Error(`接手命令不对：${line}`);
+      await clickVisible(page, cmd.getByRole("tab", { name: "Windows（PowerShell）" }));
+      if (!(await cmd.locator(".app-command code").innerText()).includes("iex")) throw new Error("PowerShell 的接手命令不对");
+      await clickVisible(page, cmd.getByRole("tab", { name: "Mac / Linux / 云端" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "handover-command");
+      // Esc closes the dialog, not the card under it.
+      await page.keyboard.press("Escape");
+      await dlg.waitFor({ state: "hidden" });
+      if (!(await page.locator(".ms").isVisible())) throw new Error("按 Esc 只该关掉弹窗，不该连资料卡一起关掉");
+      await history.getByText("等它接手").waitFor({ timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     await step("成员 · 模型和额度", async () => {
       // A manager picks a model and an effort: each goes to the App backend
       // at once with both fields. The quota rows say how much each window
@@ -2292,24 +2593,48 @@ async function runMatrix(browser, size, scheme) {
     // says to whom and when; a new one with a webhook shows its address and
     // secret once; running one now sends it, marked 自动 in the chat.
     await step("自动化", async () => {
+      // None yet: what it is for, and a few common ones to start from.
+      const empty = /\/app\/hubs\/[^/]+\/automations$/;
+      await page.route(empty, (r) => (r.request().method() === "GET" ? r.fulfill({ json: { automations: [] } }) : r.continue()));
+      await go(page, "自动化", narrow);
+      const start = page.locator("[data-testid=automations-empty]");
+      await start.waitFor({ timeout: 20_000 });
+      if ((await start.locator(".au-template").count()) < 5) throw new Error("空的自动化页应给几个常用模板和「从空白开始」");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automations-empty");
+      await clickVisible(page, start.locator(".au-template", { hasText: "CI 失败时排查" }));
+      const ed = page.locator("[data-testid=automation-editor]");
+      await ed.waitFor({ timeout: 10_000 });
+      if (!(await ed.locator("textarea").inputValue()).includes("{{payload}}")) throw new Error("模板应带好要它做什么");
+      await ed.locator(".au-kind.is-on", { hasText: "Webhook" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, ed.getByRole("button", { name: "取消" }));
+      await ed.waitFor({ state: "detached", timeout: 5_000 });
+      await page.unroute(empty);
+      await go(page, "聊天", narrow);
+
       await go(page, "自动化", narrow);
       const list = page.locator("[data-testid=automations]");
-      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".pc-row-sub", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
+      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".au-row-what", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "automations");
       await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "新建自动化" }));
-      const ed = page.locator("[data-testid=automation-editor]");
       await ed.waitFor({ timeout: 10_000 });
       const name = `CI 失败时看日志 ${size.width} ${scheme}`;
       await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);
       await ed.locator("textarea").fill("CI 又挂了，看下日志找原因：{{payload}}");
-      await ed.getByRole("combobox", { name: "多久一次" }).selectOption("daily");
-      await ed.getByLabel("几点").fill("08:30");
-      await clickVisible(page, ed.locator(".app-check-line", { hasText: "Webhook" }).locator("input"));
-      await ed.getByText("每天 08:30").waitFor({ timeout: 5_000 });
+      await clickVisible(page, ed.getByRole("radiogroup", { name: "多久一次" }).getByRole("radio", { name: "每天" }));
+      await ed.getByRole("combobox", { name: "几点" }).selectOption("8");
+      await ed.getByRole("combobox", { name: "几分" }).selectOption("30");
+      await clickVisible(page, ed.locator(".au-kind", { hasText: "Webhook" }));
+      await ed.locator(".au-summary", { hasText: "每天 08:30" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "automation-editor");
-      await clickVisible(page, ed.getByRole("button", { name: "创建" }));
+      // The buttons stay in sight however tall the form is.
+      const create = ed.getByRole("button", { name: "创建" });
+      const box = await create.boundingBox();
+      const vh = page.viewportSize().height;
+      if (!box || box.y + box.height > vh) throw new Error("编辑自动化的按钮应在窗口里看得到");
+      await clickVisible(page, create);
       const sec = page.locator("[data-testid=automation-secret]");
       await sec.waitFor({ timeout: 10_000 });
       if (!(await sec.innerText()).includes("/hooks/")) throw new Error("Webhook 地址应该显示出来");
@@ -2318,13 +2643,19 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, sec.getByRole("button", { name: "好了" }));
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
+      await row.hover();
       await clickVisible(page, row.getByRole("button", { name: "立即运行" }));
-      await row.locator(".pc-row-sub", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
-      // Pause and resume.
-      await clickVisible(page, row.getByRole("button", { name: "暂停" }));
-      await row.locator(".pc-row-sub", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, row.getByRole("button", { name: "启用" }));
-      await row.getByRole("button", { name: "暂停" }).waitFor({ timeout: 10_000 });
+      await row.locator(".au-row-status", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
+      // Off and on again: a switch.
+      await clickVisible(page, row.getByRole("switch", { name: "暂停" }));
+      await row.locator(".au-row-status", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, row.getByRole("switch", { name: "启用" }));
+      await row.getByRole("switch", { name: "暂停" }).waitFor({ timeout: 10_000 });
+      // Right-click: the same, and delete.
+      await row.click({ button: "right", position: { x: 120, y: 12 } });
+      await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
+      await clickVisible(page, page.locator(".app-modal.app-confirm").getByRole("button", { name: "删除" }));
+      await row.waitFor({ state: "detached", timeout: 10_000 });
     });
 
     // A conversation is exported from its header: Markdown for people or

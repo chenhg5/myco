@@ -24,3 +24,11 @@ export function hubAfter0194(version: string | undefined): boolean {
 export function hubHasResume(version: string | undefined): boolean {
   return hubAfter0194(version);
 }
+
+/** Whether a hub can hand a node over to another session (「换一个来接着做」):
+ *  after v0.19.22 (a later release, or a build from a later main). Machines
+ *  that start the new session need the same. */
+export function hubHasHandover(version: string | undefined): boolean {
+  if (hubAtLeast(version, "0.19.23")) return true;
+  return !!version && /-g[0-9a-f]{4,}$/i.test(version) && hubAtLeast(version, "0.19.22");
+}

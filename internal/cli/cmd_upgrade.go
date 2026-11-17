@@ -32,7 +32,8 @@ func upgradeCommand() *Command {
 		Long: `Downloads the release for this OS and architecture, checks it against the release's SHA256SUMS,
 replaces this myco binary atomically and restarts the services on this machine that run it: the
 runner service, a hub started with 'myco hub up', and (when run with sudo on a server) the system
-myco-* services such as myco-hub from install-hub.sh. The hub keeps its database and tokens; its
+myco-* services such as myco-hub from install-hub.sh (there it also gives install-hub.sh's own Caddy
+sites the 360s proxy timeout it writes now). The hub keeps its database and tokens; its
 schema migrates on start. Nothing is upgraded automatically: run this when 'myco version',
 'myco doctor' or a notice says a new release is out.`,
 		Examples: []string{
@@ -201,6 +202,10 @@ func restartMycoServices() (restarted, notes []string) {
 					}
 				}
 			}
+			// install-hub.sh's own Caddy sites from before its proxy
+			// timeout grew to 360s.
+			r, n := upgradeCaddySites()
+			restarted, notes = append(restarted, r...), append(notes, n...)
 		}
 	} else if runtime.GOOS == "linux" {
 		if _, err := os.Stat("/etc/systemd/system/myco-hub.service"); err == nil {

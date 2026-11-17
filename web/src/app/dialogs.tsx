@@ -1,7 +1,8 @@
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { L } from "@/lib/i18n";
-import { isOldHub, isTransient } from "@/appapi";
+import { ApiError, isOldHub, isTransient } from "@/appapi";
+import { CopyButton } from "@/app/copy";
 import { cn } from "@/lib/utils";
 
 /** macOS-style centered sheet. Portals carry .app-portal so the scoped tokens apply. */
@@ -67,10 +68,27 @@ export function ConfirmDialog({ open, onOpenChange, title, subject, description,
   );
 }
 
-/** Inline error: the backend message plus its suggestion. */
-export function ErrorText({ error }: { error: unknown }) {
+/** What an error says underneath, for "详细信息": the status, the code and
+ *  the raw text, so people can see or pass on why it failed. */
+function errorDetail(error: unknown): string {
+  if (error instanceof ApiError) {
+    const head = [error.status ? `HTTP ${error.status}` : "", typeof error.code === "string" ? error.code : ""].filter(Boolean).join(" · ");
+    return head && error.message !== head && error.message !== `HTTP ${error.status}` ? `${head}\n${error.message}` : head || error.message;
+  }
+  if (error instanceof Error) return error.message || error.name;
+  return String(error);
+}
+
+/**
+ * Inline error: the backend message plus its suggestion. A hub that is
+ * down or slow is said in words, with the raw reason one click away
+ * (详细信息) and, when the caller can try again, a 重试 button. Nothing
+ * here retries by itself, so it never says it will.
+ */
+export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const [details, setDetails] = React.useState(false);
+  React.useEffect(() => setDetails(false), [error]);
   if (!error) return null;
-  // A hub that is down or slow: say so in words, not the error text.
   const transient = isTransient(error);
   const old = isOldHub(error);
   const message = old
@@ -81,12 +99,32 @@ export function ErrorText({ error }: { error: unknown }) {
   const suggestion = old
     ? L("到设置里升级一下再试。", "Upgrade the hub in Settings → Hubs, then try again.")
     : transient
-      ? L("会自动重试，不用做什么。一直这样的话，到设置里看看。", "It retries by itself. If this keeps happening, check the hub in Settings → Hubs.")
+      ? onRetry
+        ? L("点「重试」再试一次。一直这样的话，看看左下角工作区连没连上，或者到设置 › 网络代理里看看。", "Press Retry to try again. If it keeps happening, check that the hub shows as connected (bottom left), or look at Settings → Network proxy.")
+        : L("等一下再试。一直这样的话，看看左下角工作区连没连上，或者到设置 › 网络代理里看看。", "Try again in a moment. If it keeps happening, check that the hub shows as connected (bottom left), or look at Settings → Network proxy.")
       : (error as { suggestion?: string } | null)?.suggestion;
+  // The raw text is only hidden when it was replaced by words above.
+  const detail = transient || old ? errorDetail(error) : "";
   return (
     <div className="app-error-text">
       <div>{message}</div>
       {suggestion && <div style={{ color: "var(--muted)", marginTop: 2 }}>{suggestion}</div>}
+      {(onRetry || detail) && (
+        <div className="app-error-actions">
+          {onRetry && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("重试", "Retry")}</button>}
+          {detail && (
+            <button type="button" className="app-error-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
+              {details ? L("收起详细信息", "Hide details") : L("详细信息", "Details")}
+            </button>
+          )}
+        </div>
+      )}
+      {details && detail && (
+        <div className="app-error-detail">
+          <pre>{detail}</pre>
+          <CopyButton value={detail} />
+        </div>
+      )}
     </div>
   );
 }

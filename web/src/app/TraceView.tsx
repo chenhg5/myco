@@ -10,6 +10,7 @@ import { useReportsOnly } from "@/app/quietRuns";
 import { TranslatableBody } from "@/app/translate";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
+import { PageCards } from "@/app/pages";
 import { AskCard } from "@/app/AskCard";
 import { drafted, grown, Reveal } from "@/app/Reveal";
 
@@ -628,7 +629,8 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
       {segments.map((seg, i) => seg.kind === "say" ? (
         <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>
           {/* What it says while you watch grows in; what was there, is. */}
-          {seg.delta ? <Reveal body={seg.text} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+          {/* (something newer after it: all of it at once) */}
+          {seg.delta ? <Reveal body={seg.text} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
         </div>
       ) : seg.kind === "steer" ? (
         <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
@@ -646,6 +648,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
                 <TranslatableBody id={r.key} body={r.text} />
                 {/* What it showed along the way: a screenshot, a draft. */}
                 {r.files && r.files.length > 0 && <div className="trace-report-files"><MessageAttachments hubId={hubId} items={r.files} /></div>}
+                <PageCards body={r.text} />
               </div>
               {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
             </li>

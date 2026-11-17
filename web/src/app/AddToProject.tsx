@@ -103,6 +103,12 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
   const touched = useRef(false);
   const [link, setLink] = useState<JoinLink | null>(null);
   const [linkError, setLinkError] = useState<unknown>(null);
+  // The sentence's join link; again from 重试 when the hub did not answer.
+  const makeLink = () => {
+    if (!hubId) return;
+    setLinkError(null);
+    appApi.createJoinLink(hubId, { uses: 10, expires_hours: 168 }).then(setLink).catch(setLinkError);
+  };
   const [joined, setJoined] = useState<string[]>([]);
   const [sessions, setSessions] = useState<LocalSession[] | null>(null);
   const [sessionsError, setSessionsError] = useState<unknown>(null);
@@ -140,7 +146,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
     setSessionsError(null);
     setQuery("");
     if (!hubId) return;
-    appApi.createJoinLink(hubId, { uses: 10, expires_hours: 168 }).then(setLink).catch(setLinkError);
+    makeLink();
     appApi.localSessions().then((r) => {
       setSessions(r.sessions);
       // Nothing on this computer to add: the sentence is the way.
@@ -322,7 +328,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
                 <p className="add-sentence-text">{sentence}</p>
                 <div className="add-sentence-actions"><CopyButton value={sentence} /></div>
               </>
-            ) : linkError ? <ErrorText error={linkError} /> : <p className="add-sentence-text is-loading">{L("正在准备…", "Getting it ready…")}</p>}
+            ) : linkError ? <ErrorText error={linkError} onRetry={makeLink} /> : <p className="add-sentence-text is-loading">{L("正在准备…", "Getting it ready…")}</p>}
           </div>
           {joined.length === 0 && (
             <div className="add-waiting"><Mushroom idle /><span>{L("发出去以后，加入的 agent 会出现在下面。", "Once sent, the agents that join show up below.")}</span></div>
@@ -469,7 +475,7 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
 
 /** Folders already used on a computer, one per label as the chips show
  *  them (/Users/me/code/x and ~/code/x are the same folder). */
-function usedFolders(rows: AgentRow[], hubId: string, machineId: string): string[] {
+export function usedFolders(rows: AgentRow[], hubId: string, machineId: string): string[] {
   const seen = new Map<string, string>();
   for (const r of rows) {
     const d = r.st.agent.binding.workdir;
@@ -667,7 +673,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
             // Only the workspace's owner or admins may make one (it lets agents run commands).
             (linkError as { code?: string }).code === "permission_denied"
               ? <div className="app-small-note" data-testid="computer-command-denied">{L("只有工作区的主人或管理员能用命令加电脑：请他们来加。你也可以用已经连上的电脑选文件夹。", "Only the workspace's owner or admins can add a computer with a command: ask one of them. You can also pick a folder on a connected computer.")}</div>
-              : <ErrorText error={linkError} />
+              : <ErrorText error={linkError} onRetry={() => setLinkError(null)} />
           ) : (
             <div className="app-command"><span className="app-spinner" /><code>{L("正在生成…", "Making it…")}</code></div>
           )}

@@ -302,6 +302,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
+			if IsReplaced(err) {
+				r.log.Warn("这个节点已由别的会话接手（换一个来接着做），这台电脑不再唤醒它", "hub", r.opts.HubURL, "err", err)
+				return err
+			}
 			if rejectedHubCredential(err) {
 				r.log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", r.opts.HubURL, "err", err)
 				return err
