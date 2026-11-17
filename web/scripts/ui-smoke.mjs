@@ -2954,11 +2954,26 @@ async function runMatrix(browser, size, scheme) {
       if (new Set(edges.texts).size > 1) throw new Error(`语音条里每行说的话应从同一处开始，实际 ${edges.texts.join(" / ")}`);
       await settle(page, 300);
       await shot(page, size, scheme, "voice-chat");
-      // Mute, then hang up.
+      // Mute; going elsewhere does not hang up: the call is in the top bar,
+      // and its name goes back to its chat.
       await clickVisible(page, call.getByRole("button", { name: "静音" }));
       await call.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
+      const voiceOnNow = async () => (await (await fetch(`http://${HOST}:${mockPort()}/app/voice/events?after=-1`)).json()).on;
+      await go(page, "设置", narrow);
+      const chip = page.locator(".vc-chip");
+      await chip.waitFor({ timeout: 5_000 });
+      if (!(await voiceOnNow())) throw new Error("切到别的页面不该挂断语音");
+      if (!compactText(await chip.innerText()).includes("Review")) throw new Error(`顶栏的通话应写明和谁，实际「${compactText(await chip.innerText())}」`);
+      await chip.getByRole("button", { name: "取消静音" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "voice-chip");
+      await clickVisible(page, chip.locator(".vc-chip-main"));
+      await page.locator(".conv-detail .vc-bar").waitFor({ timeout: 10_000 });
+      await chip.waitFor({ state: "detached", timeout: 5_000 });
+      // Then hang up.
       await clickVisible(page, call.getByRole("button", { name: "挂断" }));
       await call.waitFor({ state: "detached", timeout: 5_000 });
+      if (await voiceOnNow()) throw new Error("挂断后语音应停下");
       // From the space's box: the chat with whoever it is addressed to opens
       // with the call on.
       await go(page, "聊天", narrow);

@@ -6,7 +6,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, isMe, nodeName } from "@/app/nodes";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
-import { callWhenOpened, useVoiceReady } from "@/app/VoiceBar";
+import { callWhenOpened, useVoiceCall, useVoiceReady } from "@/app/VoiceBar";
 import { Avatar, AvatarStack, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { ConversationDetail, type ConversationTarget } from "@/app/ConversationDetail";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -902,6 +902,7 @@ function Composer({ hubId, project, agents, onSent, onCall }: {
   // With nothing typed, the round button starts a voice chat with whoever
   // it is addressed to (the Mac app; VoiceBar).
   const voice = useVoiceReady();
+  const { call: voiceCall } = useVoiceCall();
   const key = `${RECIPIENT_KEY}:${hubId}/${project?.name || "*"}`;
   const coordinator = project?.members.find((m) => m.role === "coordinator")?.name;
   const [to, setTo] = useState(() => {
@@ -1009,7 +1010,12 @@ function Composer({ hubId, project, agents, onSent, onCall }: {
           {voice?.ready && onCall && recipient && !draft.trim() && !att.items.length && !busy ? (
             // Nothing typed: the same place starts a voice chat with them.
             <button type="button" className="sp-send is-call" onClick={() => onCall(recipient)} aria-label={L("语音聊天", "Voice chat")}
-              title={L(`和 ${rec ? nodeName(rec.st.agent, rec.hub) : recipient} 语音聊天`, `Voice chat with ${rec ? nodeName(rec.st.agent, rec.hub) : recipient}`)}>
+              title={(() => {
+                const who = rec ? nodeName(rec.st.agent, rec.hub) : recipient;
+                return voiceCall && voiceCall.agent !== recipient
+                  ? L(`挂断和 ${voiceCall.agentName} 的通话，改和 ${who} 语音聊天`, `Hang up on ${voiceCall.agentName} and voice chat with ${who}`)
+                  : L(`和 ${who} 语音聊天`, `Voice chat with ${who}`);
+              })()}>
               <AudioLines />
             </button>
           ) : (
