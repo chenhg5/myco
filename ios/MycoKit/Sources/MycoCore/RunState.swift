@@ -51,6 +51,55 @@ public enum RunState: Sendable, Hashable {
     }
 }
 
+/// Why a task failed, in words. A reason the hub is known to give is
+/// explained; anything else is shown as it came. The desktop app's
+/// `failureWords`.
+public enum FailureWords {
+    public enum Kind: Sendable, Hashable {
+        /// The hub gave up: taken several times, never started on.
+        case notDelivered
+        case timedOut
+        case failed
+    }
+
+    public static func kind(of reason: String) -> Kind {
+        let reason = reason.lowercased()
+        if reason.contains("delivery attempts exhausted") { return .notDelivered }
+        if reason.contains("lease expired") || reason.contains("timed out") || reason.contains("timeout") { return .timedOut }
+        return .failed
+    }
+
+    /// A word or two ("Not delivered").
+    public static func short(_ reason: String) -> String {
+        switch kind(of: reason) {
+        case .notDelivered: return L("没送到", "Not delivered")
+        case .timedOut: return L("超时了", "Timed out")
+        case .failed: return L("失败了", "Failed")
+        }
+    }
+
+    /// One line for a notification: what happened, without the advice.
+    public static func line(_ reason: String) -> String {
+        if kind(of: reason) == .notDelivered {
+            return L("没送到：它取走了几次，都没开始处理。", "Not delivered: it picked this up several times but never started on it.")
+        }
+        return long(reason)
+    }
+
+    /// What happened and what can be done about it.
+    public static func long(_ reason: String) -> String {
+        switch kind(of: reason) {
+        case .notDelivered:
+            return L("没送到：它取走了几次，都没开始处理。它那边的会话可能没在运行，或者卡住了。可以重新发送，或者先看看它在不在线。",
+                     "Not delivered: it picked this up several times but never started on it. Its session may not be running, or may be stuck. Send it again, or check that it is online first.")
+        case .timedOut:
+            return L("超时了：", "Timed out: ") + reason
+        case .failed:
+            return reason.isEmpty ? L("失败了", "Failed") : L("失败了：", "Failed: ") + reason
+        }
+    }
+}
+
 /// What the send button does right now. Worked out here, read by the page.
 public enum ComposerAction: Sendable, Hashable {
     /// A new message.

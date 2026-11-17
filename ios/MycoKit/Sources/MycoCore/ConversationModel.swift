@@ -182,14 +182,41 @@ public final class ConversationModel {
         ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
 
-    /// Sending is off while a send is under way, while a file is still
-    /// going up, or with nothing to send. Files can go without words.
+    /// The failed task being sent again, while it is.
+    public private(set) var resending: String?
+
+    /// Only what I asked can be sent again, and only where I can send.
+    public func canSendAgain(_ taskID: String) -> Bool {
+        guard !readOnly, let task = known[taskID] else { return false }
+        return task.from == me && task.type == "task" && task.status == "failed"
+    }
+
+    /// Sends a task of mine that failed once more: the same words and
+    /// files to the same agent, in the same thread, as a new task. The
+    /// failed one stays, marked. (The desktop app's "重新发送".)
+    public func sendAgain(_ taskID: String) async {
+        guard canSendAgain(taskID), resending == nil, let task = known[taskID] else { return }
+        resending = taskID
+        defer { resending = nil }
+        do {
+            let sent = try await session.hub.send(SendRequest(
+                to: task.to, body: task.body, threadId: task.threadId, attachments: task.attachments.map(\.fileId)))
+            known[sent.id] = sent
+            problem = nil
+            show(cards: cards)
+        } catch {
+            problem = (error as? HubError)?.message ?? error.localizedDescription
+        }
+    }
+
     /// Takes what the agent offered: it is in the input now.
     public func takeSuggestion() {
         guard let suggestion, draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         draft = suggestion
     }
 
+    /// Sending is off while a send is under way, while a file is still
+    /// going up, or with nothing to send. Files can go without words.
     public var canSubmit: Bool {
         guard !sending else { return false }
         if action == .stop { return true }
