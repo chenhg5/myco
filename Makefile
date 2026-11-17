@@ -23,9 +23,11 @@ check: vet test smoke
 vet:
 	gofmt -l . | (! grep .) && go vet ./...
 
-# The CLI for six platforms, built at the same time; fails if any build does.
+# The CLI for six platforms (GOOS_LIST=linux for one OS), built at the same
+# time; fails if any build does.
+GOOS_LIST ?= linux darwin windows
 cross:
-	@pids=; for os in linux darwin windows; do for arch in amd64 arm64; do \
+	@pids=; for os in $(GOOS_LIST); do for arch in amd64 arm64; do \
 		ext=; [ $$os = windows ] && ext=.exe; \
 		echo "building $$os/$$arch"; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags '$(LDFLAGS)' -o bin/myco-$$os-$$arch$$ext ./cmd/myco & pids="$$pids $$!"; \

@@ -60,18 +60,23 @@ jobs:
 
   cross:
     # The CLI for every platform and the Windows console app, at the same
-    # time as the Mac app (tests already ran in ci on this commit).
+    # time as the Mac app (tests already ran in ci on this commit): one
+    # runner per OS, each building its two architectures.
     needs: version
     if: needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: the CLI for six platforms, in parallel
-        run: make cross VERSION=${{ needs.version.outputs.version }}
+      - name: the CLI for ${{ matrix.goos }} (amd64, arm64)
+        run: make cross GOOS_LIST=${{ matrix.goos }} VERSION=${{ needs.version.outputs.version }}
       - name: the Windows console app (no cgo needed)
+        if: matrix.goos == 'windows'
         run: |
           for arch in amd64 arm64; do
             GOOS=windows GOARCH=$arch CGO_ENABLED=0 go build -tags production \
@@ -81,10 +86,11 @@ jobs:
           wait
           ls bin/myco-app-windows-amd64.exe bin/myco-app-windows-arm64.exe
       - name: Smoke-test the linux/amd64 release binary
+        if: matrix.goos == 'linux'
         run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: cross
+          name: cross-${{ matrix.goos }}
           path: bin/myco-*
 
   release:
@@ -95,7 +101,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: cross
+          pattern: cross-*
+          merge-multiple: true
           path: bin
       - uses: actions/download-artifact@v4
         with:
