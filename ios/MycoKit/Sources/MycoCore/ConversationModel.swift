@@ -497,6 +497,17 @@ public final class ConversationModel {
             let said = (reports[task.id] ?? []).sorted { $0.createdAt < $1.createdAt }
             if RunProcess.isPaused(events: traces[task.id] ?? [], task: task, reports: said, now: Date()) { paused.insert(task.id) }
         }
+        // Each open task's last step, and whether its session ended its
+        // turn: a task is not taken for stuck while its steps still move,
+        // nor when it has stopped to wait.
+        var activity: [String: Date] = [:]
+        var ended: Set<String> = []
+        for task in all.values where task.to == agent && task.isOpen {
+            // (without the turns it woke for only to keep listening)
+            let events = RunProcess.withoutChores(traces[task.id] ?? [])
+            if let at = events.compactMap(\.at).max() { activity[task.id] = at }
+            if let last = events.last?.kind, last == "turn_end" || last == "usage" { ended.insert(task.id) }
+        }
         var tracedPlans: [String: (items: [PlanItem], at: Date?)] = [:]
         for (taskID, process) in processes {
             if let plan = process.plan { tracedPlans[taskID] = (plan, process.planAt) }
@@ -514,6 +525,7 @@ public final class ConversationModel {
         let built = ConversationBuilder.items(
             me: me, agent: agent, messages: Array(all.values), handoffs: handoffs,
             processes: Set(processes.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
+            activity: activity, ended: ended,
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
@@ -601,7 +613,14 @@ public final class ConversationModel {
     /// Fetches the steps of the agent's newest tasks: all of them once for a
     /// closed task, the new ones each time for one still being worked on.
     private func loadSteps(of tasks: [Message]) async {
-        let newest = tasks.sorted { $0.createdAt > $1.createdAt }.prefix(Self.tracedTasks).filter { !settled.contains($0.id) }
+        // The newest tasks, and those still open however old: an open
+        // task without its steps cannot be told from one that is stuck.
+        let sorted = tasks.sorted { $0.createdAt > $1.createdAt }
+        var wanted = Array(sorted.prefix(Self.tracedTasks))
+        for task in sorted.filter(\.isOpen).prefix(Self.tracedTasks) where !wanted.contains(where: { $0.id == task.id }) {
+            wanted.append(task)
+        }
+        let newest = wanted.filter { !settled.contains($0.id) }
         guard !newest.isEmpty else { return }
         let hub = session.hub
         let from = Dictionary(newest.map { ($0.id, traces[$0.id]?.last?.seq ?? 0) }, uniquingKeysWith: { first, _ in first })
