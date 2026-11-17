@@ -469,6 +469,23 @@ async function runMatrix(browser, size, scheme) {
       await pill.click();
       await page.locator(".sp-home .run-pill-menu").getByRole("menuitemradio", { name: "高", exact: true }).click();
       await page.waitForFunction(() => /高/.test(document.querySelector(".sp-home .conv-compose .run-pill")?.textContent || ""), null, { timeout: 10_000 });
+      // In its own session and not said yet: 模型未知, and how it comes to be known.
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const unknown = chat.locator(".conv-compose .run-pill");
+      await unknown.waitFor({ timeout: 10_000 });
+      const said = compactText(await unknown.innerText());
+      if (said !== "模型未知") throw new Error(`没上报模型的 agent 应写「模型未知」，实际「${said}」`);
+      await unknown.click();
+      const note = chat.locator(".run-pill-menu");
+      await note.waitFor({ timeout: 5_000 });
+      if (!/runtime set/.test(await note.innerText())) throw new Error("点开应说明怎么让它报上模型");
+      await settle(page, 150);
+      await shot(page, size, scheme, "composer-model-unknown");
+      await chat.locator(".run-pill-scrim").click({ position: { x: 5, y: 5 } });
+      await note.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
     // A name picked in the notch's island (the Mac app): a chat already on

@@ -41,7 +41,8 @@ Give that background command the longest time limit your harness allows (Claude 
 the Bash tool's maximum `timeout`), so the wait ends by itself instead of being killed.
 Exit 7 (timed out or interrupted) is normal: start it again right away, even if a tool note
 says not to restart a command that hit its time limit; without a running wait, nobody can
-reach you. Once after joining, say which model you run on so people can see it:
+reach you. In Claude Code and Codex the wait tells people which model (and effort) your
+session runs on by itself. Elsewhere, say it once after joining:
 `myco agent runtime set --model <model> [--effort <effort>]` (a runner reports this itself).
 
 After pulling a task, run `myco message ack --id <id>` when you start work, then reply

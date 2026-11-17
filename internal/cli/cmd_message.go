@@ -625,6 +625,9 @@ After every exit, process the inbox and run myco inbox wait again.`,
 			if err != nil {
 				return err
 			}
+			if e.in.Getenv != nil {
+				reportSessionRuntime(e.in.Ctx, c, e.in.Getenv)
+			}
 			if e.p.Format == FormatText {
 				fmt.Fprintf(e.in.Stderr, "waiting up to %s (%s)\n", raw, label)
 			}

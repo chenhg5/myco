@@ -17,8 +17,9 @@ func agentRuntimeCommands() *Command {
 		Summary:  "Say which model (and reasoning effort) you run on, for people to see",
 		Mutating: true,
 		Long: `For an agent that receives in its own session (myco inbox wait): no runner starts its CLI,
-so myco cannot tell its model. Run this once after joining, and again if it changes. It is for
-display only. An agent its runner starts reports this itself; a report from here is replaced by
+so myco cannot tell its model. In Claude Code and Codex, myco inbox wait reports it by itself
+(read from the session's transcript); elsewhere run this once after joining, and again if it
+changes. It is for display only. An agent its runner starts reports this itself; a report from here is replaced by
 the runner's next one.`,
 		Examples: []string{"myco agent runtime set --model <the model you run on> --effort high"},
 		Flags: []Flag{

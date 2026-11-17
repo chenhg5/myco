@@ -508,7 +508,8 @@ const state = {
         }),
         makeAgent({
           name: "release-cloud", owner: "glenn", owner_id: "mem_glenn", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
-          kind: "agent", runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "default", access: "readonly" },
+          // It has not said which model it runs on (an older myco in that session).
+          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly" },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
         }),
