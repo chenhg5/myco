@@ -251,6 +251,22 @@ public struct RunProcess: Hashable, Sendable {
     /// them): not work on a task. The CLI's `isChore` (trace_chores.go)
     /// and the desktop app's.
     public static func isChore(_ input: String) -> Bool {
+        onlyMyco(input, #"^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)"#)
+    }
+
+    /// A command that only says where things stand or hands work out
+    /// (`myco message hold`/`progress`/`send`/`ask`/`answer`, or a chore):
+    /// not work on the task itself. After a task was set aside (held),
+    /// such steps do not make it at work again: an agent holds a task and
+    /// then says what it waits for. The desktop app's `isWaitStep`.
+    public static func isWaitStep(_ input: String) -> Bool {
+        isChore(input)
+            || onlyMyco(input, #"^myco\s+(?:message\s+(?:hold|progress|send|ask|answer|ack|done|release)|inbox\s+(?:wait|pull))(?:\s|$)"#)
+    }
+
+    /// Every part of the command (a `cd` before it aside) is one the
+    /// pattern takes.
+    private static func onlyMyco(_ input: String, _ pattern: String) -> Bool {
         var command = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if let shell = command.range(of: #"^(?:/\S*/)?(?:ba|z)?sh\s+-l?c\s+"#, options: .regularExpression) {
             command.removeSubrange(shell)
@@ -262,8 +278,7 @@ public struct RunProcess: Hashable, Sendable {
         for part in parts {
             let first = (part.split(separator: "|", omittingEmptySubsequences: false).first ?? "").trimmingCharacters(in: .whitespaces)
             if first.isEmpty || first.range(of: #"^cd(?:\s|$)"#, options: .regularExpression) != nil { continue }
-            guard first.range(of: #"^myco\s+(?:inbox\s+(?:wait|pull)|message\s+(?:ack|done|release))(?:\s|$)"#, options: .regularExpression) != nil
-            else { return false }
+            guard first.range(of: pattern, options: .regularExpression) != nil else { return false }
             seen = true
         }
         return seen
@@ -299,7 +314,7 @@ public struct RunProcess: Hashable, Sendable {
 
     /// Whether a run still open has stopped, so is not at work: its session
     /// ended its turn and it has done nothing since (a chore is nothing) or
-    /// its run (`usage`), it was set aside (held) and nothing came after, or
+    /// its run (`usage`), it was set aside (held) and has done no work since, or
     /// the last thing it did was say something and it has been silent
     /// since. A command still running is at work however long. The desktop
     /// app's `pausedRun`.
@@ -320,7 +335,13 @@ public struct RunProcess: Hashable, Sendable {
            !events[(end + 1)...].contains(where: { $0.kind == "tool" && !isChore($0.data.input ?? "") }) {
             return true
         }
-        if task.status == "held" { return activeAt <= task.updatedAt }
+        // Set aside (held): it waits, until a step after it was held does
+        // some work. What it says it waits for (an update), the work it
+        // hands out, the hold itself: none of these.
+        if task.status == "held" {
+            let heldAt = task.updatedAt
+            return !events.contains { ($0.at ?? .distantPast) > heldAt && $0.kind == "tool" && !isWaitStep($0.data.input ?? "") }
+        }
         guard activeAt > .distantPast else { return false }
         let said = last == nil || last?.kind == "text" || last?.kind == "thinking" || reportAt > stepAt
         return said && now.timeIntervalSince(activeAt) > quietAfterSaying
