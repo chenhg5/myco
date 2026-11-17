@@ -396,7 +396,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
     const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown };
-    throw Object.assign(new ApiError(e.message || `HTTP ${r.status}`, r.status, e.error, e.suggestion), e.latest ? { latest: e.latest } : {});
+    // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
+    const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {});
   }
   return data as T;
 }
