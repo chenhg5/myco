@@ -17,6 +17,7 @@ Errors (any non-2xx):
 | `permission_denied` | 403 | authenticated but not allowed (an agent token on an admin route, allow-from, not your message) |
 | `not_found` | 404 | no such agent/message/thread |
 | `conflict` / `invalid_state` | 409 | already exists / illegal state transition |
+| `rate_limited` | 429 | too many calls (a webhook); `Retry-After` says when to try again (retryable) |
 | `internal` | 500 | server error (retryable) |
 
 ## Endpoints
@@ -153,6 +154,47 @@ Visibility: `members` (default) — its owner, the owners of its member nodes, t
 
 A **coordinator** of an active project may also change, with its own token, the card of that project's other member nodes: `PUT /v1/agents/{other}/profile` (display name, description and avatar; not `allow_from`), `/labels` and `/skills`; not their visibility, owner or permissions. Its changes are recorded as `agent.edit` under its own name. This replaces the per-node `coordinator` flag of v0.18.24.
 
+## Automations
+
+An automation sends a task, as its owner, to one agent when its schedule comes round or its webhook is called. It runs on the hub (each workspace's own), so it fires while the owner's computers are off. The message is an ordinary task from the owner's console address (`@console:<member>`) with `automation` set: it wakes the agent as usual, and the answer lands in the owner's chat with that agent. Older hubs answer `404` on these routes.
+
+| Endpoint | Who | Notes |
+|---|---|---|
+| `GET /v1/console/automations` | console | `{automations: [automation]}`: everyone's for the hub's owner, admins and the admin token; a member's own otherwise |
+| `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
+| `GET /v1/console/automations/{id}` | its owner, or who manages the hub | `{automation, runs}`: its last 50 runs, newest first |
+| `PATCH /v1/console/automations/{id}` | its owner, or who manages the hub | The same fields, each optional (absent: unchanged), plus `clear_schedule`, `webhook: false` (removes the webhook), `rotate_secret` (a new secret; the old one stops working) → `{automation, webhook_secret?}` |
+| `DELETE /v1/console/automations/{id}` | its owner, or who manages the hub | `204`. Its runs go too; the messages it sent stay |
+| `POST /v1/console/automations/{id}/run` | its owner, or who manages the hub | Runs it now (`trigger: manual`), also when turned off → `201` the run |
+| `POST /hooks/{id}` | the webhook secret | Public. The secret in `Authorization: Bearer <secret>` (or `?token=<secret>`). The body (text, JSON kept as it is; at most 16 KiB, else `413`) replaces `{{payload}}` in the message; a message without `{{payload}}` gets it appended after `\n\n---\n`. → `202 {run}`. A wrong or missing secret, an automation turned off or without a webhook all answer `404 not_found`. At most 30 calls an hour per automation: then `429 rate_limited` with `Retry-After` (seconds) |
+
+Others get `404 not_found` for an automation that is not theirs. Creating, changing, removing and running one are audited (`automation.*`).
+
+An automation:
+
+```json
+{
+  "id": "aut_...", "name": "日报", "owner": "glenn", "from": "@console:glenn", "to": "pm",
+  "project": "", "body": "写今天的日报",
+  "schedule": {"cron": "0 9 * * 1-5", "tz": "Asia/Shanghai"},
+  "webhook": true, "webhook_url": "https://hub.example.com/hooks/aut_...",
+  "skip_if_busy": true, "enabled": true,
+  "created_at": "...", "updated_at": "...", "next_run_at": "...",
+  "last_run": {"id": "arun_...", "automation_id": "aut_...", "at": "...", "trigger": "schedule", "outcome": "sent", "message_id": "msg_..."}
+}
+```
+
+A run: `trigger` is `schedule`, `webhook` or `manual`; `outcome` is `sent` (with `message_id`), `skipped` or `failed` (with a short `error`). The last 200 runs of each are kept.
+
+Rules:
+
+- `schedule.cron` has 5 fields: minute, hour, day of month, month, day of week (0-7, 0 and 7 are Sunday). Each takes numbers, `*`, `a-b`, `a,b`, `*/n` and `a-b/n`. When both day fields are restricted, either one matching is enough (as in cron). `tz` is an IANA zone (`Asia/Shanghai`); empty is UTC. Two runs in a row must be at least 10 minutes apart, otherwise `invalid_argument`. On a daylight-saving change a time that does not exist that day is skipped, and one that happens twice runs once.
+- `next_run_at` is set while a schedule is on. A run missed while the hub was down runs once when it is back, then the schedule goes on.
+- `skip_if_busy`: while the last task it sent is not `done` or `failed`, a run is recorded as `skipped` and sends nothing.
+- A run whose send fails (the agent removed, the sender not allowed) is recorded as `failed`; the automation stays on.
+- Limits: 200 automations per workspace, `name` 80 characters, `body` 8 KiB.
+- End-to-end encryption: the hub writes the message, so it is sent in plain text even when the hub has encryption on.
+
 ## Message object
 
 ```json
@@ -162,12 +204,12 @@ A **coordinator** of an active project may also change, with its own token, the 
   "type": "task|note|reply|event",
   "body": "...",
   "status": "queued|delivered|acked|held|done|failed",
-  "attempts": 1, "error": "", "idempotency_key": "",
+  "attempts": 1, "error": "", "idempotency_key": "", "automation": "aut_...",
   "lease_until": "...", "created_at": "...", "updated_at": "..."
 }
 ```
 
-`after` is optional and omitted when empty (from v0.19.2). Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
 ## Exec nodes
 

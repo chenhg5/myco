@@ -2267,6 +2267,45 @@ async function runMatrix(browser, size, scheme) {
       await set.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
+    // Automations: a task sent for you on a schedule or by webhook. The list
+    // says to whom and when; a new one with a webhook shows its address and
+    // secret once; running one now sends it, marked 自动 in the chat.
+    await step("自动化", async () => {
+      await go(page, "自动化", narrow);
+      const list = page.locator("[data-testid=automations]");
+      await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".pc-row-sub", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "automations");
+      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "新建自动化" }));
+      const ed = page.locator("[data-testid=automation-editor]");
+      await ed.waitFor({ timeout: 10_000 });
+      const name = `CI 失败时看日志 ${size.width} ${scheme}`;
+      await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);
+      await ed.locator("textarea").fill("CI 又挂了，看下日志找原因：{{payload}}");
+      await ed.getByRole("combobox", { name: "多久一次" }).selectOption("daily");
+      await ed.getByLabel("几点").fill("08:30");
+      await clickVisible(page, ed.locator(".app-check-line", { hasText: "Webhook" }).locator("input"));
+      await ed.getByText("每天 08:30").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-editor");
+      await clickVisible(page, ed.getByRole("button", { name: "创建" }));
+      const sec = page.locator("[data-testid=automation-secret]");
+      await sec.waitFor({ timeout: 10_000 });
+      if (!(await sec.innerText()).includes("/hooks/")) throw new Error("Webhook 地址应该显示出来");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-secret");
+      await clickVisible(page, sec.getByRole("button", { name: "好了" }));
+      const row = list.locator(".au-row", { hasText: name });
+      await row.waitFor({ timeout: 10_000 });
+      await clickVisible(page, row.getByRole("button", { name: "立即运行" }));
+      await row.locator(".pc-row-sub", { hasText: "已发送" }).waitFor({ timeout: 10_000 });
+      // Pause and resume.
+      await clickVisible(page, row.getByRole("button", { name: "暂停" }));
+      await row.locator(".pc-row-sub", { hasText: "已暂停" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, row.getByRole("button", { name: "启用" }));
+      await row.getByRole("button", { name: "暂停" }).waitFor({ timeout: 10_000 });
+    });
+
     // A conversation is exported from its header: Markdown for people or
     // JSON Lines for programs, saved to Downloads.
     await step("单聊 · 导出对话", async () => {

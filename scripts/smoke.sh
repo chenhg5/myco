@@ -122,6 +122,17 @@ OUT="$(myco broadcast send --selector team=smoke --body "ping" --wait 20s 2>>"$T
 grep -q 'PING' <<<"$OUT" || fail "broadcast replies: $OUT"
 ok
 
+step "automation: webhook sends a task"
+OUT="$(MYCO_ADMIN_TOKEN="$ADMIN" myco automation create --name smoke-hook --to worker --body "hook: {{payload}}" --webhook 2>>"$T/cli.log")" || fail "automation create: $OUT"
+read -r AID HOOK SECRET < <(python3 -c 'import json,sys; d=json.load(sys.stdin); a=d["automation"]; print(a["id"], a["webhook_url"], d["webhook_secret"])' <<<"$OUT") || fail "automation create output: $OUT"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer whk_wrong" --data "x" "$HOOK")"
+[[ "$CODE" == 404 ]] || fail "webhook with a wrong secret returned $CODE, want 404"
+curl -fsS -X POST -H "Authorization: Bearer $SECRET" --data "from smoke" "$HOOK" | grep -q '"outcome": *"sent"' || fail "webhook call"
+MSG="$(MYCO_ADMIN_TOKEN="$ADMIN" myco automation show --id "$AID" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runs"][0]["message_id"])')" || fail "automation show"
+wait_for 20 bash -c "curl -fsS -H 'Authorization: Bearer $ADMIN' '$MYCO_HUB/v1/threads/$MSG' | grep -q 'HOOK: FROM SMOKE'" || fail "the webhook's task was not answered"
+MYCO_ADMIN_TOKEN="$ADMIN" myco automation remove --id "$AID" >/dev/null || fail "automation remove"
+ok
+
 step "join link serves an install script"
 LINK="$(MYCO_ADMIN_TOKEN="$ADMIN" myco link create --uses 1 --expires 1h | grep -o 'http[^" ]*/j/[^" ]*' | head -1)"
 [[ -n "$LINK" ]] || fail "link create printed no link"
