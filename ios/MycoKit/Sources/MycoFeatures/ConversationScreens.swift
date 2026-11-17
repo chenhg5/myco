@@ -1129,6 +1129,9 @@ struct ConversationBody: View {
                 micLabel: micState == .listening ? L("停止听写", "Stop listening") : L("语音输入", "Dictate"),
                 returnSends: returnSends,
                 openLabel: L("看一下", "Look at"),
+                // The model and effort it runs with, switched here by
+                // whoever may. Out of the way while a call is on.
+                aside: call == nil ? session.runChoice(of: model.agent).map { AnyView(RunChoiceButton(agent: model.agent, choice: $0)) } : nil,
                 onSubmit: {
                     commits += 1
                     if canCall {

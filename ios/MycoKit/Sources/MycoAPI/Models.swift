@@ -23,11 +23,35 @@ public struct Runtime: Codable, Sendable, Hashable {
     public var cli: String?
     public var cliVersion: String?
     public var model: String?
+    /// Where the model comes from: app (its run settings), self (it said
+    /// so itself), configured, observed, default, cli-config, provider.
+    public var modelSource: String?
+    /// The reasoning effort its CLI runs with (hubs from v0.19.5).
+    public var effort: String?
+    public var effortSource: String?
 
-    public init(cli: String? = nil, cliVersion: String? = nil, model: String? = nil) {
+    public init(
+        cli: String? = nil, cliVersion: String? = nil, model: String? = nil, modelSource: String? = nil,
+        effort: String? = nil, effortSource: String? = nil
+    ) {
         self.cli = cli
         self.cliVersion = cliVersion
         self.model = model
+        self.modelSource = modelSource
+        self.effort = effort
+        self.effortSource = effortSource
+    }
+}
+
+/// The model and effort chosen for an agent's runner; "" or absent follows
+/// its computer's own setting (`api.RunSettings`, hubs from v0.19.5).
+public struct RunSettings: Codable, Sendable, Hashable {
+    public var model: String?
+    public var effort: String?
+
+    public init(model: String? = nil, effort: String? = nil) {
+        self.model = model
+        self.effort = effort
     }
 }
 
@@ -45,14 +69,19 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable {
     /// agent | shell | human | machine (older hubs: absent, see the harness).
     public var kind: String?
     public var owner: String?
+    /// The member who added it, by id.
+    public var ownerId: String?
     public var machineId: String?
     public var runtime: Runtime?
+    /// What was chosen for its runner; absent when nothing was.
+    public var runSettings: RunSettings?
     @LossyList public var labels: [String]
 
     public init(
         id: String, name: String, displayName: String? = nil, avatar: String? = nil, statusText: String? = nil,
         description: String = "", binding: Binding = Binding(), online: Bool = true, createdAt: Date = Date(),
-        kind: String? = "agent", owner: String? = nil, machineId: String? = nil, runtime: Runtime? = nil, labels: [String] = []
+        kind: String? = "agent", owner: String? = nil, machineId: String? = nil, runtime: Runtime? = nil, labels: [String] = [],
+        ownerId: String? = nil, runSettings: RunSettings? = nil
     ) {
         self.id = id
         self.name = name
@@ -68,6 +97,8 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable {
         self.machineId = machineId
         self.runtime = runtime
         self.labels = labels
+        self.ownerId = ownerId
+        self.runSettings = runSettings
     }
 }
 

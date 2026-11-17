@@ -514,6 +514,37 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheModelItRunsWithIsBesideTheSendButtonAndSwitchesThere() {
+        // The backend engineer runs Codex on my computer: mine to switch.
+        var app = launch(["-myco-route", "agent:studio-codex-7f3a"])
+        let run = app.descendants(matching: .any)["composer.run"].firstMatch
+        XCTAssertTrue(run.waitForExistence(timeout: 20), "the model is beside the send button")
+        XCTAssertTrue(run.label.contains("GPT-6 Sol · High"), run.label)
+        snap("run-choice")
+        run.tap()
+        let other = app.buttons["GPT-6"]
+        XCTAssertTrue(other.waitForExistence(timeout: 5), "a tap offers the models")
+        XCTAssertTrue(app.buttons["Follow this computer"].exists)
+        XCTAssertTrue(app.buttons["Very high"].exists, "and the efforts")
+        snap("run-choice-menu")
+        other.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "GPT-6 · High"), evaluatedWith: run)
+        waitForExpectations(timeout: 10)
+        snap("run-choice-switched")
+        app.terminate()
+
+        // The coordinator runs in the cloud: its own session decides.
+        app = launch(["-myco-route", "agent:cloud-lead"])
+        let theirs = app.descendants(matching: .any)["composer.run"].firstMatch
+        XCTAssertTrue(theirs.waitForExistence(timeout: 20))
+        XCTAssertTrue(theirs.label.contains("Opus 5.5"), theirs.label)
+        theirs.tap()
+        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "/model")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "a tap says where it is switched")
+        snap("run-choice-note")
+    }
+
+    @MainActor
     func testWhatAgentsHandEachOtherIsACardThatOpensTheirExchange() {
         let app = launch(["-myco-route", "agent:studio-codex-7f3a"])
         // The coordinator's task is not a message in my conversation with

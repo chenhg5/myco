@@ -158,6 +158,11 @@ public protocol HubAPI: Sendable {
     /// `PUT /v1/console/voice`: keeps them, unless the hub holds newer
     /// ones; answers what it holds then.
     func putVoiceSettings(_ document: VoiceDocument) async throws -> VoiceDocument
+    /// `PUT /v1/agents/{name}/run-settings`: the model and effort its
+    /// runner starts it with from its next run ("" follows its computer's
+    /// setting). For whoever owns the agent or manages the workspace. A
+    /// workspace from before v0.19.5 answers `not_found`.
+    func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
     /// `POST /v1/enrollments` with `kind: "link"`: a link to hand to an
     /// agent or a machine (ten uses, a week), as the desktop app makes.
     func joinLink() async throws -> JoinLink

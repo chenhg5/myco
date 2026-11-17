@@ -122,6 +122,14 @@ public struct HubClient: HubAPI {
         return try Self.decode(VoiceDocument.self, from: data)
     }
 
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        let safe = agent.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? agent
+        // (no `access`: what it may do on its computer stays as it is)
+        let data = try await call(
+            "PUT", "/v1/agents/\(safe)/run-settings", body: HubJSON.encoder().encode(["model": model, "effort": effort]))
+        return try Self.decode(Agent.self, from: data)
+    }
+
     public func joinLink() async throws -> JoinLink {
         struct Request: Encodable {
             var kind = "link"

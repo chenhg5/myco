@@ -39,7 +39,11 @@ public enum Scenario: Sendable {
             Agent(
                 id: id, name: name, displayName: display, description: role,
                 binding: Binding(harness: cli, workdir: dir), createdAt: ago(days * 86_400),
-                machineId: "mach_studio", runtime: Runtime(cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5"))
+                // (a session in the cloud runs on no computer of mine)
+                machineId: cli.hasSuffix("-cloud") ? nil : "mach_studio",
+                runtime: Runtime(
+                    cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5", modelSource: "observed",
+                    effort: cli.hasPrefix("codex") ? "high" : nil))
         }
 
         let lead = agent("agt_lead0001", "cloud-lead", "协调者", "拆任务、派活、审查合入", cli: "claude-cloud", dir: "/home/user/myco", days: 12)

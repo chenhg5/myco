@@ -332,6 +332,24 @@ public actor FakeHub: HubAPI {
         return hiddenIDs
     }
 
+    /// Acts like a hub from before run settings.
+    private var tooOldForRunSettings = false
+
+    public func setTooOldForRunSettings(_ value: Bool) {
+        tooOldForRunSettings = value
+    }
+
+    public func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent {
+        try await check()
+        if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found")
+        }
+        // Kept as chosen; what it runs with changes at its next run.
+        agents[index].agent.runSettings = model.isEmpty && effort.isEmpty ? nil : RunSettings(model: model, effort: effort)
+        return agents[index].agent
+    }
+
     public func joinLink() async throws -> JoinLink {
         try await check()
         return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_demo")
