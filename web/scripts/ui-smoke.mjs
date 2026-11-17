@@ -1432,6 +1432,27 @@ async function runMatrix(browser, size, scheme) {
       await cp.waitFor({ state: "detached", timeout: 5_000 });
     });
 
+    // Set aside as the skill says (hold, then a progress saying what it
+    // waits for), still in its session: waiting, not at work — no loading,
+    // 稍后回复 under your message, a plain box.
+    await step("单聊 · 挂起后说明在等", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(`挂起说明：定时和 Webhook 先做第一步（${size.width}-${scheme}）`);
+      await box.press("Enter");
+      await page.locator(".conv-detail .trace-report", { hasText: "已派给 release" }).last().waitFor({ timeout: 15_000 });
+      await page.locator(".conv-detail .conv-receipt", { hasText: "稍后回复" }).last().waitFor({ timeout: 10_000 });
+      await page.waitForTimeout(2500);
+      if (await page.locator(".conv-detail .work-sprite").count()) throw new Error("挂起后只是说明在等什么，不该一直显示 loading");
+      const ph = await box.getAttribute("placeholder");
+      if ((ph || "").startsWith("补充给")) throw new Error(`挂起的任务不该让输入框变成「补充给…」，实际「${ph}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-held-waiting");
+      await page.locator(".conv-detail .conv-msg", { hasText: "release 那边做完了" }).last().waitFor({ timeout: 15_000 });
+      await noRound(page);
+    });
+
     // An agent in one long session goes on with what you sent next, its
     // steps and progress still filed under the first task (still open):
     // they show under your newer message, in time, not up above.

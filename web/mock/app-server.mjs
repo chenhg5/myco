@@ -794,6 +794,36 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
     });
     return;
   }
+  // Set aside the way the skill says: it hands work out, holds the task,
+  // then says what it waits for (a progress), and stays in its session
+  // (no end of turn). Waiting, not at work: no loading in the App.
+  if (preview && /挂起说明/.test(preview.body)) {
+    const msgs = hub.threads[threadId] || [];
+    const t0 = Date.now();
+    preview.trace = [
+      { kind: "thinking", text: "先派给 release 做，等结果。" },
+      { kind: "tool", tool: "Bash", id: "h1", input: 'myco message send --to release-cloud --body "定时任务和 Webhook 先做第一步"' },
+      { kind: "tool_result", id: "h1", output: "sent" },
+      { kind: "tool", tool: "Bash", id: "h2", input: `myco message hold --id ${taskId}` },
+      { kind: "tool_result", id: "h2", output: "held" },
+      { kind: "tool", tool: "Bash", id: "h3", input: `myco message progress --id ${taskId} --body "已派给 release，等它做完"` },
+      { kind: "tool_result", id: "h3", output: "ok" },
+      { kind: "tool", tool: "Bash", id: "h4", input: "myco inbox wait --timeout 55m --format text" },
+    ].map((d, i) => ({ ...d, at: new Date(t0 + i * 250).toISOString() }));
+    preview.trace_pace = 250;
+    later(300, () => { if (["queued", "delivered"].includes(preview.status)) Object.assign(preview, { status: "acked", updated_at: iso(0) }); });
+    later(1100, () => { if (preview.status === "acked") Object.assign(preview, { status: "held", updated_at: iso(0) }); });
+    later(1600, () => {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: taskId, body: "已派给 release，等它做完再汇总给你。", created_at: iso(0), updated_at: iso(0) }));
+    });
+    later(9000, () => {
+      replyTimers.delete(taskId);
+      if (preview.status !== "held") return;
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: taskId, body: "release 那边做完了。", created_at: iso(0), updated_at: iso(0) }));
+      Object.assign(preview, { status: "done", updated_at: iso(0) });
+    });
+    return;
+  }
   if (preview && /逐字预览|启动预览|保留任务/.test(preview.body)) {
     const thinking = "先检查消息是否已经接手，再核对正在写出的文字和完整步骤之间的替换。";
     const text = "消息已经接手，正文正在逐字写出。每次收到的新片段会接在原来的文字后面，";
