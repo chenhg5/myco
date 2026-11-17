@@ -9,6 +9,8 @@
 #   A  --domain <name>|auto            automatic HTTPS: Caddy on port 443
 #   B  --behind nginx|panel|caddy|other --domain <name>
 #                                      behind the web server that already has 443
+#   C  --tunnel cloudflare [--hostname <name>] | --tunnel tailscale
+#                                      no open ports: a Cloudflare or Tailscale tunnel
 #   D  --http [--port 7777]            plain HTTP on a port (trusted networks only)
 #      --local                         this server only (127.0.0.1)
 # --domain auto uses <ip>.sslip.io (a public wildcard DNS that resolves to
@@ -22,8 +24,11 @@ DOMAIN=""
 PORT=""
 NAME=""
 NAME_SET=0
-MODE=""   # caddy | behind | http | local
+MODE=""   # caddy | behind | tunnel | http | local
 BEHIND="" # nginx | panel | caddy | other
+TUNNEL="" # cloudflare | tailscale
+TUNNEL_HOST=""
+TUNNEL_NAME=""
 CHECK_ONLY=0
 ASSUME_YES=0
 NARGS=$#
@@ -45,6 +50,13 @@ Without arguments it asks how others should reach the hub. How:
                          nginx: a site file of its own is written and reloaded;
                          panel (宝塔 / 1Panel), caddy, other: the settings to
                          fill in are printed, nothing is changed.
+  --tunnel <kind>        C: no open ports; the hub is published through a tunnel.
+                         cloudflare --hostname hub.example.com: your domain on
+                         Cloudflare (run 'cloudflared tunnel login' first);
+                         cloudflare without --hostname: a temporary
+                         trycloudflare.com address that changes on every
+                         restart (to try it out); tailscale: Tailscale Funnel at
+                         https://<machine>.<tailnet>.ts.net.
   --http                 D: plain HTTP on --port (default 7777) for everyone who
                          can reach it. Tokens travel unencrypted: trusted
                          networks and tests only.
@@ -64,6 +76,9 @@ while [[ $# -gt 0 ]]; do
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --behind) BEHIND="${2:-}"; shift 2 ;;
     --http) MODE=http; shift ;;
+    --tunnel) TUNNEL="${2:-}"; shift 2 ;;
+    --hostname) TUNNEL_HOST="${2:-}"; shift 2 ;;
+    --tunnel-name) TUNNEL_NAME="${2:-}"; shift 2 ;;
     --local) MODE=local; shift ;;
     --name) NAME="${2:-}"; NAME_SET=1; shift 2 ;;
     --version) VERSION="${2:-}"; shift 2 ;;
@@ -83,6 +98,20 @@ if [[ -n "$BEHIND" ]]; then
   [[ "$MODE" == http || "$MODE" == local ]] && { echo "--behind cannot be combined with --$MODE" >&2; exit 2; }
   [[ -n "$DOMAIN" ]] || { echo "--behind needs --domain <name> (the name the web server answers to; 'auto' for <ip>.sslip.io)" >&2; exit 2; }
   MODE=behind
+fi
+if [[ -n "$TUNNEL" ]]; then
+  case "$TUNNEL" in
+    cloudflare|tailscale) ;;
+    *) echo "--tunnel must be cloudflare or tailscale" >&2; exit 2 ;;
+  esac
+  [[ -n "$BEHIND" || "$MODE" == http || "$MODE" == local ]] && { echo "--tunnel cannot be combined with --behind, --http or --local" >&2; exit 2; }
+  # --domain reads as the tunnel's hostname, for those who reach for it.
+  [[ -z "$TUNNEL_HOST" && -n "$DOMAIN" && "$DOMAIN" != auto ]] && TUNNEL_HOST="$DOMAIN"
+  [[ "$TUNNEL" == tailscale && -n "$TUNNEL_HOST" ]] && { echo "--hostname is for --tunnel cloudflare; Tailscale picks <machine>.<tailnet>.ts.net" >&2; exit 2; }
+  DOMAIN=""
+  MODE=tunnel
+elif [[ -n "$TUNNEL_HOST" || -n "$TUNNEL_NAME" ]]; then
+  echo "--hostname and --tunnel-name go with --tunnel cloudflare" >&2; exit 2
 fi
 if [[ -z "$MODE" ]]; then
   if [[ -n "$DOMAIN" ]]; then MODE=caddy
@@ -120,6 +149,14 @@ UNIT_FILE="$ROOT/etc/systemd/system/$UNIT"
 CADDY_DIR="$ROOT/etc/caddy"
 CADDY_SITE="$CADDY_DIR/myco.d/$SITE.caddy"
 NGINX_DIR="$ROOT/etc/nginx"
+# C: our cloudflared (named tunnel) service and its files, and the name of
+# the tunnel in the Cloudflare account.
+CF_UNIT="myco-cloudflared${NAME:+-$NAME}.service"
+CF_UNIT_FILE="$ROOT/etc/systemd/system/$CF_UNIT"
+CF_DIR_REAL="/etc/myco/cloudflared"
+[[ -n "$NAME" ]] && CF_DIR_REAL="/etc/myco/hubs/$NAME/cloudflared"
+CF_DIR="$ROOT$CF_DIR_REAL"
+[[ -n "$TUNNEL_NAME" ]] || TUNNEL_NAME="myco${NAME:+-$NAME}"
 HUB_UPLOAD_LIMIT=64m # the hub's attachments are at most 50 MB by default
 
 # ---------------------------------------------------------------- helpers
@@ -170,6 +207,14 @@ holder_words() {
   esac
 }
 
+# A temporary address is printed by the hub's cloudflared once it is up.
+quick_tunnel_url() {
+  local since=() u
+  [[ -n "${1:-}" ]] && since=(--since "@$1")
+  u="$(journalctl -u "$UNIT" "${since[@]}" -n 400 --no-pager -o cat 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | grep -v '^https://api\.' | tail -1 || true)"
+  printf '%s' "$u"
+}
+
 # The way that fits what holds 443: A when it is free or Caddy's, B otherwise.
 recommended_for() {
   case "$1" in
@@ -186,6 +231,7 @@ equivalent_command() {
   case "$MODE" in
     caddy) c+=" --domain $DOMAIN" ;;
     behind) c+=" --behind $BEHIND --domain $DOMAIN" ;;
+    tunnel) c+=" --tunnel $TUNNEL"; [[ -n "$TUNNEL_HOST" ]] && c+=" --hostname $TUNNEL_HOST" ;;
     http) c+=" --http"; [[ -n "$DOMAIN" ]] && c+=" --domain $DOMAIN" ;;
     local) c+=" --local" ;;
   esac
@@ -225,6 +271,9 @@ How should others reach this hub? Run again with one of:
   B  Behind the web server that already has port 443:
        sudo bash install-hub.sh --behind nginx --domain hub.example.com
        sudo bash install-hub.sh --behind panel --domain hub.example.com   # 宝塔 / 1Panel
+  C  No open ports, through a tunnel:
+       sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com
+       sudo bash install-hub.sh --tunnel tailscale
   D  Plain HTTP on a port, trusted networks only:
        sudo bash install-hub.sh --http --port 7777
      This server only:
@@ -249,12 +298,13 @@ EOF
   [[ "$rec" == behind:* ]] && { b+="  ← 推荐 recommended"; def=2; }
   echo "$a" >&2
   echo "$b" >&2
-  echo "  3) 直接 HTTP，自选端口：明文，只适合内网和测试 / Plain HTTP on a port: trusted networks and tests only" >&2
-  echo "  4) 只给这台服务器自己用 / This server only" >&2
+  echo "  3) 不开任何端口：用 Cloudflare 或 Tailscale 隧道 / No open ports: a Cloudflare or Tailscale tunnel" >&2
+  echo "  4) 直接 HTTP，自选端口：明文，只适合内网和测试 / Plain HTTP on a port: trusted networks and tests only" >&2
+  echo "  5) 只给这台服务器自己用 / This server only" >&2
   while :; do
     ask "选一个 Choose" "$def"; choice="$REPLY"
-    case "$choice" in 1|2|3|4) break ;; esac
-    echo "   1, 2, 3 or 4" >&2
+    case "$choice" in 1|2|3|4|5) break ;; esac
+    echo "   1, 2, 3, 4 or 5" >&2
   done
   case "$choice" in
     1) MODE=caddy ;;
@@ -264,8 +314,15 @@ EOF
          ask "哪一种？ Which one: nginx / panel (宝塔、1Panel) / caddy / other" "nginx"; BEHIND="$REPLY"
          case "$BEHIND" in nginx|panel|caddy|other) ;; *) echo "nginx, panel, caddy or other" >&2; exit 2 ;; esac
        fi ;;
-    3) MODE=http ;;
-    4) MODE=local ;;
+    3) MODE=tunnel
+       ask "哪一种？ Which: cloudflare / tailscale" "cloudflare"; TUNNEL="$REPLY"
+       case "$TUNNEL" in cloudflare|tailscale) ;; *) echo "cloudflare or tailscale" >&2; exit 2 ;; esac
+       if [[ "$TUNNEL" == cloudflare ]]; then
+         ask "你在 Cloudflare 上的域名，回车用临时地址（每次重启都会变）/ Hostname on your Cloudflare domain, Enter for a temporary address" ""
+         TUNNEL_HOST="$REPLY"
+       fi ;;
+    4) MODE=http ;;
+    5) MODE=local ;;
   esac
   case "$MODE" in
     caddy|behind)
@@ -289,7 +346,14 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
   [[ -f "$UNIT_FILE" ]] || { echo "no hub installed here ($UNIT_FILE missing)" >&2; exit 1; }
   PORT="$(sed -n 's#^MYCO_HUB=http://127\.0\.0\.1:\([0-9]*\).*#\1#p' "$ENV_FILE" 2>/dev/null | head -1 || true)"
   PUBLIC_URL="$(hub_public_url)"
-  case "$PUBLIC_URL" in
+  if [[ "$(cat "$UNIT_FILE")" == *"--tunnel cloudflare"* ]]; then
+    MODE=tunnel; TUNNEL=cloudflare
+  elif [[ -f "$CF_UNIT_FILE" ]]; then
+    MODE=tunnel; TUNNEL=cloudflare; TUNNEL_HOST="${PUBLIC_URL#https://}"
+  elif [[ "$PUBLIC_URL" == https://*.ts.net ]]; then
+    MODE=tunnel; TUNNEL=tailscale
+  fi
+  [[ "$MODE" == tunnel ]] || case "$PUBLIC_URL" in
     https://*) DOMAIN="${PUBLIC_URL#https://}"
       if [[ -f "$CADDY_SITE" ]]; then MODE=caddy; else MODE=behind; fi
       if [[ -e "$NGINX_DIR/conf.d/myco-$SITE.conf" || -e "$NGINX_DIR/sites-enabled/myco-$SITE.conf" ]]; then MODE=behind; BEHIND=nginx; fi ;;
@@ -319,6 +383,91 @@ if [[ -z "$PORT" ]]; then
   fi
 fi
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then echo "--port must be 1-65535" >&2; exit 2; fi
+# How the hub was reached before this run (to undo our own parts of it).
+OLD_UNIT_TEXT="$(cat "$UNIT_FILE" 2>/dev/null || true)"
+
+# ------------------------------------------------- C: what a tunnel needs
+
+# cloudflared's account certificate (from `cloudflared tunnel login`), which
+# may have been made as root or as the user who ran sudo.
+find_cf_cert() {
+  local home c
+  home="$(getent passwd "${SUDO_USER:-root}" 2>/dev/null | cut -d: -f6 || true)"
+  for c in "${TUNNEL_ORIGIN_CERT:-}" "$CF_DIR/cert.pem" "${HOME:-/root}/.cloudflared/cert.pem" "$ROOT/root/.cloudflared/cert.pem" \
+    ${home:+"$ROOT$home/.cloudflared/cert.pem"} "$ROOT/etc/cloudflared/cert.pem" "$ROOT/usr/local/etc/cloudflared/cert.pem"; do
+    [[ -n "$c" && -f "$c" ]] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
+
+# A tunnel's credentials file (<id>.json), wherever `tunnel create` left it.
+find_cf_creds() {
+  local id="$1" home d
+  home="$(getent passwd "${SUDO_USER:-root}" 2>/dev/null | cut -d: -f6 || true)"
+  for d in "$CF_DIR" "$(dirname "$CF_CERT")" "${HOME:-/root}/.cloudflared" "$ROOT/root/.cloudflared" ${home:+"$ROOT$home/.cloudflared"} "$ROOT/etc/cloudflared"; do
+    [[ -f "$d/$id.json" ]] && { printf '%s' "$d/$id.json"; return 0; }
+  done
+  return 1
+}
+
+# The id of the named tunnel in the account ("" when there is none).
+cf_tunnel_id() {
+  local out
+  out="$(cloudflared --origincert "$CF_CERT" tunnel list --output json --name "$TUNNEL_NAME" 2>/dev/null || true)"
+  out="$(grep -o '"id": *"[^"]*"' <<<"$out" | head -1 || true)"
+  out="${out%\"}"; printf '%s' "${out##*\"}"
+}
+
+# This device's name on the tailnet, from `tailscale status --json` (the
+# first DNSName after "Self"; peers follow it).
+ts_dns_name() {
+  awk '/"Self"/ {self=1} self && /"DNSName"/ { sub(/.*"DNSName": *"/, ""); sub(/".*/, ""); sub(/\.$/, ""); print; exit }' <<<"$1"
+}
+
+# Checks what the tunnel needs before anything is downloaded or written, and
+# says what to run when something is missing.
+tunnel_preflight() {
+  case "$TUNNEL" in
+    cloudflare)
+      if ! command -v cloudflared >/dev/null; then
+        echo "!! cloudflared is not installed. Install it, then run this again:" >&2
+        echo "     Debian / Ubuntu:  curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(dpkg --print-architecture 2>/dev/null || echo amd64).deb && sudo dpkg -i /tmp/cloudflared.deb" >&2
+        echo "     others:           https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" >&2
+        exit 1
+      fi
+      [[ -z "$TUNNEL_HOST" ]] && return 0 # temporary address: no account needed
+      if ! CF_CERT="$(find_cf_cert)"; then
+        echo "!! cloudflared is not logged in to your Cloudflare account. Run this, choose the zone of $TUNNEL_HOST, then run this again:" >&2
+        echo "     cloudflared tunnel login" >&2
+        exit 1
+      fi ;;
+    tailscale)
+      if ! command -v tailscale >/dev/null; then
+        echo "!! Tailscale is not installed. Install it and log in, then run this again:" >&2
+        echo "     curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up" >&2
+        exit 1
+      fi
+      local st state
+      st="$(tailscale status --json 2>/dev/null || true)"
+      state="$(sed -n 's/.*"BackendState": *"\([^"]*\)".*/\1/p' <<<"$st" | head -1)"
+      TS_DNS="$(ts_dns_name "$st")"
+      if [[ "$state" != Running || -z "$TS_DNS" ]]; then
+        echo "!! Tailscale is not connected${state:+ (state $state)}. Log in, then run this again:" >&2
+        echo "     sudo tailscale up" >&2
+        exit 1
+      fi
+      # Funnel is set up first (nothing listens yet; that is fine), so a
+      # tailnet without Funnel stops here, before anything is installed.
+      local out
+      if ! out="$(tailscale funnel --bg "$PORT" 2>&1)"; then
+        echo "!! Tailscale Funnel could not be turned on:" >&2
+        printf '%s\n' "$out" | sed 's/^/     /' >&2
+        echo "   Enable Funnel (and HTTPS certificates) for this device in the Tailscale admin console (the link above), then run this again." >&2
+        exit 1
+      fi ;;
+  esac
+}
+[[ "$CHECK_ONLY" -eq 0 && "$MODE" == tunnel ]] && tunnel_preflight
 
 if [[ "$CHECK_ONLY" -eq 0 ]]; then
 
@@ -375,6 +524,11 @@ fi
 LISTEN="127.0.0.1:$PORT"
 case "$MODE" in
   caddy|behind) PUBLIC_URL="https://$DOMAIN" ;;
+  tunnel)
+    case "$TUNNEL" in
+      tailscale) PUBLIC_URL="https://$TS_DNS" ;;
+      *) PUBLIC_URL="${TUNNEL_HOST:+https://$TUNNEL_HOST}" ;; # temporary: learned once it runs
+    esac ;;
   http)
     LISTEN="0.0.0.0:$PORT"
     HOST="$DOMAIN"
@@ -401,6 +555,11 @@ else
 fi
 
 write_unit() {
+  local serve="--addr $LISTEN --db $DATA_DIR/hub.db"
+  [[ -n "$PUBLIC_URL" ]] && serve+=" --public-url $PUBLIC_URL"
+  # A temporary Cloudflare address is the hub's own cloudflared: it follows
+  # the address, which changes whenever the tunnel restarts.
+  [[ "$MODE" == tunnel && "$TUNNEL" == cloudflare && -z "$TUNNEL_HOST" ]] && serve+=" --tunnel cloudflare"
   install -d -m 0755 "$(dirname "$UNIT_FILE")"
   cat > "$UNIT_FILE" <<EOF
 [Unit]
@@ -410,7 +569,7 @@ Wants=network-online.target
 
 [Service]
 EnvironmentFile=$ENV_REAL
-ExecStart=/usr/local/bin/myco hub serve --addr $LISTEN --db $DATA_DIR/hub.db --public-url $PUBLIC_URL
+ExecStart=/usr/local/bin/myco hub serve $serve
 StateDirectory=$STATE_DIR
 DynamicUser=yes
 Restart=always
@@ -421,6 +580,7 @@ WantedBy=multi-user.target
 EOF
 }
 write_unit
+T0="$(date +%s)"
 systemctl daemon-reload
 systemctl enable --now "$UNIT"
 systemctl restart "$UNIT"
@@ -429,7 +589,8 @@ systemctl restart "$UNIT"
 
 # Move the site written by older install-hub.sh versions into a site file,
 # leaving unrelated Caddyfile blocks untouched. The old block is identified
-# by its reverse proxy to the default hub and the script's read_timeout.
+# by its reverse proxy to the default hub and the script's read_timeout
+# (120s before the hub's waits grew to 5 minutes, 360s since).
 migrate_legacy_caddy() {
   local file="$CADDY_DIR/Caddyfile" old_port tmp
   [[ -f "$file" ]] || return 0
@@ -444,7 +605,7 @@ migrate_legacy_caddy() {
       if (block) {
         block=block $0 ORS; depth+=delta($0)
         if (depth==0) {
-          if (index(block, "reverse_proxy 127.0.0.1:" port) && index(block, "read_timeout 120s")) printf "%s", block > site
+          if (index(block, "reverse_proxy 127.0.0.1:" port) && (index(block, "read_timeout 120s") || index(block, "read_timeout 360s"))) printf "%s", block > site
           else printf "%s", block
           block=""
         }
@@ -499,7 +660,7 @@ caddy_snippet() {
 $DOMAIN {
 	reverse_proxy 127.0.0.1:$PORT {
 		transport http {
-			read_timeout 120s
+			read_timeout 360s
 		}
 	}
 }
@@ -761,6 +922,89 @@ EOF
   esac
 }
 
+# ------------------------------------------------------------ C: tunnels
+
+# A named Cloudflare tunnel runs as a service of its own (cloudflared, as
+# Cloudflare's own service does), with its credentials kept in /etc/myco:
+# the hub runs as a dynamic user without a home for ~/.cloudflared.
+setup_cloudflare_named() {
+  local id creds bin out
+  install -d -m 0700 "$CF_DIR"
+  id="$(cf_tunnel_id)"
+  if [[ -z "$id" ]]; then
+    echo "==> creating the Cloudflare tunnel $TUNNEL_NAME"
+    cloudflared --origincert "$CF_CERT" tunnel create --credentials-file "$CF_DIR/new.json" "$TUNNEL_NAME" >/dev/null
+    id="$(cf_tunnel_id)"
+    [[ -n "$id" ]] || { echo "!! the tunnel $TUNNEL_NAME was created but cannot be found (cloudflared tunnel list)" >&2; exit 1; }
+    mv -f "$CF_DIR/new.json" "$CF_DIR/$id.json"
+  elif [[ ! -f "$CF_DIR/$id.json" ]]; then
+    if ! creds="$(find_cf_creds "$id")"; then
+      echo "!! the tunnel $TUNNEL_NAME exists in your Cloudflare account, but its credentials ($id.json) are not on this server." >&2
+      echo "   Use another name (--tunnel-name myco-2), or copy that file from the machine that created it into $CF_DIR_REAL." >&2
+      exit 1
+    fi
+    install -m 0600 "$creds" "$CF_DIR/$id.json"
+  fi
+  chmod 0600 "$CF_DIR/$id.json"
+  [[ "$CF_CERT" == "$CF_DIR/cert.pem" ]] || install -m 0600 "$CF_CERT" "$CF_DIR/cert.pem"
+  echo "==> pointing $TUNNEL_HOST at the tunnel (a DNS record in your Cloudflare zone)"
+  if ! out="$(cloudflared --origincert "$CF_CERT" tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$TUNNEL_HOST" 2>&1)"; then
+    echo "!! cloudflared could not route $TUNNEL_HOST to the tunnel:" >&2
+    printf '%s\n' "$out" | sed 's/^/     /' >&2
+    echo "   Is $TUNNEL_HOST in a zone of the account you logged in to (cloudflared tunnel login)?" >&2
+    exit 1
+  fi
+  cat > "$CF_DIR/config.yml" <<EOF
+# Written by install-hub.sh; re-running it rewrites this file.
+tunnel: $id
+credentials-file: $CF_DIR_REAL/$id.json
+ingress:
+  - hostname: $TUNNEL_HOST
+    service: http://127.0.0.1:$PORT
+  - service: http_status:404
+EOF
+  chmod 0600 "$CF_DIR/config.yml"
+  bin="$(command -v cloudflared)"
+  cat > "$CF_UNIT_FILE" <<EOF
+[Unit]
+Description=Cloudflare tunnel for the myco hub${NAME:+ $NAME}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=$bin tunnel --no-autoupdate --config $CF_DIR_REAL/config.yml run $id
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now "$CF_UNIT"
+  systemctl restart "$CF_UNIT"
+  echo "==> Cloudflare tunnel $TUNNEL_NAME: https://$TUNNEL_HOST -> 127.0.0.1:$PORT (service $CF_UNIT)"
+}
+
+# Our named-tunnel service, from an earlier install through Cloudflare. The
+# tunnel itself stays in the account (and its credentials here).
+remove_cf_tunnel_service() {
+  [[ -f "$CF_UNIT_FILE" ]] || return 0
+  echo "==> stopping this hub's Cloudflare tunnel service (it is reached another way now)"
+  systemctl disable --now "$CF_UNIT" 2>/dev/null || true
+  rm -f "$CF_UNIT_FILE" "$CF_DIR/config.yml"
+  systemctl daemon-reload
+  echo "   the tunnel $TUNNEL_NAME stays in your Cloudflare account; to delete it: cloudflared tunnel delete $TUNNEL_NAME"
+}
+
+# Our Funnel, from an earlier install through Tailscale.
+remove_ts_funnel() {
+  [[ "$OLD_UNIT_TEXT" =~ --public-url\ https://[^[:space:]]*\.ts\.net ]] || return 0
+  command -v tailscale >/dev/null || return 0
+  echo "==> turning off this hub's Tailscale Funnel (it is reached another way now)"
+  tailscale funnel --bg "${OLD_PORT:-$PORT}" off >/dev/null 2>&1 || tailscale funnel "${OLD_PORT:-$PORT}" off >/dev/null 2>&1 ||
+    echo "   could not turn it off; see: tailscale funnel status"
+}
+
 # ------------------------------------------------------- D: an open port
 
 open_firewall_port() {
@@ -776,9 +1020,27 @@ open_firewall_port() {
 }
 
 case "$MODE" in
+  tunnel) ;;
+  *) remove_cf_tunnel_service
+     remove_ts_funnel ;;
+esac
+case "$MODE" in
   caddy)
     remove_nginx_site
     setup_caddy ;;
+  tunnel)
+    remove_caddy_site
+    remove_nginx_site
+    if [[ "$TUNNEL" == cloudflare && -n "$TUNNEL_HOST" ]]; then setup_cloudflare_named; else remove_cf_tunnel_service; fi
+    [[ "$TUNNEL" == tailscale ]] || remove_ts_funnel
+    if [[ "$TUNNEL" == cloudflare && -z "$TUNNEL_HOST" ]]; then
+      echo "==> waiting for the temporary Cloudflare address (up to 60s)"
+      for _ in $(seq 1 12); do
+        PUBLIC_URL="$(quick_tunnel_url "$T0")"
+        [[ -n "$PUBLIC_URL" ]] && break
+        sleep 5
+      done
+    fi ;;
   behind)
     remove_caddy_site
     if [[ "$BEHIND" == nginx ]]; then setup_nginx
@@ -820,6 +1082,7 @@ self_test() {
   fi
   echo "==> hub is healthy"
   [[ "$MODE" == local ]] && { SELFTEST_OK=1; return 0; }
+  [[ "$MODE" == tunnel ]] && { tunnel_test; return; }
 
   url="$PUBLIC_URL"
   scheme="${url%%://*}"
@@ -887,8 +1150,52 @@ self_test() {
   return 1
 }
 
+# Through the tunnel: no port of this server is involved, so the layers are
+# the tunnel itself, its DNS name, and (Tailscale) Funnel.
+tunnel_test() {
+  local url="$PUBLIC_URL" st
+  if [[ -z "$url" ]]; then
+    check_fail "the temporary Cloudflare tunnel has not reported its address. Layer: the tunnel."
+    check_fail "  look at: journalctl -u $UNIT -n 50 --no-pager"
+    return 1
+  fi
+  if curl -fsS --max-time 10 "$url/v1/health" >/dev/null 2>&1; then
+    echo "==> reachable at $url (through the tunnel, checked from this server)"
+    echo "    to be sure, open $url/v1/health on another computer: it should say {\"ok\":true,...}"
+    SELFTEST_OK=1
+    return 0
+  fi
+  case "$TUNNEL" in
+    cloudflare)
+      if [[ -z "$TUNNEL_HOST" ]]; then
+        check_fail "$url does not reach the hub. Layer: the tunnel (a temporary address can take a minute to work)."
+        check_fail "  look at: journalctl -u $UNIT -n 50 --no-pager"
+      elif ! systemctl is-active --quiet "$CF_UNIT"; then
+        check_fail "the Cloudflare tunnel is not running. Layer: the tunnel."
+        check_fail "  look at: systemctl status $CF_UNIT ; journalctl -u $CF_UNIT -n 50 --no-pager"
+      elif [[ -z "$(getent ahosts "$TUNNEL_HOST" 2>/dev/null || true)" ]]; then
+        check_fail "$TUNNEL_HOST does not resolve yet. Layer: DNS (the record in your Cloudflare zone; it can take a few minutes)."
+        check_fail "  check the zone's DNS page for a CNAME $TUNNEL_HOST -> <tunnel id>.cfargotunnel.com"
+      else
+        check_fail "the tunnel runs but $url does not reach the hub. Layer: the tunnel."
+        check_fail "  look at: journalctl -u $CF_UNIT -n 50 --no-pager"
+      fi ;;
+    tailscale)
+      st="$(tailscale funnel status 2>&1 || true)"
+      if [[ "$st" != *"127.0.0.1:$PORT"* && "$st" != *"localhost:$PORT"* ]]; then
+        check_fail "Tailscale Funnel is not serving this hub (port $PORT). Layer: Funnel."
+        check_fail "  fix: tailscale funnel --bg $PORT ; and check Funnel is enabled for this device in the admin console"
+      else
+        check_fail "$url does not answer yet. Layer: Tailscale Funnel (the first certificate and DNS name can take a minute)."
+        check_fail "  look at: tailscale funnel status"
+      fi ;;
+  esac
+  return 1
+}
+
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   PUBLIC_IP=""
+  [[ "$MODE" == tunnel && "$TUNNEL" == cloudflare && -z "$TUNNEL_HOST" ]] && PUBLIC_URL="$(quick_tunnel_url)"
   self_test && exit 0 || exit 1
 fi
 
@@ -921,7 +1228,17 @@ if [[ "$MODE" == http ]]; then
   echo "!! Also allow inbound TCP $PORT in your cloud provider's security group."
   echo "!! ================================================================"
 fi
-echo "Hub URL:      $PUBLIC_URL"
+if [[ "$MODE" == tunnel && "$TUNNEL" == cloudflare && -z "$TUNNEL_HOST" ]]; then
+  echo "!! ================================================================"
+  echo "!! 临时地址：隧道每次重启（包括服务器重启）都会换一个新地址，"
+  echo "!! 之前的链接和已经加入的电脑就连不上了。只适合试一试。"
+  echo "!! Temporary address: it CHANGES whenever the tunnel restarts (also"
+  echo "!! after a reboot); links and joined computers then stop working."
+  echo "!! For trying it out only. For a fixed address use your own domain:"
+  echo "!!   sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com"
+  echo "!! ================================================================"
+fi
+echo "Hub URL:      ${PUBLIC_URL:-(not known yet; see journalctl -u $UNIT)}"
 echo "Admin token:  stored in $ENV_REAL (root only; never paste it into chats)"
 
 # First install: create a join link right away so adding machines is one paste.

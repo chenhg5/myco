@@ -59,8 +59,41 @@ echo '{"ok":true}'`,
 	"caddy":      `echo "caddy $*" >> "$FAKE_LOG"; exit "${FAKE_CADDY_VALIDATE:-0}"`,
 	"nginx":      `echo "nginx $*" >> "$FAKE_LOG"; if [[ "${FAKE_NGINX_T:-0}" == 1 ]]; then echo "nginx: [emerg] unknown directive" >&2; exit 1; fi; echo "nginx: configuration file test is successful" >&2`,
 	"getent":     `[[ -n "${FAKE_DNS_NONE:-}" ]] && exit 2; echo "${FAKE_DNS_IP:-$FAKE_IP}  STREAM $2"`,
-	"journalctl": `echo "(journal)"`,
-	"sleep":      `exit 0`,
+	"journalctl": `echo "(journal)"; [[ -n "${FAKE_JOURNAL:-}" ]] && echo "$FAKE_JOURNAL"; exit 0`,
+	"cloudflared": `echo "cloudflared $*" >> "$FAKE_LOG"
+args=" $* "
+case "$args" in
+  *" tunnel list "*)
+    if [[ -f "$FAKE_STATE/cf-tunnel" ]]; then echo '[{"id":"abc-123","name":"myco","deleted_at":"0001-01-01T00:00:00Z"}]'; else echo '[]'; fi ;;
+  *" tunnel create "*)
+    prev=""; for a in "$@"; do [[ "$prev" == --credentials-file ]] && echo '{"TunnelID":"abc-123"}' > "$a"; prev="$a"; done
+    : > "$FAKE_STATE/cf-tunnel" ;;
+  *" route dns "*) [[ -n "${FAKE_CF_ROUTE_FAIL:-}" ]] && { echo "zone not found" >&2; exit 1; } ;;
+esac
+exit 0`,
+	"tailscale": `echo "tailscale $*" >> "$FAKE_LOG"
+case "$1 $2" in
+  "status --json") cat <<EOF
+{
+  "BackendState": "${FAKE_TS_STATE:-Running}",
+  "Self": {
+    "HostName": "box",
+    "DNSName": "box.tail1234.ts.net."
+  },
+  "Peer": {
+    "nodekey:1": {
+      "DNSName": "other.tail1234.ts.net."
+    }
+  }
+}
+EOF
+  ;;
+  "funnel --bg")
+    if [[ -n "${FAKE_TS_FUNNEL_FAIL:-}" ]]; then echo "Funnel is not enabled on your tailnet. To enable, visit: https://login.tailscale.com/f/funnel?node=x"; exit 1; fi ;;
+  "funnel status") echo "https://box.tail1234.ts.net (Funnel on)"; echo "|-- / proxy http://127.0.0.1:${FAKE_TS_PORT:-7777}" ;;
+esac
+exit 0`,
+	"sleep": `exit 0`,
 	"ufw": `echo "ufw $*" >> "$FAKE_LOG"
 f="$FAKE_STATE/ufw"
 case "$1" in
@@ -73,7 +106,7 @@ exit 0`,
 
 // Real tools the script may use; nothing else on the machine is reachable.
 var realTools = []string{"bash", "env", "sed", "awk", "grep", "head", "tail", "tr", "od", "sort", "mktemp",
-	"install", "cat", "cp", "rm", "chmod", "ln", "dirname", "basename", "uname", "seq", "mkdir", "wc", "cut", "id", "readlink", "printf"}
+	"install", "cat", "cp", "rm", "chmod", "ln", "mv", "date", "dirname", "basename", "uname", "seq", "mkdir", "wc", "cut", "id", "readlink", "printf"}
 
 type run struct {
 	root, log string
@@ -198,7 +231,7 @@ func TestCaddyAuto(t *testing.T) {
 	}
 	unit := r.file(t, "etc/systemd/system/myco-hub.service")
 	wantIn(t, "unit", unit, "--addr 127.0.0.1:7777", "--public-url https://"+sslip, "EnvironmentFile=/etc/myco/hub.env")
-	wantIn(t, "caddy site", r.file(t, "etc/caddy/myco.d/default.caddy"), sslip+" {", "reverse_proxy 127.0.0.1:7777", "read_timeout 120s")
+	wantIn(t, "caddy site", r.file(t, "etc/caddy/myco.d/default.caddy"), sslip+" {", "reverse_proxy 127.0.0.1:7777", "read_timeout 360s")
 	wantIn(t, "Caddyfile", r.file(t, "etc/caddy/Caddyfile"), "import /etc/caddy/myco.d/*.caddy")
 	wantIn(t, "output", r.out, "==> HTTPS is up: https://"+sslip, "==> hub is healthy", "Hub URL:      https://"+sslip,
 		"curl -fsSL https://hub.test/j/tok | bash", "https://hub.test/c/app")
@@ -357,7 +390,7 @@ func TestNoArgumentsWithoutTerminalListsTheWays(t *testing.T) {
 	if r.code != 2 {
 		t.Fatalf("exit %d, want 2\n%s", r.code, r.out)
 	}
-	wantIn(t, "output", r.out, "--domain auto", "--behind nginx --domain", "--behind panel", "--http --port 7777", "--local")
+	wantIn(t, "output", r.out, "--domain auto", "--behind nginx --domain", "--behind panel", "--tunnel cloudflare --hostname", "--tunnel tailscale", "--http --port 7777", "--local")
 	if r.exists("etc/systemd/system/myco-hub.service") {
 		t.Error("installed without being told how")
 	}
@@ -400,4 +433,179 @@ func TestCheckOnly(t *testing.T) {
 
 	dns := install(t, r.root, env{"FAKE_DNS_IP": "198.51.100.9", "FAKE_CURL_FAIL": "^-fsS --max-time 8 https"}, "--check")
 	wantIn(t, "check", dns.out, "resolves to 198.51.100.9", "Layer: DNS")
+}
+
+func cfCert(t *testing.T, root string) {
+	t.Helper()
+	d := filepath.Join(root, ".state/.cloudflared") // the harness's $HOME
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "cert.pem"), []byte("cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTunnelCloudflareNamed(t *testing.T) {
+	root := t.TempDir()
+	cfCert(t, root)
+	r := install(t, root, nil, "--tunnel", "cloudflare", "--hostname", "hub.example.com")
+	if r.code != 0 {
+		t.Fatalf("exit %d\n%s", r.code, r.out)
+	}
+	unit := r.file(t, "etc/systemd/system/myco-hub.service")
+	wantIn(t, "unit", unit, "--addr 127.0.0.1:7777", "--public-url https://hub.example.com")
+	wantNotIn(t, "unit", unit, "--tunnel")
+	cf := r.file(t, "etc/systemd/system/myco-cloudflared.service")
+	wantIn(t, "cloudflared unit", cf, "tunnel --no-autoupdate --config /etc/myco/cloudflared/config.yml run abc-123", "Restart=always")
+	wantIn(t, "config", r.file(t, "etc/myco/cloudflared/config.yml"), "tunnel: abc-123",
+		"credentials-file: /etc/myco/cloudflared/abc-123.json", "hostname: hub.example.com", "service: http://127.0.0.1:7777", "http_status:404")
+	if !r.exists("etc/myco/cloudflared/abc-123.json") || !r.exists("etc/myco/cloudflared/cert.pem") {
+		t.Error("credentials or certificate not kept in /etc/myco/cloudflared")
+	}
+	wantIn(t, "calls", r.calls(t), "tunnel create --credentials-file", "tunnel route dns --overwrite-dns myco hub.example.com",
+		"systemctl enable --now myco-cloudflared.service")
+	wantIn(t, "output", r.out, "reachable at https://hub.example.com (through the tunnel")
+	if r.exists("etc/caddy/myco.d/default.caddy") || r.exists("etc/nginx") {
+		t.Error("a tunnel wrote web server config")
+	}
+
+	// Re-running reuses the tunnel; --check knows it is a tunnel.
+	r2 := install(t, root, nil, "--tunnel", "cloudflare", "--hostname", "hub.example.com")
+	if r2.code != 0 || strings.Count(r2.calls(t), "tunnel create") != 0 {
+		t.Fatalf("re-run: exit %d, created again: %v\n%s", r2.code, strings.Contains(r2.calls(t), "tunnel create"), r2.out)
+	}
+	c := install(t, root, env{"FAKE_CURL_FAIL": "hub.example.com/v1/health", "FAKE_ACTIVE": "caddy"}, "--check")
+	if c.code != 1 {
+		t.Fatalf("--check exit %d, want 1\n%s", c.code, c.out)
+	}
+	wantIn(t, "check", c.out, "the Cloudflare tunnel is not running. Layer: the tunnel.", "journalctl -u myco-cloudflared.service")
+}
+
+func TestTunnelCloudflareNotLoggedInChangesNothing(t *testing.T) {
+	r := install(t, "", nil, "--tunnel", "cloudflare", "--hostname", "hub.example.com")
+	if r.code != 1 {
+		t.Fatalf("exit %d, want 1\n%s", r.code, r.out)
+	}
+	wantIn(t, "output", r.out, "not logged in", "cloudflared tunnel login")
+	for _, f := range []string{"etc/systemd/system/myco-hub.service", "etc/myco/hub.env", "usr/local/bin/myco", "etc/myco/cloudflared"} {
+		if r.exists(f) {
+			t.Errorf("%s written before the tunnel was ready", f)
+		}
+	}
+	wantNotIn(t, "calls", r.calls(t), "releases", "systemctl")
+}
+
+func TestTunnelCloudflareTemporary(t *testing.T) {
+	r := install(t, "", env{"FAKE_JOURNAL": "level=INFO msg=\"quick tunnel is up\" url=https://brave-cat-1.trycloudflare.com"}, "--tunnel", "cloudflare")
+	if r.code != 0 {
+		t.Fatalf("exit %d\n%s", r.code, r.out)
+	}
+	unit := r.file(t, "etc/systemd/system/myco-hub.service")
+	wantIn(t, "unit", unit, "--addr 127.0.0.1:7777 --db /var/lib/myco/hub.db --tunnel cloudflare")
+	wantNotIn(t, "unit", unit, "--public-url")
+	wantIn(t, "output", r.out, "CHANGES whenever the tunnel restarts", "Hub URL:      https://brave-cat-1.trycloudflare.com",
+		"reachable at https://brave-cat-1.trycloudflare.com")
+	if r.exists("etc/systemd/system/myco-cloudflared.service") {
+		t.Error("a temporary address needs no cloudflared service of its own")
+	}
+}
+
+func TestTunnelTailscale(t *testing.T) {
+	r := install(t, "", nil, "--tunnel", "tailscale")
+	if r.code != 0 {
+		t.Fatalf("exit %d\n%s", r.code, r.out)
+	}
+	wantIn(t, "unit", r.file(t, "etc/systemd/system/myco-hub.service"), "--addr 127.0.0.1:7777", "--public-url https://box.tail1234.ts.net")
+	wantIn(t, "calls", r.calls(t), "tailscale funnel --bg 7777")
+	wantIn(t, "output", r.out, "reachable at https://box.tail1234.ts.net")
+
+	c := install(t, r.root, env{"FAKE_CURL_FAIL": "ts.net/v1/health", "FAKE_TS_PORT": "9999"}, "--check")
+	wantIn(t, "check", c.out, "Tailscale Funnel is not serving this hub (port 7777). Layer: Funnel.")
+
+	// Switching away turns our Funnel off.
+	d := install(t, r.root, env{"FAKE_PORT_7777": "myco"}, "--http")
+	if d.code != 0 {
+		t.Fatalf("exit %d\n%s", d.code, d.out)
+	}
+	wantIn(t, "calls", d.calls(t), "tailscale funnel --bg 7777 off")
+}
+
+func TestTunnelTailscaleWithoutFunnelChangesNothing(t *testing.T) {
+	r := install(t, "", env{"FAKE_TS_FUNNEL_FAIL": "1"}, "--tunnel", "tailscale")
+	if r.code != 1 {
+		t.Fatalf("exit %d, want 1\n%s", r.code, r.out)
+	}
+	wantIn(t, "output", r.out, "Funnel could not be turned on", "https://login.tailscale.com/f/funnel")
+	if r.exists("etc/systemd/system/myco-hub.service") || r.exists("etc/myco/hub.env") {
+		t.Error("installed although Funnel is off")
+	}
+
+	n := install(t, "", env{"FAKE_TS_STATE": "NeedsLogin"}, "--tunnel", "tailscale")
+	if n.code != 1 {
+		t.Fatalf("exit %d, want 1\n%s", n.code, n.out)
+	}
+	wantIn(t, "output", n.out, "Tailscale is not connected (state NeedsLogin)", "sudo tailscale up")
+}
+
+func TestSwitchingCaddyToTunnelAndBack(t *testing.T) {
+	root := t.TempDir()
+	cfCert(t, root)
+	a := install(t, root, nil, "--domain", "auto")
+	if a.code != 0 {
+		t.Fatalf("exit %d\n%s", a.code, a.out)
+	}
+	c := install(t, root, nil, "--tunnel", "cloudflare", "--hostname", "hub.example.com")
+	if c.code != 0 {
+		t.Fatalf("exit %d\n%s", c.code, c.out)
+	}
+	if c.exists("etc/caddy/myco.d/default.caddy") {
+		t.Error("our Caddy site is still there after switching to a tunnel")
+	}
+	b := install(t, root, nil, "--domain", "auto")
+	if b.code != 0 {
+		t.Fatalf("exit %d\n%s", b.code, b.out)
+	}
+	if b.exists("etc/systemd/system/myco-cloudflared.service") {
+		t.Error("our cloudflared service is still there after switching back")
+	}
+	wantIn(t, "calls", b.calls(t), "systemctl disable --now myco-cloudflared.service")
+	wantIn(t, "output", b.out, "cloudflared tunnel delete myco")
+}
+
+func TestLegacyCaddyBlockStillMoves(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "etc/caddy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "etc/myco"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(root, "etc/myco/hub.env"), []byte("MYCO_ADMIN_TOKEN=x\nMYCO_HUB=http://127.0.0.1:7777\n"), 0o600)
+	legacy := "old.example.com {\n\treverse_proxy 127.0.0.1:7777 {\n\t\ttransport http {\n\t\t\tread_timeout 120s\n\t\t}\n\t}\n}\n"
+	other := "blog.example.com {\n\troot * /srv/blog\n\tfile_server\n}\n"
+	_ = os.WriteFile(filepath.Join(root, "etc/caddy/Caddyfile"), []byte(other+"\n"+legacy), 0o644)
+	r := install(t, root, nil, "--domain", "auto")
+	if r.code != 0 {
+		t.Fatalf("exit %d\n%s", r.code, r.out)
+	}
+	cf := r.file(t, "etc/caddy/Caddyfile")
+	wantNotIn(t, "Caddyfile", cf, "old.example.com", "read_timeout 120s")
+	wantIn(t, "Caddyfile", cf, "blog.example.com", "import /etc/caddy/myco.d/*.caddy")
+	wantIn(t, "site", r.file(t, "etc/caddy/myco.d/default.caddy"), "read_timeout 360s")
+}
+
+func TestQuestionsChooseTunnel(t *testing.T) {
+	root := t.TempDir()
+	answers := filepath.Join(root, "answers")
+	// 3: no open ports, then which tunnel, then yes.
+	if err := os.WriteFile(answers, []byte("3\ntailscale\nY\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := install(t, root, env{"MYCO_INSTALL_TTY": answers})
+	if r.code != 0 {
+		t.Fatalf("exit %d\n%s", r.code, r.out)
+	}
+	wantIn(t, "output", r.out, "不开任何端口", "sudo bash install-hub.sh --tunnel tailscale")
+	wantIn(t, "unit", r.file(t, "etc/systemd/system/myco-hub.service"), "--public-url https://box.tail1234.ts.net")
 }
