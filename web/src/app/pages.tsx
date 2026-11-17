@@ -255,7 +255,15 @@ export function PageHost() {
     if (k === active) setActive(rest[Math.min(at, rest.length - 1)].key);
   };
   const meta = useCallback((k: string, m: PageMeta) => {
-    setTabs((list) => list.map((x) => (x.key === k && JSON.stringify(x.meta) !== JSON.stringify(m) ? { ...x, meta: m } : x)));
+    // (the same list when nothing changed: a new one renders the tabs again,
+    // and they tell their meta again, round and round at full CPU)
+    setTabs((list) => {
+      const i = list.findIndex((x) => x.key === k);
+      if (i < 0 || JSON.stringify(list[i].meta) === JSON.stringify(m)) return list;
+      const next = list.slice();
+      next[i] = { ...list[i], meta: m };
+      return next;
+    });
   }, []);
   if (!tabs.length) return null;
   const cur = tabs.find((x) => x.key === active) || tabs[0];
