@@ -288,6 +288,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
+  // (a reply done growing in shows its attachments: one more render)
+  const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [sendError, setSendError] = useState<unknown>(null);
   // What was typed and not sent stays with the conversation (drafts.ts).
@@ -1636,6 +1638,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // showName: the first of a run of messages from one sender (watching two
   // nodes, names are shown once per run, as a chat groups them).
+  // The newest message shown: one above it still growing in finishes at
+  // once (it would read out of order).
+  const newestId = visible[visible.length - 1]?.id;
   const renderMessage = (m: Message, showName = true) => {
       if (m.type === "progress") {
         const line = (
@@ -1712,12 +1717,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} onDone={() => revealed.add(m.id)} />
+              : growsIn(m) ? <Reveal body={m.body} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
               : <MessageContent body={m.body} />}
-            {m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
-            {!m.unreadable && <PageCards body={m.body} />}
+            {/* (after its text has grown in: pictures first, then the
+                words filling in above them, reads oddly) */}
+            {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
+            {!growsIn(m) && !m.unreadable && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">

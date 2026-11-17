@@ -71,9 +71,12 @@ const reducedMotion = () => {
 
 /** `streaming` accepts an unfinished body: each appended suffix grows in
  * before the next poll, while completed replies keep the block reveal. */
-export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow }: {
+export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow, finish }: {
   body: string; onDone?: () => void; streaming?: boolean; intervalMs?: number;
   plain?: boolean; cursor?: boolean; onGrow?: () => void;
+  /** Something newer is below it: all of it at once, no more growing (a
+   *  message still growing above a newer one reads out of order). */
+  finish?: boolean;
 }) {
   const lines = body.split("\n");
   const ends = blockEnds(body).map((n) => lines.slice(0, n).join("\n").length);
@@ -104,7 +107,14 @@ export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, pla
   }, [shown, done, streaming, body]);
 
   useEffect(() => {
-    if (!streaming) return;
+    if (!finish) return;
+    cancelAnimationFrame(frame.current);
+    visible.current = body.length;
+    setShown(body.length);
+  }, [finish, body.length]);
+
+  useEffect(() => {
+    if (!streaming || finish) return;
     const from = Math.min(visible.current, body.length);
     const start = performance.now();
     const draw = (n: number) => { visible.current = n; setShown(n); };
@@ -117,14 +127,14 @@ export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, pla
       if (fraction < 1) frame.current = requestAnimationFrame(tick);
     };
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const finish = () => {
+    const still = () => {
       if (motion.matches) { cancelAnimationFrame(frame.current); draw(body.length); }
     };
     if (motion.matches) draw(body.length);
     else frame.current = requestAnimationFrame(tick);
-    motion.addEventListener("change", finish);
-    return () => { cancelAnimationFrame(frame.current); motion.removeEventListener("change", finish); };
-  }, [body, streaming, intervalMs]);
+    motion.addEventListener("change", still);
+    return () => { cancelAnimationFrame(frame.current); motion.removeEventListener("change", still); };
+  }, [body, streaming, intervalMs, finish]);
 
   // Any sign of reading on your own: all of the received body now.
   useEffect(() => {

@@ -756,7 +756,8 @@ function consoleReply() {
     };
   }
   return {
-    body: "跑完了，截图和日志在附件里。最后一行是 BUILD SUCCESSFUL。",
+    // (long enough to grow in: its pictures come after its words)
+    body: "跑完了，截图和日志在附件里。最后一行是 BUILD SUCCESSFUL。\n\n首页在三种宽度下都看过了，导航栏在窄屏下会收起成一个菜单按钮，下载按钮的位置没有变。发布说明按新功能、修复、文档三类整理好了，你看一下措辞合不合适。",
     attachments: [
       { file_id: `f_demo_shot_${replySeq}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" },
       { file_id: `f_demo_${replySeq}`, name: "build.log", size: 20480, sha256: "demo", content_type: "text/plain" },
@@ -1686,6 +1687,29 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/index.html`, version, latest: p.version, name: p.name, entry: "index.html" });
     }
     return fail(res, 404, "not_found", "no such route");
+  }
+  // (the smoke test: two answers land a moment apart in your chat with an
+  // agent, the second with pictures; both long enough to grow in)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "replies" && method === "POST") {
+    const body = (await readBody(req)) || {};
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    const agent = body.agent || "review-cloud";
+    const threads = Object.entries(hub.threads).filter(([, ms]) => ms.some((m) => m.from === CONSOLE && m.to === agent));
+    let [threadId, msgs] = threads.sort((a, b) => b[1].at(-1).created_at.localeCompare(a[1].at(-1).created_at))[0] || [];
+    if (!msgs) {
+      // (no chat yet: one, with a task already answered)
+      threadId = `th_mock_order_${(state.counter += 1)}`;
+      msgs = hub.threads[threadId] = [makeMessage({ thread_id: threadId, from: CONSOLE, to: agent, type: "task", status: "done", body: "把首页改好，截图给我。", created_at: iso(60), updated_at: iso(30) })];
+    }
+    if (body.prepare) return send(res, 200, { ok: true, thread: threadId });
+    const long = (n) => `第 ${n} 段回答：改动已经合进去了，构建和测试都通过。\n\n首页在三种宽度下都看过了，导航栏在窄屏下收起成菜单按钮，下载按钮的位置没变。\n\n发布说明按新功能、修复、文档三类整理好了，措辞你再看一眼。`;
+    const tag = String(body.tag || "");
+    msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(1)}${tag}`, created_at: iso(0), updated_at: iso(0) }));
+    setTimeout(() => {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(2)}${tag}`, created_at: iso(0), updated_at: iso(0),
+        attachments: [{ file_id: `f_demo_shot_order_${(state.counter += 1)}`, name: "首页截图.png", size: DEMO_PNG.length, sha256: "demo", content_type: "image/png" }] }));
+    }, Number(body.gap) || 600);
+    return send(res, 200, { ok: true, thread: threadId });
   }
   // (the smoke test writes a page's state, as its agent would)
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "state" && method === "POST") {

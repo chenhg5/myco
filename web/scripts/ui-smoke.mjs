@@ -1244,6 +1244,47 @@ async function runMatrix(browser, size, scheme) {
 
     // A picture an agent sends shows as a thumbnail and opens full size; a
     // file that is not one saves to Downloads.
+    // Replies that grow in while you watch: their pictures wait for their
+    // words, and one still growing finishes at once when a newer message
+    // comes below it (several answers arriving together read in order).
+    await step("单聊 · 回复长出来的顺序", async () => {
+      const replies = (extra) => fetch(`http://${HOST}:${mockPort()}/app/mock/replies`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "review-cloud", ...extra }) });
+      await replies({ prepare: true });
+      await page.reload();
+      await page.locator(".app-shell").waitFor({ timeout: 20_000 });
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      await page.waitForTimeout(2500);
+      await page.evaluate(() => {
+        const w = window;
+        w.__revealBad = [];
+        w.__revealSeen = 0;
+        const check = () => {
+          for (const chat of document.querySelectorAll(".conv-detail")) {
+            const msgs = [...chat.querySelectorAll(".conv-msg")];
+            msgs.forEach((m, i) => {
+              if (!m.querySelector(".reveal.is-growing")) return;
+              w.__revealSeen++;
+              if (m.querySelector(".conv-attach")) w.__revealBad.push("图片先于文字出来");
+              if (i < msgs.length - 1) w.__revealBad.push("新消息出来了，旧消息还在长");
+            });
+          }
+        };
+        // (a moment after each change: a newer message and the older one
+        // finishing land in the same breath)
+        let last = "";
+        w.__revealTimer = window.setInterval(() => {
+          const now = [...document.querySelectorAll(".conv-detail .conv-msg")].map((m) => (m.querySelector(".reveal.is-growing") ? "g" : "-")).join("");
+          if (now !== last) { last = now; window.setTimeout(check, 120); }
+        }, 40);
+      });
+      await replies({ gap: 700, tag: `（${size.width} ${scheme}）` });
+      await page.waitForTimeout(6_000);
+      const r = await page.evaluate(() => { window.clearInterval(window.__revealTimer); return { bad: [...new Set(window.__revealBad)], seen: window.__revealSeen }; });
+      if (r.bad.length) throw new Error(`回复长出来的顺序不对：${r.bad.join("；")}`);
+      if (!r.seen) throw new Error("两段长回答应该长出来（不是一下子出现）");
+    });
+
     await step("单聊 · 图片附件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
