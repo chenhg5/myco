@@ -83,6 +83,7 @@ machines that already joined. With --exec, machines that join become exec nodes 
 			cmd := "curl -fsSL " + res.JoinURL + " | bash"
 			out := map[string]any{"link": res.Enrollment, "join_url": res.JoinURL, "command": cmd,
 				"agent_prompt": "接入 myco：" + res.JoinURL}
+			warnLoopbackLink(e, out, res.JoinURL)
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "join link %s: %s, %s\n\n", res.Enrollment.ID, linkValidity(res.Enrollment), linkUses(res.Enrollment))
 				fmt.Fprintf(w, "On each machine to add (macOS / Linux / WSL / VPS), run:\n  %s\n\n", cmd)

@@ -37,23 +37,49 @@ type JoinedAs struct {
 }
 
 const (
-	sessionsMax    = 40
+	sessionsMax    = 60
 	sessionsMaxAge = 30 * 24 * time.Hour
-	titleMax       = 80
-	scanLines      = 400
+	// filesMax bounds how many transcripts are read (newest first): copies
+	// of one conversation count once, so a list can need more than it shows.
+	filesMax  = 400
+	titleMax  = 80
+	scanLines = 400
 )
 
 var claudeSessionFile = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$`)
 
+// claudeDirs are where Claude Code keeps its sessions on this computer: the
+// configured directory and both default places (~/.claude, and
+// ~/.config/claude used by newer versions), each once.
+func (l *Local) claudeDirs() []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, d := range []string{os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(l.Home, ".claude"), filepath.Join(l.Home, ".config", "claude")} {
+		if d == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			d = abs
+		}
+		if !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
+}
+
 // LocalSessions lists the most recent Claude Code and Codex sessions on
 // this computer (newest first), from their transcripts:
-// ~/.claude/projects/<dir>/<session>.jsonl and
+// <claude dir>/projects/<dir>/<session>.jsonl and
 // ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
+//
+// One conversation can have several transcripts: a copy made to join myco
+// (复制一份加入), a fork, a resume that started a new file, or the same
+// session under two project folders. They share the first request (its
+// text, folder and time) and are shown once: the newest, marked joined if
+// any of them joined.
 func (l *Local) LocalSessions(now time.Time) []LocalSession {
-	claudeDir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if claudeDir == "" {
-		claudeDir = filepath.Join(l.Home, ".claude")
-	}
 	codexDir := os.Getenv("CODEX_HOME")
 	if codexDir == "" {
 		codexDir = filepath.Join(l.Home, ".codex")
@@ -74,32 +100,60 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 			}
 		}
 	}
-	add(filepath.Join(claudeDir, "projects", "*", "*.jsonl"), "claude", claudeSessionFile.MatchString)
+	for _, d := range l.claudeDirs() {
+		add(filepath.Join(d, "projects", "*", "*.jsonl"), "claude", claudeSessionFile.MatchString)
+	}
 	add(filepath.Join(codexDir, "sessions", "*", "*", "*", "rollout-*.jsonl"), "codex", func(string) bool { return true })
 	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
+	if len(files) > filesMax {
+		files = files[:filesMax]
+	}
 
 	joined := l.joinedSessions()
 	var out []LocalSession
-	seen := map[string]bool{}
+	byID := map[string]int{}   // cli:session → index in out
+	byConv := map[string]int{} // a conversation's first request → index in out
 	for _, f := range files {
-		if len(out) >= sessionsMax {
-			break
-		}
 		var s LocalSession
+		var first string
 		var ok bool
 		if f.cli == "claude" {
-			s, ok = readClaudeSession(f.path)
+			s, first, ok = readClaudeSession(f.path)
 		} else {
-			s, ok = readCodexSession(f.path)
+			s, first, ok = readCodexSession(f.path)
 		}
-		key := f.cli + ":" + s.SessionID
-		if !ok || seen[key] {
+		if !ok {
 			continue
 		}
-		seen[key] = true
+		id := f.cli + ":" + s.SessionID
+		j, isJoined := joined[id]
+		conv := ""
+		if first != "" {
+			conv = f.cli + "\x00" + s.Workdir + "\x00" + first
+		}
+		i, dup := byID[id]
+		if !dup && conv != "" {
+			i, dup = byConv[conv]
+		}
+		if dup {
+			// An older copy of a conversation already listed (files come
+			// newest first): it only adds that the conversation joined.
+			byID[id] = i
+			if isJoined && out[i].Joined == nil {
+				out[i].Joined = &j
+			}
+			continue
+		}
+		if len(out) >= sessionsMax {
+			continue
+		}
 		s.LastActive = f.mod
-		if j, ok := joined[key]; ok {
+		if isJoined {
 			s.Joined = &j
+		}
+		byID[id] = len(out)
+		if conv != "" {
+			byConv[conv] = len(out)
 		}
 		out = append(out, s)
 	}
@@ -125,13 +179,17 @@ func (l *Local) joinedSessions() map[string]JoinedAs {
 	return out
 }
 
-func readClaudeSession(path string) (LocalSession, bool) {
-	s := LocalSession{CLI: "claude", SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl")}
+// readClaudeSession reads a Claude Code transcript's folder and first
+// request; first identifies the conversation across its copies (the time
+// and text of the first request, which a copy keeps).
+func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
+	s = LocalSession{CLI: "claude", SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl")}
 	eachLine(path, func(line []byte) bool {
 		var e struct {
 			Type        string `json:"type"`
 			Cwd         string `json:"cwd"`
 			IsSidechain bool   `json:"isSidechain"`
+			Timestamp   string `json:"timestamp"`
 			Message     struct {
 				Content json.RawMessage `json:"content"`
 			} `json:"message"`
@@ -142,20 +200,25 @@ func readClaudeSession(path string) (LocalSession, bool) {
 		if s.Workdir == "" && e.Cwd != "" {
 			s.Workdir = e.Cwd
 		}
-		if s.Title == "" && e.Type == "user" && !e.IsSidechain {
-			s.Title = shorten(contentText(e.Message.Content))
+		if first == "" && e.Type == "user" && !e.IsSidechain {
+			text := contentText(e.Message.Content)
+			if t := shorten(text); t != "" {
+				s.Title = t
+				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(text), " ")
+			}
 		}
-		return s.Workdir == "" || s.Title == ""
+		return s.Workdir == "" || first == ""
 	})
-	return s, s.Workdir != ""
+	return s, first, s.Workdir != ""
 }
 
-func readCodexSession(path string) (LocalSession, bool) {
-	s := LocalSession{CLI: "codex"}
+func readCodexSession(path string) (s LocalSession, first string, ok bool) {
+	s = LocalSession{CLI: "codex"}
 	eachLine(path, func(line []byte) bool {
 		var e struct {
-			Type    string `json:"type"`
-			Payload struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			Payload   struct {
 				ID      string `json:"id"`
 				Cwd     string `json:"cwd"`
 				Type    string `json:"type"`
@@ -168,12 +231,15 @@ func readCodexSession(path string) (LocalSession, bool) {
 		switch {
 		case e.Type == "session_meta":
 			s.SessionID, s.Workdir = e.Payload.ID, e.Payload.Cwd
-		case e.Type == "event_msg" && e.Payload.Type == "user_message" && s.Title == "":
-			s.Title = shorten(e.Payload.Message)
+		case e.Type == "event_msg" && e.Payload.Type == "user_message" && first == "":
+			if t := shorten(e.Payload.Message); t != "" {
+				s.Title = t
+				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(e.Payload.Message), " ")
+			}
 		}
-		return s.SessionID == "" || s.Title == ""
+		return s.SessionID == "" || first == ""
 	})
-	return s, s.SessionID != "" && s.Workdir != ""
+	return s, first, s.SessionID != "" && s.Workdir != ""
 }
 
 // eachLine calls fn for the first scanLines lines while it returns true.

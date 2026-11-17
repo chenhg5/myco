@@ -198,3 +198,27 @@ func sortedKeys(m map[string]string) []string {
 }
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+// ErrNoUserManager: the platform has a service manager, but this user's
+// instance does not answer (systemd --user in a container, or in a shell
+// entered through su/sudo without a login session).
+var ErrNoUserManager = errors.New("the user's service manager is not reachable")
+
+// Reachable checks, before anything is installed, that the manager can be
+// used by this user: `systemctl --user` needs the user's systemd instance
+// and its D-Bus ("Failed to connect to bus" otherwise). Other managers
+// have no such check.
+func Reachable(m Manager) error {
+	s, ok := m.(*Systemd)
+	if !ok {
+		return nil
+	}
+	if out, err := s.R.Run("systemctl", "--user", "show-environment"); err != nil {
+		detail := strings.TrimSpace(out)
+		if detail == "" {
+			detail = err.Error()
+		}
+		return fmt.Errorf("%w: systemctl --user: %s", ErrNoUserManager, detail)
+	}
+	return nil
+}

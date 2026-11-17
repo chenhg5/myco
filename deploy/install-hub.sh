@@ -1271,3 +1271,7 @@ else
   echo "To add computers and AI sessions, create a join link:"
 fi
 echo "  sudo /usr/local/bin/myco link create ${HUB_NAME_ARGS[*]}"
+echo
+echo "Next, your own agent (Claude Code, Codex…) can add computers and agents for you. Tell it:"
+echo "接下来可以让你的 agent 帮你加电脑和 agent，把这句话发给它："
+echo "  帮我把电脑和 agent 加进这个 myco 工作区：读 https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md ，照着做，要我决定的先问我。"

@@ -226,7 +226,14 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			m, err := service.DetectID(home, service.ExecRunner{}, id)
 			if err != nil {
-				return errorf("unsupported", ExitError, "run it under your own process manager: myco hub up --no-service", "%v", err)
+				return errorf("unsupported", ExitError, "run it under your own process manager: "+hubUpAgain(e), "%v", err)
+			}
+			if err := service.Reachable(m); err != nil {
+				// A container, or a shell reached through su/sudo: no
+				// systemd --user to install into. Say what to run instead.
+				return errorf("no_user_service", ExitError,
+					"run "+hubUpAgain(e)+": it prints the hub command; keep that running yourself (nohup … &, tmux, or your process manager). In a normal login session (not su, not a container) systemd --user works; on a server, deploy/install-hub.sh installs a system service",
+					"cannot install the hub as a service for this user: %v", err)
 			}
 			spec := service.Spec{Binary: bin, Args: args, LogPath: filepath.Join(dir, "hub.log")}
 			spec.Env, _ = serviceEnv(e.in.Getenv) // the hub reaches GitHub for update checks
@@ -245,6 +252,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			}
 			reachable := kind == "none" || waitHealth(e.in.Ctx, public, 90*time.Second) == nil
 			out["public_url"], out["reachable"], out["service"] = public, reachable, plan.Manager
+			out["agent_setup"] = agentSetupSentence
 			_ = writeHubPublic(dir, public)
 			if lan {
 				if ip := osutil.LANAddr(); ip != "" {
@@ -256,6 +264,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 			if created {
 				if link, err := createLink(e.in.Ctx, local, dir); err == nil {
 					out["join_url"] = link
+					warnLoopbackLink(e, out, link)
 				} else {
 					out["join_link_error"] = err.Error()
 				}
@@ -275,6 +284,7 @@ URL (add its host to the environment's allowed network hosts if it uses an allow
 					fmt.Fprintf(w, "\nAdd a computer or server (macOS / Linux / WSL), run this on it:\n  curl -fsSL %s | bash\n", l)
 					fmt.Fprintf(w, "\nConnect an AI session (Claude Code, Codex, claude.ai), tell it:\n  接入 myco：%s\n", l)
 				}
+				fmt.Fprintf(w, "\nNext, your own agent (Claude Code, Codex…) can add computers and agents for you. Tell it:\n  %s\n", agentSetupSentence)
 				if name == "" {
 					fmt.Fprintln(w, "\nNew join link any time: myco link create")
 				} else {
@@ -496,3 +506,27 @@ func createLink(ctx context.Context, local, dir string) (string, error) {
 	}
 	return res.JoinURL, nil
 }
+
+// hubUpAgain is this `myco hub up` with --no-service: the same hub, run by
+// whoever runs the command it prints.
+func hubUpAgain(e *env) string {
+	parts := []string{"myco hub up"}
+	for _, f := range []string{"name", "tunnel", "hostname", "tunnel-name", "port"} {
+		if e.in.IsSet(f) {
+			parts = append(parts, "--"+f+" "+e.in.String(f))
+		}
+	}
+	for _, f := range []string{"local-only", "no-update-check"} {
+		if e.in.Bool(f) {
+			parts = append(parts, "--"+f)
+		}
+	}
+	return strings.Join(append(parts, "--no-service"), " ")
+}
+
+// agentSetupGuide is the setup guide an agent follows for its person
+// (docs/agent-setup.md); the App's welcome screen hands out the same.
+const agentSetupGuide = "https://raw.githubusercontent.com/chenhg5/myco/main/docs/agent-setup.md"
+
+// agentSetupSentence is what to tell one's agent once a hub is up.
+const agentSetupSentence = "帮我把电脑和 agent 加进这个 myco 工作区：读 " + agentSetupGuide + " ，照着做，要我决定的先问我。"

@@ -148,3 +148,53 @@ func TestLocalJoin(t *testing.T) {
 		}
 	}
 }
+
+// One conversation, several transcripts: a copy made to join (a fork keeps
+// the first request's time and text), the same session under two project
+// folders, and sessions kept in ~/.config/claude. Each shows once, the
+// newest, joined when any copy joined.
+func TestLocalSessionsCopiesShowOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	first := func(text string) map[string]any {
+		return map[string]any{"type": "user", "cwd": work, "timestamp": "2026-11-10T08:00:00.000Z", "message": map[string]any{"content": text}}
+	}
+	orig := "aaaaaaaa-0000-0000-0000-000000000001"
+	fork := "aaaaaaaa-0000-0000-0000-000000000002"
+	other := "bbbbbbbb-0000-0000-0000-000000000003"
+	xdg := "cccccccc-0000-0000-0000-000000000004"
+	at := func(path string, ago time.Duration) {
+		os.Chtimes(path, time.Now().Add(-ago), time.Now().Add(-ago))
+	}
+	p := filepath.Join(home, ".claude", "projects", "-work", orig+".jsonl")
+	writeLines(t, p, first("整理发布流程"))
+	at(p, 3*time.Hour)
+	p = filepath.Join(home, ".claude", "projects", "-work-sub", orig+".jsonl") // the same session, another folder
+	writeLines(t, p, first("整理发布流程"))
+	at(p, 2*time.Hour)
+	p = filepath.Join(home, ".claude", "projects", "-work", fork+".jsonl") // the copy that joined
+	writeLines(t, p, first("整理发布流程"), map[string]any{"type": "assistant", "cwd": work})
+	at(p, time.Hour)
+	p = filepath.Join(home, ".claude", "projects", "-work", other+".jsonl") // same text, another time: another conversation
+	writeLines(t, p, map[string]any{"type": "user", "cwd": work, "timestamp": "2026-11-12T08:00:00.000Z", "message": map[string]any{"content": "整理发布流程"}})
+	at(p, 4*time.Hour)
+	p = filepath.Join(home, ".config", "claude", "projects", "-work", xdg+".jsonl")
+	writeLines(t, p, first("在新位置的会话"))
+	at(p, 5*time.Hour)
+	os.MkdirAll(filepath.Join(home, ".myco", "agents"), 0o700)
+	os.WriteFile(filepath.Join(home, ".myco", "agents", "mac-claude-0002.yaml"), []byte("hub: https://hub.example.com\nagent: mac-claude-0002\ntoken: t\nharness: claude\nsession_id: "+fork+"\n"), 0o600)
+
+	got := (&console.Local{Home: home}).LocalSessions(time.Now())
+	var ids []string
+	for _, s := range got {
+		ids = append(ids, s.SessionID)
+	}
+	if !slices.Equal(ids, []string{fork, other, xdg}) {
+		t.Fatalf("sessions: %v", ids)
+	}
+	if got[0].Joined == nil || got[0].Joined.Agent != "mac-claude-0002" || got[1].Joined != nil {
+		t.Fatalf("joined: %+v %+v", got[0].Joined, got[1].Joined)
+	}
+}
