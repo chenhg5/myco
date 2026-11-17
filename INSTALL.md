@@ -98,7 +98,7 @@ sudo bash install-hub.sh                 # 会问你用哪种方式
 |---|---|---|
 | A 自动 HTTPS | 443 端口空着（或者已经是 Caddy） | `sudo bash install-hub.sh --domain auto` |
 | B 放到已有的网站服务器后面 | 443 已经被 nginx、宝塔、1Panel、Caddy 等占着 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` |
-| C 隧道 | 一个端口都不想开 | 脚本稍后支持；现在可以在服务器上用 `myco hub up --tunnel cloudflare` 或 `--tunnel tailscale`（见 [1.1 节](#11-没有-vps在自己的电脑上开-hub)） |
+| C 隧道 | 一个端口都不想开，或者 80/443 用不了 | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com` 或 `--tunnel tailscale` |
 | D 直接 HTTP | 内网、测试 | `sudo bash install-hub.sh --http --port 7777` |
 
 只给这台服务器自己用：`--local`。所有方式都可以加 `--port`（Hub 在本机的端口，默认 7777）和 `--name`（见下面的命名 Hub）。
@@ -118,6 +118,14 @@ sudo bash install-hub.sh                 # 会问你用哪种方式
 - `--behind panel`（宝塔、aaPanel、1Panel）、`--behind caddy`、`--behind other`：脚本不改任何东西，打印要填的反向代理设置：目标 `http://127.0.0.1:7777`、超时 360 秒、关闭缓存、上传上限 64 MB、保留原来的 Host；附带可以直接粘贴的 nginx（Caddy、Apache）配置片段。在面板里给这个站点开启 HTTPS（一键申请 Let's Encrypt 证书）。在终端里运行时，填好后按回车就会自检；也可以之后运行 `sudo bash install-hub.sh --check`。
 - 命名 Hub 的站点文件是 `myco-named-<名字>.conf`。
 
+**C 隧道**：Hub 只听本机端口，不开任何端口、不装 Caddy 或 nginx，由隧道把它发布到公网 HTTPS 地址。
+- `--tunnel cloudflare --hostname hub.example.com`：地址固定。要先有免费的 Cloudflare 账号，域名托管在 Cloudflare 上；在服务器上装好 `cloudflared`，运行一次 `cloudflared tunnel login`（选这个域名所在的 zone）。脚本会建一个叫 `myco` 的隧道（命名 Hub 是 `myco-<名字>`，可以用 `--tunnel-name` 改），在 zone 里加一条指向它的 DNS 记录，再装一个 `myco-cloudflared` 服务运行它。隧道凭据放在 `/etc/myco/cloudflared/`（权限 600）。
+- `--tunnel cloudflare` 不带 `--hostname`：不需要账号，得到一个临时的 `https://<随机>.trycloudflare.com` 地址。**每次隧道重启（包括服务器重启）地址都会变**，之前的链接和已加入的电脑都会失效，只适合试一试。
+- `--tunnel tailscale`：地址固定，是 `https://<机器名>.<tailnet>.ts.net`。要先有免费的 Tailscale 账号，在服务器上装好 Tailscale 并 `sudo tailscale up`，并在 Tailscale 后台给这台设备开启 Funnel（第一次运行时脚本会给出开启的链接）。
+- 缺什么（没装、没登录、Funnel 没开），脚本在装任何东西之前就停下，告诉你要运行什么。
+- 国内访问 Cloudflare 和 Tailscale 可能慢或不稳定，这时优先用 A 或 B。
+- 换成别的方式时，脚本会停掉自己的 `myco-cloudflared` 服务（Cloudflare 账号里的隧道保留，用 `cloudflared tunnel delete myco` 删除），或关掉自己的 Funnel。
+
 **D 直接 HTTP**：Hub 监听 `0.0.0.0:<端口>`，地址是 `http://<公网 IP>:<端口>`（给了 `--domain` 就用域名）。
 - **令牌和消息是明文传输的**，只在信得过的网络里用，或者用来测试。
 - 本机的 ufw 或 firewalld 开着时，脚本会放行这个端口；云服务商的安全组要自己放行。
@@ -129,10 +137,13 @@ sudo bash install-hub.sh                 # 会问你用哪种方式
 4. 本机防火墙；
 5. 云服务商的安全组。
 
+用隧道（C）时查的是：Hub 服务、隧道有没有在跑、隧道域名的 DNS、Tailscale Funnel。
+
 以后随时可以运行 `sudo bash install-hub.sh --check`（命名 Hub 加 `--name`）再查一次。自检是在服务器自己身上做的，最后还要在另一台电脑上打开 `<Hub URL>/v1/health` 确认一下。
 
 其他：
-- 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。重跑脚本会保留令牌和数据；换一种方式时，只会删掉 myco 自己之前写的 Caddy 或 nginx 站点文件。
+- 管理员令牌保存在 `/etc/myco/hub.env`，权限是 600。重跑脚本会保留令牌和数据；换一种方式时，只会删掉 myco 自己之前写的 Caddy 或 nginx 站点文件、隧道服务。
+- Caddy 和 nginx 给 Hub 的代理超时是 360 秒（在别的电脑上新开一个会话时，Hub 最多要等 5 分钟）。以前装的 Caddy 站点是 120 秒：在服务器上 `sudo myco upgrade` 会把脚本自己写的站点文件改成 360 秒并重载 Caddy（你改过的文件不动），重跑安装命令也一样。
 - **一个 Hub 里开多个工作区**（v0.19.9 起，推荐）：`sudo myco workspace create --name team-b`。新工作区和原来的完全隔离（自己的成员、agent、项目、消息、文件，数据在 `/var/lib/myco/workspaces/team-b/`），但用同一个地址、端口、证书和服务，地址是 `https://<你的域名>/w/team-b`。命令会打印新工作区主人的一次性 App 链接，在 App 里「连接已有的 Hub」粘进去，它就作为一个新工作区出现在切换器里；电脑和 agent 用在那个工作区里生成的入网链接加入，和加入任何 Hub 一样。原来的 Hub 就是「默认工作区」，地址、数据、链接都不变。App 里也能建：当前工作区在这台服务器上、你是它的主人时，工作区切换器里有「在 <服务器> 上新建工作区」，建好自动切过去；在新工作区里点侧栏「电脑」的 +（或电脑页的「加一台电脑」），选「另一台电脑…」，会列出已经连着这台服务器的电脑，点「加进来」就行（那台电脑的 myco 要 v0.19.9 以上），不用在电脑上跑命令；连上后点「选一个文件夹」，选好它就出现在侧栏的「电脑」里。`myco workspace list` 列出，`myco workspace remove --name team-b` 移除（数据不删，挪到 `workspaces/.removed/`）。只有服务器的主人（hub.env 里的管理令牌，或默认工作区的主人）能建和删。
 - 一台 VPS 也可以装多个独立 Hub：`sudo bash install-hub.sh --name work --domain auto`。名字限 1–32 个小写字母、数字或 `-`；命名 Hub 使用 `/etc/myco/hubs/work/hub.env`、`/var/lib/myco-work/hub.db`、`myco-hub-work.service`，没给 `--port` 时从 7778 起选择空闲端口。`--domain auto` 得到 `work.<IP 用连字符分隔>.sslip.io`；重跑相同名字会更新配置并保留令牌和数据。Caddy 的每个 Hub 站点放在 `/etc/caddy/myco.d/`，主 Caddyfile 只加入一次 import，已有其他站点会保留。
 - 管理命名 Hub 时带环境变量：`sudo MYCO_HUB_NAME=work /usr/local/bin/myco link create`。不带时仍使用默认 Hub。升级用 `sudo myco upgrade`，会重启运行中的 Hub 服务。

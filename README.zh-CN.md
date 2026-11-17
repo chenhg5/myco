@@ -176,6 +176,7 @@ curl -fsSL https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-cl
 |---|---|
 | 在你的 VPS 上 | `sudo bash install-hub.sh --domain auto`（通过 sslip.io 拿到真实 HTTPS 证书，不需要域名） |
 | 在你的 VPS 上，443 已经被 nginx、宝塔或 1Panel 占着 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com`（`--behind panel` 会打印要在面板里填的设置） |
+| 在你的 VPS 上，一个端口都不开（Cloudflare Tunnel 或 Tailscale Funnel） | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com`（或 `--tunnel tailscale`） |
 | 在你的电脑上，走 Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` |
 | 在你的电脑上，走 Tailscale Funnel | `myco hub up --tunnel tailscale` |
 

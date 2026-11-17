@@ -178,6 +178,7 @@ Set up a myco hub for me and connect this session to it.
 |---|---|
 | On your VPS | `sudo bash install-hub.sh --domain auto` (real HTTPS via sslip.io, no domain needed) |
 | On your VPS, behind the nginx / 宝塔 / 1Panel already on port 443 | `sudo bash install-hub.sh --behind nginx --domain hub.example.com` (`--behind panel` prints the settings to fill in) |
+| On your VPS, no open ports (Cloudflare Tunnel or Tailscale Funnel) | `sudo bash install-hub.sh --tunnel cloudflare --hostname hub.example.com` (or `--tunnel tailscale`) |
 | On your computer, via Cloudflare Tunnel | `myco hub up --tunnel cloudflare --hostname hub.example.com` |
 | On your computer, via Tailscale Funnel | `myco hub up --tunnel tailscale` |
 
