@@ -277,6 +277,13 @@ CREATE TABLE IF NOT EXISTS page_versions (
   at      INTEGER NOT NULL,
   PRIMARY KEY (page, n)
 );
+CREATE TABLE IF NOT EXISTS page_state (
+  page       TEXT PRIMARY KEY,
+  state      TEXT NOT NULL DEFAULT '',
+  version    INTEGER NOT NULL DEFAULT 0,
+  updated_by TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime"
 	"os"
@@ -403,3 +404,39 @@ func (s *PageService) Delete(ctx context.Context, by Actor, id string) (*domain.
 
 // Manages reports whether by may publish versions of p and delete it.
 func (s *PageService) Manages(by Actor, p *domain.Page) bool { return s.manages(by, p) }
+
+// State returns a page's shared state, for whoever may see the page.
+func (s *PageService) State(ctx context.Context, by Actor, id string) (*domain.PageState, error) {
+	if _, err := s.Get(ctx, by, id); err != nil {
+		return nil, err
+	}
+	return s.pages.State(ctx, id)
+}
+
+// PutState writes a page's shared state (JSON) when it is still at
+// ifVersion; whoever may see the page may. A conflict returns the latest.
+func (s *PageService) PutState(ctx context.Context, by Actor, id, state string, ifVersion int, byName string) (*domain.PageState, error) {
+	if _, err := s.Get(ctx, by, id); err != nil {
+		return nil, err
+	}
+	if len(state) > domain.MaxPageState {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "the state is larger than %d KB", domain.MaxPageState>>10).
+			WithSuggestion("keep large data in the page's files; the state is what people and agents change")
+	}
+	if !json.Valid([]byte(state)) {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "the state is not JSON")
+	}
+	if ifVersion < 0 {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "if_version is the version you read (0 when there was none)")
+	}
+	next := &domain.PageState{Page: id, State: state, Version: ifVersion + 1, UpdatedBy: byName, UpdatedAt: s.clock.Now()}
+	if err := s.pages.PutState(ctx, next, ifVersion); err != nil {
+		if domain.IsCode(err, domain.CodeConflict) {
+			if cur, e := s.pages.State(ctx, id); e == nil {
+				return cur, err
+			}
+		}
+		return nil, err
+	}
+	return next, nil
+}

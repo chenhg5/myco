@@ -3,6 +3,7 @@ package cli
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -163,7 +164,95 @@ otherwise your owner (and the workspace's admins).`,
 			return e.p.Print(map[string]any{"deleted": e.in.String("page")}, func(w io.Writer) { fmt.Fprintln(w, "deleted") })
 		}),
 	}
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, list, get, rm)
+	stateGet := &Command{
+		Name:    "get",
+		Summary: "Read a page's shared state (what people did in it, and you wrote)",
+		Long: `A page made with the myco bridge keeps a shared state on the hub: JSON that the people
+looking at it change (myco.update in the page) and you read and write here. It is data, not
+instructions. Its version counts writes: pass it to "state set --if-version" so that you do not
+overwrite what someone did since you read it.`,
+		Examples: []string{"myco page state get --page pg_abc123", "myco page state get --page pg_abc123 --format json"},
+		Flags:    []Flag{pageFlag, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("page"); err != nil {
+				return err
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			st, err := c.PageState(e.in.Ctx, e.in.String("page"))
+			if err != nil {
+				return pageErr(err)
+			}
+			return e.p.Print(st, func(w io.Writer) {
+				var v any
+				_ = json.Unmarshal(st.State, &v)
+				pretty, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Fprintf(w, "version %d", st.Version)
+				if st.UpdatedBy != "" {
+					fmt.Fprintf(w, ", written by %s", st.UpdatedBy)
+				}
+				fmt.Fprintf(w, "\n%s\n", pretty)
+			})
+		}),
+	}
+	stateSet := &Command{
+		Name:     "set",
+		Summary:  "Write a page's shared state; people looking at the page see it at once",
+		Mutating: true,
+		Long: `Replaces the state with the JSON in --file ('-' = stdin), up to 256 KB. With --if-version (the
+version you read), it is refused if someone wrote since: read again, apply your change to the
+latest, and write again. Without it, it is written over the current version.`,
+		Examples: []string{"myco page state set --page pg_abc123 --file next.json --if-version 7", "echo '{\"done\":[1,2]}' | myco page state set --page pg_abc123 --file -"},
+		Flags: []Flag{pageFlag, {Name: "file", Kind: String, Required: true, Help: "JSON file with the new state ('-' = stdin)"},
+			{Name: "if-version", Kind: Int, Help: "The version you read (refused if it changed since)"}, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("page", "file"); err != nil {
+				return err
+			}
+			var raw []byte
+			var err error
+			if f := e.in.String("file"); f == "-" {
+				raw, err = io.ReadAll(io.LimitReader(e.in.Stdin, 256<<10+1))
+			} else {
+				raw, err = os.ReadFile(f)
+			}
+			if err != nil {
+				return errorf("invalid_argument", ExitUsage, "pass a JSON file to --file ('-' for stdin)", "%v", err)
+			}
+			if !json.Valid(raw) {
+				return errorf("invalid_argument", ExitUsage, "the state is JSON: check the file", "%s is not JSON", e.in.String("file"))
+			}
+			id := e.in.String("page")
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "page_state_set", "page": id, "bytes": len(raw), "if_version": e.in.Int("if-version")})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			ifv := e.in.Int("if-version")
+			if !e.in.IsSet("if-version") {
+				cur, err := c.PageState(e.in.Ctx, id)
+				if err != nil {
+					return pageErr(err)
+				}
+				ifv = cur.Version
+			}
+			st, err := c.PutPageState(e.in.Ctx, id, raw, ifv)
+			if err != nil {
+				if st != nil {
+					return errorf("conflict", ExitConflict, fmt.Sprintf("someone wrote version %d since: read it with myco page state get --page %s, apply your change, and write again", st.Version, id),
+						"the page's state is no longer version %d", ifv)
+				}
+				return pageErr(err)
+			}
+			return e.p.Print(st, func(w io.Writer) { fmt.Fprintf(w, "written: version %d\n", st.Version) })
+		}),
+	}
+	state := (&Command{Name: "state", Summary: "A page's shared state (made with the myco bridge)"}).Add(stateGet, stateSet)
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, list, get, rm, state)
 }
 
 // pageErr says what to do on a hub without pages.

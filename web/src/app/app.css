@@ -7587,3 +7587,15 @@ body.is-resizing {
   background: color-mix(in srgb, var(--fg) 10%, transparent);
 }
 .conv-handover > span { flex: 0 1 auto; min-width: 0; }
+/* A page asks to send a message as you (the bridge's myco.send). */
+.pg-ask-text {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg);
+  font-size: 13px;
+  white-space: pre-wrap;
+  max-height: 140px;
+  overflow: auto;
+}

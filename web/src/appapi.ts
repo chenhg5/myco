@@ -1,4 +1,4 @@
-import type { Page, PageOpen, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageOpen, PageState, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -328,6 +328,8 @@ export interface StartLocalHubResult {
 /** An error returned by the App backend or a hub (same shape as the hub API). */
 export class ApiError extends Error {
   status: number;
+  /** what a conflict answers with (a page's latest state) */
+  latest?: unknown;
   code?: string;
   suggestion?: string;
   constructor(message: string, status: number, code?: string, suggestion?: string) {
@@ -393,8 +395,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!r.ok) {
-    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string };
-    throw new ApiError(e.message || `HTTP ${r.status}`, r.status, e.error, e.suggestion);
+    const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown };
+    throw Object.assign(new ApiError(e.message || `HTTP ${r.status}`, r.status, e.error, e.suggestion), e.latest ? { latest: e.latest } : {});
   }
   return data as T;
 }
@@ -695,6 +697,17 @@ export const appApi = {
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
   openPage: (hubId: string, id: string, version?: number) => request<PageOpen>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/open`, version ? { version } : {}),
   deletePage: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),
+  pageState: (hubId: string, id: string) => request<PageState>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`),
+  /** Writes a page's shared state based on version; when someone wrote
+   *  first, ok is false and the latest comes back. */
+  putPageState: async (hubId: string, id: string, state: unknown, version: number): Promise<PageState & { ok: boolean }> => {
+    try {
+      return { ok: true, ...(await request<PageState>("PUT", `app/hubs/${enc(hubId)}/pages/${enc(id)}/state`, { state, if_version: version })) };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && e.latest) return { ok: false, ...(e.latest as PageState) };
+      throw e;
+    }
+  },
   // Automations (hubs from v0.19.22; older ones answer 404)
   automations: (hubId: string) => request<{ automations: Automation[] }>("GET", `app/hubs/${enc(hubId)}/automations`),
   automation: (hubId: string, id: string) => request<AutomationDetail>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),

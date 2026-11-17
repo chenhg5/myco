@@ -68,6 +68,22 @@ func TestPagePublish(t *testing.T) {
 	if code, _, e := h.run("page", "publish", "--dir", empty, "--name", "x"); code == 0 || !strings.Contains(e, "html") {
 		t.Fatalf("no html: %d %s", code, e)
 	}
+	// Its shared state: written, read back; a stale version is refused.
+	st := filepath.Join(dir, "state.json")
+	os.WriteFile(st, []byte(`{"cards":["a"]}`), 0o644)
+	if code, out, e := h.run("page", "state", "set", "--page", p.ID, "--file", st, "--format", "text"); code != 0 || !strings.Contains(out, "version 1") {
+		t.Fatalf("state set: %d %s %s", code, out, e)
+	}
+	if code, out, _ := h.run("page", "state", "get", "--page", p.ID, "--format", "json"); code != 0 || !strings.Contains(out, `"version": 1`) || !strings.Contains(out, `"a"`) {
+		t.Fatalf("state get: %s", out)
+	}
+	if code, _, e := h.run("page", "state", "set", "--page", p.ID, "--file", st, "--if-version", "0"); code != ExitConflict || !strings.Contains(e, "state get") {
+		t.Fatalf("stale: %d %s", code, e)
+	}
+	os.WriteFile(st, []byte(`{nope`), 0o644)
+	if code, _, _ := h.run("page", "state", "set", "--page", p.ID, "--file", st); code == 0 {
+		t.Fatal("not JSON accepted")
+	}
 	if code, _, e := h.run("page", "rm", "--page", p.ID); code != 0 {
 		t.Fatalf("rm: %s", e)
 	}

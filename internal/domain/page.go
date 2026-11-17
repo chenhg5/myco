@@ -43,6 +43,20 @@ type PageVersion struct {
 	At    time.Time
 }
 
+// PageState is a page's shared state (the bridge's myco.update): JSON that
+// the people looking at the page and agents read and write, with a version
+// so that nobody overwrites what they did not see.
+type PageState struct {
+	Page      string
+	State     string // JSON ("" before anyone wrote)
+	Version   int
+	UpdatedBy string
+	UpdatedAt time.Time
+}
+
+// MaxPageState bounds a page's shared state.
+const MaxPageState = 256 << 10
+
 // PageRepository stores pages and their versions.
 type PageRepository interface {
 	Create(ctx context.Context, p *Page) error
@@ -54,6 +68,11 @@ type PageRepository interface {
 	// Versions lists a page's versions, newest first.
 	Versions(ctx context.Context, page string) ([]*PageVersion, error)
 	DeleteVersion(ctx context.Context, page string, n int) error
+	// State returns a page's shared state (version 0 when never written).
+	State(ctx context.Context, page string) (*PageState, error)
+	// PutState writes it when its version is still ifVersion; else
+	// CodeConflict.
+	PutState(ctx context.Context, s *PageState, ifVersion int) error
 }
 
 const (

@@ -35,7 +35,7 @@ import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
-import { PageHost, setPageHubs, setPageNames } from "@/app/pages";
+import { PageHost, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
@@ -274,6 +274,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     rememberAgentHubs(out.map((r) => ({ hubId: r.hub.id, agentId: r.st.agent.id })));
     return out;
   }, [namedOv]);
+  setPageMe((hid) => namedOv?.hubs.find((h) => h.id === hid)?.me?.member?.name || "");
   setPageNames((hid, name) => {
     const r = allRows.find((x) => x.hub.id === hid && x.st.agent.name === name);
     return r ? nodeName(r.st.agent, r.hub) : name;

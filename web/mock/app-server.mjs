@@ -197,6 +197,19 @@ let proxyPassword = "";
 const openedLinks = [];
 // Pages agents published (/app/hubs/{id}/pages), and the keys the page
 // panel opened them under (served on this port at /p/<key>/…).
+const checklistPage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>上线清单</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>上线清单</h1><p class="sub" id="who">正在连上 myco…</p><ul id="list"></ul>
+<p><button id="hand">交给 agent</button> <span id="note"></span></p></main>
+<script src="app.js"></script></body></html>`;
+const checklistCss = "body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:560px;margin:0 auto;padding:28px 24px}h1{margin:0;font-size:22px}.sub{color:#85858d;margin:4px 0 16px}ul{list-style:none;padding:0}li{padding:6px 0}label{display:flex;gap:8px;align-items:center}li.done span{color:#85858d;text-decoration:line-through}button{font:inherit;padding:4px 12px;border-radius:7px;border:1px solid #d0d0d6;background:#fff}#note{color:#2f8a68;font-size:13px}";
+const checklistJs = `const items=["升级说明已更新","Windows 安装包已签名","预发环境装过一遍","发布说明已发"];
+function draw(state){const done=(state&&state.done)||[];document.getElementById("list").innerHTML=items.map((t,i)=>'<li class="'+(done.includes(i)?"done":"")+'"><label><input type="checkbox" data-i="'+i+'"'+(done.includes(i)?" checked":"")+'><span>'+t+'</span></label></li>').join("");}
+draw(null);
+myco.ready.then((c)=>{document.getElementById("who").textContent=(c.me&&c.me.name?c.me.name+" · ":"")+"状态第 "+c.version+" 版";draw(c.state);},()=>{document.getElementById("who").textContent="（不在 myco App 里：只能看）";});
+myco.on("change",(c)=>{draw(c.state);document.getElementById("who").textContent=(c.by?c.by+" 改了 · ":"")+"状态第 "+c.version+" 版";});
+document.addEventListener("change",async(e)=>{const i=Number(e.target.dataset.i);const done=new Set((myco.state&&myco.state.done)||[]);e.target.checked?done.add(i):done.delete(i);const r=await myco.update({done:[...done].sort()});draw(r.state);document.getElementById("who").textContent=(r.ok?"已保存":"别人先改了，已刷新")+" · 状态第 "+r.version+" 版";});
+document.getElementById("hand").addEventListener("click",async()=>{try{const n=((myco.state&&myco.state.done)||[]).length;await myco.send("清单勾完了 "+n+" 项，剩下的交给你。");document.getElementById("note").textContent="已发给 agent";}catch(err){document.getElementById("note").textContent=err.message;}});`;
+const pageFilesOf = (id, n) => (id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
 <body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
@@ -213,9 +226,16 @@ const pages = new Map([["pg_release", {
   url: "http://192.168.1.20:7780/pages/pg_release", created_at: iso(19000), updated_at: iso(19000), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 2048, sha256: "a1", by: "release-cloud", at: iso(19000) }],
 }]]);
+pages.set("pg_checklist", {
+  id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 3, size: 3100, sha256: "c1", by: "release-cloud", at: iso(18500) }],
+});
+// Pages' shared states (the bridge's myco.update).
+const pageStates = new Map([["pg_checklist", { state: { done: [0] }, version: 1, updated_by: "release-cloud", updated_at: iso(18000) }]]);
 const pageKeys = new Map();
-const pageHelperJS = `(function(){function out(u){try{var x=new URL(u,location.href);return x.origin!==location.origin&&/^(https?|mailto):$/.test(x.protocol)?x.href:""}catch(e){return""}}
-document.addEventListener("click",function(e){if(e.defaultPrevented||e.button!==0)return;var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var u=out(a.getAttribute("href"));if(!u)return;e.preventDefault();parent.postMessage({myco:"open-url",url:u},"*")},true)})();`;
+// The helper and the myco bridge, as the App serves them.
+const pageHelperJS = readFileSync(new URL("../../internal/console/pagebridge.js", import.meta.url), "utf8");
 const stuckCurrent = new Map([["legacy-codex", stuckTask], ["mac-exec", machineStuckTask]]);
 
 // A task picked up and quiet ever since, with a later task the sender stopped:
@@ -373,6 +393,7 @@ const consoleThreads = {
   // shows as a card and opens in the page panel.
   th_console_page: [
     makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "上线前的检查也做成了一页清单，大家可以在上面勾：http://192.168.1.20:7780/pages/pg_checklist\n\n勾完了点页面下面的「交给 agent」，我接着往下做。", created_at: iso(18500), updated_at: iso(18500) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "reply", status: "done", body: "做好了，发布说明的网页在这里：http://192.168.1.20:7780/pages/pg_release\n\n按「新功能 / 修复 / 文档」分了三栏，图表是页面里自己画的。", created_at: iso(19000), updated_at: iso(19000) }),
   ],
   th_console_fail: [
@@ -1622,7 +1643,7 @@ const server = http.createServer(async (req, res) => {
     const k = pageKeys.get(parts[1]);
     if (!k) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
     const file = parts.slice(2).join("/") || "index.html";
-    const body = pageFiles(k.version)[file];
+    const body = pageFilesOf(k.page, k.version)[file];
     if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
     const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : "text/javascript";
     const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
@@ -1637,6 +1658,17 @@ const server = http.createServer(async (req, res) => {
     if (!p) return fail(res, 404, "not_found", `page ${parts[4]} not found`);
     if (parts.length === 5 && method === "GET") return send(res, 200, p);
     if (parts.length === 5 && method === "DELETE") { pages.delete(p.id); res.writeHead(204); return res.end(); }
+    if (parts.length === 6 && parts[5] === "state") {
+      const cur = pageStates.get(p.id) || { state: null, version: 0 };
+      if (method === "GET") return send(res, 200, cur);
+      if (method === "PUT") {
+        const body = (await readBody(req)) || {};
+        if ((body.if_version || 0) !== cur.version) return send(res, 409, { error: "conflict", message: "the page's state changed", latest: cur });
+        const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "glenn", updated_at: iso(0) };
+        pageStates.set(p.id, next);
+        return send(res, 200, next);
+      }
+    }
     if (parts.length === 6 && parts[5] === "open" && method === "POST") {
       const body = (await readBody(req)) || {};
       const version = body.version || p.version;
@@ -1645,6 +1677,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/index.html`, version, latest: p.version, name: p.name, entry: "index.html" });
     }
     return fail(res, 404, "not_found", "no such route");
+  }
+  // (the smoke test writes a page's state, as its agent would)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "state" && method === "POST") {
+    const cur = pageStates.get(parts[3]) || { state: null, version: 0 };
+    const body = (await readBody(req)) || {};
+    const next = { state: body.state ?? null, version: cur.version + 1, updated_by: "release-cloud", updated_at: iso(0) };
+    pageStates.set(parts[3], next);
+    return send(res, 200, next);
   }
   // (the smoke test publishes a new version, as an agent would)
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "publish" && method === "POST") {

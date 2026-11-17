@@ -102,6 +102,17 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 	if _, body := get(o["url"].(string), ""); !strings.HasPrefix(body, `<script src="/__myco/page.js"></script><p>v2`) {
 		t.Fatalf("reopened: %s", body)
 	}
+	// Its shared state, through the App: written, and a stale write answers
+	// 409 with the latest.
+	if code, st, raw := r.do("PUT", "/app/hubs/"+hub+"/pages/"+p.ID+"/state", map[string]any{"state": map[string]int{"n": 1}, "if_version": 0}); code != 200 || st["version"] != float64(1) {
+		t.Fatalf("state: %d %s", code, raw)
+	}
+	if code, st, raw := r.do("PUT", "/app/hubs/"+hub+"/pages/"+p.ID+"/state", map[string]any{"state": map[string]int{"n": 2}, "if_version": 0}); code != 409 || st["latest"].(map[string]any)["version"] != float64(1) {
+		t.Fatalf("stale: %d %s", code, raw)
+	}
+	if code, st, _ := r.do("GET", "/app/hubs/"+hub+"/pages/"+p.ID+"/state", nil); code != 200 || st["state"].(map[string]any)["n"] != float64(1) {
+		t.Fatalf("read: %d %v", code, st)
+	}
 	if code, _, _ := r.do("POST", "/app/hubs/"+hub+"/pages/"+p.ID+"/open", map[string]int{"version": 9}); code != 404 {
 		t.Fatalf("no such version: %d", code)
 	}

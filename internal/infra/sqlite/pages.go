@@ -88,6 +88,9 @@ func (r *PageRepo) Delete(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM page_versions WHERE page=?`, id); err != nil {
 		return internal(err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM page_state WHERE page=?`, id); err != nil {
+		return internal(err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM pages WHERE id=?`, id); err != nil {
 		return internal(err)
 	}
@@ -129,4 +132,39 @@ func (r *PageRepo) Versions(ctx context.Context, page string) ([]*domain.PageVer
 func (r *PageRepo) DeleteVersion(ctx context.Context, page string, n int) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM page_versions WHERE page=? AND n=?`, page, n)
 	return internal(err)
+}
+
+func (r *PageRepo) State(ctx context.Context, page string) (*domain.PageState, error) {
+	st := &domain.PageState{Page: page}
+	var at int64
+	err := r.db.QueryRowContext(ctx, `SELECT state, version, updated_by, updated_at FROM page_state WHERE page=?`, page).
+		Scan(&st.State, &st.Version, &st.UpdatedBy, &at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, nil
+	}
+	if err != nil {
+		return nil, internal(err)
+	}
+	st.UpdatedAt = fromMS(at)
+	return st, nil
+}
+
+func (r *PageRepo) PutState(ctx context.Context, s *domain.PageState, ifVersion int) error {
+	var res sql.Result
+	var err error
+	if ifVersion == 0 {
+		res, err = r.db.ExecContext(ctx, `INSERT INTO page_state (page, state, version, updated_by, updated_at) VALUES (?,?,?,?,?)
+			ON CONFLICT(page) DO NOTHING`, s.Page, s.State, s.Version, s.UpdatedBy, ms(s.UpdatedAt))
+	} else {
+		res, err = r.db.ExecContext(ctx, `UPDATE page_state SET state=?, version=?, updated_by=?, updated_at=? WHERE page=? AND version=?`,
+			s.State, s.Version, s.UpdatedBy, ms(s.UpdatedAt), s.Page, ifVersion)
+	}
+	if err != nil {
+		return internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.Errf(domain.CodeConflict, "the page's state changed (it is no longer version %d)", ifVersion).
+			WithSuggestion("read it again (myco page state get) and apply your change to the latest")
+	}
+	return nil
 }

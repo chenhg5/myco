@@ -75,6 +75,26 @@ func TestPages(t *testing.T) {
 		t.Fatalf("entry given: %s", r.raw)
 	}
 
+	// Its shared state: nothing yet; written with the version read; a stale
+	// write is refused with the latest; kept across versions.
+	if st := h.do("GET", "/v1/pages/"+id+"/state", alice, nil).want(t, 200); st.body["state"] != nil || st.body["version"] != float64(0) {
+		t.Fatalf("no state yet: %s", st.raw)
+	}
+	if st := h.do("PUT", "/v1/pages/"+id+"/state", adminToken, map[string]any{"state": map[string]any{"done": []int{1}}, "if_version": 0}).want(t, 200); st.body["version"] != float64(1) {
+		t.Fatalf("first write: %s", st.raw)
+	}
+	c := h.do("PUT", "/v1/pages/"+id+"/state", alice, map[string]any{"state": map[string]any{"done": []int{2}}, "if_version": 0}).want(t, 409)
+	if latest, _ := c.body["latest"].(map[string]any); latest == nil || latest["version"] != float64(1) || c.body["error"] != "conflict" {
+		t.Fatalf("stale write: %s", c.raw)
+	}
+	if st := h.do("PUT", "/v1/pages/"+id+"/state", alice, map[string]any{"state": map[string]any{"done": []int{1, 2}}, "if_version": 1}).want(t, 200); st.body["updated_by"] != "alice" {
+		t.Fatalf("second write: %s", st.raw)
+	}
+	h.doReq("PUT", "/v1/pages/"+id+"/state", alice, `{"state": nope}`, nil).wantErr(t, 400, "invalid_argument")
+	if st := h.do("GET", "/v1/pages/"+id+"/state", alice, nil).want(t, 200); st.body["version"] != float64(2) || !strings.Contains(string(st.raw), `"done":[1,2]`) {
+		t.Fatalf("read back: %s", st.raw)
+	}
+
 	// Someone else's: a member who is not its owner does not see it.
 	link := str(h.do("POST", "/v1/members", adminToken, map[string]any{"name": "dan"}).want(t, 201).body, "link")
 	code := link[strings.LastIndex(link, "/")+1:]
@@ -82,6 +102,7 @@ func TestPages(t *testing.T) {
 	h.do("GET", "/v1/pages/"+id, dan, nil).wantErr(t, 404, "not_found")
 	h.doReq("GET", "/v1/pages/"+id+"/v/1/index.html", dan, nil, nil).wantErr(t, 404, "not_found")
 	h.doReq("POST", "/v1/pages/"+id+"/versions", dan, site, zipHdr).wantErr(t, 404, "not_found")
+	h.do("PUT", "/v1/pages/"+id+"/state", dan, map[string]any{"state": 1, "if_version": 2}).wantErr(t, 404, "not_found")
 	if l := h.do("GET", "/v1/pages", dan, nil).want(t, 200); len(l.body["pages"].([]any)) != 0 {
 		t.Fatalf("dan lists: %s", l.raw)
 	}

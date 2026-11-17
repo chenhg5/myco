@@ -154,6 +154,8 @@ export interface Page {
 /** What opening a page gives: where its files are served (a loopback origin
  *  of the App's own), for which version. */
 export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string }
+/** A page's shared state (the bridge's myco.update): null before anyone wrote. */
+export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;

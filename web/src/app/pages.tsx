@@ -4,6 +4,7 @@ import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
 import { DockPanel } from "@/app/preview";
+import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -87,6 +88,24 @@ export function pageLinksIn(body: string): { hubId: string; id: string }[] {
     if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
   }
   return out;
+}
+
+// Who you are on a workspace (for a page's myco.ready).
+let meOf: (hubId: string) => string = () => "";
+export function setPageMe(f: (hubId: string) => string) {
+  meOf = f;
+}
+
+// Pages you let send messages as you (this time the App runs), and when
+// they did (at most 5 a minute).
+const allowedSend = new Set<string>();
+const sends = new Map<string, number[]>();
+
+// A page's own storage (myco.storage), kept by the App: pages cannot see
+// each other's.
+const storeKey = (hubId: string, id: string) => `myco-page-store:${hubId}:${id}`;
+function storeOf(hubId: string, id: string): Record<string, unknown> {
+  try { return JSON.parse(localStorage.getItem(storeKey(hubId, id)) || "{}") as Record<string, unknown>; } catch { return {}; }
 }
 
 // What the App knows of a page (a card asks once; the panel asks again).
@@ -198,17 +217,103 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
     return () => window.clearInterval(t);
   }, [open, target]);
 
-  // A link inside the page asks (its helper script) to go to the browser.
+  // The page's script (pagebridge.js) asks the App: a link to open in the
+  // browser, and the myco bridge's calls. Only from this panel's frame;
+  // answers go to the page's own origin only.
+  const live = useRef({ page, opened });
+  live.current = { page, opened };
+  const known = useRef(0); // the state version the page has
+  const bridged = useRef(false);
+  const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
   useEffect(() => {
     if (!open) return;
+    known.current = 0;
+    bridged.current = false;
     const on = (e: MessageEvent) => {
-      if (!frame.current || e.source !== frame.current.contentWindow) return;
-      const d = e.data as { myco?: string; url?: string } | null;
-      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) openOutside(d.url);
+      const win = frame.current?.contentWindow;
+      if (!win || e.source !== win) return;
+      const d = e.data as { myco?: string; url?: string; id?: number; method?: string; args?: Record<string, unknown> } | null;
+      if (d?.myco === "open-url" && typeof d.url === "string" && /^(https?:|mailto:)/i.test(d.url)) { openOutside(d.url); return; }
+      if (d?.myco !== "call" || typeof d.id !== "number") return;
+      const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
+      if (!origin || e.origin !== origin) return;
+      const reply = (value: unknown, error?: string, code?: string) =>
+        win.postMessage(error ? { myco: "result", id: d.id, error, code } : { myco: "result", id: d.id, value }, origin);
+      if (target.kind !== "page") { reply(null, L("这个网页不在 myco 上，没有桥", "This page is not on myco: no bridge"), "not_a_page"); return; }
+      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code));
+    };
+    const answer = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
+      const { page: p, opened: o } = live.current;
+      switch (method) {
+        case "ready": {
+          const st = await appApi.pageState(t.hubId, t.id);
+          known.current = st.version;
+          bridged.current = true;
+          return { page: { id: t.id, name: o?.name || p?.name || "", version: o?.version || 0 }, me: { name: meOf(t.hubId) }, state: st.state, version: st.version };
+        }
+        case "update": {
+          const r = await appApi.putPageState(t.hubId, t.id, args.state ?? null, Number(args.version) || 0);
+          known.current = Math.max(known.current, r.version);
+          return { ok: r.ok, state: r.state, version: r.version };
+        }
+        case "send": {
+          const text = String(args.text || "").trim();
+          if (!text) throw new Error(L("消息是空的", "The message is empty"));
+          const to = p?.publisher || "";
+          if (!to) throw new Error(L("不知道这个网页是谁发布的", "Who published this page is not known"));
+          const k = `${t.hubId}/${t.id}`;
+          const recent = (sends.get(k) || []).filter((at) => Date.now() - at < 60_000);
+          if (recent.length >= 5) throw Object.assign(new Error(L("发得太快了：一分钟最多 5 条", "Too many: at most 5 a minute")), { code: "rate_limited" });
+          if (!allowedSend.has(k)) {
+            const ok = await new Promise<boolean>((resolve) => setAsking({ text, to: nameOf(t.hubId, to), answer: resolve }));
+            setAsking(null);
+            if (!ok) throw Object.assign(new Error(L("你没有允许这个网页发消息", "You did not let this page send messages")), { code: "denied" });
+            allowedSend.add(k);
+          }
+          sends.set(k, [...recent, Date.now()]);
+          const name = o?.name || p?.name || L("网页", "a page");
+          const m = await appApi.sendMessage(t.hubId, {
+            to, body: `${text}\n\n${L(`（来自网页「${name}」${p?.url || ""}，状态第 ${known.current} 版）`, `(from the page "${name}" ${p?.url || ""}, state version ${known.current})`)}`,
+            ...(p?.project ? { project: p.project } : {}),
+          });
+          return { id: m.id };
+        }
+        case "storage.get": {
+          const all = storeOf(t.hubId, t.id);
+          return all[String(args.key)] ?? null;
+        }
+        case "storage.set": {
+          const all = storeOf(t.hubId, t.id);
+          if (args.value === null || args.value === undefined) delete all[String(args.key)];
+          else all[String(args.key)] = args.value;
+          const raw = JSON.stringify(all);
+          if (raw.length > 1 << 20) throw Object.assign(new Error(L("这个网页的存储满了（1 MB）", "This page's storage is full (1 MB)")), { code: "too_large" });
+          try { localStorage.setItem(storeKey(t.hubId, t.id), raw); } catch { throw new Error(L("存不下", "Could not store it")); }
+          return true;
+        }
+      }
+      throw new Error(`myco: no such call: ${method}`);
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
-  }, [open]);
+  }, [open, target]);
+
+  // While it is open: what others (an agent, another person) change comes
+  // to the page.
+  useEffect(() => {
+    if (!open || target.kind !== "page") return;
+    const t = window.setInterval(() => {
+      if (!bridged.current) return;
+      appApi.pageState(target.hubId, target.id).then((st) => {
+        if (st.version <= known.current) return;
+        known.current = st.version;
+        const win = frame.current?.contentWindow;
+        const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
+        if (win && origin) win.postMessage({ myco: "change", state: st.state, version: st.version, by: st.updated_by ? nameOf(target.hubId, st.updated_by) : "" }, origin);
+      }, () => undefined);
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [open, target]);
 
   const local = target.kind === "local" ? new URL(target.url) : null;
   const src = local ? target.kind === "local" && target.url : opened?.url;
@@ -225,6 +330,7 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
     window.setTimeout(() => setCopied(false), 1500);
   };
   return (
+    <>
     <DockPanel open={open} onOpenChange={onOpenChange} title={title} about={about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
@@ -254,5 +360,15 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
             allow="clipboard-write" />}
     </DockPanel>
+    <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
+      title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
+      description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
+      <blockquote className="pg-ask-text">{asking?.text}</blockquote>
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={() => asking?.answer(false)}>{L("不允许", "Don't allow")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => asking?.answer(true)}>{L("允许并发送", "Allow and send")}</button>
+      </div>
+    </Modal>
+    </>
   );
 }

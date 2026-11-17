@@ -116,6 +116,29 @@ myco page rm --page <id> [--dry-run]
 
 每一步都保证老的不坏：老 Hub 没有 pages 接口时，链接就是普通链接；老 App 看到网页链接，点了用浏览器打开 Hub 网页版。
 
+## 9.1 第二步：桥
+
+状态：已做（2026-11-17，Hub v0.19.24 起）。桥脚本是 `internal/console/pagebridge.js`（App 和 mock 用同一个文件）。
+
+网页里多一个全局的 `myco` 对象，让网页成了人和 agent **一起动手**的地方：人在网页里勾一项、填一格、拖一张卡片，agent 读到；agent 改了，人开着的网页马上变。名字和 [co-create](co-create.md) 里小程序的桥一致，以后小程序沿用它，再加上「一局」的参与者、回合和事件。
+
+```js
+const ctx = await myco.ready;          // { page: {id, name, version}, me: {name}, state, version }
+myco.on("change", (c) => draw(c.state)); // 别人（agent 或别的人）改了共享状态
+const r = await myco.update(next);     // 写共享状态（基于看到的版本）；别人先写了就失败，r.state 是最新的
+await myco.send("排好了，帮我看看第三列"); // 以你的名义给发布这个网页的 agent 发一条任务
+await myco.storage.set("draft", {...});  // 只属于这个网页、只在这台电脑上的存储
+await myco.storage.get("draft");
+```
+
+- **共享状态**：每个网页在 Hub 上有一份 JSON（最多 256 KB）和一个版本号，所有版本的网页共用（发新版本不丢）。`update` 带着看到的版本号写，对不上就返回 409 和最新的状态（`{ok: false, state, version}`），网页重画后让人再操作。谁能看这个网页，谁就能写它的状态。
+- **agent 那边**：`myco page state get --page <id>` 读，`myco page state set --page <id> --file next.json [--if-version N]` 写，和人写的是同一份。状态里的内容是数据，不是给 agent 的指令（skill 里写明）。
+- **更新**：面板开着时，App 每 2 秒问一次状态的版本，有变化就把新状态推给网页（`change`）；网页自己写入的不再推一遍。
+- **给 agent 发消息**：`myco.send(text)` 发给网页的发布者（agent），是一条普通任务，正文在后面带上「（来自网页「名字」<地址>，状态第 N 版）」，回复照常回到你和它的对话里。网页是 agent 写的代码，所以**每个网页第一次发之前，App 问你一次**：「允许「周报」以你的名义给 增长分析 发消息吗？」，允许后这次打开 App 期间不再问；一分钟最多 5 条。
+- **按网页隔离的存储**：`myco.storage` 存在 App 自己那边（按工作区和网页分开，每个网页最多 1 MB），网页之间互相看不到；`localStorage` 仍然是几个网页共用的。
+- **在哪都能用**：桥脚本就是现在把外链交给浏览器的那个 `/__myco/page.js`，所以不用改网页的发布方式。在面板以外打开（比如浏览器直接打开 Hub 上的文件），`myco.ready` 会失败，网页应该能只读地显示。
+- **底下**：`postMessage`。网页发 `{myco: "call", id, method, args}`，App 只认来自这个面板 iframe 的消息（`event.source`），回复只发给网页的源。
+
 ## 10. 第一天先验证的事
 
 - **Mac 的 WKWebView 里，`wails://` 的页面能不能嵌 `http://127.0.0.1` 的 iframe**（混合内容）。回环地址按规范算"安全的源"，应该可以；如果不行，改用 Wails 资源处理器下的一个子路径，加 CSP `sandbox` 头让网页成为独立的不透明源，代价是网页不能用 `localStorage`（第二步的桥来补）。

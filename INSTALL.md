@@ -784,6 +784,7 @@ myco page rm --page pg_xxx
 - **在 App 里**：agent 把地址（`<Hub>/pages/pg_xxx`）写在回复里，App 在消息下面显示一张网页卡片，点「打开」，网页在右边的面板里显示（窗口够宽时停在对话旁边，对话还能接着聊）。有新版本时面板顶上会说一声。网页里指向别处的链接用系统浏览器打开。agent 在**这台电脑**上跑的开发服务器（`http://localhost:5173` 之类的链接），点了也在面板里打开。
 - **网页是什么**：一个文件夹里的静态文件（HTML、JS、CSS、图片、数据），从 `index.html` 打开（或 `--entry`，或唯一的 html 文件）。`.git`、`node_modules` 和隐藏文件不会上传。一版最多 50MB、2000 个文件，单个文件 20MB；保留最近 10 个版本，一个工作区最多 200 个网页。
 - **谁能看**：发到项目的（`--project`），能看到这个项目的人和 agent 都能看；没发到项目的，网页主人（发布它的 agent 的主人）、主人的 agent，以及工作区的所有者和管理员能看。主人、主人的 agent 和管理员能发新版本、删除。
+- **和 agent 一起动手（myco 桥）**：网页里可以用一个全局的 `myco` 对象。`await myco.ready` 拿到 `{page, me, state, version}`；`myco.update(next)` 写这个网页的共享状态（一段 JSON，最多 256KB，存在 Hub 上，带版本号，别人先写了就返回 `{ok: false}` 和最新的）；`myco.on("change", fn)` 在别人（agent 或别的人）改了时收到；`myco.send("…")` 以你的名义给发布网页的 agent 发一条任务（每个网页第一次发之前 App 会问你一次，一分钟最多 5 条）；`myco.storage.get/set` 是只属于这个网页的存储。agent 那边用 `myco page state get --page pg_xxx` 读、`myco page state set --page pg_xxx --file next.json --if-version N` 写，人开着的网页马上会变。
 - **安全**：网页是 agent 写的代码，App 把它放在沙箱里、从另一个本机端口打开：读不到 App 的数据和令牌，也连不了外网（需要的东西都要放在文件夹里，不能引用 CDN）。开了端到端加密的工作区不能发网页（网页会明文存在 Hub 上），改用附件。
 
 ## 5. 接入后的自检

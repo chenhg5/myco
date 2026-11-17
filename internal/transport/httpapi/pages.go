@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -28,6 +30,8 @@ func (s *Server) pageRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/pages/{id}/versions", s.pageCaller(s.publishPage))
 	m.HandleFunc("DELETE /v1/pages/{id}", s.pageCaller(s.deletePage))
 	m.HandleFunc("GET /v1/pages/{id}/v/{n}/{path...}", s.pageCaller(s.pageFile))
+	m.HandleFunc("GET /v1/pages/{id}/state", s.pageCaller(s.getPageState))
+	m.HandleFunc("PUT /v1/pages/{id}/state", s.pageCaller(s.putPageState))
 	// A page's address, opened in a browser: say where it opens.
 	m.HandleFunc("GET /pages/{id}", s.pageLink)
 }
@@ -170,4 +174,52 @@ func (s *Server) pageLink(w http.ResponseWriter, r *http.Request) {
 <p>在 myco App 里点开这个链接就能看。也可以用命令行把它下载下来：</p>
 <p><code>myco page get --page %s</code></p>
 <p style="color:#85858d">A page published in myco: open this link in the myco App.</p>`, html.EscapeString(strings.TrimSpace(id)))
+}
+
+func pageStateDTO(st *domain.PageState) api.PageState {
+	out := api.PageState{State: json.RawMessage("null"), Version: st.Version, UpdatedBy: st.UpdatedBy}
+	if st.State != "" {
+		out.State = json.RawMessage(st.State)
+	}
+	if !st.UpdatedAt.IsZero() {
+		t := st.UpdatedAt
+		out.UpdatedAt = &t
+	}
+	return out
+}
+
+func (s *Server) getPageState(w http.ResponseWriter, r *http.Request, c pageCall) {
+	st, err := s.pages.State(r.Context(), c.by, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pageStateDTO(st))
+}
+
+// putPageState: {state, if_version} → the new state; 409 with the latest
+// when someone wrote first.
+func (s *Server) putPageState(w http.ResponseWriter, r *http.Request, c pageCall) {
+	var req api.PageStateRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, domain.MaxPageState+4096)).Decode(&req); err != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "the body is {state, if_version} (the state at most %d KB)", domain.MaxPageState>>10))
+		return
+	}
+	if len(req.State) == 0 {
+		req.State = json.RawMessage("null")
+	}
+	st, err := s.pages.PutState(r.Context(), c.by, r.PathValue("id"), string(req.State), req.IfVersion, c.name)
+	if err != nil {
+		var de *domain.Error
+		if st != nil && errors.As(err, &de) && de.Code == domain.CodeConflict {
+			writeJSON(w, http.StatusConflict, api.PageStateConflict{
+				Error:  api.Error{Code: string(de.Code), Message: de.Message, Suggestion: de.Suggestion},
+				Latest: pageStateDTO(st),
+			})
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pageStateDTO(st))
 }

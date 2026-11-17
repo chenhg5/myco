@@ -172,6 +172,8 @@ From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publis
 | `GET /v1/pages/{id}` | who sees it | The page and its versions |
 | `GET /v1/pages/{id}/v/{n}/{path}` | who sees it | A file of version `n` (`latest` for the newest; an empty path is its entry file), with its type from its extension, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox …` (opened straight from the hub, it runs in a sandbox of its own), `ETag`, `X-Myco-Page-Version`. A numbered version is cached for good; `latest` is revalidated |
 | `DELETE /v1/pages/{id}` | its managers | `204`; all its versions go |
+| `GET /v1/pages/{id}/state` | who sees it | The page's shared state (the bridge's `myco.update`): `{state, version, updated_by?, updated_at?}`; `state` is `null` and `version` `0` before anyone wrote. Kept across the page's versions |
+| `PUT /v1/pages/{id}/state` | who sees it | `{state, if_version}`: any JSON up to 256 KB, based on the version read → the new state (`version` + 1). When someone wrote since: `409 conflict` with `latest` (the current state) |
 
 ## Automations
 

@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -102,4 +104,43 @@ func escPath(p string) string {
 		parts[i] = url.PathEscape(s)
 	}
 	return strings.Join(parts, "/")
+}
+
+// PageState reads a page's shared state.
+func (c *Client) PageState(ctx context.Context, id string) (*api.PageState, error) {
+	var out api.PageState
+	return &out, c.do(ctx, http.MethodGet, "/v1/pages/"+esc(id)+"/state", nil, nil, &out)
+}
+
+// PutPageState writes a page's shared state, based on version ifVersion.
+// When someone wrote first it returns the latest with a conflict error.
+func (c *Client) PutPageState(ctx context.Context, id string, state json.RawMessage, ifVersion int) (*api.PageState, error) {
+	b, err := json.Marshal(api.PageStateRequest{State: state, IfVersion: ifVersion})
+	if err != nil {
+		return nil, err
+	}
+	u := c.urlFor("/v1/pages/" + esc(id) + "/state")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.auth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if resp.StatusCode == http.StatusConflict {
+		var cf api.PageStateConflict
+		if json.Unmarshal(data, &cf) == nil {
+			return &cf.Latest, decodeError(resp.StatusCode, data)
+		}
+	}
+	if resp.StatusCode >= 300 {
+		return nil, decodeError(resp.StatusCode, data)
+	}
+	var out api.PageState
+	return &out, json.Unmarshal(data, &out)
 }

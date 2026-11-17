@@ -1298,3 +1298,27 @@ type PageVersion struct {
 type PageList struct {
 	Pages []Page `json:"pages"`
 }
+
+// PageState is a page's shared state (GET/PUT /v1/pages/{id}/state, from
+// v0.19.24): JSON people (through the page's myco bridge) and agents read
+// and write. State is null before anyone wrote; Version counts writes.
+type PageState struct {
+	State     json.RawMessage `json:"state"`
+	Version   int             `json:"version"`
+	UpdatedBy string          `json:"updated_by,omitempty"`
+	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
+}
+
+// PageStateRequest is PUT /v1/pages/{id}/state: the new state, and the
+// version it was based on (0 when there was none). A 409 answers with the
+// latest in "latest".
+type PageStateRequest struct {
+	State     json.RawMessage `json:"state"`
+	IfVersion int             `json:"if_version"`
+}
+
+// PageStateConflict is PUT /v1/pages/{id}/state's 409.
+type PageStateConflict struct {
+	Error
+	Latest PageState `json:"latest"`
+}

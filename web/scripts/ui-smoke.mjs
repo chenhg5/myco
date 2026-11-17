@@ -531,6 +531,46 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // The myco bridge: the page's shared state, written by you, changed by
+    // its agent (it comes to the page), and a message to its agent, asked
+    // once. (The four windows share the mock: versions are read, not assumed.)
+    await step("网页 · 和 agent 一起动手", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      await clickVisible(page, chat.locator(".pg-card", { hasText: "上线清单" }));
+      const panel = page.locator(".pg-panel");
+      const frame = page.frameLocator(".pg-frame");
+      await frame.locator("#who", { hasText: "状态第" }).waitFor({ timeout: 15_000 });
+      const st = () => page.evaluate(async () => (await (await fetch("/app/hubs/hub_studio/pages/pg_checklist/state")).json()));
+      // You tick an item: it is saved on the hub.
+      const before = await st();
+      const box = frame.locator('input[data-i="3"]');
+      await box.dispatchEvent("click");
+      await page.waitForFunction(async (v) => (await (await fetch("/app/hubs/hub_studio/pages/pg_checklist/state")).json()).version > v, before.version, { timeout: 10_000 });
+      // Its agent writes: the page shows it.
+      const mark = 100 + Math.floor(Math.random() * 1000);
+      await page.evaluate(async (m) => { await fetch("/app/mock/pages/pg_checklist/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: { done: [0, 1, 2], mark: m } }) }); }, mark);
+      await frame.locator("#who", { hasText: "Release (Claude 云端) 改了" }).waitFor({ timeout: 10_000 });
+      if (!(await frame.locator('input[data-i="2"]').isChecked())) throw new Error("agent 改的状态应推到网页里");
+      if ((await st()).state.mark !== mark) throw new Error("agent 写的状态应是最新的");
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-bridge");
+      // A message to its agent: asked once.
+      await frame.locator("#hand").dispatchEvent("click");
+      const ask = page.locator(".pg-ask");
+      await ask.waitFor({ timeout: 5_000 });
+      await settle(page, 250);
+      await shot(page, size, scheme, "page-bridge-ask");
+      await clickVisible(page, ask.getByRole("button", { name: "允许并发送" }));
+      await frame.locator("#note", { hasText: "已发给 agent" }).waitFor({ timeout: 10_000 });
+      await chat.locator(".conv-msg.is-me", { hasText: "来自网页「上线清单」" }).first().waitFor({ timeout: 10_000 });
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere

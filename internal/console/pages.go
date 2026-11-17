@@ -3,6 +3,7 @@ package console
 import (
 	"bytes"
 	"crypto/rand"
+	_ "embed"
 	"encoding/base32"
 	"fmt"
 	"io"
@@ -43,20 +44,10 @@ const pageCSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inlin
 // panel.
 const pageHelper = `<script src="/__myco/page.js"></script>`
 
-const pageHelperJS = `(function(){
-  function out(u){ try { var x = new URL(u, location.href); return x.origin !== location.origin && /^(https?|mailto):$/.test(x.protocol) ? x.href : ""; } catch (e) { return ""; } }
-  document.addEventListener("click", function(e){
-    if (e.defaultPrevented || e.button !== 0) return;
-    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-    if (!a) return;
-    var u = out(a.getAttribute("href"));
-    if (!u) return;
-    e.preventDefault();
-    parent.postMessage({ myco: "open-url", url: u }, "*");
-  }, true);
-  var open = window.open;
-  window.open = function(u){ var x = out(String(u || "")); if (x) { parent.postMessage({ myco: "open-url", url: x }, "*"); return null; } return open.apply(window, arguments); };
-})();`
+// pageHelperJS is the helper and the myco bridge (pagebridge.js).
+//
+//go:embed pagebridge.js
+var pageHelperJS string
 
 type pageKey struct {
 	hub, page, name, entry string
@@ -137,6 +128,35 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/pages/{pid}/state", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		st, err := c.PageState(r.Context(), r.PathValue("pid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	}))
+	m.HandleFunc("PUT /app/hubs/{id}/pages/{pid}/state", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.PageStateRequest
+		if !decode(w, r, &in) {
+			return
+		}
+		st, err := c.PutPageState(r.Context(), r.PathValue("pid"), in.State, in.IfVersion)
+		if err != nil {
+			if st != nil {
+				e, _ := client.AsError(err)
+				msg := "the page's state changed"
+				if e != nil {
+					msg = e.Message
+				}
+				writeJSON(w, http.StatusConflict, map[string]any{"error": "conflict", "message": msg, "latest": st})
+				return
+			}
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/open", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
