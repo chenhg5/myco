@@ -130,6 +130,23 @@ public struct HubClient: HubAPI {
         return try Self.decode(Agent.self, from: data)
     }
 
+    public func computerLink(allowFrom: [String]) async throws -> JoinLink {
+        struct Request: Encodable {
+            var kind = "link"
+            var harness = "exec"
+            var allowFrom: [String]
+            var maxUses = 1
+            var ttlSeconds = 24 * 3600
+            var note = "myco ios: a folder as a computer"
+        }
+        let data = try await call("POST", "/v1/enrollments", body: HubJSON.encoder().encode(Request(allowFrom: allowFrom)))
+        return try Self.decode(JoinLink.self, from: data)
+    }
+
+    public func addProjectMember(_ agent: String, to project: String) async throws {
+        _ = try await call("PUT", "/v1/projects/\(Self.segment(project))/members/\(Self.segment(agent))", body: Data("{}".utf8))
+    }
+
     public func automations() async throws -> [Automation] {
         let envelope: AutomationsEnvelope = try await get("/v1/console/automations", timeout: Self.pollTimeout)
         return envelope.automations

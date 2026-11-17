@@ -426,10 +426,37 @@ final class WalkthroughTests: XCTestCase {
     func testAddingAnAgentGivesASentenceWithARealLink() {
         let app = launch()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        // (the plus offers an agent, or a computer)
+        app.buttons["chrome.add"].firstMatch.tap()
         app.buttons["Add an agent"].firstMatch.tap()
         let sentence = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "curl -fsSL https://demo.myco.example/j/")).firstMatch
         XCTAssertTrue(sentence.waitForExistence(timeout: 5), "the sentence carries the workspace's join link")
         XCTAssertTrue(app.buttons["Copy"].isEnabled)
+    }
+
+    @MainActor
+    func testAComputerIsAddedWithOneCommand() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        app.buttons["chrome.add"].firstMatch.tap()
+        app.buttons["Add a computer"].firstMatch.tap()
+        // One line to run on that computer, in the folder agents should use.
+        let command = app.staticTexts["computer.command"]
+        XCTAssertTrue(command.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label BEGINSWITH %@", "curl -fsSL https://demo.myco.example/j/"), evaluatedWith: command)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["computer.waiting"].exists, "it waits for the folder to show up")
+        shot("computer-command")
+        // The other system's line.
+        app.buttons["Windows (PowerShell)"].tap()
+        XCTAssertTrue(command.label.hasPrefix("irm 'https://demo.myco.example/j/"), command.label)
+        XCTAssertTrue(command.label.hasSuffix("?format=ps1' | iex"), command.label)
+        // (The demo runs the command a moment later.) It shows up, and is
+        // put in the project chosen.
+        let arrived = app.staticTexts["computer.arrived"]
+        XCTAssertTrue(arrived.waitForExistence(timeout: 20), "the folder showed up")
+        XCTAssertTrue(arrived.label.contains("myco 手机端"), arrived.label)
+        shot("computer-arrived")
     }
 
     @MainActor
@@ -503,6 +530,8 @@ final class WalkthroughTests: XCTestCase {
         // to try again.
         let app = launch(["-myco-trouble", "links"])
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))
+        // (the plus offers an agent, or a computer)
+        app.buttons["chrome.add"].firstMatch.tap()
         app.buttons["Add an agent"].firstMatch.tap()
         let words = app.staticTexts["failure.words"]
         XCTAssertTrue(words.waitForExistence(timeout: 5))

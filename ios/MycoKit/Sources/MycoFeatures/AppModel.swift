@@ -732,6 +732,7 @@ struct RootView: View {
             case .workspace: WorkspaceSheet()
             case .memberCard(let name): MemberCardSheet(name: name)
             case .addAgent: AddAgentSheet()
+            case .addComputer(let project): AddComputerSheet(project: project)
             case .export(let agent, let project): ExportSheet(agent: agent, project: project)
             }
         }

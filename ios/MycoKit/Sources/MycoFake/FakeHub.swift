@@ -352,6 +352,54 @@ public actor FakeHub: HubAPI {
         return agents[index].agent
     }
 
+    // MARK: A computer added with one command
+
+    /// A link was made: the folder it is run in shows up a moment later
+    /// (as if someone ran the command), usable by these agents.
+    private var computerComing: (at: Date, allowFrom: [String])?
+    /// Acts as for someone who is not the workspace's owner or an admin.
+    private var mayNotAddComputers = false
+
+    public func setMayNotAddComputers(_ value: Bool) {
+        mayNotAddComputers = value
+    }
+
+    public func computerLink(allowFrom: [String]) async throws -> JoinLink {
+        try await check()
+        if mayNotAddComputers {
+            throw HubError(error: "permission_denied", message: "only the hub's owner or an admin can make a link for a shell node", status: 403)
+        }
+        guard !allowFrom.isEmpty else {
+            throw HubError(error: "invalid_argument", message: "a shell node needs at least one agent allowed to send it commands", status: 400)
+        }
+        computerComing = (Date().addingTimeInterval(4), allowFrom)
+        return JoinLink(joinUrl: "https://demo.myco.example/j/myco_enroll_computer")
+    }
+
+    public func addProjectMember(_ agent: String, to project: String) async throws {
+        try await check()
+        guard let index = projectList.firstIndex(where: { $0.name == project }) else {
+            throw HubError(error: "not_found", message: "project \(project) not found", status: 404)
+        }
+        guard agents.contains(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found", status: 404)
+        }
+        if !projectList[index].members.contains(where: { $0.name == agent }) {
+            projectList[index].members.append(ProjectMember(name: agent, addedAt: Date()))
+        }
+    }
+
+    /// The command "was run": the folder is a node now.
+    private func arriveComputer() {
+        guard let coming = computerComing, Date() >= coming.at else { return }
+        computerComing = nil
+        seq += 1
+        let node = Agent(
+            id: "agt_shell\(seq)", name: "studio-site-shell\(seq)", binding: Binding(harness: "exec", workdir: "~/code/site"),
+            kind: "shell", machineId: "mach_studio")
+        agents.append(AgentStatus(agent: node, state: "idle"))
+    }
+
     // MARK: Automations
 
     private var automationList: [Automation] = []
@@ -484,6 +532,7 @@ public actor FakeHub: HubAPI {
     /// Moves what the app sent along: taken on, then answered.
     private func advance() {
         let now = Date()
+        arriveComputer()
         for (id, sentAt) in simulated {
             guard let i = messages.firstIndex(where: { $0.id == id }) else { continue }
             // Put after a task that is still open: it waits, as on a hub.

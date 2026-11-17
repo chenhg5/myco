@@ -163,6 +163,14 @@ public protocol HubAPI: Sendable {
     /// setting). For whoever owns the agent or manages the workspace. A
     /// workspace from before v0.19.5 answers `not_found`.
     func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `POST /v1/enrollments` with `kind: "link"` and `harness: "exec"`:
+    /// a link for one computer (one use, a day). Its command, run in a
+    /// folder there, makes that folder a computer the agents in
+    /// `allowFrom` may run commands in. For the workspace's owner and
+    /// admins only.
+    func computerLink(allowFrom: [String]) async throws -> JoinLink
+    /// `PUT /v1/projects/{name}/members/{agent}`: puts a node in a project.
+    func addProjectMember(_ agent: String, to project: String) async throws
     /// `GET /v1/console/automations`: mine, or everyone's for whoever
     /// manages the workspace. A workspace from before v0.19.22 answers
     /// `not_found`.
