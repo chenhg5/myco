@@ -147,6 +147,62 @@ public final class AppModel {
         public var state: VoiceSharing.State
     }
 
+    // MARK: The network proxy
+
+    /// How the app reaches its workspaces and the voice services: as the
+    /// system has it, directly, or through a proxy set here.
+    public private(set) var proxy: ProxySettings = AppModel.savedProxy()
+    /// A password for the proxy is in the keychain.
+    public private(set) var proxyHasPassword = false
+
+    private static let proxyKey = "myco-network-proxy"
+
+    private static func savedProxy() -> ProxySettings {
+        guard let data = UserDefaults.standard.data(forKey: proxyKey),
+              let settings = try? JSONDecoder().decode(ProxySettings.self, from: data)
+        else { return ProxySettings() }
+        return settings
+    }
+
+    /// Puts the saved setting in force: at launch, before anything is
+    /// asked of a workspace, and when it is saved.
+    private func applyProxy() async {
+        let password = await secret(ProxySettings.passwordKey)
+        proxyHasPassword = !password.isEmpty
+        AppNetwork.shared.apply(proxy, password: password)
+    }
+
+    /// Keeps a proxy setting and puts it in force at once. A password
+    /// left empty stays as it was; `forgetPassword`, or no user name,
+    /// takes the saved one away.
+    public func saveProxy(_ settings: ProxySettings, password: String = "", forgetPassword: Bool = false) async {
+        var settings = settings
+        settings.host = settings.host.trimmingCharacters(in: .whitespaces)
+        settings.user = settings.user.trimmingCharacters(in: .whitespaces)
+        guard settings.problem == nil else { return }
+        proxy = settings
+        UserDefaults.standard.set(try? JSONEncoder().encode(settings), forKey: Self.proxyKey)
+        if forgetPassword || settings.user.isEmpty {
+            try? await doors.secrets.setSecret(nil, for: ProxySettings.passwordKey)
+        } else if !password.isEmpty {
+            try? await doors.secrets.setSecret(password, for: ProxySettings.passwordKey)
+        }
+        await applyProxy()
+    }
+
+    /// One request through a setting, before it is saved: to a workspace
+    /// that is not on the local network (those go direct, whatever is
+    /// set), else to GitHub. With the password typed, else the one kept.
+    public func tryProxy(_ settings: ProxySettings, password: String) async -> ProxyTrial {
+        var password = password
+        if password.isEmpty, !settings.user.isEmpty { password = await secret(ProxySettings.passwordKey) }
+        var target = URL(string: "https://github.com/")!
+        if let away = workspaces.first(where: { !ProxySettings.isLocal($0.url.host() ?? "") }) { target = away.url }
+        // (`-myco-proxy-target <url>`: where a try goes, for tests.)
+        if let given = UserDefaults.standard.string(forKey: "myco-proxy-target"), let url = URL(string: given) { target = url }
+        return await ProxyTrial.run(settings, password: password, to: target)
+    }
+
     private static let voiceKey = "myco-voice"
 
     private static func savedVoice() -> VoiceSettings {
@@ -431,6 +487,8 @@ public final class AppModel {
     /// page up.
     public func start(restoring: Bool) async {
         guard !started else { return }
+        // The proxy set in Settings is in force before anything is asked.
+        await applyProxy()
         if restoring { await loadWorkspaces() }
         started = true
         // What was set for voice on another device: here without asking.

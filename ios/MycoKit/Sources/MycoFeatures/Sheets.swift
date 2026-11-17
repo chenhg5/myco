@@ -416,6 +416,18 @@ struct SettingsScreen: View {
             }
             Section {
                 NavigationLink {
+                    ProxySettingsScreen()
+                } label: {
+                    LabeledContent(L("代理", "Proxy"), value: ProxySettingsScreen.word(for: app.proxy))
+                }
+                .accessibilityIdentifier("settings.proxy")
+            } header: {
+                Text(L("网络", "Network"))
+            } footer: {
+                Text(L("连工作区和语音服务时走的代理。局域网里的地址总是直连。", "How the app reaches its workspaces and the voice services. Addresses on the local network always go direct."))
+            }
+            Section {
+                NavigationLink {
                     VoiceSettingsScreen()
                 } label: {
                     LabeledContent(L("语音聊天", "Voice chat"), value: app.voiceReady ? L("已设置", "Set up") : L("未设置", "Not set up"))
@@ -657,6 +669,215 @@ struct VoiceSettingsScreen: View {
                     .font(.footnote).tint(MycoColor.red)
                     .buttonStyle(.borderless)
             }
+        }
+    }
+}
+
+/// Settings › 代理: as the system has it, none, or a proxy set here,
+/// tried before it is saved. The desktop app's page, on the phone.
+struct ProxySettingsScreen: View {
+    @Environment(AppModel.self) private var app
+    @State private var settings = ProxySettings()
+    @State private var port = ""
+    @State private var password = ""
+    @State private var forgetPassword = false
+    @State private var read = false
+    @State private var busy = false
+    /// How the last try went.
+    @State private var tried: ProxyTrial?
+    @State private var saved = false
+
+    /// The setting as typed.
+    private var typed: ProxySettings {
+        var out = settings
+        out.host = out.host.trimmingCharacters(in: .whitespaces)
+        out.user = out.user.trimmingCharacters(in: .whitespaces)
+        out.port = Int(port) ?? 0
+        return out
+    }
+
+    private var hasPassword: Bool { app.proxyHasPassword && !forgetPassword }
+
+    private var dirty: Bool {
+        typed != app.proxy || !password.isEmpty || (forgetPassword && app.proxyHasPassword)
+    }
+
+    /// "System", "Off", "SOCKS5 host:port".
+    static func word(for settings: ProxySettings) -> String {
+        switch settings.mode {
+        case .system: return L("跟系统", "System")
+        case .none: return L("不用代理", "Off")
+        case .manual: return name(of: settings.kind) + " " + settings.host + ":" + String(settings.port)
+        }
+    }
+
+    static func name(of kind: ProxySettings.Kind) -> String {
+        switch kind {
+        case .socks5: return "SOCKS5"
+        case .http: return "HTTP"
+        case .https: return "HTTPS"
+        }
+    }
+
+    /// How a try went, in words.
+    static func words(for trial: ProxyTrial) -> String {
+        switch trial {
+        case .connected(let milliseconds): return L("连通了，用时 \(milliseconds) 毫秒", "Connected in \(milliseconds) ms")
+        // (A proxy that wants a password and gets none, or a wrong one,
+        // is asked again and again until the time is up: the system does
+        // not say so.)
+        case .timeout: return L("12 秒内没有回应。代理要用户名和密码而没填对时，也是这样。", "No answer within 12 seconds. A proxy that wants a user name and password, and did not get the right ones, ends this way too.")
+        case .refused: return L("代理拒绝了连接：它在运行吗，端口对吗？", "The proxy refused the connection: is it running, on that port?")
+        case .notFound: return L("找不到这个地址", "That address was not found")
+        case .auth: return L("代理要用户名和密码，或者没接受填的这组", "The proxy wants a user name and password, or did not accept these")
+        case .other(let said): return L("连不上：", "Could not connect: ") + said
+        }
+    }
+
+    private var note: String {
+        switch settings.mode {
+        case .system: return L("用 iPhone 自己的设置：无线局域网里配的代理、VPN。没有就直连。", "Uses the iPhone's own settings: the proxy set for the Wi-Fi network, a VPN. Without one, connects directly.")
+        case .none: return L("所有连接都直连，不走系统里配的代理。", "Every connection goes directly, not through a proxy the system is set to.")
+        case .manual: return L("比如电脑上 Clash、V2Ray 一类的代理：SOCKS5 常见端口 1080 / 7891，HTTP 常见 7890 / 8080。填电脑在局域网里的地址，并在代理里打开「允许局域网连接」。",
+                               "Such as Clash or V2Ray on a computer: SOCKS5 is often on 1080 / 7891, HTTP on 7890 / 8080. Use the computer's address on the local network, and let the proxy accept connections from it.")
+        }
+    }
+
+    private var problem: String? {
+        switch typed.problem {
+        case nil: return nil
+        case .host: return L("地址填主机名或 IP，不带 http:// 和端口。", "The address is a host name or IP, without http:// or a port.")
+        case .port: return L("端口是 1 到 65535。", "The port is 1 to 65535.")
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker(L("代理", "Proxy"), selection: $settings.mode) {
+                    Text(L("跟系统", "System")).tag(ProxySettings.Mode.system)
+                    Text(L("不用代理", "Off")).tag(ProxySettings.Mode.none)
+                    Text(L("手动设置", "Set here")).tag(ProxySettings.Mode.manual)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("proxy.mode")
+            } footer: {
+                Text(note)
+            }
+            if settings.mode == .manual {
+                Section {
+                    Picker(L("类型", "Type"), selection: $settings.kind) {
+                        ForEach(ProxySettings.Kind.allCases, id: \.self) { kind in
+                            Text(Self.name(of: kind)).tag(kind)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("proxy.kind")
+                    TextField(L("地址，如 192.168.1.10", "Host, e.g. 192.168.1.10"), text: $settings.host)
+                        .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .accessibilityIdentifier("proxy.host")
+                    TextField(L("端口，如 ", "Port, e.g. ") + (settings.kind == .socks5 ? "1080" : "7890"), text: $port)
+                        .keyboardType(.numberPad)
+                        .onChange(of: port) { _, new in
+                            let digits = String(new.filter(\.isNumber).prefix(5))
+                            if digits != new { port = digits }
+                        }
+                        .accessibilityIdentifier("proxy.port")
+                } header: {
+                    Text(L("代理", "The proxy"))
+                } footer: {
+                    if let problem, !typed.host.isEmpty || !port.isEmpty {
+                        Text(problem).foregroundStyle(MycoColor.amber)
+                    }
+                }
+                Section {
+                    TextField(L("用户名（可不填）", "User (optional)"), text: $settings.user)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .accessibilityIdentifier("proxy.user")
+                    HStack {
+                        SecureField(hasPassword ? L("密码已保存，要换就填新的", "Password saved; type a new one to replace it") : L("密码（可不填）", "Password (optional)"), text: $password)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .accessibilityIdentifier("proxy.password")
+                        if hasPassword, password.isEmpty {
+                            Button(L("清除", "Clear")) { forgetPassword = true }
+                                .font(.footnote).tint(MycoColor.red)
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                } footer: {
+                    Text(L("密码存在这台 iPhone 的钥匙串里。", "The password is kept in this iPhone's keychain."))
+                }
+            }
+            Section {
+                if settings.mode == .manual {
+                    Button {
+                        tryIt()
+                    } label: {
+                        HStack {
+                            Text(L("试一下", "Try it"))
+                            if busy {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(busy || typed.problem != nil)
+                    .tint(MycoColor.accent)
+                    .accessibilityIdentifier("proxy.try")
+                }
+                Button(L("保存", "Save")) { save() }
+                    .disabled(busy || !dirty || typed.problem != nil)
+                    .tint(MycoColor.accent)
+                    .accessibilityIdentifier("proxy.save")
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let tried {
+                        let connected: Bool = { if case .connected = tried { return true } else { return false } }()
+                        Text(Self.words(for: tried)).foregroundStyle(connected ? MycoColor.green : MycoColor.amber)
+                            .accessibilityIdentifier("proxy.tried")
+                    }
+                    if saved, !dirty {
+                        Text(L("已保存，马上生效", "Saved; in effect now")).foregroundStyle(MycoColor.green)
+                            .accessibilityIdentifier("proxy.saved")
+                    }
+                    Text(L("这台手机和局域网里的地址（比如家里电脑上的工作区）总是直连，不走这里设的代理。",
+                           "Addresses on this phone and the local network (a workspace on a computer at home, say) always go direct, not through the proxy set here."))
+                }
+            }
+        }
+        .navigationTitle(L("代理", "Proxy"))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            guard !read else { return }
+            read = true
+            settings = app.proxy
+            port = app.proxy.port > 0 ? String(app.proxy.port) : ""
+        }
+        .onChange(of: typed) { tried = nil }
+    }
+
+    private func tryIt() {
+        let setting = typed
+        let typedPassword = password
+        busy = true
+        tried = nil
+        Task {
+            tried = await app.tryProxy(setting, password: typedPassword)
+            busy = false
+        }
+    }
+
+    private func save() {
+        let setting = typed
+        let typedPassword = password
+        let forget = forgetPassword && password.isEmpty
+        busy = true
+        Task {
+            await app.saveProxy(setting, password: typedPassword, forgetPassword: forget)
+            password = ""
+            forgetPassword = false
+            saved = true
+            busy = false
         }
     }
 }
