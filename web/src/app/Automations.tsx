@@ -212,37 +212,49 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
 
           <div className="app-field">
             <span className="app-field-label">{L("什么时候", "When")}</span>
-            <label className="app-check-line"><input type="checkbox" checked={timed} onChange={(e) => setTimed(e.target.checked)} disabled={busy} /><span>{L("定时", "On a schedule")}</span></label>
-            {timed && (
-              <div className="au-when">
-                <select className="app-select-field" value={mode} onChange={(e) => setMode(e.target.value as Mode)} disabled={busy} aria-label={L("多久一次", "How often")}>
-                  <option value="daily">{L("每天", "Every day")}</option>
-                  <option value="weekdays">{L("工作日（周一到周五）", "Weekdays (Mon–Fri)")}</option>
-                  <option value="weekly">{L("每周一次", "Once a week")}</option>
-                  <option value="hours">{L("每隔几小时", "Every few hours")}</option>
-                  <option value="cron">{L("自定义（cron）", "Custom (cron)")}</option>
-                </select>
-                {mode === "weekly" && (
-                  <select className="app-select-field" value={day} onChange={(e) => setDay(+e.target.value)} disabled={busy} aria-label={L("星期几", "Which day")}>
-                    {dayNames().map((d, i) => <option key={d} value={i}>{d}</option>)}
-                  </select>
+            <div className="au-triggers">
+              <div className="au-trigger">
+                <label className="app-check-line"><input type="checkbox" checked={timed} onChange={(e) => setTimed(e.target.checked)} disabled={busy} />
+                  <span>{L("定时", "On a schedule")}<small>{L("到点就发，最短 10 分钟一次。", "Sent when it is time; at most every 10 minutes.")}</small></span></label>
+                {timed && (
+                  <div className="au-trigger-body">
+                    <div className="au-when">
+                      <select className="app-select-field" value={mode} onChange={(e) => setMode(e.target.value as Mode)} disabled={busy} aria-label={L("多久一次", "How often")}>
+                        <option value="daily">{L("每天", "Every day")}</option>
+                        <option value="weekdays">{L("工作日（周一到周五）", "Weekdays (Mon–Fri)")}</option>
+                        <option value="weekly">{L("每周一次", "Once a week")}</option>
+                        <option value="hours">{L("每隔几小时", "Every few hours")}</option>
+                        <option value="cron">{L("自定义（cron）", "Custom (cron)")}</option>
+                      </select>
+                      {mode === "weekly" && (
+                        <select className="app-select-field" value={day} onChange={(e) => setDay(+e.target.value)} disabled={busy} aria-label={L("星期几", "Which day")}>
+                          {dayNames().map((d, i) => <option key={d} value={i}>{d}</option>)}
+                        </select>
+                      )}
+                      {mode === "hours" && (
+                        <select className="app-select-field" value={hours} onChange={(e) => setHours(+e.target.value)} disabled={busy} aria-label={L("隔几小时", "How many hours")}>
+                          {[1, 2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{L(`每 ${n} 小时`, `Every ${n} h`)}</option>)}
+                        </select>
+                      )}
+                      {mode !== "cron" && mode !== "hours" && <input type="time" className="app-input au-time" value={time} onChange={(e) => setTime(e.target.value)} disabled={busy} aria-label={L("几点", "At what time")} />}
+                      {mode === "cron" && <input className="app-input mono au-cron" value={cron} onChange={(e) => setCron(e.target.value)} placeholder="0 9 * * 1-5" disabled={busy} aria-label="cron" />}
+                    </div>
+                    <div className="au-summary">{L(`${describe(toCron(every))}（${tz} 时间）`, `${describe(toCron(every))} (${tz} time)`)}</div>
+                  </div>
                 )}
-                {mode === "hours" && (
-                  <select className="app-select-field" value={hours} onChange={(e) => setHours(+e.target.value)} disabled={busy} aria-label={L("隔几小时", "How many hours")}>
-                    {[1, 2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{L(`每 ${n} 小时`, `Every ${n} h`)}</option>)}
-                  </select>
-                )}
-                {mode !== "cron" && mode !== "hours" && <input type="time" className="app-input au-time" value={time} onChange={(e) => setTime(e.target.value)} disabled={busy} aria-label={L("几点", "At what time")} />}
-                {mode === "cron" && <input className="app-input mono" value={cron} onChange={(e) => setCron(e.target.value)} placeholder="0 9 * * 1-5" disabled={busy} aria-label="cron" />}
               </div>
-            )}
-            {timed && <span className="app-small-note">{L(`${describe(toCron(every))}，按 ${tz} 的时间。最短 10 分钟一次。`, `${describe(toCron(every))}, ${tz} time. At most every 10 minutes.`)}</span>}
-            <label className="app-check-line"><input type="checkbox" checked={hook} onChange={(e) => setHook(e.target.checked)} disabled={busy} />
-              <span>{L("Webhook", "Webhook")}<small>{L("给它一个地址，CI、监控、GitHub 之类的外部系统 POST 一下就触发。保存后给出地址和密钥。", "It gets an address; an outside system (CI, monitoring, GitHub…) POSTs to it to run this. The address and secret come after saving.")}</small></span></label>
+              <div className="au-trigger">
+                <label className="app-check-line"><input type="checkbox" checked={hook} onChange={(e) => setHook(e.target.checked)} disabled={busy} />
+                  <span>{L("Webhook", "Webhook")}<small>{L("外部系统（CI、监控、GitHub…）POST 一个地址就触发。保存后给出地址和密钥。", "An outside system (CI, monitoring, GitHub…) POSTs to an address to run it. The address and secret come after saving.")}</small></span></label>
+              </div>
+            </div>
           </div>
-          <label className="app-check-line"><input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={busy} />
-            <span>{L("上一次的任务还没做完就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span></label>
-          <div className="app-small-note">{L("自动化的内容存在工作区的 Hub 上，不是端到端加密的。", "An automation's text is kept on the workspace's hub, not end-to-end encrypted.")}</div>
+          <div className="au-triggers">
+            <div className="au-trigger">
+              <label className="app-check-line"><input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={busy} />
+                <span>{L("上一次的任务还没做完就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span></label>
+            </div>
+          </div>
 
           {a && runs.length > 0 && (
             <div className="app-field">
@@ -258,6 +270,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
             </div>
           )}
 
+          <div className="au-note">{L("自动化的内容存在工作区的 Hub 上，不是端到端加密的。", "An automation's text is kept on the workspace's hub, not end-to-end encrypted.")}</div>
           <ErrorText error={error} />
           <div className="app-modal-actions">
             {a && <button type="button" className="app-btn app-btn-quiet au-delete" onClick={() => setDeleting(true)} disabled={busy}>{L("删除", "Delete")}</button>}
