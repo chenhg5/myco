@@ -168,7 +168,7 @@ public enum Scenario: Sendable {
                         error: "delivery attempts exhausted: recipient pulled but never acknowledged",
                         createdAt: ago(1_200), updatedAt: ago(600)),
             ]
-            world.silent = ["s2"]
+            world.silent = ["s2", "x1"]
         }
         if self == .long {
             // Four hundred messages with the notes helper, oldest first,
