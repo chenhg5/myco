@@ -1770,10 +1770,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
+              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
-              : <MessageContent body={m.body} />}
+              : <MessageContent body={m.body} foldId={m.id} />}
             {/* (after its text has grown in: pictures first, then the
                 words filling in above them, reads oddly) */}
             {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}

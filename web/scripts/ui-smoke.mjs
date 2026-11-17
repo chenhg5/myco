@@ -1886,29 +1886,29 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
-    // A long message starts folded; unfolded, it stays unfolded when the
-    // list above it changes (a message deleted, older ones loaded).
+    // A long answer starts folded; unfolded, it stays unfolded while it
+    // settles (it grows in, then is drawn as a plain reply) and you scroll
+    // down through it.
     await step("单聊 · 展开的长消息不会自己收起", async () => {
+      const tag = `（${size.width}-${scheme}）`;
+      const mock = (data) => fetch(`http://${HOST}:${mockPort()}/app/mock/replies`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      await mock({ agent: "review-cloud", prepare: true });
+      await page.reload();
+      await page.locator(".app-shell").waitFor({ timeout: 20_000 });
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
-      const tag = `${size.width}-${scheme}`;
-      const box = page.locator(".conv-detail .conv-compose-input");
-      await box.fill(`先说一句短的（${tag}）`);
-      await box.press("Enter");
-      const short = page.locator(".conv-detail .conv-msg.is-me", { hasText: `先说一句短的（${tag}）` }).last();
-      await short.waitFor({ timeout: 10_000 });
-      await box.fill(Array.from({ length: 40 }, (_, i) => `长消息第 ${i + 1} 行（${tag}）`).join("\n"));
-      await box.press("Enter");
-      const long = page.locator(".conv-detail .conv-msg.is-me", { hasText: `长消息第 1 行（${tag}）` }).last();
-      await long.waitFor({ timeout: 10_000 });
-      await clickVisible(page, long.locator(".md-fold-btn", { hasText: "展开" }));
+      await page.waitForTimeout(1500);
+      await mock({ agent: "review-cloud", lines: 45, tag });
+      const long = page.locator(".conv-detail .conv-msg", { hasText: `长回复第 1 行${tag}` }).last();
+      const unfold = long.locator(".md-fold-btn", { hasText: "展开" });
+      await unfold.waitFor({ timeout: 15_000 });
+      await unfold.click();
       await long.locator(".md-fold-btn", { hasText: "收起" }).waitFor({ timeout: 5_000 });
-      // The short one, above it, goes from your view: the long one stays open.
-      await short.hover();
-      await clickVisible(page, short.locator(".conv-msg-del"));
-      await short.waitFor({ state: "detached", timeout: 5_000 });
+      // It settles; you scroll down through it.
+      await settle(page, 2500);
+      await long.evaluate((el) => el.closest(".conv-scroll")?.scrollBy(0, 600));
       await settle(page, 800);
-      if (await long.locator(".md-fold-body.is-collapsed").count()) throw new Error("上面的消息变了之后，展开的长消息不该自己收起");
+      if (await long.locator(".md-fold-body.is-collapsed").count()) throw new Error("展开的长回复不该自己收起");
       await noRound(page);
     });
 

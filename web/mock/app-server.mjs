@@ -1709,6 +1709,12 @@ const server = http.createServer(async (req, res) => {
     if (body.prepare) return send(res, 200, { ok: true, thread: threadId });
     const long = (n) => `第 ${n} 段回答：改动已经合进去了，构建和测试都通过。\n\n首页在三种宽度下都看过了，导航栏在窄屏下收起成菜单按钮，下载按钮的位置没变。\n\n发布说明按新功能、修复、文档三类整理好了，措辞你再看一眼。`;
     const tag = String(body.tag || "");
+    // One long answer (lines: N), which starts folded in the App.
+    if (body.lines) {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
+        body: Array.from({ length: Number(body.lines) }, (_, i) => `长回复第 ${i + 1} 行${tag}`).join("\n"), created_at: iso(0), updated_at: iso(0) }));
+      return send(res, 200, { ok: true, thread: threadId });
+    }
     msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(1)}${tag}`, created_at: iso(0), updated_at: iso(0) }));
     setTimeout(() => {
       msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(2)}${tag}`, created_at: iso(0), updated_at: iso(0),

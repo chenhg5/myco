@@ -71,8 +71,10 @@ const reducedMotion = () => {
 
 /** `streaming` accepts an unfinished body: each appended suffix grows in
  * before the next poll, while completed replies keep the block reveal. */
-export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow, finish }: {
+export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, plain, cursor, onGrow, finish, foldId }: {
   body: string; onDone?: () => void; streaming?: boolean; intervalMs?: number;
+  /** the message it is (MessageContent keeps it unfolded by this) */
+  foldId?: string;
   plain?: boolean; cursor?: boolean; onGrow?: () => void;
   /** Something newer is below it: all of it at once, no more growing (a
    *  message still growing above a newer one reads out of order). */
@@ -158,7 +160,7 @@ export function Reveal({ body, onDone, streaming = false, intervalMs = 1500, pla
   const text = done ? body : body.slice(0, shown);
   return (
     <div className={cn("reveal", !done && "is-growing", streaming && "is-streaming")}>
-      {plain ? text : <MessageContent body={text} />}
+      {plain ? text : <MessageContent body={text} foldId={foldId} />}
       {cursor && <span className="trace-cursor" aria-hidden />}
     </div>
   );
