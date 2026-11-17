@@ -32,6 +32,40 @@ CREATE TABLE IF NOT EXISTS agent_resumes (
   last_used_at  INTEGER NOT NULL DEFAULT 0,
   last_used_env TEXT NOT NULL DEFAULT ''
 );
+-- Handovers (v0.19.23): the session behind a node replaced by another.
+CREATE TABLE IF NOT EXISTS agent_handovers (
+  id              TEXT PRIMARY KEY,
+  agent           TEXT NOT NULL,
+  at              INTEGER NOT NULL,
+  by_who          TEXT NOT NULL DEFAULT '',
+  note            TEXT NOT NULL DEFAULT '',
+  from_binding    TEXT NOT NULL DEFAULT '{}',
+  from_machine_id TEXT NOT NULL DEFAULT '',
+  from_runtime    TEXT NOT NULL DEFAULT '{}',
+  to_binding      TEXT NOT NULL DEFAULT '{}',
+  to_machine_id   TEXT NOT NULL DEFAULT '',
+  to_runtime      TEXT NOT NULL DEFAULT '{}',
+  state           TEXT NOT NULL,
+  done_at         INTEGER NOT NULL DEFAULT 0,
+  open_tasks      TEXT NOT NULL DEFAULT '[]',
+  back_to         TEXT NOT NULL DEFAULT '',
+  expires_at      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_agent_handovers ON agent_handovers(agent, at DESC);
+CREATE TABLE IF NOT EXISTS handover_links (
+  token_hash  TEXT PRIMARY KEY,
+  handover_id TEXT NOT NULL,
+  agent       TEXT NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  used_at     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS agent_retired_tokens (
+  token_hash  TEXT PRIMARY KEY,
+  agent       TEXT NOT NULL,
+  handover_id TEXT NOT NULL,
+  retired_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_retired_tokens ON agent_retired_tokens(agent, retired_at DESC);
 CREATE TABLE IF NOT EXISTS messages (
   id              TEXT PRIMARY KEY,
   from_agent      TEXT NOT NULL,

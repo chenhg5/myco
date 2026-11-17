@@ -21,6 +21,7 @@ type AgentService struct {
 	visibility   func(ctx context.Context, owner string) domain.Visibility
 	projects     domain.ProjectRepository
 	avatars      domain.AvatarStore
+	replaced     func(ctx context.Context, tokenHash string) error
 }
 
 // SetAvatarStore keeps the pictures agents use as faces (without one, only
@@ -372,12 +373,24 @@ func (s *AgentService) SetVisibility(ctx context.Context, name string, v string)
 // DeliveryModes lists supported delivery modes.
 func (s *AgentService) DeliveryModes() []string { return s.wakers.Modes() }
 
+// SetReplaced sets how a credential retired by a handover is reported
+// (see HandoverService.Replaced).
+func (s *AgentService) SetReplaced(fn func(ctx context.Context, tokenHash string) error) {
+	s.replaced = fn
+}
+
 // Authenticate resolves a bearer token to an agent and records activity.
 func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.Agent, error) {
 	if token == "" {
 		return nil, domain.Errf(domain.CodeUnauthenticated, "missing agent token")
 	}
 	a, err := s.agents.GetByTokenHash(ctx, s.tokens.Hash(token))
+	if domain.IsCode(err, domain.CodeNotFound) && s.replaced != nil {
+		// A session another one took over: say so, so it stops.
+		if rerr := s.replaced(ctx, s.tokens.Hash(token)); rerr != nil {
+			return nil, rerr
+		}
+	}
 	if domain.IsCode(err, domain.CodeNotFound) {
 		return nil, domain.Errf(domain.CodeUnauthenticated, "invalid agent token").
 			WithSuggestion("check the address: a token works only in the hub or workspace that issued it (a workspace's address ends in /w/<name>; MYCO_HUB or --hub may point elsewhere). Otherwise an admin issues a new one there: myco agent register --hub <that address> --name <name> --rotate-token --no-save")

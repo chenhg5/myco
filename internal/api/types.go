@@ -689,6 +689,15 @@ type SpawnRequest struct {
 	// into the new agent instead of starting an empty one: it keeps the
 	// original's context, and the original is left untouched.
 	ForkFrom string `json:"fork_from,omitempty"`
+	// TakeOver, from the hub only (POST /v1/agents/{name}/handover): a
+	// take-over link token. The new session takes that node over instead of
+	// joining as a new agent; Brief is its first prompt (the handover note).
+	// ResumeSession continues that session (a switch back) instead of
+	// starting one. Machines older than the hub's handover support are
+	// refused by the hub before it sends this.
+	TakeOver      string `json:"take_over,omitempty"`
+	Brief         string `json:"brief,omitempty"`
+	ResumeSession string `json:"resume_session,omitempty"`
 	// JoinLink, instead of starting a session, adds this machine to another
 	// workspace of the same hub server with that workspace's join link
 	// (<hub>/w/<name>/j/<token>): it reuses the machine's way to the server,

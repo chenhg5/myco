@@ -196,6 +196,10 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	handovers := app.NewHandoverService(sqlite.NewHandoverRepo(db), agentsRepo, msgRepo, security.Tokens{}, ids, clock)
+	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
+	srv.SetHandovers(handovers)
+	messages.SetCredentialCheck(handovers.StillCurrent)
 	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations,
 		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
@@ -291,6 +295,9 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		}
 		if strings.HasPrefix(path, "/j/") {
 			path = "/j/<redacted>" // join links carry a credential
+		}
+		if strings.HasPrefix(path, "/h/") {
+			path = "/h/<redacted>" // take-over links carry a credential
 		}
 		if strings.HasPrefix(path, "/c/") {
 			path = "/c/<redacted>" // app links carry a console token

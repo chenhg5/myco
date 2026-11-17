@@ -178,6 +178,7 @@ var statusByCode = map[domain.ErrorCode]int{
 	domain.CodeUnauthenticated:  http.StatusUnauthorized,
 	domain.CodeInternal:         http.StatusInternalServerError,
 	domain.CodeRateLimited:      http.StatusTooManyRequests,
+	domain.CodeReplaced:         http.StatusUnauthorized,
 }
 
 func writeError(w http.ResponseWriter, err error) {
