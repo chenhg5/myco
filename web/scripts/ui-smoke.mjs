@@ -356,6 +356,8 @@ async function runMatrix(browser, size, scheme) {
   // The run step changes a node's model and effort; put the demo ones back.
   const resetRun = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`, { method: "POST" });
   if (!resetRun.ok) throw new Error(`重置模型设置失败：HTTP ${resetRun.status}`);
+  const resetHandovers = await fetch(`http://${HOST}:${mockPort()}/app/mock/handovers`, { method: "POST" });
+  if (!resetHandovers.ok) throw new Error(`重置接手记录失败：HTTP ${resetHandovers.status}`);
   const context = await browser.newContext({
     viewport: size,
     colorScheme: scheme,
@@ -520,6 +522,28 @@ async function runMatrix(browser, size, scheme) {
     });
 
     // The members column folds to a strip of faces, and stays so.
+    // Where another session took the coordinator over, its chat has a quiet
+    // line saying so; its menu in the members column offers it again.
+    await step("项目 · 换过会话的地方有一条线", async () => {
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home .conv-detail").waitFor({ timeout: 20_000 });
+      const line = page.locator(".sp-home [data-testid=handover-divider]").first();
+      await line.waitFor({ state: "attached", timeout: 10_000 });
+      const said = compactText(await line.innerText());
+      if (!said.includes("换成 Studio Mac · Codex 接着做") || !said.includes("你换的")) throw new Error(`分隔线的字不对：「${said}」`);
+      const sc = page.locator(".sp-home .conv-scroll").first();
+      const box = await sc.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, -600); await page.waitForTimeout(50); }
+      await settle(page, 300);
+      await shot(page, size, scheme, "handover-divider");
+      if (!narrow) {
+        await page.locator(".sp-side .sp-member:visible", { hasText: "PM (Codex)" }).first().click({ button: "right" });
+        await page.getByRole("menuitem", { name: "换一个来接着做" }).waitFor({ timeout: 5_000 });
+        await page.keyboard.press("Escape");
+      }
+    });
+
     if (!narrow) await step("项目 · 成员栏收起", async () => {
       await page.getByRole("button", { name: "收起成员" }).click();
       await page.locator(".sp-side.is-folded").waitFor({ timeout: 5_000 });
@@ -2077,6 +2101,55 @@ async function runMatrix(browser, size, scheme) {
       await resumeConfirm.getByRole("button", { name: "作废", exact: true }).click();
       await resumeConfirm.waitFor({ state: "hidden" });
       await resume.getByText("还没有链接").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    // 「换一个来接着做」: PM was taken over from a claude.ai session; its card
+    // lists that, with a way back, and the dialog offers a new session on a
+    // computer (old computers need an update first) or a one-time command.
+    await step("成员 · 换一个来接着做", async () => {
+      await go(page, "成员", narrow);
+      const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
+      await pm.scrollIntoViewIfNeeded();
+      await pm.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      const history = page.locator(".ms [data-testid=handover-history]");
+      await history.waitFor({ timeout: 10_000 });
+      const said = compactText(await history.innerText());
+      for (const want of ["claude.ai 云端", "Studio Mac · Codex", "换回这个", "没用上"]) {
+        if (!said.includes(want)) throw new Error(`接手记录里应有「${want}」，实际「${said}」`);
+      }
+      await history.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-handovers");
+      await clickVisible(page, page.locator(".ms [data-testid=handover-open]"));
+      const dlg = page.locator(".app-modal", { hasText: "换一个来接着做" });
+      await dlg.waitFor({ timeout: 5_000 });
+      const form = compactText(await dlg.innerText());
+      for (const want of ["只是换个账号", "Studio Mac", "要先升级", "原来的会话会停下", "最近 30 条"]) {
+        if (!form.includes(want)) throw new Error(`接手弹窗里应有「${want}」，实际「${form}」`);
+      }
+      // The folder of the computer it is on now is filled in.
+      if ((await dlg.locator("input.mono").inputValue()) !== "~/code/myco") throw new Error("同一台电脑上应默认原来的文件夹");
+      await settle(page, 200);
+      await shot(page, size, scheme, "handover-machine");
+      await clickVisible(page, dlg.locator("[data-testid=handover-way-link]"));
+      await clickVisible(page, dlg.locator("[data-testid=handover-start]"));
+      const cmd = dlg.locator("[data-testid=handover-command]");
+      await cmd.waitFor({ timeout: 5_000 });
+      const line = (await cmd.locator(".app-command code").innerText()).trim();
+      if (!line.startsWith("curl -fsSL") || !line.includes("/h/myco_takeover_")) throw new Error(`接手命令不对：${line}`);
+      await clickVisible(page, cmd.getByRole("tab", { name: "Windows（PowerShell）" }));
+      if (!(await cmd.locator(".app-command code").innerText()).includes("iex")) throw new Error("PowerShell 的接手命令不对");
+      await clickVisible(page, cmd.getByRole("tab", { name: "Mac / Linux / 云端" }));
+      await settle(page, 200);
+      await shot(page, size, scheme, "handover-command");
+      // Esc closes the dialog, not the card under it.
+      await page.keyboard.press("Escape");
+      await dlg.waitFor({ state: "hidden" });
+      if (!(await page.locator(".ms").isVisible())) throw new Error("按 Esc 只该关掉弹窗，不该连资料卡一起关掉");
+      await history.getByText("等它接手").waitFor({ timeout: 10_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });

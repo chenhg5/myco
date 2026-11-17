@@ -469,7 +469,7 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
 
 /** Folders already used on a computer, one per label as the chips show
  *  them (/Users/me/code/x and ~/code/x are the same folder). */
-function usedFolders(rows: AgentRow[], hubId: string, machineId: string): string[] {
+export function usedFolders(rows: AgentRow[], hubId: string, machineId: string): string[] {
   const seen = new Map<string, string>();
   for (const r of rows) {
     const d = r.st.agent.binding.workdir;

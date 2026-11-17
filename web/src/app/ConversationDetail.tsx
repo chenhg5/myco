@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -40,7 +40,8 @@ const revealed = new Set<string>();
 const firstSeen = new Map<string, number>();
 import { chatDraftKey, draftOf, keepDraft } from "@/app/drafts";
 import { chatQueueKey, keepQueue, queueOf, queuedId, type Queued } from "@/app/queued";
-import { hubAtLeast } from "@/app/hubVersion";
+import { hubAtLeast, hubHasHandover } from "@/app/hubVersion";
+import { HandoverDivider, handoverEntry, openHandover, useHandovers } from "@/app/Handover";
 
 export interface ConversationTarget {
   hubId: string;
@@ -926,6 +927,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The other side is one of your computers (a folder on one): its header
   // offers its settings.
   const computer = !observed && !!row && isWorkspace(row.st.agent);
+  // Another session took it over (「换一个来接着做」): a line where it did,
+  // and the header offers it to whoever may.
+  const handoverOk = !observed && !!row && agentKind(row.st.agent) === "agent" && hubHasHandover(row.hub.hub_version);
+  const handovers = useHandovers(target.hubId, target.agent, handoverOk);
+  const hoEntry = handoverOk ? handoverEntry(row || undefined) : { show: false, why: undefined };
   // What the agent offers you to say next (on your newest task, once it is
   // not at work any more): the empty input shows it, Tab takes it.
   const suggestion = !shellMode && !openTask && lastTask?.suggest?.trim() && !lastTask.unreadable ? lastTask.suggest.trim() : "";
@@ -980,7 +986,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // tasks show their run as it goes (TraceView) instead.
   const rowOf = (name: string) => rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === name);
   // (the handoff cards, with the rest of what goes between the messages)
-  const allInserts = handoffs.length
+  const baseInserts = handoffs.length
     ? [...(inserts || []), ...handoffs.map((h) => ({
       id: h.id,
       at: h.at,
@@ -988,6 +994,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         onOpen={() => (onOpenExchange ? onOpenExchange(target.agent, h.other, h.id) : onOpen?.(target.hubId, target.agent, h.other))} />,
     }))]
     : inserts;
+  const handoverLines = row ? handovers.filter((h) => h.state === "done").map((h) => ({
+    id: "ho_" + h.id, at: h.done_at || h.at, node: <HandoverDivider h={h} hub={row.hub} />,
+  })) : [];
+  const allInserts = handoverLines.length ? [...(baseInserts || []), ...handoverLines] : baseInserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -1845,6 +1855,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
+              </button>
+            )}
+            {hoEntry.show && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="handover-head"
+                disabled={!!hoEntry.why} onClick={() => openHandover({ hubId: target.hubId, name: target.agent })}
+                title={hoEntry.why || L("换一个来接着做：另一个会话接手，聊天记录都在", "Hand over: another session carries on, the chat stays")}
+                aria-label={L("换一个来接着做", "Hand over to another session")}>
+                <ArrowRightLeft />
               </button>
             )}
             {!observed && (shown?.length || 0) > 0 && (

@@ -1,4 +1,4 @@
-import type { Automation, AutomationDetail, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -622,6 +622,15 @@ export const appApi = {
   removeAgent: (hubId: string, name: string) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/agents/${enc(name)}`),
 
+  /** Another session takes a node over (「换一个来接着做」); older hubs 404. */
+  handovers: (hubId: string, name: string) =>
+    request<{ handovers: Handover[] }>("GET", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handovers`),
+  /** A one-time command (24 hours) that whoever runs it takes the node over with. */
+  handoverLink: (hubId: string, name: string, input: { note?: string; back?: string } = {}) =>
+    request<HandoverLink>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover-link`, input),
+  /** A new session on a computer takes the node over; waits for its first turn. */
+  handOver: (hubId: string, name: string, input: HandoverRequest) =>
+    request<HandoverResult>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover`, input),
   /** Starts a session on a machine; the machine may take up to two minutes. */
   spawn: (hubId: string, machineId: string, input: SpawnInput) =>
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),

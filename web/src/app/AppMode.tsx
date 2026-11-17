@@ -37,6 +37,7 @@ import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
+import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
 
 const POLL_MS = 5000;
 const SIDEBAR_KEY = "myco-app-sidebar";
@@ -176,7 +177,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-computer-settings", on);
     return () => window.removeEventListener("myco-computer-settings", on);
   }, []);
-  const [profile, setProfile] = useState<{ hubId: string; name: string } | null>(null);
+  const [profile, setProfile] = useState<{ hubId: string; name: string; details?: boolean } | null>(null);
+  // 「换一个来接着做」: asked for from menus, the profile and a chat's header.
+  const [handover, setHandover] = useState<HandoverTarget | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent<HandoverTarget>).detail; if (d) setHandover(d); };
+    window.addEventListener("myco-handover", on);
+    return () => window.removeEventListener("myco-handover", on);
+  }, []);
   // Members open a chat: the space to show it in, and with whom.
   const [chatWith, setChatWith] = useState<{ space: SpaceRef; agent: string; n: number; focus?: string; reveal?: boolean } | null>(null);
   // ⌘K / Ctrl+K: find anything (CommandPalette).
@@ -809,6 +817,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       <ComputerSettings focus={pcSettings?.focus} row={pcSettings ? rows.find((r) => r.hub.id === pcSettings.hubId && r.st.agent.name === pcSettings.name) || null : null}
         rows={rows} projects={hubProjects} onClose={() => setPcSettings(null)} onChanged={() => { setProjectReload((n) => n + 1); void refresh(); void loadProjects(hubs.map((h) => h.id)); }}
         onOpenTerminal={(r) => chatWithMember(r)} />
+      <HandoverDialog target={handover} rows={rows} onClose={() => setHandover(null)} onDone={() => void refresh()}
+        onOpenProfile={(r) => setProfile({ hubId: r.hub.id, name: r.st.agent.name, details: true })} />
       <NamePrompt hubsOv={namedOv?.hubs} onRefresh={refresh} />
       <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
 
@@ -840,7 +850,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           setPage("space");
           setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), focus: t.message });
         }} />
-      <MemberSheet row={profileRow} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
+      <MemberSheet row={profileRow} details={!!profile?.details} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
         onChat={chatWithMember} onChanged={() => void refresh()} onRefresh={refresh}
         onOpenProject={(ref) => { setProfile(null); openSpace(ref); }}
         onOpenMachine={() => { setProfile(null); setPage("computers"); }} />
