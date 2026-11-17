@@ -264,12 +264,15 @@ private struct WorkspaceChrome: ViewModifier {
                 ToolbarItem(placement: .topBarLeading) { WorkspaceButton() }
                 if add {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            router.sheet = .addAgent
+                        // An agent to talk to, or a computer for agents to work on.
+                        Menu {
+                            Button(L("添加 agent", "Add an agent"), systemImage: "person.badge.plus") { router.sheet = .addAgent }
+                            Button(L("加一台电脑", "Add a computer"), systemImage: "desktopcomputer") { router.sheet = .addComputer(project: nil) }
                         } label: {
                             Image(systemName: "plus")
                         }
-                        .accessibilityLabel(L("添加 agent", "Add an agent"))
+                        .accessibilityLabel(L("添加", "Add"))
+                        .accessibilityIdentifier("chrome.add")
                     }
                 }
             }

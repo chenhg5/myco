@@ -318,3 +318,51 @@ struct SessionTests {
         #expect(model.openTask?.body == "then the changelog")
     }
 }
+
+/// A computer added with one command, run in the folder agents should use.
+@MainActor
+struct ComputerTests {
+    @Test func theCommandIsOneLineForEachSystem() {
+        let link = JoinLink(joinUrl: "https://hub.example.com/j/myco_enroll_x")
+        #expect(ComputerCommand.line(for: link, on: .shell) == "curl -fsSL https://hub.example.com/j/myco_enroll_x | bash")
+        #expect(ComputerCommand.line(for: link, on: .powershell) == "irm 'https://hub.example.com/j/myco_enroll_x?format=ps1' | iex")
+        let nobody = ComputerCommand.nobody()
+        #expect(ComputerCommand.isNobody(nobody))
+        #expect(nobody != ComputerCommand.nobody())
+        #expect(!ComputerCommand.isNobody("studio-codex-7f3a"))
+    }
+
+    @Test func theFolderShowsUpAndGoesIntoTheProject() async throws {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        // The project's agents are the ones it lets in (not its computers, not me).
+        let users = session.computerUsers(of: "myco-ios")
+        #expect(users.contains("cloud-lead"))
+        #expect(users.contains("studio-codex-7f3a"))
+        #expect(session.computerUsers(of: nil).isEmpty)
+        #expect(session.computerUsers(of: "nope").isEmpty)
+        let before = Set(session.computers.map(\.name))
+        let link = try await session.computerLink(for: "myco-ios")
+        #expect(link.joinUrl.contains("/j/"))
+        #expect(session.computer(newSince: before) == nil)
+        // (the demo "runs the command" a few seconds later)
+        var fresh: Agent?
+        for _ in 0..<40 where fresh == nil {
+            try? await Task.sleep(for: .milliseconds(200))
+            await session.refresh()
+            fresh = session.computer(newSince: before)
+        }
+        let computer = try #require(fresh)
+        #expect(Naming.kind(of: computer) == .shell)
+        #expect(await session.add(computer.name, toProject: "myco-ios") == nil)
+        #expect(session.project("myco-ios")?.members.contains { $0.name == computer.name } == true)
+        // A project that is not there: said.
+        #expect(await session.add(computer.name, toProject: "nope") != nil)
+        // Without a project: for nobody yet (the workspace wants a name).
+        _ = try await session.computerLink(for: nil)
+        // Not the owner or an admin: refused, as the workspace does.
+        await hub.setMayNotAddComputers(true)
+        await #expect(throws: HubError.self) { _ = try await session.computerLink(for: "myco-ios") }
+    }
+}

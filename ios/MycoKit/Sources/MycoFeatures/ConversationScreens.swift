@@ -128,6 +128,9 @@ struct ProjectScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button(L("项目资料", "About this project"), systemImage: "doc.text") { router.push(.projectInfo(name)) }
+                    Button(L("给项目加一台电脑", "Add a computer to the project"), systemImage: "desktopcomputer") {
+                        router.sheet = .addComputer(project: name)
+                    }
                     if let project = session.project(name), let lead = session.coordinator(of: project) {
                         Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
                             router.sheet = .export(agent: lead, project: name)

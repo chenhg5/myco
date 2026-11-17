@@ -186,10 +186,13 @@ struct AutomationsScreen: View {
                             Button(L("删除", "Delete"), systemImage: "trash", role: .destructive) { removing = automation }
                         }
                 }
-            } footer: {
+                // (a row, not the section's footer: a plain list draws a
+                // band behind that one)
                 Text(L("到点或者外部系统通知时，替你给 agent 派一个任务。往右滑立即运行一次。", "On a schedule, or when an outside system calls, a task goes to an agent for you. Swipe right to run one now."))
                     .font(.footnote).foregroundStyle(MycoColor.muted)
-                    .padding(.top, 6)
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    .listRowBackground(MycoColor.bg)
+                    .listRowSeparator(.hidden)
             }
         }
         .listStyle(.plain)
