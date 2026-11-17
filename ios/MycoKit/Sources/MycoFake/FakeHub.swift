@@ -47,6 +47,7 @@ public actor FakeHub: HubAPI {
         silent = world.silent
         automationList = world.automations
         pageList = world.pages.map(\.page)
+        handoverList = world.handovers
         pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
     }
@@ -354,6 +355,97 @@ public actor FakeHub: HubAPI {
         return agents[index].agent
     }
 
+    // MARK: Handovers
+
+    private var handoverList: [Handover] = []
+    /// A command was made: "someone runs it" a moment later.
+    private var takeoverComing: (at: Date, id: String)?
+    /// Acts like a hub from before handovers.
+    private var tooOldForHandovers = false
+
+    public func setTooOldForHandovers(_ value: Bool) {
+        tooOldForHandovers = value
+    }
+
+    private func checkHandovers(_ agent: String) async throws -> Int {
+        try await check()
+        if tooOldForHandovers { throw HubError(error: "not_found", message: "no route for /v1/agents/\(agent)/handovers", status: 404) }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found", status: 404)
+        }
+        return index
+    }
+
+    private func side(of agent: Agent) -> HandoverSide {
+        HandoverSide(
+            binding: agent.binding, machineId: agent.machineId,
+            machineName: machines.first { $0.id == agent.machineId }?.name, runtime: agent.runtime)
+    }
+
+    public func handovers(of agent: String) async throws -> [Handover] {
+        _ = try await checkHandovers(agent)
+        advance()
+        return handoverList.filter { $0.agent == agent }.sorted { $0.at > $1.at }
+    }
+
+    /// The new session is there: the agent answers from it now.
+    private func take(over index: Int, with handover: inout Handover, cli: String, dir: String?, machine: String?) {
+        let open = messages.filter { $0.to == agents[index].agent.name && $0.isOpen }.map(\.id)
+        agents[index].agent.binding = Binding(harness: cli, sessionId: "sess_\(handover.id)", workdir: dir ?? agents[index].agent.binding.workdir)
+        agents[index].agent.machineId = machine
+        agents[index].agent.runtime = Runtime(cli: cli, model: cli.hasPrefix("codex") ? "gpt-6-sol" : "claude-opus-5-5")
+        handover.to = side(of: agents[index].agent)
+        handover.state = "done"
+        handover.doneAt = Date()
+        handover.openTasks = open
+    }
+
+    public func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult {
+        let index = try await checkHandovers(agent)
+        guard let machine = machines.first(where: { $0.id == request.machine || $0.name == request.machine }) else {
+            throw HubError(error: "not_found", message: "machine \(request.machine) not found", status: 404)
+        }
+        // (the new session takes a moment to start and read the note)
+        try? await Task.sleep(for: .milliseconds(1_500))
+        seq += 1
+        var handover = Handover(
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: request.note, from: side(of: agents[index].agent),
+            state: "waiting", back: request.back)
+        if let back = request.back, let earlier = handoverList.first(where: { $0.id == back }) {
+            take(
+                over: index, with: &handover, cli: earlier.from?.binding?.harness ?? "claude", dir: earlier.from?.binding?.workdir,
+                machine: earlier.from?.machineId)
+        } else {
+            take(over: index, with: &handover, cli: request.cli ?? "claude", dir: request.dir, machine: machine.id)
+        }
+        handoverList.append(handover)
+        return HandoverResult(handover: handover, spawn: .init(reply: "读完交接说明了：我接着把推送接口的设计写完，先看上一位留下的草稿。"))
+    }
+
+    public func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink {
+        let index = try await checkHandovers(agent)
+        seq += 1
+        let handover = Handover(
+            id: "hov_fake\(seq)", agent: agent, at: Date(), by: "glenn", note: note, from: side(of: agents[index].agent),
+            state: "waiting", back: back)
+        handoverList.append(handover)
+        takeoverComing = (Date().addingTimeInterval(4), handover.id)
+        let url = "https://demo.myco.example/h/myco_takeover_demo\(seq)"
+        return HandoverLink(handover: handover, command: "curl -fsSL '\(url)' | sh", commandPs1: "irm '\(url)?format=ps1' | iex")
+    }
+
+    /// The command "was run" in a cloud session: it has the agent now.
+    private func arriveTakeover() {
+        guard let coming = takeoverComing, Date() >= coming.at else { return }
+        takeoverComing = nil
+        guard let place = handoverList.firstIndex(where: { $0.id == coming.id }),
+              let index = agents.firstIndex(where: { $0.agent.name == handoverList[place].agent })
+        else { return }
+        var handover = handoverList[place]
+        take(over: index, with: &handover, cli: "claude-cloud", dir: "/home/user/myco", machine: nil)
+        handoverList[place] = handover
+    }
+
     // MARK: Pages
 
     public static let demoAddress = URL(string: "https://demo.myco.example")!
@@ -570,6 +662,7 @@ public actor FakeHub: HubAPI {
     private func advance() {
         let now = Date()
         arriveComputer()
+        arriveTakeover()
         for (id, sentAt) in simulated {
             guard let i = messages.firstIndex(where: { $0.id == id }) else { continue }
             // Put after a task that is still open: it waits, as on a hub.

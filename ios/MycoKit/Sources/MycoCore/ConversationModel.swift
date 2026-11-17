@@ -640,6 +640,10 @@ public final class ConversationModel {
             me: me, agent: agent, messages: Array(all.values), handoffs: handoffs,
             processes: Set(shownProcesses.filter { $0.value.hasSteps }.keys), tracedPlans: tracedPlans, paused: paused,
             activity: activity, ended: ended, windows: windows,
+            // (my own conversation with it: where another session took over)
+            takeovers: observed != nil ? [] : session.handovers(of: agent).done.map { handover in
+                (handover.id, handover.doneAt ?? handover.at, HandoverWords.line(handover, machines: session.machines, me: session.me))
+            },
             status: { self.session.status(of: $0) }, now: Date())
         let mine = Array(known.values).filter { shown($0) }
         let held = ConversationBuilder.queuedBehind(mine).filter { $0.from == me }
@@ -687,6 +691,10 @@ public final class ConversationModel {
     private func loadSurroundings() async -> [Handoff] {
         let hub = session.hub
         let agent = agent
+        // The times another session took it over, where I may see them.
+        if observed == nil, let known = session.agent(agent), Naming.kind(of: known) == .agent, session.manages(known) {
+            await session.handovers(of: agent).load()
+        }
         // Which projects to look through: this page's, or the agent's.
         var scanned: [Project] = []
         if let project {

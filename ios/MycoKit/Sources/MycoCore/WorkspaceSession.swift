@@ -89,6 +89,16 @@ public final class WorkspaceSession {
         return model
     }
 
+    @ObservationIgnored private var handoverModels: [String: HandoversModel] = [:]
+
+    /// An agent's handovers: the times another session took it over.
+    public func handovers(of agent: String) -> HandoversModel {
+        if let known = handoverModels[agent] { return known }
+        let model = HandoversModel(hub: hub, agent: agent)
+        handoverModels[agent] = model
+        return model
+    }
+
     @ObservationIgnored private var pagesModel: PagesModel?
 
     /// The web pages this workspace's messages link to.

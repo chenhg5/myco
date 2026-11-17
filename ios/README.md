@@ -61,13 +61,14 @@ The app opens the workspace joined earlier, or the welcome page: join with a lin
 
 | Argument | Values |
 |---|---|
-| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation), `waiting` (the demo plus runs that are open but not at work): a demo workspace. `two`: two demo workspaces joined side by side (any well-formed link joins a third). `welcome`: the welcome page |
+| `-myco-start` | nothing: the workspace joined earlier, else the welcome page. `demo`, `empty`, `long` (the demo plus a 400-message conversation), `waiting` (the demo plus runs that are open but not at work, and no automations), `session` (the demo plus an agent in one long session, a message that was never delivered, a note that links to a web page, and an earlier handover): a demo workspace. `two`: two demo workspaces joined side by side (any well-formed link joins a third). `welcome`: the welcome page |
 | `-myco-join` | an "add a device" link to join with at launch |
-| `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add>` |
+| `-myco-route` | `tab:<chats\|projects\|members>`, `project:<name>`, `info:<project>`, `agent:<name>`, `member:<name>`, `sheet:<workspace\|add\|computer>`, `page:automations` |
 | `-myco-attach` | an agent's name: the demo starts with a picture and a file picked for that agent, to see the input with files without the system's pickers |
 | `-myco-dictation` | `scripted`: the microphone hears a script (nobody speaks to a simulator); `denied`: it is not allowed to listen |
 | `-myco-proxy-target` | where Settings › Proxy's "Try it" sends its request (default: a workspace that is not on the local network, else GitHub); the proxy UI test sets it. That test needs `ios/scripts/test-proxies.py` running and is skipped without (see the script) |
 | `-myco-voice` | `scripted`: a voice chat is a script (the microphone hears a question and a request, a scripted model answers, the voice is silent), with no key and nobody speaking; `denied`: the microphone may not open; `probe`: opens a call's real microphone and speaker alone for a few seconds, plays a short tone, and writes what happened to the system's log (subsystem `dev.myco.ios`, category `voice`; never what was said), to see on a phone why a call would not start |
+| `-myco-trouble` | `links`: the demo's first join link fails as a gateway in front of the workspace would (502), to see what a failed request says |
 | `-myco-latency` | milliseconds every answer of the demo takes: a slow connection, to see what loading looks like |
 | `-myco-notifier` | `recorded`: notifications are kept in memory and the system is never asked for permission |
 | `-myco-appearance` | `system`, `light`, `dark` |
@@ -123,6 +124,24 @@ The rules are the desktop's (`web/src/app/ConversationDetail.tsx`, `TraceView.ts
 - A task reads as a message, not as a state (the desktop's rule, `docs/design/app-ui.md`). A run that is open but not at work (its turn ended, it handed work out, it was set aside) gets no line saying so: what it said last stands, as in any chat. A task of mine that has not started has a few words under the message instead, like a receipt (`TaskReceipt`): "Not opened yet", "Queued behind the current one", "Offline; it reads it when back", "Its session is busy elsewhere", or, set aside, "Will answer later"; gone once it starts. Only a run really at work shows the mushroom; one that may be stuck still has its own line, because it carries something to do (Stop). And when the run has stopped or the task was set aside, the input is a plain message box again ("Message X", no stop button): what is typed is a new message, until the agent is at work again; one that asks me something still takes the answer (`ConversationBuilder.openTask`).
 - Thinking is part of the steps ("thought, ran 2 commands"), there on a tap.
 - A long press on a message offers Delete: it leaves this person's view on all their devices (`/v1/console/hidden`; on this device only with a workspace before v0.19.9), with Undo for a few seconds. Nothing is deleted for anyone else.
+
+- A task that failed says why in words (`FailureWords`): one the workspace gave up delivering reads "没送到…", with "重新发送" under it (the same words and files, as a new task; the failed one stays).
+- An agent in one long session files its steps under the task it took first. The page goes by time (`RunWindows`): a task shows its steps up to my next message that was taken up, and that message shows what came since.
+- Where another session took the agent over, a thin line says so (`HandoverWords.line`).
+- A message an automation sent is marked 自动.
+- A link to a page of this workspace has a card under its message and opens in the app (below).
+
+## What else the desktop app has, here too
+
+Each follows the desktop app's page of the same name; `docs/design/app-ui.md` says how the phone's differs.
+
+- **The model beside the send button** (`RunChoice`): what the agent runs with, small and quiet; a menu to switch model and effort for an agent a runner wakes that I may manage (`PUT /v1/agents/{name}/run-settings`), a note saying who decides for any other.
+- **A request that failed** (`Failure`, `FailureLine`): a workspace that is down or slow is said in words, with what to do, "重试" where the page can try again, and the raw reason (HTTP status, code, message) one tap away with a copy button.
+- **Export** (`ConversationExport`, a conversation's "…"): the whole conversation as Markdown, in the shape `myco thread export` writes, with or without each task's tool calls, handed to the share sheet.
+- **Automations** (`AutomationsScreen`, the first row of Members): the list with a switch each, run now (swipe right), delete (swipe left), and an editor that reads as an automation does: to whom, what, when (`Every` is the schedule as people say it and the cron the workspace keeps). A webhook's secret is shown once, after saving.
+- **Add a computer** (`AddComputerSheet`, the plus): one command to run on that computer, in the folder agents should use; the page waits for the folder and puts it in the project chosen.
+- **Web pages agents publish** (`PageCard`, `PageScreen`): the page's files are fetched by the app with its own token and handed to a web view through a scheme of its own (`myco-page://<page>/…`), each file with the desktop's content policy: a page loads only its own files, sends nothing elsewhere, and never sees the token. The page bridge and live reload are not here yet.
+- **Hand over to another session** (`HandoverSheet`, at the foot of an agent's card): a new session on a computer, or a one-time command for any session; what will happen is said first; the card lists the handovers, each with a way back where there is one.
 
 ## Several workspaces
 

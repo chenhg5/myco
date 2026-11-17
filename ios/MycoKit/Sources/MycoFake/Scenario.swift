@@ -31,6 +31,8 @@ public enum Scenario: Sendable {
         var silent: Set<String> = []
         /// What is sent for me on a schedule, or when something calls.
         var automations: [Automation] = []
+        /// The times another session took an agent over.
+        var handovers: [Handover] = []
         /// Web pages agents published, with their files by path.
         var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
     }
@@ -62,7 +64,9 @@ public enum Scenario: Sendable {
         let fresh = agent("agt_new00008", "studio-codex-e07b", "翻译", "中英文互译", cli: "codex", dir: "~/code/site", days: 1)
 
         var world = World()
-        world.machines = [Machine(id: "mach_studio", name: "Studio Mac", hostname: "studio", os: "darwin")]
+        world.machines = [
+            Machine(id: "mach_studio", name: "Studio Mac", hostname: "studio", os: "darwin", canSpawn: true, mycoVersion: "v0.19.25"),
+        ]
         world.agents = [
             AgentStatus(agent: lead, state: "idle", receiving: "session"),
             AgentStatus(agent: backend, state: "working", inProgress: 1),
@@ -216,6 +220,14 @@ public enum Scenario: Sendable {
                         createdAt: ago(1_200), updatedAt: ago(600)),
             ]
             world.silent = ["s2", "x1"]
+            // The backend engineer was a cloud session until two days ago:
+            // its subscription ran out, and a session on the Studio Mac
+            // took over.
+            world.handovers = [Handover(
+                id: "hov_demo1", agent: backend.name, at: ago(172_900), by: "glenn", note: "原来的订阅到期了",
+                from: HandoverSide(binding: Binding(harness: "claude-cloud", sessionId: "sess_before"), runtime: Runtime(cli: "claude-cloud")),
+                to: HandoverSide(binding: backend.binding, machineId: "mach_studio", machineName: "Studio Mac", runtime: backend.runtime),
+                state: "done", doneAt: ago(172_800), openTasks: [])]
             // The tester made its checklist a web page, and says where it is.
             world.messages.append(Message(
                 id: "pgm", from: tester.name, to: me, type: "note",

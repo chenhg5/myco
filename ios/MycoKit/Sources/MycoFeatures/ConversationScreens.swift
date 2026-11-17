@@ -855,6 +855,10 @@ struct ConversationBody: View {
         switch item.kind {
         case .time(let date):
             TimeBreak(Self.timeText(date))
+        case .takenOver(let text):
+            // Another session answers from here on: a line, not a message.
+            TimeBreak(Self.timeText(item.at) + " · " + text)
+                .accessibilityIdentifier("conversation.handover")
         case .mine(let text, let steer, let by):
             // A colleague's task carries their name; mine needs none.
             VStack(alignment: .trailing, spacing: Space.s) {

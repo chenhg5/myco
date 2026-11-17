@@ -435,6 +435,37 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAnAgentIsHandedOverToAnotherSession() {
+        // The backend engineer's card, for whoever may manage it: a way
+        // to hand it over, and the time it was (with a way back).
+        let app = launch(["-myco-start", "session", "-myco-route", "member:studio-codex-7f3a"])
+        let entry = app.buttons["member.handover"]
+        for _ in 0..<4 where !entry.exists { app.swipeUp() }
+        XCTAssertTrue(entry.waitForExistence(timeout: 15))
+        let history = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "claude.ai cloud → Studio Mac · Codex")).firstMatch
+        XCTAssertTrue(history.waitForExistence(timeout: 10), "the earlier handover is in its card")
+        XCTAssertTrue(app.buttons["member.handover.back"].exists, "with a way back")
+        shot("handover-card")
+        entry.tap()
+        // Which way, on which computer, and what will happen.
+        let start = app.buttons["handover.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["handover.machine"].firstMatch.label.contains("Studio Mac"))
+        XCTAssertTrue(app.buttons["handover.machine"].firstMatch.label.contains("Where it is now"))
+        XCTAssertTrue(start.isEnabled, "its own computer and folder are there to start with")
+        shot("handover-sheet")
+        for _ in 0..<3 where !app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "The earlier session stops")).firstMatch.exists { app.swipeUp() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "The earlier session stops")).firstMatch.exists, "what will happen is said first")
+        start.tap()
+        // The new session read the handover note and said so.
+        let done = app.staticTexts["handover.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 20))
+        XCTAssertTrue(done.label.contains("Studio Mac · Codex answers for 后端工程师 now"), done.label)
+        XCTAssertTrue(app.staticTexts["handover.reply"].exists)
+        shot("handover-done")
+    }
+
+    @MainActor
     func testAComputerIsAddedWithOneCommand() {
         let app = launch()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))

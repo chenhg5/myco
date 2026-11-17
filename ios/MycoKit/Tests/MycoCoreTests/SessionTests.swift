@@ -366,3 +366,145 @@ struct ComputerTests {
         await #expect(throws: HubError.self) { _ = try await session.computerLink(for: "myco-ios") }
     }
 }
+
+/// 「换一个来接着做」: another session takes an agent over.
+@MainActor
+struct HandoverTests {
+    let studio = Machine(id: "mach_studio", name: "Studio Mac", canSpawn: true, mycoVersion: "v0.19.25")
+
+    @Test func aSideIsSaidAsPeopleSayIt() {
+        AppLanguage.$forced.withValue(.zh) {
+            let onMac = HandoverSide(binding: Binding(harness: "codex"), machineId: "mach_studio", runtime: Runtime(cli: "codex"))
+            #expect(HandoverWords.side(onMac, machines: [studio]) == "Studio Mac · Codex")
+            #expect(HandoverWords.side(HandoverSide(binding: Binding(harness: "claude"), machineName: "mini"), machines: []) == "mini · Claude Code")
+            #expect(HandoverWords.side(HandoverSide(binding: Binding(harness: "claude-cloud")), machines: []) == "claude.ai 云端")
+            #expect(HandoverWords.side(HandoverSide(binding: Binding(harness: "codex-cloud")), machines: []) == "Codex 云端")
+            #expect(HandoverWords.side(HandoverSide(binding: Binding(harness: "inbox")), machines: []) == "一个开着的会话")
+            #expect(HandoverWords.side(HandoverSide(), machines: []) == "另一个会话")
+            #expect(HandoverWords.side(nil, machines: []) == "")
+            // The line a conversation draws where it took effect.
+            var done = Handover(id: "hov_1", agent: "coder", at: Date(), by: "glenn", to: onMac, state: "done", doneAt: Date())
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:glenn") == "换成 Studio Mac · Codex 接着做（你换的）")
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:lee") == "换成 Studio Mac · Codex 接着做（glenn换的）")
+            done.back = "hov_0"
+            done.by = "admin"
+            #expect(HandoverWords.line(done, machines: [studio], me: "@console:glenn") == "换回原来的会话 · Studio Mac · Codex（管理员换的）")
+            #expect(HandoverWords.state(done) == nil)
+            done.state = "waiting"
+            #expect(HandoverWords.state(done) == "等它接手")
+            done.state = "expired"
+            #expect(HandoverWords.state(done) == "没用上")
+        }
+    }
+
+    @Test func whatWillHappenIsSaidBeforeItDoes() {
+        AppLanguage.$forced.withValue(.en) {
+            #expect(HandoverWords.consequences(back: false, open: 0, working: false).count == 2)
+            let busy = HandoverWords.consequences(back: false, open: 2, working: true)
+            #expect(busy.count == 4)
+            #expect(busy[2] == "The 2 tasks it has not finished go to the new session to redo.")
+            let back = HandoverWords.consequences(back: true, open: 1, working: false)
+            #expect(back.count == 2)
+            #expect(back[1] == "The 1 task it has not finished go to the earlier session to redo.")
+        }
+    }
+
+    @Test func aComputerNeedsANewEnoughMyco() {
+        #expect(HandoverWords.canTakeOver(mycoVersion: "v0.19.23"))
+        #expect(HandoverWords.canTakeOver(mycoVersion: "0.20.0"))
+        #expect(HandoverWords.canTakeOver(mycoVersion: "v0.19.22-7-g8484653"), "a build from a later main")
+        #expect(!HandoverWords.canTakeOver(mycoVersion: "v0.19.22"))
+        #expect(!HandoverWords.canTakeOver(mycoVersion: "v0.19.9"))
+        #expect(!HandoverWords.canTakeOver(mycoVersion: "v0.19.21-3-gabcdef0"))
+        #expect(!HandoverWords.canTakeOver(mycoVersion: nil))
+    }
+
+    @Test func anEarlierSessionCanBeSwitchedBackToOnce() {
+        let now = Agent(id: "a", name: "coder", binding: Binding(harness: "codex", sessionId: "sess_now"))
+        let first = Handover(
+            id: "hov_1", agent: "coder", at: Date(), from: HandoverSide(binding: Binding(harness: "claude-cloud", sessionId: "sess_before")),
+            state: "done")
+        #expect(HandoverWords.canGoBack(first, among: [first], agent: now))
+        // Already undone; the session answering now; one that never took effect.
+        let undo = Handover(id: "hov_2", agent: "coder", at: Date(), state: "done", back: "hov_1")
+        #expect(!HandoverWords.canGoBack(first, among: [undo, first], agent: now))
+        let same = Agent(id: "a", name: "coder", binding: Binding(harness: "claude-cloud", sessionId: "sess_before"))
+        #expect(!HandoverWords.canGoBack(first, among: [first], agent: same))
+        var waiting = first
+        waiting.state = "waiting"
+        #expect(!HandoverWords.canGoBack(waiting, among: [waiting], agent: now))
+    }
+
+    @Test func aNewSessionOnAComputerTakesOver() async throws {
+        let hub = FakeHub(scenario: .session)
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        let backend = "studio-codex-7f3a"
+        let model = session.handovers(of: backend)
+        await model.load()
+        #expect(model.list.map(\.id) == ["hov_demo1"])
+        #expect(session.spawners.map(\.name) == ["Studio Mac"])
+        #expect(session.folders(on: "mach_studio").contains("~/code/myco"))
+        // In my conversation with it: a line where the earlier one took effect,
+        // when that is within what is on the page (two days ago: it is not).
+        let chat = session.conversation(with: backend)
+        await chat.reload()
+        #expect(!chat.items.contains { if case .takenOver = $0.kind { return true } else { return false } })
+
+        let result = try await model.handOver(HandoverRequest(machine: "mach_studio", cli: "claude", dir: "~/code/site", note: "换个模型试试"))
+        #expect(result.handover.state == "done")
+        #expect(result.spawn?.reply?.isEmpty == false)
+        #expect(model.list.first?.id == result.handover.id)
+        await session.refresh()
+        #expect(session.agent(backend)?.binding.workdir == "~/code/site")
+        #expect(Naming.cli(of: try #require(session.agent(backend))) == "claude")
+        // The line is on the page now, after what was said before.
+        await chat.reload()
+        let line = chat.items.first { if case .takenOver = $0.kind { return true } else { return false } }
+        guard case .takenOver(let text)? = line?.kind else {
+            Issue.record("the conversation says where the new session took over")
+            return
+        }
+        AppLanguage.$forced.withValue(.en) {
+            #expect(HandoverWords.line(result.handover, machines: session.machines, me: session.me) == "Studio Mac · Claude Code carries on from here (by you)")
+        }
+        #expect(!text.isEmpty)
+        let order = chat.items.map(\.id)
+        let place = order.firstIndex(of: line?.id ?? "") ?? -1
+        #expect(place > (order.firstIndex(of: "b1") ?? .max), "after what was said before it")
+
+        // Back to the session before that one: its own computer, AI and folder.
+        let back = try await model.handOver(HandoverRequest(machine: "mach_studio", back: result.handover.id))
+        #expect(back.handover.back == result.handover.id)
+        await session.refresh()
+        #expect(session.agent(backend)?.binding.workdir == "~/code/myco")
+        let agent = try #require(session.agent(backend))
+        #expect(!HandoverWords.canGoBack(result.handover, among: model.list, agent: agent), "undone once")
+    }
+
+    @Test func aCommandLetsAnySessionTakeOver() async throws {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        let model = session.handovers(of: "studio-codex-7f3a")
+        let link = try await model.link(note: nil, back: nil)
+        #expect(link.command?.hasPrefix("curl -fsSL '") == true)
+        #expect(link.commandPs1?.hasSuffix("| iex") == true)
+        #expect(model.list.first?.state == "waiting")
+        #expect(await model.arrived(link.handover.id) == nil)
+        // (the demo "runs the command" a few seconds later)
+        var taken: Handover?
+        for _ in 0..<40 where taken == nil {
+            try? await Task.sleep(for: .milliseconds(200))
+            taken = await model.arrived(link.handover.id)
+        }
+        #expect(taken?.state == "done")
+        let by = HandoverWords.side(taken?.to, machines: [])
+        #expect(by.contains("claude.ai"))
+        // A workspace from before handovers: none, and said so.
+        await hub.setTooOldForHandovers(true)
+        await model.load(force: true)
+        #expect(model.unsupported)
+        await #expect(throws: HubError.self) { _ = try await model.link(note: nil, back: nil) }
+    }
+}

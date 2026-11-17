@@ -31,6 +31,8 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     /// Writing a conversation out as a file: with this agent, in this
     /// project's page or its own.
     case export(agent: String, project: String?)
+    /// Another session takes this agent over; `back`: a handover to undo.
+    case handover(agent: String, back: String?)
 
     public var id: String {
         switch self {
@@ -39,6 +41,7 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .addAgent: return "add"
         case .addComputer(let project): return "computer:" + (project ?? "")
         case .export(let agent, let project): return "export:" + agent + ":" + (project ?? "")
+        case .handover(let agent, let back): return "handover:" + agent + ":" + (back ?? "")
         }
     }
 }

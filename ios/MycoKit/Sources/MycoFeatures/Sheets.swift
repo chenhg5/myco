@@ -59,6 +59,11 @@ struct MemberCardSheet: View {
                             }
                         }
                     }
+                    // For whoever may manage it: hand it over to another
+                    // session, and the times it was.
+                    if Naming.kind(of: agent) == .agent, session.manages(agent) {
+                        HandoverCardSections(agent: agent)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)

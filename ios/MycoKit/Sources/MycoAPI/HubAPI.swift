@@ -163,6 +163,18 @@ public protocol HubAPI: Sendable {
     /// setting). For whoever owns the agent or manages the workspace. A
     /// workspace from before v0.19.5 answers `not_found`.
     func setRunSettings(of agent: String, model: String, effort: String) async throws -> Agent
+    /// `GET /v1/agents/{name}/handovers`: the times another session took
+    /// this agent over, newest first. For whoever owns it or manages the
+    /// workspace. A workspace from before v0.19.23 answers `not_found`.
+    func handovers(of agent: String) async throws -> [Handover]
+    /// `POST /v1/agents/{name}/handover`: a new session on a computer
+    /// takes the agent over (or, with `back`, an earlier one takes it
+    /// back). Answers when the new session has read the handover note:
+    /// that takes minutes.
+    func handOver(_ agent: String, _ request: HandoverRequest) async throws -> HandoverResult
+    /// `POST /v1/agents/{name}/handover-link`: a one-time command (a day)
+    /// that makes whichever session runs it take the agent over.
+    func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink
     /// Where this workspace is: its links (a page's address) begin with it.
     var address: URL? { get }
     /// `GET /v1/pages/{id}`: a web page an agent published, with its
