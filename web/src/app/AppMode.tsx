@@ -35,7 +35,7 @@ import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
 import { handleLinkClick, setOpenLinksViaApp } from "@/app/links";
 import { CommandPalette } from "@/app/CommandPalette";
-import { PageHost, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
+import { PageHost, PageToggle, setPageHubs, setPageMe, setPageNames } from "@/app/pages";
 import { modKey } from "@/app/ConversationDetail";
 import { useSidebarWidth } from "@/app/sidebarWidth";
 import { HandoverDialog, type HandoverTarget } from "@/app/Handover";
@@ -717,6 +717,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
             </button>
           )}
           <h1 className="app-title">{title}</h1>
+          <PageToggle />
         </header>
 
         {error !== null && (

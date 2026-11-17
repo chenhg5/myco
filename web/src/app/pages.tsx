@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AppWindow, Check, ExternalLink, Link2, Monitor, PanelRightClose, Radio, RotateCw, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AppWindow, Check, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Radio, RotateCw, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -108,6 +108,35 @@ function storeOf(hubId: string, id: string): Record<string, unknown> {
   try { return JSON.parse(localStorage.getItem(storeKey(hubId, id)) || "{}") as Record<string, unknown>; } catch { return {}; }
 }
 
+// The panel as the top bar's toggle sees it (PageToggle), and the toggle
+// asking it to show or hide.
+type PanelState = { count: number; title: string; open: boolean };
+let panelState: PanelState = { count: 0, title: "", open: false };
+const panelSubs = new Set<() => void>();
+function publishPanel(next: PanelState) {
+  if (next.count === panelState.count && next.title === panelState.title && next.open === panelState.open) return;
+  panelState = next;
+  panelSubs.forEach((f) => f());
+}
+
+/** In the App's top bar, at its right end: the pages open in the panel
+ *  (it is one for the whole App, whichever chat opened them). Shown while
+ *  there are some; pressed while the panel shows; a click shows or tucks it
+ *  away. */
+export function PageToggle() {
+  const st = useSyncExternalStore((f) => { panelSubs.add(f); return () => { panelSubs.delete(f); }; }, () => panelState);
+  if (!st.count) return null;
+  const label = st.open ? L("收起网页面板", "Tuck the pages away") : L(`展开网页面板：${st.title}${st.count > 1 ? ` 等 ${st.count} 个` : ""}`, `Show the pages: ${st.title}${st.count > 1 ? ` and ${st.count - 1} more` : ""}`);
+  return (
+    <button type="button" className={cn("pg-toggle", st.open && "is-on")} aria-pressed={st.open} title={label} aria-label={label}
+      onClick={() => window.dispatchEvent(new Event("myco-pages-toggle"))}>
+      <PanelRight />
+      <span>{L("网页", "Pages")}</span>
+      {st.count > 1 && <span className="pg-toggle-count">{st.count}</span>}
+    </button>
+  );
+}
+
 // What the App knows of a page (a card asks once; the panel asks again).
 const known = new Map<string, Promise<Page>>();
 function pageOf(hubId: string, id: string, fresh = false): Promise<Page> {
@@ -201,8 +230,19 @@ export function PageHost() {
       openPage(t);
     };
     document.addEventListener("click", click);
-    return () => { window.removeEventListener("myco-open-page", on); document.removeEventListener("click", click); };
+    const toggle = () => setOpen((o) => !o);
+    window.addEventListener("myco-pages-toggle", toggle);
+    return () => {
+      window.removeEventListener("myco-open-page", on);
+      document.removeEventListener("click", click);
+      window.removeEventListener("myco-pages-toggle", toggle);
+    };
   }, []);
+  // (what the top bar's toggle shows)
+  const shownTab = tabs.find((x) => x.key === active) || tabs[0];
+  useEffect(() => {
+    publishPanel({ count: tabs.length, title: shownTab?.meta.title || L("网页", "Page"), open: open && tabs.length > 0 });
+  }, [tabs.length, shownTab?.meta.title, open]);
   // Tucked away (收起, Esc, a click beside it): the pages stay open, a
   // small button brings them back. Closed (×): they go.
   const setPanel = (o: boolean) => setOpen(o);
@@ -229,21 +269,13 @@ export function PageHost() {
   const tabIcon = (x: Tab) => (x.meta.icon === "live" ? <Radio /> : x.meta.icon === "local" ? <Monitor /> : <AppWindow />);
   return (
     <>
-    {!open && (
-      <button type="button" className="pg-restore" onClick={() => setOpen(true)}
-        title={L("展开收起的网页", "Show the pages tucked away")} aria-label={L("展开收起的网页", "Show the pages tucked away")}>
-        <span className="pg-restore-icon">{tabIcon(cur)}</span>
-        <span className="pg-restore-name">{m.title || L("网页", "Page")}</span>
-        {tabs.length > 1 && <span className="pg-restore-count">{tabs.length}</span>}
-      </button>
-    )}
     <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted
       closeLabel={tabs.length > 1 ? L(`关闭全部 ${tabs.length} 个网页`, `Close all ${tabs.length} pages`) : L("关闭", "Close")}
       title={m.title || L("网页", "Page")} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
           <button type="button" className="app-btn app-btn-plain" onClick={() => setOpen(false)}
-            title={L("收起（网页保留，右下角点一下展开）", "Tuck away (the pages stay; bring them back from the corner)")} aria-label={L("收起", "Tuck away")}><PanelRightClose /></button>
+            title={L("收起（网页保留，点顶栏右边的「网页」展开）", "Tuck away (the pages stay; Pages at the top right brings them back)")} aria-label={L("收起", "Tuck away")}><PanelRightClose /></button>
           <button type="button" className="app-btn app-btn-plain" onClick={() => setTabs((list) => list.map((x) => (x.key === cur.key ? { ...x, reload: x.reload + 1 } : x)))} disabled={!m.loaded}
             title={L("刷新", "Reload")} aria-label={L("刷新", "Reload")}><RotateCw /></button>
           {m.localUrl ? (

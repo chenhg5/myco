@@ -580,9 +580,10 @@ async function runMatrix(browser, size, scheme) {
       const mainRight = () => page.evaluate(() => document.querySelector(".app-main").getBoundingClientRect().right);
       const docked = await mainRight();
       await clickVisible(page, panel.getByRole("button", { name: "收起" }));
-      const restore = page.locator(".pg-restore");
+      // (the panel is one for the whole App: its toggle is at the top bar's right end)
+      const restore = page.locator(".app-crumbbar .pg-toggle");
       await restore.waitFor({ timeout: 5_000 });
-      if (!(await restore.innerText()).includes("2")) throw new Error("收起后右下角应写着有几个网页");
+      if (!(await restore.innerText()).includes("2") || (await restore.getAttribute("aria-pressed")) !== "false") throw new Error("收起后顶栏右边的「网页」应写着有几个、不是按下的");
       if (await panel.isVisible()) throw new Error("收起后面板应藏起来");
       if ((await page.locator(".pg-frame").count()) !== 2) throw new Error("收起时网页应保留");
       await page.waitForFunction((d) => document.querySelector(".app-main").getBoundingClientRect().right > d + 100, docked, { timeout: 5_000 });
@@ -590,7 +591,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "page-tucked");
       await clickVisible(page, restore);
       await panel.locator(".fp-titles h3", { hasText: "发布说明" }).waitFor({ timeout: 5_000 });
-      await restore.waitFor({ state: "detached", timeout: 5_000 });
+      if ((await restore.getAttribute("aria-pressed")) !== "true") throw new Error("面板展开时顶栏的「网页」应是按下的");
       await page.waitForFunction((d) => Math.abs(document.querySelector(".app-main").getBoundingClientRect().right - d) <= 2, docked, { timeout: 5_000 })
         .catch(() => { throw new Error("展开后对话应回到原来的宽度"); });
       // Dragging the panel's edge: the chat's edge follows (no gap).
@@ -616,7 +617,7 @@ async function runMatrix(browser, size, scheme) {
       await panel.locator(".pg-tab", { hasText: "下载页" }).waitFor({ timeout: 5_000 });
       await clickVisible(page, panel.getByRole("button", { name: "关闭全部 2 个网页" }));
       await panel.waitFor({ state: "detached", timeout: 5_000 });
-      if (await page.locator(".pg-restore").count()) throw new Error("全部关闭后不该留下展开按钮");
+      if (await page.locator(".pg-toggle").count()) throw new Error("全部关闭后顶栏不该再有「网页」");
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
