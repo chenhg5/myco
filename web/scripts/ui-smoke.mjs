@@ -337,9 +337,17 @@ async function go(page, label, narrow) {
     if (narrow) await sidebar(page, false);
     return;
   }
-  // Computers is a heading over the computers listed in the sidebar.
-  const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible") : page.locator(".app-nav-item:visible", { hasText: label });
-  await clickVisible(page, item);
+  // Computers is a heading over the computers listed in the sidebar;
+  // members are managed from the chat list's menu.
+  if (label === "成员") {
+    await clickVisible(page, page.locator(".sp-nav-chat-sort"));
+    await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "管理成员" }));
+  } else {
+    const item = label === "电脑" ? page.locator(".sp-nav-title-link:visible")
+      : label === "聊天" ? page.locator(".sp-nav-chat:visible")
+      : page.locator(".app-nav-item:visible", { hasText: label });
+    await clickVisible(page, item);
+  }
   // At narrow widths the sidebar covers the window; show the page as a person
   // would after picking it, with the compact Hub pill in the crumb bar.
   if (narrow) await sidebar(page, false);
@@ -1088,11 +1096,33 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-group").waitFor({ timeout: 20_000 });
       const title = compactText(await page.locator(".sp-head h2").innerText());
       if (title !== "聊天") throw new Error(`这里应该是聊天（不在项目里的 agent），实际标题「${title}」`);
-      // Chat comes first in the sidebar, above the projects: you can start
-      // talking without making a project.
+      // The sidebar: automations one line at the top; projects first, then
+      // chat with everyone to talk to listed under it (one click into a
+      // chat, in the order picked), computers last.
       await sidebar(page, true);
-      const first = compactText(await page.locator(".app-nav .app-nav-item:visible").first().innerText());
-      if (!first.startsWith("聊天")) throw new Error(`边栏第一项应是「聊天」，实际是「${first}」`);
+      const order = await page.evaluate(() => [...document.querySelectorAll(".app-nav > .app-nav-group")].map((g) => g.className));
+      if (!order[0]?.includes("sp-nav-projects") || !order[1]?.includes("sp-nav-chats") || !order[2]?.includes("sp-nav-pcs")) throw new Error(`边栏应是项目、聊天、电脑，实际 ${order.join(" / ")}`);
+      if (!(await page.locator(".app-sidebar > .sp-nav-auto:visible").count())) throw new Error("自动化应在边栏最上面一行");
+      if (await page.locator(".app-nav .app-nav-item:visible", { hasText: /^成员$/ }).count()) throw new Error("成员不该再单独占边栏一行");
+      const people = page.locator(".sp-nav-chat-list .sp-nav-person:visible");
+      if ((await people.count()) < 2) throw new Error("聊天下面应列出能聊的 agent");
+      // Ordered by name: the names come in order; the choice is kept.
+      await clickVisible(page, page.locator(".sp-nav-chat-sort"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "按名字" }));
+      const names = (await people.allInnerTexts()).map(compactText);
+      const sorted = await page.evaluate((xs) => [...xs].sort((a, b) => a.localeCompare(b)), names);
+      if (names.join("|") !== sorted.join("|")) throw new Error(`按名字排序不对：${names.join(" / ")}`);
+      await shot(page, size, scheme, "sidebar-chats");
+      await clickVisible(page, page.locator(".sp-nav-chat-sort"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "最近聊过的在前" }));
+      // One click into a chat with one of them (a coordinator's is its
+      // project's home).
+      const who = "Release (Claude 云端)";
+      await clickVisible(page, people.filter({ hasText: who }));
+      await page.locator(".conv-detail .conv-head h2", { hasText: who }).first().waitFor({ timeout: 10_000 });
+      await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-nav-chat"));
+      await page.locator(".sp-head h2", { hasText: "聊天" }).waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
       await settle(page);
       await shot(page, size, scheme, "loose");

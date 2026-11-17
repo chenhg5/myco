@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MoreHorizontal, Plus, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, MoreHorizontal, Plus, Search, WifiOff, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import "@/app/app.css";
@@ -22,10 +22,11 @@ import { HubSwitcher } from "@/app/HubSwitcher";
 import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
-import { Avatar, AvatarStack, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
+import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
+import { recentChats } from "@/app/recentChats";
 import { useContextMenu } from "@/app/ContextMenu";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
@@ -326,7 +327,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Chat (the agents in no project) is always there: you can start by
   // talking to an agent and make a project later, or never.
   const looseHubs = hubId ? [hubId] : [];
-  const looseAgents = loose.filter((r) => agentKind(r.st.agent) === "agent");
   const hubName = (id: string) => namedHubs.find((h) => h.id === id)?.name || namedOv?.hubs.find((h) => h.id === id)?.name || id;
   // The computers agents use, in the sidebar: one click opens a terminal.
   const computers = rows.filter((r) => isWorkspace(r.st.agent))
@@ -339,6 +339,26 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const navComputers = computerSort.order.map((n) => computers.find((r) => r.st.agent.name === n)!).filter(Boolean);
   const people = rows.filter((r) => agentKind(r.st.agent) === "agent")
     .sort((a, b) => Number(a.st.state === "offline") - Number(b.st.state === "offline"));
+  // The sidebar's chat list: everyone you can talk to, one click into a
+  // chat, in the order picked (kept on this computer).
+  const [chatSort, setChatSort] = useState<ChatSort>(() => {
+    try { const v = localStorage.getItem(CHAT_SORT_KEY); return v === "busy" || v === "name" ? v : "recent"; } catch { return "recent"; }
+  });
+  const pickChatSort = (v: ChatSort) => { setChatSort(v); try { localStorage.setItem(CHAT_SORT_KEY, v); } catch { /* not kept */ } };
+  const [navChat, setNavChat] = useState<string | null>(null);
+  const chatRows = useMemo(() => {
+    const at = new Map(recentChats().filter((c) => c.hubId === hubId).map((c) => [c.agent, c.at]));
+    const name = (r: AgentRow) => nodeName(r.st.agent, r.hub);
+    const busy = (r: AgentRow) => ((r.st.asking || 0) > 0 ? 0 : r.st.state === "working" ? 1 : r.st.state === "offline" ? 3 : 2);
+    return [...people].sort((a, b) => chatSort === "name" ? name(a).localeCompare(name(b))
+      : chatSort === "busy" ? busy(a) - busy(b) || name(a).localeCompare(name(b))
+      : (at.get(b.st.agent.name) || 0) - (at.get(a.st.agent.name) || 0) || busy(a) - busy(b) || name(a).localeCompare(name(b)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people.map((r) => `${r.st.agent.name}:${r.st.state}:${r.st.asking || 0}`).join(","), chatSort, hubId, navChat]);
+  useEffect(() => { if (page !== "space") setNavChat(null); }, [page]);
+  // Computers: folded or not (kept on this computer).
+  const [pcFolded, setPcFolded] = useState(() => { try { return localStorage.getItem(PC_FOLD_KEY) === "1"; } catch { return false; } });
+  const foldPcs = (v: boolean) => { setPcFolded(v); try { localStorage.setItem(PC_FOLD_KEY, v ? "1" : "0"); } catch { /* not kept */ } };
 
   // The space on show: the one chosen (while it exists), else the newest
   // project, else chat.
@@ -585,28 +605,17 @@ export default function AppMode({ initialHubs, initialInfo }: {
             <Search /><span>{L("搜索", "Search")}</span><kbd>{modKey()}K</kbd>
           </button>
 
+          <button type="button" className={cn("app-nav-item sp-nav sp-nav-auto", page === "automations" && "active")} onClick={() => setPage("automations")}
+            style={{ ["--wails-draggable" as string]: "no-drag" }}>
+            <Zap />
+            <span className="app-nav-label">{L("自动化", "Automations")}</span>
+          </button>
+
           <nav className="app-nav">
-            {/* Chat first: talk to your agents straight away; a project is
-                for when several should work on one thing. */}
-            <div className="app-nav-group">
-              {looseHubs.map((id) => {
-                const ref: SpaceRef = { hubId: id, loose: true };
-                const active = page === "space" && !!shown && spaceKey(shown) === spaceKey(ref);
-                const dot = workDot(loose);
-                return (
-                  <button key={`${id}/*`} type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => openSpace(ref)}
-                    title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
-                    <span className="app-nav-label">{L("聊天", "Chat")}</span>
-                    {looseAgents.length > 0 && <AvatarStack agents={looseAgents.map((r) => r.st.agent)} size={18} max={3} />}
-                    {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有 agent 可能卡住", "Someone may be stuck") : L("有 agent 在干活", "Someone is at work")} />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="app-nav-group">
+            {/* Projects first: the work. Then chat: everyone you can talk to,
+                one click into a chat, in the order you pick; it takes the
+                height left and scrolls. Computers last, foldable. */}
+            <div className="app-nav-group sp-nav-projects">
               <div className="app-nav-title app-nav-title-row">
                 <span>{L("项目", "Projects")}</span>
                 <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
@@ -641,61 +650,109 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 </button>
               )}
             </div>
-            <div className="app-nav-group">
-              <div className="app-nav-title app-nav-title-row">
-                <button type="button" className={cn("sp-nav-title-link", page === "computers" && "active")} onClick={() => setPage("computers")}
-                  title={L("管理电脑", "Manage computers")}>{L("电脑", "Computers")}</button>
-                <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
-                  onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
-              </div>
-              {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
-                const dot = workDot([r]);
-                const pc = { hubId: r.hub.id, name: r.st.agent.name };
-                const menu = [
-                  { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
-                  { label: L("改名", "Rename"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
-                  { label: L("谁能用、项目", "Who can use it, projects"), onSelect: () => setPcSettings(pc) },
-                  { label: L("移除这台电脑", "Remove this computer"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
+            <div className="app-nav-group sp-nav-chats">
+              {looseHubs.map((id) => {
+                const ref: SpaceRef = { hubId: id, loose: true };
+                const active = page === "space" && !navChat && !!shown && spaceKey(shown) === spaceKey(ref);
+                const sorts: { v: ChatSort; label: string }[] = [
+                  { v: "recent", label: L("最近聊过的在前", "Recently talked to first") },
+                  { v: "busy", label: L("在忙的在前", "Busy first") },
+                  { v: "name", label: L("按名字", "By name") },
                 ];
                 return (
-                  <div key={r.st.agent.name} className="sp-nav-pc-wrap">
-                    <button type="button" {...computerSort.bind(r.st.agent.name)}
-                      className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
-                      onClick={() => chatWithMember(r)} onContextMenu={(e) => navMenu.open(e, menu)}
-                      title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                  <div key={`${id}/*`} className="sp-nav-chat-wrap">
+                    <button type="button" className={cn("app-nav-item sp-nav sp-nav-chat", active && "active")} onClick={() => { setNavChat(null); openSpace(ref); }}
+                      title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}>
+                      <span className="app-nav-label">{L("聊天", "Chat")}</span>
+                    </button>
+                    <button type="button" className="app-nav-add sp-nav-chat-sort" aria-label={L("排序和成员", "Order and members")} title={L("排序方式、管理成员", "How to order, manage members")}
+                      onClick={(e) => navMenu.openUnder(e.currentTarget, [
+                        { header: L("排序", "Order") },
+                        ...sorts.map((x) => ({ label: x.label, checked: chatSort === x.v, onSelect: () => pickChatSort(x.v) })),
+                        "sep",
+                        { label: L("管理成员", "Manage members"), onSelect: () => { setNavChat(null); setPage("members"); } },
+                      ])}><ArrowUpDown /></button>
+                  </div>
+                );
+              })}
+              <div className="sp-nav-chat-list">
+                {chatRows.map((r) => {
+                  const key = `${r.hub.id}\u0000${r.st.agent.name}`;
+                  const dot = workDot([r]);
+                  return (
+                    <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", page === "space" && navChat === key && "active")}
+                      onClick={() => { setNavChat(key); chatWithMember(r); }}
+                      onContextMenu={(e) => navMenu.open(e, [
+                        { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },
+                        { label: L("看它的资料", "Its profile"), onSelect: () => { setNavChat(null); setPage("members"); setProfile({ hubId: r.hub.id, name: r.st.agent.name }); } },
+                      ])}
+                      title={[nodeName(r.st.agent, r.hub), r.st.agent.description].filter(Boolean).join(" · ")}>
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                       {dot && (
                         <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                          title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("在干活", "At work")} />
                       )}
                     </button>
-                    <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
-                      title={L("谁能用、项目、移除", "Who can use it, projects, remove")} onClick={(e) => navMenu.openUnder(e.currentTarget, menu)}>
-                      <MoreHorizontal />
-                    </button>
-                  </div>
-                );
-              })}
-              {computers.length > NAV_COMPUTERS && (
-                <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
-                  <span className="app-nav-label">{L(`全部 ${computers.length} 台`, `All ${computers.length}`)}</span>
-                </button>
-              )}
-              {computers.length === 0 && (
-                <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
-                  <span className="app-nav-label">{L("还没有", "None yet")}</span>
-                </button>
-              )}
+                  );
+                })}
+                {rows.length > 0 && chatRows.length === 0 && (
+                  <button type="button" className="app-nav-item sp-nav muted" onClick={() => hub && setAddAgent({ hubId: hub.id, loose: true })}>
+                    <Plus /><span className="app-nav-label">{L("添加 agent", "Add an agent")}</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="app-nav-group">
-              <button type="button" className={cn("app-nav-item sp-nav sp-nav-members", page === "members" && "active")} onClick={() => setPage("members")}>
-                <span className="app-nav-label">{L("成员", "Members")}</span>
-                {people.length > 0 && <AvatarStack agents={people.map((r) => r.st.agent)} size={18} max={3} />}
-              </button>
-              <button type="button" className={cn("app-nav-item sp-nav sp-nav-auto", page === "automations" && "active")} onClick={() => setPage("automations")}>
-                <span className="app-nav-label">{L("自动化", "Automations")}</span>
-              </button>
+            <div className="app-nav-group sp-nav-pcs">
+              <div className="app-nav-title app-nav-title-row">
+                <button type="button" className="sp-nav-fold" aria-expanded={!pcFolded} aria-label={pcFolded ? L("展开电脑", "Show computers") : L("收起电脑", "Hide computers")}
+                  onClick={() => foldPcs(!pcFolded)}><ChevronRight className={cn(!pcFolded && "is-open")} /></button>
+                <button type="button" className={cn("sp-nav-title-link", page === "computers" && "active")} onClick={() => setPage("computers")}
+                  title={L("管理电脑", "Manage computers")}>{L("电脑", "Computers")}{pcFolded && computers.length > 0 ? ` · ${computers.length}` : ""}</button>
+                <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
+                  onClick={() => (shownProject && shown ? setAddWorkspace(shown) : hub && setAddWorkspace({ hubId: hub.id, loose: true }))}><Plus /></button>
+              </div>
+              {!pcFolded && (<>
+              {navComputers.slice(0, NAV_COMPUTERS).map((r) => {
+                  const dot = workDot([r]);
+                  const pc = { hubId: r.hub.id, name: r.st.agent.name };
+                  const menu = [
+                    { label: L("打开终端", "Open the terminal"), onSelect: () => chatWithMember(r) },
+                    { label: L("改名", "Rename"), onSelect: () => setPcSettings({ ...pc, focus: "name" as const }) },
+                    { label: L("谁能用、项目", "Who can use it, projects"), onSelect: () => setPcSettings(pc) },
+                    { label: L("移除这台电脑", "Remove this computer"), onSelect: () => setPcSettings({ ...pc, focus: "remove" as const }) },
+                  ];
+                  return (
+                    <div key={r.st.agent.name} className="sp-nav-pc-wrap">
+                      <button type="button" {...computerSort.bind(r.st.agent.name)}
+                        className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
+                        onClick={() => chatWithMember(r)} onContextMenu={(e) => navMenu.open(e, menu)}
+                        title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                        <Avatar agent={r.st.agent} size={20} badge={false} />
+                        <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
+                        {dot && (
+                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
+                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                        )}
+                      </button>
+                      <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
+                        title={L("谁能用、项目、移除", "Who can use it, projects, remove")} onClick={(e) => navMenu.openUnder(e.currentTarget, menu)}>
+                        <MoreHorizontal />
+                      </button>
+                    </div>
+                  );
+                })}
+                {computers.length > NAV_COMPUTERS && (
+                  <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
+                    <span className="app-nav-label">{L(`全部 ${computers.length} 台`, `All ${computers.length}`)}</span>
+                  </button>
+                )}
+                {computers.length === 0 && (
+                  <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
+                    <span className="app-nav-label">{L("还没有", "None yet")}</span>
+                  </button>
+                )}
+              </>)}
             </div>
           </nav>
 
@@ -884,6 +941,9 @@ export default function AppMode({ initialHubs, initialInfo }: {
 const SPACE_KEY = "myco-app-space";
 // Computers listed in the sidebar before "All N".
 const NAV_COMPUTERS = 6;
+type ChatSort = "recent" | "busy" | "name";
+const CHAT_SORT_KEY = "myco-nav-chat-sort";
+const PC_FOLD_KEY = "myco-nav-pcs-folded";
 const HUB_KEY = "myco-app-hub";
 const PLACES_KEY = "myco-app-places";
 /** A hub that answered 401: it no longer takes this app's token. The hub says

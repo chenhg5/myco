@@ -166,6 +166,20 @@
 .sp-nav-pc.is-away .pa {
   opacity: 0.55;
 }
+/* Someone to talk to, under Chat: their face, their name; one click
+   into the chat. Away ones are faded, as computers. */
+.sp-nav-person {
+  padding-left: 6px;
+}
+.sp-nav-person .pa {
+  flex: none;
+}
+.sp-nav-person.is-away {
+  color: var(--faint);
+}
+.sp-nav-person.is-away .pa {
+  opacity: 0.55;
+}
 .sp-nav-members .pa-stack,
 .sp-nav-chat .pa-stack {
   flex: none;
@@ -2724,4 +2738,76 @@ body.is-sorting * {
 }
 .add-agent-way .app-small-note {
   margin-top: 6px;
+}
+
+/* ---------- the sidebar's order: automations (one line, at the top),
+   projects, chat (the height left; it scrolls), computers (foldable) ---- */
+.app-sidebar > .sp-nav-auto {
+  flex: none;
+  width: auto;
+  margin: -4px 10px 2px;
+}
+.app-nav {
+  display: flex;
+  flex-direction: column;
+}
+.sp-nav-projects {
+  flex: none;
+}
+.sp-nav-chats {
+  flex: 1 1 auto;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+}
+.sp-nav-chat-wrap {
+  position: relative;
+  flex: none;
+}
+.sp-nav-chat-sort {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.sp-nav-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.sp-nav-pcs {
+  flex: none;
+}
+.sp-nav-pcs .app-nav-title-row {
+  justify-content: flex-start;
+  gap: 2px;
+}
+.sp-nav-pcs .app-nav-title-row .app-nav-add {
+  margin-left: auto;
+}
+.sp-nav-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--faint);
+  cursor: default;
+}
+.sp-nav-fold:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.sp-nav-fold svg {
+  width: 12px;
+  height: 12px;
+}
+.sp-nav-fold svg.is-open {
+  transform: rotate(90deg);
 }
