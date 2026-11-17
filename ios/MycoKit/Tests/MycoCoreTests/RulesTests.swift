@@ -385,6 +385,49 @@ struct ConversationBuilderTests {
         #expect(receipt("c1", [theirs]) == nil)
     }
 
+    /// The desktop app's rule (docs/design/app-ui.md): quiet counts from a
+    /// task's last sign of life, and one whose turn is over waits.
+    @Test func aTaskIsNotTakenForStuckWhileItShowsLifeOrWaits() {
+        // Taken on ten hours ago and never closed; the task itself says
+        // nothing since.
+        let old = Message(id: "t1", from: "me", to: "lead", body: "ship it", status: "acked", createdAt: at(-36_100), updatedAt: at(-36_000), activeAt: at(-36_000))
+        let lead = AgentStatus(agent: Agent(id: "a", name: "lead"), state: "working", receiving: "session")
+        func line(
+            _ messages: [Message], paused: Set<String> = [], activity: [String: Date] = [:], ended: Set<String> = [],
+            status: AgentStatus? = nil
+        ) -> ConversationItem.Kind? {
+            ConversationBuilder.items(
+                me: "me", agent: "lead", messages: messages, paused: paused, activity: activity, ended: ended,
+                status: { _ in status ?? lead }, now: now
+            ).first { $0.id == "t1.status" }?.kind
+        }
+        // Nothing known about its run: it may be stuck, quiet since then.
+        #expect(line([old]) == .status(.maybeStuck(quietSince: at(-36_000)), taskID: "t1"))
+        // Its steps moved two minutes ago: it is at work.
+        #expect(line([old], activity: ["t1": at(-120)]) == .status(.working(since: at(-36_000)), taskID: "t1"))
+        // It reported two minutes ago: the same.
+        let report = Message(id: "p1", from: "lead", to: "me", threadId: "t1", replyTo: "t1", type: "progress", body: "half way", status: "done", createdAt: at(-120))
+        #expect(line([old, report]) == .status(.working(since: at(-36_000)), taskID: "t1"))
+        // Steps that stopped an hour ago: quiet since the last of them.
+        #expect(line([old], activity: ["t1": at(-3_600)]) == .status(.maybeStuck(quietSince: at(-3_600)), taskID: "t1"))
+        // Its session ended its turn long ago: it waits (for me, or for
+        // others). No line about being stuck; and stopped, no line at all.
+        #expect(line([old], activity: ["t1": at(-3_600)], ended: ["t1"]) == .status(.working(since: at(-3_600)), taskID: "t1"))
+        #expect(line([old], paused: ["t1"], activity: ["t1": at(-3_600)], ended: ["t1"]) == nil)
+        // Its answer is in the conversation while its status lags: it is
+        // answered. No line, and the input does not speak to it.
+        let answer = Message(id: "r1", from: "lead", to: "me", threadId: "t1", replyTo: "t1", type: "reply", body: "shipped", status: "done", createdAt: at(-600))
+        #expect(line([old, answer]) == nil)
+        #expect(ConversationBuilder.openTask(me: "me", messages: [old, answer]) == nil)
+        #expect(ConversationBuilder.openTask(me: "me", messages: [old])?.id == "t1")
+        // Unless its node is away: it cannot go on, whatever its turn says.
+        let away = AgentStatus(agent: Agent(id: "a", name: "lead"), state: "offline", receiving: "session")
+        guard case .status(.maybeStuck, "t1")? = line([old], paused: ["t1"], activity: ["t1": at(-3_600)], ended: ["t1"], status: away) else {
+            Issue.record("a task on a node that is away may be stuck even when its turn ended")
+            return
+        }
+    }
+
     @Test func aRunThatWaitsDoesNotLookAtWork() {
         // Mine, taken on; it handed work to the tester, whose task is open.
         let mine = Message(id: "t1", from: "me", to: "lead", body: "ship it", status: "acked", createdAt: at(-300), updatedAt: at(-200), activeAt: at(-200))
