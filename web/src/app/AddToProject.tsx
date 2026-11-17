@@ -306,7 +306,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
                       <span className="add-local-icon"><Icon /></span>
                       <span className="add-local-main">
                         <span className="add-local-name">{s.title || folderOf(s.workdir)}</span>
-                        <span className="add-local-sub">{L("已经加入了", "Already joined")}</span>
+                        <span className="add-local-sub">{s.joined?.agent ? L(`已经加入了，是 ${s.joined.agent}`, `Already joined as ${s.joined.agent}`) : L("已经加入了", "Already joined")}</span>
                       </span>
                     </div>
                   );
