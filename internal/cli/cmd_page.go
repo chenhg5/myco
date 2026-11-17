@@ -3,15 +3,21 @@ package cli
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
+
+	"github.com/hashicorp/yamux"
 
 	"github.com/chenhg5/myco/internal/api"
 	. "github.com/chenhg5/myco/internal/cli/cmdkit"
@@ -252,7 +258,63 @@ latest, and write again. Without it, it is written over the current version.`,
 		}),
 	}
 	state := (&Command{Name: "state", Summary: "A page's shared state (made with the myco bridge)"}).Add(stateGet, stateSet)
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, list, get, rm, state)
+	serve := &Command{
+		Name:     "serve",
+		Summary:  "Forward a server on this computer (a dev server) as a live page people open in the App",
+		Mutating: true,
+		Long: `Publishes a live page for a server you run on this computer (e.g. a Vite dev server on
+localhost:5173) and forwards it through the hub while this command runs: people open it in the
+App, hot reload included, and see your changes as you make them. Run it in the background and
+write the printed address in your reply; stop it to stop forwarding.
+
+It forwards, it does not start the server. The page is the server's root (/). With --page it
+takes up a live page it published before (same address).`,
+		Examples: []string{
+			`myco page serve --port 5173 --name "前端预览" --project web`,
+			"myco page serve --port 5173 --page pg_abc123",
+		},
+		Flags: []Flag{
+			{Name: "port", Kind: Int, Required: true, Help: "The port the server listens on, on this computer"},
+			{Name: "name", Kind: String, Help: "Its name, as people see it (required for a new page)"},
+			{Name: "project", Kind: String, Help: "Publish it to this project (its people see it)"},
+			{Name: "page", Kind: String, Help: "Take up this live page again (pg_...)"},
+		},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("port"); err != nil {
+				return err
+			}
+			in := client.LiveInput{Page: e.in.String("page"), Name: e.in.String("name"), Project: e.in.String("project"), Port: e.in.Int("port")}
+			if in.Port < 1 || in.Port > 65535 {
+				return errorf("invalid_argument", ExitUsage, "the port your server listens on, e.g. --port 5173", "invalid port %d", in.Port)
+			}
+			if in.Page == "" && strings.TrimSpace(in.Name) == "" {
+				return errorf("invalid_argument", ExitUsage, `give it a name people will recognise: --name "前端预览" (or --page to take up one again)`, "a new live page needs --name")
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "page_serve", "page": in.Page, "name": in.Name, "project": in.Project, "port": in.Port})
+			}
+			if !listening(in.Port) {
+				fmt.Fprintf(e.in.Stderr, "note: nothing listens on localhost:%d yet; people see an error until your server runs\n", in.Port)
+			}
+			c, err := e.agentClient()
+			if err != nil {
+				return err
+			}
+			p, err := c.PublishLivePage(e.in.Ctx, in)
+			if err != nil {
+				return pageErr(err)
+			}
+			if err := e.p.Print(p, func(w io.Writer) {
+				fmt.Fprintf(w, "forwarding localhost:%d as %s\n%s\n", in.Port, p.Name, p.URL)
+				fmt.Fprintln(w, "Write this address in your reply. Keep this running (in the background); stop it to stop forwarding.")
+			}); err != nil {
+				return err
+			}
+			forward(e.in.Ctx, c, p.ID, in.Port, e.in.Stderr)
+			return nil
+		}),
+	}
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, state)
 }
 
 // pageErr says what to do on a hub without pages.
@@ -356,4 +418,82 @@ func zipPage(dir string) ([]byte, []string, string, error) {
 		return nil, nil, "", errorf("invalid_argument", ExitUsage, "a page opens on an html file, index.html by default", "%s has no html file", dir)
 	}
 	return buf.Bytes(), names, entry, nil
+}
+
+// listening says whether something answers on localhost:port.
+func listening(port int) bool {
+	c, err := net.DialTimeout("tcp", net.JoinHostPort("localhost", strconv.Itoa(port)), time.Second)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
+}
+
+// forward keeps a live page's tunnel open until ctx ends, reconnecting
+// after a break; each stream the hub opens goes to localhost:port.
+func forward(ctx context.Context, c *client.Client, id string, port int, log io.Writer) {
+	wait := time.Second
+	for ctx.Err() == nil {
+		conn, err := c.DialPageTunnel(ctx, id)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			fmt.Fprintf(log, "could not reach the hub (%v); trying again in %s\n", err, wait)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
+			wait = min(wait*2, 30*time.Second)
+			continue
+		}
+		cfg := yamux.DefaultConfig()
+		cfg.LogOutput = io.Discard
+		cfg.KeepAliveInterval = 20 * time.Second
+		sess, err := yamux.Server(conn, cfg)
+		if err != nil {
+			conn.Close()
+			continue
+		}
+		wait = time.Second
+		fmt.Fprintln(log, "connected: people can open it now")
+		go func() { <-ctx.Done(); sess.Close() }()
+		for {
+			st, err := sess.Accept()
+			if err != nil {
+				break
+			}
+			go pipe(st, port)
+		}
+		sess.Close()
+		if ctx.Err() == nil {
+			fmt.Fprintln(log, "the connection to the hub dropped; reconnecting")
+		}
+	}
+}
+
+// pipe joins a stream from the hub to the server on this computer.
+func pipe(st net.Conn, port int) {
+	defer st.Close()
+	var d net.Dialer
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	local, err := d.DialContext(ctx, "tcp", net.JoinHostPort("localhost", strconv.Itoa(port)))
+	cancel()
+	if err != nil {
+		return
+	}
+	defer local.Close()
+	done := make(chan struct{}, 2)
+	go func() { _, _ = io.Copy(local, st); closeWrite(local); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(st, local); done <- struct{}{} }()
+	<-done
+	<-done
+}
+
+func closeWrite(c net.Conn) {
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.CloseWrite()
+	}
 }

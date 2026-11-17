@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AppWindow, Check, ExternalLink, Link2, Monitor, RotateCw } from "lucide-react";
+import { AppWindow, Check, ExternalLink, Link2, Monitor, Radio, RotateCw } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -141,13 +141,19 @@ function PageCard({ hubId, id }: { hubId: string; id: string }) {
   }, [hubId, id]);
   // Not there (deleted, not yours, an older hub): the link in the text stays.
   if (gone) return null;
-  const about = page ? [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${nameOf(hubId, page.publisher)} 发布`, `by ${nameOf(hubId, page.publisher)}`), timeAgo(page.updated_at)].filter(Boolean).join(" · ") : "";
+  const who = page ? nameOf(hubId, page.publisher) : "";
+  const about = !page ? ""
+    : page.live ? L(`${who} 电脑上的 ${page.port} 端口`, `Port ${page.port} on ${who}'s computer`)
+      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at)].filter(Boolean).join(" · ");
   return (
     <button type="button" className="pg-card" data-page={id} onClick={() => openPage({ kind: "page", hubId, id })}
       title={L("在旁边打开这个网页", "Open this page beside the chat")}>
-      <span className="pg-card-icon"><AppWindow /></span>
+      <span className={cn("pg-card-icon", page?.live && "is-live")}>{page?.live ? <Radio /> : <AppWindow />}</span>
       <span className="pg-card-text">
-        <span className="pg-card-name">{page?.name || L("网页", "Page")}</span>
+        <span className="pg-card-name">
+          {page?.name || L("网页", "Page")}
+          {page?.live && <span className={cn("pg-live", page.online && "is-on")}>{page.online ? L("实时 · 在线", "Live") : L("实时 · 离线", "Live · offline")}</span>}
+        </span>
         <span className="pg-card-about">{page ? about : L("正在读取…", "Loading…")}</span>
       </span>
       <span className="pg-card-open">{L("打开", "Open")}</span>
@@ -320,6 +326,7 @@ function PagePanel({ target, open, onOpenChange }: { target: PageTarget; open: b
   const title = local ? L(`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, `This computer · port ${local.port || 80}`)
     : opened?.name || page?.name || L("网页", "Page");
   const about = local ? local.host + local.pathname.replace(/\/$/, "")
+    : opened?.live && target.kind === "page" ? L(`实时 · ${page ? nameOf(target.hubId, page.publisher) : ""} 电脑上的 ${opened.port || page?.port || ""} 端口`, `Live · port ${opened.port || page?.port || ""} on ${page ? nameOf(target.hubId, page.publisher) : ""}'s computer`)
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(`第 ${opened.version} 版`, `Version ${opened.version}`) : "", page && target.kind === "page" ? L(`${nameOf(target.hubId, page.publisher)} 发布`, `by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;

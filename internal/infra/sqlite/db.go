@@ -262,6 +262,8 @@ CREATE TABLE IF NOT EXISTS pages (
   publisher  TEXT NOT NULL DEFAULT '',
   owner      TEXT NOT NULL DEFAULT '',
   latest     INTEGER NOT NULL DEFAULT 0,
+  live       INTEGER NOT NULL DEFAULT 0,
+  port       INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -311,6 +313,11 @@ func Open(path string) (*sql.DB, error) {
 	if err := addColumns(db, "enrollments", [][2]string{{"labels", "TEXT NOT NULL DEFAULT '[]'"},
 		{"kind", "TEXT NOT NULL DEFAULT ''"}, {"parent_id", "TEXT NOT NULL DEFAULT ''"}, {"machine", "TEXT NOT NULL DEFAULT ''"},
 		{"owner", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	// Live pages (a dev server forwarded): from the same release as pages.
+	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

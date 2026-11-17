@@ -179,6 +179,11 @@ Put everything the page needs in the folder (HTML, JS, CSS, pictures, data): it 
 sandbox without internet, so CDN links do not load. Publish the built output (e.g. `dist/`),
 not sources. Then write the printed address in your reply. Do not put secrets in a page.
 
+While you build a front end with a dev server, forward it instead, so people watch it as you
+change it (hot reload included): run in the background
+`myco page serve --port 5173 --name "前端预览"` and write the address it prints in your reply.
+It forwards, it does not start the server; stop it to stop.
+
 To work on it together (a checklist people tick, a board they arrange, a form they fill),
 use the `myco` object the App puts in the page. Its shared state is JSON on the hub that you
 read and write too:

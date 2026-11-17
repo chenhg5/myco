@@ -111,7 +111,7 @@ myco page rm --page <id> [--dry-run]
 
 1. **网页面板 + 发布静态网页**（本文的主体）：Hub 的 pages、CLI 的 `page`、console 的网页端口、App 的卡片和面板、本机 localhost 在面板里打开。估计 5～7 天：Hub 和 CLI 2 天，console 和安全 1～2 天，App 2 天，测试和文档 1 天。
 2. **桥：网页里的 `myco` 对象**：按网页隔离的存储、读写共享状态、给 agent 发消息、收到更新。这就是 [co-create](co-create.md) 里的桥，网页和小程序用同一个。
-3. **别的电脑上的开发服务器**：agent 电脑上的 `localhost:3000` 经 runner 转发过来（包括热更新用的 WebSocket），面板里实时看 agent 改前端。
+3. **别的电脑上的开发服务器**（已做，Hub v0.19.24 起）：agent 运行 `myco page serve --port 5173`，登记一个「实时网页」并和 Hub 保持一条 WebSocket，上面用 yamux 多路复用；App 打开时，请求走 App → 本机 console（这个网页单独一个回环端口，因为开发服务器的路径从根开始）→ Hub 的 `/v1/pages/{id}/live/…` → 那条连接 → agent 电脑上的 `localhost:5173`，热更新的 WebSocket 也一样。转发时去掉人的令牌和 cookie，`Host` 换成 `localhost:<端口>`（开发服务器只认本机）。不经过 runner：哪种方式接入的 agent 都能用。
 4. **按需要**：原生子 webview（在面板里登录外部网站）；iOS 的网页面板（同样是 WKWebView，同一套）；网页版控制台里打开网页。
 
 每一步都保证老的不坏：老 Hub 没有 pages 接口时，链接就是普通链接；老 App 看到网页链接，点了用浏览器打开 Hub 网页版。

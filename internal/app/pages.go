@@ -144,6 +144,10 @@ func (s *PageService) Publish(ctx context.Context, by Actor, in PublishInput, r 
 		if !s.sees(ctx, by, p) {
 			return nil, pageHidden(in.Page)
 		}
+		if p.Live {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "page %s is a live page (a server forwarded), not files", p.ID).
+				WithSuggestion("publish files as a new page (without --page)")
+		}
 		if !s.manages(by, p) {
 			return nil, domain.Errf(domain.CodePermissionDenied, "you may not publish a new version of page %s", p.ID).
 				WithSuggestion("its owner, their agents and the workspace's admins may; publish a page of your own instead")
@@ -338,6 +342,9 @@ func (s *PageService) Open(ctx context.Context, by Actor, id string, n int, file
 			break
 		}
 	}
+	if pv.Page.Live {
+		return nil, domain.Errf(domain.CodeNotFound, "page %s is a live page: its files come from its publisher's computer", id)
+	}
 	if v == nil {
 		return nil, domain.Errf(domain.CodeNotFound, "page %s has no version %d", id, n)
 	}
@@ -439,4 +446,100 @@ func (s *PageService) PutState(ctx context.Context, by Actor, id, state string, 
 		return nil, err
 	}
 	return next, nil
+}
+
+// LiveInput says what `myco page serve` forwards: a new live page (Name,
+// Project) or one of its own again (Page), and the port on its computer.
+type LiveInput struct {
+	Page    string
+	Name    string
+	Project string
+	Port    int
+	By      string
+}
+
+// PublishLive makes (or takes up again) a live page: a server on the
+// publisher's computer, forwarded while `myco page serve` runs there.
+func (s *PageService) PublishLive(ctx context.Context, by Actor, in LiveInput) (*PageView, error) {
+	if in.Port < 1 || in.Port > 65535 {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "the port is 1 to 65535").
+			WithSuggestion("the port your dev server listens on, e.g. --port 5173")
+	}
+	if s.encrypted != nil && s.encrypted(ctx) {
+		return nil, domain.Errf(domain.CodeInvalidState, "this workspace has end-to-end encryption on; a live page would pass through the hub in plain text")
+	}
+	if by.Agent == nil {
+		return nil, domain.Errf(domain.CodePermissionDenied, "a live page forwards a server on an agent's computer: an agent publishes it").
+			WithSuggestion("run myco page serve as the agent, on the computer the server runs on")
+	}
+	now := s.clock.Now()
+	if in.Page != "" {
+		p, err := s.pages.Get(ctx, in.Page)
+		if err != nil {
+			return nil, err
+		}
+		if !s.sees(ctx, by, p) {
+			return nil, pageHidden(in.Page)
+		}
+		if !p.Live {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "page %s is files, not a live page", p.ID).
+				WithSuggestion("publish files with myco page publish, or serve a new live page without --page")
+		}
+		if string(by.Agent.Name) != p.Publisher {
+			return nil, domain.Errf(domain.CodePermissionDenied, "page %s is forwarded by %s", p.ID, p.Publisher).
+				WithSuggestion("serve a live page of your own (without --page)")
+		}
+		if in.Name != "" {
+			if p.Name, err = domain.ParsePageName(in.Name); err != nil {
+				return nil, err
+			}
+		}
+		p.Port, p.UpdatedAt = in.Port, now
+		if err := s.pages.Save(ctx, p); err != nil {
+			return nil, err
+		}
+		return &PageView{Page: p}, nil
+	}
+	name, err := domain.ParsePageName(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	project := ""
+	if in.Project != "" {
+		if s.projects == nil {
+			return nil, domain.Errf(domain.CodeNotFound, "this hub has no projects")
+		}
+		if project, err = s.projects.MayAddFiles(ctx, by, in.Project); err != nil {
+			return nil, err
+		}
+	}
+	all, err := s.pages.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(all) >= domain.MaxPages {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "this workspace already has %d pages", domain.MaxPages).
+			WithSuggestion("delete pages no longer needed (myco page rm)")
+	}
+	p := &domain.Page{ID: s.ids.New("pg"), Name: name, Project: project, Publisher: string(by.Agent.Name), Owner: by.Agent.Owner,
+		Live: true, Port: in.Port, CreatedAt: now, UpdatedAt: now}
+	if err := s.pages.Create(ctx, p); err != nil {
+		return nil, err
+	}
+	return &PageView{Page: p}, nil
+}
+
+// Serves reports whether by is the agent that forwards live page id.
+func (s *PageService) Serves(ctx context.Context, by Actor, id string) (*domain.Page, error) {
+	pv, err := s.Get(ctx, by, id)
+	if err != nil {
+		return nil, err
+	}
+	if !pv.Page.Live {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "page %s is not a live page", id)
+	}
+	if by.Agent == nil || string(by.Agent.Name) != pv.Page.Publisher {
+		return nil, domain.Errf(domain.CodePermissionDenied, "page %s is forwarded by %s", id, pv.Page.Publisher)
+	}
+	return pv.Page, nil
 }

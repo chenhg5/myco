@@ -209,7 +209,9 @@ myco.ready.then((c)=>{document.getElementById("who").textContent=(c.me&&c.me.nam
 myco.on("change",(c)=>{draw(c.state);document.getElementById("who").textContent=(c.by?c.by+" 改了 · ":"")+"状态第 "+c.version+" 版";});
 document.addEventListener("change",async(e)=>{const i=Number(e.target.dataset.i);const done=new Set((myco.state&&myco.state.done)||[]);e.target.checked?done.add(i):done.delete(i);const r=await myco.update({done:[...done].sort()});draw(r.state);document.getElementById("who").textContent=(r.ok?"已保存":"别人先改了，已刷新")+" · 状态第 "+r.version+" 版";});
 document.getElementById("hand").addEventListener("click",async()=>{try{const n=((myco.state&&myco.state.done)||[]).length;await myco.send("清单勾完了 "+n+" 项，剩下的交给你。");document.getElementById("note").textContent="已发给 agent";}catch(err){document.getElementById("note").textContent=err.message;}});`;
-const pageFilesOf = (id, n) => (id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : pageFiles(n));
+const livePage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>下载页</title><style>body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:560px;margin:0 auto;padding:32px 24px}h1{margin:0 0 6px;font-size:24px}.dl{display:flex;gap:8px;margin-top:18px}.dl a{padding:8px 14px;border-radius:9px;background:#26262c;color:#fff;text-decoration:none;font-size:14px}.tag{font-size:12px;color:#b45309}</style></head>
+<body><main><p class="tag">vite dev server · localhost:5173</p><h1>下载 myco</h1><p>Mac、Windows、Linux 都有。</p><div class="dl"><a href="#mac">macOS</a><a href="#win">Windows</a><a href="#linux">Linux</a></div></main></body></html>`;
+const pageFilesOf = (id, n) => (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
 <body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
@@ -230,6 +232,11 @@ pages.set("pg_checklist", {
   id: "pg_checklist", name: "上线清单", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
   url: "http://192.168.1.20:7780/pages/pg_checklist", created_at: iso(18500), updated_at: iso(18500), can_manage: true,
   versions: [{ n: 1, entry: "index.html", files: 3, size: 3100, sha256: "c1", by: "release-cloud", at: iso(18500) }],
+});
+pages.set("pg_live", {
+  id: "pg_live", name: "下载页（实时）", project: "website", publisher: "release-cloud", version: 0, entry: "",
+  url: "http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200), can_manage: true,
+  versions: [], live: true, port: 5173, online: true,
 });
 // Pages' shared states (the bridge's myco.update).
 const pageStates = new Map([["pg_checklist", { state: { done: [0] }, version: 1, updated_by: "release-cloud", updated_at: iso(18000) }]]);
@@ -393,6 +400,7 @@ const consoleThreads = {
   // shows as a card and opens in the page panel.
   th_console_page: [
     makeMessage({ thread_id: "th_console_page", project: "website", from: CONSOLE, to: "release-cloud", type: "task", status: "done", body: "把 v0.16.8 的发布说明做成一页网页，带上每类改动的数量。", created_at: iso(20000), updated_at: iso(20000) }),
+    makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "下载页的改动在我电脑上跑着，实时预览（改了会自己刷新）：http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "note", status: "done", body: "上线前的检查也做成了一页清单，大家可以在上面勾：http://192.168.1.20:7780/pages/pg_checklist\n\n勾完了点页面下面的「交给 agent」，我接着往下做。", created_at: iso(18500), updated_at: iso(18500) }),
     makeMessage({ thread_id: "th_console_page", project: "website", from: "release-cloud", to: CONSOLE, type: "reply", status: "done", body: "做好了，发布说明的网页在这里：http://192.168.1.20:7780/pages/pg_release\n\n按「新功能 / 修复 / 文档」分了三栏，图表是页面里自己画的。", created_at: iso(19000), updated_at: iso(19000) }),
   ],
@@ -1674,6 +1682,7 @@ const server = http.createServer(async (req, res) => {
       const version = body.version || p.version;
       const key = `k${Math.random().toString(36).slice(2, 12)}`;
       pageKeys.set(key, { page: p.id, version });
+      if (p.live) return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/`, version: 0, latest: 0, name: p.name, entry: "", live: true, online: p.online, port: p.port });
       return send(res, 200, { url: `http://127.0.0.1:${PORT}/p/${key}/index.html`, version, latest: p.version, name: p.name, entry: "index.html" });
     }
     return fail(res, 404, "not_found", "no such route");

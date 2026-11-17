@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	_ "embed"
 	"encoding/base32"
+	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strconv"
 	"strings"
@@ -60,6 +63,8 @@ type pageServer struct {
 	err   error
 	keys  map[string]pageKey
 	order []string
+	// live pages opened: a loopback port each (hub/page → port)
+	live map[string]int
 }
 
 const maxPageKeys = 500
@@ -186,6 +191,16 @@ func (b *Backend) pageRoutes(m *http.ServeMux) {
 		ps, err := b.pageServer()
 		if err != nil {
 			writeErr(w, err)
+			return
+		}
+		if p.Live {
+			port, err := b.livePort(ps, r.PathValue("id"), p.ID)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"url": fmt.Sprintf("http://127.0.0.1:%d/", port), "version": 0, "latest": 0,
+				"name": p.Name, "entry": "", "live": true, "online": p.Online, "port": p.Port})
 			return
 		}
 		key := ps.add(pageKey{hub: r.PathValue("id"), page: p.ID, version: v.N, name: p.Name, entry: v.Entry})
@@ -322,4 +337,126 @@ func withHelper(page []byte) []byte {
 	out = append(out, page[:at]...)
 	out = append(out, pageHelper...)
 	return append(out, page[at:]...)
+}
+
+// livePort is the loopback port a live page is opened on: its own, since
+// a dev server's paths start at the root (/src/main.ts, /@vite/client).
+// Everything on it goes to the hub's /v1/pages/{id}/live/…, as the person
+// signed in there, and on to the server on the agent's computer.
+func (b *Backend) livePort(ps *pageServer, hubID, pageID string) (int, error) {
+	k := hubID + "/" + pageID
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	if port, ok := ps.live[k]; ok {
+		return port, nil
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	srv := &http.Server{Handler: b.liveHandler(hubID, pageID, port), ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(ln) }()
+	if ps.live == nil {
+		ps.live = map[string]int{}
+	}
+	ps.live[k] = port
+	return port, nil
+}
+
+func liveCSP(port int) string {
+	ws := fmt.Sprintf("ws://127.0.0.1:%d ws://localhost:%d", port, port)
+	return strings.Replace(pageCSP, "connect-src 'self' data: blob:", "connect-src 'self' "+ws+" data: blob:", 1)
+}
+
+const liveOffline = `<!doctype html><meta charset="utf-8"><div style="font:14px/1.7 system-ui;color:#85858d;margin:56px auto;max-width:420px;text-align:center">` +
+	`<p style="font-size:15px;color:#4b4b53">这个实时网页现在没有在转发</p><p>%s</p></div>`
+
+func (b *Backend) liveHandler(hubID, pageID string, port int) http.Handler {
+	rp := &httputil.ReverseProxy{
+		Transport: client.TunnelTransport(),
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			hub, err := b.find(hubID)
+			if err != nil {
+				return
+			}
+			base, err := url.Parse(strings.TrimRight(hub.URL, "/"))
+			if err != nil {
+				return
+			}
+			tok, _ := b.Secrets.Get(hub.ID)
+			pr.Out.URL.Scheme, pr.Out.URL.Host = base.Scheme, base.Host
+			prefix := base.EscapedPath() + "/v1/pages/" + url.PathEscape(pageID) + "/live"
+			pr.Out.URL.Path = base.Path + "/v1/pages/" + pageID + "/live" + pr.In.URL.Path
+			pr.Out.URL.RawPath = prefix + pr.In.URL.EscapedPath()
+			pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+			pr.Out.Host = base.Host
+			pr.Out.Header.Del("Cookie")
+			pr.Out.Header.Del("Origin")
+			pr.Out.Header.Set("Authorization", "Bearer "+tok)
+		},
+		ModifyResponse: func(res *http.Response) error {
+			h := res.Header
+			if res.StatusCode == http.StatusSwitchingProtocols {
+				return nil
+			}
+			h.Del("X-Frame-Options")
+			h.Del("Set-Cookie")
+			h.Set("Content-Security-Policy", liveCSP(port))
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("Referrer-Policy", "no-referrer")
+			if res.StatusCode == http.StatusServiceUnavailable || res.StatusCode == http.StatusBadGateway {
+				var e struct {
+					Message    string `json:"message"`
+					Suggestion string `json:"suggestion"`
+				}
+				raw, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+				res.Body.Close()
+				_ = json.Unmarshal(raw, &e)
+				why := "agent 那边的 myco page serve 没在运行，或者开发服务器没起来。"
+				if e.Suggestion != "" {
+					why += "<br><code>" + html.EscapeString(e.Suggestion) + "</code>"
+				}
+				out := []byte(fmt.Sprintf(liveOffline, why))
+				h.Set("Content-Type", "text/html; charset=utf-8")
+				h.Set("Cache-Control", "no-store")
+				h.Del("Content-Encoding")
+				res.Body = io.NopCloser(bytes.NewReader(out))
+				res.ContentLength = int64(len(out))
+				h.Set("Content-Length", strconv.Itoa(len(out)))
+				return nil
+			}
+			if !strings.HasPrefix(h.Get("Content-Type"), "text/html") || h.Get("Content-Encoding") != "" {
+				return nil
+			}
+			page, err := io.ReadAll(io.LimitReader(res.Body, 20<<20))
+			res.Body.Close()
+			if err != nil {
+				return err
+			}
+			out := withHelper(page)
+			res.Body = io.NopCloser(bytes.NewReader(out))
+			res.ContentLength = int64(len(out))
+			h.Set("Content-Length", strconv.Itoa(len(out)))
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(w, liveOffline, "连不上工作区的 Hub。")
+		},
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "127.0.0.1:"+strconv.Itoa(port) && r.Host != "localhost:"+strconv.Itoa(port) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if r.URL.Path == "/__myco/page.js" {
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = io.WriteString(w, pageHelperJS)
+			return
+		}
+		rp.ServeHTTP(w, r)
+	})
 }

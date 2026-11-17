@@ -3,6 +3,7 @@
 package hubserver
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"log/slog"
@@ -287,6 +288,18 @@ type statusRecorder struct {
 }
 
 func (s *statusRecorder) WriteHeader(code int) { s.status = code; s.ResponseWriter.WriteHeader(code) }
+
+// Unwrap lets http.ResponseController reach the connection (a WebSocket, a
+// forwarded live page, streaming).
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// Hijack: for handlers that ask the writer itself (WebSocket libraries).
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(s.ResponseWriter).Hijack()
+}
+
+// Flush passes streaming on.
+func (s *statusRecorder) Flush() { _ = http.NewResponseController(s.ResponseWriter).Flush() }
 
 func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

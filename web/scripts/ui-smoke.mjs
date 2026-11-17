@@ -531,6 +531,30 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // A live page: a dev server on the agent's computer, forwarded; its
+    // card says so and whether it is on.
+    await step("网页 · 实时预览", async () => {
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator('.sp-strip-face[title="Release (Claude 云端)"]'));
+      else await clickVisible(page, page.locator(".sp-side .sp-member:visible", { hasText: "Release (Claude 云端)" }));
+      const chat = page.locator(".sp-pane-right");
+      const card = chat.locator(".pg-card", { hasText: "下载页（实时）" });
+      await card.waitFor({ timeout: 15_000 });
+      await card.locator(".pg-live.is-on", { hasText: "实时 · 在线" }).waitFor({ timeout: 5_000 });
+      if (!(await card.innerText()).includes("5173 端口")) throw new Error("实时网页的卡片应写是哪台电脑的哪个端口");
+      await clickVisible(page, card);
+      const panel = page.locator(".pg-panel");
+      await page.frameLocator(".pg-frame").locator("h1", { hasText: "下载 myco" }).waitFor({ timeout: 15_000 });
+      if (!(await panel.locator(".fp-titles").innerText()).includes("实时")) throw new Error("面板上应写这是实时的");
+      const src = await page.locator(".pg-frame").getAttribute("src");
+      if (!src || !/\/$/.test(new URL(src).pathname)) throw new Error(`实时网页应从根路径打开：${src}`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "page-live");
+      await clickVisible(page, panel.getByRole("button", { name: "关闭" }));
+      await panel.waitFor({ state: "detached", timeout: 5_000 });
+      await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
+    });
+
     // The myco bridge: the page's shared state, written by you, changed by
     // its agent (it comes to the page), and a message to its agent, asked
     // once. (The four windows share the mock: versions are read, not assumed.)

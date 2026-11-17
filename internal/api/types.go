@@ -1281,6 +1281,11 @@ type Page struct {
 	UpdatedAt time.Time     `json:"updated_at"`
 	// CanManage: the caller may publish versions of it and delete it.
 	CanManage bool `json:"can_manage"`
+	// Live: a server on its publisher's computer (on Port there), forwarded
+	// while `myco page serve` runs; Online says whether it is now.
+	Live   bool `json:"live,omitempty"`
+	Port   int  `json:"port,omitempty"`
+	Online bool `json:"online,omitempty"`
 }
 
 // PageVersion is one publish of a page.

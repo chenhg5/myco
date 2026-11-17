@@ -150,10 +150,13 @@ export interface PageVersion { n: number; entry: string; files: number; size: nu
 export interface Page {
   id: string; name: string; project?: string; publisher: string; version: number; entry: string; url: string;
   versions: PageVersion[]; created_at: string; updated_at: string; can_manage: boolean;
+  /** a server on its publisher's computer (port there), forwarded while
+   *  `myco page serve` runs; online: forwarded now */
+  live?: boolean; port?: number; online?: boolean;
 }
 /** What opening a page gives: where its files are served (a loopback origin
  *  of the App's own), for which version. */
-export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string }
+export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
 

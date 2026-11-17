@@ -56,6 +56,7 @@ type Server struct {
 	traces      *app.TraceService
 	automations *app.AutomationService
 	pages       *app.PageService
+	tun         tunnels
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
 	voice       *app.VoiceSettingsService
@@ -203,6 +204,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
 	s.pageRoutes(m)
+	s.liveRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
 	m.HandleFunc("GET /j/{token}/{project}", s.joinPage)

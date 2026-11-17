@@ -5,9 +5,15 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/hashicorp/yamux"
 
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
@@ -115,5 +121,102 @@ func TestPagesOpenOnTheirOwnOrigin(t *testing.T) {
 	}
 	if code, _, _ := r.do("POST", "/app/hubs/"+hub+"/pages/"+p.ID+"/open", map[string]int{"version": 9}); code != 404 {
 		t.Fatalf("no such version: %d", code)
+	}
+}
+
+// A live page opened in the App: its own loopback port, the whole root
+// forwarded to the server on the agent's computer (through the hub), with
+// the helper put in; when nothing forwards it, a page that says so.
+func TestLivePageOpensOnAPortOfItsOwn(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	reg, err := r.admin.Register(ctx, api.RegisterRequest{Name: "front"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := client.New(r.hubURL, reg.Token)
+	dev := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("X-Frame-Options", "DENY")
+		io.WriteString(w, "<html><head></head><body>dev "+r.URL.Path+"</body></html>")
+	}))
+	defer dev.Close()
+	port, _ := strconv.Atoi(dev.URL[strings.LastIndex(dev.URL, ":")+1:])
+	p, err := agent.PublishLivePage(ctx, client.LiveInput{Name: "前端预览", Port: port})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, h, _ := r.do("POST", "/app/hubs", map[string]string{"name": "Main", "url": r.hubURL, "token": r.consoleToken("t")})
+	if code != 201 {
+		t.Fatalf("add hub: %d", code)
+	}
+	hub := h["id"].(string)
+	get := func(u string) (*http.Response, string) {
+		res, err := http.Get(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res, string(b)
+	}
+	// Not forwarded yet: it says so.
+	code, o, raw := r.do("POST", "/app/hubs/"+hub+"/pages/"+p.ID+"/open", nil)
+	if code != 200 || o["live"] != true || o["online"] == true {
+		t.Fatalf("open: %d %s", code, raw)
+	}
+	u := o["url"].(string)
+	if res, body := get(u); res.StatusCode != 503 || !strings.Contains(body, "没有在转发") || !strings.Contains(body, "page serve --page "+p.ID) {
+		t.Fatalf("offline: %d %s", res.StatusCode, body)
+	}
+	// Forwarded (what myco page serve does).
+	fctx, stop := context.WithCancel(ctx)
+	defer stop()
+	conn, err := agent.DialPageTunnel(fctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := yamux.DefaultConfig()
+	cfg.LogOutput = io.Discard
+	sess, err := yamux.Server(conn, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	go func() {
+		for {
+			st, err := sess.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer st.Close()
+				local, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
+				if err != nil {
+					return
+				}
+				defer local.Close()
+				go io.Copy(local, st)
+				io.Copy(st, local)
+			}()
+		}
+	}()
+	// (the hub takes the tunnel up a moment after it connects)
+	for i := 0; i < 100; i++ {
+		if pg, err := agent.Page(ctx, p.ID); err == nil && pg.Online {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	res, body := get(u + "src/main.ts")
+	if res.StatusCode != 200 || body != `<html><head><script src="/__myco/page.js"></script></head><body>dev /src/main.ts</body></html>` {
+		t.Fatalf("forwarded: %d %s", res.StatusCode, body)
+	}
+	if res.Header.Get("X-Frame-Options") != "" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "ws://127.0.0.1:") {
+		t.Fatalf("headers: %v", res.Header)
+	}
+	// Opened again: the same port.
+	if _, o2, _ := r.do("POST", "/app/hubs/"+hub+"/pages/"+p.ID+"/open", nil); o2["url"] != u || o2["online"] != true {
+		t.Fatalf("again: %v", o2)
 	}
 }

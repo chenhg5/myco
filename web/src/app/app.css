@@ -7599,3 +7599,22 @@ body.is-resizing {
   max-height: 140px;
   overflow: auto;
 }
+/* A live page (a dev server on an agent's computer, forwarded). */
+.pg-card-icon.is-live { background: var(--amber-soft); color: var(--amber); }
+.pg-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 6px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.pg-live::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+.pg-live.is-on { color: var(--green); background: var(--green-soft); }
+.pg-live.is-on::before { background: var(--green); }

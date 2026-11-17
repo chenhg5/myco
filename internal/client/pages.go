@@ -3,11 +3,16 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+
+	"github.com/coder/websocket"
 
 	"github.com/chenhg5/myco/internal/api"
 )
@@ -143,4 +148,65 @@ func (c *Client) PutPageState(ctx context.Context, id string, state json.RawMess
 	}
 	var out api.PageState
 	return &out, json.Unmarshal(data, &out)
+}
+
+// LiveInput says what `myco page serve` forwards: a new live page, or one
+// of its own again (Page), and the port on this computer.
+type LiveInput struct {
+	Page    string
+	Name    string
+	Project string
+	Port    int
+}
+
+// PublishLivePage makes (or takes up again) a live page: a server on this
+// computer, forwarded while a tunnel is open (from v0.19.24).
+func (c *Client) PublishLivePage(ctx context.Context, in LiveInput) (*api.Page, error) {
+	q := url.Values{"port": {strconv.Itoa(in.Port)}}
+	for k, v := range map[string]string{"name": in.Name, "project": in.Project, "page": in.Page} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	var out api.Page
+	return &out, c.do(ctx, http.MethodPost, "/v1/pages/live", q, nil, &out)
+}
+
+// tunnelTransport is HTTP/1.1 only: a WebSocket and a forwarded upgrade
+// need it.
+var tunnelTransport = func() *http.Transport {
+	t := newTransport(0, 0)
+	t.HTTP2 = nil
+	t.ForceAttemptHTTP2 = false
+	t.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	return t
+}()
+
+// TunnelTransport is the transport for what goes through a live page's
+// tunnel (the App forwarding a page to the hub): HTTP/1.1, so upgrades
+// (a dev server's hot reload WebSocket) pass.
+func TunnelTransport() http.RoundTripper { return tunnelTransport }
+
+// DialPageTunnel opens the tunnel of a live page this agent forwards: a
+// connection on which the hub opens a stream for each connection to the
+// page's server. It lasts until ctx ends or the hub closes it.
+func (c *Client) DialPageTunnel(ctx context.Context, id string) (net.Conn, error) {
+	u := c.urlFor("/v1/pages/" + esc(id) + "/tunnel")
+	hdr := http.Header{}
+	if c.token != "" {
+		hdr.Set("Authorization", "Bearer "+c.token)
+	}
+	ws, res, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPHeader: hdr, HTTPClient: &http.Client{Transport: tunnelTransport}})
+	if err != nil {
+		if res != nil && res.Body != nil {
+			data, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+			res.Body.Close()
+			if res.StatusCode >= 400 {
+				return nil, decodeError(res.StatusCode, data)
+			}
+		}
+		return nil, &Error{Code: CodeUnavailable, Message: err.Error(), Retryable: true}
+	}
+	ws.SetReadLimit(64 << 20)
+	return websocket.NetConn(ctx, ws, websocket.MessageBinary), nil
 }

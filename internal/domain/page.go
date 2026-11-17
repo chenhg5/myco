@@ -23,8 +23,12 @@ type Page struct {
 	Publisher string
 	// Owner is the member id of the person it belongs to (the publishing
 	// agent's owner, or the person): they see and manage it.
-	Owner     string
-	Latest    int
+	Owner  string
+	Latest int
+	// Live: not files but a server on its publisher's computer (a dev
+	// server on Port there), forwarded while `myco page serve` runs.
+	Live      bool
+	Port      int
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
