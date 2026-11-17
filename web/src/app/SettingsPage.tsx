@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
-  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice,
+  type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
 import { renameHub } from "@/app/hubNames";
@@ -22,7 +22,7 @@ import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 
-type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "voice" | "about";
+type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -164,6 +164,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
+  { key: "network", get label() { return L("网络代理", "Proxy"); }, icon: Globe },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
@@ -596,6 +597,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
         {section === "translate" && <TranslateSection />}
         {section === "voice" && <VoiceSection />}
+        {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "about" && <AboutSection info={info} local={local} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
@@ -1023,6 +1025,121 @@ function TranslateSection() {
         <ErrorText error={error} />
       </section>
     </>
+  );
+}
+
+/** How the App reaches its workspaces, update checks, translation and
+ *  voice services: the proxy in the environment (as before), none, or one
+ *  set here (HTTP or SOCKS5; a password goes to the keychain). Addresses on
+ *  this computer and the local network go direct. 「试一下」 tries the
+ *  setting before it is saved, against a workspace's address. */
+function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
+  const [cfg, setCfg] = useState<ProxySetting | null>(null);
+  const [mode, setMode] = useState<ProxySetting["mode"]>("system");
+  const [type, setType] = useState<NonNullable<ProxySetting["type"]>>("socks5");
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("");
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [tried, setTried] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const fill = (c: ProxySetting) => {
+    setCfg(c); setMode(c.mode); setType(c.type || "socks5"); setHost(c.host || ""); setPort(c.port ? String(c.port) : ""); setUser(c.user || "");
+  };
+  useEffect(() => { appApi.proxy().then(fill, setError); }, []);
+  const input = (): ProxyInput => mode === "manual"
+    ? { mode, type, host: host.trim(), port: Number(port) || 0, user: user.trim(), ...(password ? { password } : {}) }
+    : { mode };
+  const dirty = !!cfg && (mode !== cfg.mode || (mode === "manual" && (type !== (cfg.type || "socks5") || host.trim() !== (cfg.host || "") || (Number(port) || 0) !== (cfg.port || 0) || user.trim() !== (cfg.user || "") || !!password)));
+  const save = async (extra: { clear_password?: boolean } = {}) => {
+    setBusy(true); setError(null); setTried(null); setSaved(false);
+    try {
+      fill(await appApi.putProxy({ ...input(), ...extra }));
+      setPassword("");
+      setSaved(true);
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const reasons: Record<string, string> = {
+    timeout: L("12 秒内没有回应", "No answer within 12 seconds"),
+    refused: L("代理拒绝了连接：它在运行吗，端口对吗？", "The proxy refused the connection: is it running, on that port?"),
+    not_found: L("找不到这个地址", "That address was not found"),
+    auth: L("代理要用户名和密码，或者没接受填的这组", "The proxy wants a user name and password, or did not accept these"),
+  };
+  // (against the workspace you are on, else GitHub)
+  const target = hubsOv?.find((h) => h.ok)?.id;
+  const tryIt = async () => {
+    setBusy(true); setError(null); setTried(null); setSaved(false);
+    try {
+      const hubUrl = target ? (await appApi.hubs().catch(() => [])).find((h) => h.id === target)?.url : undefined;
+      const r = await appApi.testProxy({ ...input(), url: hubUrl });
+      setTried(r.ok
+        ? { ok: true, text: L(`连通了，用时 ${r.ms} 毫秒`, `Connected in ${r.ms} ms`) }
+        : { ok: false, text: (r.reason && reasons[r.reason]) || r.error || L("连不上", "Could not connect") });
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const modes: { key: ProxySetting["mode"]; label: string }[] = [
+    { key: "system", label: L("跟系统环境", "From the environment") },
+    { key: "none", label: L("不用代理", "No proxy") },
+    { key: "manual", label: L("手动设置", "Set here") },
+  ];
+  return (
+    <section className="app-setting-card app-setting-lines">
+      <div className="app-setting-line">
+        <div className="app-setting-line-text">
+          <b>{L("网络代理", "Proxy")}</b>
+          <span>{L("App 连工作区、检查更新、翻译和语音服务时走的代理。这台电脑和局域网里的地址（比如本机的工作区）总是直连。",
+            "The proxy the App uses to reach workspaces, update checks, translation and voice services. Addresses on this computer and the local network (a workspace here, say) are always reached directly.")}</span>
+        </div>
+      </div>
+      <div className="app-setting-line tr-services">
+        <div className="seg" role="tablist" aria-label={L("网络代理", "Proxy")}>
+          {modes.map((x) => (
+            <button key={x.key} type="button" role="tab" aria-selected={mode === x.key} className={cn("seg-btn", mode === x.key && "active")}
+              onClick={() => { setMode(x.key); setTried(null); setSaved(false); setError(null); }}>{x.label}</button>
+          ))}
+        </div>
+        <p className="tr-note">{mode === "system"
+          ? L("用环境变量里的代理（HTTPS_PROXY、HTTP_PROXY、ALL_PROXY），没有就直连。", "Uses the proxy in the environment (HTTPS_PROXY, HTTP_PROXY, ALL_PROXY), else connects directly.")
+          : mode === "none" ? L("所有连接都直连，不走任何代理。", "Every connection goes directly, through no proxy.")
+          : L("比如 Clash、V2Ray 一类本地代理：SOCKS5 常见端口 1080 / 7891，HTTP 常见 7890 / 8080。", "Such as a local Clash or V2Ray: SOCKS5 is often on 1080 / 7891, HTTP on 7890 / 8080.")}</p>
+      </div>
+      {mode === "manual" && (
+        <>
+          <div className="app-setting-line tr-fields">
+            <div className="tr-field">{L("类型", "Type")}
+              <div className="seg seg-sm" role="tablist" aria-label={L("代理类型", "Proxy type")}>
+                {(["socks5", "http", "https"] as const).map((t) => (
+                  <button key={t} type="button" role="tab" aria-selected={type === t} className={cn("seg-btn", type === t && "active")} onClick={() => setType(t)}>
+                    {t === "socks5" ? "SOCKS5" : t.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="app-setting-line tr-fields">
+            <label>{L("地址", "Host")}<input className="app-input mono" value={host} onChange={(e) => setHost(e.target.value)} placeholder="127.0.0.1" spellCheck={false} autoComplete="off" /></label>
+            <label>{L("端口", "Port")}<input className="app-input mono" value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, "").slice(0, 5))} placeholder={type === "socks5" ? "1080" : "7890"} inputMode="numeric" spellCheck={false} /></label>
+          </div>
+          <div className="app-setting-line tr-fields">
+            <label>{L("用户名（可不填）", "User (optional)")}<input className="app-input mono" value={user} onChange={(e) => setUser(e.target.value)} spellCheck={false} autoComplete="off" /></label>
+            <label>{L("密码（可不填）", "Password (optional)")}
+              <input className="app-input mono" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" spellCheck={false}
+                placeholder={cfg?.has_password ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : ""} />
+            </label>
+            {cfg?.has_password && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_password: true })}>{L("删掉密码", "Remove the password")}</button>}
+          </div>
+        </>
+      )}
+      <div className="app-setting-line tr-actions">
+        <button type="button" className="app-btn app-btn-primary" disabled={busy || !dirty} onClick={() => void save()}>{L("保存", "Save")}</button>
+        {mode === "manual" && <button type="button" className="app-btn" disabled={busy || !host.trim() || !port} onClick={() => void tryIt()}>{L("试一下", "Try it")}</button>}
+        {saved && !dirty && <span className="tr-tried"><Check />{L("已保存，马上生效", "Saved; in effect now")}</span>}
+        {tried && <span className={cn("tr-tried", !tried.ok && "is-error")}>{tried.ok && <Check />}{tried.text}</span>}
+      </div>
+      <ErrorText error={error} />
+    </section>
   );
 }
 
