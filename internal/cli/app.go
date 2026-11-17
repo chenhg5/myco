@@ -199,6 +199,13 @@ func (e *env) agentClient() (*client.Client, error) {
 	if err := e.autoResume(); err != nil {
 		return nil, err
 	}
+	several, err := e.adoptProfile()
+	if err != nil {
+		return nil, err
+	}
+	if e.cfg.Token == "" && len(several) > 0 && e.in.Getenv(config.EnvEnrollToken) == "" {
+		return nil, severalAgentsError(several)
+	}
 	hub, err := e.hubURL()
 	if err != nil {
 		return nil, err

@@ -95,7 +95,7 @@ func doctorCommand() *Command {
 	return &Command{
 		Name:    "doctor",
 		Summary: "Check hub connectivity, identity and every local agent's CLI setup (no quota spent)",
-		Long:    "Exits 1 if any check fails. With --all it checks every profile in ~/.myco/agents.",
+		Long:    "Exits 1 if any check fails. Outside an agent's session it checks the agent on this computer (MYCO_AGENT=<name> picks one; several and none picked: all of them). With --all it checks every profile in ~/.myco/agents.",
 		Examples: []string{
 			"myco doctor",
 			"myco doctor --all --format json",
@@ -106,7 +106,16 @@ func doctorCommand() *Command {
 			add := func(scope, check, status, detail, suggestion string) {
 				results = append(results, checkResult{scope, check, status, detail, suggestion})
 			}
+			// Outside an agent's session with no identity chosen: the one agent
+			// on this computer, or every one when there are several.
+			several, err := e.adoptProfile()
+			if err != nil {
+				return err
+			}
 			targets := []config.Profile{{Path: e.cfgPath, Config: e.cfg}}
+			if len(several) > 0 && !e.in.Bool("all") {
+				targets = agentProfiles(e.defaultPath)
+			}
 			if e.in.Bool("all") {
 				ps, err := config.ListProfiles(config.ProfilesDir(e.defaultPath))
 				if err != nil {
