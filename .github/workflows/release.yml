@@ -84,9 +84,24 @@ jobs:
           security create-keychain -p "$kcpw" "$kc"
           security set-keychain-settings -lut 21600 "$kc"
           security unlock-keychain -p "$kcpw" "$kc"
-          printf '%s' "$MAC_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
-          rm -f "$RUNNER_TEMP/cert.p12"
+          p12="$RUNNER_TEMP/cert.p12"
+          printf '%s' "$MAC_CERT_P12_BASE64" | base64 --decode > "$p12"
+          if ! security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null; then
+            # A .p12 from a newer macOS can use algorithms this runner's
+            # import does not take: OpenSSL 3 reads it and packs it again in
+            # the older format. If OpenSSL cannot open it, the password is wrong.
+            ossl="$(brew --prefix openssl@3)/bin/openssl"
+            { "$ossl" pkcs12 -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null ||
+              "$ossl" pkcs12 -legacy -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null; } || {
+              echo "::error::MAC_CERT_PASSWORD does not open the .p12 in MAC_CERT_P12_BASE64: set the password again (or export and set both again)"
+              exit 1
+            }
+            "$ossl" pkcs12 -export -legacy -in "$RUNNER_TEMP/id.pem" -passout env:MAC_CERT_PASSWORD -out "$p12"
+            rm -f "$RUNNER_TEMP/id.pem"
+            security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+            echo "imported the identity after packing the .p12 in the older format"
+          fi
+          rm -f "$p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
           security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
           # Sign by the identity's hash, so its name stays out of the log.
