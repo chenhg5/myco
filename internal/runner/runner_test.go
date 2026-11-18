@@ -268,3 +268,18 @@ func TestAttachmentsDownloadedAndInPrompt(t *testing.T) {
 		t.Fatalf("download: %q %v", b, err)
 	}
 }
+
+// OnStop runs when the runner is stopped, not when a single pass ends.
+func TestRunnerOnStop(t *testing.T) {
+	stops := 0
+	New(newFakeHub(), fakeHarness{}, NewMemorySessions(), nil, Options{Once: true, OnStop: func() { stops++ }}, quiet()).Run(context.Background())
+	if stops != 0 {
+		t.Fatalf("a finished pass is not a stop: %d", stops)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	New(newFakeHub(), fakeHarness{}, NewMemorySessions(), nil, Options{OnStop: func() { stops++ }}, quiet()).Run(ctx)
+	if stops != 1 {
+		t.Fatalf("stopped runner: OnStop ran %d times", stops)
+	}
+}

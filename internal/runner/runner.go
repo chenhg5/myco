@@ -55,6 +55,10 @@ type Options struct {
 	MaxAccess harness.Access
 	// OnQuota hears the account's usage limits whenever a run reports them.
 	OnQuota func(harness.Quota)
+	// OnStop runs once when Run returns because its context ended (the
+	// runner was stopped), after the runs in progress finished: the runner
+	// says goodbye to the hub there, so the app can tell why it is offline.
+	OnStop func()
 	// Once processes at most one pull batch and returns.
 	Once bool
 	// Scope selects agent-level (default) or per-thread sessions.
@@ -270,6 +274,13 @@ func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api
 // Run processes messages until ctx is cancelled (or after one batch if Once).
 // In-flight work is allowed to finish before Run returns.
 func (r *Runner) Run(ctx context.Context) error {
+	if r.opts.OnStop != nil {
+		defer func() {
+			if ctx.Err() != nil {
+				r.opts.OnStop()
+			}
+		}()
+	}
 	r.recoverPending(ctx)
 	slots := make(chan struct{}, r.opts.Concurrency)
 	var wg sync.WaitGroup

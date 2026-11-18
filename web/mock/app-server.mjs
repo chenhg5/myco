@@ -600,6 +600,7 @@ const state = {
           runtime: {
             cli: "claude", cli_version: "2.1.240", model: "claude-opus-5-5", model_source: "observed",
             effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "DeepSeek", provider_source: "machine",
+            away: "stopped",
             quota: {
               source: "claude", at: iso(600),
               windows: [

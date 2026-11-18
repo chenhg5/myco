@@ -4,7 +4,7 @@ import { ArrowRightLeft, Check, ChevronRight, Copy, Pencil, Plus, Power, Trash2,
 import { IconChat } from "@/components/icons";
 import { appApi, isOldHub, type AgentProvider, type ProviderList } from "@/appapi";
 import type { AgentRow } from "@/app/types";
-import type { AuditEntry, Member, Peer, Project, Skill } from "@/api";
+import type { AuditEntry, Member, Peer, Project, Runtime, Skill } from "@/api";
 import {
   agentKind, cliName, cliVersion, cloudLabel, isCloud, isInbox, kindLabel, machineLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
@@ -455,6 +455,29 @@ export function InUseCard() {
   );
 }
 
+/** Why a runner's agent is offline, as far as can be told: its runner said
+ *  it was stopped; it runs in WSL (Windows shuts WSL down when idle); on a
+ *  Mac with no goodbye it most likely slept; otherwise switched off or cut off. */
+export function offlineWhy(rt: Runtime | undefined, os?: string): "stopped" | "wsl" | "sleep" | "gone" {
+  if (rt?.away === "stopped") return "stopped";
+  if (rt?.env === "wsl") return "wsl";
+  if (os === "darwin") return "sleep";
+  return "gone";
+}
+
+function offlineWhyText(why: ReturnType<typeof offlineWhy>): string {
+  switch (why) {
+    case "stopped": return L("它那边的 myco 后台被停掉了：有人停了服务、注销或关机。", "Its runner was stopped: someone stopped the service, logged out or shut the computer down.");
+    case "wsl": return L("它在 WSL 里。Windows 在一段时间没有打开的 WSL 窗口后，会自动关掉 WSL，里面的 myco 后台也就停了。在 Windows 的 PowerShell 里运行下面这条，WSL 会一直开着（开机后要再运行一次，或放进「任务计划程序」）。",
+      "It runs in WSL. Windows shuts WSL down after a while with no WSL window open, and the runner in it stops. Run this in a Windows PowerShell to keep WSL running (again after a restart, or put it in Task Scheduler).");
+    case "sleep": return L("它没有说再见就断了：多半是那台 Mac 睡着了、合上了盖子，或者断网了。电脑醒来后会自己连上。", "It went without saying goodbye: most likely that Mac is asleep, its lid is closed, or it lost its network. It reconnects when the Mac wakes.");
+    default: return L("它没有说再见就断了：多半是那台电脑关机、睡眠或断网了。", "It went without saying goodbye: most likely that computer is off, asleep or offline.");
+  }
+}
+
+/** Keeps WSL running: a process Windows waits for, started hidden. */
+const WSL_KEEP = "Start-Process wsl.exe -ArgumentList '-e','sleep','infinity' -WindowStyle Hidden";
+
 // OfflineCard says why a node is offline and how to bring it back: on this
 // computer, restart the runner; on another one, the command to run there;
 // a cloud session comes back when its session continues.
@@ -520,9 +543,13 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
         <b>{L("离线", "Offline")}</b>
         {seen && <span>{L(`· 最后一次连接工作区是 ${seen}`, `· Last connected to the Hub ${seen}`)}</span>}
       </div>
+      {!isCloud(ag) && <p className="app-offline-why" data-offline-why={offlineWhy(ag.runtime, machine?.os)}>{offlineWhyText(offlineWhy(ag.runtime, machine?.os))}</p>}
       <p>
         {L("在线是指它最近 90 秒内连过工作区： agent 所在电脑上的 myco 后台 会每隔几秒替它连一次。 离线时发给它的任务会先排队，上线后自动送达。", "Online means it reached the Hub in the last 90 seconds: the runner on the node's machine checks in for it every few seconds. Tasks sent while it is offline wait in a queue and are delivered when it comes back.")}
       </p>
+      {offlineWhy(ag.runtime, machine?.os) === "wsl" && (
+        <div className="app-command"><code>{WSL_KEEP}</code><CopyButton value={WSL_KEEP} /></div>
+      )}
       {isCloud(ag) ? (
         <p>{L("这是云端会话，会话结束就会离线。回到那个会话继续对话，它就会重新上线。", "This is a cloud session. It goes offline when the session ends. Continue the conversation in that session to bring it back online.")}</p>
       ) : here ? (

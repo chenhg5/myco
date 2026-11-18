@@ -57,7 +57,7 @@ func (s *Server) agentDTO(a *domain.Agent) api.Agent {
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
 		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: quotaDTO(rt.Quota),
-			Features: rt.FeatureList()}
+			Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env}
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
 		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access}

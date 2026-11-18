@@ -2659,6 +2659,20 @@ async function runMatrix(browser, size, scheme) {
     });
 
 
+    // An offline agent says why, as far as can be told: here its runner
+    // said goodbye as it was stopped.
+    await step("成员 · 离线原因", async () => {
+      await go(page, "成员", narrow);
+      await clickVisible(page, page.locator(".mb-card", { hasText: "docs-claude" }).first());
+      const why = page.locator('.ms .app-offline-why[data-offline-why="stopped"]');
+      await why.waitFor({ timeout: 10_000 });
+      if (!(await why.innerText()).includes("被停掉了")) throw new Error("runner 停下时说过再见，离线说明应写它被停掉了");
+      await why.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "member-offline-why");
+      await page.keyboard.press("Escape");
+    });
+
     await step("成员", async () => {
       await go(page, "成员", narrow);
       await page.locator(".mb-card").first().waitFor({ timeout: 20_000 });
