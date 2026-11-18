@@ -4,7 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
@@ -232,12 +232,13 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const mockTemplates = ["table", "base", "doc", "slides"].map((name) => {
+const officialOrder = ["table", "base", "doc", "slides", "whiteboard", "mindmap", "gomoku", "sudoku", "poll", "picker"];
+const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
   const id = `tp_myco_${name}`;
   templateFiles.set(id, files);
-  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, version: m.version, publisher: "myco", official: true, can_manage: false,
+  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, version: m.version, publisher: "myco", official: true, can_manage: false,
     data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
     created_at: iso(0), updated_at: iso(0) };
 });

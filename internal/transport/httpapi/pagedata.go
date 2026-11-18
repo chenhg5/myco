@@ -182,6 +182,7 @@ func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 	if tv.Manifest != nil {
 		out.Data, out.Permissions, out.Export = collectionsDTO(tv.Manifest.Data), tv.Manifest.Permissions, tv.Manifest.Export
+		out.Category = tv.Manifest.Category
 	}
 	for _, v := range tv.Versions {
 		out.Versions = append(out.Versions, api.TemplateVersion{Version: v.Version, Files: v.Files, Size: v.Size, By: v.By, At: v.At})

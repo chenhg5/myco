@@ -3,11 +3,30 @@
   "name": "文档",
   "version": "2.0.0",
   "kind": "doc",
+  "category": "office",
   "description": "像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。",
   "data": {
-    "doc": { "single": true, "fields": { "title": "text" } },
-    "blocks": { "fields": { "type": "text", "text": "text", "checked": "bool", "block": "json", "order": "number" } }
+    "doc": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "blocks": {
+      "fields": {
+        "type": "text",
+        "text": "text",
+        "checked": "bool",
+        "block": "json",
+        "order": "number"
+      }
+    }
   },
-  "permissions": ["download"],
-  "export": ["md", "html"]
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "md",
+    "html"
+  ]
 }

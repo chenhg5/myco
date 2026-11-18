@@ -19,6 +19,9 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 	for _, o := range list {
 		m := o.Manifest
 		ids = append(ids, m.ID)
+		if m.Category == "" {
+			t.Errorf("%s has no category (its shelf in the App)", m.ID)
+		}
 		for _, f := range []string{m.Entry, m.Agent, m.Sample} {
 			if len(o.Files[f]) == 0 {
 				t.Errorf("%s has no %s", m.ID, f)
@@ -48,7 +51,15 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(ids, ",") != "myco/table,myco/base,myco/doc,myco/slides" {
+	var want []string
+	for _, id := range templates.Order {
+		for _, x := range ids {
+			if x == id {
+				want = append(want, id)
+			}
+		}
+	}
+	if len(ids) < 4 || strings.Join(ids, ",") != strings.Join(want, ",") {
 		t.Fatalf("official templates: %v", ids)
 	}
 }

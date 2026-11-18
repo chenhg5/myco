@@ -802,10 +802,10 @@ async function runMatrix(browser, size, scheme) {
     // and calendar of 多维表格, and a document typed with shortcuts.
     await step("应用 · 应用库和官方应用", async () => {
       await go(page, "应用", narrow);
-      const lib = page.locator("[data-testid=templates-official] .tp-card");
+      const lib = page.locator("[data-testid=templates-official] [data-shelf=office] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`官方应用应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
+      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "templates");

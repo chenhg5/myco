@@ -17,6 +17,24 @@ import (
 //go:embed official
 var files embed.FS
 
+// Order is how the library lists them: by shelf (office, creative,
+// games, tools), then as a person would reach for them.
+var Order = []string{
+	"myco/table", "myco/base", "myco/doc", "myco/slides",
+	"myco/whiteboard", "myco/mindmap",
+	"myco/gomoku", "myco/sudoku",
+	"myco/poll", "myco/picker",
+}
+
+func rank(id string) int {
+	for i, x := range Order {
+		if x == id {
+			return i
+		}
+	}
+	return len(Order)
+}
+
 // Official returns the official templates, read from the binary.
 func Official() ([]app.OfficialTemplate, error) {
 	entries, err := fs.ReadDir(files, "official")
@@ -51,7 +69,6 @@ func Official() ([]app.OfficialTemplate, error) {
 		t.Manifest = m
 		out = append(out, t)
 	}
-	order := map[string]int{"myco/table": 0, "myco/base": 1, "myco/doc": 2, "myco/slides": 3}
-	sort.SliceStable(out, func(i, j int) bool { return order[out[i].Manifest.ID] < order[out[j].Manifest.ID] })
+	sort.SliceStable(out, func(i, j int) bool { return rank(out[i].Manifest.ID) < rank(out[j].Manifest.ID) })
 	return out, nil
 }

@@ -1450,11 +1450,14 @@ type PageChanges struct {
 
 // Template is one template in the workspace's library (hubs from v0.20.5).
 type Template struct {
-	ID          string                        `json:"id"`
-	Slug        string                        `json:"slug"`
-	Name        string                        `json:"name"`
-	Description string                        `json:"description,omitempty"`
-	Kind        string                        `json:"kind"`
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Kind        string `json:"kind"`
+	// Category is its shelf: office, creative, game, tools or other
+	// (hubs from v0.20.6; empty before, and when the manifest has none).
+	Category    string                        `json:"category,omitempty"`
 	Version     string                        `json:"version"`
 	Publisher   string                        `json:"publisher"`
 	Data        map[string]TemplateCollection `json:"data,omitempty"`

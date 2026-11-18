@@ -83,6 +83,7 @@ type Manifest struct {
 	Name        string                        `json:"name"`
 	Version     string                        `json:"version"`
 	Kind        string                        `json:"kind,omitempty"`
+	Category    string                        `json:"category,omitempty"`
 	Description string                        `json:"description,omitempty"`
 	Entry       string                        `json:"entry,omitempty"`
 	Data        map[string]ManifestCollection `json:"data,omitempty"`
@@ -101,6 +102,10 @@ type ManifestCollection struct {
 
 // FieldTypes are the types a field may have.
 var FieldTypes = []string{"text", "markdown", "number", "bool", "date", "datetime", "person", "select", "multi", "url", "file", "json"}
+
+// TemplateCategories are the shelves of the library (apps, in the App):
+// office suite, creative, games, tools; others are "other".
+var TemplateCategories = []string{"office", "creative", "game", "tools", "other"}
 
 // TemplateKinds are what a template may be (custom: anything else).
 var TemplateKinds = []string{"table", "records", "doc", "slides", "board", "form", "custom"}
@@ -151,6 +156,9 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 	}
 	if !has(TemplateKinds, m.Kind) {
 		return bad("kind %q: one of %s", m.Kind, strings.Join(TemplateKinds, ", "))
+	}
+	if m.Category != "" && !has(TemplateCategories, m.Category) {
+		return bad("category %q: one of %s", m.Category, strings.Join(TemplateCategories, ", "))
 	}
 	if utf8.RuneCountInString(m.Description) > 300 {
 		return bad("description: 300 characters at most")

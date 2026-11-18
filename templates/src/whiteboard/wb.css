@@ -1,0 +1,35 @@
+/* 白板 */
+.wb-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--line2); touch-action: none;
+  background-color: var(--bg2); background-image: radial-gradient(circle, color-mix(in srgb, var(--faint) 45%, transparent) 1px, transparent 1.2px); }
+.wb-stage.tool-hand { cursor: grab; }
+.wb-stage.tool-sticky, .wb-stage.tool-text, .wb-stage.tool-rect, .wb-stage.tool-ellipse { cursor: crosshair; }
+.wb-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.wb-links { position: absolute; left: 0; top: 0; overflow: visible; }
+.wb-line { stroke: var(--muted); stroke-width: 2; fill: none; }
+.wb-line.is-on { stroke: var(--accent); }
+.wb-item { position: absolute; display: flex; padding: 12px; border-radius: 6px; user-select: none; }
+.wb-item.is-sticky { box-shadow: 0 1px 2px rgba(31, 35, 41, 0.12), 0 4px 12px rgba(31, 35, 41, 0.08); }
+.wb-item.is-rect, .wb-item.is-ellipse { align-items: center; justify-content: center; text-align: center; border: 2px solid; background: var(--bg); border-radius: 10px; }
+.wb-item.is-ellipse { border-radius: 50%; }
+.wb-item.is-text { padding: 6px 8px; }
+.wb-item.is-on { outline: 2px solid var(--accent); outline-offset: 3px; }
+.wb-text { width: 100%; font-size: 16px; line-height: 1.5; color: #1f2329; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; outline: none; }
+.is-dark .wb-text { color: #f0f0f0; }
+.wb-item.is-rect .wb-text, .wb-item.is-ellipse .wb-text { color: var(--fg); }
+.wb-item.is-text .wb-text { font-size: 20px; font-weight: 500; color: var(--fg); }
+.wb-text.is-editing { user-select: text; cursor: text; }
+.wb-handle { position: absolute; right: -8px; bottom: -8px; width: 12px; height: 12px; border: 2px solid var(--accent); border-radius: 3px; background: var(--bg); cursor: nwse-resize; }
+.wb-tools { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--menu); box-shadow: var(--shadow); }
+.wb-tools button, .wb-zoom button { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 7px; background: none; color: var(--muted); }
+.wb-tools button:hover, .wb-zoom button:hover { background: var(--hover); color: var(--fg); }
+.wb-tools button.is-on { background: var(--accent-bg); color: var(--accent); }
+.wb-tools .ico { width: 18px; height: 18px; }
+.wb-props { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--menu); box-shadow: var(--shadow); }
+.wb-swatch { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1); }
+.wb-swatch.is-on { border-color: var(--accent); }
+.wb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+.wb-count { font-size: 13px; color: var(--muted); padding: 0 4px; }
+.wb-zoom { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--menu); box-shadow: var(--shadow); }
+.wb-zoom button { width: 30px; height: 30px; }
+.wb-zoom .wb-k { width: auto; min-width: 52px; font-size: 12px; }
+.wb-empty { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); max-width: 380px; text-align: center; color: var(--muted); font-size: 14px; pointer-events: none; }

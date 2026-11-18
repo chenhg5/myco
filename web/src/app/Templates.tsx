@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, Table2 } from "lucide-react";
+import { CircleDot, FileText, Hash, KanbanSquare, LayoutTemplate, Network, PenTool, Plus, Presentation, Shuffle, Table2, Vote } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -16,7 +16,17 @@ import { cn, timeAgo } from "@/lib/utils";
  * templates are listed under them, to open again.
  */
 
-const iconOf = (kind: string) => (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
+const BY_SLUG: Record<string, typeof FileText> = {
+  "myco/whiteboard": PenTool, "myco/mindmap": Network, "myco/gomoku": CircleDot, "myco/sudoku": Hash, "myco/poll": Vote, "myco/picker": Shuffle,
+};
+const iconOf = (kind: string, slug = "") => BY_SLUG[slug] || (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
+
+/** The shelves official apps are on (their manifest's category; hubs
+ *  before v0.20.6 have none: the office kinds go on the first). */
+const SHELVES: [string, string, string][] = [
+  ["office", "办公套件", "Office"], ["creative", "创意设计", "Creative"], ["game", "游戏", "Games"], ["tools", "效率工具", "Tools"], ["other", "其他", "Other"],
+];
+const shelfOf = (t: Template) => t.category || (["table", "records", "doc", "slides"].includes(t.kind) ? "office" : "other");
 
 export function TemplatesPage({ hubId, projects, now }: { hubId: string; projects: { name: string; title: string }[]; now: number }) {
   const [list, setList] = useState<Template[] | null>(null);
@@ -37,13 +47,13 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const official = (list || []).filter((t) => t.official);
   const own = (list || []).filter((t) => !t.official);
   const card = (t: Template) => {
-    const Icon = iconOf(t.kind);
+    const Icon = iconOf(t.kind, t.slug);
     return (
       <button key={t.id} type="button" className="au-template tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
         title={L(`新建一份${t.name}`, `New ${t.name}`)}>
-        <span className={cn("au-icon", `tp-icon is-${t.kind}`)}><Icon /></span>
+        <span className={cn("au-icon", `tp-icon is-${t.kind} on-${shelfOf(t)}`)}><Icon /></span>
         <span className="au-template-text">
-          <span className="au-template-name">{t.name}{t.official && <span className="tp-tag">{L("官方", "Official")}</span>}</span>
+          <span className="au-template-name">{t.name}</span>
           {t.description && <span className="au-template-hint">{t.description}</span>}
           {!t.official && <span className="au-template-hint">{t.slug} · {t.version} · {t.publisher}</span>}
         </span>
@@ -66,8 +76,17 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
         </div>
       ) : list === null ? null : (
         <>
-          <h3 className="tp-section">{L("官方应用", "Official apps")}</h3>
-          <div className="au-templates" data-testid="templates-official">{official.map(card)}</div>
+          <div data-testid="templates-official">
+            {SHELVES.map(([key, zh, en]) => {
+              const on = official.filter((t) => shelfOf(t) === key);
+              return on.length ? (
+                <section key={key} className="tp-shelf" data-shelf={key}>
+                  <h3 className="tp-section">{L(zh, en)}</h3>
+                  <div className="au-templates">{on.map(card)}</div>
+                </section>
+              ) : null;
+            })}
+          </div>
           <h3 className="tp-section">{L("这个工作区的应用", "This workspace's apps")}</h3>
           {own.length ? <div className="au-templates" data-testid="templates-own">{own.map(card)}</div> : (
             <p className="tp-hint">{L("还没有。想要一个自己的（比如周报、面试评估表），跟 agent 说：「用 myco template init 帮我做一个周报应用，做好发布到工作区」。",
@@ -78,7 +97,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
             <div className="pc-list tp-made" data-testid="templates-made">
               {made.map((p) => {
                 const t = (list || []).find((x) => x.id === p.template?.id);
-                const Icon = iconOf(t?.kind || "");
+                const Icon = iconOf(t?.kind || "", t?.slug);
                 return (
                   <button key={p.id} type="button" className="tp-made-row" onClick={() => openPage({ kind: "page", hubId, id: p.id })}>
                     <Icon />
