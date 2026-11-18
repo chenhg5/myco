@@ -97,11 +97,10 @@ scripts/release-verify.sh vX.Y.Z
 在 Mac 上：
 
 1. 打开「钥匙串访问」→「登录」→「我的证书」，右键 Developer ID Application 那一项 →「导出」，存成桌面上的 `myco-sign.p12`，设一个密码。
-2. 在终端里（`gh` 要已登录，对仓库有管理权限；每条命令会提示你输入值，输入时不显示）：
+2. 在仓库目录的终端里（`gh` 要已登录，对仓库有管理权限；会提示你输入值，输入时不显示）：
 
    ```bash
-   base64 -i ~/Desktop/myco-sign.p12 | gh secret set MAC_CERT_P12_BASE64 -R chenhg5/myco
-   gh secret set MAC_CERT_PASSWORD -R chenhg5/myco
+   scripts/mac-signing-secrets.sh ~/Desktop/myco-sign.p12   # 证书和密码：先在本机核对密码能打开证书，再一起设
    gh secret set NOTARY_APPLE_ID -R chenhg5/myco
    gh secret set NOTARY_TEAM_ID -R chenhg5/myco
    gh secret set NOTARY_PASSWORD -R chenhg5/myco
