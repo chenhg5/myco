@@ -48,7 +48,7 @@ func TestChangesOfARun(t *testing.T) {
 	dir := gitRepo(t)
 	ctx := context.Background()
 	write(t, dir, "b.txt", "b\nbefore the run\n") // uncommitted before the run
-	write(t, dir, "notes.txt", "mine\n")            // untracked before the run
+	write(t, dir, "notes.txt", "mine\n")          // untracked before the run
 
 	snap := snapshotChanges(ctx, dir)
 	if snap == nil {
