@@ -1229,12 +1229,16 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       const order = await page.evaluate(() => [...document.querySelectorAll(".app-nav > .app-nav-group")].map((g) => g.className));
       if (!order[0]?.includes("sp-nav-autos") || !order[1]?.includes("sp-nav-projects") || !order[2]?.includes("sp-nav-chats") || !order[3]?.includes("sp-nav-pcs")) throw new Error(`边栏应是自动化、项目、会话、电脑，实际 ${order.join(" / ")}`);
-      // The four headings look alike: one size and weight, no icon.
+      // The three headings look alike: one size and weight, no icon.
       const heads = await page.evaluate(() => [...document.querySelectorAll(".app-nav .sp-nav-head .sp-nav-title-link")].map((e) => {
         const st = getComputedStyle(e);
         return { text: (e.textContent || "").trim(), size: st.fontSize, icon: !!e.querySelector("svg") };
       }));
-      if (heads.map((h) => h.text).join("|") !== "自动化|应用|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、应用、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      if (heads.map((h) => h.text).join("|") !== "项目|会话|电脑") throw new Error(`边栏标题应是 项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      // Automations and apps are rows on top, like the rows below, with an icon.
+      const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
+      const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
+      if (tops.map((t) => t.text).join("|") !== "自动化|应用" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「应用」两行，和项目一样大：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));

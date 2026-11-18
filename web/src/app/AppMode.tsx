@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, MoreHorizontal, Pin, Plus, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { TemplatesPage } from "@/app/Templates";
@@ -620,14 +620,21 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </button>
 
           <nav className="app-nav">
-            {/* One heading style for all four: automations (a page, one
-                line), projects first (the work), conversations (everyone you
+            {/* Two pages on top, rows like the ones below (an icon each):
+                automations and apps. Then three lists under one heading
+                style: projects first (the work), conversations (everyone you
                 can talk to, one click into a chat, pinned ones first, in the
                 order you pick; the height left, scrolling), computers last.
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
-              <NavHead label={L("自动化", "Automations")} active={page === "automations"} className="sp-nav-auto" onOpen={() => { setNavChat(null); setPage("automations"); }} />
-              <NavHead label={L("应用", "Apps")} active={page === "templates"} className="sp-nav-templates" onOpen={() => { setNavChat(null); setPage("templates"); }} />
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
+                onClick={() => { setNavChat(null); setPage("automations"); }}>
+                <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
+                onClick={() => { setNavChat(null); setPage("templates"); }}>
+                <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
+              </button>
             </div>
             <div className="app-nav-group sp-nav-projects">
               <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>
