@@ -2713,7 +2713,7 @@ body.is-sorting * {
    pointed out for a moment instead of anything moving. */
 .sp-pane-right.is-called,
 .sp-home.is-called,
-.sp-main > .conv-detail.is-called {
+.pg-pane > .conv-detail.is-called {
   animation: sp-called 1.2s ease-out;
 }
 @keyframes sp-called {
@@ -2723,7 +2723,7 @@ body.is-sorting * {
 @media (prefers-reduced-motion: reduce) {
   .sp-pane-right.is-called,
   .sp-home.is-called,
-  .sp-main > .conv-detail.is-called {
+  .pg-pane > .conv-detail.is-called {
     animation: none;
     box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
   }
@@ -2851,3 +2851,106 @@ button.sp-nav-fold:hover {
 .sp-nav-fold svg.is-open {
   transform: rotate(90deg);
 }
+
+/* ── Up to four panes (Panes.tsx): at most two rows of two ── */
+.pg-grid {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pg-room {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.pg-pane {
+  position: absolute;
+  overflow: hidden;
+}
+.pg-pane.has-left { border-left: 1px solid var(--line); }
+.pg-pane.has-top { border-top: 1px solid var(--line); }
+.pg-pane.is-hidden { display: none; }
+/* (only a member opened just now slides in, not every pane on a reflow) */
+.pg-grid .sp-pane-right:not(.is-called):not(.is-new) { animation: none; }
+.pg-pane.is-new { animation: sp-pane-in 0.16s ease-out; }
+/* The lines between panes: a wide grip over a 1px line. */
+.pg-line {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+}
+.pg-line.is-col { width: 9px; margin-left: -4px; cursor: col-resize; }
+.pg-line.is-row { left: 0; right: 0; height: 9px; margin-top: -4px; cursor: row-resize; }
+.pg-line::after {
+  content: "";
+  position: absolute;
+  background: transparent;
+  transition: background 0.12s;
+}
+.pg-line.is-col::after { top: 0; bottom: 0; left: 4px; width: 1px; }
+.pg-line.is-row::after { left: 0; right: 0; top: 4px; height: 1px; }
+.pg-line:hover::after,
+.pg-grid.is-dragging .pg-line::after { background: var(--focus); }
+body.is-resizing-rows { cursor: row-resize; user-select: none; }
+/* A member dragged over: where it would go. */
+.pg-drop {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  margin: 6px;
+  border-radius: 12px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--focus) 12%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus) 70%, transparent);
+  transform: translate(0, 0);
+}
+.pg-drop > span {
+  max-width: 80%;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line), 0 4px 14px rgba(15, 20, 30, 0.12);
+  font-size: 12.5px;
+  color: var(--fg);
+  text-align: center;
+}
+.pg-drop.is-no {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  box-shadow: inset 0 0 0 2px var(--line-2);
+}
+.pg-drop.is-no > span { color: var(--muted); }
+/* Too small for every pane: tabs, one pane shown. */
+.pg-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pg-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.pg-tab > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-tab:hover { background: var(--nav-hover); color: var(--fg); }
+.pg-tab.is-on { background: var(--pill); color: var(--fg); font-weight: 500; }
+.pg-tab-x { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: var(--faint); }
+.pg-tab-x:hover { background: var(--pill-hover); color: var(--fg); }
+.pg-tab-x svg { width: 12px; height: 12px; }

@@ -1051,20 +1051,91 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "project-chat");
       if (!narrow) {
+        const mainPane = page.locator('.pg-pane[data-pane="main"]');
         await clickVisible(page, right.getByRole("button", { name: "只看这一栏" }));
-        await page.locator(".sp-split.show-right").waitFor({ timeout: 5_000 });
+        await page.locator('.pg-pane[data-pane="main"].is-hidden').waitFor({ state: "attached", timeout: 5_000 });
         await settle(page, 200);
         await shot(page, size, scheme, "project-chat-full");
         // Full width stays while you switch: the coordinator takes it too.
         await clickVisible(page, page.locator(".sp-side .sp-member").first());
-        await page.locator(".sp-split.show-left").waitFor({ timeout: 5_000 });
+        await page.locator(".pg-pane.sp-pane-right.is-hidden").waitFor({ state: "attached", timeout: 5_000 });
         await clickVisible(page, page.locator(".sp-side .sp-member").nth(1));
-        await page.locator(".sp-split.show-right").waitFor({ timeout: 5_000 });
-        await clickVisible(page, right.getByRole("button", { name: "还原成两栏" }));
-        await page.locator(".sp-split.show-both").waitFor({ timeout: 5_000 });
+        await page.locator('.pg-pane[data-pane="main"].is-hidden').waitFor({ state: "attached", timeout: 5_000 });
+        await clickVisible(page, right.getByRole("button", { name: "还原所有栏" }));
+        await page.locator('.pg-pane[data-pane="main"]:not(.is-hidden)').waitFor({ timeout: 5_000 });
+        if (await page.locator(".pg-pane.is-hidden").count()) throw new Error("还原后每一栏都该看得到");
+        void mainPane;
       }
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // Up to four panes: a member opened with 「在新的一栏打开」 goes beside
+    // the others, then below; one dragged onto an edge of a pane opens
+    // there. A window too small for them all shows them as tabs.
+    await step("项目 · 多栏", async () => {
+      const grid = page.locator(".pg-grid");
+      const dropOn = async (from, x, y) => {
+        const dt = await page.evaluateHandle(() => new DataTransfer());
+        await from.dispatchEvent("dragstart", { dataTransfer: dt });
+        const at = { dataTransfer: dt, clientX: x, clientY: y };
+        await grid.dispatchEvent("dragenter", at);
+        await grid.dispatchEvent("dragover", at);
+        return async () => grid.dispatchEvent("drop", at);
+      };
+      if (narrow) {
+        // (no members column: the faces in a row) One beside, one below.
+        const room = async () => page.locator(".pg-room").boundingBox();
+        let b = await room();
+        await (await dropOn(page.locator(".sp-strip-face:not(.is-add)").nth(1), b.x + b.width - 10, b.y + b.height / 2))();
+        await page.locator(".pg-pane").nth(1).waitFor({ state: "attached", timeout: 10_000 });
+        b = await room();
+        await (await dropOn(page.locator(".sp-strip-face:not(.is-add)").nth(2), b.x + b.width / 4, b.y + b.height - 10))();
+        await page.locator(".pg-pane").nth(2).waitFor({ state: "attached", timeout: 10_000 });
+        // Smaller than they need: tabs, one shown.
+        const vp = page.viewportSize();
+        await page.setViewportSize({ width: 560, height: vp.height });
+        await page.locator(".pg-tab").nth(2).waitFor({ timeout: 10_000 });
+        if ((await page.locator(".pg-pane:not(.is-hidden)").count()) !== 1) throw new Error("标签页时应只显示一栏");
+        await settle(page, 300);
+        await shot(page, size, scheme, "project-panes-tabs");
+        await page.setViewportSize(vp);
+        for (let i = 0; i < 2; i++) {
+          const close = page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first();
+          if (await close.count()) await close.click();
+          else await page.locator(".pg-tab .pg-tab-x").last().click();
+          await page.waitForTimeout(200);
+        }
+        await page.locator(".pg-pane.sp-pane-right").first().waitFor({ state: "detached", timeout: 5_000 });
+        return;
+      }
+      const members = page.locator(".sp-side .sp-member:not(.is-add)");
+      await clickVisible(page, members.nth(1));
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ timeout: 10_000 });
+      // (the members column folds into faces once two panes share the
+      // room: the next comes from the sidebar's chats)
+      await menuPick(page, page.locator(".sp-nav-person", { hasText: "docs-claude" }), "在新的一栏打开");
+      await page.locator(".pg-pane.sp-pane-right").nth(1).waitFor({ timeout: 10_000 });
+      // A third, dragged onto the bottom edge of the coordinator's pane:
+      // where it would go lights up first.
+      const mb = await page.locator('.pg-pane[data-pane="main"]').boundingBox();
+      const drop = await dropOn(page.locator(".sp-nav-person", { hasText: "legacy-codex" }), mb.x + mb.width / 2, mb.y + mb.height - 12);
+      await page.locator(".pg-drop:not(.is-no)").waitFor({ timeout: 5_000 });
+      await drop();
+      await page.locator(".pg-pane").nth(3).waitFor({ state: "attached", timeout: 10_000 });
+      const shown = await page.locator(".pg-pane:not(.is-hidden)").count();
+      const tabs = await page.locator(".pg-tab").count();
+      if (shown !== 4 && tabs !== 4) throw new Error(`应有四栏（或四个标签），实际 ${shown} 栏、${tabs} 个标签`);
+      await settle(page, 400);
+      await shot(page, size, scheme, "project-panes");
+      // Close them all: the coordinator's pane alone again.
+      for (let i = 0; i < 3; i++) {
+        const close = page.locator(".pg-pane.sp-pane-right:not(.is-hidden)").getByRole("button", { name: "关掉这一栏" }).first();
+        if (await close.count()) await close.click();
+        else await page.locator(".pg-tab .pg-tab-x").last().click();
+        await page.waitForTimeout(200);
+      }
+      await page.locator(".pg-pane.sp-pane-right").first().waitFor({ state: "detached", timeout: 5_000 });
     });
 
     // Three ways in, as tabs: a session on this computer joins with a click;

@@ -17,6 +17,7 @@ import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
 import { UpdateNotice } from "@/app/UpdateNotice";
 import { Welcome } from "@/app/Welcome";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
+import { dragAgent } from "@/app/Panes";
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
@@ -703,8 +704,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   return (
                     <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", isPinned && "is-pinned", page === "space" && navChat === key && "active")}
                       onClick={() => { setNavChat(key); chatWithMember(r); }}
+                      draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: r.st.agent.name })}
                       onContextMenu={(e) => navMenu.open(e, [
                         { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },
+                        // Beside what is open (a project, the chats): a pane of its own.
+                        ...(page === "space" ? [{ label: L("在新的一栏打开", "Open in a new pane"), onSelect: () => window.dispatchEvent(new CustomEvent("myco-open-pane", { detail: { hubId: r.hub.id, agent: r.st.agent.name } })) }] : []),
                         { label: isPinned ? L("取消置顶", "Unpin") : L("置顶", "Pin to the top"), onSelect: () => pinChat(r.st.agent.name, !isPinned) },
                         { label: L("看它的资料", "Its profile"), onSelect: () => { setNavChat(null); setPage("members"); setProfile({ hubId: r.hub.id, name: r.st.agent.name }); } },
                       ])}
