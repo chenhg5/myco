@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/443892f8-f6bf-47e3-bcce-50b19ec29453
+
 <div align="center">
 
 <h1>
@@ -21,7 +25,7 @@
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
-https://github.com/user-attachments/assets/0259f755-d077-46ba-a7ba-4f66e4a2f633
+https://github.com/user-attachments/assets/2a9103f4-4f13-4130-aad8-3e02598460c3
 
 
 </div>
