@@ -803,7 +803,10 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   const outside = !!info && !!dir.trim() && !insideDirs(dir.trim(), info);
   const limited = !!info && !(info.dirs.length === 1 && tildeOf(info.dirs[0], info.home) === "~");
   const tooHigh = !!info && (ACCESS_RANK[access] || 2) > (ACCESS_RANK[info.max_access] || 2);
-  const ready = machine.online && machine.can_spawn && (!!dir.trim() || autoDir) && !outside && !tooHigh;
+  // A computer that can say where folders may be is waited for, so the
+  // folder made for an empty field is one it allows.
+  const asking = askable(machine) && !info && !state?.error;
+  const ready = machine.online && machine.can_spawn && (!!dir.trim() || autoDir) && !outside && !tooHigh && !asking;
   useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
   const start = async (e: React.FormEvent) => {
@@ -871,6 +874,9 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
           placeholder={autoDir ? L(`不填就新建 ${autoFolder(role, cli, base)}`, `Empty: a new ${autoFolder(role, cli, base)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
+        {asking && (
+          <span className="app-field-hint" data-testid="asking-dirs">{L(`正在问「${machine.name}」允许在哪些文件夹开工…`, `Asking “${machine.name}” which folders it allows…`)}</span>
+        )}
         {info && limited && (
           <span className={cn("app-field-hint", outside && "is-bad")} data-testid="allowed-dirs">{outside
             ? L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)

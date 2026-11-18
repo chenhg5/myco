@@ -212,11 +212,16 @@ func TestAutoDirInsideAllowedFolders(t *testing.T) {
 	if st, err := os.Stat(filepath.Join(r.home, "code", "reviewer")); err != nil || !st.IsDir() {
 		t.Fatalf("folder not made: %v", err)
 	}
-	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); !res.Denied {
-		t.Fatalf("~/myco outside the allowed folders: %+v", res)
+	// An App that did not know asks for ~/myco/<name>: it goes in the
+	// first allowed folder instead, and nothing is made in ~/myco.
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); res.Denied || res.Workdir != filepath.Join(r.home, "code", "x") {
+		t.Fatalf("~/myco/<name> where ~/myco is not allowed: %+v", res)
 	}
 	if _, err := os.Stat(filepath.Join(r.home, "myco", "x")); err == nil {
 		t.Fatal("made a folder outside the allowed ones")
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/elsewhere/x"}); !res.Denied {
+		t.Fatalf("any other folder outside stays refused: %+v", res)
 	}
 	r.node.Policy.Dirs = nil
 	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI}); res.Info == nil || res.Info.NewDir != "~/myco" || res.Info.Dirs[0] != "~" {

@@ -390,6 +390,16 @@ func (n *Node) dir(requested string) (string, error) {
 		return "", fmt.Errorf("directory %q must be absolute or start with ~/", requested)
 	}
 	real, err := filepath.EvalSymlinks(p)
+	if err != nil && n.autoDir(p) && !n.allowedPath(p) &&
+		filepath.Dir(filepath.Clean(p)) == filepath.Join(n.Policy.Home, AutoDirRoot) {
+		// A conversation started without a folder gets ~/myco/<name>; where
+		// ~/myco is not allowed, the same name goes in the first allowed
+		// folder instead (an App that did not know which folders are allowed).
+		if root := filepath.Clean(n.expand(n.newDir())); filepath.IsAbs(root) {
+			p = filepath.Join(root, filepath.Base(p))
+			real, err = filepath.EvalSymlinks(p)
+		}
+	}
 	if err != nil && n.autoDir(p) && n.allowedPath(p) {
 		// A new conversation the app named a folder for under ~/myco
 		// (docs/design/client-plan.md 5.2): make it, nothing else.
