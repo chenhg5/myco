@@ -104,9 +104,22 @@ jobs:
           rm -f "$p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
           security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          # Apple's Developer ID intermediate certificate: without it in reach
+          # the identity's chain does not verify and it is not valid.
+          for ca in DeveloperIDG2CA DeveloperIDCA; do
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer" &&
+              security import "$RUNNER_TEMP/$ca.cer" -k "$kc" >/dev/null 2>&1 || true
+          done
           # Sign by the identity's hash, so its name stays out of the log.
           id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
-          [ -n "$id" ] || { echo "::error::MAC_CERT_P12_BASE64 holds no Developer ID Application identity"; exit 1; }
+          if [ -z "$id" ]; then
+            # Say why, with the identity's name masked: none at all means the
+            # .p12 has the certificate without its private key.
+            echo "identities in the .p12 (any kind, valid or not):"
+            security find-identity "$kc" | sed 's/"[^"]*"/"…"/'
+            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; export it from My Certificates)"
+            exit 1
+          fi
           xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
             --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
           MYCO_SIGN_IDENTITY="$id" MYCO_NOTARY_KEYCHAIN="$kc" scripts/mac-sign.sh ${{ needs.version.outputs.version }}
