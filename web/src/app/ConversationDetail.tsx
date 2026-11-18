@@ -1194,13 +1194,25 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (st === "held") return { text: L("稍后回复", "Will answer later") };
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
-    return { text: atWorkId && atWorkId !== m.id ? L("排在后面", "Queued behind the current one") : L("还没开始看", "Not opened yet") };
+    if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
+    // An agent that receives in its session has it in front of it already.
+    if (st === "delivered" && rowOf(m.to)?.st.receiving === "session") return { text: L("已送到", "Delivered"), title: L("已经送进它的会话，它接着就会看", "In its session already: it reads it next") };
+    return { text: L("还没开始看", "Not opened yet") };
+  };
+  // A task of yours it has not taken up yet (sent while it works on
+  // another): it waits under the one at work.
+  const waitsBehind = (m: Message) => {
+    if (m.type !== "task" || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id)) return false;
+    const st = traceStatuses.get(m.id) || m.status;
+    return (st === "queued" || st === "delivered") && !progressOf.get(m.id)?.length;
   };
   // Messages under the run at work (tasks it handed out, your supplements):
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
+  // (not your next message waiting behind it: that one says 排在后面, and
+  // the loading stays with the run it belongs to, above it)
   const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
-    m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
+    m.type !== "progress" && !waitsBehind(m) && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
     || (allInserts || []).some((x) => x.at > shown![liveIndex].created_at));
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
