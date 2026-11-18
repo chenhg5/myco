@@ -8,17 +8,18 @@
 - 要有 `curl` 和 `python3`（查 GitHub 的状态用）。
 - 不用在本地跑界面冒烟：它在 GitHub CI 里跑（`ci` 的 `ui` 任务，四种窗口组合各一台机器）。想在本地跑的话，需要 Playwright 和它的 Chromium：`npm install -g playwright && npx playwright install --with-deps chromium`。
 
-## 1. 检查：main 的 CI 是绿的
+## 1. 检查：main 上没有测试失败
 
-每个改动推上 main 时，CI 都已经检查过了（Go 的 vet、测试、smoke，Windows，Mac App，网页 dist 是否最新，界面冒烟）。发版前不再在本地重跑，只确认 main 最新的提交 CI 全过：
+发版**不等 CI 跑完**：`release` 工作流自己会构建所有平台，还会在 Linux 的二进制上跑一遍 smoke。只看 main 最新一次 CI 有没有**测试**失败：
 
 ```bash
 git checkout main && git pull --rebase origin main
-scripts/release-status.sh "$(git rev-parse HEAD)" ci --wait   # 退出码 0 才继续
+scripts/release-status.sh "$(git rev-parse HEAD)" ci   # 不加 --wait
 ```
 
-- 失败（退出码 1）：不发版，打开输出里的链接，报告是哪个任务、哪个测试失败。
-- 刚有人推了新提交、CI 还在跑：`--wait` 会每 30 秒查一次，等它结束。
+- 失败在测试上（`go`、`windows`、`web`、界面冒烟里的某个检查）：先修，不发版。
+- 还在跑，或者只是机器问题（装 Playwright 卡住、macOS 机器排队）：直接往下走，不等。
+- CI 只在改了 `web/` 时才跑界面冒烟（大约 8 分钟）；新的推送会取消同一分支上旧的那次 CI。
 
 ## 2. 版本号和 CHANGELOG
 
@@ -44,12 +45,12 @@ sha=$(git rev-parse HEAD)       # 记下这个 sha
 ## 4. 等 GitHub
 
 ```bash
-scripts/release-status.sh "$sha" all --wait
+scripts/release-status.sh "$sha" release --wait
 ```
 
-- `ci` 和 `release` 都是 `completed/success`（退出码 0）才继续。`release` 通常 10 分钟左右，大部分时间在等 Apple 公证。
+- `release` 是 `completed/success`（退出码 0）就继续，不等 `ci`。`release` 通常 5–10 分钟，大部分时间在等 Apple 公证。
 - `release` 失败：发版没成功，报告失败的步骤和日志。在「创建 Release」这一步被 GitHub 拒（HTTP 403）的话，重跑一次；还不行就按下一步在 Mac 上建。
-- `ci` 失败但 `release` 成功：Release 已经发出去了。找出失败的测试，修好（通常是 Windows 上的测试问题），推一个修复提交，并在报告里说明。
+- 之后 `ci` 失败但 `release` 成功：Release 已经发出去了。找出失败的测试，修好（通常是 Windows 上的测试问题），推一个修复提交，并在报告里说明。
 
 ## 5. Release 里没有 myco.dmg 时：在 Mac 上签名（备用）
 
