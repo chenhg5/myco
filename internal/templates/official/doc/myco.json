@@ -1,0 +1,13 @@
+{
+  "id": "myco/doc",
+  "name": "文档",
+  "version": "1.0.0",
+  "kind": "doc",
+  "description": "一篇大家一起写的文档：标题、正文、列表、待办、引用、代码，每段单独保存，导出 Markdown 和网页。",
+  "data": {
+    "doc": { "single": true, "fields": { "title": "text" } },
+    "blocks": { "fields": { "type": "select", "text": "text", "checked": "bool", "order": "number" } }
+  },
+  "permissions": ["download"],
+  "export": ["md", "html"]
+}

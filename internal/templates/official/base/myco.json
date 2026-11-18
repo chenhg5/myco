@@ -1,0 +1,13 @@
+{
+  "id": "myco/base",
+  "name": "多维表格",
+  "version": "1.0.0",
+  "kind": "records",
+  "description": "同一份记录，表格、看板、日历、画廊几种看法，还能用表单收集；字段可以自己加。",
+  "data": {
+    "base": { "single": true, "fields": { "title": "text", "fields": "json" } },
+    "records": { "fields": { "values": "json", "order": "number" } }
+  },
+  "permissions": ["download"],
+  "export": ["csv", "xlsx"]
+}

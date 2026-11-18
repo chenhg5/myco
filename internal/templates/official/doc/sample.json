@@ -1,0 +1,14 @@
+{
+  "doc": [ { "id": "main", "title": "上线计划" } ],
+  "blocks": [
+    { "id": "b1", "type": "p", "text": "这是一篇大家一起写的文档：你在这里写，agent 也能往里加段落。", "order": 1 },
+    { "id": "b2", "type": "h2", "text": "时间表", "order": 2 },
+    { "id": "b3", "type": "li", "text": "周三：冻结代码", "order": 3 },
+    { "id": "b4", "type": "li", "text": "周四：预发环境验证", "order": 4 },
+    { "id": "b5", "type": "li", "text": "周五：发布", "order": 5 },
+    { "id": "b6", "type": "h2", "text": "上线前检查", "order": 6 },
+    { "id": "b7", "type": "todo", "text": "核对下载页的每个链接", "checked": true, "order": 7 },
+    { "id": "b8", "type": "todo", "text": "发布说明给运营过一遍", "checked": false, "order": 8 },
+    { "id": "b9", "type": "quote", "text": "有问题直接在对应的段落下面写，agent 会看到。", "order": 9 }
+  ]
+}

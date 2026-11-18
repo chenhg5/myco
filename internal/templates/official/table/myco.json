@@ -1,0 +1,13 @@
+{
+  "id": "myco/table",
+  "name": "表格",
+  "version": "1.0.0",
+  "kind": "table",
+  "description": "一张大家一起填的表：列可以自己加、改类型，能排序、搜索，导出 CSV 和 Excel。",
+  "data": {
+    "sheet": { "single": true, "fields": { "title": "text", "columns": "json" } },
+    "rows": { "fields": { "cells": "json", "order": "number" } }
+  },
+  "permissions": ["download"],
+  "export": ["csv", "xlsx"]
+}

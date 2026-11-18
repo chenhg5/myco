@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"github.com/chenhg5/myco/internal/templates"
 	"log/slog"
 	"net"
 	"net/http"
@@ -204,7 +205,13 @@ func Build(o Options) (*Hub, error) {
 	srv.SetPages(pages)
 	pageData := app.NewPageDataService(pages, sqlite.NewPageDataRepo(db), ids, clock)
 	srv.SetPageData(pageData)
-	srv.SetTemplates(app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock))
+	templateSvc := app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock)
+	if official, err := templates.Official(); err == nil {
+		templateSvc.SetOfficial(official)
+	} else {
+		o.Log.Warn("official templates", "err", err)
+	}
+	srv.SetTemplates(templateSvc)
 	handovers := app.NewHandoverService(sqlite.NewHandoverRepo(db), agentsRepo, msgRepo, security.Tokens{}, ids, clock)
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)

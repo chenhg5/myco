@@ -50,7 +50,9 @@ func TestTemplatesAndPageRecords(t *testing.T) {
 	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"index.html": "x"}), zipHdr).wantErr(t, 400, "invalid_argument")
 
 	// Everyone sees the library; by id or by slug.
-	if l := h.do("GET", "/v1/templates", bob, nil).want(t, 200); len(l.body["templates"].([]any)) != 1 {
+	l := h.do("GET", "/v1/templates", bob, nil).want(t, 200)
+	ts := l.body["templates"].([]any)
+	if len(ts) != 4 || str(ts[0], "slug") != "myco/table" || ts[0].(map[string]any)["official"] != true || str(ts[3], "slug") != "alice/weekly" {
 		t.Fatalf("list: %s", l.raw)
 	}
 	if g := h.do("GET", "/v1/templates/alice%2Fweekly", bob, nil).want(t, 200); str(g.body, "id") != id {
@@ -127,3 +129,29 @@ func TestTemplatesAndPageRecords(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// myco's own templates are in every library: they make pages (with their
+// sample data), cannot be deleted, and their ids are not anyone else's.
+func TestOfficialTemplates(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	g := h.do("GET", "/v1/templates/myco%2Fbase", alice, nil).want(t, 200)
+	if g.body["official"] != true || g.body["can_manage"] != false || !strings.Contains(str(g.body, "guide"), "myco page data") {
+		t.Fatalf("get: %s", g.raw)
+	}
+	u := h.do("POST", "/v1/templates/myco%2Fbase/use", alice, map[string]any{"name": "招聘进度", "sample": true}).want(t, 201)
+	page := str(u.body, "page", "id")
+	if f := h.doReq("GET", "/v1/pages/"+page+"/v/latest/kit.js", alice, nil, nil).want(t, 200); !strings.Contains(string(f.raw), "kit.store") {
+		t.Fatalf("its kit: %q", f.raw[:min(80, len(f.raw))])
+	}
+	recs := h.do("GET", "/v1/pages/"+page+"/data?collection=records", alice, nil).want(t, 200)
+	if len(recs.body["records"].([]any)) != 4 {
+		t.Fatalf("sample: %s", recs.raw)
+	}
+	h.do("DELETE", "/v1/templates/myco%2Fbase", adminToken, nil).wantErr(t, 403, "permission_denied")
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": strings.Replace(weeklyManifest, "alice/weekly", "myco/weekly", 1), "index.html": "x"}),
+		map[string]string{"Content-Type": "application/zip"}).wantErr(t, 400, "invalid_argument")
+	for _, slug := range []string{"myco%2Ftable", "myco%2Fdoc"} {
+		h.do("POST", "/v1/templates/"+slug+"/use", alice, map[string]any{"sample": true}).want(t, 201)
+	}
+}

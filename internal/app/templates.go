@@ -2,9 +2,11 @@ package app
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/chenhg5/myco/internal/domain"
@@ -24,6 +26,43 @@ type TemplateService struct {
 	data  *PageDataService
 	ids   IDGenerator
 	clock Clock
+	// official are myco's own, offered in every workspace.
+	official []OfficialTemplate
+}
+
+// OfficialTemplate is one of myco's templates: its manifest and files
+// (myco.json, the page, agent.md, sample.json), as the hub carries them.
+type OfficialTemplate struct {
+	Manifest *domain.Manifest
+	Files    map[string][]byte
+}
+
+// SetOfficial offers myco's templates in the library.
+func (s *TemplateService) SetOfficial(list []OfficialTemplate) { s.official = list }
+
+func officialID(m *domain.Manifest) string {
+	return "tp_" + strings.ReplaceAll(m.ID, "/", "_")
+}
+
+func (s *TemplateService) officialOf(idOrSlug string) *OfficialTemplate {
+	for i := range s.official {
+		o := &s.official[i]
+		if o.Manifest.ID == idOrSlug || officialID(o.Manifest) == idOrSlug {
+			return o
+		}
+	}
+	return nil
+}
+
+func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {
+	m := o.Manifest
+	var size int64
+	for _, b := range o.Files {
+		size += int64(len(b))
+	}
+	t := &domain.Template{ID: officialID(m), Slug: m.ID, Name: m.Name, Description: m.Description, Kind: m.Kind, Latest: m.Version, Publisher: "myco", Official: true}
+	return &TemplateView{Template: t, Manifest: m, Guide: string(o.Files[m.Agent]),
+		Versions: []*domain.TemplateVersion{{Template: t.ID, Version: m.Version, Size: size, Files: len(o.Files), By: "myco"}}}
 }
 
 // NewTemplateService wires the library.
@@ -41,6 +80,9 @@ type TemplateView struct {
 }
 
 func (s *TemplateService) manages(by Actor, t *domain.Template) bool {
+	if t.Official {
+		return false
+	}
 	switch {
 	case by.Manages():
 		return true
@@ -75,13 +117,17 @@ func (s *TemplateService) view(ctx context.Context, t *domain.Template) (*Templa
 	return tv, nil
 }
 
-// List lists the library, newest first.
+// List lists the library: myco's own first, then the workspace's, newest
+// first.
 func (s *TemplateService) List(ctx context.Context, by Actor) ([]*TemplateView, error) {
 	ts, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*TemplateView, 0, len(ts))
+	out := make([]*TemplateView, 0, len(ts)+len(s.official))
+	for i := range s.official {
+		out = append(out, s.officialView(&s.official[i]))
+	}
 	for _, t := range ts {
 		tv, err := s.view(ctx, t)
 		if err != nil {
@@ -94,6 +140,9 @@ func (s *TemplateService) List(ctx context.Context, by Actor) ([]*TemplateView, 
 
 // Get returns one (by id or by its manifest's id).
 func (s *TemplateService) Get(ctx context.Context, by Actor, idOrSlug string) (*TemplateView, error) {
+	if o := s.officialOf(idOrSlug); o != nil {
+		return s.officialView(o), nil
+	}
 	t, err := s.find(ctx, idOrSlug)
 	if err != nil {
 		return nil, err
@@ -161,6 +210,11 @@ func (s *TemplateService) Publish(ctx context.Context, by Actor, r io.Reader, by
 	if err != nil {
 		closer()
 		return nil, err
+	}
+	if strings.HasPrefix(m.ID, "myco/") {
+		closer()
+		return nil, domain.Errf(domain.CodeInvalidArgument, "ids starting with myco/ are myco's own templates").
+			WithSuggestion("use an id of your own in myco.json, e.g. yourname/%s", strings.TrimPrefix(m.ID, "myco/"))
 	}
 	guide, _, err := readZipFile(z, m.Agent, domain.MaxTemplateGuide)
 	if err != nil {
@@ -249,6 +303,9 @@ func (s *TemplateService) Delete(ctx context.Context, by Actor, idOrSlug string)
 	if err != nil {
 		return nil, err
 	}
+	if tv.Template.Official {
+		return nil, domain.Errf(domain.CodePermissionDenied, "%s is one of myco's own templates; it cannot be deleted", tv.Template.Slug)
+	}
 	if !s.manages(by, tv.Template) {
 		return nil, domain.Errf(domain.CodePermissionDenied, "you may not delete template %s", tv.Template.Slug).
 			WithSuggestion("whoever published it, their agents and the workspace's admins may")
@@ -275,6 +332,9 @@ type UseInput struct {
 
 // Use makes a page from a template.
 func (s *TemplateService) Use(ctx context.Context, by Actor, idOrSlug string, in UseInput) (*PageView, *TemplateView, error) {
+	if o := s.officialOf(idOrSlug); o != nil {
+		return s.useOfficial(ctx, by, o, in)
+	}
 	tv, err := s.Get(ctx, by, idOrSlug)
 	if err != nil {
 		return nil, nil, err
@@ -321,6 +381,55 @@ func (s *TemplateService) Use(ctx context.Context, by Actor, idOrSlug string, in
 				if err := s.data.Seed(ctx, by, p.ID, sample, in.By); err != nil {
 					return pv, tv, err
 				}
+			}
+		}
+	}
+	return pv, tv, nil
+}
+
+// useOfficial makes a page from one of myco's templates.
+func (s *TemplateService) useOfficial(ctx context.Context, by Actor, o *OfficialTemplate, in UseInput) (*PageView, *TemplateView, error) {
+	m, tv := o.Manifest, s.officialView(o)
+	if in.Version != "" && in.Version != m.Version {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "%s is at version %s", m.ID, m.Version)
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		in.Name = m.Name
+	}
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	names := make([]string, 0, len(o.Files))
+	for n := range o.Files {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		w, err := z.Create(n)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := w.Write(o.Files[n]); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := z.Close(); err != nil {
+		return nil, nil, err
+	}
+	pv, err := s.pages.Publish(ctx, by, PublishInput{Name: in.Name, Project: in.Project, Entry: m.Entry, By: in.By}, &buf)
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, _ := json.Marshal(m)
+	p := pv.Page
+	p.Template, p.TemplateVersion, p.Manifest = tv.Template.ID, m.Version, string(raw)
+	if err := s.pages.pages.Save(ctx, p); err != nil {
+		return nil, nil, err
+	}
+	if in.Sample {
+		var sample map[string][]json.RawMessage
+		if json.Unmarshal(o.Files[m.Sample], &sample) == nil {
+			if err := s.data.Seed(ctx, by, p.ID, sample, in.By); err != nil {
+				return pv, tv, err
 			}
 		}
 	}

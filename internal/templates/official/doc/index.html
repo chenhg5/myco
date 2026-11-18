@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文档</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+.d-page { max-width: 760px; margin: 0 auto; padding: 8px 24px 120px; }
+.d-title { width: 100%; font-size: 28px; font-weight: 700; border: 0; background: none; padding: 6px 0; margin: 4px 0 8px; outline: none; }
+.d-title::placeholder { color: var(--faint); }
+.d-block { position: relative; display: flex; align-items: flex-start; gap: 6px; margin: 1px 0; }
+.d-handle { position: absolute; left: -30px; top: 3px; width: 22px; height: 22px; padding: 0; border-radius: 5px; background: none; color: var(--faint); opacity: 0; font-size: 14px; line-height: 22px; }
+.d-block:hover .d-handle, .d-handle:focus-visible { opacity: 1; }
+.d-handle:hover { background: var(--pill); color: var(--fg); }
+.d-text { flex: 1; min-width: 0; outline: none; padding: 3px 2px; border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.d-text:empty::before { content: attr(data-ph); color: var(--faint); }
+.d-text:not(:focus):empty::before { content: ""; }
+.d-block.is-focus .d-text:empty::before { content: attr(data-ph); }
+.t-h1 .d-text { font-size: 24px; font-weight: 700; margin-top: 14px; }
+.t-h2 .d-text { font-size: 20px; font-weight: 650; margin-top: 10px; }
+.t-h3 .d-text { font-size: 16.5px; font-weight: 650; margin-top: 6px; }
+.t-li .d-mark, .t-ol .d-mark { flex: none; width: 22px; text-align: right; padding-top: 3px; color: var(--muted); }
+.t-todo input { margin-top: 7px; }
+.t-todo.done .d-text { color: var(--muted); text-decoration: line-through; }
+.t-quote .d-text { border-left: 3px solid var(--line); padding-left: 12px; color: var(--fg2); }
+.t-code .d-text { font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg2); padding: 10px 12px; border-radius: 8px; }
+.t-hr hr { flex: 1; border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.d-block.k-flash .d-text { animation: kflash 1.4s ease-out; }
+.d-help { color: var(--faint); font-size: 12px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="kit.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

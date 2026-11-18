@@ -1461,7 +1461,9 @@ type Template struct {
 	Permissions []string                      `json:"permissions,omitempty"`
 	Export      []string                      `json:"export,omitempty"`
 	// Guide is its agent's guide (agent.md): how to fill its data.
-	Guide     string            `json:"guide,omitempty"`
+	Guide string `json:"guide,omitempty"`
+	// Official: one of myco's, in every workspace (hubs from v0.20.5).
+	Official  bool              `json:"official,omitempty"`
 	Versions  []TemplateVersion `json:"versions"`
 	CanManage bool              `json:"can_manage"`
 	CreatedAt time.Time         `json:"created_at"`

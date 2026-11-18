@@ -30,7 +30,10 @@ type Template struct {
 	Publisher string
 	// Owner is the member id of the person it belongs to (the publishing
 	// agent's owner, or the person).
-	Owner     string
+	Owner string
+	// Official: one of myco's, offered by the hub itself (not in the
+	// library's tables; it cannot be deleted).
+	Official  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
