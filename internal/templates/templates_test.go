@@ -48,7 +48,7 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(ids, ",") != "myco/table,myco/base,myco/doc" {
+	if strings.Join(ids, ",") != "myco/table,myco/base,myco/doc,myco/slides" {
 		t.Fatalf("official templates: %v", ids)
 	}
 }

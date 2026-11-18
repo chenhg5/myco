@@ -7872,6 +7872,7 @@ body.is-resizing {
 .tp-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--pill); color: var(--muted); font-size: 11px; font-weight: 500; vertical-align: 1px; }
 .tp-icon.is-records { background: color-mix(in srgb, #7b5cd6 14%, var(--card)); color: #7b5cd6; }
 .tp-icon.is-doc { background: color-mix(in srgb, #3a7bd5 14%, var(--card)); color: #3a7bd5; }
+.tp-icon.is-slides { background: color-mix(in srgb, #e8710a 14%, var(--card)); color: #e8710a; }
 .tp-hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .tp-made { display: flex; flex-direction: column; gap: 2px; }
 .tp-made-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; }

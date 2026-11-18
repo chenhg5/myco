@@ -53,7 +53,7 @@ func TestTemplatesAndPageRecords(t *testing.T) {
 	// Everyone sees the library; by id or by slug.
 	l := h.do("GET", "/v1/templates", bob, nil).want(t, 200)
 	ts := l.body["templates"].([]any)
-	if len(ts) != 4 || str(ts[0], "slug") != "myco/table" || ts[0].(map[string]any)["official"] != true || str(ts[3], "slug") != "alice/weekly" {
+	if len(ts) != 5 || str(ts[0], "slug") != "myco/table" || ts[0].(map[string]any)["official"] != true || str(ts[4], "slug") != "alice/weekly" {
 		t.Fatalf("list: %s", l.raw)
 	}
 	if g := h.do("GET", "/v1/templates/alice%2Fweekly", bob, nil).want(t, 200); str(g.body, "id") != id {
@@ -156,7 +156,7 @@ func TestOfficialTemplates(t *testing.T) {
 	h.do("DELETE", "/v1/templates/myco%2Fbase", adminToken, nil).wantErr(t, 403, "permission_denied")
 	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": strings.Replace(weeklyManifest, "alice/weekly", "myco/weekly", 1), "index.html": "x"}),
 		map[string]string{"Content-Type": "application/zip"}).wantErr(t, 400, "invalid_argument")
-	for _, slug := range []string{"myco%2Ftable", "myco%2Fdoc"} {
+	for _, slug := range []string{"myco%2Ftable", "myco%2Fdoc", "myco%2Fslides"} {
 		h.do("POST", "/v1/templates/"+slug+"/use", alice, map[string]any{"sample": true}).want(t, 201)
 	}
 }

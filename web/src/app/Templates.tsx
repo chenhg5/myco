@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, KanbanSquare, LayoutTemplate, Plus, Table2 } from "lucide-react";
+import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -9,13 +9,13 @@ import { cn, timeAgo } from "@/lib/utils";
 
 /*
  * 模板 (templates.md): ready-made pages people and agents fill with data.
- * myco's own (表格, 多维表格, 文档) are in every workspace; the workspace's
+ * myco's own (表格, 多维表格, 文档, 幻灯片) are in every workspace; the workspace's
  * own are below them (agents make them with myco template init/publish).
  * Using one makes a page, opened in the page panel; the pages made from
  * templates are listed under them, to open again.
  */
 
-const iconOf = (kind: string) => (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : LayoutTemplate);
+const iconOf = (kind: string) => (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
 
 export function TemplatesPage({ hubId, projects, now }: { hubId: string; projects: { name: string; title: string }[]; now: number }) {
   const [list, setList] = useState<Template[] | null>(null);

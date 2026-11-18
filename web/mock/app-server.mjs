@@ -232,7 +232,7 @@ const officialFiles = (name) => {
   return out;
 };
 const templateFiles = new Map();
-const mockTemplates = ["table", "base", "doc"].map((name) => {
+const mockTemplates = ["table", "base", "doc", "slides"].map((name) => {
   const files = officialFiles(name);
   const m = JSON.parse(files["myco.json"]);
   const id = `tp_myco_${name}`;
@@ -1856,7 +1856,8 @@ const server = http.createServer(async (req, res) => {
     if (!/\.(csv|tsv|xlsx|pdf|docx|pptx|json|md|txt|png|svg)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents and pictures");
     const chunks = [];
     for await (const c of req) chunks.push(c);
-    state.lastPageDownload = { name, size: Buffer.concat(chunks).length, text: Buffer.concat(chunks).toString("utf8").slice(0, 2000) };
+    const buf = Buffer.concat(chunks);
+    state.lastPageDownload = { name, size: buf.length, text: buf.toString("utf8").slice(0, 2000), base64: buf.length < 4e6 ? buf.toString("base64") : "" };
     return send(res, 200, { path: `/Users/glenn/Downloads/${name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-page-download" && method === "GET") return send(res, 200, state.lastPageDownload || {});

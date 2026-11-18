@@ -805,7 +805,7 @@ async function runMatrix(browser, size, scheme) {
       const lib = page.locator("[data-testid=templates-official] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 3 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档")) throw new Error(`官方模板应是 表格、多维表格、文档，实际 ${names.join(" / ")}`);
+      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`官方模板应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "templates");
@@ -849,6 +849,14 @@ async function runMatrix(browser, size, scheme) {
       await base.locator(".tab", { hasText: "日历" }).dispatchEvent("click");
       await base.locator(".cal").waitFor({ timeout: 5_000 });
       await base.locator(".tab", { hasText: "表格" }).dispatchEvent("click");
+      // 幻灯片: the sample deck, laid out; a point added in place.
+      const deck = await make("myco/slides", `发布会（${mark}）`);
+      await deck.locator(".stage .sl").waitFor({ timeout: 15_000 });
+      if ((await deck.locator(".thumb").count()) !== 8) throw new Error("幻灯片应带着 8 页示例");
+      await deck.locator(".thumb-face").nth(3).dispatchEvent("click");
+      await deck.locator(".stage .sl.is-two .chart").waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "template-slides");
       // 文档: typed with shortcuts, each block saved.
       const doc = await make("myco/doc", `计划（${mark}）`);
       await doc.locator(".bn-editor .bn-inline-content").first().waitFor({ timeout: 15_000 });

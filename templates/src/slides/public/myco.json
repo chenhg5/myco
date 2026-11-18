@@ -1,0 +1,16 @@
+{
+  "id": "myco/slides",
+  "name": "幻灯片",
+  "version": "1.0.0",
+  "kind": "slides",
+  "description": "agent 写内容，网页按版式和主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint。",
+  "data": {
+    "deck": { "single": true, "fields": { "title": "text", "theme": "text" } },
+    "slides": { "fields": {
+      "layout": "text", "title": "text", "subtitle": "text", "points": "json", "body": "text",
+      "cards": "json", "chart": "json", "table": "json", "notes": "text", "order": "number"
+    } }
+  },
+  "permissions": ["download"],
+  "export": ["pptx", "md"]
+}

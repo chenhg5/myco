@@ -536,7 +536,7 @@ function PageView({ target, open, active, reload, onMeta }: {
         : !src ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
         : <iframe ref={frame} key={`${src}#${reload}`} className={cn("fp-frame pg-frame")} title={title} src={src || undefined}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-same-origin" referrerPolicy="no-referrer"
-            allow="clipboard-write" />}
+            allow="clipboard-write; fullscreen" />}
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
       title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
