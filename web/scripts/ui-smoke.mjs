@@ -860,6 +860,9 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".tp-made-row", { hasText: `计划（${mark}）` }).waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".pg-toggle"));
       await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+      // (back where the steps after this one start: the project)
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
     });
 
     // A name picked in the notch's island (the Mac app): a chat already on
