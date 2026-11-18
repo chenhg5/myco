@@ -40,3 +40,10 @@ export function machineMakesFolders(version: string | undefined): boolean {
   if (hubAtLeast(version, "0.20.12")) return true;
   return !!version && /-g[0-9a-f]{4,}$/i.test(version) && hubAtLeast(version, "0.20.11");
 }
+
+/** Whether a computer's myco says what it allows and has (its folders,
+ *  AIs and sessions): v0.20.14 on, or a build from main after v0.20.13. */
+export function machineTellsInfo(version: string | undefined): boolean {
+  if (hubAtLeast(version, "0.20.14")) return true;
+  return !!version && /-g[0-9a-f]{4,}$/i.test(version) && hubAtLeast(version, "0.20.13");
+}

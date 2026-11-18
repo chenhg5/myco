@@ -1742,6 +1742,128 @@
   margin: 0 4px;
   color: var(--faint);
 }
+/* One card per computer: name, online, its agents, its terminals, and its
+   details (what it allows, its AIs) on demand. */
+.pc-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pc-card {
+  padding: 8px;
+  gap: 4px;
+}
+.pc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 6px;
+}
+.pc-card-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--pill);
+  color: var(--fg-2);
+}
+.pc-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.pc-card.is-away .pc-card-icon,
+.pc-card.is-away .pc-row-name {
+  color: var(--muted);
+}
+.pc-online::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--faint);
+  vertical-align: 1px;
+}
+.pc-online.is-on::before {
+  background: var(--green);
+}
+.pc-card-more svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.12s;
+}
+.pc-card-more.is-open svg {
+  transform: rotate(180deg);
+}
+.pc-card-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 4px 4px 48px;
+}
+.pc-card-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 3px 8px 3px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--pill);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.pc-card-agent span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-card-agent:hover {
+  background: var(--pill-hover);
+}
+.pc-card-agent.is-away {
+  color: var(--muted);
+}
+.pc-card-empty {
+  padding: 2px 4px 6px 48px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pc-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 4px 2px 48px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--line);
+}
+.pc-loose-head {
+  margin: 20px 6px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .pc-card-head {
+    flex-wrap: wrap;
+  }
+  .pc-card-head .pc-row-main {
+    flex-basis: calc(100% - 44px);
+  }
+  .pc-card-agents,
+  .pc-card-empty,
+  .pc-details {
+    padding-left: 0;
+    margin-left: 4px;
+  }
+}
+
 /* The nav sizes its own icons; a face in it keeps its proportions. */
 .app-nav-item .pa-sprite {
   width: 74%;

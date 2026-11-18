@@ -709,7 +709,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }
 
 /** Reconfigure the local hub behind a public tunnel. */
-function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: {
+export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   local: LocalState | null;

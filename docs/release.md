@@ -54,7 +54,7 @@ scripts/release-status.sh "$sha" release --wait
 
 ## 5. Release 里没有 myco.dmg 时：在 Mac 上签名（备用）
 
-仓库还没设签名 Secrets，或者 GitHub 上签名那一步失败了，Release 里就没有 `myco.dmg`。这时用 Mac 签名、上传：
+仓库还没设签名 Secrets、GitHub 上签名那一步失败了，或者 Mac 构建机一直排不上队（Mac 那一步被取消，Release 照样发出，只是没有 Mac 的文件），Release 里就没有 `myco.dmg`。这时用 Mac 签名、上传：
 
 ```bash
 myco exec --to mac-exec --cmd "~/code/myco-release.sh start vX.Y.Z $sha"

@@ -1153,23 +1153,24 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".pg-pane.sp-pane-right").first().waitFor({ state: "detached", timeout: 5_000 });
     });
 
-    // Three ways in, as tabs: a session on this computer joins with a click;
-    // the sentence is short (the link carries the project and the steps);
-    // a new session starts on a computer. Each shows up at once.
+    // First where the agent is: one already in the workspace, this computer,
+    // another computer (a VPS), one to connect, or an AI elsewhere; on a
+    // computer, a session already there or a new one. Each shows up at once.
     await step("项目 · 添加 agent", async () => {
       if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
       else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
       const dialog = page.locator(".app-modal-add");
       await dialog.waitFor();
       // Members of the workspace not in the project come first.
-      await dialog.getByRole("tab", { name: "已有的", selected: true }).waitFor({ timeout: 10_000 });
+      await dialog.getByRole("tab", { name: "工作区里已有的", selected: true }).waitFor({ timeout: 10_000 });
       await dialog.locator(".add-local-row button", { hasText: "加进来" }).first().waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-members");
       await dialog.locator(".add-local-row button", { hasText: "加进来" }).first().click();
       await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
 
-      await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑上的" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "用上面已有的会话" }));
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().waitFor({ timeout: 10_000 });
       // A session that joined two workspaces names both.
       await dialog.locator(".add-local-row.is-taken .add-local-sub", { hasText: /已经加入了：.*的 glenn-mac-claude-x9k2、.*tapnow.* 的 glenn-mac-claude-x9k2-tn/ }).waitFor({ timeout: 5_000 });
@@ -1178,7 +1179,52 @@ async function runMatrix(browser, size, scheme) {
       await dialog.locator(".add-local-row button", { hasText: "加入" }).first().click();
       await dialog.locator(".add-arrived").nth(1).waitFor({ timeout: 20_000 });
 
-      await clickVisible(page, dialog.getByRole("tab", { name: "发一句话" }));
+      // A cloud server: its own sessions, asked of it; one outside the
+      // folders it allows cannot join; a copy of another one joins.
+      await clickVisible(page, dialog.getByRole("tab", { name: "VPS 东京" }));
+      const remote = dialog.locator("[data-testid=remote-sessions]");
+      await remote.locator(".add-local-row", { hasText: "把订单接口的分页改成游标分页" }).waitFor({ timeout: 10_000 });
+      const outside = remote.locator(".add-local-row", { hasText: "试一下 bun 的启动速度" });
+      await outside.locator(".add-local-sub", { hasText: "不在那台电脑允许的文件夹里" }).waitFor({ timeout: 5_000 });
+      if (!(await outside.locator("button").isDisabled())) throw new Error("允许的文件夹之外的会话不能加入");
+      await remote.locator(".add-local-row.is-taken", { hasText: "已经加入了：tokyo-vps-claude-ops" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-remote");
+      await remote.locator(".add-local-row", { hasText: "把订单接口的分页改成游标分页" }).locator("button").click();
+      await dialog.locator(".add-arrived").nth(2).waitFor({ timeout: 20_000 });
+      // A new one there: it lacks Codex (with the command to install it),
+      // and keeps to its folder (a new one goes inside it).
+      await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
+      await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      const vpsFolder = dialog.locator("input.app-input.mono").first();
+      if (!/^不填就新建 ~\/code\/myco-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
+      await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
+      await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
+      await vpsFolder.fill("~/elsewhere");
+      await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
+      if (!(await dialog.getByRole("button", { name: "开一个" }).isDisabled())) throw new Error("允许范围外的文件夹不能开");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-remote-new");
+      await vpsFolder.fill("");
+      await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Claude Code" }));
+
+      // An older computer cannot say what it has: upgrade it.
+      await clickVisible(page, dialog.getByRole("tab", { name: "Office PC" }));
+      await dialog.locator("[data-testid=info-too-old]").waitFor({ timeout: 10_000 });
+
+      // Connecting a computer: it says this workspace is on the local
+      // network only (a VPS cannot reach it), gives the command, and picks
+      // the computer once it connects.
+      await clickVisible(page, dialog.getByRole("tab", { name: "连一台电脑" }));
+      await dialog.locator("[data-testid=reach-note]", { hasText: "局域网" }).waitFor({ timeout: 10_000 });
+      await dialog.locator("[data-testid=connect-computer] .app-command code", { hasText: "| bash" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect");
+      const ran = await page.evaluate(async () => (await fetch("/app/mock/run-connect", { method: "POST" })).status);
+      if (ran !== 200) throw new Error(`run-connect: ${ran}`);
+      await dialog.getByRole("tab", { name: /新服务器/, selected: true }).waitFor({ timeout: 20_000 });
+
+      await clickVisible(page, dialog.getByRole("tab", { name: "云端或别处的 AI" }));
       await page.waitForFunction(() => {
         const t = document.querySelector(".add-sentence-text")?.textContent || "";
         return /\/j\/\S+\/\S+ \| bash/.test(t) && t.includes("最后的输出") && !t.includes("inbox wait");
@@ -1186,11 +1232,11 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-link");
 
+      await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑" }));
       await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
-      await dialog.locator(".ws-computer.active").first().waitFor({ timeout: 10_000 });
       // A newer computer makes ~/myco/<name> when no folder is given; model,
       // effort and access are under "more".
-      await dialog.locator(".app-field-label", { hasText: "文件夹干活（可以不填）" }).waitFor({ timeout: 5_000 });
+      await dialog.locator(".app-field-label", { hasText: "文件夹干活（可以不填）" }).waitFor({ timeout: 10_000 });
       const folder = dialog.locator("input.app-input.mono").first();
       if (!/~\/myco\//.test(await folder.getAttribute("placeholder") || "")) throw new Error("文件夹可以不填时，提示里应写会新建的 ~/myco/… 文件夹");
       await clickVisible(page, dialog.locator("details.app-advanced summary", { hasText: "更多选项" }));
@@ -1205,7 +1251,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
-      await dialog.locator(".add-arrived").nth(2).waitFor({ timeout: 20_000 });
+      await dialog.locator(".add-arrived").nth(3).waitFor({ timeout: 20_000 });
       await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
       await page.locator(".app-modal").waitFor({ state: "hidden" });
     });
@@ -1215,9 +1261,12 @@ async function runMatrix(browser, size, scheme) {
         // Adding a computer is one command, as adding an agent is: run it in
         // the folder on that computer, and the dialog ticks itself; from a
         // project, the folder is in the project at once.
-        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
+        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一个终端" }));
         const dialog = page.locator(".app-modal-add");
         await dialog.waitFor();
+        // With computers connected it starts at picking one; a computer not
+        // connected yet is one command, run in the folder there.
+        await clickVisible(page, dialog.getByRole("button", { name: "在还没连上的电脑上开" }));
         const box = dialog.locator("[data-testid=computer-command]");
         await box.waitFor({ timeout: 10_000 });
         // What it means is said calmly (no red block).
@@ -1247,9 +1296,8 @@ async function runMatrix(browser, size, scheme) {
         // A folder on a computer already connected can still be picked; a
         // computer that has not allowed terminals says so there, with the
         // command to run on it, and cannot be added yet.
-        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一台电脑" }));
+        await clickVisible(page, page.locator(".sp-side").getByRole("button", { name: "加一个终端" }));
         await dialog.waitFor();
-        await clickVisible(page, dialog.getByRole("button", { name: "用已经连上的电脑选文件夹" }));
         await dialog.locator(".ws-computer.active").waitFor({ timeout: 10_000 });
         const office = dialog.locator(".ws-computer", { hasText: "Office PC" });
         await office.locator(".ws-computer-sub", { hasText: "还没允许" }).waitFor({ timeout: 10_000 });
@@ -1340,13 +1388,13 @@ async function runMatrix(browser, size, scheme) {
       // chat, in the order picked), computers last.
       await sidebar(page, true);
       const order = await page.evaluate(() => [...document.querySelectorAll(".app-nav > .app-nav-group")].map((g) => g.className));
-      if (!order[0]?.includes("sp-nav-autos") || !order[1]?.includes("sp-nav-projects") || !order[2]?.includes("sp-nav-chats") || !order[3]?.includes("sp-nav-pcs")) throw new Error(`边栏应是自动化、项目、会话、电脑，实际 ${order.join(" / ")}`);
+      if (!order[0]?.includes("sp-nav-autos") || !order[1]?.includes("sp-nav-projects") || !order[2]?.includes("sp-nav-chats") || !order[3]?.includes("sp-nav-pcs")) throw new Error(`边栏应是自动化、项目、会话、终端，实际 ${order.join(" / ")}`);
       // The three headings look alike: one size and weight, no icon.
       const heads = await page.evaluate(() => [...document.querySelectorAll(".app-nav .sp-nav-head .sp-nav-title-link")].map((e) => {
         const st = getComputedStyle(e);
         return { text: (e.textContent || "").trim(), size: st.fontSize, icon: !!e.querySelector("svg") };
       }));
-      if (heads.map((h) => h.text).join("|") !== "项目|会话|电脑") throw new Error(`边栏标题应是 项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      if (heads.map((h) => h.text).join("|") !== "项目|会话|终端") throw new Error(`边栏标题应是 项目、会话、终端，实际 ${heads.map((h) => h.text).join(" / ")}`);
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
@@ -3083,6 +3131,7 @@ async function runMatrix(browser, size, scheme) {
 
     await step("电脑", async () => {
       await go(page, "电脑", narrow);
+      await page.locator(".pc-card").first().waitFor({ timeout: 20_000 });
       await page.locator(".pc-row").first().waitFor({ timeout: 20_000 });
       // An agent on that computer has nearly used its quota: the rows of
       // that machine say so, quietly.
@@ -3091,14 +3140,22 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computers");
       // A computer that has not allowed terminals is marked, and says how to
       // allow it: on that computer, never from here.
-      const office = page.locator(".pc-machine", { hasText: "Office PC" });
-      await office.locator(".pc-machine-tag", { hasText: "没允许开终端" }).waitFor({ timeout: 10_000 });
-      await clickVisible(page, office);
-      const view = page.locator("[data-testid=machine-view]");
+      // Its details: what it allows and its AIs (asked of it), and whether
+      // terminals may be opened (only changed on it).
+      const vps = page.locator(".pc-card", { hasText: "VPS 东京" });
+      await clickVisible(page, vps.getByRole("button", { name: "详情" }));
+      await vps.locator("[data-testid=pc-details] .app-kv", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await vps.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-details");
+      await clickVisible(page, vps.getByRole("button", { name: "详情" }));
+      const office = page.locator(".pc-card", { hasText: "Office PC" });
+      await clickVisible(page, office.getByRole("button", { name: "详情" }));
+      const view = office.locator("[data-testid=pc-details]");
       await view.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-permission");
-      await clickVisible(page, view.getByRole("button", { name: "好" }));
+      await clickVisible(page, office.getByRole("button", { name: "详情" }));
       await view.waitFor({ state: "hidden", timeout: 5_000 });
       // Who may use a computer, which projects have it, and removing it are
       // in one place, a click from its row.
@@ -3115,7 +3172,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 200);
       await shot(page, size, scheme, "computer-settings");
       if (!narrow) {
-        await clickVisible(page, set.getByRole("button", { name: "移除这台电脑" }));
+        await clickVisible(page, set.getByRole("button", { name: "移除这个终端" }));
         const sure = page.locator(".app-modal.app-confirm");
         await sure.waitFor({ timeout: 5_000 });
         await clickVisible(page, sure.getByRole("button", { name: "移除", exact: true }));
@@ -3288,7 +3345,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-rename");
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await page.locator(".sp-nav-pc", { hasText: newName }).waitFor({ timeout: 20_000 });
-      await menuPick(page, page.locator(".sp-nav-pc", { hasText: newName }), "移除这台电脑");
+      await menuPick(page, page.locator(".sp-nav-pc", { hasText: newName }), "移除这个终端");
       const sure = page.locator(".app-modal.app-confirm");
       await sure.waitFor({ timeout: 5_000 });
       if (await set.isVisible()) throw new Error("从右键直接移除时只该出现确认框");
@@ -3352,14 +3409,15 @@ async function runMatrix(browser, size, scheme) {
     // the online one shows the uninstall command, and both are gone after.
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
-      await clickVisible(page, page.locator(".pc-machine", { hasText: "临时 Mac" }));
-      const view = page.locator("[data-testid=machine-view]");
+      const card = page.locator(".pc-card", { hasText: "临时 Mac" });
+      await clickVisible(page, card.getByRole("button", { name: "详情" }));
+      const view = card.locator("[data-testid=pc-details]");
       await view.waitFor({ timeout: 10_000 });
       await clickVisible(page, view.getByRole("button", { name: "移除这台电脑" }));
       const dialog = page.locator(".app-modal");
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       const dialogText = compactText(await dialog.innerText());
-      for (const want of ["2 个 agent 和电脑会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
+      for (const want of ["2 个 agent 和终端会一起移除", "聊过的内容都保留", "myco runner service uninstall"]) {
         if (!dialogText.includes(want)) throw new Error(`移除电脑弹窗里应提到「${want}」，实际是「${dialogText}」`);
       }
       await settle(page, 300);
@@ -3367,7 +3425,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, dialog.getByRole("button", { name: "移除这台电脑和上面的 2 个" }));
       await page.locator(".app-modal").waitFor({ state: "hidden", timeout: 10_000 });
       await page.waitForFunction(
-        () => ![...document.querySelectorAll(".pc-machine, .pc-row")].some((r) => /临时/.test(r.textContent || "")),
+        () => ![...document.querySelectorAll(".pc-card, .pc-row")].some((r) => /临时/.test(r.textContent || "")),
         null,
         { timeout: 10_000 },
       );
@@ -3581,10 +3639,12 @@ async function runMatrix(browser, size, scheme) {
       // Adding a computer to the new workspace, outside any project: the
       // same one command; the folder it is run in is in the sidebar after.
       await go(page, "电脑", narrow);
-      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "加一台电脑" }));
+      await page.locator(".pc .app-empty-note", { hasText: "还没有连上的电脑" }).waitFor({ timeout: 10_000 });
+      if (narrow) await sidebar(page, true);
+      await clickVisible(page, page.locator(".sp-nav-pcs").getByRole("button", { name: "加一个终端" }));
       const pick = page.locator(".app-modal-add");
       await pick.waitFor({ timeout: 10_000 });
-      if (!(await pick.locator("h3").first().innerText()).includes("加一台电脑")) throw new Error("工作区里加电脑不该说「给项目」");
+      if (!(await pick.locator("h3").first().innerText()).includes("开一个终端") || (await pick.locator("h3").first().innerText()).includes("项目")) throw new Error("工作区里开终端不该说「给项目」");
       const box = pick.locator("[data-testid=computer-command]");
       await box.locator(".app-command code", { hasText: "curl -fsSL" }).waitFor({ timeout: 10_000 });
       const ran = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir: "~/code/team-b" }) });

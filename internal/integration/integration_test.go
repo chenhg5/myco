@@ -590,7 +590,7 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("coder spawn: exit %d, want %d", code, cli.ExitPermission)
 	}
 	code, _, errOut := lead.run(c, "agent", "spawn", "--on", "box", "--dir", t.TempDir(), "--cli", "pi", "--timeout", "20s")
-	if code != cli.ExitPermission || !strings.Contains(errOut, "outside the allowed directories") {
+	if code != cli.ExitPermission || !strings.Contains(errOut, "outside the folders this computer allows") {
 		t.Fatalf("spawn outside home: exit %d %s", code, errOut)
 	}
 
@@ -620,8 +620,15 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatalf("admin spawn: %v %+v", err, res)
 	}
 	_, err = h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: t.TempDir()}, 20*time.Second)
-	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" || !strings.Contains(e.Message, "outside the allowed") {
+	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" || !strings.Contains(e.Message, "outside the folders") {
 		t.Fatalf("admin spawn outside the machine's directories: %v", err)
+	}
+	// Asking the machine about itself through the hub: its folders and
+	// limit, nothing started, nothing recorded as a spawn.
+	info, err := h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.InfoCLI, Dir: "/ignored"}, 20*time.Second)
+	if err != nil || info.Info == nil || info.Agent != "" || len(info.Info.Dirs) != 1 || info.Info.Dirs[0] != "~" ||
+		info.Info.NewDir != "~/myco" || info.Info.MaxAccess != "workspace" || info.Info.AIs == nil || info.Info.Sessions == nil {
+		t.Fatalf("machine info: %v %+v", err, info)
 	}
 	if _, err := h.client("").SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: "pi", Dir: "~"}, time.Second); err == nil {
 		t.Fatal("spawn without a token")
