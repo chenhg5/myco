@@ -96,7 +96,7 @@ scripts/release-verify.sh vX.Y.Z
 
 在 Mac 上：
 
-1. 打开「钥匙串访问」→「我的证书」，右键名字以 **Developer ID Application** 开头的那一项（不是 Apple Development）→「导出」，存成桌面上的 `myco-sign.p12`，设一个密码。它可能在「登录」里，也可能在「系统」里（左边栏切换）；在「证书」里导出的只有证书、没有私钥，不会让你设密码，那个用不了。
+1. 打开「钥匙串访问」→「我的证书」，右键名字以 **Developer ID Application** 开头的那一项（不是 Apple Development）→「导出」，存成桌面上的 `myco-sign.p12`，设一个密码。在「证书」里导出的只有证书、没有私钥，不会让你设密码，那个用不了。哪个钥匙串的「我的证书」里都找不到它，多半是证书和私钥分在了两个钥匙串（比如证书在「系统」、私钥在「登录」）：把证书复制一份到私钥所在的钥匙串（`security find-certificate -c "Developer ID Application" -p /Library/Keychains/System.keychain > /tmp/devid.pem && security import /tmp/devid.pem -k ~/Library/Keychains/login.keychain-db`），它就会出现在那里的「我的证书」里。
 2. 在仓库目录的终端里（`gh` 要已登录，对仓库有管理权限；会提示你输入值，输入时不显示）：
 
    ```bash
