@@ -4,13 +4,18 @@ import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
- * Up to four chats at once, in a grid of at most two rows of at most two
- * panes. The first pane is the space's own (the coordinator, the group, a
- * chat); the others are members opened beside it: dragged in from a list
- * of members (onto an edge of a pane: a new pane there) or opened with
- * 「在新的一栏打开」. The lines between panes drag to share the room. Where
- * the panes do not fit at their least size, they turn into tabs: one
- * shown, the others a click away. One pane can take the whole room.
+ * Up to four chats at once. The room is split the way you split it: a
+ * member dropped on an edge of a pane splits that pane (dropped below the
+ * left one: the left one is now two, one above the other; the right one
+ * stays as it is); dropped on an edge of the whole room, the whole room
+ * (a pane across the bottom of all of them). Its middle shows it there
+ * instead. 「在新的一栏打开」 splits the largest pane along its longer side.
+ * The first pane is the space's own (the coordinator, the group, a chat).
+ *
+ * The lines between panes drag to share the room. Where the panes do not
+ * fit at their least size, they turn into tabs: one shown, the others a
+ * click away. One pane can take the whole room. A member already on
+ * screen is not opened twice: dragged in, its pane says so.
  *
  * Every pane stays mounted whatever the layout (absolutely placed, in the
  * same order), so a chat keeps its place and its draft when panes move.
@@ -26,21 +31,30 @@ export type PaneSlot = {
   node: (actions: React.ReactNode) => React.ReactNode;
 };
 
-/** Which panes are where: rows of keys, and how the room is shared (the
- *  first pane's share of its row; the first row's share of the height). */
-export type PaneLayout = { rows: string[][]; col: number[]; row: number };
+/** How the room is split: a pane (its key), or two parts side by side
+ *  ("row": a left, b right) or one above the other ("col": a top, b
+ *  bottom), `ratio` being a's share. */
+export type PaneNode = string | { dir: "row" | "col"; ratio: number; a: PaneNode; b: PaneNode };
+export type PaneLayout = { root: PaneNode };
 export type Edge = "left" | "right" | "top" | "bottom" | "center";
 /** Where a member was dropped: an edge of a pane, or its middle (in its
- *  place). Key "": wherever there is room. */
+ *  place). Key "*": an edge of the whole room. Key "": wherever there is
+ *  room. */
 export type DropAt = { key: string; edge: Edge };
 
-/** What is dragged in: a member, by its workspace and name. */
+/** What is dragged in: a member, by its workspace and name. (Kept while
+ *  it is dragged, too: a drag over says only what kind it is.) */
 export const DRAG_TYPE = "application/x-myco-agent";
 export type DragAgent = { hubId: string; agent: string };
+let dragged: DragAgent | null = null;
 export function dragAgent(e: React.DragEvent, a: DragAgent) {
   e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(a));
   e.dataTransfer.setData("text/plain", a.agent);
   e.dataTransfer.effectAllowed = "copy";
+  dragged = a;
+  const done = () => { dragged = null; window.removeEventListener("dragend", done, true); window.removeEventListener("drop", done, true); };
+  window.addEventListener("dragend", done, true);
+  window.addEventListener("drop", done, true);
 }
 const isAgentDrag = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes(DRAG_TYPE);
 
@@ -49,92 +63,140 @@ export const MAX_PANES = 4;
 export const PANE_MIN_W = 320;
 export const PANE_MIN_H = 240;
 
+export const onePane = (key: string): PaneLayout => ({ root: key });
+
+export function paneKeys(n: PaneNode): string[] {
+  return typeof n === "string" ? [n] : [...paneKeys(n.a), ...paneKeys(n.b)];
+}
 export function paneCount(l: PaneLayout): number {
-  return l.rows.reduce((n, r) => n + r.length, 0);
+  return paneKeys(l.root).length;
+}
+/** A layout as kept (on this computer): sound, or null. */
+export function soundLayout(v: unknown): PaneLayout | null {
+  const ok = (n: unknown): n is PaneNode => typeof n === "string"
+    || (!!n && typeof n === "object" && ((n as { dir?: string }).dir === "row" || (n as { dir?: string }).dir === "col")
+      && typeof (n as { ratio?: unknown }).ratio === "number" && ok((n as { a?: unknown }).a) && ok((n as { b?: unknown }).b));
+  const root = (v as { root?: unknown } | null)?.root;
+  return ok(root) ? { root } : null;
 }
 
-/** The layout with `key` added: where it was dropped, or (no place given)
- *  beside the others, then below them. Null where it cannot go. */
+/** How many panes `n` puts one after another that way (side by side for
+ *  "row", one above the other for "col"). */
+const stacked = (n: PaneNode, dir: "row" | "col"): number => (typeof n === "string" ? 1
+  : n.dir === dir ? stacked(n.a, dir) + stacked(n.b, dir) : Math.max(stacked(n.a, dir), stacked(n.b, dir)));
+/** `n` with `key` on that edge, the new pane getting an equal share (two
+ *  panes stacked there: a third). */
+const split = (n: PaneNode, key: string, edge: Exclude<Edge, "center">): PaneNode => {
+  const dir = edge === "left" || edge === "right" ? "row" : "col";
+  const s = stacked(n, dir);
+  return edge === "left" || edge === "top" ? { dir, ratio: 1 / (s + 1), a: key, b: n } : { dir, ratio: s / (s + 1), a: n, b: key };
+};
+const mapLeaf = (n: PaneNode, key: string, f: (leaf: string) => PaneNode): PaneNode => (
+  typeof n === "string" ? (n === key ? f(n) : n) : { ...n, a: mapLeaf(n.a, key, f), b: mapLeaf(n.b, key, f) });
+
+/** The layout with `key` added: on that edge of that pane (or of the
+ *  whole room, key "*"); with no place given, in the largest pane, split
+ *  along its longer side (on a wide room, beside it). Null where it
+ *  cannot go (four already). */
 export function placePane(l: PaneLayout, key: string, at?: DropAt): PaneLayout | null {
-  if (paneCount(l) >= MAX_PANES) return null;
-  const rows = l.rows.map((r) => [...r]);
-  const col = [...l.col];
-  if (!at) {
-    const r = rows.findIndex((x) => x.length < 2);
-    if (r >= 0) { rows[r].push(key); col[r] = 0.5; }
-    else if (rows.length < 2) { rows.push([key]); col.push(0.5); }
-    else return null;
-    return { rows, col, row: rows.length === 2 && l.rows.length === 1 ? 0.5 : l.row };
+  const keys = paneKeys(l.root);
+  if (keys.length >= MAX_PANES) return null;
+  if (at && at.edge === "center") return null;
+  if (at && at.key === "*") return { root: split(l.root, key, at.edge as Exclude<Edge, "center">) };
+  if (at && at.key && keys.includes(at.key)) return { root: mapLeaf(l.root, at.key, (leaf) => split(leaf, key, at.edge as Exclude<Edge, "center">)) };
+  // The largest pane (the last of equals: new panes go right, then down),
+  // as the room is usually wider than tall.
+  const rects = rectsOf(l);
+  let best = keys[0];
+  for (const k of keys) {
+    const r = rects.get(k)!, b = rects.get(best)!;
+    if (r.w * r.h >= b.w * b.h - 1e-6) best = k;
   }
-  const r = rows.findIndex((x) => x.includes(at.key));
-  if (r < 0 || at.edge === "center") return null;
-  if (at.edge === "left" || at.edge === "right") {
-    if (rows[r].length >= 2) return null;
-    const i = rows[r].indexOf(at.key);
-    rows[r].splice(at.edge === "left" ? i : i + 1, 0, key);
-    col[r] = 0.5;
-    return { rows, col, row: l.row };
-  }
-  if (rows.length < 2) {
-    if (at.edge === "top") { rows.unshift([key]); col.unshift(0.5); }
-    else { rows.push([key]); col.push(0.5); }
-    return { rows, col, row: 0.5 };
-  }
-  // Two rows already: into the row above or below, if it has room.
-  const into = at.edge === "top" ? r - 1 : r + 1;
-  if (into < 0 || into > 1 || rows[into].length >= 2) return null;
-  rows[into].push(key);
-  col[into] = 0.5;
-  return { rows, col, row: l.row };
+  const r = rects.get(best)!;
+  return { root: mapLeaf(l.root, best, (leaf) => split(leaf, key, r.w * 1.6 >= r.h ? "right" : "bottom")) };
 }
 
-/** The layout without `key` (an emptied row goes; the rest share). */
+/** The layout without `key` (the other part of its split takes its room). */
 export function removePane(l: PaneLayout, key: string): PaneLayout {
-  const rows: string[][] = [];
-  const col: number[] = [];
-  l.rows.forEach((r, i) => {
-    const left = r.filter((k) => k !== key);
-    if (!left.length) return;
-    rows.push(left);
-    col.push(left.length === r.length ? l.col[i] ?? 0.5 : 0.5);
-  });
-  return { rows, col, row: rows.length === 2 ? l.row : 0.5 };
+  const drop = (n: PaneNode): PaneNode | null => {
+    if (typeof n === "string") return n === key ? null : n;
+    const a = drop(n.a), b = drop(n.b);
+    if (!a) return b;
+    if (!b) return a;
+    return { ...n, a, b };
+  };
+  return { root: drop(l.root) || l.root };
 }
 
 /** The layout with `key` in place of `old`. */
 export function replacePane(l: PaneLayout, old: string, key: string): PaneLayout {
-  return { ...l, rows: l.rows.map((r) => r.map((k) => (k === old ? key : k))) };
-}
-
-/** Whether every pane gets its least room in a box this size. */
-export function panesFit(l: PaneLayout, w: number, h: number): boolean {
-  const cols = Math.max(...l.rows.map((r) => r.length), 1);
-  return w >= cols * PANE_MIN_W && h >= l.rows.length * PANE_MIN_H;
+  return { root: mapLeaf(l.root, old, () => key) };
 }
 
 type Rect = { x: number; y: number; w: number; h: number };
-const clamp = (v: number) => Math.min(0.8, Math.max(0.2, v));
+const clamp = (v: number) => Math.min(0.85, Math.max(0.15, v));
+const WHOLE: Rect = { x: 0, y: 0, w: 1, h: 1 };
 
 /** Where each pane is, as shares of the room (0..1). */
 function rectsOf(l: PaneLayout): Map<string, Rect> {
   const out = new Map<string, Rect>();
-  const rowH = l.rows.length === 2 ? [l.row, 1 - l.row] : [1];
-  let y = 0;
-  l.rows.forEach((r, i) => {
-    const h = rowH[i];
-    const ws = r.length === 2 ? [l.col[i] ?? 0.5, 1 - (l.col[i] ?? 0.5)] : [1];
-    let x = 0;
-    r.forEach((k, j) => { out.set(k, { x, y, w: ws[j], h }); x += ws[j]; });
-    y += h;
-  });
+  const walk = (n: PaneNode, r: Rect) => {
+    if (typeof n === "string") { out.set(n, r); return; }
+    if (n.dir === "row") {
+      walk(n.a, { ...r, w: r.w * n.ratio });
+      walk(n.b, { ...r, x: r.x + r.w * n.ratio, w: r.w * (1 - n.ratio) });
+    } else {
+      walk(n.a, { ...r, h: r.h * n.ratio });
+      walk(n.b, { ...r, y: r.y + r.h * n.ratio, h: r.h * (1 - n.ratio) });
+    }
+  };
+  walk(l.root, WHOLE);
   return out;
+}
+
+/** Each split's line: where it is, and the way to its node. */
+type Line = { path: ("a" | "b")[]; dir: "row" | "col"; ratio: number; r: Rect };
+function linesOf(l: PaneLayout): Line[] {
+  const out: Line[] = [];
+  const walk = (n: PaneNode, r: Rect, path: ("a" | "b")[]) => {
+    if (typeof n === "string") return;
+    out.push({ path, dir: n.dir, ratio: n.ratio, r });
+    if (n.dir === "row") {
+      walk(n.a, { ...r, w: r.w * n.ratio }, [...path, "a"]);
+      walk(n.b, { ...r, x: r.x + r.w * n.ratio, w: r.w * (1 - n.ratio) }, [...path, "b"]);
+    } else {
+      walk(n.a, { ...r, h: r.h * n.ratio }, [...path, "a"]);
+      walk(n.b, { ...r, y: r.y + r.h * n.ratio, h: r.h * (1 - n.ratio) }, [...path, "b"]);
+    }
+  };
+  walk(l.root, WHOLE, []);
+  return out;
+}
+const withRatio = (n: PaneNode, path: ("a" | "b")[], ratio: number): PaneNode => {
+  if (typeof n === "string") return n;
+  if (!path.length) return { ...n, ratio };
+  return path[0] === "a" ? { ...n, a: withRatio(n.a, path.slice(1), ratio) } : { ...n, b: withRatio(n.b, path.slice(1), ratio) };
+};
+
+/** The smallest share of the width and of the height any pane has. */
+export function leastShare(l: PaneLayout): { w: number; h: number } {
+  let w = 1, h = 1;
+  for (const r of rectsOf(l).values()) { w = Math.min(w, r.w); h = Math.min(h, r.h); }
+  return { w, h };
+}
+/** Whether every pane gets its least room in a box this size. */
+export function panesFit(l: PaneLayout, w: number, h: number): boolean {
+  const s = leastShare(l);
+  return w * s.w >= PANE_MIN_W - 1 && h * s.h >= PANE_MIN_H - 1;
 }
 
 const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
 const halfOf = (b: Rect, e: Edge): Rect => (e === "left" ? { ...b, w: b.w / 2 } : e === "right" ? { ...b, x: b.x + b.w / 2, w: b.w / 2 }
   : e === "top" ? { ...b, h: b.h / 2 } : e === "bottom" ? { ...b, y: b.y + b.h / 2, h: b.h / 2 } : b);
+/** How near the room's own edge (px) a drop means "across the whole room". */
+const OUTER = 22;
 
-export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDrop, onFocus, className }: {
+export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDrop, openIn, onFocus, className }: {
   slots: PaneSlot[];
   layout: PaneLayout;
   onLayout: (l: PaneLayout) => void;
@@ -142,8 +204,10 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
   zoom: string;
   onZoom: (key: string) => void;
   onClose: (key: string) => void;
-  /** a member dropped here; false: it could not go there */
+  /** a member dropped here */
   onDrop?: (a: DragAgent, at: DropAt) => void;
+  /** the pane a member is already in (it is not opened twice) */
+  openIn?: (a: DragAgent) => string;
   /** a pane was clicked into (the one "beside" means from now on) */
   onFocus?: (key: string) => void;
   className?: string;
@@ -159,7 +223,7 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const keys = layout.rows.flat();
+  const keys = paneKeys(layout.root);
   const many = keys.length > 1;
   // Too small for every pane at its least: tabs, one pane shown.
   // (one pane with the whole room needs no tabs: its button brings the rest back)
@@ -177,30 +241,30 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
       const t = window.setTimeout(() => setFresh(""), 400);
       return () => window.clearTimeout(t);
     }
-    else if (!keys.includes(tab)) setTab(keys[keys.length - 1] || "");
+    if (!keys.includes(tab)) setTab(keys[keys.length - 1] || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys.join("\u0000")]);
   const alone = zoom && keys.includes(zoom) ? zoom : tabbed ? (keys.includes(tab) ? tab : keys[0]) : "";
   const rects = rectsOf(layout);
+  const lines = alone ? [] : linesOf(layout);
 
-  // The lines between panes: dragged, they share the room.
-  const drag = useRef<{ kind: "col" | "row"; r: number; from: number; at: number; size: number } | null>(null);
+  // The lines between panes: dragged, they share their part of the room.
+  const drag = useRef<{ line: Line; from: number; at: number; size: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const startDrag = (kind: "col" | "row", r: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+  const startDrag = (line: Line) => (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const el = box.current!;
-    const rect = el.getBoundingClientRect();
-    drag.current = { kind, r, from: kind === "col" ? layout.col[r] ?? 0.5 : layout.row, at: kind === "col" ? e.clientX : e.clientY, size: kind === "col" ? rect.width : rect.height };
+    const b = box.current!.getBoundingClientRect();
+    const row = line.dir === "row";
+    drag.current = { line, from: line.ratio, at: row ? e.clientX : e.clientY, size: row ? b.width * line.r.w : b.height * line.r.h };
     setDragging(true);
-    document.body.classList.add(kind === "col" ? "is-resizing" : "is-resizing-rows");
+    document.body.classList.add(row ? "is-resizing" : "is-resizing-rows");
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const v = clamp(d.from + ((d.kind === "col" ? e.clientX : e.clientY) - d.at) / d.size);
-    if (d.kind === "col") { const col = [...layout.col]; col[d.r] = v; onLayout({ ...layout, col }); }
-    else onLayout({ ...layout, row: v });
+    const v = clamp(d.from + ((d.line.dir === "row" ? e.clientX : e.clientY) - d.at) / d.size);
+    onLayout({ root: withRatio(layout.root, d.line.path, v) });
   };
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
@@ -211,15 +275,27 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
   };
 
   // A member dragged over: where it would go (an edge of a pane: half of
-  // it; its middle: in its place), or why it cannot.
-  const [over, setOver] = useState<{ at: DropAt; ok: boolean } | null>(null);
+  // it; near an edge of the room: across it; a pane's middle: in its
+  // place), or why it cannot.
+  const [over, setOver] = useState<{ at: DropAt; ok: boolean; open?: string } | null>(null);
   const depth = useRef(0);
   const atPoint = (e: React.DragEvent): DropAt | null => {
-    const el = box.current;
+    const el = box.current?.querySelector(".pg-room");
     if (!el) return null;
     const b = el.getBoundingClientRect();
-    const px = (e.clientX - b.left) / b.width, py = (e.clientY - b.top) / b.height;
-    const shown = alone ? [[alone, { x: 0, y: 0, w: 1, h: 1 }] as const] : [...rects.entries()];
+    if (b.width <= 0 || b.height <= 0) return null;
+    const dx = e.clientX - b.left, dy = e.clientY - b.top;
+    if (dx < 0 || dy < 0 || dx > b.width || dy > b.height) return null;
+    // Near the room's own edge, with more than one pane: across the room.
+    if (!alone && many) {
+      const near = Math.min(dx, b.width - dx, dy, b.height - dy);
+      if (near < OUTER) {
+        const edge: Edge = near === dx ? "left" : near === b.width - dx ? "right" : near === dy ? "top" : "bottom";
+        return { key: "*", edge };
+      }
+    }
+    const px = dx / b.width, py = dy / b.height;
+    const shown = alone ? [[alone, WHOLE] as const] : [...rects.entries()];
     for (const [key, r] of shown) {
       if (px < r.x || px > r.x + r.w || py < r.y || py > r.y + r.h) continue;
       const fx = (px - r.x) / r.w, fy = (py - r.y) / r.h;
@@ -233,12 +309,11 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
   // null where it cannot go.
   const placeAt = (at: DropAt): Rect | null => {
     const slot = slots.find((s) => s.key === at.key);
-    if (at.edge === "center") return slot && !slot.main ? (alone ? { x: 0, y: 0, w: 1, h: 1 } : rects.get(at.key) || null) : null;
-    if (alone) return paneCount(layout) < MAX_PANES ? halfOf({ x: 0, y: 0, w: 1, h: 1 }, at.edge) : null;
+    if (at.edge === "center") return slot && !slot.main ? (alone ? WHOLE : rects.get(at.key) || null) : null;
+    if (alone) return keys.length < MAX_PANES ? halfOf(WHOLE, at.edge) : null;
     const next = placePane(layout, "\u0000new", at);
     return next ? rectsOf(next).get("\u0000new") || null : null;
   };
-  const okAt = (at: DropAt) => !!placeAt(at);
   const dropProps = onDrop ? {
     onDragEnter: (e: React.DragEvent) => { if (isAgentDrag(e)) depth.current++; },
     onDragLeave: (e: React.DragEvent) => {
@@ -249,37 +324,55 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
     onDragOver: (e: React.DragEvent) => {
       if (!isAgentDrag(e)) return;
       e.preventDefault();
+      // Already on screen: its pane says so, wherever the pointer is.
+      const open = dragged && openIn ? openIn(dragged) : "";
+      if (open && keys.includes(open) && (!alone || alone === open)) {
+        e.dataTransfer.dropEffect = "none";
+        setOver((o) => (o && o.open === open ? o : { at: { key: open, edge: "center" }, ok: false, open }));
+        return;
+      }
       const at = atPoint(e);
       if (!at) { setOver(null); return; }
-      const ok = okAt(at);
+      const ok = !!placeAt(at);
       e.dataTransfer.dropEffect = ok ? "copy" : "none";
-      setOver((o) => (o && o.at.key === at.key && o.at.edge === at.edge && o.ok === ok ? o : { at, ok }));
+      setOver((o) => (o && !o.open && o.at.key === at.key && o.at.edge === at.edge && o.ok === ok ? o : { at, ok }));
     },
     onDrop: (e: React.DragEvent) => {
       if (!isAgentDrag(e)) return;
       e.preventDefault();
       depth.current = 0;
-      const at = atPoint(e);
+      const was = over;
       setOver(null);
-      if (!at || !okAt(at)) return;
+      if (was?.open) return;
+      const at = atPoint(e);
+      if (!at || !placeAt(at)) return;
+      let a: DragAgent;
+      try { a = JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as DragAgent; } catch { return; }
+      if (openIn?.(a)) return;
       // (one pane shown, as tabs or with the whole room: an edge means
       // "a new pane", wherever there is room; key "")
-      const where = alone && at.edge !== "center" ? { key: "", edge: at.edge } : at;
-      try { onDrop(JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as DragAgent, where); } catch { /* not a member */ }
+      onDrop(a, alone && at.edge !== "center" ? { key: "", edge: at.edge } : at);
     },
   } : {};
-  // The highlighted part of the pane under the pointer.
+  // The highlighted part of the room, and what letting go there does.
   const hint = (() => {
     if (!over) return null;
-    const base = alone ? { x: 0, y: 0, w: 1, h: 1 } : rects.get(over.at.key);
-    if (!base) return null;
+    if (over.open) {
+      const r = alone ? WHOLE : rects.get(over.open);
+      const name = slots.find((s) => s.key === over.open)?.title || "";
+      return r ? { r, why: L(`${name} 已经开着了`, `${name} is open already`), open: true } : null;
+    }
     const e = over.at.edge;
+    const base = over.at.key === "*" ? WHOLE : alone ? WHOLE : rects.get(over.at.key);
+    if (!base) return null;
     const r: Rect = placeAt(over.at) || (e === "center" ? base : halfOf(base, e));
-    const full = paneCount(layout) >= MAX_PANES;
-    const why = over.ok ? (e === "center" ? L("换成它", "Show it here instead") : L("在这里多开一栏", "Open it in a new pane here"))
+    const full = keys.length >= MAX_PANES;
+    const across = { top: L("在最上面多开一栏，横跨整个", "A new pane across the top"), bottom: L("在最下面多开一栏，横跨整个", "A new pane across the bottom"),
+      left: L("在最左边多开一栏，竖着占满", "A new pane down the left"), right: L("在最右边多开一栏，竖着占满", "A new pane down the right"), center: "" };
+    const why = over.ok ? (e === "center" ? L("换成它", "Show it here instead") : over.at.key === "*" ? across[e] : L("在这里多开一栏", "Open it in a new pane here"))
       : full ? L("最多四栏：放到一栏中间换掉它", "Four panes at most: drop on one to show it there instead")
-      : e === "center" ? L("放到边上，多开一栏", "Drop on an edge for a new pane") : L("这边放不下了", "No room on this side");
-    return { r, why };
+      : L("放到边上，多开一栏", "Drop on an edge for a new pane");
+    return { r, why, open: false };
   })();
 
   const buttons = (s: PaneSlot) => {
@@ -322,32 +415,28 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
       )}
       <div className="pg-room">
         {slots.filter((s) => keys.includes(s.key)).map((s) => {
-          const r = alone ? (alone === s.key ? { x: 0, y: 0, w: 1, h: 1 } : null) : rects.get(s.key);
+          const r = alone ? (alone === s.key ? WHOLE : null) : rects.get(s.key);
           return (
-            <div key={s.key} data-pane={s.key} className={cn("sp-pane pg-pane", s.main ? "sp-pane-left" : "sp-pane-right", !r && "is-hidden", fresh === s.key && "is-new", r && r.x > 0 && "has-left", r && r.y > 0 && "has-top")}
+            <div key={s.key} data-pane={s.key} className={cn("sp-pane pg-pane", s.main ? "sp-pane-left" : "sp-pane-right", !r && "is-hidden", fresh === s.key && "is-new", r && r.x > 0.0005 && "has-left", r && r.y > 0.0005 && "has-top")}
               style={r ? { left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) } : undefined}
               onPointerDownCapture={() => onFocus?.(s.key)}>
               {s.node(buttons(s))}
             </div>
           );
         })}
-        {!alone && layout.rows.map((row, i) => (row.length === 2 ? (() => {
-          const a = rects.get(row[0])!;
-          return (
-            <div key={`c${i}`} className="pg-line is-col" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
-              style={{ left: pct(a.x + a.w), top: pct(a.y), height: pct(a.h) }}
-              onPointerDown={startDrag("col", i)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
-              onDoubleClick={() => { const col = [...layout.col]; col[i] = 0.5; onLayout({ ...layout, col }); }} />
-          );
-        })() : null))}
-        {!alone && layout.rows.length === 2 && (
-          <div className="pg-line is-row" role="separator" aria-orientation="horizontal" aria-label={L("拖动调整高度", "Drag to resize")}
-            style={{ top: pct(layout.row) }}
-            onPointerDown={startDrag("row", 0)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
-            onDoubleClick={() => onLayout({ ...layout, row: 0.5 })} />
-        )}
+        {lines.map((line) => (line.dir === "row" ? (
+          <div key={`l${line.path.join("")}`} className="pg-line is-col" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
+            style={{ left: pct(line.r.x + line.r.w * line.ratio), top: pct(line.r.y), height: pct(line.r.h) }}
+            onPointerDown={startDrag(line)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+            onDoubleClick={() => onLayout({ root: withRatio(layout.root, line.path, 0.5) })} />
+        ) : (
+          <div key={`l${line.path.join("")}`} className="pg-line is-row" role="separator" aria-orientation="horizontal" aria-label={L("拖动调整高度", "Drag to resize")}
+            style={{ top: pct(line.r.y + line.r.h * line.ratio), left: pct(line.r.x), width: pct(line.r.w) }}
+            onPointerDown={startDrag(line)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+            onDoubleClick={() => onLayout({ root: withRatio(layout.root, line.path, 0.5) })} />
+        )))}
         {hint && (
-          <div className={cn("pg-drop", !over?.ok && "is-no")} style={{ left: pct(hint.r.x), top: pct(hint.r.y), width: pct(hint.r.w), height: pct(hint.r.h) }}>
+          <div className={cn("pg-drop", !over?.ok && "is-no", hint.open && "is-open")} style={{ left: pct(hint.r.x), top: pct(hint.r.y), width: pct(hint.r.w), height: pct(hint.r.h) }}>
             <span>{hint.why}</span>
           </div>
         )}

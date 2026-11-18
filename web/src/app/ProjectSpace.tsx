@@ -19,7 +19,7 @@ import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
 import { handoverItem } from "@/app/Handover";
-import { PaneGrid, dragAgent, placePane, removePane, replacePane, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
+import { PaneGrid, dragAgent, leastShare, onePane, paneKeys, placePane, removePane, replacePane, soundLayout, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
@@ -40,7 +40,7 @@ let openedChatN = 0;
 // A member opened in a pane of its own (Panes.tsx), beside the space's own.
 type PaneSide = Side & { id: string };
 const MAIN = "main";
-const oneLayout = (): PaneLayout => ({ rows: [[MAIN]], col: [0.5], row: 0.5 });
+const oneLayout = (): PaneLayout => onePane(MAIN);
 // Per space: what was open (a chat, a pair, the activity), the panes beside
 // it and which takes the whole room, for this run of the app (see
 // ProjectSpace): going to another space or workspace and back finds it so.
@@ -51,11 +51,12 @@ const PANES_KEY = "myco-panes:";
 function storedPanes(key: string): Pick<Panes, "sides" | "layout"> | null {
   try {
     const v = JSON.parse(localStorage.getItem(PANES_KEY + key) || "null") as Pick<Panes, "sides" | "layout"> | null;
-    if (!v || !Array.isArray(v.sides) || !v.layout || !Array.isArray(v.layout.rows)) return null;
-    // (only what is still consistent: every pane placed once, main first)
-    const keys = v.layout.rows.flat();
-    if (!keys.includes(MAIN) || keys.length !== v.sides.length + 1 || v.sides.some((x) => !keys.includes(x.id))) return null;
-    return v;
+    const layout = soundLayout(v?.layout);
+    if (!v || !Array.isArray(v.sides) || !layout) return null;
+    // (only what is still consistent: every pane placed once, main among them)
+    const keys = paneKeys(layout.root);
+    if (!keys.includes(MAIN) || keys.length !== v.sides.length + 1 || new Set(keys).size !== keys.length || v.sides.some((x) => !keys.includes(x.id))) return null;
+    return { sides: v.sides, layout };
   } catch {
     return null;
   }
@@ -583,18 +584,26 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       ),
     })),
   ];
-  const cols = zoom ? 1 : Math.max(...layout.rows.map((r) => r.length), 1);
+  // (the least room the panes side by side need)
+  const cols = zoom ? 1 : 1 / leastShare(layout).w;
 
   return (
     // With members open beside, a window too small for the panes side by
     // side and the members column folds the column into the row of faces.
-    <div ref={spRef} className={cn("sp", cols > 1 && spWidth - (folded ? SIDE_FOLDED_W : SIDE_W) < cols * PANE_MIN && "has-side")}>
+    <div ref={spRef} className={cn("sp", cols > 1.01 && spWidth - (folded ? SIDE_FOLDED_W : SIDE_W) < cols * PANE_MIN && "has-side")}>
       <div className="sp-main">
         <PaneGrid slots={slots} layout={layout} zoom={zoom}
           onLayout={(l) => setGrid((g) => ({ ...g, layout: l }))}
           onZoom={setZoom}
           onClose={closeSide}
           onDrop={dropAgent}
+          openIn={(a) => {
+            if (a.hubId !== hubId) return "";
+            const there = sides.find((x) => x.agent === a.agent && youPeer(x.peer));
+            if (there) return there.id;
+            if (t ? t.agent === a.agent && youPeer(t.peer) : split && view.kind === "home" && a.agent === coordinator) return MAIN;
+            return "";
+          }}
           onFocus={(k) => { if (k !== MAIN) setLastSide(k); }} />
       </div>
 

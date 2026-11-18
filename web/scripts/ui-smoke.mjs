@@ -1112,6 +1112,15 @@ async function runMatrix(browser, size, scheme) {
       const members = page.locator(".sp-side .sp-member:not(.is-add)");
       await clickVisible(page, members.nth(1));
       await page.locator(".pg-pane.sp-pane-right").first().waitFor({ timeout: 10_000 });
+      // One already on screen is not opened again: dragged in, its pane says so.
+      {
+        const rb = await page.locator(".pg-room").boundingBox();
+        const again = await dropOn(members.nth(1), rb.x + rb.width / 4, rb.y + rb.height / 2);
+        await page.locator(".pg-drop.is-open").waitFor({ timeout: 5_000 });
+        await again();
+        await page.waitForTimeout(300);
+        if ((await page.locator(".pg-pane").count()) !== 2) throw new Error("已经开着的成员拖进来不该再开一栏");
+      }
       // (the members column folds into faces once two panes share the
       // room: the next comes from the sidebar's chats)
       await menuPick(page, page.locator(".sp-nav-person", { hasText: "docs-claude" }), "在新的一栏打开");
