@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, Table2 } from "lucide-react";
+import { FileText, KanbanSquare, LayoutGrid, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { openPage } from "@/app/pages";
+import { CardsSkeleton, PageHero, SectionHead } from "@/app/PageHero";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -59,32 +60,43 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   }, [hubId]);
   useEffect(() => { setList(null); load(); }, [load]);
 
-  const official = (list || []).filter((t) => t.official);
-  const own = (list || []).filter((t) => !t.official);
-  const card = (t: Template) => {
-    return (
-      <button key={t.id} type="button" className="au-template tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
-        title={L(`新建一份${t.name}`, `New ${t.name}`)}>
-        <span className={cn("au-icon", `tp-icon is-${t.kind} on-${shelfOf(t)}`)}><AppIcon t={t} /></span>
-        <span className="au-template-text">
-          <span className="au-template-name">{t.name}</span>
-          {t.description && <span className="au-template-hint">{t.description}</span>}
-          {!t.official && <span className="au-template-hint">{t.slug} · {t.version} · {t.publisher}</span>}
-        </span>
-      </button>
-    );
-  };
+  const [shelf, setShelf] = useState("all");
+  const [q, setQ] = useState("");
+  const [allMade, setAllMade] = useState(false);
+  const match = (t: Template) => !q.trim() || `${t.name} ${t.description || ""} ${t.slug}`.toLowerCase().includes(q.trim().toLowerCase());
+  const official = (list || []).filter((t) => t.official && match(t));
+  const own = (list || []).filter((t) => !t.official && match(t));
+  const shelves = SHELVES.filter(([key]) => (list || []).some((t) => t.official && shelfOf(t) === key));
+  const card = (t: Template) => (
+    <button key={t.id} type="button" className="tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
+      title={L(`新建一份${t.name}`, `New ${t.name}`)}>
+      <span className={cn("tp-icon", `is-${t.kind} on-${shelfOf(t)}`)}><AppIcon t={t} /></span>
+      <span className="tp-card-text">
+        <span className="tp-card-name">{t.name}</span>
+        {t.description && <span className="tp-card-desc">{t.description}</span>}
+        {!t.official && <span className="tp-card-meta">{t.slug} · {t.version} · {t.publisher}</span>}
+      </span>
+      <span className="tp-card-new"><Plus />{L("新建", "New")}</span>
+    </button>
+  );
+  const shownMade = allMade ? made : made.slice(0, 6);
+  const nothing = !!list && !official.length && !own.length;
 
   return (
-    <div className="pc au tp">
-      <div className="pc-head">
-        <p className="pc-intro">{L("你和 agent 一起用的应用：你在页面里改，agent 用命令行读写同一份，谁改了对方马上看到。新建一份，它就在右边的面板里打开。",
-          "Apps you and agents use together: you edit in the page, agents read and write the same data, and each sees the other's changes at once. New ones open in the page panel.")}</p>
-        <p className="tp-sync">
-          <button type="button" className="tp-sync-btn" onClick={syncNow} disabled={sync.busy} data-testid="apps-sync">{sync.busy ? L("正在检查…", "Checking…") : L("检查官方应用更新", "Check for app updates")}</button>
-          {sync.text && <span className="tp-sync-note">{sync.text}</span>}
-        </p>
-      </div>
+    <div className="pc tp">
+      <PageHero icon={LayoutGrid} title={L("应用", "Apps")}
+        subtitle={L("你和 agent 一起用的表格、文档、白板和小游戏，两边的改动实时同步。", "Tables, documents, boards and games you and agents use together, changes shared as they happen.")}>
+        {!unsupported && (
+          <>
+            <label className="tp-search"><Search /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("找应用", "Find an app")} aria-label={L("找应用", "Find an app")} /></label>
+            <button type="button" className="app-btn app-btn-plain tp-sync-btn" onClick={syncNow} disabled={sync.busy} data-testid="apps-sync"
+              title={L("检查官方应用更新", "Check for app updates")} aria-label={L("检查官方应用更新", "Check for app updates")}>
+              <RefreshCw className={cn(sync.busy && "is-spinning")} />
+            </button>
+          </>
+        )}
+      </PageHero>
+      {sync.text && <p className="tp-sync"><span className="tp-sync-note">{sync.text}</span><button type="button" className="tp-sync-x" aria-label={L("知道了", "Dismiss")} onClick={() => setSync({})}>×</button></p>}
       <ErrorText error={error} />
       {unsupported ? (
         <div className="app-empty" data-testid="templates-unsupported">
@@ -92,39 +104,66 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
           <h2>{L("这个工作区还不能用应用", "No apps in this workspace yet")}</h2>
           <p>{L("它的 Hub 版本太旧。在服务器上运行 sudo myco upgrade，升级到 v0.20.5 或更新。", "Its hub is too old: run sudo myco upgrade on the server (v0.20.5 or later).")}</p>
         </div>
-      ) : list === null ? null : (
+      ) : list === null ? (
         <>
-          <div data-testid="templates-official">
-            {SHELVES.map(([key, zh, en]) => {
-              const on = official.filter((t) => shelfOf(t) === key);
-              return on.length ? (
-                <section key={key} className="tp-shelf" data-shelf={key}>
-                  <h3 className="tp-section">{L(zh, en)}</h3>
-                  <div className="au-templates">{on.map(card)}</div>
-                </section>
-              ) : null;
-            })}
-          </div>
-          <h3 className="tp-section">{L("这个工作区的应用", "This workspace's apps")}</h3>
-          {own.length ? <div className="au-templates" data-testid="templates-own">{own.map(card)}</div> : (
-            <p className="tp-hint">{L("还没有。想要一个自己的（比如周报、面试评估表），跟 agent 说：「用 myco template init 帮我做一个周报应用，做好发布到工作区」。",
-              "None yet. For one of your own (a weekly report, an interview sheet), ask an agent: \"make a weekly report app with myco template init and publish it\".")}</p>
+          <div className="tp-chips" aria-hidden>{[64, 76, 76, 64, 48].map((w, i) => <span key={i} className="skel tp-chip-skel" style={{ width: w }} />)}</div>
+          <CardsSkeleton count={8} />
+        </>
+      ) : (
+        <>
+          {made.length > 0 && !q && (
+            <>
+              <SectionHead title={L("最近建的", "Made recently")} count={made.length}>
+                {made.length > 6 && <button type="button" className="tp-more" onClick={() => setAllMade(!allMade)}>{allMade ? L("收起", "Fewer") : L("全部", "All")}</button>}
+              </SectionHead>
+              <div className="tp-made" data-testid="templates-made">
+                {shownMade.map((p) => {
+                  const t = (list || []).find((x) => x.id === p.template?.id);
+                  return (
+                    <button key={p.id} type="button" className="tp-made-row" onClick={() => openPage({ kind: "page", hubId, id: p.id })} title={p.name}>
+                      <span className="tp-icon is-small"><AppIcon t={t} /></span>
+                      <span className="tp-made-text">
+                        <span className="tp-made-name">{p.name}</span>
+                        <span className="tp-made-meta">{[p.template?.name, p.project ? projects.find((x) => x.name === p.project)?.title || p.project : "", timeAgo(p.updated_at, now)].filter(Boolean).join(" · ")}</span>
+                      </span>
+                      {p.template?.latest && <span className="tp-made-new" title={L("有新版本", "A new version")} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
-          {made.length > 0 && <>
-            <h3 className="tp-section">{L("最近建的", "Made recently")}</h3>
-            <div className="pc-list tp-made" data-testid="templates-made">
-              {made.map((p) => {
-                const t = (list || []).find((x) => x.id === p.template?.id);
-                return (
-                  <button key={p.id} type="button" className="tp-made-row" onClick={() => openPage({ kind: "page", hubId, id: p.id })}>
-                    <AppIcon t={t} />
-                    <span className="tp-made-name">{p.name}</span>
-                    <span className="tp-made-meta">{[p.template?.name, p.project ? projects.find((x) => x.name === p.project)?.title || p.project : "", timeAgo(p.updated_at, now)].filter(Boolean).join(" · ")}</span>
-                  </button>
-                );
+          <div className="tp-chips" role="tablist" aria-label={L("分类", "Shelves")}>
+            {[["all", "全部", "All"] as [string, string, string], ...shelves, ["own", "这个工作区的", "This workspace's"] as [string, string, string]].map(([key, zh, en]) => (
+              <button key={key} type="button" role="tab" aria-selected={shelf === key} className={cn("tp-chip", shelf === key && "is-on")} onClick={() => setShelf(key)}>{L(zh, en)}</button>
+            ))}
+          </div>
+          {nothing && <p className="tp-hint">{L(`没有找到「${q}」`, `Nothing matches "${q}"`)}</p>}
+          {shelf !== "own" && (
+            <div data-testid="templates-official">
+              {(shelf === "all" ? shelves : shelves.filter(([key]) => key === shelf)).map(([key, zh, en]) => {
+                const on = official.filter((t) => shelfOf(t) === key);
+                return on.length ? (
+                  <section key={key} className="tp-shelf" data-shelf={key}>
+                    {shelf === "all" && <SectionHead title={L(zh, en)} count={on.length} />}
+                    <div className="tp-grid">{on.map(card)}</div>
+                  </section>
+                ) : null;
               })}
             </div>
-          </>}
+          )}
+          {(shelf === "all" || shelf === "own") && (
+            <section className="tp-shelf">
+              <SectionHead title={L("这个工作区的应用", "This workspace's apps")} count={own.length} />
+              {own.length ? <div className="tp-grid" data-testid="templates-own">{own.map(card)}</div> : (
+                <div className="tp-own-empty">
+                  <span className="tp-icon"><Sparkles /></span>
+                  <p>{L("还没有自己的应用。想要一个（比如周报、面试评估表），跟 agent 说：「用 myco template init 帮我做一个周报应用，做好发布到工作区」。",
+                    "None of your own yet. For one (a weekly report, an interview sheet), ask an agent: \"make a weekly report app with myco template init and publish it\".")}</p>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
       <UseTemplate hubId={hubId} template={using} projects={projects} onClose={() => setUsing(null)}

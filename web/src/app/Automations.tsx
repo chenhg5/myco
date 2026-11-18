@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
+import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook, Zap } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
 import type { Automation, AutomationRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
@@ -7,6 +7,8 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
+import { PageHero, SectionHead } from "@/app/PageHero";
+import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
 import { L } from "@/lib/i18n";
@@ -95,14 +97,35 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
     try { await appApi.deleteAutomation(hubId, a.id); setRemoving(null); load(); } catch (e) { setError(e); setRemoving(null); } finally { setBusy(""); }
   };
 
+  const gallery = (
+    <div className="au-templates">
+      {templates().map((t) => (
+        <button key={t.name} type="button" className="au-template" onClick={() => setEditing({ start: t })}>
+          <span className={cn("au-icon", t.hook && "is-hook")}><t.icon /></span>
+          <span className="au-template-text">
+            <span className="au-template-name">{t.name}</span>
+            <span className="au-template-hint">{t.hint}</span>
+          </span>
+        </button>
+      ))}
+      <button type="button" className="au-template is-blank" onClick={() => setEditing({ start: blank })}>
+        <span className="au-icon is-blank"><Plus /></span>
+        <span className="au-template-text">
+          <span className="au-template-name">{L("从空白开始", "Start from blank")}</span>
+          <span className="au-template-hint">{L("自己写要它做什么、什么时候做", "Write what it does, and when")}</span>
+        </span>
+      </button>
+    </div>
+  );
+  const on = (list || []).filter((a) => a.enabled).length;
+  const last = (list || []).map((a) => a.last_run).filter(Boolean).sort((x, y) => (y!.at > x!.at ? 1 : -1))[0];
+
   return (
     <div className="pc au">
-      {!(list && list.length === 0 && !unsupported) && <div className="pc-head">
-        <p className="pc-intro">{L("到点或者外部系统通知时，替你给 agent 派一个任务。跑在工作区的 Hub 上，电脑关着也照常。", "On a schedule, or when an outside system calls, a task goes to an agent for you. It runs on the workspace's hub, so it goes on while your computers are off.")}</p>
-        {!unsupported && list && list.length > 0 && (
-          <button type="button" className="app-btn app-btn-quiet" onClick={() => setEditing({ start: blank })}><Plus />{L("新建自动化", "New automation")}</button>
-        )}
-      </div>}
+      <PageHero icon={Zap} title={L("自动化", "Automations")}
+        subtitle={L("让 agent 按时、按事件自己干活。跑在工作区的 Hub 上，电脑关着也照常。", "Agents at work on a schedule or when something happens. It runs on the workspace's hub, so it goes on while your computers are off.")}>
+        {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setEditing({ start: blank })}><Plus />{L("新建自动化", "New automation")}</button>}
+      </PageHero>
       <ErrorText error={error} />
       {unsupported ? (
         <div className="app-empty" data-testid="automations-unsupported">
@@ -110,33 +133,33 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
           <h2>{L("这个工作区还不能用自动化", "No automations in this workspace yet")}</h2>
           <p>{L("它的 Hub 版本太旧。在服务器上运行 sudo myco upgrade，升级到 v0.19.22 或更新。", "Its hub is too old: run sudo myco upgrade on the server (v0.19.22 or later).")}</p>
         </div>
-      ) : list === null ? null : list.length === 0 ? (
-        <div className="au-start" data-testid="automations-empty">
-          <div className="app-empty au-empty">
-            <div className="app-empty-icon"><Clock /></div>
-            <h2>{L("让 agent 按时自己干活", "Let agents work on their own schedule")}</h2>
-            <p>{L("比如每天早上汇总 issue、CI 失败时看日志。它的回复在你和它的对话里，标着「自动」。", "Say, a morning summary of issues, or a look at the log when CI fails. Its answers are in your chat with it, marked 自动.")}</p>
+      ) : list === null ? (
+        <>
+          <div className="au-stats" aria-hidden>{[0, 1, 2].map((i) => <div key={i} className="au-stat"><span className="skel skel-line is-thin" style={{ width: "40%" }} /><span className="skel skel-line" style={{ width: "60%", height: 18 }} /></div>)}</div>
+          <RowsSkeleton rows={3} className="pc-list" />
+        </>
+      ) : list.length === 0 ? (
+        <div data-testid="automations-empty">
+          <div className="au-none">
+            <span className="au-none-icon"><Clock /></span>
+            <div>
+              <b>{L("还没有自动化", "No automations yet")}</b>
+              <p>{L("比如每天早上汇总 issue、CI 失败时看日志。它的回复在你和它的对话里，标着「自动」。从下面挑一个开始。", "Say, a morning summary of issues, or a look at the log when CI fails. Its answers are in your chat with it, marked 自动. Start from one below.")}</p>
+            </div>
           </div>
-          <div className="au-templates">
-            {templates().map((t) => (
-              <button key={t.name} type="button" className="au-template" onClick={() => setEditing({ start: t })}>
-                <span className={cn("au-icon", t.hook && "is-hook")}><t.icon /></span>
-                <span className="au-template-text">
-                  <span className="au-template-name">{t.name}</span>
-                  <span className="au-template-hint">{t.hint}</span>
-                </span>
-              </button>
-            ))}
-            <button type="button" className="au-template is-blank" onClick={() => setEditing({ start: blank })}>
-              <span className="au-icon is-blank"><Plus /></span>
-              <span className="au-template-text">
-                <span className="au-template-name">{L("从空白开始", "Start from blank")}</span>
-                <span className="au-template-hint">{L("自己写要它做什么、什么时候做", "Write what it does, and when")}</span>
-              </span>
-            </button>
-          </div>
+          <SectionHead title={L("从模板开始", "Start from one of these")} />
+          {gallery}
         </div>
       ) : (
+        <>
+          <div className="au-stats">
+            <div className="au-stat"><span>{L("在运行", "Running")}</span><b>{on}</b></div>
+            <div className="au-stat"><span>{L("已暂停", "Paused")}</span><b className={on === list.length ? "is-quiet" : ""}>{list.length - on}</b></div>
+            <div className="au-stat"><span>{L("最近一次", "Last run")}</span>
+              {last ? <b className={cn("au-stat-last", outcomeTone(last))}>{timeAgo(last.at, now)}<small>{outcomeWords(last)}</small></b> : <b className="is-quiet">—</b>}
+            </div>
+          </div>
+          <SectionHead title={L("我的自动化", "Your automations")} count={list.length} />
         <div className="pc-list" data-testid="automations">
           {list.map((a) => {
             const r = rowOf(a.to);
@@ -185,6 +208,9 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
             );
           })}
         </div>
+          <SectionHead title={L("从模板开始", "Start from one of these")} />
+          {gallery}
+        </>
       )}
       <AutomationEditor hubId={hubId} rows={rows} editing={editing} now={now} onClose={() => setEditing(null)} onChanged={load} />
       <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={L("删除这个自动化？", "Delete this automation?")}

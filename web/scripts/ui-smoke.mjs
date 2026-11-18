@@ -2927,7 +2927,7 @@ async function runMatrix(browser, size, scheme) {
       await list.locator(".au-row", { hasText: "每天早上汇总 issue" }).locator(".au-row-what", { hasText: "工作日 09:00" }).waitFor({ timeout: 20_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "automations");
-      await clickVisible(page, page.locator(".pc-head").getByRole("button", { name: "新建自动化" }));
+      await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建自动化" }));
       await ed.waitFor({ timeout: 10_000 });
       const name = `CI 失败时看日志 ${size.width} ${scheme}`;
       await ed.getByPlaceholder("比如：每天早上汇总 issue").fill(name);

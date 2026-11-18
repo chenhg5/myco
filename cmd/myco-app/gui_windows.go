@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 	"time"
 
@@ -52,6 +53,18 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 		StartState: application.WindowStateMaximised,
 		URL:        "/",
 		Windows:    application.WindowsWindow{Theme: application.SystemDefault},
+	})
+	// StartState alone is not always kept: Windows takes the first
+	// ShowWindow as the launcher says (a shortcut's "normal window"), so it
+	// is maximised once more when it first shows. After that it stays as
+	// the person leaves it.
+	var maximised sync.Once
+	window.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+		maximised.Do(func() {
+			if !window.IsMaximised() {
+				window.Maximise()
+			}
+		})
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		window.Hide()

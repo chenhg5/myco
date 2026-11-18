@@ -7867,29 +7867,103 @@ body.is-resizing {
 
 /* 模板 (Templates.tsx): the library, as the automations' starting points
    look; then the pages made from templates. */
-.tp-section { margin: 22px 0 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
-.tp-section:first-of-type { margin-top: 6px; }
-.tp-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--pill); color: var(--muted); font-size: 11px; font-weight: 500; vertical-align: 1px; }
-.tp-icon.is-records { background: color-mix(in srgb, #7b5cd6 14%, var(--card)); color: #7b5cd6; }
-.tp-icon.is-doc { background: color-mix(in srgb, #3a7bd5 14%, var(--card)); color: #3a7bd5; }
-.tp-icon.is-slides { background: color-mix(in srgb, #e8710a 14%, var(--card)); color: #e8710a; }
-/* (one quiet look for every app: the icon tells them apart) */
-.tp-icon.tp-icon { background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
-/* an app's own icon: its SVG's shape, in the text colour */
-.tp-svg { display: inline-block; width: 18px; height: 18px; flex: none; background: currentColor;
+/* 应用 (Templates.tsx): a page head with search; what you made recently as
+   tiles; shelves as chips; apps as cards with their own icon. */
+.pc.tp { max-width: 1040px; }
+.tp-icon { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
+  background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
+.tp-icon svg { width: 20px; height: 20px; }
+.tp-icon.is-small { width: 32px; height: 32px; border-radius: 9px; }
+.tp-icon.is-small svg, .tp-icon.is-small .tp-svg { width: 16px; height: 16px; }
+.tp-svg { display: inline-block; width: 20px; height: 20px; flex: none; background: currentColor;
   -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
-.tp-sync { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; font-size: 12.5px; }
-.tp-sync-btn { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: default; }
-.tp-sync-btn:hover:not(:disabled) { text-decoration: underline; }
-.tp-sync-btn:disabled { color: var(--muted); }
-.tp-sync-note { color: var(--muted); }
-.tp-made-row .tp-svg { width: 16px; height: 16px; color: var(--muted); }
-.tp-hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
-.tp-made { display: flex; flex-direction: column; gap: 2px; }
-.tp-made-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; }
+.tp-search { display: flex; align-items: center; gap: 6px; width: 220px; height: 32px; padding: 0 10px; border-radius: 9px;
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
+.tp-search:focus-within { box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--ring); }
+.tp-search svg { width: 14px; height: 14px; flex: none; }
+.tp-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg); font: inherit; font-size: 13px; }
+.tp-sync-btn svg.is-spinning { animation: tp-spin 0.9s linear infinite; }
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tp-sync-btn svg.is-spinning { animation: none; } }
+.tp-sync { display: flex; align-items: center; gap: 8px; width: fit-content; margin: -10px 0 14px; padding: 6px 8px 6px 12px; border-radius: 8px;
+  background: var(--pill); font-size: 12.5px; }
+.tp-sync-note { color: var(--fg-2); }
+.tp-sync-x { border: 0; background: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0 2px; cursor: default; }
+.tp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 4px; }
+.tp-chip { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2); font: inherit; font-size: 13px; cursor: default; }
+.tp-chip:hover { background: var(--nav-hover); }
+.tp-chip.is-on { background: var(--fg); color: var(--bg); box-shadow: none; }
+.tp-chip-skel { display: inline-block; height: 30px; border-radius: 999px; }
+.tp-shelf + .tp-shelf { margin-top: 4px; }
+.tp-shelf:not(:has(.ph-section)) { margin-top: 14px; }
+.tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.tp-card { position: relative; display: flex; align-items: flex-start; gap: 14px; min-height: 96px; padding: 16px; border: 0; border-radius: 14px;
+  background: var(--card); box-shadow: 0 0 0 0.5px var(--line); color: var(--fg); font: inherit; text-align: left; cursor: default;
+  transition: box-shadow 0.15s, transform 0.15s; }
+.tp-card:hover { box-shadow: 0 0 0 0.5px var(--line-2), 0 6px 18px rgba(15, 20, 30, 0.08); transform: translateY(-1px); }
+.tp-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tp-card-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 44px; }
+.tp-card-name { font-size: 14.5px; font-weight: 600; }
+.tp-card-desc { font-size: 12.5px; line-height: 1.55; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-card-meta { font-size: 12px; color: var(--faint); }
+.tp-card-new { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 9px; border-radius: 999px;
+  background: var(--fg); color: var(--bg); font-size: 12px; font-weight: 500; opacity: 0; transition: opacity 0.15s; }
+.tp-card-new svg { width: 12px; height: 12px; }
+.tp-card:hover .tp-card-new, .tp-card:focus-visible .tp-card-new { opacity: 1; }
+@media (hover: none) { .tp-card-new { opacity: 1; } }
+.tp-made { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.tp-made-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line); color: var(--fg); font: inherit; text-align: left; cursor: default; }
 .tp-made-row:hover { background: var(--nav-hover); }
 .tp-made-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-.tp-made-row svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
-.tp-made-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.tp-made-meta { margin-left: auto; flex: none; font-size: 12px; color: var(--muted); }
+.tp-made-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tp-made-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+.tp-made-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--muted); }
+.tp-made-new { flex: none; width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--accent); }
+.tp-more { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: default; }
+.tp-more:hover { color: var(--fg); }
+.tp-hint { margin: 10px 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.tp-own-empty { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); }
+.tp-own-empty p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+@media (max-width: 640px) { .tp-search { width: auto; flex: 1; } }
 .tp-sample { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
+
+/* ---------- a top-level page's head (PageHero.tsx): 自动化, 应用 ---------- */
+.ph { display: flex; align-items: center; gap: 14px; margin: 10px 0 22px; }
+.ph-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px;
+  background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
+.ph-icon svg { width: 22px; height: 22px; stroke-width: 1.75; }
+.ph-text { flex: 1; min-width: 0; }
+.ph-text h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; color: var(--fg); }
+.ph-text p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.ph-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+.ph-section { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 10px; }
+.ph-section h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.ph-count { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ph-section-tools { display: flex; align-items: center; gap: 6px; }
+.ph-skel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.ph-skel-card { display: flex; gap: 12px; padding: 14px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
+.ph-skel-icon { flex: none; width: 40px; height: 40px; border-radius: 11px; }
+@media (max-width: 640px) {
+  .ph { flex-wrap: wrap; }
+  .ph-actions { width: 100%; }
+}
+
+/* 自动化: three numbers on top (running, paused, the last run), nothing yet:
+   one quiet card; the templates always below. */
+.pc.au { max-width: 880px; }
+.au-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.au-stat { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
+.au-stat > span { font-size: 12px; color: var(--muted); }
+.au-stat > b { display: flex; align-items: baseline; gap: 8px; font-size: 22px; font-weight: 650; color: var(--fg); font-variant-numeric: tabular-nums; }
+.au-stat > b.is-quiet { color: var(--faint); }
+.au-stat-last { font-size: 17px !important; }
+.au-stat-last small { font-size: 12px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-stat-last.is-bad small { color: var(--red); }
+.au-none { display: flex; align-items: center; gap: 16px; padding: 20px 22px; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
+.au-none-icon { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--green-soft); color: var(--green); }
+.au-none-icon svg { width: 22px; height: 22px; }
+.au-none b { font-size: 15px; font-weight: 600; }
+.au-none p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+@media (max-width: 640px) { .au-stats { grid-template-columns: 1fr 1fr; } .au-stat:last-child { grid-column: 1 / -1; } }
