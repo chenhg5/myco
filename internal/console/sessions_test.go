@@ -220,3 +220,73 @@ func TestLocalSessionsJoinedTwoWorkspaces(t *testing.T) {
 		t.Fatalf("joined_all: %+v", got[0].JoinedAll)
 	}
 }
+
+// Sessions a script ran (claude -p, the Agent SDK, codex exec) are left out
+// unless they joined, and one request asked again in the same folder shows
+// once (the newest), unless a session of them joined.
+func TestLocalSessionsScriptsAndRepeats(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	n := 0
+	claude := func(entry, text string, ago time.Duration) string {
+		n++
+		id := "eeeeeeee-0000-0000-0000-00000000000" + string(rune('0'+n))
+		p := filepath.Join(home, ".claude", "projects", "-work", id+".jsonl")
+		writeLines(t, p, map[string]any{"type": "user", "cwd": work, "entrypoint": entry,
+			"timestamp": time.Now().Add(-ago).UTC().Format(time.RFC3339), "message": map[string]any{"content": text}})
+		os.Chtimes(p, time.Now().Add(-ago), time.Now().Add(-ago))
+		return id
+	}
+	newest := claude("claude-desktop", "say hello briefly", time.Hour)
+	claude("claude-desktop", "say  hello briefly", 2*time.Hour)
+	claude("cli", "say hello briefly", 3*time.Hour)
+	claude("sdk-cli", "a script's prompt", 30*time.Minute)
+	claude("sdk-ts", "an SDK app's prompt", 40*time.Minute)
+	joined := claude("sdk-cli", "say hello briefly", 4*time.Hour)
+	mine := claude("cli", "改一下首页", 5*time.Hour)
+	exec := filepath.Join(home, ".codex", "sessions", "2026", "11", "08", "rollout-exec.jsonl")
+	writeLines(t, exec,
+		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "0199-exec", "cwd": work, "originator": "codex_exec", "source": "exec"}},
+		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
+	tui := filepath.Join(home, ".codex", "sessions", "2026", "11", "08", "rollout-tui.jsonl")
+	writeLines(t, tui,
+		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "0199-tui", "cwd": work, "originator": "codex_cli_rs", "source": "cli"}},
+		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
+	os.Chtimes(tui, time.Now().Add(-6*time.Hour), time.Now().Add(-6*time.Hour))
+	os.MkdirAll(filepath.Join(home, ".myco", "agents"), 0o700)
+	os.WriteFile(filepath.Join(home, ".myco", "agents", "a.yaml"), []byte("hub: https://hub.example.com\nagent: mac-claude-a\ntoken: t\nharness: claude\nsession_id: "+joined+"\n"), 0o600)
+
+	var ids []string
+	for _, s := range (&console.Local{Home: home}).LocalSessions(time.Now()) {
+		ids = append(ids, s.SessionID)
+	}
+	if want := []string{newest, joined, mine, "0199-tui"}; !slices.Equal(ids, want) {
+		t.Fatalf("sessions: %v, want %v", ids, want)
+	}
+}
+
+// Newer Codex versions write the request only as a message item, after the
+// AGENTS.md and context items they add themselves.
+func TestLocalSessionsCodexMessageItems(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	work := t.TempDir()
+	user := func(text string) map[string]any {
+		return map[string]any{"type": "response_item", "timestamp": "2026-11-17T05:00:00.000Z", "payload": map[string]any{
+			"type": "message", "role": "user", "content": []any{map[string]any{"type": "input_text", "text": text}}}}
+	}
+	writeLines(t, filepath.Join(home, ".codex", "sessions", "2026", "11", "17", "rollout-new.jsonl"),
+		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "019a-new", "cwd": work, "originator": "Codex Desktop", "source": "vscode"}},
+		map[string]any{"type": "response_item", "payload": map[string]any{"type": "message", "role": "developer", "content": []any{map[string]any{"type": "input_text", "text": "rules"}}}},
+		user("# AGENTS.md instructions for "+work+"\n\n<INSTRUCTIONS>…</INSTRUCTIONS>"),
+		user("<environment_context>…</environment_context>"),
+		user("我的 iPhone 老是连不上工作区，帮我 debug 一下\n"),
+	)
+	got := (&console.Local{Home: home}).LocalSessions(time.Now())
+	if len(got) != 1 || got[0].Title != "我的 iPhone 老是连不上工作区，帮我 debug 一下" {
+		t.Fatalf("sessions: %+v", got)
+	}
+}

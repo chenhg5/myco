@@ -30,6 +30,10 @@ type LocalSession struct {
 	// for older apps); JoinedAll is every workspace it joined.
 	Joined    *JoinedAs  `json:"joined,omitempty"`
 	JoinedAll []JoinedAs `json:"joined_all,omitempty"`
+
+	// auto: a program ran it (claude -p or the Agent SDK, codex exec),
+	// not a person in a terminal.
+	auto bool
 }
 
 // JoinedAs names the agent a session joined as, and on which hub (HubName:
@@ -115,8 +119,9 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 
 	joined := l.joinedSessions()
 	var out []LocalSession
-	byID := map[string]int{}   // cli:session → index in out
-	byConv := map[string]int{} // a conversation's first request → index in out
+	byID := map[string]int{}    // cli:session → index in out
+	byConv := map[string]int{}  // a conversation's first request → index in out
+	byText := map[string]bool{} // cli, folder and first request of a listed unjoined session
 	for _, f := range files {
 		var s LocalSession
 		var first string
@@ -145,6 +150,18 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 			byID[id] = i
 			out[i].addJoined(js)
 			continue
+		}
+		if len(js) == 0 {
+			// Not joined yet: leave out what scripts ran (they repeat one
+			// prompt many times), and show a request asked again in the
+			// same folder once (the newest), since the rows would read alike.
+			text := f.cli + "\x00" + s.Workdir + "\x00" + firstText(first)
+			if s.auto || (first != "" && byText[text]) {
+				continue
+			}
+			if first != "" {
+				byText[text] = true
+			}
 		}
 		if len(out) >= sessionsMax {
 			continue
@@ -205,12 +222,14 @@ func (l *Local) joinedSessions() map[string][]JoinedAs {
 // and text of the first request, which a copy keeps).
 func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 	s = LocalSession{CLI: "claude", SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl")}
+	entry := ""
 	eachLine(path, func(line []byte) bool {
 		var e struct {
 			Type        string `json:"type"`
 			Cwd         string `json:"cwd"`
 			IsSidechain bool   `json:"isSidechain"`
 			Timestamp   string `json:"timestamp"`
+			Entrypoint  string `json:"entrypoint"`
 			Message     struct {
 				Content json.RawMessage `json:"content"`
 			} `json:"message"`
@@ -221,6 +240,12 @@ func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 		if s.Workdir == "" && e.Cwd != "" {
 			s.Workdir = e.Cwd
 		}
+		if entry == "" && e.Entrypoint != "" {
+			// "cli" in a terminal, "claude-desktop" in the desktop app,
+			// "sdk-cli" for claude -p, "sdk-ts" / "sdk-py" for the Agent SDK.
+			entry = e.Entrypoint
+			s.auto = strings.HasPrefix(entry, "sdk")
+		}
 		if first == "" && e.Type == "user" && !e.IsSidechain {
 			text := contentText(e.Message.Content)
 			if t := shorten(text); t != "" {
@@ -228,7 +253,7 @@ func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(text), " ")
 			}
 		}
-		return s.Workdir == "" || first == ""
+		return s.Workdir == "" || first == "" || entry == ""
 	})
 	return s, first, s.Workdir != ""
 }
@@ -240,10 +265,14 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 			Type      string `json:"type"`
 			Timestamp string `json:"timestamp"`
 			Payload   struct {
-				ID      string `json:"id"`
-				Cwd     string `json:"cwd"`
-				Type    string `json:"type"`
-				Message string `json:"message"`
+				ID         string          `json:"id"`
+				Cwd        string          `json:"cwd"`
+				Originator string          `json:"originator"`
+				Source     json.RawMessage `json:"source"`
+				Type       string          `json:"type"`
+				Message    string          `json:"message"`
+				Role       string          `json:"role"`
+				Content    json.RawMessage `json:"content"`
 			} `json:"payload"`
 		}
 		if json.Unmarshal(line, &e) != nil {
@@ -252,15 +281,45 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 		switch {
 		case e.Type == "session_meta":
 			s.SessionID, s.Workdir = e.Payload.ID, e.Payload.Cwd
-		case e.Type == "event_msg" && e.Payload.Type == "user_message" && first == "":
-			if t := shorten(e.Payload.Message); t != "" {
+			// codex exec: originator codex_exec, source "exec".
+			s.auto = e.Payload.Originator == "codex_exec" || string(e.Payload.Source) == `"exec"`
+		case first != "":
+		case e.Type == "event_msg" && e.Payload.Type == "user_message",
+			// Newer versions write the request only as a message item.
+			e.Type == "response_item" && e.Payload.Type == "message" && e.Payload.Role == "user":
+			text := e.Payload.Message
+			if e.Type == "response_item" {
+				text = codexInputText(e.Payload.Content)
+			}
+			if t := shorten(text); t != "" && !strings.HasPrefix(t, "# AGENTS.md instructions") {
 				s.Title = t
-				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(e.Payload.Message), " ")
+				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(text), " ")
 			}
 		}
 		return s.SessionID == "" || first == ""
 	})
 	return s, first, s.SessionID != "" && s.Workdir != ""
+}
+
+// codexInputText is the text a person typed in a Codex message item.
+func codexInputText(raw json.RawMessage) string {
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	json.Unmarshal(raw, &parts)
+	for _, p := range parts {
+		if p.Type == "input_text" && strings.TrimSpace(p.Text) != "" {
+			return p.Text
+		}
+	}
+	return ""
+}
+
+// firstText is the request's text without its time.
+func firstText(first string) string {
+	_, text, _ := strings.Cut(first, "\x00")
+	return text
 }
 
 // eachLine calls fn for the first scanLines lines while it returns true.
