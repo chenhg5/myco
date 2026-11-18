@@ -206,6 +206,9 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 		return nil, errorf("invalid_config", ExitUsage, "spawn.max_access must be readonly, workspace or full", "~/.myco/machine.yaml: %v", err)
 	}
 	host := hostname()
+	// Read what this computer has ahead of the first ask (the App asks when
+	// adding an agent opens).
+	console.PrewarmMachineInventory(home, m.Hub)
 	return &machinenode.Node{
 		Hub: m.Hub, Machine: m.Machine, Prefix: m.NamePrefix,
 		Policy: machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: maxAccess},
@@ -271,9 +274,11 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				return res.Agent.Name, saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
 			},
 			Machine: func(ctx context.Context) ([]api.MachineAI, []api.MachineSession) {
-				return console.MachineInventory(ctx, home, m.Hub)
+				return console.MachineInventoryCached(ctx, home, m.Hub)
 			},
 			Spawned: func() {
+				// A session joined or started: the next ask reads again.
+				console.ForgetMachineInventory(home, m.Hub)
 				if sh.rescan != nil {
 					select {
 					case sh.rescan <- struct{}{}:

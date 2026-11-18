@@ -1878,6 +1878,19 @@
   height: 56%;
 }
 
+/* A computer's sessions come in one after another. */
+@keyframes add-row-in {
+  /* No end opacity: a row already joined fades to its own dimness. */
+  from { opacity: 0; transform: translateY(4px); }
+  to { transform: none; }
+}
+.add-row-in {
+  animation: add-row-in 160ms ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-row-in { animation: none; }
+}
+
 /* Adding an agent: three ways, as tabs. */
 .add-tabs {
   margin-top: 14px;

@@ -198,11 +198,14 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
       .then((info) => setInfos((s) => ({ ...s, [m.id]: { info } })))
       .catch((error) => setInfos((s) => ({ ...s, [m.id]: { error } })));
   };
+  // Every computer that can answer is asked as soon as this opens (they
+  // answer from memory), so picking one shows its sessions at once.
+  const askable = (m: Machine) => m.online && m.can_spawn && machineTellsInfo(m.myco_version);
   useEffect(() => {
-    if (!open || !picked || !picked.online || !picked.can_spawn || !machineTellsInfo(picked.myco_version) || infos[picked.id]) return;
-    loadInfo(picked);
+    if (!open) return;
+    for (const m of machines) if (askable(m) && !infos[m.id]) loadInfo(m);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, picked?.id, picked?.online]);
+  }, [open, machines.map((m) => `${m.id}:${m.online}`).join(",")]);
 
   // New agents on this hub since it opened: into the project, and on show.
   useEffect(() => {
@@ -469,7 +472,9 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
 }
 
 /** One session in a list: its AI, its first words (or folder), where and when. */
-function SessionRow({ cli, title, workdir, at, action, taken, sub, subTitle }: {
+function SessionRow({ cli, title, workdir, at, action, taken, sub, subTitle, index }: {
+  /** set: the row fades in after the ones above it */
+  index?: number;
   cli: string;
   title?: string;
   workdir: string;
@@ -482,7 +487,8 @@ function SessionRow({ cli, title, workdir, at, action, taken, sub, subTitle }: {
 }) {
   const Icon = cli === "codex" ? IconCode : IconAsterisk;
   return (
-    <div className={cn("add-local-row", taken && "is-taken")}>
+    <div className={cn("add-local-row", taken && "is-taken", index !== undefined && "add-row-in")}
+      style={index !== undefined ? { animationDelay: `${Math.min(index, 12) * 35}ms` } : undefined}>
       <span className="add-local-icon"><Icon /></span>
       <span className="add-local-main">
         <span className="add-local-name">{title || folderOf(workdir)}</span>
@@ -547,10 +553,10 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
             <input className="app-input add-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个会话：标题、文件夹", "Find a session: title, folder")} aria-label={L("搜索会话", "Search sessions")} />
           )}
           <div className="add-sessions">
-            {free.map((s) => {
+            {free.map((s, i) => {
               const ok = insideDirs(s.workdir, info);
               return (
-                <SessionRow key={`${s.cli}:${s.session_id}`} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
+                <SessionRow key={`${s.cli}:${s.session_id}`} index={i} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
                   sub={ok ? undefined : L(`${folderOf(s.workdir)} 不在那台电脑允许的文件夹里`, `${folderOf(s.workdir)} is outside the folders that computer allows`)}
                   action={<button type="button" className="app-btn app-btn-small" disabled={!!joining || !ok} onClick={() => onJoin(s)}
                     title={ok ? undefined : L(`允许的文件夹：${info.dirs.join("、")}`, `Allowed: ${info.dirs.join(", ")}`)}>
@@ -558,8 +564,8 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
                   </button>} />
               );
             })}
-            {taken.map((s) => (
-              <SessionRow key={`${s.cli}:${s.session_id}`} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={L(`已经加入了：${s.joined}`, `Already joined: ${s.joined}`)} />
+            {taken.map((s, i) => (
+              <SessionRow key={`${s.cli}:${s.session_id}`} index={free.length + i} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={L(`已经加入了：${s.joined}`, `Already joined: ${s.joined}`)} />
             ))}
             {list.length === 0 && <div className="app-empty-note">{L("没找到。", "Nothing matches.")}</div>}
           </div>
