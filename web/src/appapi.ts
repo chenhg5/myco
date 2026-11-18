@@ -303,6 +303,21 @@ export interface LocalHub {
 }
 export interface LocalTool { path: string }
 export interface LocalTools { cloudflared: LocalTool | null; tailscale: LocalTool | null }
+/** An agent CLI on this computer (GET /app/local/agents). */
+export interface LocalAgent {
+  cli: string;
+  name: string;
+  /** missing, signed_out, ready, or unknown (installed; sign-in not visible without spending quota) */
+  state: "missing" | "signed_out" | "ready" | "unknown";
+  path?: string;
+  version?: string;
+  install: string;
+  install_mirror?: string;
+  login: string;
+  /** a program the install command needs ("npm") */
+  needs?: string;
+}
+
 export interface LocalState {
   myco: MycoInstall | null;
   /** The default hub on this computer (older backends have only this one). */
@@ -681,6 +696,11 @@ export const appApi = {
   },
 
   local: () => request<LocalState>("GET", "app/local"),
+  /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
+  localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),
+  /** Opens a terminal that installs or signs in to an agent CLI; opened:false → show command. */
+  agentTerminal: (cli: string, action: "install" | "install_mirror" | "login") =>
+    request<{ opened: boolean; command: string }>("POST", `app/local/agents/${enc(cli)}/terminal`, { action }),
   /** cc-switch's Claude providers on this computer (names and hosts only). */
   providers: (app: "claude" | "codex" = "claude") => request<ProviderList>("GET", `app/local/providers?app=${app}`),
   /** A node's provider setting, if the node runs on this computer. */

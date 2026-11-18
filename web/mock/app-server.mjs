@@ -1407,6 +1407,18 @@ function projectView(hub, p, bodies) {
   };
 }
 
+const npmMirror = " --registry=https://registry.npmmirror.com";
+const localAgents = [
+  { cli: "claude", name: "Claude Code", state: "ready", path: "/Users/me/.local/bin/claude", version: "2.1.30 (Claude Code)",
+    install: "curl -fsSL https://claude.ai/install.sh | bash", install_mirror: "npm install -g @anthropic-ai/claude-code" + npmMirror, login: "claude" },
+  { cli: "codex", name: "Codex", state: "signed_out", path: "/opt/homebrew/bin/codex", version: "codex-cli 0.60.1",
+    install: "npm install -g @openai/codex", install_mirror: "npm install -g @openai/codex" + npmMirror, login: "codex login", needs: "npm" },
+  { cli: "gemini", name: "Gemini CLI", state: "missing",
+    install: "npm install -g @google/gemini-cli", install_mirror: "npm install -g @google/gemini-cli" + npmMirror, login: "gemini", needs: "npm" },
+  { cli: "opencode", name: "opencode", state: "missing",
+    install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
+];
+
 function send(res, status, data) {
   const body = data === undefined ? "" : JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -2060,6 +2072,22 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       local.shell_allowed = !!body.allow;
       return send(res, 200, { shell_allowed: local.shell_allowed });
+    }
+
+    // /app/local/agents: the agent CLIs on this computer (LocalAgents.tsx).
+    if (parts.length === 3 && parts[2] === "agents" && method === "GET") {
+      return send(res, 200, { agents: localAgents });
+    }
+    if (parts.length === 5 && parts[2] === "agents" && parts[4] === "terminal" && method === "POST") {
+      const a = localAgents.find((x) => x.cli === decodeURIComponent(parts[3]));
+      if (!a) return send(res, 404, { error: "not_found", message: "no such agent CLI" });
+      const body = await readBody(req);
+      const command = { install: a.install, install_mirror: a.install_mirror, login: a.login }[body.action];
+      if (!command) return send(res, 400, { error: "invalid_argument", message: "action must be install, install_mirror or login" });
+      // The mock "finishes" right away: the next check shows it done.
+      if (body.action === "login") a.state = "ready";
+      else { a.state = a.cli === "codex" ? "signed_out" : "ready"; a.version = "1.0.0"; a.path = `/usr/local/bin/${a.cli}`; }
+      return send(res, 200, { opened: a.cli !== "opencode", command });
     }
 
     // /app/local/providers and /app/local/agents/{name}/provider (cc-switch)

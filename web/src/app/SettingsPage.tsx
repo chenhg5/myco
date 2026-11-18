@@ -1,7 +1,7 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -15,6 +15,7 @@ import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
+import { LocalAgentsSection } from "@/app/LocalAgents";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
@@ -22,7 +23,7 @@ import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 
-type Section = "hubs" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -159,6 +160,7 @@ function CacheRow() {
 
 const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", get label() { return L("工作区", "Workspaces"); }, icon: Server },
+  { key: "agents", get label() { return L("本机 agent", "Agents"); }, icon: Bot },
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
@@ -190,7 +192,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents") { nextSettingsSection = s; }
 function takeSettingsSection(): Section | null {
   const s = nextSettingsSection;
   nextSettingsSection = null;
@@ -596,6 +598,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         )}
 
         {section === "translate" && <TranslateSection />}
+        {section === "agents" && <LocalAgentsSection />}
         {section === "voice" && <VoiceSection />}
         {section === "network" && <ProxySection hubsOv={hubsOv} />}
         {section === "about" && <AboutSection info={info} local={local} />}

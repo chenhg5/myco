@@ -56,6 +56,9 @@ type Local struct {
 	// ShellPath returns the PATH a login shell of this user has: the App
 	// sets LoginShellPath; nil (tests) asks nothing.
 	ShellPath func() string
+	// OpenTerminal opens a terminal window running command (tests replace
+	// it); default openTerminal.
+	OpenTerminal func(command string, env []string) error
 
 	shellPathOnce sync.Once
 	shellPathVal  string

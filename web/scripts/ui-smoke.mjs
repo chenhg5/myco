@@ -2121,6 +2121,33 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // Settings › Agents: the agent CLIs on this computer, installed or not,
+    // signed in or not; a button opens a terminal for what is missing, or
+    // shows the command when no terminal could be opened.
+    await step("设置 · 本机 agent", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "本机 agent" }));
+      const lines = page.locator(".la-line");
+      await lines.first().waitFor({ timeout: 10_000 });
+      if (await lines.count() !== 4) throw new Error(`应列出 4 个 agent，实际 ${await lines.count()}`);
+      const codex = page.locator('.la-line[data-agent-cli="codex"]');
+      await codex.locator(".app-pill", { hasText: "未登录" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-agents");
+      await codex.getByRole("button", { name: "登录" }).click();
+      await codex.locator(".la-opened", { hasText: "已经在终端里打开了" }).waitFor({ timeout: 5_000 });
+      await page.locator(".la-foot").getByRole("button", { name: "重新检查" }).click();
+      await page.locator('.la-line[data-agent-cli="codex"][data-agent-state="ready"]').waitFor({ timeout: 5_000 });
+      // No terminal here: the command to copy instead.
+      const oc = page.locator('.la-line[data-agent-cli="opencode"]');
+      await oc.getByRole("button", { name: "安装" }).click();
+      await clickVisible(page, page.locator(".app-ctx-item, [role=menuitem]", { hasText: "用官方方式安装" }).first());
+      await oc.locator(".app-command code", { hasText: "opencode.ai/install" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-agents-command");
+      if (narrow) await sidebar(page, false);
+    });
+
     // A proxy for the App: from the environment (as before), none, or one
     // set here; tried before it is saved, in force once saved.
     await step("设置 · 代理", async () => {
