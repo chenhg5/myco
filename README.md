@@ -21,7 +21,7 @@ reach your other computers and your phone, put them on a schedule — all from o
 **English** · [中文](README.zh-CN.md) · [Install Guide](INSTALL.md) · [Architecture](docs/architecture.md) · [HTTP API](docs/api.md)
 
 
-https://github.com/user-attachments/assets/0f6269ac-236f-4b65-b896-68b2a8562ced
+https://github.com/user-attachments/assets/76d235fc-1c4a-4f7c-88c1-ee058f4db1da
 
 
 </div>
