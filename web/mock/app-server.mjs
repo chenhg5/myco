@@ -2810,11 +2810,6 @@ const server = http.createServer(async (req, res) => {
         { kind: "tool", tool: "Bash", id: "c5", input: "make web && make check" },
         { kind: "tool_result", id: "c5", output: "smoke: all steps passed" },
         { kind: "usage", input_tokens: 18400, output_tokens: 2100, cost_usd: 0.08, duration_ms: 84000 },
-        // What the run changed in its folder (runners from v0.20.12).
-        { kind: "change", tool: "CHANGELOG.md", input: "M", added: 4, removed: 1,
-          output: "diff --git a/CHANGELOG.md b/CHANGELOG.md\n--- a/CHANGELOG.md\n+++ b/CHANGELOG.md\n@@ -1,4 +1,7 @@\n # 更新记录\n \n-## Unreleased\n+## v0.16.8\n+\n+- **对话页支持 Markdown 表格**\n+- **本机会话一键接入**\n" },
-        { kind: "change", tool: "docs/release-notes/v0.16.8.md", input: "A", added: 3,
-          output: "--- /dev/null\n+++ b/docs/release-notes/v0.16.8.md\n@@ -0,0 +1,3 @@\n+# v0.16.8\n+\n+两项 App 新功能，一个 Hub 修复。\n" },
       ];
       // "Just say 收到": a run with no thinking or tools.
       if (/收到/.test(m.body || "")) steps.splice(0, steps.length, { kind: "text", text: "收到" }, { kind: "usage", input_tokens: 900, output_tokens: 3, duration_ms: 2100 });

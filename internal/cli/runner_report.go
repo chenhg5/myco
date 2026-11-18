@@ -279,11 +279,7 @@ func cliConfigModel(cli string, getenv func(string) string) string {
 // here when it lands.
 func runnerFeatures(h harness.Harness) []string {
 	var out []string
-	switch h.Name() {
-	case "exec", "shell", "machine":
-	default:
-		out = append(out, "changes") // a task's trace ends with what it changed (runner/changes.go)
-	}
+	_ = h
 	return out
 }
 
