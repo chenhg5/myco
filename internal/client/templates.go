@@ -116,6 +116,12 @@ func (c *Client) PublishTemplate(ctx context.Context, zip io.Reader, size int64)
 	return &out, c.send(ctx, req, &out)
 }
 
+// SyncApps asks the hub to fetch the official apps now (hubs from v0.20.7).
+func (c *Client) SyncApps(ctx context.Context) (*api.AppSync, error) {
+	var out api.AppSync
+	return &out, c.do(ctx, http.MethodPost, "/v1/templates/sync", nil, nil, &out)
+}
+
 // DeleteTemplate takes one out of the library.
 func (c *Client) DeleteTemplate(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/templates/"+esc(id), nil, nil, nil)

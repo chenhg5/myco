@@ -211,6 +211,8 @@ From v0.20.5 ([design](design/templates.md)). A page's data can be **records**: 
 | `GET /v1/templates` | `{templates: [...]}`: `{id, slug, name, description, kind, category, icon (SVG markup: show it as a mask or an image, never as HTML), version, publisher, data, permissions, export, versions, can_manage, created_at, updated_at}` |
 | `GET /v1/templates/{id}` | One, by `tp_…` or its slug (URL-escaped), with `guide` (agent.md) |
 | `DELETE /v1/templates/{id}` | `204`; pages made from it stay |
+| `POST /v1/templates/sync` | From v0.20.7: fetch myco's official apps now (the hub does once a day; at most once a minute) → `{apps, updated?, source, fetched_at?, error?}` |
+| `POST /v1/pages/{id}/upgrade` | From v0.20.7: a page made from an app takes the app's newest version (new files, new data structure; its records stay) → the page; `409` when it is already at it. A page's `template.latest` says when there is one |
 | `POST /v1/templates/{id}/use` | `{name?, project?, version?, sample?}` → `201 {page, template}`: a page made from it (its `template` says which: `{id, slug, name, version, data, permissions}`), with the sample data when asked |
 
 ## Automations

@@ -245,7 +245,39 @@ With --sample it starts with the template's sample data.`,
 			})
 		}),
 	}
-	return (&Command{Name: "template", Summary: "Templates: ready-made pages people and agents fill with data"}).Add(initCmd, publish, list, get, rm, use)
+	sync := &Command{
+		Name:     "sync",
+		Summary:  "Fetch myco's official apps now (the hub does once a day)",
+		Mutating: true,
+		Long: `myco publishes its official apps (表格, 文档, 白板, …) on their own, so a hub gets new and updated
+ones without being upgraded: it fetches them once a day, and now with this. Apps that need a
+newer hub are left out until the hub is upgraded. Hubs from v0.20.7.`,
+		Examples: []string{"myco template sync"},
+		Flags:    []Flag{adminFile},
+		Run: handler(func(e *env) error {
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "template_sync"})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			r, err := c.SyncApps(e.in.Ctx)
+			if err != nil {
+				return templateErr(err)
+			}
+			return e.p.Print(r, func(w io.Writer) {
+				fmt.Fprintf(w, "%d official apps (%s)\n", r.Apps, r.Source)
+				for _, u := range r.Updated {
+					fmt.Fprintf(w, "  new or updated: %s\n", u)
+				}
+				if r.Error != "" {
+					fmt.Fprintf(w, "could not fetch: %s\n", r.Error)
+				}
+			})
+		}),
+	}
+	return (&Command{Name: "template", Summary: "Templates: ready-made pages people and agents fill with data"}).Add(initCmd, publish, list, get, rm, use, sync)
 }
 
 func printCollections(w io.Writer, data map[string]api.TemplateCollection) {

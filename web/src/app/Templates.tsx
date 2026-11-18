@@ -37,6 +37,18 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const [unsupported, setUnsupported] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [using, setUsing] = useState<Template | null>(null);
+  const [sync, setSync] = useState<{ busy?: boolean; text?: string }>({});
+  // myco's own apps come on their own (hubs from v0.20.7 fetch them daily):
+  // fetched now on request.
+  const syncNow = () => {
+    setSync({ busy: true });
+    appApi.syncApps(hubId).then((r) => {
+      setSync({ text: r.error ? L(`没拉到新的（${r.error}）`, `Could not fetch (${r.error})`)
+        : r.updated?.length ? L(`更新了 ${r.updated.length} 个：${r.updated.join("、")}`, `Updated ${r.updated.length}: ${r.updated.join(", ")}`)
+        : L(`已是最新，${r.apps} 个官方应用`, `Up to date: ${r.apps} official apps`) });
+      load();
+    }, (e) => setSync({ text: e instanceof ApiError && e.status === 404 ? L("这个 Hub 还不会自己更新官方应用：升级到 v0.20.7 或更新", "This hub cannot update its official apps yet: upgrade it to v0.20.7 or later") : e instanceof Error ? e.message : String(e) }));
+  };
   const load = useCallback(() => {
     appApi.templates(hubId).then((r) => { setList(r.templates || []); setUnsupported(false); }, (e) => {
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
@@ -68,6 +80,10 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
       <div className="pc-head">
         <p className="pc-intro">{L("你和 agent 一起用的应用：你在页面里改，agent 用命令行读写同一份，谁改了对方马上看到。新建一份，它就在右边的面板里打开。",
           "Apps you and agents use together: you edit in the page, agents read and write the same data, and each sees the other's changes at once. New ones open in the page panel.")}</p>
+        <p className="tp-sync">
+          <button type="button" className="tp-sync-btn" onClick={syncNow} disabled={sync.busy} data-testid="apps-sync">{sync.busy ? L("正在检查…", "Checking…") : L("检查官方应用更新", "Check for app updates")}</button>
+          {sync.text && <span className="tp-sync-note">{sync.text}</span>}
+        </p>
       </div>
       <ErrorText error={error} />
       {unsupported ? (

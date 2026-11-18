@@ -154,7 +154,8 @@ export interface Page {
    *  `myco page serve` runs; online: forwarded now */
   live?: boolean; port?: number; online?: boolean;
   /** the template it was made from (hubs from v0.20.5) */
-  template?: { id: string; slug: string; name: string; version: string; permissions?: string[] };
+  /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
+  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; latest?: string };
 }
 /** A template in the workspace's library (hubs from v0.20.5): official
  *  ones (myco's own) first. */

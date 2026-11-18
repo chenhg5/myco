@@ -17,8 +17,8 @@ import (
 //go:embed official
 var files embed.FS
 
-// Order is how the library lists them: by shelf (office, dev, tools,
-// life, creative, games), then as a person would reach for them.
+// Order is how the library lists the apps it knows within a shelf (as a
+// person would reach for them); shelves come first (domain.TemplateCategories).
 var Order = []string{
 	"myco/table", "myco/base", "myco/doc", "myco/slides",
 	"myco/code", "myco/devtools",
@@ -71,6 +71,29 @@ func Official() ([]app.OfficialTemplate, error) {
 		t.Manifest = m
 		out = append(out, t)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return rank(out[i].Manifest.ID) < rank(out[j].Manifest.ID) })
+	sortOfficial(out)
 	return out, nil
+}
+
+// sortOfficial puts them in the library's order: by shelf, then as Order
+// has them (apps it does not know after those it does), then by name.
+func sortOfficial(list []app.OfficialTemplate) {
+	shelf := func(c string) int {
+		for i, x := range domain.TemplateCategories {
+			if x == c {
+				return i
+			}
+		}
+		return len(domain.TemplateCategories)
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		a, b := list[i].Manifest, list[j].Manifest
+		if sa, sb := shelf(a.Category), shelf(b.Category); sa != sb {
+			return sa < sb
+		}
+		if ra, rb := rank(a.ID), rank(b.ID); ra != rb {
+			return ra < rb
+		}
+		return a.ID < b.ID
+	})
 }

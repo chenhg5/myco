@@ -7,3 +7,4 @@
 /web/ui-smoke/
 runner.log
 /templates/node_modules/
+/dist/

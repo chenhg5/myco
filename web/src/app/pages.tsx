@@ -519,6 +519,7 @@ function PageView({ target, open, active, reload, onMeta }: {
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(`第 ${opened.version} 版`, `Version ${opened.version}`) : "", page && target.kind === "page" ? L(`${nameOf(target.hubId, page.publisher)} 发布`, `by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
+  const [upgrading, setUpgrading] = useState(false);
   const icon: PageMeta["icon"] = local ? "local" : opened?.live || page?.live ? "live" : "page";
   useEffect(() => {
     onMeta({ title, about, icon, copyUrl: page?.url, localUrl: target.kind === "local" ? target.url : undefined, loaded: !!src });
@@ -529,6 +530,15 @@ function PageView({ target, open, active, reload, onMeta }: {
         <div className="pg-new" role="status">
           <span>{L(`有新版本：第 ${newer} 版`, `A new version: version ${newer}`)}</span>
           <button type="button" className="app-btn app-btn-small" onClick={() => void load()}>{L("看新版本", "Show it")}</button>
+        </div>
+      )}
+      {!newer && page?.template?.latest && page.can_manage && target.kind === "page" && (
+        <div className="pg-new" role="status">
+          <span>{L(`「${page.template.name}」有新版本 ${page.template.latest}（现在是 ${page.template.version}），升级后数据不变`, `${page.template.name} has a new version ${page.template.latest} (this is ${page.template.version}); your data stays`)}</span>
+          <button type="button" className="app-btn app-btn-small" disabled={upgrading} onClick={() => {
+            setUpgrading(true);
+            appApi.upgradePage(target.hubId, target.id).then(() => load(), (e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setUpgrading(false));
+          }}>{upgrading ? L("正在升级…", "Upgrading…") : L("升级", "Upgrade")}</button>
         </div>
       )}
       {local && <div className="pg-local-note"><Monitor />{L("这台电脑上正在运行的网页。是空白的话，可能这个端口没有在跑。", "A server running on this computer. Blank? Nothing may be running on this port.")}</div>}

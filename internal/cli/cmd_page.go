@@ -173,6 +173,37 @@ otherwise your owner (and the workspace's admins).`,
 			return e.p.Print(map[string]any{"deleted": e.in.String("page")}, func(w io.Writer) { fmt.Fprintln(w, "deleted") })
 		}),
 	}
+	upgrade := &Command{
+		Name:     "upgrade",
+		Summary:  "Give a page made from an app the app's newest version (its data stays)",
+		Mutating: true,
+		Long: `A page made from an app (myco template use) keeps the app's files as they were. When the app has a
+newer version (myco page get shows it), this makes it the page's: new files and data structure,
+the same records. Hubs from v0.20.7.`,
+		Examples: []string{"myco page upgrade --page pg_abc123"},
+		Flags:    []Flag{pageFlag, adminFile},
+		Run: handler(func(e *env) error {
+			if err := e.in.Require("page"); err != nil {
+				return err
+			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "page_upgrade", "page": e.in.String("page")})
+			}
+			c, err := e.projectClient()
+			if err != nil {
+				return err
+			}
+			p, err := c.UpgradePage(e.in.Ctx, e.in.String("page"))
+			if err != nil {
+				return pageErr(err)
+			}
+			return e.p.Print(p, func(w io.Writer) {
+				if p.Template != nil {
+					fmt.Fprintf(w, "%s is now at %s %s\n", p.Name, p.Template.Slug, p.Template.Version)
+				}
+			})
+		}),
+	}
 	stateGet := &Command{
 		Name:    "get",
 		Summary: "Read a page's shared state (what people did in it, and you wrote)",
@@ -317,7 +348,7 @@ takes up a live page it published before (same address).`,
 			return nil
 		}),
 	}
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, state, pageDataCommand())
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, upgrade, state, pageDataCommand())
 }
 
 // pageErr says what to do on a hub without pages.

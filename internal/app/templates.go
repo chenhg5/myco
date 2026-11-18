@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/chenhg5/myco/internal/domain"
 )
@@ -26,7 +27,9 @@ type TemplateService struct {
 	data  *PageDataService
 	ids   IDGenerator
 	clock Clock
-	// official are myco's own, offered in every workspace.
+	// official are myco's own, offered in every workspace (they may change
+	// while the hub runs: a newer set fetched).
+	offMu    sync.RWMutex
 	official []OfficialTemplate
 	// hubVersion is this hub's build: templates that need a newer hub
 	// (requires.hub) are refused.
@@ -57,15 +60,26 @@ type OfficialTemplate struct {
 }
 
 // SetOfficial offers myco's templates in the library.
-func (s *TemplateService) SetOfficial(list []OfficialTemplate) { s.official = list }
+func (s *TemplateService) SetOfficial(list []OfficialTemplate) {
+	s.offMu.Lock()
+	s.official = list
+	s.offMu.Unlock()
+}
+
+func (s *TemplateService) officials() []OfficialTemplate {
+	s.offMu.RLock()
+	defer s.offMu.RUnlock()
+	return s.official
+}
 
 func officialID(m *domain.Manifest) string {
 	return "tp_" + strings.ReplaceAll(m.ID, "/", "_")
 }
 
 func (s *TemplateService) officialOf(idOrSlug string) *OfficialTemplate {
-	for i := range s.official {
-		o := &s.official[i]
+	list := s.officials()
+	for i := range list {
+		o := &list[i]
 		if o.Manifest.ID == idOrSlug || officialID(o.Manifest) == idOrSlug {
 			return o
 		}
@@ -147,9 +161,10 @@ func (s *TemplateService) List(ctx context.Context, by Actor) ([]*TemplateView, 
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*TemplateView, 0, len(ts)+len(s.official))
-	for i := range s.official {
-		out = append(out, s.officialView(&s.official[i]))
+	official := s.officials()
+	out := make([]*TemplateView, 0, len(ts)+len(official))
+	for i := range official {
+		out = append(out, s.officialView(&official[i]))
 	}
 	for _, t := range ts {
 		tv, err := s.view(ctx, t)
@@ -427,6 +442,108 @@ func (s *TemplateService) Use(ctx context.Context, by Actor, idOrSlug string, in
 	return pv, tv, nil
 }
 
+// LatestOf is the newest version of a template ("" when it is gone).
+func (s *TemplateService) LatestOf(ctx context.Context, id string) string {
+	if o := s.officialOf(id); o != nil {
+		return o.Manifest.Version
+	}
+	t, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return ""
+	}
+	return t.Latest
+}
+
+// UpgradePage gives a page made from a template the template's newest
+// files and data structure, as a new version of the page; its records
+// stay as they are (fields the new version no longer has are kept, and
+// checked again only when written).
+func (s *TemplateService) UpgradePage(ctx context.Context, by Actor, pageID, byName string) (*PageView, error) {
+	pv, err := s.pages.Get(ctx, by, pageID)
+	if err != nil {
+		return nil, err
+	}
+	p := pv.Page
+	if p.Template == "" {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "page %s was not made from an app", p.ID)
+	}
+	var (
+		m    *domain.Manifest
+		body io.Reader
+	)
+	if o := s.officialOf(p.Template); o != nil {
+		m = o.Manifest
+		b, err := zipFiles(o.Files)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(b)
+	} else {
+		t, err := s.repo.Get(ctx, p.Template)
+		if err != nil {
+			if domain.IsCode(err, domain.CodeNotFound) {
+				return nil, domain.Errf(domain.CodeNotFound, "the app page %s was made from is no longer in the library", p.ID)
+			}
+			return nil, err
+		}
+		vs, err := s.repo.Versions(ctx, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(vs) == 0 {
+			return nil, domain.Errf(domain.CodeNotFound, "%s has no versions", t.Slug)
+		}
+		if m, err = domain.ParseManifest([]byte(vs[0].Manifest)); err != nil {
+			return nil, err
+		}
+		rc, err := s.blobs.Open(ctx, vs[0].Blob)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		body = rc
+	}
+	if domain.CompareVersions(m.Version, p.TemplateVersion) <= 0 {
+		return nil, domain.Errf(domain.CodeConflict, "page %s is already at %s %s", p.ID, m.ID, p.TemplateVersion)
+	}
+	nv, err := s.pages.Publish(ctx, by, PublishInput{Page: p.ID, Entry: m.Entry, By: byName}, body)
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := json.Marshal(m)
+	np := nv.Page
+	np.TemplateVersion, np.Manifest = m.Version, string(raw)
+	if err := s.pages.pages.Save(ctx, np); err != nil {
+		return nil, err
+	}
+	return nv, nil
+}
+
+// zipFiles makes a zip of a template's files (sorted, so the same files
+// make the same zip).
+func zipFiles(files map[string][]byte) ([]byte, error) {
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	names := make([]string, 0, len(files))
+	for n := range files {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		w, err := z.Create(n)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(files[n]); err != nil {
+			return nil, err
+		}
+	}
+	if err := z.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // useOfficial makes a page from one of myco's templates.
 func (s *TemplateService) useOfficial(ctx context.Context, by Actor, o *OfficialTemplate, in UseInput) (*PageView, *TemplateView, error) {
 	m, tv := o.Manifest, s.officialView(o)
@@ -436,26 +553,11 @@ func (s *TemplateService) useOfficial(ctx context.Context, by Actor, o *Official
 	if strings.TrimSpace(in.Name) == "" {
 		in.Name = m.Name
 	}
-	var buf bytes.Buffer
-	z := zip.NewWriter(&buf)
-	names := make([]string, 0, len(o.Files))
-	for n := range o.Files {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	for _, n := range names {
-		w, err := z.Create(n)
-		if err != nil {
-			return nil, nil, err
-		}
-		if _, err := w.Write(o.Files[n]); err != nil {
-			return nil, nil, err
-		}
-	}
-	if err := z.Close(); err != nil {
+	b, err := zipFiles(o.Files)
+	if err != nil {
 		return nil, nil, err
 	}
-	pv, err := s.pages.Publish(ctx, by, PublishInput{Name: in.Name, Project: in.Project, Entry: m.Entry, By: in.By}, &buf)
+	pv, err := s.pages.Publish(ctx, by, PublishInput{Name: in.Name, Project: in.Project, Entry: m.Entry, By: in.By}, bytes.NewReader(b))
 	if err != nil {
 		return nil, nil, err
 	}

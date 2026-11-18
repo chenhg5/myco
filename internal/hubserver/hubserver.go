@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/app"
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/infra/blob"
@@ -58,6 +59,10 @@ type Options struct {
 	// UpdateCheck, if set, looks for newer releases in the background
 	// (Run starts it); the result is reported at /v1/health.
 	UpdateCheck *release.Checker
+	// Apps, if set, are the official apps every workspace offers, fetched
+	// in the background as they are published (Run starts it); else the
+	// ones the binary carries.
+	Apps *templates.Catalog
 	// PathPrefix is where this hub is served under another's address
 	// ("/w/<name>": one workspace of several); "" for the hub itself.
 	PathPrefix string
@@ -207,7 +212,17 @@ func Build(o Options) (*Hub, error) {
 	srv.SetPageData(pageData)
 	templateSvc := app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock)
 	templateSvc.SetHubVersion(o.Version)
-	if official, err := templates.Official(); err == nil {
+	if o.Apps != nil {
+		o.Apps.Attach(templateSvc.SetOfficial)
+		srv.SetAppSync(func(ctx context.Context) api.AppSync {
+			r := o.Apps.Sync(ctx)
+			out := api.AppSync{Apps: r.Apps, Updated: r.Updated, Source: r.Source, Error: r.Error}
+			if !r.At.IsZero() {
+				out.At = &r.At
+			}
+			return out
+		})
+	} else if official, err := templates.Official(); err == nil {
 		templateSvc.SetOfficial(official)
 	} else {
 		o.Log.Warn("official templates", "err", err)
@@ -234,6 +249,9 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Dispatcher.Run(ctx)
 	if o.UpdateCheck != nil {
 		go o.UpdateCheck.Run(ctx) // background only: never in a request path
+	}
+	if o.Apps != nil {
+		go o.Apps.Run(ctx)
 	}
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)

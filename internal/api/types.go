@@ -1300,6 +1300,9 @@ type PageTemplate struct {
 	Data    map[string]TemplateCollection `json:"data,omitempty"`
 	// Permissions it asked for (send, download).
 	Permissions []string `json:"permissions,omitempty"`
+	// Latest is the app's newest version, when newer than the page's
+	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
+	Latest string `json:"latest,omitempty"`
 }
 
 // PageVersion is one publish of a page.
@@ -1474,6 +1477,17 @@ type Template struct {
 	CanManage bool              `json:"can_manage"`
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// AppSync is what POST /v1/templates/sync found: how many official apps
+// the hub offers, which came new or newer, where they come from (built in,
+// kept from an earlier fetch, the "apps" release), and a fetch error.
+type AppSync struct {
+	Apps    int        `json:"apps"`
+	Updated []string   `json:"updated,omitempty"`
+	Source  string     `json:"source"`
+	At      *time.Time `json:"fetched_at,omitempty"`
+	Error   string     `json:"error,omitempty"`
 }
 
 // TemplateCollection is a collection of a template's data.

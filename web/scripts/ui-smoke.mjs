@@ -807,6 +807,9 @@ async function runMatrix(browser, size, scheme) {
       const names = (await lib.allInnerTexts()).map(compactText);
       if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`办公套件应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
+      // myco's own apps update on their own; fetched now on request.
+      await clickVisible(page, page.locator("[data-testid=apps-sync]"));
+      await page.locator(".tp-sync-note", { hasText: "已是最新" }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "templates");
       const mark = `${size.width}-${scheme}`;

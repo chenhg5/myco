@@ -702,6 +702,9 @@ export const appApi = {
   // The template library (hubs from v0.20.5; older ones answer 404).
   templates: (hubId: string) => request<{ templates: Template[] }>("GET", `app/hubs/${enc(hubId)}/templates`),
   template: (hubId: string, id: string) => request<Template>("GET", `app/hubs/${enc(hubId)}/templates/${enc(id)}`),
+  // Fetch myco's official apps now; give a page its app's newest version (hubs from v0.20.7).
+  syncApps: (hubId: string) => request<{ apps: number; updated?: string[]; source: string; error?: string }>("POST", `app/hubs/${enc(hubId)}/templates/sync`),
+  upgradePage: (hubId: string, id: string) => request<Page>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/upgrade`),
   useTemplate: (hubId: string, id: string, input: { name?: string; project?: string; sample?: boolean }) =>
     request<{ page: Page; template: Template }>("POST", `app/hubs/${enc(hubId)}/templates/${enc(id)}/use`, input),
   // A page's records and change feed (hubs from v0.20.5), for the bridge.

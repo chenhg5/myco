@@ -179,3 +179,40 @@ func TestTemplateIconAndRequiredHub(t *testing.T) {
 	noIcon := strings.Replace(withIcon, `"version": "1.0.0"`, `"version": "1.0.1"`, 1)
 	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": noIcon, "index.html": "x"}), zipHdr).wantErr(t, 400, "invalid_argument")
 }
+
+// A page made from an app sees the app's newer version and takes it: new
+// files and data structure, its records as they were.
+func TestPageUpgradesToItsAppsNewVersion(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": weeklyManifest, "index.html": "v1"}), zipHdr).want(t, 201)
+	u := h.do("POST", "/v1/templates/alice%2Fweekly/use", alice, map[string]any{"name": "第 47 周"}).want(t, 201)
+	page := str(u.body, "page", "id")
+	h.do("POST", "/v1/pages/"+page+"/data/items", alice, map[string]any{"data": map[string]any{"title": "发版"}}).want(t, 201)
+	if g := h.do("GET", "/v1/pages/"+page, alice, nil).want(t, 200); str(g.body, "template", "latest") != "" {
+		t.Fatalf("no newer version yet: %s", g.raw)
+	}
+	h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).wantErr(t, 409, "conflict")
+	v2 := strings.Replace(strings.Replace(weeklyManifest, `"version": "1.0.0"`, `"version": "1.1.0"`, 1), `"due": "date"}`, `"due": "date", "owner": "person"}`, 1)
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": v2, "index.html": "v2"}), zipHdr).want(t, 200)
+	g := h.do("GET", "/v1/pages/"+page, alice, nil).want(t, 200)
+	if str(g.body, "template", "latest") != "1.1.0" || str(g.body, "template", "version") != "1.0.0" {
+		t.Fatalf("the page should see the newer version: %s", g.raw)
+	}
+	// (the new field is refused before the upgrade, taken after)
+	h.do("POST", "/v1/pages/"+page+"/data/items", alice, map[string]any{"data": map[string]any{"title": "x", "owner": "Ann"}}).wantErr(t, 400, "invalid_argument")
+	up := h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).want(t, 200)
+	if str(up.body, "template", "version") != "1.1.0" || str(up.body, "template", "latest") != "" {
+		t.Fatalf("upgraded: %s", up.raw)
+	}
+	if f := h.doReq("GET", "/v1/pages/"+page+"/v/latest/index.html", alice, nil, nil).want(t, 200); string(f.raw) != "v2" {
+		t.Fatalf("its files should be the new version's: %q", f.raw)
+	}
+	recs := h.do("GET", "/v1/pages/"+page+"/data?collection=items", alice, nil).want(t, 200)
+	if len(recs.body["records"].([]any)) != 1 {
+		t.Fatalf("its records should stay: %s", recs.raw)
+	}
+	h.do("POST", "/v1/pages/"+page+"/data/items", alice, map[string]any{"data": map[string]any{"title": "x", "owner": "Ann"}}).want(t, 201)
+	h.do("POST", "/v1/pages/"+page+"/upgrade", alice, nil).wantErr(t, 409, "conflict")
+}

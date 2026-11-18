@@ -1735,6 +1735,8 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "templates") {
     if (process.env.MOCK_OLD_HUB || parts[2] !== "hub_studio") return fail(res, 404, "", "404 page not found");
     if (parts.length === 4 && method === "GET") return send(res, 200, { templates: mockTemplates.map(({ guide, ...t }) => t) });
+    // (fetching myco's apps: the mock has only the ones in the repo)
+    if (parts.length === 5 && parts[4] === "sync" && method === "POST") return send(res, 200, { apps: mockTemplates.length, source: "built in" });
     const t = mockTemplates.find((x) => x.id === decodeURIComponent(parts[4]) || x.slug === decodeURIComponent(parts[4]));
     if (!t) return fail(res, 404, "not_found", `template ${parts[4]} not found`);
     if (parts.length === 5 && method === "GET") return send(res, 200, t);

@@ -93,6 +93,22 @@ func (b *Backend) pageDataRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, t)
 	}))
+	m.HandleFunc("POST /app/hubs/{id}/templates/sync", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		res, err := c.SyncApps(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/pages/{pid}/upgrade", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		p, err := c.UpgradePage(r.Context(), r.PathValue("pid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}))
 	m.HandleFunc("POST /app/hubs/{id}/templates/{tid}/use", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.TemplateUse
 		if !decode(w, r, &in) {

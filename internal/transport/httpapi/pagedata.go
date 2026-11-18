@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -18,6 +19,20 @@ func (s *Server) SetPageData(d *app.PageDataService) { s.pageData = d }
 // SetTemplates enables the template library (/v1/templates).
 func (s *Server) SetTemplates(t *app.TemplateService) { s.templates = t }
 
+// SetAppSync lets people ask the hub to fetch the official apps now.
+func (s *Server) SetAppSync(f func(context.Context) api.AppSync) { s.appSync = f }
+
+// syncApps: POST /v1/templates/sync: fetch the official apps now (the
+// hub does once a day by itself; at most once a minute).
+func (s *Server) syncApps(w http.ResponseWriter, r *http.Request, c pageCall) {
+	if s.appSync == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "this hub offers only the official apps it was built with").
+			WithSuggestion("upgrade the hub to v0.20.7 or later"))
+		return
+	}
+	writeJSON(w, http.StatusOK, s.appSync(r.Context()))
+}
+
 func (s *Server) pageDataRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/pages/{id}/data", s.pageDataCaller(s.listRecords))
 	m.HandleFunc("GET /v1/pages/{id}/data/{collection}/{record}", s.pageDataCaller(s.getRecord))
@@ -27,9 +42,11 @@ func (s *Server) pageDataRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/pages/{id}/changes", s.pageDataCaller(s.pageChanges))
 	m.HandleFunc("GET /v1/templates", s.templateCaller(s.listTemplates))
 	m.HandleFunc("POST /v1/templates", s.templateCaller(s.publishTemplate))
+	m.HandleFunc("POST /v1/templates/sync", s.templateCaller(s.syncApps))
 	m.HandleFunc("GET /v1/templates/{id}", s.templateCaller(s.getTemplate))
 	m.HandleFunc("DELETE /v1/templates/{id}", s.templateCaller(s.deleteTemplate))
 	m.HandleFunc("POST /v1/templates/{id}/use", s.templateCaller(s.useTemplate))
+	m.HandleFunc("POST /v1/pages/{id}/upgrade", s.pageCaller(s.upgradePage))
 }
 
 func (s *Server) pageDataCaller(h func(http.ResponseWriter, *http.Request, pageCall)) http.HandlerFunc {
@@ -161,6 +178,33 @@ func collectionsDTO(m map[string]domain.ManifestCollection) map[string]api.Templ
 		out[k] = api.TemplateCollection{Fields: v.Fields, Single: v.Single}
 	}
 	return out
+}
+
+// pageTemplate: what a page made from a template says of it, with the
+// app's newer version when there is one.
+func (s *Server) pageTemplate(ctx context.Context, p *domain.Page) *api.PageTemplate {
+	t := pageTemplateDTO(p)
+	if t != nil && s.templates != nil {
+		if l := s.templates.LatestOf(ctx, p.Template); l != "" && domain.CompareVersions(l, t.Version) > 0 {
+			t.Latest = l
+		}
+	}
+	return t
+}
+
+// upgradePage: POST /v1/pages/{id}/upgrade: the page takes its app's
+// newest version (files and data structure); its records stay.
+func (s *Server) upgradePage(w http.ResponseWriter, r *http.Request, c pageCall) {
+	if s.templates == nil {
+		writeError(w, domain.Errf(domain.CodeNotFound, "apps are not enabled on this hub"))
+		return
+	}
+	v, err := s.templates.UpgradePage(r.Context(), c.by, r.PathValue("id"), c.name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.pageDTO(r, c.by, v))
 }
 
 // pageTemplateDTO: what a page made from a template says of it.
