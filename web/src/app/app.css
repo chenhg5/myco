@@ -7869,7 +7869,7 @@ body.is-resizing {
    look; then the pages made from templates. */
 /* 应用 (Templates.tsx): a page head with search; what you made recently as
    tiles; shelves as chips; apps as cards with their own icon. */
-.pc.tp { max-width: 1040px; }
+.pc.tp { max-width: 1000px; }
 .tp-icon { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
   background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
 .tp-icon svg { width: 20px; height: 20px; }
@@ -7889,7 +7889,7 @@ body.is-resizing {
   background: var(--pill); font-size: 12.5px; }
 .tp-sync-note { color: var(--fg-2); }
 .tp-sync-x { border: 0; background: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0 2px; cursor: default; }
-.tp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 4px; }
+.tp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 4px; }
 .tp-chip { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
   color: var(--fg-2); font: inherit; font-size: 13px; cursor: default; }
 .tp-chip:hover { background: var(--nav-hover); }
@@ -7897,7 +7897,7 @@ body.is-resizing {
 .tp-chip-skel { display: inline-block; height: 30px; border-radius: 999px; }
 .tp-shelf + .tp-shelf { margin-top: 4px; }
 .tp-shelf:not(:has(.ph-section)) { margin-top: 14px; }
-.tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .tp-card { position: relative; display: flex; align-items: flex-start; gap: 14px; min-height: 96px; padding: 16px; border: 0; border-radius: 14px;
   background: var(--card); box-shadow: 0 0 0 0.5px var(--line); color: var(--fg); font: inherit; text-align: left; cursor: default;
   transition: box-shadow 0.15s, transform 0.15s; }
@@ -7935,12 +7935,13 @@ body.is-resizing {
 .ph-text h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; color: var(--fg); }
 .ph-text p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 .ph-actions { flex: none; display: flex; align-items: center; gap: 8px; }
-.ph-section { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 10px; }
+.ph-section { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; margin: 26px 0 10px; }
 .ph-section h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
 .ph-count { font-size: 12px; font-weight: 400; color: var(--muted); }
 .ph-section-tools { display: flex; align-items: center; gap: 6px; }
-.ph-skel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
-.ph-skel-card { display: flex; gap: 12px; padding: 14px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
+.ph-skel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ph-skel-title { width: 96px; height: 12px; }
+.ph-skel-card { display: flex; gap: 14px; min-height: 96px; padding: 16px; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
 .ph-skel-icon { flex: none; width: 40px; height: 40px; border-radius: 11px; }
 @media (max-width: 640px) {
   .ph { flex-wrap: wrap; }
@@ -7949,8 +7950,8 @@ body.is-resizing {
 
 /* 自动化: three numbers on top (running, paused, the last run), nothing yet:
    one quiet card; the templates always below. */
-.pc.au { max-width: 880px; }
-.au-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pc.au { max-width: 1000px; }
+.au-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .au-stat { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); }
 .au-stat > span { font-size: 12px; color: var(--muted); }
 .au-stat > b { display: flex; align-items: baseline; gap: 8px; font-size: 22px; font-weight: 650; color: var(--fg); font-variant-numeric: tabular-nums; }

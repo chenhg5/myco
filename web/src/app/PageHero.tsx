@@ -24,6 +24,11 @@ export function SectionHead({ title, count, children }: { title: string; count?:
   );
 }
 
+/** A section heading still loading: keeps the gap a real one leaves. */
+export function SectionSkeleton() {
+  return <div className="ph-section" aria-hidden><span className="skel skel-line ph-skel-title" /></div>;
+}
+
 /** Cards in place of a grid that is still loading (its shape, not a word). */
 export function CardsSkeleton({ count = 6, className = "" }: { count?: number; className?: string }) {
   return (

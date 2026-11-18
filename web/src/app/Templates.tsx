@@ -4,7 +4,7 @@ import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { openPage } from "@/app/pages";
-import { CardsSkeleton, PageHero, SectionHead } from "@/app/PageHero";
+import { CardsSkeleton, PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -32,9 +32,13 @@ const SHELVES: [string, string, string][] = [
 ];
 const shelfOf = (t: Template) => t.category || (["table", "records", "doc", "slides"].includes(t.kind) ? "office" : "other");
 
+/** What each hub's page showed last: back on the page, it shows that at
+ *  once and refreshes behind it (skeletons only the first time). */
+const seen = new Map<string, { list?: Template[]; made?: Page[] }>();
+
 export function TemplatesPage({ hubId, projects, now }: { hubId: string; projects: { name: string; title: string }[]; now: number }) {
-  const [list, setList] = useState<Template[] | null>(null);
-  const [made, setMade] = useState<Page[]>([]);
+  const [list, setList] = useState<Template[] | null>(() => seen.get(hubId)?.list ?? null);
+  const [made, setMade] = useState<Page[]>(() => seen.get(hubId)?.made ?? []);
   const [unsupported, setUnsupported] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [using, setUsing] = useState<Template | null>(null);
@@ -51,14 +55,18 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
     }, (e) => setSync({ text: e instanceof ApiError && e.status === 404 ? L("这个 Hub 还不会自己更新官方应用：升级到 v0.20.7 或更新", "This hub cannot update its official apps yet: upgrade it to v0.20.7 or later") : e instanceof Error ? e.message : String(e) }));
   };
   const load = useCallback(() => {
-    appApi.templates(hubId).then((r) => { setList(r.templates || []); setUnsupported(false); }, (e) => {
+    appApi.templates(hubId).then((r) => { seen.set(hubId, { ...seen.get(hubId), list: r.templates || [] }); setList(r.templates || []); setUnsupported(false); }, (e) => {
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
       else setError(e);
       setList([]);
     });
-    appApi.pages(hubId).then((r) => setMade((r.pages || []).filter((p) => p.template).sort((a, b) => b.updated_at.localeCompare(a.updated_at))), () => undefined);
+    appApi.pages(hubId).then((r) => {
+      const m = (r.pages || []).filter((p) => p.template).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      seen.set(hubId, { ...seen.get(hubId), made: m });
+      setMade(m);
+    }, () => undefined);
   }, [hubId]);
-  useEffect(() => { setList(null); load(); }, [load]);
+  useEffect(() => { setList(seen.get(hubId)?.list ?? null); setMade(seen.get(hubId)?.made ?? []); load(); }, [hubId, load]);
 
   const [shelf, setShelf] = useState("all");
   const [q, setQ] = useState("");
@@ -107,7 +115,8 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
       ) : list === null ? (
         <>
           <div className="tp-chips" aria-hidden>{[64, 76, 76, 64, 48].map((w, i) => <span key={i} className="skel tp-chip-skel" style={{ width: w }} />)}</div>
-          <CardsSkeleton count={8} />
+          <SectionSkeleton />
+          <CardsSkeleton count={6} />
         </>
       ) : (
         <>

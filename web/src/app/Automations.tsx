@@ -7,7 +7,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
-import { PageHero, SectionHead } from "@/app/PageHero";
+import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
@@ -62,8 +62,12 @@ const templates = (): (Start & { icon: typeof Clock; hint: string })[] => [
   },
 ];
 
+/** What each hub's page showed last: back on the page, it shows that at
+ *  once and refreshes behind it (skeletons only the first time). */
+const seen = new Map<string, Automation[]>();
+
 export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: AgentRow[]; now: number }) {
-  const [list, setList] = useState<Automation[] | null>(null);
+  const [list, setList] = useState<Automation[] | null>(() => seen.get(hubId) ?? null);
   const [unsupported, setUnsupported] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -71,13 +75,13 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
   const [removing, setRemoving] = useState<Automation | null>(null);
   const menu = useContextMenu();
   const load = useCallback(() => {
-    appApi.automations(hubId).then((r) => { setList(r.automations || []); setUnsupported(false); }, (e) => {
+    appApi.automations(hubId).then((r) => { seen.set(hubId, r.automations || []); setList(r.automations || []); setUnsupported(false); }, (e) => {
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
       else setError(e);
       setList([]);
     });
   }, [hubId]);
-  useEffect(() => { setList(null); load(); const t = setInterval(load, 20_000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { setList(seen.get(hubId) ?? null); load(); const t = setInterval(load, 20_000); return () => clearInterval(t); }, [hubId, load]);
   const rowOf = (n: string) => rows.find((x) => x.hub.id === hubId && x.st.agent.name === n);
 
   const toggle = async (a: Automation) => {
@@ -136,6 +140,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
       ) : list === null ? (
         <>
           <div className="au-stats" aria-hidden>{[0, 1, 2].map((i) => <div key={i} className="au-stat"><span className="skel skel-line is-thin" style={{ width: "40%" }} /><span className="skel skel-line" style={{ width: "60%", height: 18 }} /></div>)}</div>
+          <SectionSkeleton />
           <RowsSkeleton rows={3} className="pc-list" />
         </>
       ) : list.length === 0 ? (
