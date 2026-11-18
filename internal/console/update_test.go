@@ -164,7 +164,7 @@ func TestWindowsAppUpdate(t *testing.T) {
 		dir := t.TempDir()
 		exe := filepath.Join(dir, "myco-app-windows-amd64.exe")
 		os.WriteFile(exe, []byte("MZold app"), 0o755)
-		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
+		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "amd64", OS: "windows", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
 		relaunched := make(chan struct{}, 1)
 		u.SetRelaunch(func() { relaunched <- struct{}{} })
 		app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
@@ -204,5 +204,48 @@ func TestWindowsAppUpdate(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(exe); string(b) != "MZold app" {
 		t.Fatalf("a refused update must leave the app alone: %q", b)
+	}
+}
+
+// On Linux the app replaces its own program the same way, from the Linux
+// asset, and refuses a download that is not a Linux program.
+func TestLinuxAppUpdate(t *testing.T) {
+	newExe := append([]byte("\x7fELF"), []byte("new app")...)
+	for _, c := range []struct {
+		body []byte
+		ok   bool
+	}{{newExe, true}, {[]byte("MZ windows"), false}} {
+		sum := sha256.Sum256(c.body)
+		rel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/latest":
+				fmt.Fprint(w, `{"tag_name":"v9.1.0"}`)
+			case "/dl/v9.1.0/SHA256SUMS":
+				fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), LinuxAppAsset("arm64"))
+			case "/dl/v9.1.0/" + LinuxAppAsset("arm64"):
+				w.Write(c.body)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		dir := t.TempDir()
+		exe := filepath.Join(dir, "myco-app")
+		os.WriteFile(exe, []byte("\x7fELFold app"), 0o755)
+		u := &Updater{Version: "v9.0.0", Exe: exe, Arch: "arm64", OS: "linux", API: rel.URL + "/latest", Download: rel.URL + "/dl"}
+		u.SetRelaunch(func() {})
+		app := httptest.NewServer((&Backend{Store: NewStore(filepath.Join(dir, "hubs.json")), Update: u}).Handler())
+		resp, err := http.Post(app.URL+"/app/update", "application/json", nil)
+		app.Close()
+		rel.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(exe)
+		if c.ok && (resp.StatusCode != 200 || string(b) != string(newExe)) {
+			t.Fatalf("update: %d, exe %q", resp.StatusCode, b)
+		}
+		if !c.ok && (resp.StatusCode == 200 || string(b) != "\x7fELFold app") {
+			t.Fatalf("a Windows program must be refused on Linux: %d, exe %q", resp.StatusCode, b)
+		}
 	}
 }

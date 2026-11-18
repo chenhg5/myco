@@ -1,11 +1,12 @@
 """Synthesize the promo's music and sound effects (numpy only, no samples).
 
-    python3 music.py <out dir>   -> bgm.wav (70 s, 120 BPM) and sfx/<name>.wav
+    python3 music.py <out dir>   -> bgm.wav (62 s, 120 BPM) and sfx/<name>.wav
 
 The track follows script.json's sections: a quiet title (0-4 s), a sparse intro
-(4-12 s), a build with a riser and snare roll (12-18 s), the drop at 18 s, a full
-groove, a lift into the app at 48 s, and a final hit at 60 s. A minor:
-Am - F - C - G, one chord a bar.
+(4-12 s), a build with a riser and snare roll (12-18 s), the drop at 18 s as the
+agents land in the app, a full groove, a lift at 36 s (other computers, the
+phone), and a final hit at 52 s on the end card. A minor: Am - F - C - G, one
+chord a bar.
 """
 import os, sys, wave
 import numpy as np
@@ -14,8 +15,8 @@ SR = 48000
 BPM = 120
 BEAT = 60 / BPM
 BAR = 4 * BEAT
-TOTAL = 70.0
-TITLE, BUILD, DROP, LIFT, HIT = 4.0, 12.0, 18.0, 48.0, 60.0
+TOTAL = 62.0
+TITLE, BUILD, DROP, LIFT, HIT = 4.0, 12.0, 18.0, 36.0, 52.0
 rng = np.random.default_rng(7)
 
 
@@ -151,7 +152,7 @@ def build():
                 if title: continue
                 if sec < 64:
                     put(drums, hat(open_=(full and h == 1)), th, 1.5 if intro else 1.0)
-            if LIFT <= sec < HIT:  # the app section: extra 16th hats
+            if LIFT <= sec < HIT:  # after the lift: extra 16th hats
                 for q in (0.25, 0.75):
                     put(drums, hat(), tb + q * BEAT, 0.6)
             if full and not (LIFT - 2 <= sec < LIFT):  # bass, 8ths, ducked by the kick

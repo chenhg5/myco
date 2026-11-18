@@ -4,6 +4,7 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -99,3 +100,6 @@ func runGUI(h http.Handler, _ func(string), setRelaunch func(func())) error {
 
 	return app.Run()
 }
+
+// quitRunning is for Linux, where the app has no tray menu to quit from.
+func quitRunning() error { return errors.New("quit the app from its menu") }

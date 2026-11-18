@@ -14,9 +14,9 @@ import (
 // workspace, so nobody has to copy and paste the link.
 func appLinkURL(link string) string { return "myco://add-hub?link=" + url.QueryEscape(link) }
 
-// openAppLink gives an app link to the myco app on this computer. The app
-// runs on macOS and Windows; elsewhere, or when nothing handles myco://,
-// it says so and the link is pasted by hand.
+// openAppLink gives an app link to the myco app on this computer. On Linux
+// the app registers no myco:// handler; there, or when nothing handles
+// myco://, it says so and the link is pasted by hand.
 var openAppLink = func(link string) error {
 	u := appLinkURL(link)
 	var cmd *exec.Cmd
@@ -26,7 +26,7 @@ var openAppLink = func(link string) error {
 	case "windows":
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u)
 	default:
-		return errors.New("the myco app runs on macOS and Windows; paste the link into it there")
+		return errors.New("the myco app cannot take a link here: paste it into the app (加入已有的工作区)")
 	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
