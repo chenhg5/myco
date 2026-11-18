@@ -762,7 +762,13 @@ async function runMatrix(browser, size, scheme) {
       await renamed.waitFor({ timeout: 5_000 });
       await menuOn(renamed, "取消置顶");
       await renamed.waitFor({ state: "detached", timeout: 5_000 });
-      const left = (await (await api("GET", "?with=release-cloud")).json()).pins.map((p) => p.title);
+      // (the tab goes at once; the hub hears of it a moment later)
+      let left = [];
+      for (let i = 0; i < 25; i++) {
+        left = (await (await api("GET", "?with=release-cloud")).json()).pins.map((p) => p.title);
+        if (left.length === 2 && !left.includes("设计稿 v2")) break;
+        await page.waitForTimeout(200);
+      }
       if (left.length !== 2 || left.includes("设计稿 v2")) throw new Error(`取消置顶后 Hub 上应剩两个，实际 ${left.join(" / ")}`);
       // A page's card in the chat: right-click pins it above the chat (here
       // it already is, as 发布说明网页: the card says so), or takes it off.
