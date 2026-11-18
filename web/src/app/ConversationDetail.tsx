@@ -1134,17 +1134,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // message shows what the earlier ones still open got since (borrow).
   // (A runner's agent starts the next one only after the first is done.)
   const untilOf = new Map<string, string>();
-  const borrowOf = new Map<string, { ids: string[]; since: string }>();
+  const borrowOf = new Map<string, { ids: string[]; since: string; label?: string }>();
   {
+    // In time, always: what an earlier task still open gets after you sent
+    // your next message goes under that message, not above it (whether or
+    // not the agent has taken the next one up: until it has, it says it is
+    // still on the one before).
     const mine = (shown || []).filter((m) => m.type === "task" && !m.e2e && isMe(m.from, row?.hub))
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
     mine.forEach((t, i) => {
       const st = traceStatuses.get(t.id) || t.status;
       const taken = (st !== "queued" && st !== "delivered") || !!progressOf.get(t.id)?.length;
-      if (!taken) return;
-      const ids = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id)).map((p) => p.id);
+      const earlier = mine.slice(0, i).filter((p) => isOpen(p.status) && !answerOf.has(p.id));
+      const ids = earlier.map((p) => p.id);
       if (!ids.length) return;
-      borrowOf.set(t.id, { ids, since: t.created_at });
+      const last = earlier[earlier.length - 1];
+      borrowOf.set(t.id, { ids, since: t.created_at, label: taken ? undefined : titleOfMessage(last.body) || L("上一件", "the one before") });
       for (const id of ids) if (!untilOf.has(id)) untilOf.set(id, t.created_at);
       // (and this one's own window ends where a later one takes over)
       const next = mine[i + 1];
@@ -1195,24 +1200,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (st === "acked" || progressOf.get(m.id)?.length) return null;
     if (waitingShort) return { text: waitingShort, title: waitingReason };
     if (atWorkId && atWorkId !== m.id) return { text: L("排在后面", "Queued behind the current one"), title: L("它做完手上这件就看这条", "It reads this once it is done with the one at hand") };
-    // An agent that receives in its session has it in front of it already.
-    if (st === "delivered" && rowOf(m.to)?.st.receiving === "session") return { text: L("已送到", "Delivered"), title: L("已经送进它的会话，它接着就会看", "In its session already: it reads it next") };
     return { text: L("还没开始看", "Not opened yet") };
   };
-  // A task of yours it has not taken up yet (sent while it works on
-  // another): it waits under the one at work.
-  const waitsBehind = (m: Message) => {
-    if (m.type !== "task" || !isMe(m.from, row?.hub) || !isOpen(m.status) || answerOf.has(m.id)) return false;
-    const st = traceStatuses.get(m.id) || m.status;
-    return (st === "queued" || st === "delivered") && !progressOf.get(m.id)?.length;
-  };
+
   // Messages under the run at work (tasks it handed out, your supplements):
   // its loading goes to the foot of the chat, under them, not above.
   const liveIndex = liveId && shown ? shown.findIndex((m) => m.id === liveId) : -1;
-  // (not your next message waiting behind it: that one says 排在后面, and
-  // the loading stays with the run it belongs to, above it)
   const liveFoot = liveIndex >= 0 && (shown!.slice(liveIndex + 1).some((m) =>
-    m.type !== "progress" && !waitsBehind(m) && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
+    m.type !== "progress" && !(m.reply_to === liveId && (m.type === "reply" || m.type === "event" || m.type === "steer")))
     || (allInserts || []).some((x) => x.at > shown![liveIndex].created_at));
   // Jump to a message (from a quote of it) and light it up for a moment.
   const jumpTo = (id: string, smooth = true) => {
