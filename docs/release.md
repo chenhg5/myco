@@ -108,6 +108,6 @@ scripts/release-verify.sh vX.Y.Z
    rm ~/Desktop/myco-sign.p12
    ```
 
-3. 下次发版时看 `release` 工作流的「sign, notarize, DMG」这一步是不是成功了、Release 里有没有 `myco.dmg`。
+3. 不发版也能检查：手动运行 `release` 工作流并勾选 `sign_only`（Actions → release → Run workflow），它只在 macOS 机器上签名、公证，什么都不发布；成功后产物 `app` 里有签好的 `myco.dmg`。
 
 证书过期或换了 App 专用密码，重新设对应的 Secret 就行。

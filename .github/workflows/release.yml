@@ -8,6 +8,11 @@ on:
     paths: [VERSION]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      sign_only:
+        description: "Only build and sign the Mac app (checks the signing secrets; publishes nothing)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -36,7 +41,7 @@ jobs:
   # signing secrets also the signed, notarized universal app and DMG.
   app:
     needs: version
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' || inputs.sign_only
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -63,7 +68,8 @@ jobs:
         if: env.SIGN == 'true'
         # A failure here (Apple down, an expired certificate) still lets the
         # release out, without myco.dmg; a Mac then signs it (docs/release.md).
-        continue-on-error: true
+        # A sign-only run is the check, so there it fails the job.
+        continue-on-error: ${{ !inputs.sign_only }}
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -100,7 +106,7 @@ jobs:
     # time as the Mac app (tests already ran in ci on this commit): one
     # runner per OS, each building its two architectures.
     needs: version
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -132,7 +138,7 @@ jobs:
 
   release:
     needs: [version, app, cross]
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
