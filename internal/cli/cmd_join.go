@@ -251,6 +251,11 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	name := e.in.String("machine")
 	if name == "" {
 		name = hostname()
+		if runnerEnv() == "wsl" {
+			// WSL shares its host name with the Windows it runs in, which
+			// may join too: tell the two apart from the start.
+			name += "-wsl"
+		}
 		if cloud {
 			name = "cloud"
 		}

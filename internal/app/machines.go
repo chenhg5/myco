@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -132,7 +133,7 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 	m, err := s.machines.GetByFingerprint(ctx, r.Fingerprint)
 	switch {
 	case domain.IsCode(err, domain.CodeNotFound):
-		m = &domain.Machine{ID: s.ids.New("mch"), FingerprintHash: r.Fingerprint, Name: defaultMachineName(r),
+		m = &domain.Machine{ID: s.ids.New("mch"), FingerprintHash: r.Fingerprint, Name: s.uniqueName(ctx, defaultMachineName(r)),
 			Hostname: r.Hostname, OS: r.OS, Arch: r.Arch, MycoVersion: r.MycoVersion, CreatedAt: now, LastSeenAt: now, Owner: a.Owner}
 		if err := s.machines.Create(ctx, m); err != nil {
 			if !domain.IsCode(err, domain.CodeConflict) {
@@ -148,7 +149,7 @@ func (s *MachineService) Report(ctx context.Context, a *domain.Agent, r domain.M
 	default:
 		m.Hostname, m.OS, m.Arch, m.MycoVersion, m.LastSeenAt = r.Hostname, r.OS, r.Arch, r.MycoVersion, now
 		if m.Name == "" {
-			m.Name = defaultMachineName(r)
+			m.Name = s.uniqueName(ctx, defaultMachineName(r))
 		}
 		if m.Owner == "" {
 			m.Owner = a.Owner
@@ -287,8 +288,41 @@ func (s *MachineService) Rename(ctx context.Context, id, name string) (*domain.M
 	if err != nil {
 		return nil, err
 	}
+	if other, _ := s.nameTaken(ctx, name, id); other {
+		return nil, domain.Errf(domain.CodeConflict, "another computer in this workspace is already called %q", name).
+			WithSuggestion("pick another name")
+	}
 	m.Name = name
 	return m, s.machines.Save(ctx, m)
+}
+
+// nameTaken says whether a machine other than except has this name
+// (letter case aside).
+func (s *MachineService) nameTaken(ctx context.Context, name, except string) (bool, error) {
+	all, err := s.machines.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range all {
+		if m.ID != except && strings.EqualFold(strings.TrimSpace(m.Name), strings.TrimSpace(name)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// uniqueName is name, or name-2, name-3… when another machine has it.
+func (s *MachineService) uniqueName(ctx context.Context, name string) string {
+	for i := 1; i < 100; i++ {
+		try := name
+		if i > 1 {
+			try = fmt.Sprintf("%s-%d", name, i)
+		}
+		if taken, err := s.nameTaken(ctx, try, ""); err != nil || !taken {
+			return try
+		}
+	}
+	return name
 }
 
 // Spawn starts a session on machine id for an administrator: the request

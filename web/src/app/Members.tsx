@@ -4,7 +4,7 @@ import { Camera, MessageCircle, Plus, Search, X } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, cliName, cloudLabel, isCloud, isInbox, isMe, machineOfRow, nodeName } from "@/app/nodes";
+import { agentKind, cliName, cloudLabel, isCloud, isInbox, isMe, machineOfRow, nodeName, thisComputerId } from "@/app/nodes";
 import { shortDir } from "@/app/AddToProject";
 import { Avatar, isWorkspace, stateWords, whereOf } from "@/app/persona";
 import { shareWorkspaces } from "@/app/AddToProject";
@@ -279,7 +279,7 @@ function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
     }
     return () => { off = true; };
   }, [a.name, a.binding.session_id]);
-  const here = !!machine && !!local && ((local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
+  const here = !!machine && thisComputerId(row.hub, local) === machine.id;
   const ws = isWorkspace(a);
   const where = isCloud(a) ? cloudLabel(a)
     : [machine ? (here ? L("这台电脑", "This computer") : machine.name) : "", a.binding.workdir ? shortDir(a.binding.workdir) : ""].filter(Boolean).join(" · ") || "—";

@@ -1415,7 +1415,7 @@ async function runMatrix(browser, size, scheme) {
       // Automations and apps are rows on top, like the rows below, with an icon.
       const tops = await page.evaluate(() => [...document.querySelectorAll(".sp-nav-autos .sp-nav-top")].map((e) => ({ text: (e.textContent || "").trim(), icon: !!e.querySelector("svg"), size: getComputedStyle(e).fontSize })));
       const row = await page.evaluate(() => getComputedStyle(document.querySelector(".sp-nav-projects .app-nav-item")).fontSize);
-      if (tops.map((t) => t.text).join("|") !== "自动化|应用" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「应用」两行，和项目一样大：${JSON.stringify(tops)} ${row}`);
+      if (tops.map((t) => t.text).join("|") !== "自动化|应用|电脑" || tops.some((t) => !t.icon || t.size !== row)) throw new Error(`顶上应是带图标的「自动化」「应用」「电脑」三行，和项目一样大：${JSON.stringify(tops)} ${row}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));
@@ -3174,6 +3174,27 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-permission");
       await clickVisible(page, office.getByRole("button", { name: "详情" }));
       await view.waitFor({ state: "hidden", timeout: 5_000 });
+      // Renaming a computer from its card: another computer's name is refused.
+      const bench = page.locator(".pc-card", { hasText: "Bench Linux" });
+      await bench.locator(".pc-card-head").hover();
+      await clickVisible(page, bench.getByRole("button", { name: "改名" }));
+      const form = page.locator(".pc-rename-form");
+      const nameBox = form.getByRole("textbox", { name: "电脑的名字" });
+      await nameBox.fill("office pc");
+      await form.locator(".app-field-hint.is-bad").waitFor({ timeout: 5_000 });
+      if (await form.getByRole("button", { name: "保存" }).isEnabled()) throw new Error("和别的电脑重名时不该能保存");
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-rename-clash");
+      await nameBox.fill(`测试机 ${size.width} ${scheme}`);
+      await nameBox.press("Enter");
+      const renamed = page.locator(".pc-card", { hasText: `测试机 ${size.width} ${scheme}` });
+      await renamed.waitFor({ timeout: 10_000 });
+      // Back to its name for the steps after this one.
+      await renamed.locator(".pc-card-head").hover();
+      await clickVisible(page, renamed.getByRole("button", { name: "改名" }));
+      await nameBox.fill("Bench Linux");
+      await nameBox.press("Enter");
+      await page.locator(".pc-card .pc-card-head .pc-row-name", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
       // Who may use a computer, which projects have it, and removing it are
       // in one place, a click from its row.
       // (The folder added in the project step, at full width; else the first.)

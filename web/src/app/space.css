@@ -1759,6 +1759,38 @@
   gap: 10px;
   padding: 4px 4px 6px;
 }
+.pc-rename {
+  margin-left: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  opacity: 0;
+  vertical-align: middle;
+}
+.pc-rename svg {
+  width: 13px;
+  height: 13px;
+}
+.pc-card-head:hover .pc-rename,
+.pc-rename:focus-visible {
+  opacity: 1;
+}
+.pc-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.pc-rename-form .app-input {
+  flex: 1;
+  min-width: 140px;
+  height: 30px;
+}
+.pc-rename-form .app-field-hint,
+.pc-rename-form .app-error {
+  flex-basis: 100%;
+  margin-top: 0;
+}
 .pc-card-icon {
   flex: none;
   display: inline-flex;

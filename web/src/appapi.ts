@@ -368,6 +368,8 @@ export interface LocalState {
   hostname?: string;
   /** This computer's machine names, one per hub it joined. */
   machines?: string[];
+  /** this computer's machine nodes, one per workspace it joined: name exactly which computer is this one */
+  machine_nodes?: string[];
   /** This computer allows shell nodes and full-access sessions (spawn.max_access: full). */
   shell_allowed?: boolean;
 }

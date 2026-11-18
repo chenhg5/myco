@@ -3020,6 +3020,9 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const name = typeof body?.name === "string" ? body.name.trim() : "";
         if (!name) return fail(res, 400, "invalid_request", "name 不能为空。");
+        if ((hub.machines || []).some((m) => m.id !== machine.id && m.name.toLowerCase() === name.toLowerCase())) {
+          return fail(res, 409, "conflict", `another computer in this workspace is already called "${name}"`, "pick another name");
+        }
         machine.name = name;
         const agents = hub.agents.filter((a) => a.kind !== "machine" && a.machine_id === machine.id).length;
         return send(res, 200, { ...machine, agents });

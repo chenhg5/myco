@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Info, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { ChevronDown, Info, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, ver } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, thisComputerId, ver } from "@/app/nodes";
 import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
@@ -68,9 +68,12 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   const [dropping, setDropping] = useState<Machine | null>(null);
   // The computer whose details (folders, AIs, terminals allowed) are open.
   const [open, setOpen] = useState<string | null>(null);
+  // The computer whose name is being changed.
+  const [renaming, setRenaming] = useState<string | null>(null);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
-  const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
   const hubs = [...new Map(rows.map((r) => [r.hub.id, r.hub])).values()];
+  const hereIds = new Set(hubs.map((h) => thisComputerId(h, local)).filter(Boolean));
+  const isHere = (m: Machine) => hereIds.has(m.id);
   const machines = hubs.flatMap((h) => machinesOfHub(h).map((m) => ({ m, hub: h })))
     .sort((a, b) => Number(isHere(b.m)) - Number(isHere(a.m)) || Number(b.m.online) - Number(a.m.online) || a.m.name.localeCompare(b.m.name));
   const onIt = (m: Machine) => rows.filter((r) => r.st.agent.machine_id === m.id);
@@ -120,7 +123,15 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
               <div className="pc-card-head">
                 <span className="pc-card-icon"><Icon /></span>
                 <div className="pc-row-main">
-                  <span className="pc-row-name">{m.name}{here && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}</span>
+                  {renaming === m.id ? (
+                    <RenameComputer hubId={hub.id} machine={m} taken={machines.filter((x) => x.hub.id === hub.id && x.m.id !== m.id).map((x) => x.m.name)}
+                      onDone={() => { setRenaming(null); onChanged(); }} />
+                  ) : (
+                    <span className="pc-row-name">
+                      {m.name}{here && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}
+                      <button type="button" className="app-btn app-btn-plain pc-rename" onClick={() => setRenaming(m.id)} aria-label={L("改名", "Rename")} title={L("改名", "Rename")}><Pencil /></button>
+                    </span>
+                  )}
                   <span className="pc-row-sub">
                     <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
                     <span>{osInfo(m.os).label}</span>
@@ -162,6 +173,40 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
       )}
       <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); onChanged(); }} />
     </div>
+  );
+}
+
+/** Changes a computer's name, as everyone in the workspace sees it (it
+ *  must not be another computer's). Enter saves, Esc leaves it. */
+function RenameComputer({ hubId, machine, taken, onDone }: { hubId: string; machine: Machine; taken: string[]; onDone: () => void }) {
+  const [name, setName] = useState(machine.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const clash = taken.some((t) => t.trim().toLowerCase() === name.trim().toLowerCase());
+  const save = async () => {
+    const n = name.trim();
+    if (!n || n === machine.name) { onDone(); return; }
+    if (clash || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.renameMachine(hubId, machine.id, n);
+      onDone();
+    } catch (e) {
+      setError((e as { code?: string })?.code === "conflict" ? new Error(L("已经有一台电脑叫这个名字了。", "Another computer already has this name.")) : e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="pc-rename-form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+      <input className="app-input" value={name} autoFocus onChange={(e) => setName(e.target.value)} disabled={busy} maxLength={64}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onDone(); } }} aria-label={L("电脑的名字", "Computer name")} />
+      <button type="submit" className="app-btn app-btn-small app-btn-primary" disabled={busy || !name.trim() || clash}>{L("保存", "Save")}</button>
+      <button type="button" className="app-btn app-btn-small" onClick={onDone} disabled={busy}>{L("取消", "Cancel")}</button>
+      {clash && <span className="app-field-hint is-bad">{L("已经有一台电脑叫这个名字了。", "Another computer already has this name.")}</span>}
+      <ErrorText error={error} />
+    </form>
   );
 }
 
@@ -208,7 +253,7 @@ function ComputerDetails({ hubId, hub, machine, onChanged, onRemove }: {
           <div className="app-small-note">{L("这些由那台电脑自己决定，只能在它上面改（~/.myco/machine.yaml 的 spawn.dirs、spawn.max_access）。", "That computer decides these itself; they are changed on it only (spawn.dirs and spawn.max_access in ~/.myco/machine.yaml).")}</div>
         </div>
       )}
-      <LocalShellAccess machine={machine} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />
+      <LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />
       <div className="app-setting-actions">
         <button type="button" className="app-btn app-btn-quiet" onClick={onRemove}><Trash2 />{L("移除这台电脑", "Remove this computer")}</button>
       </div>

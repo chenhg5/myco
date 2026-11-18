@@ -4,7 +4,7 @@ import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, ty
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machineShell, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, thisComputerId } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { computerPrompt } from "@/app/agentSetup";
@@ -136,7 +136,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   const [infos, setInfos] = useState<Record<string, InfoState>>({});
   const ov = rows.find((r) => r.hub.id === hubId)?.hub;
   const machines = ov ? machinesOfHub(ov) : [];
-  const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
+  const hereId = ov ? thisComputerId(ov, local) : undefined;
+  const isHere = (m: Machine) => m.id === hereId;
   const hereMachine = machines.find(isHere);
   const elsewhere = machines.filter((m) => !isHere(m))
     .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
@@ -1045,7 +1046,8 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
     appApi.local().then(setLocal).catch(() => setLocal(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
+  const hereId = ov ? thisComputerId(ov, local) : undefined;
+  const isHere = (m: Machine) => m.id === hereId;
   // This computer first, then the others online.
   const ordered = [...machines].sort((a, b) => Number(isHere(b)) - Number(isHere(a)) || Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
   useEffect(() => {
@@ -1262,7 +1264,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
               ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
               : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
-        {machine && <LocalShellAccess machine={machine} what="shell" shell={shell} />}
+        {machine && <LocalShellAccess machine={machine} hub={ov} what="shell" shell={shell} />}
         <ErrorText error={error} />
         {busy ? (
           <div className="app-convpick-starting"><Mushroom /><span>{L("正在准备", "Setting it up")} · <Elapsed since={busy} /></span></div>

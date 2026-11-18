@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
 import { TemplatesPage } from "@/app/Templates";
@@ -650,6 +650,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); setPage("templates"); }}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-computers", page === "computers" && "active")} aria-current={page === "computers" ? "page" : undefined}
+                onClick={() => { setNavChat(null); setPage("computers"); }}>
+                <Monitor /><span className="app-nav-label">{L("电脑", "Computers")}</span>
               </button>
             </div>
             <div className="app-nav-group sp-nav-projects">
