@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -141,9 +142,13 @@ func TestOfficialTemplates(t *testing.T) {
 	}
 	u := h.do("POST", "/v1/templates/myco%2Fbase/use", alice, map[string]any{"name": "招聘进度", "sample": true}).want(t, 201)
 	page := str(u.body, "page", "id")
-	if f := h.doReq("GET", "/v1/pages/"+page+"/v/latest/kit.js", alice, nil, nil).want(t, 200); !strings.Contains(string(f.raw), "kit.store") {
-		t.Fatalf("its kit: %q", f.raw[:min(80, len(f.raw))])
+	// (its page and the script it loads, bundled with it)
+	idx := string(h.doReq("GET", "/v1/pages/"+page+"/v/latest/index.html", alice, nil, nil).want(t, 200).raw)
+	m := regexp.MustCompile(`src="\./(assets/[^"]+\.js)"`).FindStringSubmatch(idx)
+	if m == nil {
+		t.Fatalf("its page loads no script of its own: %q", idx[:min(200, len(idx))])
 	}
+	h.doReq("GET", "/v1/pages/"+page+"/v/latest/"+m[1], alice, nil, nil).want(t, 200)
 	recs := h.do("GET", "/v1/pages/"+page+"/data?collection=records", alice, nil).want(t, 200)
 	if len(recs.body["records"].([]any)) != 4 {
 		t.Fatalf("sample: %s", recs.raw)

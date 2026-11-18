@@ -221,7 +221,7 @@ const tableFiles = { "index.html": kit("index.html"), "myco.json": kit("myco.jso
 // page with its files (madeFiles) and, if asked, its sample data.
 const officialRoot = new URL("../../internal/templates/official/", import.meta.url);
 const officialFiles = (name) => {
-  const out = { "kit.js": readFileSync(new URL("kit.js", officialRoot), "utf8"), "kit.css": readFileSync(new URL("kit.css", officialRoot), "utf8") };
+  const out = {};
   const walk = (dir, prefix) => {
     for (const e of readdirSync(new URL(dir, officialRoot), { withFileTypes: true })) {
       if (e.isDirectory()) walk(`${dir}${e.name}/`, `${prefix}${e.name}/`);

@@ -8,7 +8,7 @@ import (
 	"github.com/chenhg5/myco/internal/templates"
 )
 
-// Every official template reads, has its page, the shared kit, the agent's
+// Every official template reads, has its page, the agent's
 // guide and sample data that its own data structure accepts.
 func TestOfficialTemplatesAreWhole(t *testing.T) {
 	list, err := templates.Official()

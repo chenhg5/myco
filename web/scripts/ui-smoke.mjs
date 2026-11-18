@@ -828,18 +828,27 @@ async function runMatrix(browser, size, scheme) {
         await frame.waitFor({ timeout: 15_000 });
         return page.frameLocator(`.pg-frame[title="${name}"]`);
       };
+      // 表格: a grid (canvas) with the sample rows.
+      const sheet = await make("myco/table", `本周（${mark}）`);
+      await sheet.locator("[data-testid=grid] canvas").first().waitFor({ timeout: 15_000 });
+      await sheet.locator(".toolbar-count", { hasText: "共 3 行" }).waitFor({ state: "attached", timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "template-grid");
       // 多维表格: its records, as a board and a calendar.
       const base = await make("myco/base", `招聘（${mark}）`);
-      await base.locator("tbody tr").first().waitFor({ timeout: 15_000 });
-      if ((await base.locator("tbody tr").count()) !== 4) throw new Error("多维表格应带着 4 条示例记录");
-      await base.locator(".k-tab", { hasText: "看板" }).dispatchEvent("click");
-      await base.locator(".b-col-head", { hasText: "面试中" }).waitFor({ timeout: 5_000 });
-      if ((await base.locator(".b-card").count()) !== 4) throw new Error("看板上应有 4 张卡片");
+      await base.locator("[data-testid=grid] canvas").first().waitFor({ timeout: 15_000 });
+      await base.locator(".toolbar-count", { hasText: "共 4 条" }).waitFor({ state: "attached", timeout: 10_000 });
+      await base.locator(".tab", { hasText: "看板" }).dispatchEvent("click");
+      await base.locator(".col-head", { hasText: "面试中" }).waitFor({ timeout: 5_000 });
+      if ((await base.locator(".card").count()) !== 4) throw new Error("看板上应有 4 张卡片");
       await settle(page, 300);
       await shot(page, size, scheme, "template-board");
-      await base.locator(".k-tab", { hasText: "日历" }).dispatchEvent("click");
-      await base.locator(".b-cal").waitFor({ timeout: 5_000 });
-      await base.locator(".k-tab", { hasText: "表格" }).dispatchEvent("click");
+      await base.locator(".card", { hasText: "李想" }).dispatchEvent("click");
+      await base.locator(".drawer .drawer-title").waitFor({ timeout: 5_000 });
+      await base.locator(".drawer").getByRole("button", { name: "关闭" }).dispatchEvent("click");
+      await base.locator(".tab", { hasText: "日历" }).dispatchEvent("click");
+      await base.locator(".cal").waitFor({ timeout: 5_000 });
+      await base.locator(".tab", { hasText: "表格" }).dispatchEvent("click");
       // 文档: typed with shortcuts, each block saved.
       const doc = await make("myco/doc", `计划（${mark}）`);
       await doc.locator(".bn-editor .bn-inline-content").first().waitFor({ timeout: 15_000 });

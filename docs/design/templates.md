@@ -113,11 +113,11 @@ weekly-report/
 
 ## 10. 官方模板（第二步，已做）
 
-随 Hub 一起提供（`internal/templates/official`，编进二进制），每个工作区的模板库里都有、排在最前、标「官方」，不能删，跟着 Hub 升级；`myco/` 开头的 id 留给它们。表格和多维表格用原生 JS（`kit.js`、`kit.css` 共用：按顺序存一个集合、别人改的实时合进来、冲突时换成最新的、同一条记录的写入排队；CSV 和不依赖任何库的 .xlsx 生成），浅色、深色都有，离线能用。
+随 Hub 一起提供（`internal/templates/official`，编进二进制），每个工作区的模板库里都有、排在最前、标「官方」，不能删，跟着 Hub 升级；`myco/` 开头的 id 留给它们。v2 对标飞书：源码在仓库的 `templates/`（React + Vite，`make templates` 构建进 `internal/templates/official`，构建结果提交进仓库，Go 构建不跑 Node），共用 `templates/src/_lib`（桥的封装：按顺序存一个集合、别人改的实时合进来、冲突时换成最新的、同一条记录的写入排队；CSV 和不依赖任何库的 .xlsx 生成）。浅色、深色都有，不连外网。用模板建的网页带着当时的文件副本，升级 Hub 不会改已经建好的网页。
 
-- **表格**（`myco/table`）：`sheet`（一条 main：标题、列）+ `rows`（每行 `cells` 按列 id 存、`order`）。列能加、改名、改类型（文本、多行、数字、日期、单选、勾选、人、链接）、删；按列排序、搜索（只在这个网页里，不存）；导出 Excel 和 CSV。
-- **多维表格**（`myco/base`）：`base`（一条 main：标题、字段）+ `records`（`values` 按字段 id 存、`order`）。视图：表格、看板（按单选字段分组，优先「状态 / 阶段 / 进度」，拖卡片改值）、日历（按日期字段，按月翻）、画廊、表单（填好提交就是一条新记录）；点一条在右侧打开，所有字段都能改。导出 Excel 和 CSV。
-- **文档**（`myco/doc`，v2）：对标飞书文档，编辑器用 [BlockNote](https://www.blocknotejs.org/)（MPL-2.0，基于 ProseMirror），源码在仓库的 `templates/src/doc`（React + Vite，`make templates` 构建进 `internal/templates/official/doc`）。`doc`（一条 main：标题）+ `blocks`（每个顶层块一条：`type` p / h1–h3 / li / ol / todo / toggle / quote / code / hr / table、`text` 纯文字、`checked`、`order`，`block` 是编辑器自己的完整格式：加粗、颜色、链接、嵌套、表格）。「/」菜单插入各种块，`#` `-` `1.` `[]` `>` 等 Markdown 快捷写法，选中文字出格式工具条，左侧把手拖动调整段落；停顿 0.5 秒保存，只写改了的块，两个人改不同块互不覆盖；agent 只写 `type` 和 `text` 也行，网页据此画出来；导出 Markdown 和网页。
+- **表格**（`myco/table`，v2）：表格用 [Glide Data Grid](https://github.com/glideapps/glide-data-grid)（MIT，canvas 绘制，几万行也流畅）。`sheet`（一条 main：标题、列；列可带 `width`）+ `rows`（每行 `cells` 按列 id 存、`order`）。列类型：文本、多行文本、数字、单选、多选、日期、勾选、人员、链接；单选和多选是彩色标签，在格子里点开就能选、搜索、新建选项（新值自动加进选项）。框选、复制、从 Excel 粘贴一块（超出的行自动新增）、拖填充柄往下填、Delete 清空；拖列宽、拖动列和行换位置、冻结首列；列头菜单：改名、改类型（文本改成单选时，已有的值变成选项）、编辑选项（改选项名会同步改已有的值）、排序、左右插入、删除；右键行：上下插入、删除（可撤销）；筛选（多个条件，全部或任一）、排序（多个字段）、Ctrl+F 搜索，只在这个人的浏览器里记着，不影响别人；导出 Excel 和 CSV（按当前筛选和排序）。
+- **多维表格**（`myco/base`，v2）：同一套表格，加上视图：看板（按单选字段分组，拖卡片改值、调顺序，每列能直接新建）、日历（按日期字段，拖到另一天改日期，每天能新建）、画廊、表单（填好提交就是一条新记录）。点一条在右侧展开（表格里把鼠标放到第一列点展开图标，或右键「展开记录」），所有字段都能改，上下切换、删除。`base`（一条 main：标题、字段）+ `records`（`values` 按字段 id 存、`order`）。
+- **文档**（`myco/doc`，v2）：对标飞书文档，编辑器用 [BlockNote](https://www.blocknotejs.org/)（MPL-2.0，基于 ProseMirror），`doc`（一条 main：标题）+ `blocks`（每个顶层块一条：`type` p / h1–h3 / li / ol / todo / toggle / quote / code / hr / table、`text` 纯文字、`checked`、`order`，`block` 是编辑器自己的完整格式：加粗、颜色、链接、嵌套、表格）。「/」菜单插入各种块，`#` `-` `1.` `[]` `>` 等 Markdown 快捷写法，选中文字出格式工具条，左侧把手拖动调整段落；停顿 0.5 秒保存，只写改了的块，两个人改不同块互不覆盖；agent 只写 `type` 和 `text` 也行，网页据此画出来；导出 Markdown 和网页。
 
 每个模板都带 `agent.md`（怎么读写它的数据）和 `sample.json`（示例数据）。
 

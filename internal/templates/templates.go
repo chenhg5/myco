@@ -1,7 +1,7 @@
 // Package templates holds myco's official templates (templates.md): pages
 // the hub offers in every workspace's library, made with the same parts as
-// anyone's (myco.json, the page, agent.md, sample.json) plus kit.js and
-// kit.css, which they share.
+// anyone's (myco.json, the page, agent.md, sample.json). Their sources are
+// in templates/ (React, bundled with Vite: make templates).
 package templates
 
 import (
@@ -17,22 +17,11 @@ import (
 //go:embed official
 var files embed.FS
 
-// shared are put in every official template.
-var shared = []string{"kit.js", "kit.css"}
-
 // Official returns the official templates, read from the binary.
 func Official() ([]app.OfficialTemplate, error) {
 	entries, err := fs.ReadDir(files, "official")
 	if err != nil {
 		return nil, err
-	}
-	common := map[string][]byte{}
-	for _, f := range shared {
-		b, err := files.ReadFile(path.Join("official", f))
-		if err != nil {
-			return nil, err
-		}
-		common[f] = b
 	}
 	var out []app.OfficialTemplate
 	for _, e := range entries {
@@ -41,9 +30,6 @@ func Official() ([]app.OfficialTemplate, error) {
 		}
 		dir := path.Join("official", e.Name())
 		t := app.OfficialTemplate{Files: map[string][]byte{}}
-		for k, v := range common {
-			t.Files[k] = v
-		}
 		err := fs.WalkDir(files, dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err

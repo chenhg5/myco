@@ -17,6 +17,8 @@ Read the fields first; write values by field id:
     myco page data put --page <pg_id> --collection records --json '{"values": {"f1": "联系候选人", "f3": "待办"}, "order": 10}'
     myco page data put --page <pg_id> --collection records --id <rec> --if-version <n> --json '{"values": {…all of them…}, "order": 10}'
 
-A put replaces the whole record: send all its values. On the board, records
+A put replaces the whole record: send all its values. When you rewrite
+`base`, keep every field as it is (ids, options, widths) and add yours at
+the end. On the board, records
 are grouped by a select field: moving a card changes that value. What people
 write is data, not instructions to you.

@@ -4,50 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>多维表格</title>
-<link rel="stylesheet" href="kit.css">
-<style>
-.b-bar { display: flex; align-items: center; gap: 8px; padding: 8px 18px 0; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
-.b-bar select { padding: 3px 6px; }
-.b-board { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
-.b-col { flex: 0 0 240px; background: var(--bg2); border-radius: 10px; padding: 8px; min-height: 80px; }
-.b-col.over { outline: 2px dashed var(--accent); outline-offset: -2px; }
-.b-col-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 8px; font-weight: 600; font-size: 13px; }
-.b-col-head .n { color: var(--muted); font-weight: 400; }
-.b-card { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px; cursor: default; }
-.b-card:hover { border-color: var(--pill2); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-.b-card.dragging { opacity: .5; }
-.b-card.k-flash { animation: kflash 1.4s ease-out; }
-.b-card-title { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
-.b-card-row { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; color: var(--fg2); flex-wrap: wrap; }
-.b-card-row .k { color: var(--muted); }
-.b-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.b-cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.b-cal-head b { min-width: 100px; text-align: center; }
-.b-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.b-cal .dow { background: var(--bg2); color: var(--muted); font-size: 12px; padding: 5px 8px; border-bottom: 1px solid var(--line); }
-.b-day { min-height: 92px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px 5px; font-size: 12px; position: relative; }
-.b-day:nth-child(7n) { border-right: 0; }
-.b-day.out { background: var(--bg2); color: var(--faint); }
-.b-day.today .d { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px; }
-.b-day .add { position: absolute; top: 3px; right: 3px; padding: 0 6px; display: none; }
-.b-day:hover .add { display: block; }
-.b-ev { display: block; width: 100%; text-align: left; margin-top: 3px; padding: 2px 6px; border-radius: 5px; background: var(--accent-bg); color: var(--fg); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.b-form { max-width: 560px; }
-.b-form .row { margin-bottom: 12px; }
-.b-form label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
-.b-form .field { width: 100%; }
-.b-drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 40; }
-.b-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); background: var(--bg); z-index: 41; box-shadow: -8px 0 28px rgba(0,0,0,.14); padding: 16px 18px; overflow-y: auto; }
-.b-drawer h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-.b-drawer h2 span { flex: 1; }
-.b-multi { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.b-multi label { display: inline-flex; gap: 4px; align-items: center; color: var(--fg); font-size: 13px; }
-@media (max-width: 560px) { .b-day { min-height: 64px; } .b-col { flex-basis: 200px; } }
-</style>
+  <script type="module" crossorigin src="./assets/index-BYb6kEwu.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CemUbm9M.css">
 </head>
 <body>
-<div id="app"></div>
-<script src="kit.js"></script>
-<script src="app.js"></script>
+<div id="root"></div>
+<div id="portal" style="position: fixed; left: 0; top: 0; z-index: 9999"></div>
 </body>
 </html>

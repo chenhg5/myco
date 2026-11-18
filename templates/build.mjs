@@ -37,7 +37,10 @@ for (const name of readdirSync(path.join(here, "src"))) {
       assetsDir: "assets",
       chunkSizeWarningLimit: 4000,
       // one script and one stylesheet: a page is a few files
-      rollupOptions: { output: { manualChunks: undefined } },
+      rollupOptions: {
+        output: { manualChunks: undefined },
+        onwarn(w, warn) { if (w.code !== "INVALID_ANNOTATION") warn(w); },
+      },
     },
   });
   console.log(`built ${name}`);
