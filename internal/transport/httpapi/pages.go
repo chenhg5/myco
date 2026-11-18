@@ -64,7 +64,7 @@ func (s *Server) pageDTO(r *http.Request, by app.Actor, v *app.PageView) api.Pag
 	p := v.Page
 	out := api.Page{ID: p.ID, Name: p.Name, Project: p.Project, Publisher: p.Publisher, Version: p.Latest,
 		URL: s.publicBase(r) + "/pages/" + p.ID, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-		CanManage: s.pages.Manages(by, p), Versions: []api.PageVersion{}, Live: p.Live, Port: p.Port}
+		CanManage: s.pages.Manages(by, p), Versions: []api.PageVersion{}, Live: p.Live, Port: p.Port, Template: pageTemplateDTO(p)}
 	if p.Live {
 		out.Online = s.online(p.ID)
 	}

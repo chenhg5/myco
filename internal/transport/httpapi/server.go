@@ -60,6 +60,8 @@ type Server struct {
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
 	pins        *app.PinService
+	pageData    *app.PageDataService
+	templates   *app.TemplateService
 	voice       *app.VoiceSettingsService
 	activity    sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu   sync.Mutex // serialize alias permission checks with writes
@@ -206,6 +208,7 @@ func (s *Server) routes() {
 	s.automationRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
+	s.pageDataRoutes(m)
 	s.liveRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)
