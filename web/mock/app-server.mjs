@@ -216,7 +216,35 @@ const livePage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><ti
 const kit = (f) => readFileSync(new URL(`../../internal/cli/templatekit/${f}`, import.meta.url), "utf8")
   .replaceAll("{{ID}}", "release/progress").replaceAll("{{NAME}}", "发布进度表");
 const tableFiles = { "index.html": kit("index.html"), "myco.json": kit("myco.json") };
-const pageFilesOf = (id, n) => (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
+// The template library: myco's own (read from internal/templates, as the hub
+// embeds them) and the workspace's (the starter above). Using one makes a
+// page with its files (madeFiles) and, if asked, its sample data.
+const officialRoot = new URL("../../internal/templates/official/", import.meta.url);
+const officialFiles = (name) => {
+  const out = { "kit.js": readFileSync(new URL("kit.js", officialRoot), "utf8"), "kit.css": readFileSync(new URL("kit.css", officialRoot), "utf8") };
+  for (const f of ["myco.json", "index.html", "app.js", "agent.md", "sample.json"]) out[f] = readFileSync(new URL(`${name}/${f}`, officialRoot), "utf8");
+  return out;
+};
+const templateFiles = new Map();
+const mockTemplates = ["table", "base", "doc"].map((name) => {
+  const files = officialFiles(name);
+  const m = JSON.parse(files["myco.json"]);
+  const id = `tp_myco_${name}`;
+  templateFiles.set(id, files);
+  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, version: m.version, publisher: "myco", official: true, can_manage: false,
+    data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
+    created_at: iso(0), updated_at: iso(0) };
+});
+{
+  const files = { ...tableFiles, "agent.md": kit("agent.md"), "sample.json": kit("sample.json") };
+  const m = JSON.parse(files["myco.json"]);
+  templateFiles.set("tp_progress", files);
+  mockTemplates.push({ id: "tp_progress", slug: m.id, name: m.name, description: "", kind: m.kind, version: m.version, publisher: "release-cloud", can_manage: true,
+    data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: 4, size: 9000, by: "release-cloud", at: iso(17500) }],
+    created_at: iso(17500), updated_at: iso(17500) });
+}
+const madeFiles = new Map();
+const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
 <body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
@@ -1690,10 +1718,35 @@ const server = http.createServer(async (req, res) => {
     const file = parts.slice(2).join("/") || "index.html";
     const body = pageFilesOf(k.page, k.version)[file];
     if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
-    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : "text/javascript";
+    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : file.endsWith(".md") ? "text/markdown; charset=utf-8" : "text/javascript";
     const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
     res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
     return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);
+  }
+  // /app/hubs/{id}/templates… — the template library (v0.20.5; MOCK_OLD_HUB: none).
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "templates") {
+    if (process.env.MOCK_OLD_HUB || parts[2] !== "hub_studio") return fail(res, 404, "", "404 page not found");
+    if (parts.length === 4 && method === "GET") return send(res, 200, { templates: mockTemplates.map(({ guide, ...t }) => t) });
+    const t = mockTemplates.find((x) => x.id === decodeURIComponent(parts[4]) || x.slug === decodeURIComponent(parts[4]));
+    if (!t) return fail(res, 404, "not_found", `template ${parts[4]} not found`);
+    if (parts.length === 5 && method === "GET") return send(res, 200, t);
+    if (parts.length === 6 && parts[5] === "use" && method === "POST") {
+      const body = (await readBody(req)) || {};
+      const files = templateFiles.get(t.id);
+      const id = `pg_t${(state.counter += 1)}`;
+      const p = { id, name: body.name || t.name, project: body.project || "", publisher: "glenn", version: 1, entry: "index.html",
+        url: `http://192.168.1.20:7780/pages/${id}`, created_at: iso(0), updated_at: iso(0), can_manage: true,
+        versions: [{ n: 1, entry: "index.html", files: Object.keys(files).length, size: 30000, sha256: "x", by: "glenn", at: iso(0) }],
+        template: { id: t.id, slug: t.slug, name: t.name, version: t.version, permissions: t.permissions, data: t.data } };
+      pages.set(id, p);
+      madeFiles.set(id, files);
+      if (body.sample) {
+        for (const [coll, recs] of Object.entries(JSON.parse(files["sample.json"]))) {
+          for (const r of recs) { const { id: rid, ...data } = r; putRecord(id, coll, rid || "", data, null, "glenn"); }
+        }
+      }
+      return send(res, 201, { page: p, template: t });
+    }
   }
   // /app/hubs/{id}/pages… — pages agents published (v0.19.24).
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "pages") {

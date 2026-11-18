@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpDown, ChevronRight, MoreHorizontal, Pin, Plus, Search, WifiOff } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
+import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
 import { appApi, errorMessage, type AppInfo, type AppOverview, type Hub, type LocalState, type WorkspaceState } from "@/appapi";
@@ -64,7 +65,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "automations" | "templates" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -121,7 +122,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "templates" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -580,6 +581,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
+    : page === "templates" ? L("模板", "Templates")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
     // A project says its own name, larger, just below.
@@ -625,6 +627,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
               <NavHead label={L("自动化", "Automations")} active={page === "automations"} className="sp-nav-auto" onOpen={() => { setNavChat(null); setPage("automations"); }} />
+              <NavHead label={L("模板", "Templates")} active={page === "templates"} className="sp-nav-templates" onOpen={() => { setNavChat(null); setPage("templates"); }} />
             </div>
             <div className="app-nav-group sp-nav-projects">
               <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>
@@ -847,6 +850,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "automations" && hub && (
           <div className="app-scroll">
             <AutomationsPage key={hub.id} hubId={hub.id} rows={rows} now={now} />
+          </div>
+        )}
+
+        {page === "templates" && hub && (
+          <div className="app-scroll">
+            <TemplatesPage key={hub.id} hubId={hub.id} now={now} projects={liveProjects.map((x) => ({ name: x.p.name, title: x.p.title || x.p.name }))} />
           </div>
         )}
 

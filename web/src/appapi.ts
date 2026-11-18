@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -696,6 +696,11 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // The template library (hubs from v0.20.5; older ones answer 404).
+  templates: (hubId: string) => request<{ templates: Template[] }>("GET", `app/hubs/${enc(hubId)}/templates`),
+  template: (hubId: string, id: string) => request<Template>("GET", `app/hubs/${enc(hubId)}/templates/${enc(id)}`),
+  useTemplate: (hubId: string, id: string, input: { name?: string; project?: string; sample?: boolean }) =>
+    request<{ page: Page; template: Template }>("POST", `app/hubs/${enc(hubId)}/templates/${enc(id)}/use`, input),
   // A page's records and change feed (hubs from v0.20.5), for the bridge.
   pageRecords: (hubId: string, id: string, collection?: string) =>
     request<{ records: PageRecord[]; seq: number }>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data${collection ? `?collection=${enc(collection)}` : ""}`),

@@ -7864,3 +7864,20 @@ body.is-resizing {
 .pin-bar-error { padding: 4px 16px 0; }
 .pin-edit { display: flex; flex-direction: column; gap: 12px; }
 .conv-msg-pin.is-on { color: var(--accent); }
+
+/* 模板 (Templates.tsx): the library, as the automations' starting points
+   look; then the pages made from templates. */
+.tp-section { margin: 22px 0 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.tp-section:first-of-type { margin-top: 6px; }
+.tp-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--pill); color: var(--muted); font-size: 11px; font-weight: 500; vertical-align: 1px; }
+.tp-icon.is-records { background: color-mix(in srgb, #7b5cd6 14%, var(--card)); color: #7b5cd6; }
+.tp-icon.is-doc { background: color-mix(in srgb, #3a7bd5 14%, var(--card)); color: #3a7bd5; }
+.tp-hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.tp-made { display: flex; flex-direction: column; gap: 2px; }
+.tp-made-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; }
+.tp-made-row:hover { background: var(--nav-hover); }
+.tp-made-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.tp-made-row svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
+.tp-made-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.tp-made-meta { margin-left: auto; flex: none; font-size: 12px; color: var(--muted); }
+.tp-sample { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }

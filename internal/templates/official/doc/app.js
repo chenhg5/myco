@@ -36,13 +36,24 @@
     r.selectNodeContents(node); r.collapse(false); s.removeAllRanges(); s.addRange(r);
   };
 
+  // Saves fields of a block: kept here at once (a redraw meanwhile shows
+  // them), written behind.
   var save = function (id, fields) {
     clearTimeout(pending[id]);
     delete pending[id];
+    var cur = blocks.get(id);
+    if (cur) {
+      var next = {};
+      for (var k in cur.data) next[k] = cur.data[k];
+      for (var f in fields) next[f] = fields[f];
+      cur.data = next;
+    }
     return blocks.patch(id, fields).catch(function (e) {
       if (e.code === "conflict") { kit.note("别人刚改过这一段，已换成最新的"); renderBlocks(id); } else kit.note(e.message);
     });
   };
+  // A change shown at once, saved behind (its type, a todo's tick).
+  var applyLocal = function (id, patch) { return save(id, patch); };
   var saveSoon = function (id, node) {
     clearTimeout(pending[id]);
     pending[id] = setTimeout(function () { delete pending[id]; save(id, { text: textOf(node) }); }, 600);
@@ -54,15 +65,18 @@
     });
   };
 
+  // A new block: shown and focused at once, saved behind (so what is typed
+  // next goes into it).
   var addAfter = function (after, type, text) {
     var i = blocks.rows.indexOf(after);
     var order = after ? blocks.between(after, blocks.rows[i + 1]) : blocks.next();
-    return blocks.put({ type: type || "p", text: text || "", checked: false, order: order }).then(function (r) {
-      renderBlocks();
-      var n = list.querySelector('[data-id="' + r.id + '"] .d-text');
-      if (n) place(n, 0);
-      return r;
-    }, function (e) { kit.note(e.message); });
+    var data = { type: type || "p", text: text || "", checked: false, order: order };
+    var id = kit.uid("b");
+    blocks.local(id, data);
+    renderBlocks();
+    var n = list.querySelector('[data-id="' + id + '"] .d-text');
+    if (n) place(n, 0);
+    return blocks.put(data, id).catch(function (e) { kit.note(e.message); });
   };
   var removeBlock = function (b, focusPrev) {
     var i = blocks.rows.indexOf(b), prev = blocks.rows[i - 1];
@@ -79,7 +93,12 @@
     if (b.data.type === type) return;
     var patch = { type: type };
     if (type === "todo" && b.data.checked === undefined) patch.checked = false;
-    save(b.id, patch).then(function () { renderBlocks(); var n = list.querySelector('[data-id="' + b.id + '"] .d-text'); if (n) place(n, textOf(n).length); });
+    var n0 = list.querySelector('[data-id="' + b.id + '"] .d-text');
+    if (n0) patch.text = textOf(n0);
+    applyLocal(b.id, patch);
+    renderBlocks();
+    var n = list.querySelector('[data-id="' + b.id + '"] .d-text');
+    if (n) place(n, textOf(n).length);
   };
 
   var blockMenu = function (btn, b) {
@@ -127,7 +146,7 @@
   var input = function (b, node) {
     var text = textOf(node);
     if ((b.data.type || "p") === "p") {
-      if (text === "---") { node.textContent = ""; save(b.id, { type: "hr", text: "" }).then(function () { renderBlocks(); addAfter(blocks.get(b.id), "p", ""); }); return; }
+      if (text === "---") { node.textContent = ""; applyLocal(b.id, { type: "hr", text: "" }); renderBlocks(); addAfter(blocks.get(b.id), "p", ""); return; }
       for (var i = SHORT.length - 1; i >= 0; i--) {
         var m = SHORT[i][0].exec(text);
         if (m) {
@@ -135,7 +154,10 @@
           node.textContent = rest;
           var patch = { type: SHORT[i][1], text: rest };
           if (patch.type === "todo") patch.checked = false;
-          save(b.id, patch).then(function () { renderBlocks(); var n = list.querySelector('[data-id="' + b.id + '"] .d-text'); if (n) place(n, textOf(n).length); });
+          applyLocal(b.id, patch);
+          renderBlocks();
+          var n2 = list.querySelector('[data-id="' + b.id + '"] .d-text');
+          if (n2) place(n2, textOf(n2).length);
           return;
         }
       }
@@ -152,7 +174,7 @@
     if (type === "li") row.appendChild(el("span", { class: "d-mark", text: "•" }));
     if (type === "ol") row.appendChild(el("span", { class: "d-mark", text: n + "." }));
     if (type === "todo") row.appendChild(el("input", { type: "checkbox", checked: !!b.data.checked, "aria-label": "做完了",
-      onchange: function (e) { row.classList.toggle("done", e.target.checked); save(b.id, { checked: e.target.checked }); } }));
+      onchange: function (e) { row.classList.toggle("done", e.target.checked); applyLocal(b.id, { checked: e.target.checked }); } }));
     var node = el(type === "code" ? "pre" : "div", { class: "d-text", "data-ph": PH[type] || "" });
     node.contentEditable = plain ? "plaintext-only" : "true";
     node.textContent = b.data.text || "";
@@ -175,13 +197,24 @@
     var active = document.activeElement && document.activeElement.closest && document.activeElement.closest(".d-block");
     var keepId = active && active.dataset.id && pending[active.dataset.id] !== undefined ? active.dataset.id : null;
     if (active && !keepId && document.activeElement.classList.contains("d-text")) keepId = active.dataset.id;
-    var olN = 0, frag = document.createDocumentFragment();
+    var olN = 0, frag = document.createDocumentFragment(), reFocus = null;
     blocks.rows.forEach(function (b) {
       olN = b.data.type === "ol" ? olN + 1 : 0;
-      if (b.id === keepId && active) {
+      if (b.id === keepId && active && active.classList.contains("t-" + (b.data.type || "p"))) {
         var mark = active.querySelector(".d-mark");
         if (mark && b.data.type === "ol") mark.textContent = olN + ".";
         frag.appendChild(active);
+        return;
+      }
+      if (b.id === keepId && active) {
+        // Its type changed while typing in it: drawn anew, the caret kept.
+        var was = active.querySelector(".d-text");
+        var at = was ? caret(was) : 0;
+        var fresh = rowOf(b, olN);
+        // (what is on screen is newer than what was saved)
+        if (was && fresh.querySelector(".d-text")) fresh.querySelector(".d-text").textContent = textOf(was);
+        frag.appendChild(fresh);
+        reFocus = { node: fresh.querySelector(".d-text"), at: at };
         return;
       }
       var row = rowOf(b, olN);
@@ -191,7 +224,8 @@
     list.innerHTML = "";
     list.appendChild(frag);
     if (!blocks.rows.length) list.appendChild(el("div", { class: "k-empty", text: "点这里开始写", onclick: function () { addAfter(null, "p", ""); } }));
-    if (keepId && active) { var n = active.querySelector(".d-text"); if (n && document.activeElement !== n) n.focus(); }
+    if (reFocus && reFocus.node) place(reFocus.node, reFocus.at);
+    else if (keepId && active) { var n = active.querySelector(".d-text"); if (n && document.activeElement !== n) n.focus(); }
   };
   var syncType = function () {
     var b = focused && blocks.get(focused);

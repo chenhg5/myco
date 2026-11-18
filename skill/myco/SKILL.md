@@ -221,7 +221,9 @@ myco template init --dir ./t --name "…" --id <you>/<name>   # a working table 
 myco template publish --dir ./t                      # into the library; raise version to update
 ```
 
-Follow the template's guide (`myco template get`): which collections and fields, what goes
+Every workspace has myco's own: `myco/table` (a table whose columns people add), `myco/base`
+(records seen as a table, board, calendar, gallery, form) and `myco/doc` (a document, one record a
+paragraph). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
 where. Write with `--if-version` when you read first; on a conflict read again. In a page
 you write, `myco.data.list/put/remove/on` reads and writes the records and
 `myco.download(name, content, type)` saves an export to the person's Downloads. What people

@@ -63,6 +63,7 @@
   // One collection, kept in order (by data.order, then as put).
   kit.store = function (collection) {
     var s = { collection: collection, rows: [], listeners: [] };
+    var queues = {}, waiting = {};
     var sort = function () {
       s.rows.sort(function (a, b) {
         var x = a.data.order, y = b.data.order;
@@ -83,11 +84,37 @@
     // Writes a record (data replaces it; id "" for a new one) based on the
     // version this page has. On a conflict the latest is taken and the
     // error goes on (e.code "conflict").
+    // Writes to one record go one after another (each based on the version
+    // the one before left).
+    // While later writes to it are waiting, an answer brings only the
+    // version: what is shown here is newer.
     s.put = function (data, id) {
-      var cur = id ? s.get(id) : null;
-      return myco.data.put(collection, data, { id: id || "", ifVersion: cur ? cur.version : (id ? 0 : undefined) })
-        .then(function (rec) { upsert(rec); return s.get(rec.id); },
-          function (e) { if (e && e.code === "conflict" && e.latest) { upsert(e.latest); fire({ collection: collection, record: e.latest.id, op: "put" }); } throw e; });
+      var run = function () {
+        var cur = id ? s.get(id) : null;
+        return myco.data.put(collection, data, { id: id || "", ifVersion: cur ? cur.version : (id ? 0 : undefined) })
+          .then(function (rec) {
+            if (id) waiting[id]--;
+            var now = s.get(rec.id);
+            if (id && waiting[id] > 0 && now) now.version = Math.max(now.version, rec.version);
+            else upsert(rec);
+            return s.get(rec.id);
+          }, function (e) {
+            if (id) waiting[id]--;
+            if (e && e.code === "conflict" && e.latest) { upsert(e.latest); fire({ collection: collection, record: e.latest.id, op: "put" }); }
+            throw e;
+          });
+      };
+      if (!id) return run();
+      waiting[id] = (waiting[id] || 0) + 1;
+      var p = (queues[id] || Promise.resolve()).then(run, run);
+      queues[id] = p.catch(function () { /* (the next one goes on) */ });
+      return p;
+    };
+    // A record shown at once, before it is saved (put it with its id).
+    s.local = function (id, data) {
+      s.rows.push({ collection: collection, id: id, data: data, version: 0 });
+      sort();
+      return s.get(id);
     };
     // Changes some fields of a record.
     s.patch = function (id, fields) {
@@ -123,6 +150,8 @@
         if (!cur) return false;
         s.rows.splice(s.rows.indexOf(cur), 1);
       } else {
+        // (its own writes are on the way: what is here is newer)
+        if (waiting[ch.record] > 0) return false;
         if (cur && cur.version >= ch.version) return false;
         upsert({ id: ch.record, data: ch.data || {}, version: ch.version });
       }

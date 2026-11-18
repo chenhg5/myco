@@ -346,6 +346,7 @@ async function go(page, label, narrow) {
     const item = label === "电脑" ? page.locator(".sp-nav-pcs-head:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
       : label === "自动化" ? page.locator(".sp-nav-auto:visible")
+      : label === "模板" ? page.locator(".sp-nav-templates:visible")
       : page.locator(".app-nav-item:visible", { hasText: label });
     await clickVisible(page, item);
   }
@@ -796,6 +797,71 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
     });
 
+    // 模板: myco's own first, then the workspace's; one makes a page in the
+    // panel (with sample data), listed under them to open again. The board
+    // and calendar of 多维表格, and a document typed with shortcuts.
+    await step("模板 · 模板库和官方模板", async () => {
+      await go(page, "模板", narrow);
+      const lib = page.locator("[data-testid=templates-official] .tp-card");
+      await lib.first().waitFor({ timeout: 15_000 });
+      const names = (await lib.allInnerTexts()).map(compactText);
+      if (names.length !== 3 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档")) throw new Error(`官方模板应是 表格、多维表格、文档，实际 ${names.join(" / ")}`);
+      await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "templates");
+      const mark = `${size.width}-${scheme}`;
+      // (a narrow window: the page panel covers the sidebar; tucked away first)
+      const tuck = async () => {
+        const panel = page.locator(".pg-panel:visible");
+        if (await panel.count()) {
+          await clickVisible(page, panel.getByRole("button", { name: "收起" }).first());
+          await page.locator(".pg-panel").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+        }
+      };
+      const make = async (slug, name) => {
+        await tuck();
+        await go(page, "模板", narrow);
+        await clickVisible(page, page.locator(`[data-testid="template-${slug}"]`));
+        await page.locator("[data-testid=template-name]").fill(name);
+        await clickVisible(page, page.getByRole("button", { name: "新建", exact: true }));
+        const frame = page.locator(`.pg-frame[title="${name}"]`);
+        await frame.waitFor({ timeout: 15_000 });
+        return page.frameLocator(`.pg-frame[title="${name}"]`);
+      };
+      // 多维表格: its records, as a board and a calendar.
+      const base = await make("myco/base", `招聘（${mark}）`);
+      await base.locator("tbody tr").first().waitFor({ timeout: 15_000 });
+      if ((await base.locator("tbody tr").count()) !== 4) throw new Error("多维表格应带着 4 条示例记录");
+      await base.locator(".k-tab", { hasText: "看板" }).dispatchEvent("click");
+      await base.locator(".b-col-head", { hasText: "面试中" }).waitFor({ timeout: 5_000 });
+      if ((await base.locator(".b-card").count()) !== 4) throw new Error("看板上应有 4 张卡片");
+      await settle(page, 300);
+      await shot(page, size, scheme, "template-board");
+      await base.locator(".k-tab", { hasText: "日历" }).dispatchEvent("click");
+      await base.locator(".b-cal").waitFor({ timeout: 5_000 });
+      await base.locator(".k-tab", { hasText: "表格" }).dispatchEvent("click");
+      // 文档: typed with shortcuts, each block saved.
+      const doc = await make("myco/doc", `计划（${mark}）`);
+      await doc.locator(".d-block").first().waitFor({ timeout: 15_000 });
+      const last = doc.locator(".d-text").last();
+      await last.focus();
+      await last.evaluate((n) => { const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); });
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("## 风险");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("- 下载页 CDN 可能没刷新");
+      await doc.locator(".t-li .d-text", { hasText: "下载页 CDN" }).waitFor({ timeout: 5_000 });
+      await doc.locator(".t-h2 .d-text", { hasText: "风险" }).waitFor({ timeout: 5_000 });
+      await settle(page, 1200);
+      await shot(page, size, scheme, "template-doc");
+      // The pages made are listed under the templates.
+      await tuck();
+      await go(page, "模板", narrow);
+      await page.locator(".tp-made-row", { hasText: `计划（${mark}）` }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".pg-toggle"));
+      await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere
@@ -1146,7 +1212,7 @@ async function runMatrix(browser, size, scheme) {
         const st = getComputedStyle(e);
         return { text: (e.textContent || "").trim(), size: st.fontSize, icon: !!e.querySelector("svg") };
       }));
-      if (heads.map((h) => h.text).join("|") !== "自动化|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      if (heads.map((h) => h.text).join("|") !== "自动化|模板|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、模板、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));

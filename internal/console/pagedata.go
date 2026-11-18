@@ -76,6 +76,35 @@ func (b *Backend) pageDataRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, ch)
 	}))
+	// The workspace's templates (myco's own first) and pages made from one.
+	m.HandleFunc("GET /app/hubs/{id}/templates", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		ts, err := c.Templates(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.TemplateList{Templates: ts})
+	}))
+	m.HandleFunc("GET /app/hubs/{id}/templates/{tid}", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		t, err := c.Template(r.Context(), r.PathValue("tid"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, t)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/templates/{tid}/use", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in api.TemplateUse
+		if !decode(w, r, &in) {
+			return
+		}
+		u, err := c.UseTemplate(r.Context(), r.PathValue("tid"), in)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, u)
+	}))
 	// A file a page made (an export: CSV, Excel, PDF…), saved to Downloads
 	// and shown in Finder / Explorer.
 	m.HandleFunc("POST /app/page-download", func(w http.ResponseWriter, r *http.Request) {

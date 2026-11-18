@@ -182,7 +182,9 @@
   var pickField = function (kind, label, key) {
     var fs = fields().filter(function (f) { return kind.indexOf(f.type) >= 0; });
     if (!fs.length) return { field: null, node: el("span", { text: "先加一个" + (kind[0] === "date" ? "日期" : "单选") + "字段" }) };
-    var cur = fieldOf(pref[key]) && kind.indexOf(fieldOf(pref[key]).type) >= 0 ? fieldOf(pref[key]) : fs[0];
+    // (a status-like field first: 状态, 阶段, 进度)
+    var likely = fs.filter(function (f) { return /状态|阶段|进度|status|stage/i.test(f.name); })[0];
+    var cur = fieldOf(pref[key]) && kind.indexOf(fieldOf(pref[key]).type) >= 0 ? fieldOf(pref[key]) : likely || fs[0];
     var sel = el("select", { class: "field", "aria-label": label, onchange: function () { pref[key] = sel.value; savePref(); render(); } },
       fs.map(function (f) { return el("option", { value: f.id, text: f.name }); }));
     sel.value = cur.id;
