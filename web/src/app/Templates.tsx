@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, KanbanSquare, LayoutGrid, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
+import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -84,7 +84,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
 
   return (
     <div className="pc tp">
-      <PageHero icon={LayoutGrid} title={L("应用", "Apps")}
+      <PageHero title={L("应用", "Apps")}
         subtitle={L("你和 agent 一起用的表格、文档、白板和小游戏，两边的改动实时同步。", "Tables, documents, boards and games you and agents use together, changes shared as they happen.")}>
         {!unsupported && (
           <>

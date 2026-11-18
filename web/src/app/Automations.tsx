@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook, Zap } from "lucide-react";
+import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
 import type { Automation, AutomationRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
@@ -122,7 +122,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
 
   return (
     <div className="pc au">
-      <PageHero icon={Zap} title={L("自动化", "Automations")}
+      <PageHero title={L("自动化", "Automations")}
         subtitle={L("让 agent 按时、按事件自己干活。跑在工作区的 Hub 上，电脑关着也照常。", "Agents at work on a schedule or when something happens. It runs on the workspace's hub, so it goes on while your computers are off.")}>
         {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setEditing({ start: blank })}><Plus />{L("新建自动化", "New automation")}</button>}
       </PageHero>

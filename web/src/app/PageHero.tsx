@@ -1,14 +1,10 @@
-import type { LucideIcon } from "lucide-react";
-
 /**
- * The head of a top-level page (自动化, 应用): its icon on a soft tile, a
- * title, one line on what it is for, and the page's main actions on the
- * right. Under it, sections with a heading of their own (SectionHead).
+ * The head of a top-level page (自动化, 应用): a title, one line on what
+ * it is for, and the page's main actions on the right. Under it, sections with a heading of their own (SectionHead).
  */
-export function PageHero({ icon: Icon, title, subtitle, children }: { icon: LucideIcon; title: string; subtitle: string; children?: React.ReactNode }) {
+export function PageHero({ title, subtitle, children }: { title: string; subtitle: string; children?: React.ReactNode }) {
   return (
     <header className="ph">
-      <span className="ph-icon" aria-hidden><Icon /></span>
       <div className="ph-text">
         <h1>{title}</h1>
         <p>{subtitle}</p>
