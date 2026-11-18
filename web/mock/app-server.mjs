@@ -1412,7 +1412,8 @@ const npmMirror = " --registry=https://registry.npmmirror.com";
 const localAgents = [
   { cli: "claude", name: "Claude Code", state: "ready", path: "/Users/me/.local/bin/claude", version: "2.1.30 (Claude Code)",
     install: "curl -fsSL https://claude.ai/install.sh | bash", install_mirror: "npm install -g @anthropic-ai/claude-code" + npmMirror, login: "claude" },
-  { cli: "codex", name: "Codex", state: "signed_out", path: "/opt/homebrew/bin/codex", version: "codex-cli 0.60.1",
+  // (the showcase: signed in, as on a computer people use)
+  { cli: "codex", name: "Codex", state: process.env.MOCK_SHOWCASE ? "ready" : "signed_out", path: "/opt/homebrew/bin/codex", version: "codex-cli 0.60.1",
     install: "npm install -g @openai/codex", install_mirror: "npm install -g @openai/codex" + npmMirror, login: "codex login", needs: "npm" },
   { cli: "gemini", name: "Gemini CLI", state: "missing",
     install: "npm install -g @google/gemini-cli", install_mirror: "npm install -g @google/gemini-cli" + npmMirror, login: "gemini", needs: "npm" },
@@ -1746,7 +1747,7 @@ const server = http.createServer(async (req, res) => {
   }
   // /app/hubs/{id}/templates… — the template library (v0.20.5; MOCK_OLD_HUB: none).
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "templates") {
-    if (process.env.MOCK_OLD_HUB || parts[2] !== "hub_studio") return fail(res, 404, "", "404 page not found");
+    if (process.env.MOCK_OLD_HUB || (parts[2] !== "hub_studio" && !SHOWCASE)) return fail(res, 404, "", "404 page not found");
     if (parts.length === 4 && method === "GET") return send(res, 200, { templates: mockTemplates.map(({ guide, ...t }) => t) });
     // (fetching myco's apps: the mock has only the ones in the repo)
     if (parts.length === 5 && parts[4] === "sync" && method === "POST") return send(res, 200, { apps: mockTemplates.length, source: "built in" });

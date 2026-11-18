@@ -2,10 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
-<!-- The myco promo film. Every frame is a pure function of time: window.seek(t)
-     sets the whole picture for second t. render.mjs steps through it. Inputs come
-     from the page's init script: window.LANG ("en" | "zh"), window.ASSETS (folder
-     of app captures), window.LINES (narration lines with at / dur / text). -->
+<!-- The myco promo film (v6, 60 s): only the app's own interface. Every frame is a
+     pure function of time: window.seek(t) sets the whole picture for second t, and
+     render.mjs steps through it. Inputs come from the page's init script:
+     window.LANG ("en" | "zh") and window.ASSETS (folder of capture.cjs's captures). -->
 <link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
 <link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
 <link rel="stylesheet" href="node_modules/@fontsource/inter/800.css">
@@ -14,262 +14,93 @@
 <link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400.css">
 <style>
 :root {
-  --bg: #0a0c0b; --green: #52a685; --green-2: #3a9a78; --ink: #f2f4f3; --muted: #8b928f;
-  --sans: Inter, "Noto Sans SC", "WenQuanYi Zen Hei", system-ui, sans-serif;
+  --bg: #0b0c0d; --green: #52a685; --ink: #f2f4f3; --muted: #8b928f;
+  --sans: Inter, "Noto Sans SC", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); font-family: var(--sans); color: var(--ink); }
-#stage { position: absolute; inset: 0; overflow: hidden; perspective: 1800px; }
 .abs { position: absolute; }
-#glow { position: absolute; width: 1600px; height: 1600px; border-radius: 50%; left: 160px; top: -260px;
-  background: radial-gradient(closest-side, rgba(82,166,133,.10), rgba(82,166,133,.03) 55%, transparent 72%); }
-#grain { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px); background-size: 4px 4px; }
-
-/* product windows (hook) */
-.win { position: absolute; border-radius: 14px; background: #15181a; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07); }
-.win .bar { border-radius: 14px 14px 0 0; }
-.win .bar { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #1d2124; font-size: 15px; color: #aab1ad; }
-.win .dots { display: flex; gap: 7px; margin-right: 8px; } .win .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
-.win .dots i:nth-child(1) { background: #ff5f57; } .win .dots i:nth-child(2) { background: #febc2e; } .win .dots i:nth-child(3) { background: #28c840; }
-.win .body { padding: 18px 20px; font-family: var(--mono); font-size: 17px; line-height: 1.7; color: #d7dcd9; }
-.win .tag { position: absolute; left: 50%; bottom: -40px; transform: translateX(-50%); white-space: nowrap; font-size: 18px; color: var(--muted); }
-.brand { font-family: var(--sans); font-weight: 600; font-size: 20px; margin-bottom: 8px; }
-.wait { color: #e0b252; }
-.chip { position: absolute; padding: 8px 14px; border-radius: 10px; background: #f2f4f3; color: #111; font-family: var(--mono); font-size: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); white-space: nowrap; }
-#cursor { position: absolute; width: 34px; height: 34px; z-index: 50; pointer-events: none; }
-#cursor svg { filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
-#ripple { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--green); z-index: 49; }
-
-.kinetic { position: absolute; left: 0; right: 0; text-align: center; font-weight: 800; letter-spacing: -.02em; }
-#threads { position: absolute; inset: 0; }
-#logo { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; margin: -190px 0 0 -130px; }
-#word { position: absolute; left: 50%; top: 50%; height: 92px; margin-left: -150px; width: 300px; }
-#tagline { top: 640px; font-size: 46px; font-weight: 600; }
+#glow { position: absolute; width: 1700px; height: 1700px; border-radius: 50%; left: 110px; top: -320px;
+  background: radial-gradient(closest-side, rgba(82,166,133,.12), rgba(82,166,133,.03) 55%, transparent 72%); }
+#grain { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.03) 1px, transparent 1px); background-size: 4px 4px; }
 
 /* the app window */
-#frame { position: absolute; left: 248px; top: 54px; width: 1424px; height: 890px; border-radius: 18px; overflow: hidden;
-  box-shadow: 0 50px 120px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.09); background: #1c1c1e; transform-style: preserve-3d; }
+#frame { position: absolute; left: 160px; top: 40px; width: 1600px; height: 1000px; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 40px 120px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); background: #141517; transform-origin: 50% 50%; }
 #cam { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; }
 #cam img.shot { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; }
-#lights { position: absolute; left: 22px; top: 20px; display: flex; gap: 9px; z-index: 5; }
-#lights i { width: 14px; height: 14px; border-radius: 50%; display: block; }
-.mask { position: absolute; background: #1a1a1e; }
-.reg { position: absolute; overflow: hidden; }
-.reg img { position: absolute; width: 1280px; height: 800px; }
-.hl { position: absolute; border-radius: 12px; box-shadow: 0 0 0 2px rgba(82,166,133,.85), 0 0 24px rgba(82,166,133,.25); }
-#typed { position: absolute; font-size: 14px; color: #f2f4f3; white-space: nowrap; overflow: hidden; }
-.badge { position: absolute; padding: 10px 18px; border-radius: 999px; background: rgba(82,166,133,.16); color: #8fd3b4; font-weight: 600; font-size: 22px;
-  box-shadow: 0 0 0 1px rgba(82,166,133,.45); white-space: nowrap; }
+.hl { position: absolute; border-radius: 10px; box-shadow: 0 0 0 2px rgba(82,166,133,.95), 0 0 0 9999px rgba(0,0,0,.42); pointer-events: none; }
 
-#net { position: absolute; inset: 0; }
-.node { position: absolute; transform: translate(-50%, -50%); text-align: center; }
-.node .dot { width: 92px; height: 92px; border-radius: 50%; margin: 0 auto 12px; background: #151a18; box-shadow: 0 0 0 2px rgba(82,166,133,.6), 0 0 40px rgba(82,166,133,.25);
-  display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 26px; color: var(--green); }
-.node b { display: block; font-size: 22px; font-weight: 600; } .node span { font-size: 17px; color: var(--muted); }
-.pkt { position: absolute; transform: translate(-50%, -50%); }
-.pkt i { display: block; width: 18px; height: 18px; border-radius: 50%; background: #c8f0dd; box-shadow: 0 0 24px 8px rgba(82,166,133,.8); }
-.pkt em { position: absolute; left: 24px; top: -14px; font-style: normal; white-space: nowrap; font-size: 18px; padding: 4px 10px; border-radius: 8px; background: rgba(20,26,24,.9); color: #cfe9dd; box-shadow: 0 0 0 1px rgba(82,166,133,.4); }
+/* terminals (the opening) */
+.term { position: absolute; width: 760px; border-radius: 12px; background: #16181a; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); }
+.term .bar { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #1d2023; color: #8b928f; font-size: 14px; font-family: var(--sans); }
+.term .dot { width: 11px; height: 11px; border-radius: 50%; background: #3a3f42; }
+.term .bar b { margin-left: 8px; font-weight: 600; color: #b7bdba; }
+.term .body { padding: 18px 22px 22px; font-family: var(--mono); font-size: 22px; line-height: 1.7; color: #d7dcd9; white-space: pre; min-height: 190px; }
+.term .p { color: var(--green); }
+.term .dim { color: #7d8582; }
+.term .caret { display: inline-block; width: 9px; height: 19px; background: #d7dcd9; vertical-align: -3px; }
 
-#word2 { position: absolute; left: 0; right: 0; text-align: center; top: 40px; font-size: 56px; font-weight: 800; letter-spacing: -.02em; z-index: 20; }
-#end { position: absolute; inset: 0; }
-#end .pill { display: inline-block; margin: 0 10px; padding: 16px 30px; border-radius: 999px; font-size: 26px; font-weight: 600; }
-#sub { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; z-index: 90; }
-#sub span { display: inline-block; max-width: 1500px; padding: 10px 22px; border-radius: 12px; background: rgba(0,0,0,.55); font-size: 30px; line-height: 1.35; font-weight: 600; }
-#flash { position: absolute; inset: 0; background: #fff; z-index: 95; pointer-events: none; }
-#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55)); pointer-events: none; z-index: 80; }
+/* the phone */
+#phone { position: absolute; width: 430px; height: 900px; border-radius: 62px; background: #050505; padding: 14px;
+  box-shadow: 0 40px 120px rgba(0,0,0,.7), 0 0 0 2px #2a2c2e; }
+#phone .screen { width: 100%; height: 100%; border-radius: 48px; overflow: hidden; position: relative; background: #141517; }
+#phone img { position: absolute; left: 0; top: 0; width: 100%; }
+#phone .notch { position: absolute; left: 50%; top: 12px; width: 120px; height: 34px; margin-left: -60px; border-radius: 20px; background: #050505; }
+
+/* title and end */
+.kinetic { position: absolute; left: 0; right: 0; text-align: center; font-weight: 800; letter-spacing: -0.02em; }
+#cursor { position: absolute; width: 26px; height: 26px; pointer-events: none; z-index: 20; }
+#ripple { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); z-index: 19; }
 </style>
 </head>
 <body>
-<div id="stage">
-  <div id="glow"></div><div id="grain"></div>
-
-  <!-- hook: five agents, each alone -->
-  <div id="hook">
-    <div class="win" id="w0" style="left:120px;top:140px;width:560px;height:300px">
-      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>zsh — ~/code/website</div>
-      <div class="body"><div class="brand" style="color:#d97757">✻ Claude Code</div>
-        <div>&gt; <span data-t="redo the hero section">redo the hero section</span></div>
-        <div style="color:#8fd3b4">● Editing app/page.tsx</div><div class="wait" data-wait>● Waiting for the API spec…</div></div>
-      <div class="tag" data-tag></div></div>
-    <div class="win" id="w1" style="left:1200px;top:110px;width:600px;height:310px">
-      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>ssh build-01 — codex</div>
-      <div class="body"><div class="brand" style="color:#e8e8e8">⌘ Codex</div>
-        <div>› add a /api/plans endpoint</div><div style="color:#8fd3b4">• Running tests… 18 passed</div><div class="wait" data-wait>• Waiting for review…</div></div>
-      <div class="tag" data-tag></div></div>
-    <div class="win" id="w2" style="left:210px;top:590px;width:620px;height:330px">
-      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Cursor — website</div>
-      <div class="body" style="display:flex;gap:18px;padding:0">
-        <div style="width:330px;padding:16px 18px;font-size:15px;line-height:1.75;color:#9aa19e">
-          <div><span style="color:#c792ea">export</span> <span style="color:#82aaff">function</span> <span style="color:#ffcb6b">Pricing</span>() {</div>
-          <div>&nbsp; <span style="color:#c792ea">const</span> plans = <span style="color:#82aaff">usePlans</span>()</div>
-          <div>&nbsp; <span style="color:#c792ea">return</span> &lt;<span style="color:#f07178">Grid</span>&gt;</div>
-          <div>&nbsp;&nbsp;&nbsp; {plans.<span style="color:#82aaff">map</span>(p =&gt;</div><div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;<span style="color:#f07178">PlanCard</span> {...p}/&gt;)}</div></div>
-        <div style="flex:1;border-left:1px solid #2a2f31;padding:16px 16px;font-family:var(--sans);font-size:16px;line-height:1.55">
-          <div class="brand" style="color:#e8e8e8;font-size:18px">◆ Cursor Agent</div><div style="color:#9aa19e">Building PlanCard…</div><div class="wait" data-wait>Needs the copy from docs</div></div></div>
-      <div class="tag" data-tag></div></div>
-    <div class="win" id="w3" style="left:1280px;top:600px;width:480px;height:330px">
-      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Grok</div>
-      <div class="body" style="font-family:var(--sans);font-size:17px">
-        <div class="brand" style="color:#e8e8e8">✦ Grok bot</div>
-        <div style="margin-left:auto;width:max-content;max-width:330px;background:#2a3034;padding:8px 14px;border-radius:14px;margin-bottom:10px" data-t>Any alerts overnight?</div>
-        <div style="width:max-content;max-width:360px;background:#1f2a26;padding:8px 14px;border-radius:14px;color:#cfe9dd">3 alerts, all resolved. One needs a deploy.</div></div>
-      <div class="tag" data-tag></div></div>
-    <div class="win" id="w4" style="left:760px;top:350px;width:420px;height:270px">
-      <div class="bar"><span class="dots"><i></i><i></i><i></i></span>claude.ai</div>
-      <div class="body" style="font-family:var(--sans);font-size:17px">
-        <div class="brand" style="color:#d97757">claude.ai · cloud</div>
-        <div style="color:#9aa19e">Research: payment providers in the EU</div><div class="wait" data-wait>Drafting the comparison…</div></div>
-      <div class="tag" data-tag></div></div>
-    <div class="chip" id="carry"></div>
-    <div class="kinetic" id="k1" style="top:470px;font-size:120px"></div>
-  </div>
-
-  <svg id="threads" viewBox="0 0 1920 1080"></svg>
-  <img id="logo" src="../assets/logo/myco-symbol.svg">
-  <img id="word" src="../assets/logo/myco-wordmark-dark.svg">
-  <div class="kinetic" id="tagline"></div>
-
-  <div id="frame"><div id="cam"></div><div id="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div></div>
-  <div id="net"></div>
-  <div id="word2"></div>
-  <div id="end"></div>
-  <div id="ripple"></div>
-  <div id="cursor"><svg viewBox="0 0 24 24" width="34" height="34"><path d="M4 2l14 9-6.5 1.5L15 20l-3 1.5-3.5-7.5L4 18z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg></div>
-  <div id="vignette"></div>
-  <div id="sub"><span></span></div>
-  <div id="flash"></div>
-</div>
+<div id="glow"></div>
+<div id="grain"></div>
+<div id="frame"><div id="cam"></div></div>
+<div id="terms"></div>
+<div id="phone"><div class="screen"><img id="phoneimg"><div class="notch"></div></div></div>
+<div id="title"></div>
+<svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.6 14.8 L11.6 21.6 L14.6 20.3 L11.7 13.6 L18 13.6 Z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+<div id="ripple"></div>
 <script>
-const LANG = window.LANG || 'en';
-const ZH = LANG === 'zh';
-const A = (window.ASSETS || 'assets/' + LANG) + '/';
-const T = (zh, en) => (ZH ? zh : en);
+const LANG = window.LANG || 'zh';
+const zh = LANG === 'zh';
+const T = (z, e) => (zh ? z : e);
+const A = (window.ASSETS || ('../assets/app-film/' + LANG)) + '/';
 const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+const eio = (p) => (p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const out3 = (p) => 1 - Math.pow(1 - p, 3);
+const in3 = (p) => p * p * p;
+const expoOut = (p) => (p >= 1 ? 1 : 1 - Math.pow(2, -10 * p));
 
-// ---------- easing ----------
-const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-const seg = (t, a, b) => clamp((t - a) / (b - a));
-const eo = (x) => 1 - Math.pow(1 - x, 3);
-const eio = (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
-const back = (x) => { const c = 1.6; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
-const lerp = (a, b, x) => a + (b - a) * x;
-const p4out = (x) => 1 - Math.pow(1 - x, 4);
-const expoOut = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
-const p3in = (x) => x * x * x;
-const beatPulse = (t, from, to) => (t >= from && t < to ? Math.exp(-((t * 2) % 1) * 7) : 0); // 120 BPM
-
-// ---------- hook ----------
-const W = [0, 1, 2, 3, 4].map((i) => $('w' + i));
-const POP = [0.5, 2.0, 3.5, 4.5, 5.5];
-const TAGS = [T('MacBook 上的 Claude Code', 'Claude Code · MacBook'), T('服务器上的 Codex', 'Codex · build server'), T('Windows 上的 Cursor', 'Cursor · Windows desktop'),
-  T('Grok 机器人', 'Grok bot'), T('云端的 agent', 'Agents in the cloud')];
-W.forEach((w, i) => { w.querySelector('[data-tag]').textContent = TAGS[i]; });
-const center = (w) => { const r = { x: parseFloat(w.style.left) + parseFloat(w.style.width) / 2, y: parseFloat(w.style.top) + parseFloat(w.style.height) / 2 }; return r; };
-const WC = W.map(center);
-// the copy-paste chaos: (from, to, start, end)
-// the same hops as film3d.html (the 3D hook); the sound cues follow them
-const HOPS = [[0, 1, 8.3, 8.95], [1, 3, 9.35, 9.95], [3, 2, 10.35, 10.9], [2, 4, 11.25, 11.7], [4, 0, 12.05, 12.4], [0, 3, 12.55, 12.85], [3, 1, 12.95, 13.2], [1, 2, 13.25, 13.45], [2, 0, 13.5, 13.68]];
-const CARRY = ['/api/plans spec', 'review: LGTM?', 'alert #3 → deploy', 'pricing copy', 'EU fee table', 'hero text', 'deploy ok?', 'tests?', 'copy…'];
-
-function hook(t) {
-  const on = t < 15.4;
-  $('hook').style.display = on ? '' : 'none';
-  if (!on) return;
-  W.forEach((w, i) => {
-    const p = seg(t, POP[i], POP[i] + .45);
-    const floatY = Math.sin(t * 1.3 + i * 1.7) * 6;
-    let s = lerp(.6, 1, back(p)); let op = p;
-    // the drop: windows shrink into the threads' ends
-    const d = seg(t, 14.2, 15.2);
-    const tx = (960 - WC[i].x) * eio(d) * .55, ty = (540 - WC[i].y) * eio(d) * .55;
-    s *= 1 - .82 * eio(d); op *= 1 - d;
-    // problem phase: everything dims a little, then jitters on the beats
-    const dim = seg(t, 8, 8.6) * (1 - seg(t, 13.9, 14.1));
-    const jit = t > 12 && t < 14 ? Math.sin(t * 60 + i) * 3 * seg(t, 12, 13.5) : 0;
-    w.style.opacity = op;
-    w.style.filter = `brightness(${1 - .25 * dim})`;
-    w.style.transform = `translate(${tx + jit}px, ${floatY + ty}px) scale(${s})`;
-    w.querySelectorAll('[data-wait]').forEach((e) => { e.style.opacity = seg(t, 8.4 + i * .3, 8.8 + i * .3) * (0.6 + 0.4 * Math.sin(t * 6)); });
-  });
-  // carried chip + cursor during 8-14
-  const c = $('carry'); c.style.display = 'none';
-  for (let h = 0; h < HOPS.length; h++) {
-    const [a, b, s0, s1] = HOPS[h];
-    if (t >= s0 - .15 && t <= s1 + .1) {
-      const p = eio(seg(t, s0, s1));
-      const x = lerp(WC[a].x, WC[b].x, p), y = lerp(WC[a].y, WC[b].y, p) - Math.sin(p * Math.PI) * 120;
-      c.style.display = ''; c.textContent = CARRY[h]; c.style.left = x + 18 + 'px'; c.style.top = y + 24 + 'px';
-      c.style.opacity = seg(t, s0 - .15, s0) * (1 - seg(t, s1, s1 + .1));
-      setCursor(x, y, 1);
-    }
-  }
-  // "Copy. Paste. Wait." on the beats
-  const k = $('k1'); const words = [[12.0, T('复制。', 'Copy.')], [12.5, T('粘贴。', 'Paste.')], [13.0, T('等待。', 'Wait.')]];
-  k.textContent = ''; k.style.opacity = 0;
-  for (const [at, wd] of words) if (t >= at && t < at + .5) { k.textContent = wd; const p = seg(t, at, at + .12); k.style.opacity = 1; k.style.transform = `scale(${lerp(1.5, 1, eo(p))})`; }
-  if (t >= 13.5 && t < 14) { k.textContent = T('复制。粘贴。等待。', 'Copy. Paste. Wait.'); k.style.opacity = 1 - seg(t, 13.85, 14); k.style.transform = `scale(${1 + .08 * seg(t, 13.5, 14)})`; k.style.fontSize = '96px'; }
-  else k.style.fontSize = '120px';
-}
-
-// ---------- the drop: mycelium threads into the logo ----------
-function drop(t) {
-  const svg = $('threads');
-  const on = t >= 14 && t < 18.6;
-  svg.style.display = on ? '' : 'none';
-  $('logo').style.display = $('word').style.display = $('tagline').style.display = on ? '' : 'none';
-  if (!on) return;
-  const grow = eo(seg(t, 14.0, 15.0)), fade = 1 - seg(t, 17.6, 18.4);
-  let html = '';
-  WC.forEach((c, i) => {
-    for (let k = 0; k < 3; k++) {
-      const mx = (c.x + 960) / 2 + Math.sin(i * 3 + k) * 140, my = (c.y + 540) / 2 + Math.cos(i * 2 + k) * 120;
-      const len = 1400;
-      html += `<path d="M${c.x},${c.y} Q${mx},${my} 960,540" fill="none" stroke="rgba(82,166,133,${.75 - k * .2})" stroke-width="${3 - k * .8}" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - grow)}" stroke-linecap="round"/>`;
-    }
-    const nodeP = seg(t, 14.6, 15.3);
-    html += `<circle cx="${lerp(c.x, 960 + (c.x - 960) * .45, eio(nodeP))}" cy="${lerp(c.y, 540 + (c.y - 540) * .45, eio(nodeP))}" r="${10 + 6 * Math.exp(-(((t - 14.6) * 3) ** 2))}" fill="#8fd3b4" opacity="${grow}"/>`;
-  });
-  svg.innerHTML = html; svg.style.opacity = fade * (1 - .6 * seg(t, 15.2, 16));
-  const lp = seg(t, 15.0, 15.7), wp = seg(t, 15.5, 16.1), tp = seg(t, 16.0, 16.6);
-  $('logo').style.opacity = lp * fade; $('logo').style.transform = `scale(${lerp(.3, 1, back(lp)) * (1 + .5 * seg(t, 17.6, 18.4))}) rotate(${lerp(-40, 0, eo(lp))}deg)`;
-  $('word').style.opacity = wp * fade; $('word').style.top = `calc(50% + ${110 + 20 * (1 - eo(wp))}px)`;
-  const tg = $('tagline'); tg.textContent = T('一个 App，连起你所有的 agent', 'One app for every agent, on every machine.');
-  tg.style.top = '790px'; tg.style.opacity = tp * fade; tg.style.transform = `translateY(${20 * (1 - eo(tp))}px)`;
-}
-
-// ---------- app shots ----------
+// ---------- the app window and its camera ----------
+const FW = 1600, FH = 1000, K0 = FW / 1280; // display px per app px
 const cam = $('cam');
 const IMG = {};
-// "other:<name>" is a capture in the other language (the montage's language beat)
 function img(name) {
-  if (!IMG[name]) {
-    const i = new Image(); i.className = 'shot';
-    i.src = name.startsWith('other:') ? (window.ASSETS_OTHER + '/' + name.slice(6) + '.png') : A + name + '.png';
-    IMG[name] = i;
-  }
+  if (!IMG[name]) { const i = new Image(); i.className = 'shot'; i.src = A + name + '.png'; IMG[name] = i; }
   return IMG[name];
 }
-const K0 = 1424 / 1280; // display px per app px
 let shown = '';
-function show(name, extra) {
-  const key = name + (extra || '');
-  // the shot stays; what each frame draws over it (masks, highlights, floods) does not
-  if (shown === key) { while (cam.children.length > 1) cam.lastChild.remove(); return; }
-  shown = key; cam.innerHTML = ''; cam.appendChild(img(name).cloneNode());
+function show(name) {
+  if (shown === name) { while (cam.children.length > 1) cam.lastChild.remove(); return; }
+  shown = name; cam.innerHTML = ''; cam.appendChild(img(name).cloneNode());
 }
-// camera: focus (app px) and zoom
-function camera(fx, fy, s) {
-  const k = K0 * s; const fw = 1424, fh = 890;
-  let x = fw / 2 - fx * k, y = fh / 2 - fy * k;
-  x = clamp(x, fw - 1280 * k, 0); y = clamp(y, fh - 800 * k, 0);
-  cam.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
-  return { k, x, y };
-}
-// app px -> screen px under the current camera
 let CAM = { k: K0, x: 0, y: 0 };
-const toScreen = (ax, ay) => ({ x: 248 + CAM.x + ax * CAM.k, y: 54 + CAM.y + ay * CAM.k });
-function keyframes(t, ks) { // [[t, fx, fy, s], ...] eased
+function camera(fx, fy, s) {
+  const k = K0 * s;
+  let x = FW / 2 - fx * k, y = FH / 2 - fy * k;
+  x = clamp(x, FW - 1280 * k, 0); y = clamp(y, FH - 800 * k, 0);
+  cam.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  CAM = { k, x, y };
+}
+function keys(t, ks) { // [[t, fx, fy, s], ...] eased between
   if (t <= ks[0][0]) return ks[0].slice(1);
   for (let i = 0; i < ks.length - 1; i++) {
     const [t0, ...a] = ks[i], [t1, ...b] = ks[i + 1];
@@ -277,251 +108,241 @@ function keyframes(t, ks) { // [[t, fx, fy, s], ...] eased
   }
   return ks[ks.length - 1].slice(1);
 }
-function overlay(html) { const d = document.createElement('div'); d.innerHTML = html; cam.appendChild(d); return d; }
-function hlRect(x, y, w, h, op) { if (op <= 0) return; overlay(`<div class="hl" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${op}"></div>`); }
-
-function setCursor(x, y, op, click) {
-  const c = $('cursor'); c.style.display = op > 0 ? '' : 'none'; c.style.left = x + 'px'; c.style.top = y + 'px'; c.style.opacity = op;
-  c.style.transform = `scale(${click ? .85 : 1})`;
+function hl(b, op, pad = 6) { // a box (app px) lit, the rest dimmed
+  if (!b || op <= 0) return;
+  const d = document.createElement('div'); d.className = 'hl';
+  Object.assign(d.style, { left: b[0] - pad + 'px', top: b[1] - pad + 'px', width: b[2] + 2 * pad + 'px', height: b[3] + 2 * pad + 'px', opacity: op });
+  cam.appendChild(d);
 }
-function ripple(x, y, p) { const r = $('ripple'); r.style.display = p > 0 && p < 1 ? '' : 'none'; r.style.left = x - 30 + 'px'; r.style.top = y - 30 + 'px'; r.style.transform = `scale(${.4 + p * 1.4})`; r.style.opacity = 1 - p; }
-function clickAt(t, at, ax, ay) { const s = toScreen(ax, ay); ripple(s.x, s.y, seg(t, at, at + .45)); }
-
-function frameMotion(t) {
+// app px -> screen px (frame at rest)
+const FX = 160, FY = 40;
+const toScreen = (ax, ay) => ({ x: FX + CAM.x + ax * CAM.k, y: FY + CAM.y + ay * CAM.k });
+function cursorTo(t, pts) { // [[t, ax, ay], ...] in app px; null when before/after
+  const c = $('cursor');
+  if (t < pts[0][0] - .25 || t > pts[pts.length - 1][0] + .5) { c.style.display = 'none'; return; }
+  const [ax, ay] = keys(t, pts.map(([tt, x, y]) => [tt, x, y]));
+  const s = toScreen(ax, ay);
+  c.style.display = ''; c.style.left = s.x + 'px'; c.style.top = s.y + 'px';
+  c.style.opacity = Math.min(seg(t, pts[0][0] - .25, pts[0][0]), 1 - seg(t, pts[pts.length - 1][0] + .2, pts[pts.length - 1][0] + .5));
+}
+function rippleAt(t, at, ax, ay) {
+  const r = $('ripple'); const p = seg(t, at, at + .45);
+  if (p <= 0 || p >= 1) return;
+  const s = toScreen(ax, ay);
+  r.style.display = ''; r.style.left = s.x - 30 + 'px'; r.style.top = s.y - 30 + 'px';
+  r.style.transform = `scale(${.4 + p * 1.4})`; r.style.opacity = 1 - p;
+}
+// the frame's own motion: in, out, a swap between two shots
+function frameAt(op, sc = 1, dx = 0, blur = 0) {
   const f = $('frame');
-  const on = t >= 47.95 && t < 60.0;
-  f.style.display = on ? '' : 'none';
-  if (!on) return false;
-  let sc = 1, op = 1, blur = 0, clip = 'none';
-  // out of the dive into the hub: an iris opens from the centre; the app lands slightly large
-  if (t < 48.8) { const p = seg(t, 48.0, 48.4); clip = `circle(${lerp(2, 75, p4out(p))}% at 50% 50%)`; sc = lerp(1.08, 1, expoOut(seg(t, 48.0, 48.8))); }
-  // back into the network
-  if (t >= 59.6) { const p = seg(t, 59.6, 59.95); op = 1 - p; sc = 1 - .06 * p3in(p); blur = 8 * p; }
-  f.style.opacity = op; f.style.clipPath = clip;
-  f.style.transform = `scale(${sc})`;
+  f.style.display = op > 0 ? '' : 'none';
+  f.style.opacity = op; f.style.transform = `translateX(${dx}px) scale(${sc})`;
   f.style.filter = blur > .1 ? `blur(${blur}px)` : 'none';
-  return true;
+}
+function swap(t, at) { // a quick blur-slide at a cut
+  const a = seg(t, at - .18, at), b = seg(t, at, at + .22);
+  if (a > 0 && a < 1) return { dx: -in3(a) * 160, blur: a * 14 };
+  if (b > 0 && b < 1) return { dx: (1 - out3(b)) * 160, blur: (1 - b) * 14 };
+  return { dx: 0, blur: 0 };
 }
 
-// conversation regions (app px): you+task, progress, reply, follow-up
-const REG = [[580, 135, 640, 80], [560, 230, 420, 30], [330, 272, 560, 246], [560, 528, 640, 125]];
-function conversation(t, base) {
-  show('conversation-dark', 'c');
-  // masks over the regions, then each region rises in
-  const at = [35.6, 36.3, 37.0, 40.0];
-  let html = '';
-  REG.forEach(([x, y, w, h], i) => {
-    html += `<div class="mask" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`;
-    const p = seg(t, at[i], at[i] + (i === 2 ? .9 : .35));
-    if (p > 0) {
-      const clip = i === 2 ? `clip-path: inset(0 0 ${(1 - eo(p)) * 100}% 0);` : '';
-      html += `<div class="reg" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${i === 2 ? 1 : eo(p)};transform:translateY(${(1 - eo(p)) * 14}px);${clip}"><img src="${A}conversation-dark.png" style="left:${-x}px;top:${-y}px"></div>`;
-    }
-  });
-  // the composer: the task types itself, then it's sent
-  const task = T('按设计稿做新的定价页，三档套餐，支持月付 / 年付切换。', 'Build the new pricing page from the design: three plans, with a monthly / yearly toggle.');
-  const typing = seg(t, 34.4, 35.4), sent = t >= 35.6;
-  if (t >= 34.3 && !sent) {
-    html += `<div class="mask" style="left:330px;top:692px;width:700px;height:30px;background:#2a2a2d"></div>`;
-    html += `<div id="typed" style="left:336px;top:700px">${task.slice(0, Math.round(task.length * typing))}<span style="opacity:${(t * 2) % 1 < .5 ? 1 : 0}">|</span></div>`;
+// ---------- title and end ----------
+const SYMBOL = '../assets/logo/myco-symbol.svg';
+const WORD = '../assets/logo/myco-wordmark-dark.svg';
+function titleCard(t) {
+  const el = $('title');
+  if (t >= 4.2 && t < 52) { el.innerHTML = ''; return; }
+  if (t < 4.2) {
+    // the pixel mushroom grows in steps, then the word
+    const g = seg(t, .3, 1.6); const step = Math.ceil(g * 8) / 8;
+    const w = seg(t, 1.5, 2.3); const outp = seg(t, 3.5, 4.2);
+    el.innerHTML = `
+      <img src="${SYMBOL}" class="abs" style="left:${960 - 110}px;top:${360 - 20 * w}px;width:220px;filter:invert(1);transform:scale(${step * (1 - .15 * outp)});transform-origin:50% 100%;opacity:${1 - outp}">
+      <img src="${WORD}" class="abs" style="left:${960 - 170}px;top:${640}px;width:340px;opacity:${out3(w) * (1 - outp)};transform:translateY(${(1 - out3(w)) * 24}px)">`;
+    return;
   }
-  if (t >= 40.0) html += ''; // follow-up shown via region 3
-  const d = document.createElement('div'); d.innerHTML = html; cam.appendChild(d);
+  // the end: the mark, the line, where to get it
+  const u = seg(t, 52.0, 53.0), l = seg(t, 52.8, 53.8), d = seg(t, 54.0, 55.0), o = seg(t, 59.0, 60.0);
+  el.innerHTML = `
+    <img src="${SYMBOL}" class="abs" style="left:${960 - 80}px;top:${230}px;width:160px;filter:invert(1);opacity:${out3(u) * (1 - o)};transform:scale(${.85 + .15 * expoOut(u)});transform-origin:50% 100%">
+    <img src="${WORD}" class="abs" style="left:${960 - 150}px;top:${440}px;width:300px;opacity:${out3(u) * (1 - o)}">
+    <div class="kinetic" style="top:580px;font-size:${zh ? 64 : 60}px;opacity:${out3(l) * (1 - o)};transform:translateY(${(1 - out3(l)) * 20}px)">${T('你的 AI agent，一个 App 就够', 'All your AI agents, one app')}</div>
+    <div class="kinetic" style="top:720px;font-size:28px;font-weight:400;color:#9aa19e;opacity:${out3(d) * (1 - o)}">${T('Mac · Windows · Linux　免费下载', 'Free for Mac, Windows and Linux')}</div>
+    <div class="kinetic" style="top:776px;font-size:26px;font-weight:400;color:#7d8582;font-family:var(--mono);opacity:${out3(d) * (1 - o)}">github.com/chenhg5/myco</div>`;
 }
 
-// a second capture over the first, revealed by a circle from (cx, cy) in app px
-function flood(name, p, cx, cy) {
-  if (p <= 0) return;
-  const d = document.createElement('div');
-  d.style.cssText = `position:absolute;left:0;top:0;width:1280px;height:800px;clip-path:circle(${p4out(p) * 1600}px at ${cx}px ${cy}px)`;
-  d.appendChild(img(name).cloneNode()); cam.appendChild(d);
-}
-// motion blur from the camera's own speed (screen px per frame)
-function camBlur(t, ks) {
-  const a = keyframes(t, ks), b = keyframes(t - 1 / 30, ks);
-  const k = K0 * a[2], kb = K0 * b[2];
-  const v = Math.hypot(a[0] * k - b[0] * kb, a[1] * k - b[1] * kb) + Math.abs(k - kb) * 160;
-  cam.style.filter = v > 8 ? `blur(${Math.min(3.5, (v - 8) * .1)}px)` : 'none';
-}
-
-function cursorPath(t, pts) { // [[t, appX, appY, click?], ...] in app px -> screen
-  let p = pts[0];
-  for (let i = 1; i < pts.length; i++) if (t >= pts[i - 1][0]) { const q = p4out(seg(t, pts[i - 1][0], pts[i][0] - .1)); const A = toScreen(pts[i - 1][1], pts[i - 1][2]), B = toScreen(pts[i][1], pts[i][2]); p = [0, lerp(A.x, B.x, q), lerp(A.y, B.y, q)]; }
-  return p;
-}
-// where the film aims, in app px, measured on the captures (capture.cjs writes boxes.json)
-const BOX = {
-  zh: { frontend: [312, 186, 899, 60], trace: [701, 459, 545, 179], shell: [672, 118, 600, 140], session: [405, 327, 503, 41], join: [870, 666, 53, 28], added: [312, 547, 899, 60] },
-  en: { frontend: [312, 186, 899, 60], trace: [701, 458, 545, 179], shell: [672, 118, 600, 140], session: [405, 316, 503, 41], join: [870, 676, 53, 28], added: [312, 547, 899, 60] },
-}[ZH ? 'zh' : 'en'];
-const mid = (b) => [b[0] + b[2] / 2, b[1] + b[3] / 2];
-// the rows a running task reveals one at a time (the steps; the terminal's output), app px
-const STEP_TOP = [496, 525, 553, 582, 610, 640];
-const OUT_TOP = [142, 160, 178, 196, 214, 284];
-function reveal(tops, n, x, w, bottom, color) {
-  const top = tops[Math.min(n, tops.length - 1)];
-  if (top < bottom) overlay(`<div style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${bottom - top}px;background:${color}"></div>`);
-}
-function slideIn(t, at) { const w = 1 - seg(t, at, at + .2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform = `translateX(${p3in(w) * 300}px) ` + cam.style.transform; } }
-function slideOut(t, at) { const w = seg(t, at, at + .2); if (w > 0) { cam.style.filter = `blur(${w * 16}px)`; cam.style.transform += ` translateX(${-p3in(w) * 300}px)`; } }
-
-function appShots(t) {
-  cam.style.filter = 'none'; cam.style.opacity = 1;
-  $('word2').style.opacity = 0;
-  if (!frameMotion(t)) return;
-  let ks, after = null;
-  if (t < 50.4) { // every agent, in one list; open Frontend's conversation
-    show('nodes-dark');
-    ks = [[48.0, 640, 400, 1], [48.9, 640, 400, 1], [49.6, 700, 280, 1.3]];
-    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    hlRect(...BOX.frontend, seg(t, 49.6, 49.8));
-    const [fx, fy] = mid(BOX.frontend);
-    const a = toScreen(fx - 200, fy), from = toScreen(1100, 640);
-    const q = p4out(seg(t, 49.3, 49.9));
-    setCursor(lerp(from.x, a.x, q), lerp(from.y, a.y, q), seg(t, 49.2, 49.35), Math.abs(t - 50.05) < .07);
-    clickAt(t, 50.05, fx - 200, fy);
-    flood('conversation-dark', seg(t, 50.1, 50.4), fx - 200, fy);
-    after = 'cursor';
-  } else if (t < 53.6) { // what it is doing: the steps of its task, as they happen
-    show('conversation-dark');
-    ks = [[50.4, 900, 420, 1.1], [51.2, 960, 545, 1.6]];
-    CAM = camera(...keyframes(t, ks)); camBlur(t, ks);
-    reveal(STEP_TOP, Math.floor(seg(t, 50.8, 52.9) * 5.99), BOX.trace[0], BOX.trace[2] + 20, 640, '#1b1b1f');
-    hlRect(...BOX.trace, seg(t, 51.3, 51.55));
-    slideOut(t, 53.4);
-  } else if (t < 56.8) { // even a shell on your computer, its output as it runs
-    show('shell-dark');
-    ks = [[53.6, 960, 300, 1.25], [54.4, 940, 200, 1.75]];
-    CAM = camera(...keyframes(t, ks));
-    slideIn(t, 53.6);
-    reveal(OUT_TOP, Math.floor(seg(t, 54.0, 56.0) * 5.99), 672, 600, 284, '#121317');
-    hlRect(...BOX.shell, seg(t, 54.2, 54.45));
-    slideOut(t, 56.6);
-  } else if (t < 58.2) { // add one: a session on this computer, one click
-    show('add-node-dark');
-    ks = [[56.8, 640, 380, 1.4], [57.2, 640, 420, 1.25]];
-    CAM = camera(...keyframes(t, ks));
-    slideIn(t, 56.8);
-    const [sx, sy] = mid(BOX.session), [jx, jy] = mid(BOX.join);
-    hlRect(...BOX.session, seg(t, 57.35, 57.5));
-    const p = cursorPath(t, [[56.9, 1000, 650], [57.35, sx - 120, sy], [57.85, jx, jy]]);
-    setCursor(p[1], p[2], seg(t, 56.9, 57.05), Math.abs(t - 57.35) < .07 || Math.abs(t - 57.85) < .07);
-    clickAt(t, 57.35, sx - 120, sy); clickAt(t, 57.85, jx, jy);
-    flood('added', seg(t, 57.9, 58.2), jx, jy);
-    after = 'cursor';
-  } else { // joined
-    show('added');
-    const [, ay] = mid(BOX.added);
-    ks = [[58.2, 700, ay - 30, 1.25], [58.7, 700, ay, 1.6]];
-    CAM = camera(...keyframes(t, ks));
-    const p = seg(t, 58.25, 58.6);
-    hlRect(...BOX.added, p);
-    overlay(`<div class="badge" style="left:1010px;top:${BOX.added[1] + 16}px;transform:scale(${1 / CAM.k});transform-origin:0 0;opacity:${p}">${T('已加入', 'Joined')}</div>`);
-  }
-  if (after !== 'cursor') { setCursor(0, 0, 0); ripple(0, 0, 0); }
-}
-
-// the app section's sound cues (the 3D world's are in film3d.html)
-window.APP_CUES = [[50.05, 'click', .8], [50.1, 'pop', .5], ...[0, 1, 2, 3, 4].map((i) => [50.8 + i * .42, 'tick', .35]), [53.4, 'whoosh', .35],
-  ...[0, 1, 2, 3, 4].map((i) => [54.0 + i * .4, 'tick', .4]), [56.6, 'whoosh', .35], [57.35, 'click', .8], [57.85, 'click', .8], [57.9, 'pop', .6]];
-
-// ---------- together: the network ----------
-const NODES = [
-  { k: 'fe', x: 620, y: 360, b: T('前端', 'Frontend'), s: 'Claude Code', g: '✻' },
-  { k: 'be', x: 1300, y: 360, b: T('后端', 'Backend'), s: 'Codex', g: '⌘' },
-  { k: 'rv', x: 960, y: 220, b: T('代码审查', 'Reviewer'), s: 'Codex', g: '⌘' },
-  { k: 'cu', x: 470, y: 660, b: T('组件', 'Components'), s: 'Cursor', g: '◆' },
-  { k: 'gr', x: 1450, y: 660, b: T('值班', 'On-call'), s: 'Grok bot', g: '✦' },
-  { k: 'rs', x: 960, y: 760, b: T('调研', 'Research'), s: 'claude.ai', g: '☁' },
+// ---------- the opening: agents scattered in terminals ----------
+const TERMS = [
+  { at: 4.3, x: 90, y: 80, r: -3, title: 'claude', lines: [['p', '> '], ['', T('把定价页的 FAQ 写完', 'finish the FAQ on the pricing page')], ['br'], ['dim', '✻ ' + T('思考中…（12 秒）', 'Thinking… (12s)')], ['br'], ['dim', '⎿ ' + T('读了 3 个文件', 'Read 3 files')]] },
+  { at: 5.3, x: 1060, y: 130, r: 2.5, title: 'codex', lines: [['p', '› '], ['', T('加一个 /api/plans 接口', 'add a /api/plans endpoint')], ['br'], ['dim', '• ' + T('正在跑测试…', 'Running tests…')], ['br'], ['dim', '  ✓ 18 passed']] },
+  { at: 6.3, x: 220, y: 590, r: 2, title: 'gemini', lines: [['p', '> '], ['', T('总结一下这周的 issue', "summarize this week's issues")], ['br'], ['dim', '⠋ ' + T('读取中…', 'Reading…')], ['br'], ['dim', T('  共 23 个 issue', '  23 issues')]] },
+  { at: 7.3, x: 980, y: 630, r: -2, title: 'ssh build-01', lines: [['p', '$ '], ['', 'go test ./...'], ['br'], ['dim', 'ok   myco/internal/runner  1.8s'], ['br'], ['dim', 'ok   myco/internal/app     2.4s']] },
 ];
-const PKTS = [['fe', 'be', 44.5, T('需要 /api/plans', 'need /api/plans')], ['be', 'fe', 45.5, T('今天下午部署', 'deploying today')], ['rv', 'fe', 46.4, 'LGTM ✓'],
-  ['gr', 'be', 47.2, T('告警 #3：要部署', 'alert #3: deploy')], ['rs', 'cu', 48.0, T('费率对比', 'fee table')], ['cu', 'fe', 48.8, 'PlanCard ✓']];
-function together(t) {
-  const net = $('net'); const on = t >= 43.8 && t < 50.3;
-  net.style.display = on ? '' : 'none'; if (!on) return;
-  const inP = seg(t, 43.8, 44.4), outP = seg(t, 49.8, 50.3);
-  const byK = Object.fromEntries(NODES.map((n) => [n.k, n]));
-  let svg = '<svg viewBox="0 0 1920 1080" style="position:absolute;inset:0">';
-  for (let i = 0; i < NODES.length; i++) for (let j = i + 1; j < NODES.length; j++) {
-    const a = NODES[i], b = NODES[j];
-    const mx = (a.x + b.x) / 2 + (a.y - b.y) * .15, my = (a.y + b.y) / 2 + (b.x - a.x) * .15;
-    svg += `<path d="M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}" stroke="rgba(82,166,133,.28)" stroke-width="2" fill="none" stroke-dasharray="1200" stroke-dashoffset="${1200 * (1 - eo(seg(t, 44.0 + i * .08, 44.9 + i * .08)))}"/>`;
+// where each terminal lands in the app: the sidebar's conversations (app px)
+const LAND = [[120, 293], [120, 325], [120, 357], [120, 687]];
+function typed(lines, n) { // the first n characters of a terminal's lines
+  let out = '', left = n;
+  for (const [cls, text] of lines) {
+    if (cls === 'br') { if (left > 0) out += '\n'; continue; }
+    const s = text.slice(0, Math.max(0, left)); left -= text.length;
+    out += cls ? `<span class="${cls}">${s}</span>` : s;
   }
-  svg += '</svg>';
-  let html = svg;
-  NODES.forEach((n, i) => {
-    const p = back(seg(t, 43.9 + i * .07, 44.4 + i * .07));
-    const glow = PKTS.some(([a, b, at]) => (b === n.k && t > at + .7 && t < at + 1.2)) ? 1 : 0;
-    html += `<div class="node" style="left:${n.x}px;top:${n.y}px;transform:translate(-50%,-50%) scale(${p});opacity:${clamp(p)}"><div class="dot" style="box-shadow:0 0 0 2px rgba(82,166,133,${.6 + .4 * glow}),0 0 ${40 + 50 * glow}px rgba(82,166,133,${.25 + .5 * glow})">${n.g}</div><b>${n.b}</b><span>${n.s}</span></div>`;
+  return out;
+}
+function terminals(t) {
+  const box = $('terms');
+  if (t < 4 || t >= 14) { box.innerHTML = ''; return; }
+  let html = '';
+  TERMS.forEach((w, i) => {
+    const inP = out3(seg(t, w.at, w.at + .45));
+    if (inP <= 0) return;
+    const total = w.lines.reduce((n, [c, s]) => n + (c === 'br' ? 0 : s.length), 0);
+    const chars = Math.floor(seg(t, w.at + .4, w.at + 2.2) * total);
+    const drift = Math.sin((t + i) * .6) * 6;
+    // into the app: each flies to its row in the sidebar and shrinks away
+    const fly = eio(seg(t, 12.2 + i * .12, 13.4 + i * .12));
+    const land = LAND[i];
+    const tx = lerp(w.x, FX + land[0] * K0 - 380, fly), ty = lerp(w.y + drift, FY + land[1] * K0 - 115, fly);
+    const sc = lerp(1, .06, fly), op = inP * (1 - seg(fly, .8, 1));
+    html += `<div class="term" style="left:${tx}px;top:${ty}px;opacity:${op};transform:rotate(${w.r * (1 - fly)}deg) scale(${sc * (.94 + .06 * inP)})">
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><b>${w.title}</b></div>
+      <div class="body">${typed(w.lines, chars)}${chars < total || Math.floor(t * 2) % 2 ? '<span class="caret"></span>' : ''}</div></div>`;
   });
-  PKTS.forEach(([a, b, at, label]) => {
-    const p = seg(t, at, at + .75); if (p <= 0 || p >= 1) return;
-    const A1 = byK[a], B1 = byK[b];
-    const mx = (A1.x + B1.x) / 2 + (A1.y - B1.y) * .15, my = (A1.y + B1.y) / 2 + (B1.x - A1.x) * .15;
-    const q = eio(p), x = (1 - q) ** 2 * A1.x + 2 * (1 - q) * q * mx + q * q * B1.x, y = (1 - q) ** 2 * A1.y + 2 * (1 - q) * q * my + q * q * B1.y;
-    html += `<div class="pkt" style="left:${x}px;top:${y}px"><i></i><em>${label}</em></div>`;
-  });
-  net.innerHTML = html; net.style.opacity = inP * (1 - outP); net.style.transform = `scale(${1 + .04 * seg(t, 44, 50)})`;
+  box.innerHTML = html;
 }
 
-// ---------- end card ----------
-function endCard(t) {
-  const e = $('end'); const on = t >= 58.2;
-  e.style.display = on ? '' : 'none'; if (!on) return;
-  const lp = seg(t, 58.2, 58.9), wp = seg(t, 58.7, 59.3), tp = seg(t, 59.3, 59.9), pp = seg(t, 60.2, 60.8), up = seg(t, 60.9, 61.4);
-  e.innerHTML = `
-    <img src="../assets/logo/myco-symbol.svg" style="position:absolute;left:50%;top:210px;width:200px;margin-left:-100px;opacity:${lp};transform:scale(${lerp(.5, 1, back(lp))})">
-    <img src="../assets/logo/myco-wordmark-dark.svg" style="position:absolute;left:50%;top:440px;height:88px;width:280px;margin-left:-140px;opacity:${wp};transform:translateY(${16 * (1 - eo(wp))}px)">
-    <div class="kinetic" style="top:560px;font-size:40px;font-weight:600;color:#cfd6d2;opacity:${tp}">${T('AI agent 的菌丝网络', 'The mycelium for your AI agents.')}</div>
-    <div class="kinetic" style="top:650px;opacity:${pp};transform:translateY(${14 * (1 - eo(pp))}px)">
-      <span class="pill" style="background:#3a9a78;color:#fff">${T('下载 Mac 版', 'Download for Mac')}</span>
-      <span class="pill" style="box-shadow:0 0 0 2px rgba(255,255,255,.35)">${T('Windows 版', 'Windows')}</span></div>
-    <div class="kinetic" style="top:770px;font-size:30px;font-weight:400;color:#9aa19e;font-family:var(--mono);opacity:${up}">github.com/chenhg5/myco</div>`;
+// ---------- the app ----------
+function boxes() { return window.BOXES || {}; }
+function appScenes(t) {
+  const B = boxes();
+  $('ripple').style.display = 'none';
+  if (t < 12.6 || t >= 52) { frameAt(0); return; }
+  // 12.6-18: the app arrives, the agents land in its sidebar
+  if (t < 18) {
+    show('home');
+    const p = expoOut(seg(t, 12.6, 13.6));
+    const [fx, fy, s] = keys(t, [[13.6, 640, 400, 1], [17.6, 560, 380, 1.08]]);
+    camera(fx, fy, s);
+    hl(B['home.chats'] && [11, 280, 229, 160], seg(t, 13.6, 14.0) * (1 - seg(t, 15.6, 16.2)) * .9);
+    const sw = swap(t, 18);
+    frameAt(p, lerp(.92, 1, p), sw.dx, sw.blur);
+    return;
+  }
+  // 18-20.6: your own agents, signed in to your own subscriptions
+  if (t < 20.6) {
+    show('agents');
+    const [fx, fy, s] = keys(t, [[18, 700, 330, 1.25], [20.6, 760, 300, 1.4]]);
+    camera(fx, fy, s);
+    hl(B['agents.list'] && [B['agents.list'][0], B['agents.list'][1], B['agents.list'][2], 130], seg(t, 18.6, 19.0) * .95);
+    const sw = swap(t, 20.6); frameAt(1, 1, sw.dx, sw.blur);
+    return;
+  }
+  // 20.6-23.6: a new conversation: the agent, start it
+  if (t < 23.6) {
+    show('new');
+    const d = B['new.dialog'] || [359, 122, 562, 557];
+    const [fx, fy, s] = keys(t, [[20.6, d[0] + d[2] / 2, d[1] + d[3] / 2, 1.3], [23.6, d[0] + d[2] / 2, d[1] + d[3] / 2 + 30, 1.38]]);
+    camera(fx, fy, s);
+    const go = [d[0] + d[2] - 48, d[1] + d[3] - 26];
+    cursorTo(t, [[21.2, d[0] + 90, d[1] + 160], [21.9, d[0] + 90, d[1] + 160], [22.7, go[0], go[1]], [23.1, go[0], go[1]]]);
+    rippleAt(t, 22.75, go[0], go[1]);
+    const sw = swap(t, 23.6); frameAt(1, 1, sw.dx, sw.blur);
+    return;
+  }
+  // 23.6-28: it works; its run folded into a line, its answer
+  if (t < 28) {
+    show('chat');
+    const c = B['chat.detail'] || [628, 48, 376, 744];
+    const [fx, fy, s] = keys(t, [[23.6, c[0] + c[2] / 2, 300, 1.55], [28, c[0] + c[2] / 2, 470, 1.6]]);
+    camera(fx, fy, s);
+    const sw = swap(t, 28); frameAt(1, 1, sw.dx, sw.blur);
+    return;
+  }
+  // 28-31.8: several at once
+  if (t < 31.8) {
+    show('panes');
+    const [fx, fy, s] = keys(t, [[28, 640, 400, 1.18], [31.8, 640, 400, 1.0]]);
+    camera(fx, fy, s);
+    const sw = swap(t, 31.8); frameAt(1, 1, sw.dx, sw.blur);
+    return;
+  }
+  // 31.8-36: one hands work to another, and it comes back
+  if (t < 36) {
+    show('home');
+    const d = B['home.dispatch'] || [332, 149, 604, 59];
+    const [fx, fy, s] = keys(t, [[31.8, d[0] + d[2] / 2, d[1] + 120, 1.35], [36, d[0] + d[2] / 2, d[1] + 90, 1.5]]);
+    camera(fx, fy, s);
+    hl(d, seg(t, 32.3, 32.8) * .95, 8);
+    const sw = swap(t, 36); frameAt(1, 1, sw.dx, sw.blur);
+    return;
+  }
+  // 36-40: another computer: its terminal, a command running
+  if (t < 40) {
+    show('terminal');
+    const [fx, fy, s] = keys(t, [[36, 816, 330, 1.45], [40, 816, 360, 1.55]]);
+    camera(fx, fy, s);
+    frameAt(1, 1, swap(t, 36).dx, swap(t, 36).blur);
+    return;
+  }
+  // 40-44: and the phone: the app steps back, the phone comes in
+  if (t < 44) {
+    show('home');
+    camera(640, 400, 1);
+    const p = eio(seg(t, 40, 40.8));
+    const sw = swap(t, 44);
+    frameAt(1 - .35 * p, 1 - .1 * p, -220 * p + sw.dx, sw.blur);
+    return;
+  }
+  // 44-52: on their own: automations (and, in Chinese, the apps)
+  const apps = zh && t >= 48;
+  show(apps ? 'apps' : 'automations');
+  if (apps) {
+    const [fx, fy, s] = keys(t, [[48, 640, 330, 1.25], [52, 660, 380, 1.32]]);
+    camera(fx, fy, s);
+  } else {
+    const [fx, fy, s] = keys(t, [[44, 760, 330, 1.2], [48, 760, 520, 1.35], [52, 760, 560, 1.38]]);
+    camera(fx, fy, s);
+  }
+  const sw = zh ? swap(t, 48) : { dx: 0, blur: 0 };
+  const o = seg(t, 51.6, 52);
+  frameAt(1 - o, 1 - .04 * o, sw.dx + swap(t, 44).dx, sw.blur + swap(t, 44).blur + o * 10);
 }
-
-// ---------- subtitles, flash, glow ----------
-function subtitles(t) {
-  const s = $('sub').firstElementChild; const L = window.LINES || [];
-  const ln = L.find((l) => t >= l.at - .05 && t < l.at + l.dur + .35);
-  s.textContent = ln && window.SUBS ? ln.text : ''; s.parentElement.style.opacity = ln && window.SUBS ? clamp(seg(t, ln.at - .05, ln.at + .15)) * (1 - seg(t, ln.at + ln.dur + .15, ln.at + ln.dur + .35)) : 0;
-}
-function flash(t) {
-  const f = $('flash');
-  let o = 0;
-  
-  f.style.opacity = o;
-}
-function glow(t) {
-  const g = $('glow');
-  const energy = t < 8 ? .45 : t < 14 ? .45 + .4 * seg(t, 8, 14) : 1;
-  g.style.opacity = energy * (.85 + .15 * beatPulse(t, 14, 58));
-  g.style.transform = `translate(${Math.sin(t * .3) * 60}px, ${Math.cos(t * .23) * 40}px) scale(${1 + .04 * beatPulse(t, 14, 58)})`;
+function phone(t) {
+  const ph = $('phone');
+  if (t < 40 || t >= 44.2) { ph.style.display = 'none'; return; }
+  ph.style.display = '';
+  const p = expoOut(seg(t, 40.3, 41.2)), o = seg(t, 43.8, 44.2);
+  ph.style.left = lerp(1920, 1180, p) + 'px'; ph.style.top = '90px';
+  ph.style.opacity = 1 - o; ph.style.transform = `rotate(${lerp(6, 0, p)}deg)`;
+  // the conversation scrolls a little, as if read on the phone
+  $('phoneimg').style.transform = `translateY(${-lerp(0, 120, eio(seg(t, 41.5, 43.6)))}px)`;
 }
 
 // sound-effect cues the mixer reads (seconds, name, gain)
 window.CUES = [
-  ...POP.map((at) => [at, 'pop', .8]),
-  ...HOPS.flatMap(([, , s0, s1]) => [[s0, 'click', .5], [s1, 'tick', .7]]),
-  [17.7, 'whoosh', .7], [25.7, 'click', .9], [25.85, 'whoosh', .55], [27.0, 'click', .9], [28.0, 'click', .9], [28.1, 'pop', .8],
-  [29.85, 'whoosh', .55], [31.8, 'click', .9], [33.85, 'whoosh', .4], [50.2, 'whoosh', .6],
-  ...Array.from({ length: 14 }, (_, i) => [34.4 + i * .07, 'tick', .45]),
-  [35.6, 'send', .9], [36.3, 'tick', .6], [37.0, 'ding', .7], [40.0, 'pop', .6], [43.8, 'whoosh', .7],
-  ...PKTS.map(([, , at]) => [at, 'zip', .8]),
-  [52.15, 'whoosh', .35], [54.1, 'whoosh', .35], [56.05, 'whoosh', .35], [58.7, 'shimmer', .6],
+  [0.4, 'pop', .6], [1.5, 'shimmer', .5],
+  ...TERMS.map((w) => [w.at, 'pop', .7]),
+  ...TERMS.flatMap((w) => Array.from({ length: 6 }, (_, i) => [w.at + .45 + i * .18, 'tick', .25])),
+  [12.2, 'whoosh', .8], [13.5, 'zip', .6], [17.85, 'whoosh', .45],
+  [20.45, 'whoosh', .4], [22.75, 'click', .9], [23.45, 'whoosh', .4], [27.85, 'whoosh', .4], [28.2, 'pop', .5],
+  [31.65, 'whoosh', .4], [32.4, 'ding', .6], [35.85, 'whoosh', .4], [40.3, 'whoosh', .6], [43.85, 'whoosh', .45],
+  ...(zh ? [[47.85, 'whoosh', .4]] : []), [52.0, 'shimmer', .6],
 ];
 
 window.seek = (t) => {
-  setCursor(0, 0, 0); ripple(0, 0, 0);
-  // v3: the opening, the network and the end are drawn by film3d.html; this page is the app section
-  glow(t); $('hook').style.display = 'none'; $('threads').style.display = 'none'; $('logo').style.display = $('word').style.display = $('tagline').style.display = 'none';
-  $('net').style.display = 'none'; $('end').style.display = 'none';
-  appShots(t); subtitles(t); flash(t);
+  $('glow').style.opacity = .6 + .4 * Math.sin(t * .4);
+  titleCard(t); terminals(t); appScenes(t); phone(t);
+  if (!((t >= 21 && t < 23.6))) $('cursor').style.display = 'none';
 };
-window.ready = Promise.all([...document.images].map((i) => i.decode().catch(() => {}))).then(async () => {
-  const names = ['nodes-dark', 'conversation-dark', 'shell-dark', 'add-node-dark', 'added'];
-  await Promise.all(names.map((n) => img(n).decode().catch(() => console.error('missing ' + n))));
+window.ready = (async () => {
+  // (file:// pages read files with XHR, not fetch)
+  try { const x = new XMLHttpRequest(); x.open('GET', A + 'boxes.json', false); x.send(); window.BOXES = JSON.parse(x.responseText); } catch { window.BOXES = {}; }
+  $('phoneimg').src = A + 'phone.png';
+  const names = ['home', 'agents', 'new', 'chat', 'panes', 'terminal', 'automations', ...(zh ? ['apps'] : [])];
+  await Promise.all([...names.map((n) => img(n).decode().catch(() => console.error('missing ' + n))), $('phoneimg').decode().catch(() => console.error('missing phone'))]);
+  for (const s of [SYMBOL, WORD]) { const i = new Image(); i.src = s; await i.decode().catch(() => console.error('missing ' + s)); }
   await document.fonts.ready;
-});
+})();
 </script>
 </body>
 </html>

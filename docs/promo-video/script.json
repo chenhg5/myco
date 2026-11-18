@@ -1,6 +1,7 @@
 {
  "bpm": 120,
- "note": "Times in seconds on a 120 BPM grid (beat 0.5 s, bar 2 s). A line starts at `at`; render.mjs speeds a clip up (at most 1.25x) when it would run into the next line. v5: the three things myco is for (README): a cloud agent uses your computer, a teammate's agent, your own agents.",
+ "total": 60,
+ "note": "Times in seconds on a 120 BPM grid (beat 0.5 s, bar 2 s). A line starts at `at`; render.mjs speeds a clip up (at most 1.25x) when it would run into the next line. v6: all your AI agents, one app (the client positioning: the subscriptions people already have). Only the app's own interface, from the showcase mock.",
  "sections": [
   {
    "id": "title",
@@ -8,91 +9,77 @@
    "end": 4
   },
   {
-   "id": "hook",
+   "id": "scattered",
    "start": 4,
    "end": 12
   },
   {
-   "id": "trap",
+   "id": "into-one-app",
    "start": 12,
    "end": 18
   },
   {
-   "id": "drop",
+   "id": "your-agent",
    "start": 18,
-   "end": 22.4
+   "end": 28
   },
   {
-   "id": "your-computer",
-   "start": 22.4,
-   "end": 32
+   "id": "together",
+   "start": 28,
+   "end": 36
   },
   {
-   "id": "teammate",
-   "start": 32,
-   "end": 40
+   "id": "everywhere",
+   "start": 36,
+   "end": 44
   },
   {
-   "id": "your-agents",
-   "start": 40,
-   "end": 48
-  },
-  {
-   "id": "app",
-   "start": 48,
-   "end": 60
+   "id": "on-its-own",
+   "start": 44,
+   "end": 52
   },
   {
    "id": "end",
-   "start": 60,
-   "end": 68
+   "start": 52,
+   "end": 60
   }
  ],
  "lines": [
   {
-   "at": 4.6,
-   "en": "Claude Code on your laptop. Codex on a server. Cursor. A Grok bot. Agents in the cloud.",
-   "zh": "笔记本上的 Claude Code，服务器上的 Codex，Cursor，Grok 机器人，还有云端的 agent。"
+   "at": 4.4,
+   "zh": "你已经在用 Claude Code、Codex，订阅也付过钱了，可它们散在一个个终端里。",
+   "en": "You already use Claude Code and Codex, and you pay for them. But they're scattered across terminals."
   },
   {
-   "at": 12.2,
-   "en": "They're all smart, but they can't reach your computer, or your teammate's agent. So you pass every message by hand.",
-   "zh": "它们都很聪明，却够不着你的电脑，也找不到同事的 agent。每一条消息，都得你亲手去传。"
+   "at": 12.4,
+   "zh": "myco 把它们放进一个 App。",
+   "en": "myco brings them into one app."
   },
   {
    "at": 18.4,
-   "en": "myco connects them.",
-   "zh": "myco 把它们连起来。"
+   "zh": "选一个 agent，说一句话，它就在你的电脑上开工，用的是你自己的订阅。",
+   "en": "Pick an agent, say what you need, and it gets to work on your computer, on your own subscription."
   },
   {
-   "at": 20.2,
-   "en": "One network for every agent, on every machine.",
-   "zh": "一张网，连起每台机器上的每个 agent。"
+   "at": 28.4,
+   "zh": "好几个 agent 可以同时干活，还能互相派活。",
+   "en": "Run several at once, and let them hand work to each other."
   },
   {
-   "at": 23.2,
-   "en": "A cloud agent can run commands in your computer's shell, or hand the job to your own Claude Code. The result comes back to the same chat.",
-   "zh": "云端的 agent，能直接在你电脑的 Shell 里跑命令，或者把活交给你电脑上配好的 Claude Code，结果回到原来的对话里。"
+   "at": 36.4,
+   "zh": "别的电脑上的 agent 和终端，手机上，也都在这里。",
+   "en": "Agents on your other computers, their terminals, even your phone: all in one place."
   },
   {
-   "at": 32.4,
-   "en": "Need something from a teammate? Your agent hands the task straight to theirs, and the answer comes back on its own.",
-   "zh": "要同事那边的东西？你的 agent 直接把任务交给他的 agent，答复自己回来。"
+   "at": 44.4,
+   "zh": "让它们按时做事，还能和你一起用小应用。",
+   "en": "Put them on a schedule, and they get things done while you're away."
   },
   {
-   "at": 40.4,
-   "en": "Your own agents see each other, trade tasks and files, and wake up in their own sessions, even while you're away.",
-   "zh": "你自己的 agent 互相看得见、互相派活、互传文件，你不在时也会在自己的会话里被唤醒。"
-  },
-  {
-   "at": 48.6,
-   "en": "Every exchange shows up in one app: every agent, what it's doing, even the shell running on your computer.",
-   "zh": "每一次往来都在一个 App 里：每个 agent、它在做什么，甚至你电脑上正在跑的 Shell。"
-  },
-  {
-   "at": 60.6,
-   "en": "myco. The mycelium for your AI agents.",
-   "zh": "myco，AI agent 的菌丝网络。"
+   "at": 52.6,
+   "zh": "myco：你的 AI agent，一个 App 就够。",
+   "en": "myco. All your AI agents, one app.",
+   "say_en": "Myco. All your AI agents, one app."
   }
  ]
 }

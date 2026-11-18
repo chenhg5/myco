@@ -1,8 +1,8 @@
-// Render the promo film.
+// Render the promo film (film.html, one page: only the app's own interface).
 //   LANG_FILM=en|zh WORK=/path/to/work node render.mjs stills 3 15 27 ...  -> $WORK/stills-<lang>/t<sec>.png
 //   ... node render.mjs film                                               -> $WORK/out-<lang>/video.mp4 (silent)
 //   ... node render.mjs mix                                                -> $WORK/out-<lang>/myco-promo-<lang>.mp4
-// $WORK holds: assets/<lang>/*.png (capture.cjs), vo-<lang>/ (tts_en.py / tts_zh.mjs),
+// $WORK holds: assets/<lang>/*.png and boxes.json (capture.cjs), vo-<lang>/ (tts_en.py / tts_zh.mjs),
 // audio/bgm.wav and audio/sfx/*.wav (music.py).
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -15,11 +15,10 @@ const WORK = process.env.WORK || join(DIR, 'work');
 const LANG = process.env.LANG_FILM === 'zh' ? 'zh' : 'en';
 const OTHER = LANG === 'zh' ? 'en' : 'zh';
 const FPS = Number(process.env.FPS || 30);
-const TOTAL = 68;
+const script = JSON.parse(readFileSync(join(DIR, 'script.json'), 'utf8'));
+const TOTAL = script.total;
 const OUT = join(WORK, `out-${LANG}`);
 mkdirSync(OUT, { recursive: true });
-
-const script = JSON.parse(readFileSync(join(DIR, 'script.json'), 'utf8'));
 const VO = join(WORK, `vo-${LANG}`);
 const durs = JSON.parse(readFileSync(join(VO, 'durations.json'), 'utf8'));
 const ext = LANG === 'zh' ? 'mp3' : 'wav';
@@ -32,25 +31,17 @@ const LINES = script.lines.map((l, i) => {
   return { at: l.at, dur: +(durs[i] / tempo).toFixed(3), tempo, text: l[LANG], file: join(VO, `${String(i).padStart(2, '0')}.${ext}`) };
 });
 
-async function page(film = process.env.FILM || 'film.html') {
-  const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--allow-file-access-from-files', '--ignore-gpu-blocklist'] });
+async function page() {
+  const b = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const p = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  await p.addInitScript(([lang, assets, other, lines]) => { window.LANG = lang; window.ASSETS = assets; window.ASSETS_OTHER = other; window.LINES = lines; },
-    [LANG, 'file://' + join(WORK, 'assets', LANG), 'file://' + join(WORK, 'assets', OTHER), LINES]);
+  await p.addInitScript(([lang, assets]) => { window.LANG = lang; window.ASSETS = assets; }, [LANG, 'file://' + join(WORK, 'assets', LANG)]);
   p.on('pageerror', (e) => console.error('page error:', e.message));
-  await p.addInitScript((tex) => { window.TEX = tex; }, join(WORK, 'tex'));
   p.on('console', (m) => { if (m.type() === 'error') console.error('console:', m.text()); });
-  await p.goto('file://' + join(DIR, film));
+  await p.goto('file://' + join(DIR, 'film.html'));
   await p.evaluate(() => window.ready);
-  return { b, p };
+  return { pick: () => p, close: () => b.close() };
 }
-
-// the 3D worlds (film3d.html) and the app (film.html) share the clock; each frame comes from one of them
-const is3d = (t) => t < 48.0 || t >= 59.95;
-async function pages() {
-  const a = await page('film3d.html'); const b = await page('film.html');
-  return { pick: (t) => (is3d(t) ? a.p : b.p), close: async () => { await a.b.close(); await b.b.close(); } };
-}
+const pages = page;
 const mode = process.argv[2];
 if (mode === 'stills') {
   const P = await pages();
@@ -77,7 +68,7 @@ if (mode === 'stills') {
   console.log('video', n, 'frames');
 } else if (mode === 'mix') {
   const P = await pages();
-  const cues = [...(await P.pick(0).evaluate(() => window.CUES)), ...(await P.pick(50).evaluate(() => window.APP_CUES || []))];
+  const cues = await P.pick(0).evaluate(() => window.CUES);
   await P.close();
   const SFX = join(WORK, 'audio', 'sfx');
   const inputs = ['-i', join(OUT, 'video.mp4'), '-i', join(WORK, 'audio', 'bgm.wav')];

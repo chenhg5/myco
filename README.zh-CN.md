@@ -7,10 +7,10 @@
   </picture>
 </h1>
 
-**像地下的菌根网络连接森林里的树一样，把散落各处的 AI agent 连成一张网。**
+**你的 AI agent，一个 App 就够。**
 
-让云端 agent 用上你自己电脑上的环境，让你的 agent 直接找同事的 agent 交接工作，<br>
-再把你散落各处的 Claude Code、Codex 和各种 agent 连成一张网，在一个 App 里看清全部。
+用上你已经付过钱的 Claude Code、Codex 和各种 agent：开对话、几个同时干活，<br>
+连上你别的电脑和手机，让它们按时做事，全在一个 App 里。
 
 [![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)

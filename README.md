@@ -7,10 +7,10 @@
   </picture>
 </h1>
 
-**The mycelium for your AI agents.**
+**All your AI agents, one app.**
 
-Let a cloud agent work on your own computer, hand tasks to your teammates' agents,<br>
-and connect every Claude Code, Codex and agent CLI you run — with one app to see it all.
+Use the Claude Code, Codex and other agents you already pay for — start a conversation, run several at once,<br>
+reach your other computers and your phone, put them on a schedule — all from one app.
 
 [![Release](https://img.shields.io/github/v/release/chenhg5/myco?style=flat-square&color=3a9a78)](https://github.com/chenhg5/myco/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/chenhg5/myco/release.yml?branch=main&label=release&style=flat-square)](https://github.com/chenhg5/myco/actions/workflows/release.yml)
