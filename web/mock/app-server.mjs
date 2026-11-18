@@ -389,6 +389,8 @@ const vpsInfo = {
     { cli: "claude", session_id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(3 * 3600), title: "修复登录页在 Safari 上的跳转" },
     { cli: "claude", session_id: "9e8d7c6b-5a4f-4e3d-2c1b-0a9f8e7d6c5b", workdir: "/home/glenn/scratch", last_active: iso(26 * 3600), title: "试一下 bun 的启动速度" },
     { cli: "claude", session_id: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", workdir: "/home/glenn/code/myco-team/ops", last_active: iso(2 * 86400), title: "给 nginx 加上 gzip", joined: "tokyo-vps-claude-ops" },
+    { cli: "codex", session_id: "019b0001-aaaa-7bbb-8ccc-000000000001", workdir: "/home/glenn/code/myco-team/api", last_active: iso(40 * 60), title: "跑一遍测试，把失败的列出来", auto: true },
+    { cli: "claude", session_id: "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f", workdir: "/home/glenn/code/myco-team/web", last_active: iso(5 * 3600), title: "生成本周的更新说明", auto: true },
   ],
 };
 const versionBelow = (v, want) => {

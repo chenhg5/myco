@@ -785,6 +785,8 @@ type MachineSession struct {
 	// says it joined another workspace.
 	Joined          string `json:"joined,omitempty"`
 	JoinedElsewhere bool   `json:"joined_elsewhere,omitempty"`
+	// Auto: a program ran it (claude -p, codex exec, myco), not a person.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // ExecResult is the reply body of an exec node (harness "exec").

@@ -50,7 +50,7 @@ func TestLocalSessions(t *testing.T) {
 	)
 	old := filepath.Join(home, ".codex", "sessions", "2025", "01", "01", "rollout-old.jsonl")
 	writeLines(t, old, map[string]any{"type": "session_meta", "payload": map[string]any{"id": "old", "cwd": work}})
-	os.Chtimes(old, time.Now().AddDate(0, -3, 0), time.Now().AddDate(0, -3, 0))
+	os.Chtimes(old, time.Now().AddDate(0, -7, 0), time.Now().AddDate(0, -7, 0))
 	os.Chtimes(codexPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
 	// The Claude session already joined a hub (a local agent profile).
 	os.MkdirAll(filepath.Join(home, ".myco", "agents"), 0o700)
@@ -249,21 +249,30 @@ func TestLocalSessionsScriptsAndRepeats(t *testing.T) {
 	exec := filepath.Join(home, ".codex", "sessions", "2026", "11", "08", "rollout-exec.jsonl")
 	writeLines(t, exec,
 		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "0199-exec", "cwd": work, "originator": "codex_exec", "source": "exec"}},
-		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
+		map[string]any{"type": "event_msg", "timestamp": "2026-11-08T10:00:00Z", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
 	tui := filepath.Join(home, ".codex", "sessions", "2026", "11", "08", "rollout-tui.jsonl")
 	writeLines(t, tui,
 		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "0199-tui", "cwd": work, "originator": "codex_cli_rs", "source": "cli"}},
-		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
+		map[string]any{"type": "event_msg", "timestamp": "2026-11-08T09:00:00Z", "payload": map[string]any{"type": "user_message", "message": "run the checks"}})
 	os.Chtimes(tui, time.Now().Add(-6*time.Hour), time.Now().Add(-6*time.Hour))
 	os.MkdirAll(filepath.Join(home, ".myco", "agents"), 0o700)
 	os.WriteFile(filepath.Join(home, ".myco", "agents", "a.yaml"), []byte("hub: https://hub.example.com\nagent: mac-claude-a\ntoken: t\nharness: claude\nsession_id: "+joined+"\n"), 0o600)
 
-	var ids []string
+	// What people started is listed; what scripts ran is listed too, marked
+	// (the App folds them away), each repeated prompt once.
+	var ids, autos []string
 	for _, s := range (&console.Local{Home: home}).LocalSessions(time.Now()) {
-		ids = append(ids, s.SessionID)
+		if s.Auto && s.Joined == nil {
+			autos = append(autos, s.SessionID)
+		} else {
+			ids = append(ids, s.SessionID)
+		}
 	}
 	if want := []string{newest, joined, mine, "0199-tui"}; !slices.Equal(ids, want) {
 		t.Fatalf("sessions: %v, want %v", ids, want)
+	}
+	if want := []string{"0199-exec", "eeeeeeee-0000-0000-0000-000000000004", "eeeeeeee-0000-0000-0000-000000000005"}; !slices.Equal(autos, want) {
+		t.Fatalf("sessions programs ran: %v, want %v", autos, want)
 	}
 }
 

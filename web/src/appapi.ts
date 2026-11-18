@@ -180,6 +180,8 @@ export interface MachineSession {
   /** the agent it already is in this workspace */
   joined?: string;
   joined_elsewhere?: boolean;
+  /** a program ran it (claude -p, codex exec, myco), not a person */
+  auto?: boolean;
 }
 export interface SpawnResult {
   /** the new node's name */
@@ -225,6 +227,8 @@ export interface LocalSession {
   joined?: { agent: string; hub: string; hub_name?: string };
   /** Every workspace it joined (one session can be an agent of several). */
   joined_all?: { agent: string; hub: string; hub_name?: string }[];
+  /** a program ran it (claude -p, codex exec, myco), not a person */
+  auto?: boolean;
 }
 export interface LocalJoinInput {
   cli: string;

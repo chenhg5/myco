@@ -1198,6 +1198,13 @@ async function runMatrix(browser, size, scheme) {
       await outside.locator(".add-local-sub", { hasText: "不在那台电脑允许的文件夹里" }).waitFor({ timeout: 5_000 });
       if (!(await outside.locator("button").isDisabled())) throw new Error("允许的文件夹之外的会话不能加入");
       await remote.locator(".add-local-row.is-taken", { hasText: "已经加入了：tokyo-vps-claude-ops" }).waitFor({ timeout: 5_000 });
+      // What programs started (myco, scripts) is there too, folded away.
+      const byProgram = remote.locator("[data-testid=by-program]");
+      await byProgram.locator("summary", { hasText: "还有 2 个是程序开的会话" }).waitFor({ timeout: 5_000 });
+      if (await byProgram.locator(".add-local-row", { hasText: "跑一遍测试" }).isVisible()) throw new Error("程序开的会话应先折起来");
+      await clickVisible(page, byProgram.locator("summary"));
+      await byProgram.locator(".add-local-row", { hasText: "跑一遍测试" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, byProgram.locator("summary"));
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-remote");
       await remote.locator(".add-local-row", { hasText: "把订单接口的分页改成游标分页" }).locator("button").click();

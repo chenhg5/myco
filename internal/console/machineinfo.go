@@ -10,7 +10,7 @@ import (
 )
 
 // machineSessionsMax bounds the sessions a machine reports at a time.
-const machineSessionsMax = 40
+const machineSessionsMax = 200
 
 // MachineInventory is what a machine node tells its owner about its
 // computer (api.MachineInfo): the agent CLIs, as Settings › 本机 agent shows
@@ -28,7 +28,7 @@ func MachineInventory(ctx context.Context, home, hub string) ([]api.MachineAI, [
 		if len(sessions) >= machineSessionsMax {
 			break
 		}
-		ms := api.MachineSession{CLI: s.CLI, SessionID: s.SessionID, Workdir: s.Workdir, LastActive: s.LastActive, Title: s.Title}
+		ms := api.MachineSession{CLI: s.CLI, SessionID: s.SessionID, Workdir: s.Workdir, LastActive: s.LastActive, Title: s.Title, Auto: s.Auto}
 		all := s.JoinedAll
 		if len(all) == 0 && s.Joined != nil {
 			all = []JoinedAs{*s.Joined}

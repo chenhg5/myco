@@ -1878,6 +1878,35 @@
   height: 56%;
 }
 
+/* Sessions programs started, folded under the others. */
+.add-auto > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  list-style: none;
+  cursor: default;
+}
+.add-auto > summary::-webkit-details-marker {
+  display: none;
+}
+.add-auto > summary:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.add-auto > summary svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  transition: transform 0.12s;
+}
+.add-auto[open] > summary svg {
+  transform: rotate(180deg);
+}
+
 /* A computer's sessions come in one after another. */
 @keyframes add-row-in {
   /* No end opacity: a row already joined fades to its own dimness. */

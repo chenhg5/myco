@@ -31,9 +31,9 @@ type LocalSession struct {
 	Joined    *JoinedAs  `json:"joined,omitempty"`
 	JoinedAll []JoinedAs `json:"joined_all,omitempty"`
 
-	// auto: a program ran it (claude -p or the Agent SDK, codex exec),
-	// not a person in a terminal.
-	auto bool
+	// Auto: a program ran it (claude -p or the Agent SDK, codex exec, myco
+	// itself), not a person in a terminal. Listed after the others, folded.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // JoinedAs names the agent a session joined as, and on which hub (HubName:
@@ -45,11 +45,12 @@ type JoinedAs struct {
 }
 
 const (
-	sessionsMax    = 60
-	sessionsMaxAge = 30 * 24 * time.Hour
+	sessionsMax    = 200
+	autoMax        = 100 // of them, ones a program ran (they repeat a lot)
+	sessionsMaxAge = 180 * 24 * time.Hour
 	// filesMax bounds how many transcripts are read (newest first): copies
 	// of one conversation count once, so a list can need more than it shows.
-	filesMax  = 400
+	filesMax  = 4000
 	titleMax  = 80
 	scanLines = 400
 )
@@ -122,6 +123,7 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 	byID := map[string]int{}    // cli:session → index in out
 	byConv := map[string]int{}  // a conversation's first request → index in out
 	byText := map[string]bool{} // cli, folder and first request of a listed unjoined session
+	autos := 0                  // unjoined ones a program ran, listed so far
 	for _, f := range files {
 		var s LocalSession
 		var first string
@@ -152,19 +154,23 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 			continue
 		}
 		if len(js) == 0 {
-			// Not joined yet: leave out what scripts ran (they repeat one
-			// prompt many times), and show a request asked again in the
-			// same folder once (the newest), since the rows would read alike.
-			text := f.cli + "\x00" + s.Workdir + "\x00" + firstText(first)
-			if s.auto || (first != "" && byText[text]) {
+			// Not joined yet: a request asked again in the same folder shows
+			// once (the newest), since the rows would read alike (scripts
+			// repeat one prompt many times).
+			// (A person's session never hides behind a script's with the same prompt.)
+			text := fmt.Sprint(f.cli, "\x00", s.Workdir, "\x00", s.Auto, "\x00", firstText(first))
+			if first != "" && byText[text] {
 				continue
 			}
 			if first != "" {
 				byText[text] = true
 			}
 		}
-		if len(out) >= sessionsMax {
+		if len(out) >= sessionsMax || (s.Auto && len(js) == 0 && autos >= autoMax) {
 			continue
+		}
+		if s.Auto && len(js) == 0 {
+			autos++
 		}
 		s.LastActive = f.mod
 		s.addJoined(js)
@@ -244,7 +250,7 @@ func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 			// "cli" in a terminal, "claude-desktop" in the desktop app,
 			// "sdk-cli" for claude -p, "sdk-ts" / "sdk-py" for the Agent SDK.
 			entry = e.Entrypoint
-			s.auto = strings.HasPrefix(entry, "sdk")
+			s.Auto = strings.HasPrefix(entry, "sdk")
 		}
 		if first == "" && e.Type == "user" && !e.IsSidechain {
 			text := contentText(e.Message.Content)
@@ -282,7 +288,7 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 		case e.Type == "session_meta":
 			s.SessionID, s.Workdir = e.Payload.ID, e.Payload.Cwd
 			// codex exec: originator codex_exec, source "exec".
-			s.auto = e.Payload.Originator == "codex_exec" || string(e.Payload.Source) == `"exec"`
+			s.Auto = e.Payload.Originator == "codex_exec" || string(e.Payload.Source) == `"exec"`
 		case first != "":
 		case e.Type == "event_msg" && e.Payload.Type == "user_message",
 			// Newer versions write the request only as a message item.

@@ -383,12 +383,20 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
                 <input className="app-input add-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个会话：标题、文件夹", "Find a session: title, folder")} aria-label={L("搜索会话", "Search sessions")} />
               )}
               <div className="add-sessions">
-                {free.map((s) => (
-                  <SessionRow key={`${s.cli}:${s.session_id}`} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
-                    action={<button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void joinLocal(s)}>
-                      {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
-                    </button>} />
-                ))}
+                {(() => {
+                  const row = (s: LocalSession) => (
+                    <SessionRow key={`${s.cli}:${s.session_id}`} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
+                      action={<button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void joinLocal(s)}>
+                        {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
+                      </button>} />
+                  );
+                  return (
+                    <>
+                      {free.filter((s) => !s.auto).map(row)}
+                      <ByProgram count={free.filter((s) => s.auto).length} open={!!q}>{free.filter((s) => s.auto).map(row)}</ByProgram>
+                    </>
+                  );
+                })()}
                 {taken.map((s) => (
                   <SessionRow key={`${s.cli}:${s.session_id}`} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={joinedLine(s)} subTitle={joinedWhere(s).join("\n")} />
                 ))}
@@ -499,6 +507,18 @@ function SessionRow({ cli, title, workdir, at, action, taken, sub, subTitle, ind
   );
 }
 
+/** Sessions a program ran (claude -p, codex exec, myco itself), folded
+ *  under the ones people started: there are many, and seldom wanted. */
+function ByProgram({ count, open, children }: { count: number; open: boolean; children: React.ReactNode }) {
+  if (count === 0) return null;
+  return (
+    <details className="add-auto" open={open || undefined} data-testid="by-program">
+      <summary>{L(`还有 ${count} 个是程序开的会话（myco、脚本、claude -p、codex exec），一般不用加`, `${count} more were started by a program (myco, scripts, claude -p, codex exec); seldom worth adding`)}<ChevronDown /></summary>
+      {children}
+    </details>
+  );
+}
+
 /** Says why a computer could not tell what it has. */
 function infoErrorText(error: unknown): React.ReactNode {
   const code = (error as { code?: string })?.code;
@@ -553,7 +573,8 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
             <input className="app-input add-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个会话：标题、文件夹", "Find a session: title, folder")} aria-label={L("搜索会话", "Search sessions")} />
           )}
           <div className="add-sessions">
-            {free.map((s, i) => {
+            {(() => {
+              const row = (s: MachineSession, i: number) => {
               const ok = insideDirs(s.workdir, info);
               return (
                 <SessionRow key={`${s.cli}:${s.session_id}`} index={i} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
@@ -563,7 +584,16 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
                     {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
                   </button>} />
               );
-            })}
+              };
+              const mine = free.filter((s) => !s.auto);
+              const auto = free.filter((s) => s.auto);
+              return (
+                <>
+                  {mine.map(row)}
+                  <ByProgram count={auto.length} open={!!q}>{auto.map((s, i) => row(s, mine.length + i))}</ByProgram>
+                </>
+              );
+            })()}
             {taken.map((s, i) => (
               <SessionRow key={`${s.cli}:${s.session_id}`} index={free.length + i} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={L(`已经加入了：${s.joined}`, `Already joined: ${s.joined}`)} />
             ))}
