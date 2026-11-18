@@ -91,7 +91,7 @@ scripts/release-verify.sh vX.Y.Z
 | `MAC_CERT_P12_BASE64` | Developer ID Application 证书和私钥导出的 .p12，base64 编码 |
 | `MAC_CERT_PASSWORD` | 导出 .p12 时设的密码 |
 | `NOTARY_APPLE_ID` | 公证用的 Apple ID（邮箱） |
-| `NOTARY_TEAM_ID` | 开发者团队 ID（10 位） |
+| `NOTARY_TEAM_ID` | 开发者团队 ID（10 位）。可以不设：工作流从 Developer ID 证书里读团队 ID，读不到才用它 |
 | `NOTARY_PASSWORD` | 这个 Apple ID 的 App 专用密码（appleid.apple.com → 登录与安全 → App 专用密码） |
 
 在 Mac 上：

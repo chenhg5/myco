@@ -121,7 +121,13 @@ jobs:
             echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; another kind = export the Developer ID Application certificate instead)"
             exit 1
           fi
-          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
+          # The team is the Developer ID certificate's OU; NOTARY_TEAM_ID is
+          # only the fallback (another ID in brackets is easy to copy instead).
+          team=$(security find-certificate -c "Developer ID Application" -p "$kc" |
+            openssl x509 -noout -subject -nameopt RFC2253 | grep -o 'OU=[A-Z0-9]\{10\}' | head -1 | cut -c4-)
+          team=${team:-$NOTARY_TEAM_ID}
+          echo "::add-mask::$team"
+          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$team" \
             --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
           MYCO_SIGN_IDENTITY="$id" MYCO_NOTARY_KEYCHAIN="$kc" scripts/mac-sign.sh ${{ needs.version.outputs.version }}
           mv dist/myco.dmg dist/myco-app-darwin-universal.zip out/
