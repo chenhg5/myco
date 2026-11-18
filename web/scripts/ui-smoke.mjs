@@ -1734,15 +1734,17 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
-    // What was sent in a chat, in one place: the header's 图片和文件 opens
-    // a panel with the pictures as a grid and the files as rows, each a way
-    // back to its message. The rest of the header's tools sit in ⋯.
+    // What was sent in a chat, in one place: 图片和文件 in the header's ⋯
+    // opens a panel with the pictures as a grid and the files as rows, each
+    // a way back to its message. The header shows only ⋯ and find (find
+    // last, next to a pane's own buttons).
     await step("单聊 · 图片和文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const head = page.locator(".conv-detail .conv-head");
-      const icons = await head.locator(".conv-head-actions > .conv-head-find:visible").count();
-      if (icons > 3) throw new Error(`单聊顶栏右边最多三个按钮（找、图片和文件、更多），实际 ${icons} 个`);
-      await clickVisible(page, head.locator("[data-testid=chat-files-open]"));
+      const icons = await head.locator(".conv-head-actions > .conv-head-find:visible").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+      if (icons.join("|") !== "更多|在这段对话里找") throw new Error(`单聊顶栏右边应是「更多」「找」两个，实际 ${icons.join("、")}`);
+      await clickVisible(page, head.locator("[data-testid=chat-more]"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "图片和文件" }));
       const panel = page.locator(".cf-panel");
       await panel.waitFor({ timeout: 5_000 });
       const pics = panel.locator("[data-testid=chat-files-pictures] .cf-shot");

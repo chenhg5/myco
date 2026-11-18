@@ -1898,10 +1898,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // The header's ⋯ menu: what is used now and then.
   const headMore: MenuItem[] = [
+    ...(!termMode ? [{ label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) }, "sep" as const] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
-  ];
+  ].filter((it, i, all) => it !== "sep" || i < all.length - 1);
   // Everything sent in the chat so far (what is loaded), for 图片和文件.
   const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
     ...(m.unreadable ? [] : (m.attachments || []).map((a) => ({ a, msg: m.id, from: m.from, at: m.created_at }))),
@@ -1956,23 +1957,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Settings2 />
               </button>
             )}
-            {!termMode && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
-                title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
-                <Search />
-              </button>
-            )}
-            {!termMode && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", filesOpen && "is-on")} data-testid="chat-files-open"
-                onClick={() => setFilesOpen((v) => !v)} title={L("图片和文件：这段对话里发过的", "Pictures and files sent in this chat")} aria-label={L("图片和文件", "Pictures and files")}>
-                <Images />
-              </button>
-            )}
-            {/* The rest, used now and then: one ⋯ menu. */}
+            {/* Used now and then: one ⋯ menu; find stays out, next to the
+                pane's own buttons (full width, close). */}
             {headMore.length > 0 && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="chat-more"
                 onClick={(e) => headMenu.openUnder(e.currentTarget, headMore)} title={L("更多", "More")} aria-label={L("更多", "More")} aria-haspopup="menu">
                 <MoreHorizontal />
+              </button>
+            )}
+            {!termMode && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
+                title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
+                <Search />
               </button>
             )}
             {headActions}
