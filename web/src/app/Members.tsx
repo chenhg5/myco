@@ -67,7 +67,7 @@ export function MembersPage({ rows, projects, now, onOpen }: {
       </div>
       {people.length === 0 && <div className="app-empty-note">{L("还没有成员。到一个项目里点「添加 agent」。", "No members yet. Open a project and choose Add an agent.")}</div>}
       {agents.length > 0 && <Section title={L("agent", "Agents")} rows={agents} projects={projects} now={now} onOpen={onOpen} />}
-      {spaces.length > 0 && <Section title={L("电脑", "Computers")} rows={spaces} projects={projects} now={now} onOpen={onOpen} />}
+      {spaces.length > 0 && <Section title={L("终端", "Terminals")} rows={spaces} projects={projects} now={now} onOpen={onOpen} />}
       {asleep.length > 0 && (
         <>
           <button type="button" className="mb-rest-toggle" onClick={() => setShowResting((v) => !v)}>

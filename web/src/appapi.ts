@@ -147,6 +147,40 @@ export interface SpawnInput {
   fork_from?: string;
   display_name?: string;
 }
+/** What a computer allows and has, as its machine node says
+ *  (GET /app/hubs/{id}/machines/{mid}/info; "too_old" from an older myco). */
+export interface MachineInfo {
+  /** folders sessions may start in, as written there ("~/code/x"); ["~"]: anywhere in its home */
+  dirs: string[];
+  /** where a new conversation's folder goes when none is given ("~/myco") */
+  new_dir: string;
+  /** the highest access a session there may get */
+  max_access: RuntimeAccess;
+  ais: MachineAI[];
+  sessions: MachineSession[];
+  /** its home directory (what "~" stands for there) */
+  home?: string;
+}
+export interface MachineAI {
+  cli: string;
+  name: string;
+  /** missing | signed_out | ready | unknown */
+  state: string;
+  version?: string;
+  /** commands to run on that computer */
+  install?: string;
+  login?: string;
+}
+export interface MachineSession {
+  cli: "claude" | "codex";
+  session_id: string;
+  workdir: string;
+  last_active: string;
+  title?: string;
+  /** the agent it already is in this workspace */
+  joined?: string;
+  joined_elsewhere?: boolean;
+}
 export interface SpawnResult {
   /** the new node's name */
   agent: string;
@@ -658,6 +692,8 @@ export const appApi = {
   /** Starts a session on a machine; the machine may take up to two minutes. */
   spawn: (hubId: string, machineId: string, input: SpawnInput) =>
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
+  machineInfo: (hubId: string, machineId: string) =>
+    request<MachineInfo>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/info`),
   renameMachine: (hubId: string, machineId: string, name: string) =>
     request<Machine>("PATCH", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}`, { name }),
   /** Removes a machine and every node on it. dryRun lists them first. */

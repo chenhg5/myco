@@ -150,8 +150,8 @@ func TestDirectoryPolicy(t *testing.T) {
 		{"", "pass the directory"},
 		{"code/app", "absolute"},
 		{"~/missing", "does not exist"},
-		{outside, "outside the allowed"},
-		{"~/code/escape", "outside the allowed"}, // symlink out of home
+		{outside, "outside the folders"},
+		{"~/code/escape", "outside the folders"}, // symlink out of home
 		{"~/.ssh/keys", "credentials directory"}, // inside home but a credentials dir
 		{"~/code/keys", "credentials directory"}, // symlink into one
 		{"~/.myco", "credentials directory"},
@@ -194,6 +194,33 @@ func TestAutoDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(r.home, "escape")); err == nil {
 		t.Fatal("made a folder outside ~/myco")
+	}
+}
+
+// A machine that limits folders: a new conversation's folder goes inside
+// the first one (~/myco is not allowed there), and nothing is made outside.
+func TestAutoDirInsideAllowedFolders(t *testing.T) {
+	r := newRig(t)
+	r.node.Policy.Dirs = []string{"~/code"}
+	res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI})
+	if res.Denied || res.Info == nil || res.Info.NewDir != "~/code" || len(res.Info.Dirs) != 1 || res.Info.Dirs[0] != "~/code" || res.Info.MaxAccess != "workspace" {
+		t.Fatalf("info: %+v %+v", res, res.Info)
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/code/reviewer"}); res.Denied {
+		t.Fatalf("~/code/<name>: %+v", res)
+	}
+	if st, err := os.Stat(filepath.Join(r.home, "code", "reviewer")); err != nil || !st.IsDir() {
+		t.Fatalf("folder not made: %v", err)
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); !res.Denied {
+		t.Fatalf("~/myco outside the allowed folders: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(r.home, "myco", "x")); err == nil {
+		t.Fatal("made a folder outside the allowed ones")
+	}
+	r.node.Policy.Dirs = nil
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI}); res.Info == nil || res.Info.NewDir != "~/myco" || res.Info.Dirs[0] != "~" {
+		t.Fatalf("unlimited: %+v", res.Info)
 	}
 }
 

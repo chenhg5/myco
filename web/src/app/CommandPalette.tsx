@@ -98,7 +98,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
     for (const r of recent) {
       out.push({
         key: `r:${r.hub.id}:${r.st.agent.name}`, group: L("最近", "Recent"), title: nodeName(r.st.agent, r.hub),
-        sub: [isWorkspace(r.st.agent) ? L("电脑", "Computer") : r.st.agent.description, where(r.hub.id)].filter(Boolean).join(" · "),
+        sub: [isWorkspace(r.st.agent) ? L("终端", "Terminal") : r.st.agent.description, where(r.hub.id)].filter(Boolean).join(" · "),
         icon: isWorkspace(r.st.agent) ? <Monitor /> : <Avatar agent={r.st.agent} size={22} badge={false} />, target: { kind: "member", row: r },
       });
     }
@@ -118,7 +118,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
     }
     for (const r of rows.filter((x) => isWorkspace(x.st.agent) && !inRecent.has(`${x.hub.id}:${x.st.agent.name}`) && hit(nodeName(x.st.agent, x.hub), x.st.agent.name)).slice(0, text ? 4 : 2)) {
       out.push({
-        key: `c:${r.hub.id}:${r.st.agent.name}`, group: L("电脑", "Computers"), title: nodeName(r.st.agent, r.hub), sub: where(r.hub.id),
+        key: `c:${r.hub.id}:${r.st.agent.name}`, group: L("终端", "Terminals"), title: nodeName(r.st.agent, r.hub), sub: where(r.hub.id),
         icon: <Monitor />, target: { kind: "member", row: r },
       });
     }

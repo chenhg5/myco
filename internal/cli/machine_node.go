@@ -13,6 +13,7 @@ import (
 	"github.com/chenhg5/myco/internal/api"
 	"github.com/chenhg5/myco/internal/client"
 	"github.com/chenhg5/myco/internal/config"
+	"github.com/chenhg5/myco/internal/console"
 	"github.com/chenhg5/myco/internal/domain"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
@@ -268,6 +269,9 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				rc := config.Runner{Harness: p.CLI, Workdir: p.Workdir, Access: string(p.Access), Model: sr.Model,
 					EnvFile: machineEnvFile(e.defaultPath, me.Name)}
 				return res.Agent.Name, saveTakenProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc)
+			},
+			Machine: func(ctx context.Context) ([]api.MachineAI, []api.MachineSession) {
+				return console.MachineInventory(ctx, home, m.Hub)
 			},
 			Spawned: func() {
 				if sh.rescan != nil {

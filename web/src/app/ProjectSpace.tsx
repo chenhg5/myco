@@ -872,7 +872,7 @@ function EmptyProject({ loose, onAddAgent, onAddWorkspace, onNewProject }: { loo
         : L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
       <div className="sp-empty-actions">
         <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
-        {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一台电脑", "Add a computer")}</button>}
+        {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一个终端", "Add a terminal")}</button>}
       </div>
       {loose && onNewProject && (
         <button type="button" className="sp-empty-alt" onClick={onNewProject}>
@@ -1209,7 +1209,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
-        <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一台电脑", "Add a computer")} aria-label={L("加一台电脑", "Add a computer")}><Plus /></button>
+        <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
         {menu.element}
       </aside>
     );
@@ -1266,8 +1266,8 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       </div>
       <div className="sp-side-group">
         <div className="sp-side-title">
-          <span>{L(`电脑 ${workspaces.length}`, `Computers ${workspaces.length}`)}</span>
-          <button type="button" className="sp-side-add" onClick={onAddWorkspace} title={L("加一台电脑", "Add a computer")} aria-label={L("加一台电脑", "Add a computer")}><Plus /></button>
+          <span>{L(`终端 ${workspaces.length}`, `Terminals ${workspaces.length}`)}</span>
+          <button type="button" className="sp-side-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
         </div>
         {workspaces.map(row)}
         {workspaces.length === 0 && (
