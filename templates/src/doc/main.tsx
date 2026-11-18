@@ -187,9 +187,17 @@ function Doc({ initial, me, title0 }: { initial: PartialBlock<any, any, any>[]; 
       docs.put({ title: t.trim() }, "main")?.catch((e: { message?: string }) => flash(e?.message || "标题没保存上"));
     }, 500);
   };
+  // (the title's height follows its text, and the width: the page may be
+  // made while its panel is narrow or hidden, then widened)
   useEffect(() => {
     const el = titleRef.current;
-    if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
+    if (!el) return;
+    const fit = () => { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; };
+    fit();
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; fit(); } });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [title]);
 
   const fileName = () => (title.trim() || "文档").replace(/[\\/:*?"<>|]/g, " ");
