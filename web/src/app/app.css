@@ -7992,3 +7992,6 @@ body.is-resizing {
 .cf-empty b { font-size: 14px; font-weight: 600; }
 .cf-empty p { margin: 6px auto 0; max-width: 300px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
 .cf-more { display: flex; align-items: center; gap: 6px; margin: 18px auto 0; }
+
+/* A page card pinned above its conversation: a small pin before 打开. */
+.pg-card-pinned { flex: none; width: 13px; height: 13px; color: var(--muted); }

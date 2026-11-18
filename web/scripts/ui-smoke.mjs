@@ -764,6 +764,15 @@ async function runMatrix(browser, size, scheme) {
       await renamed.waitFor({ state: "detached", timeout: 5_000 });
       const left = (await (await api("GET", "?with=release-cloud")).json()).pins.map((p) => p.title);
       if (left.length !== 2 || left.includes("设计稿 v2")) throw new Error(`取消置顶后 Hub 上应剩两个，实际 ${left.join(" / ")}`);
+      // A page's card in the chat: right-click pins it above the chat (here
+      // it already is, as 发布说明网页: the card says so), or takes it off.
+      const card = chat.locator(".pg-card", { hasText: "v0.16.8 发布说明" }).first();
+      await card.locator(".pg-card-pinned").waitFor({ timeout: 5_000 });
+      await menuOn(card, "取消置顶");
+      await bar.locator(".pin-chip", { hasText: "发布说明网页" }).waitFor({ state: "detached", timeout: 5_000 });
+      await menuOn(card, "置顶到对话上方");
+      await bar.locator(".pin-chip", { hasText: "v0.16.8 发布说明" }).waitFor({ timeout: 5_000 });
+      await card.locator(".pg-card-pinned").waitFor({ timeout: 5_000 });
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 

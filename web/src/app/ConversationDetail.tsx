@@ -24,7 +24,7 @@ import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
-import { PageCards } from "@/app/pages";
+import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -987,6 +987,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       ...files.map((f) => ({ label: L(`置顶文件「${f.name}」`, `Pin the file “${f.name}”`), onSelect: () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "file", file: f, title: f.name })) })),
     ]);
   };
+  // A page's card (in a message or a progress update): right-click pins
+  // its link above the conversation, or takes it off.
+  const pagePinOf = (id: string) => pins?.find((p) => {
+    if (p.kind !== "link" || !p.target) return false;
+    const t = pageTargetOf(p.target);
+    return t?.kind === "page" && t.id === id;
+  });
+  const pagePins: PagePins | null = pins ? {
+    pinned: (id) => !!pagePinOf(id),
+    toggle: ({ id, url, name }) => {
+      const done = pagePinOf(id);
+      const work = done
+        ? appApi.removePin(target.hubId, done.id, target.agent, target.peer).then(() => pinsChanged(target.hubId))
+        : pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "link", target: url, title: name });
+      void work.catch((e) => setSendError(e));
+    },
+  } : null;
   // A pinned message: brought to the middle; in a long exchange, older
   // pages load until it turns up (a few at most).
   const [seek, setSeek] = useState<{ id: string; tries: number } | null>(null);
@@ -1893,6 +1910,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   return (
     <VersionsContext.Provider value={versions}>
+    <PagePinsContext.Provider value={pagePins}>
     <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
@@ -2293,6 +2311,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       </div>
       )}
     </div>
+    </PagePinsContext.Provider>
     </VersionsContext.Provider>
   );
 }

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppWindow, Check, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Radio, RotateCw, X } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AppWindow, Check, Copy, ExternalLink, Link2, Monitor, PanelRight, PanelRightClose, Pin as PinIcon, PinOff, Radio, RotateCw, X } from "lucide-react";
 import type { Page, PageOpen } from "@/api";
 import { ApiError, appApi, isOldHub } from "@/appapi";
 import { copyText } from "@/app/copy";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { DockPanel } from "@/app/preview";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
@@ -80,15 +81,22 @@ setInAppLinks((href) => {
 const URLS = /https?:\/\/[^\s<>()"'`，。；、]+/g;
 
 /** The page links in a message's text, once each. */
-export function pageLinksIn(body: string): { hubId: string; id: string }[] {
+export function pageLinksIn(body: string): { hubId: string; id: string; url: string }[] {
   const seen = new Set<string>();
-  const out: { hubId: string; id: string }[] = [];
+  const out: { hubId: string; id: string; url: string }[] = [];
   for (const m of body.matchAll(URLS)) {
-    const p = pageLinkOf(m[0].replace(/[.,;:!?)\]]+$/, ""));
-    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    const url = m[0].replace(/[.,;:!?)\]]+$/, "");
+    const p = pageLinkOf(url);
+    if (p && !seen.has(p.id)) { seen.add(p.id); out.push({ ...p, url }); }
   }
   return out;
 }
+
+/** Pinning a page's card above the conversation it is in (pins.tsx): the
+ *  conversation provides it; without one (or on a hub without pins) a
+ *  card's menu has no 置顶. */
+export type PagePins = { pinned: (id: string) => boolean; toggle: (p: { id: string; url: string; name: string }) => void };
+export const PagePinsContext = createContext<PagePins | null>(null);
 
 // Who you are on a workspace (for a page's myco.ready).
 let meOf: (hubId: string) => string = () => "";
@@ -155,14 +163,16 @@ export function PageCards({ body }: { body: string }) {
   if (!links.length) return null;
   return (
     <div className="pg-cards">
-      {links.map((l) => <PageCard key={l.id} hubId={l.hubId} id={l.id} />)}
+      {links.map((l) => <PageCard key={l.id} hubId={l.hubId} id={l.id} url={l.url} />)}
     </div>
   );
 }
 
-function PageCard({ hubId, id }: { hubId: string; id: string }) {
+function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
   const [page, setPage] = useState<Page | null>(null);
   const [gone, setGone] = useState(false);
+  const pins = useContext(PagePinsContext);
+  const menu = useContextMenu();
   useEffect(() => {
     let live = true;
     pageOf(hubId, id).then((p) => live && setPage(p), () => live && setGone(true));
@@ -174,9 +184,19 @@ function PageCard({ hubId, id }: { hubId: string; id: string }) {
   const about = !page ? ""
     : page.live ? L(`${who} 电脑上的 ${page.port} 端口`, `Port ${page.port} on ${who}'s computer`)
       : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at)].filter(Boolean).join(" · ");
+  // Right-click: open, pin it above the conversation (or unpin), copy its link.
+  const pinned = !!pins?.pinned(id);
+  const items: MenuItem[] = [
+    { label: L("打开", "Open"), icon: PanelRight, onSelect: () => openPage({ kind: "page", hubId, id }) },
+    ...(pins ? [{ label: pinned ? L("取消置顶", "Unpin") : L("置顶到对话上方", "Pin above the chat"), icon: pinned ? PinOff : PinIcon, onSelect: () => pins.toggle({ id, url, name: page?.name || L("网页", "Page") }) }] : []),
+    "sep",
+    { label: L("复制链接", "Copy the link"), icon: Copy, onSelect: () => void copyText(url) },
+  ];
   return (
-    <button type="button" className="pg-card" data-page={id} onClick={() => openPage({ kind: "page", hubId, id })}
-      title={L("在旁边打开这个网页", "Open this page beside the chat")}>
+    <>
+    <button type="button" className={cn("pg-card", pinned && "is-pinned")} data-page={id} onClick={() => openPage({ kind: "page", hubId, id })}
+      onContextMenu={(e) => menu.open(e, items)}
+      title={L("在旁边打开这个网页（右键：置顶、复制链接）", "Open this page beside the chat (right-click: pin, copy the link)")}>
       <span className={cn("pg-card-icon", page?.live && "is-live")}>{page?.live ? <Radio /> : <AppWindow />}</span>
       <span className="pg-card-text">
         <span className="pg-card-name">
@@ -185,8 +205,11 @@ function PageCard({ hubId, id }: { hubId: string; id: string }) {
         </span>
         <span className="pg-card-about">{page ? about : L("正在读取…", "Loading…")}</span>
       </span>
+      {pinned && <PinIcon className="pg-card-pinned" aria-label={L("已置顶", "Pinned")} />}
       <span className="pg-card-open">{L("打开", "Open")}</span>
     </button>
+    {menu.element}
+    </>
   );
 }
 
