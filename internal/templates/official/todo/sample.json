@@ -1,0 +1,66 @@
+{
+  "list": [
+    {
+      "id": "main",
+      "title": "本周待办"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "交 Q4 周报",
+      "done": false,
+      "order": 1,
+      "due": "2026-11-18",
+      "owner": "Lee",
+      "star": true
+    },
+    {
+      "id": "t2",
+      "title": "约设计评审",
+      "done": false,
+      "order": 2,
+      "due": "2026-11-19",
+      "owner": "Ann",
+      "note": "带上官网首页的两版稿子"
+    },
+    {
+      "id": "t3",
+      "title": "核对下载页的每个链接",
+      "done": false,
+      "order": 3,
+      "due": "2026-11-20",
+      "owner": "agent"
+    },
+    {
+      "id": "t4",
+      "title": "整理发布说明",
+      "done": false,
+      "order": 4,
+      "due": "2026-11-21"
+    },
+    {
+      "id": "t5",
+      "title": "给新同事开账号",
+      "done": false,
+      "order": 5,
+      "due": "2026-11-17",
+      "owner": "Lee"
+    },
+    {
+      "id": "t6",
+      "title": "买团建的零食",
+      "done": false,
+      "order": 6
+    },
+    {
+      "id": "t7",
+      "title": "回复用户关于中文输入的反馈",
+      "done": true,
+      "order": 7,
+      "due": "2026-11-18",
+      "owner": "Lee",
+      "done_at": "2026-11-18T09:30:00Z"
+    }
+  ]
+}
