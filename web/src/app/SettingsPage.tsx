@@ -23,6 +23,7 @@ import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTransl
 import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
+import { ChatBgDialog } from "@/app/ChatBgDialog";
 
 type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
 
@@ -593,6 +594,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                 </div>
               </div>
               <ReportsOnlyLine />
+              <ChatBgLine />
               {info?.shell === "mac" && <IslandLine />}
               <div className="app-setting-line">
                 <div className="app-setting-line-text">
@@ -1386,3 +1388,19 @@ function VoiceSection() {
     </>
   );
 }
+
+/** 聊天背景: the default for every conversation (each can have its own). */
+function ChatBgLine() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="app-setting-line" data-setting="chat-bg">
+      <div className="app-setting-line-text">
+        <b>{L("聊天背景", "Chat background")}</b>
+        <span>{L("所有对话默认用的背景，只在这台电脑上。单个对话在它顶栏的「⋯」里换。", "The background every conversation uses, on this computer only. Change one conversation's in its header's ⋯.")}</span>
+      </div>
+      <button type="button" className="app-btn" onClick={() => setOpen(true)}>{L("选择…", "Choose…")}</button>
+      <ChatBgDialog open={open} onClose={() => setOpen(false)} />
+    </div>
+  );
+}
+

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -24,6 +24,8 @@ import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
 import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
+import { ChatBgDialog } from "@/app/ChatBgDialog";
+import { chatKey, useChatBg } from "@/app/chatBg";
 import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
@@ -293,6 +295,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
   const headMenu = useContextMenu();
   // (a reply done growing in shows its attachments: one more render)
   const [, setRevealedTick] = useState(0);
@@ -961,6 +964,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Either way (typing at it, or reading what other nodes ran on it) the
   // pane is a terminal.
   const termMode = shellMode || !!execNode;
+  // 聊天背景: this conversation's own, else the default (not a terminal).
+  const chatBg = useChatBg(termMode ? "" : chatKey(target.hubId, target.agent));
 
   // 置顶 (pins.tsx): what this conversation keeps at hand, above it; the
   // same list for both parties (hubs from v0.20.3). Not in a terminal.
@@ -1905,7 +1910,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
 
   // The header's ⋯ menu: what is used now and then.
   const headMore: MenuItem[] = [
-    ...(!termMode ? [{ label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) }, "sep" as const] : []),
+    ...(!termMode ? [
+      { label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) },
+      { label: L("聊天背景", "Chat background"), icon: Paintbrush, onSelect: () => setBgOpen(true) },
+      "sep" as const,
+    ] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
@@ -1919,7 +1928,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   return (
     <VersionsContext.Provider value={versions}>
     <PagePinsContext.Provider value={pagePins}>
-    <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
+    <div className={cn("conv-detail", hasRail && "has-rail", chatBg && "has-bg")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
+      {/* 聊天背景 (chatBg.ts): this conversation's own, filling its pane */}
+      {chatBg && (
+        <div className="conv-bg" aria-hidden>
+          <div className="cbg-layer" style={{ background: chatBg.css }} />
+          {chatBg.veil > 0 && <div className="cbg-veil" style={{ opacity: chatBg.veil }} />}
+        </div>
+      )}
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
           <button type="button" className="app-btn app-btn-plain" onClick={onBack}
@@ -1988,6 +2004,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       )}
       {pinMenu.element}
       {headMenu.element}
+      {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
       <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
         nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
         more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />

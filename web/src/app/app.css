@@ -8020,3 +8020,35 @@ body.is-resizing {
 /* A run not started yet that shows what the one before goes on doing
    (after your next message, in time): it says so first. */
 .trace-carry { margin: 2px 0 6px; font-size: 12px; color: var(--muted); }
+
+/* ── 聊天背景 (chatBg.ts): a conversation's own, filling its own pane ── */
+.conv-detail { position: relative; }
+.conv-detail.has-bg { isolation: isolate; }
+.conv-bg { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.cbg-layer, .cbg-veil { position: absolute; inset: 0; }
+.cbg-veil { background: var(--bg); }
+/* (the header stays plain over it; the words below sit on the veil) */
+.conv-detail.has-bg > .conv-head { background: var(--bg); }
+.conv-detail.has-bg .conv-compose { background: transparent; }
+.conv-detail.has-bg .conv-compose-box { box-shadow: 0 0 0 0.5px var(--line), 0 6px 18px rgba(15, 20, 30, 0.06); }
+
+.cbg-dialog { width: min(560px, calc(100vw - 32px)); }
+.cbg-scope { margin: 4px 0 12px; }
+.cbg-preview { position: relative; height: 150px; border-radius: 12px; overflow: hidden; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.cbg-preview .cbg-layer, .cbg-preview .cbg-veil { position: absolute; inset: 0; }
+.cbg-sample { position: relative; display: flex; flex-direction: column; gap: 10px; height: 100%; padding: 18px 18px; justify-content: flex-end; }
+.cbg-sample-agent { align-self: flex-start; max-width: 75%; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.cbg-sample-me { align-self: flex-end; max-width: 70%; padding: 7px 12px; border-radius: 14px; font-size: 13px; background: var(--pill); color: var(--fg); }
+.cbg-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin-top: 14px; }
+.cbg-tile { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 0; border: 0; background: none; color: var(--fg-2); font: inherit; font-size: 12px; text-align: center; cursor: default; }
+.cbg-swatch { display: grid; place-items: center; height: 56px; border-radius: 10px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
+.cbg-swatch svg { width: 18px; height: 18px; }
+.cbg-tile.is-none .cbg-swatch { background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in srgb, var(--fg) 5%, transparent) 8px 9px), var(--bg); }
+.cbg-tile:hover .cbg-swatch { box-shadow: inset 0 0 0 1px var(--line-2), 0 2px 8px rgba(15, 20, 30, 0.08); }
+.cbg-tile.is-on .cbg-swatch { box-shadow: inset 0 0 0 2px var(--fg); }
+.cbg-tile:focus-visible { outline: none; }
+.cbg-tile:focus-visible .cbg-swatch { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cbg-check { position: absolute; top: 6px; right: 6px; width: 14px; height: 14px; padding: 2px; border-radius: 50%; background: var(--fg); color: var(--bg); }
+.cbg-veil-line { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 12.5px; color: var(--fg-2); }
+.cbg-veil-line input { flex: 1; accent-color: var(--fg); }
+.cbg-veil-value { width: 36px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }

@@ -1863,6 +1863,35 @@ async function runMatrix(browser, size, scheme) {
       await panel.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
+    // 聊天背景: from the header's ⋯, for this chat or as the default; the
+    // chat shows it at once, filling its pane; back to none afterwards.
+    await step("单聊 · 聊天背景", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const chat = page.locator(".conv-detail").first();
+      await clickVisible(page, chat.locator("[data-testid=chat-more]"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "聊天背景" }));
+      const dlg = page.locator(".cbg-dialog");
+      await dlg.waitFor({ timeout: 5_000 });
+      await clickVisible(page, dlg.locator(".cbg-tile", { hasText: "点阵" }));
+      await chat.locator(".conv-bg .cbg-layer").waitFor({ timeout: 5_000 });
+      if (!(await chat.evaluate((el) => el.classList.contains("has-bg")))) throw new Error("选了背景，对话应马上换上");
+      // The default, for every conversation without its own.
+      await clickVisible(page, dlg.getByRole("tab", { name: "所有对话的默认" }));
+      await clickVisible(page, dlg.locator(".cbg-tile", { hasText: "晨雾" }));
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-background-dialog");
+      await clickVisible(page, dlg.getByRole("button", { name: "好" }));
+      await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-background");
+      // Another conversation has the default.
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await page.locator(".conv-detail.has-bg").first().waitFor({ timeout: 5_000 });
+      // Back to none, for the steps after this one.
+      await page.evaluate(() => { localStorage.removeItem("myco-chat-bg"); window.dispatchEvent(new CustomEvent("myco-chat-bg-changed")); });
+      await page.locator(".conv-detail.has-bg").waitFor({ state: "detached", timeout: 5_000 });
+    });
+
     // Speaking instead of typing: the microphone beside Send listens in the
     // app's language (the mock is the Mac app), the words grow into the box
     // after what was typed, and it stops by itself at the end.
