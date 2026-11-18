@@ -119,8 +119,14 @@ jobs:
         run: |
           cd web && npm ci
           npm install -g playwright@1
-          node "$(npm root -g)/playwright/cli.js" install --with-deps chromium
-          sudo apt-get install -y -q fonts-noto-cjk >/dev/null
+          # Now and then a runner's apt or download stalls: give each try two
+          # minutes and try three times rather than wait out the step.
+          for try in 1 2 3; do
+            timeout 120 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
+              timeout 120 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
+            echo "::warning::Playwright / font install try $try stalled or failed; trying again"
+            [ "$try" = 3 ] && exit 1
+          done
       - name: UI smoke (${{ matrix.combo }})
         run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }}
       - uses: actions/upload-artifact@v4
