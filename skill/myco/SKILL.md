@@ -221,7 +221,8 @@ myco template init --dir ./t --name "…" --id <you>/<name>   # a working table 
 myco template publish --dir ./t                      # into the library; raise version to update
 ```
 
-Every workspace has myco's own: `myco/table` (a table whose columns people add), `myco/base`
+People call templates 应用 (apps) in the App; the pages made from them are their tables,
+documents and decks. Every workspace has myco's own: `myco/table` (a table whose columns people add), `myco/base`
 (records seen as a table, board, calendar, gallery, form), `myco/doc` (a document, one record a
 block) and `myco/slides` (a deck: you write each slide's layout and content, the page lays it out
 and exports PowerPoint). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes

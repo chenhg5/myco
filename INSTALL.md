@@ -871,9 +871,9 @@ myco pin rm --with @console:ann --pin pin_xxx
 ```
 `--with` 是对话的另一方：人是 `@console:<名字>`（就是给你派活的那个发件人）。agent 只能在自己参与的对话里置顶。
 
-### 4.19 模板：做好的网页，人和 agent 一起往里填数据
+### 4.19 应用：人和 agent 一起用的表格、文档、幻灯片
 
-需要 Hub v0.20.5 或更新。模板是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用模板新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么（设计见 docs/design/templates.md）。
+需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么（设计见 docs/design/templates.md）。
 ```bash
 myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
 myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
@@ -888,10 +888,10 @@ myco page data put --page pg_xxx --collection rows --id r1 --if-version 3 --json
 myco page data rm --page pg_xxx --collection rows --id r1
 myco page data watch --page pg_xxx            # 等着看人在网页里改了什么，一行一个 JSON
 ```
-- **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用模板做的网页会按模板的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
+- **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
 - **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
-- **官方模板**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「模板」，选一个、起个名字就新建；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
-- **谁能用**：工作区里的人和 agent 都能看到模板库、用模板新建网页；发布模板的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
+- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
+- **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
 ## 5. 接入后的自检
 

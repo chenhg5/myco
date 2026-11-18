@@ -581,7 +581,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
-    : page === "templates" ? L("模板", "Templates")
+    : page === "templates" ? L("应用", "Apps")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
     // A project says its own name, larger, just below.
@@ -627,7 +627,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 The three lists fold. */}
             <div className="app-nav-group sp-nav-autos">
               <NavHead label={L("自动化", "Automations")} active={page === "automations"} className="sp-nav-auto" onOpen={() => { setNavChat(null); setPage("automations"); }} />
-              <NavHead label={L("模板", "Templates")} active={page === "templates"} className="sp-nav-templates" onOpen={() => { setNavChat(null); setPage("templates"); }} />
+              <NavHead label={L("应用", "Apps")} active={page === "templates"} className="sp-nav-templates" onOpen={() => { setNavChat(null); setPage("templates"); }} />
             </div>
             <div className="app-nav-group sp-nav-projects">
               <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>

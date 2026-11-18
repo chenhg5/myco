@@ -346,7 +346,7 @@ async function go(page, label, narrow) {
     const item = label === "电脑" ? page.locator(".sp-nav-pcs-head:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
       : label === "自动化" ? page.locator(".sp-nav-auto:visible")
-      : label === "模板" ? page.locator(".sp-nav-templates:visible")
+      : label === "应用" ? page.locator(".sp-nav-templates:visible")
       : page.locator(".app-nav-item:visible", { hasText: label });
     await clickVisible(page, item);
   }
@@ -770,7 +770,7 @@ async function runMatrix(browser, size, scheme) {
     // its records through the bridge; you edit a cell (saved with its
     // version), the agent adds a row (it shows up), and it exports a CSV to
     // Downloads.
-    await step("模板 · 人和 agent 一起填表", async () => {
+    await step("应用 · 人和 agent 一起填表", async () => {
       await go(page, "官网改版", narrow);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_table" } })));
       const frame = page.frameLocator(".pg-frame");
@@ -797,15 +797,15 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
     });
 
-    // 模板: myco's own first, then the workspace's; one makes a page in the
+    // 应用 (templates): myco's own first, then the workspace's; one makes a page in the
     // panel (with sample data), listed under them to open again. The board
     // and calendar of 多维表格, and a document typed with shortcuts.
-    await step("模板 · 模板库和官方模板", async () => {
-      await go(page, "模板", narrow);
+    await step("应用 · 应用库和官方应用", async () => {
+      await go(page, "应用", narrow);
       const lib = page.locator("[data-testid=templates-official] .tp-card");
       await lib.first().waitFor({ timeout: 15_000 });
       const names = (await lib.allInnerTexts()).map(compactText);
-      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`官方模板应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
+      if (names.length !== 4 || !names[0].startsWith("表格") || !names[1].startsWith("多维表格") || !names[2].startsWith("文档") || !names[3].startsWith("幻灯片")) throw new Error(`官方应用应是 表格、多维表格、文档、幻灯片，实际 ${names.join(" / ")}`);
       await page.locator("[data-testid=templates-own] .tp-card").first().waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "templates");
@@ -820,7 +820,7 @@ async function runMatrix(browser, size, scheme) {
       };
       const make = async (slug, name) => {
         await tuck();
-        await go(page, "模板", narrow);
+        await go(page, "应用", narrow);
         await clickVisible(page, page.locator(`[data-testid="template-${slug}"]`));
         await page.locator("[data-testid=template-name]").fill(name);
         await clickVisible(page, page.getByRole("button", { name: "新建", exact: true }));
@@ -875,7 +875,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "template-doc");
       // The pages made are listed under the templates.
       await tuck();
-      await go(page, "模板", narrow);
+      await go(page, "应用", narrow);
       await page.locator(".tp-made-row", { hasText: `计划（${mark}）` }).waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".pg-toggle"));
       await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
@@ -1234,7 +1234,7 @@ async function runMatrix(browser, size, scheme) {
         const st = getComputedStyle(e);
         return { text: (e.textContent || "").trim(), size: st.fontSize, icon: !!e.querySelector("svg") };
       }));
-      if (heads.map((h) => h.text).join("|") !== "自动化|模板|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、模板、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
+      if (heads.map((h) => h.text).join("|") !== "自动化|应用|项目|会话|电脑") throw new Error(`边栏标题应是 自动化、应用、项目、会话、电脑，实际 ${heads.map((h) => h.text).join(" / ")}`);
       if (new Set(heads.map((h) => h.size)).size !== 1 || heads.some((h) => h.icon)) throw new Error(`边栏标题字号应一致、不带图标：${JSON.stringify(heads)}`);
       // Projects fold, and stay folded.
       await clickVisible(page, page.locator(".sp-nav-projects .sp-nav-fold"));

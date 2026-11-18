@@ -8,7 +8,8 @@ import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
- * 模板 (templates.md): ready-made pages people and agents fill with data.
+ * 应用 (templates.md; templates in the CLI and API): ready-made pages
+ * people and agents use together, filling them with data.
  * myco's own (表格, 多维表格, 文档, 幻灯片) are in every workspace; the workspace's
  * own are below them (agents make them with myco template init/publish).
  * Using one makes a page, opened in the page panel; the pages made from
@@ -39,7 +40,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
     const Icon = iconOf(t.kind);
     return (
       <button key={t.id} type="button" className="au-template tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
-        title={L(`用「${t.name}」新建一个网页`, `New page from ${t.name}`)}>
+        title={L(`新建一份${t.name}`, `New ${t.name}`)}>
         <span className={cn("au-icon", `tp-icon is-${t.kind}`)}><Icon /></span>
         <span className="au-template-text">
           <span className="au-template-name">{t.name}{t.official && <span className="tp-tag">{L("官方", "Official")}</span>}</span>
@@ -53,27 +54,27 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   return (
     <div className="pc au tp">
       <div className="pc-head">
-        <p className="pc-intro">{L("做好的网页，你和 agent 一起往里填数据：你在网页里改，agent 用命令行读写同一份，谁改了对方马上看到。用模板新建一个，它就在右边的面板里打开。",
-          "Ready-made pages you and agents fill together: you edit in the page, agents read and write the same data, and each sees the other's changes at once. New ones open in the page panel.")}</p>
+        <p className="pc-intro">{L("你和 agent 一起用的应用：你在页面里改，agent 用命令行读写同一份，谁改了对方马上看到。新建一份，它就在右边的面板里打开。",
+          "Apps you and agents use together: you edit in the page, agents read and write the same data, and each sees the other's changes at once. New ones open in the page panel.")}</p>
       </div>
       <ErrorText error={error} />
       {unsupported ? (
         <div className="app-empty" data-testid="templates-unsupported">
           <div className="app-empty-icon"><LayoutTemplate /></div>
-          <h2>{L("这个工作区还不能用模板", "No templates in this workspace yet")}</h2>
+          <h2>{L("这个工作区还不能用应用", "No apps in this workspace yet")}</h2>
           <p>{L("它的 Hub 版本太旧。在服务器上运行 sudo myco upgrade，升级到 v0.20.5 或更新。", "Its hub is too old: run sudo myco upgrade on the server (v0.20.5 or later).")}</p>
         </div>
       ) : list === null ? null : (
         <>
-          <h3 className="tp-section">{L("官方", "Official")}</h3>
+          <h3 className="tp-section">{L("官方应用", "Official apps")}</h3>
           <div className="au-templates" data-testid="templates-official">{official.map(card)}</div>
-          <h3 className="tp-section">{L("这个工作区的", "This workspace's")}</h3>
+          <h3 className="tp-section">{L("这个工作区的应用", "This workspace's apps")}</h3>
           {own.length ? <div className="au-templates" data-testid="templates-own">{own.map(card)}</div> : (
-            <p className="tp-hint">{L("还没有。想要一个自己的（比如周报、面试评估表），跟 agent 说：「用 myco template init 帮我做一个周报模板，做好发布到工作区」。",
-              "None yet. For one of your own (a weekly report, an interview sheet), ask an agent: \"make a weekly report template with myco template init and publish it\".")}</p>
+            <p className="tp-hint">{L("还没有。想要一个自己的（比如周报、面试评估表），跟 agent 说：「用 myco template init 帮我做一个周报应用，做好发布到工作区」。",
+              "None yet. For one of your own (a weekly report, an interview sheet), ask an agent: \"make a weekly report app with myco template init and publish it\".")}</p>
           )}
           {made.length > 0 && <>
-            <h3 className="tp-section">{L("用模板建的网页", "Pages made from templates")}</h3>
+            <h3 className="tp-section">{L("最近建的", "Made recently")}</h3>
             <div className="pc-list tp-made" data-testid="templates-made">
               {made.map((p) => {
                 const t = (list || []).find((x) => x.id === p.template?.id);
@@ -125,7 +126,7 @@ function UseTemplate({ hubId, template, projects, onClose, onMade }: {
     }
   };
   return (
-    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`用「${template.name}」新建`, `New ${template.name}`) : ""}
+    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`新建一份${template.name}`, `New ${template.name}`) : ""}
       description={template?.description}>
       <form onSubmit={make} className="pin-edit">
         <label className="app-field">
