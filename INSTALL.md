@@ -877,7 +877,7 @@ myco pin rm --with @console:ann --pin pin_xxx
 ```bash
 myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
 myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
-myco template list
+myco template list [--category life] [--query 记账]               # 一个应用一行：叫什么、做什么用、分类（--full 全部字段）
 myco template get --template glenn/weekly                         # 数据结构、版本、给 agent 的说明
 myco template use --template glenn/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
 myco template rm --template glenn/weekly                          # 已经做好的网页不受影响
@@ -888,6 +888,7 @@ myco page data put --page pg_xxx --collection rows --id r1 --if-version 3 --json
 myco page data rm --page pg_xxx --collection rows --id r1
 myco page data watch --page pg_xxx            # 等着看人在网页里改了什么，一行一个 JSON
 ```
+给 agent 的内容是一层层给的，应用再多也不会一下子塞给它：技能里只有一小段怎么用应用（不列应用）；`myco template list` 每个应用只有一行（叫什么、做什么用、分类，不带图标、数据结构和说明，可以按 `--category`、`--query` 筛）；选中一个再用 `myco template get` 或 `use` 拿到它自己的数据结构和说明（`agent.md`）。
 - **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
 - **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
 - **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「待办清单」「投票」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。

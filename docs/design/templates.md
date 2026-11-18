@@ -135,6 +135,7 @@ weekly-report/
 - **Hub 自己拉**：Hub 启动 20 秒后、之后每天拉一次（`myco template sync` 或应用页的「检查官方应用更新」立刻拉，最多一分钟一次），按 `SHA256SUMS` 校验，每个应用按模板的规矩检查；同一个应用取二进制里的和拉到的里版本高的，新应用直接加上。拉到的存在数据库旁边（`official-apps.zip`），重启不用等网络。关了升级检查（`--no-update-check` 或 `MYCO_NO_UPDATE_CHECK=1`）就只用二进制里带的和存下来的，内网、离线的 Hub 照样有官方应用。
 - **最低 Hub 版本**：myco.json 的 `requires.hub`；Hub 先只读这一项，太旧就跳过这个应用（它的 manifest 可能有旧 Hub 不认识的字段），等升级。
 - **应用自带图标和分类**：`icon`（应用里的一个 SVG）和 `category`，App 不写死任何应用；技能也不列名单，让 agent 用 `myco template list` / `get`。
+- **给 agent 的是一层层的**：技能里只有一小段通用的用法；`myco template list` 默认每个应用一条（id、名字、一句说明、分类，不带图标、数据结构、版本和说明，14 个应用约 6KB，带 `--full` 才是全部字段，约 23KB），可按 `--category`、`--query` 筛；选中一个再 `get` / `use` 拿它自己的 `agent.md`（每个 0.6～2KB，最多 32KB）。应用再多，agent 每次读到的也只是一张短名单加一份说明。
 - **建好的网页升级**：用应用建的网页带着当时的文件；应用出了新版本，网页面板顶上提示「有新版本，升级后数据不变」，点「升级」（或 `myco page upgrade --page`）就换成新版本的文件和数据结构，记录原样保留。
 
 每个模板都带 `agent.md`（怎么读写它的数据）和 `sample.json`（示例数据）。

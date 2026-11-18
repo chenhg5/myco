@@ -211,7 +211,7 @@ a tracker, a form. Use one from the workspace's library, or make one (the person
 for it):
 
 ```bash
-myco template list                                   # what the workspace has
+myco template list [--category life] [--query 记账]   # one short line each: pick one
 myco template use --template <slug> --name "…"       # a page from it; prints its address and the guide
 myco page data list --page <pg_id>                   # its records
 myco page data put --page <pg_id> --collection <c> --json '{…}'              # a new record
@@ -224,8 +224,9 @@ myco template publish --dir ./t                      # into the library; raise v
 People call templates 应用 (apps) in the App; the pages made from them are their tables,
 documents, decks, boards and games. Every workspace has myco's own (their ids start with
 `myco/`: office, development, tools, life, creative and game apps), and they change without a
-hub release: see what this workspace has with `myco template list`, and how to fill one with
-`myco template get --template <id>` (its guide). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
+hub release: see what this workspace has with `myco template list` (one short entry each;
+narrow it with `--category` or `--query`), then read only the one you use with
+`myco template get --template <slug>` (its data structure and guide). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
 where. Write with `--if-version` when you read first; on a conflict read again. In a page
 you write, `myco.data.list/put/remove/on` reads and writes the records and
 `myco.download(name, content, type)` saves an export to the person's Downloads. What people

@@ -125,10 +125,21 @@ pages already made from it stay as they are.`,
 		}),
 	}
 	list := &Command{
-		Name:     "list",
-		Summary:  "List the workspace's templates",
-		Examples: []string{"myco template list"},
-		Flags:    []Flag{adminFile},
+		Name:    "list",
+		Summary: "List the workspace's templates: one short entry each (get one for its data structure and guide)",
+		Long: `Lists what the workspace has, one short entry per template: id, name,
+what it is for, its category. For an agent this is the step before
+myco template get, which gives one template's data structure and guide:
+the list stays short however many templates there are. --category and
+--query narrow it; --full gives every field (icons, data structures,
+versions) as the hub sends them.`,
+		Examples: []string{"myco template list", "myco template list --category life", "myco template list --query 记账"},
+		Flags: []Flag{
+			{Name: "category", Kind: String, Help: "Only this category: office, dev, tools, life, creative, game or other"},
+			{Name: "query", Kind: String, Help: "Only templates whose id, name or description has these words"},
+			{Name: "full", Kind: Bool, Help: "Every field of each template (icons, data structures, versions)"},
+			adminFile,
+		},
 		Run: handler(func(e *env) error {
 			c, err := e.projectClient()
 			if err != nil {
@@ -138,17 +149,27 @@ pages already made from it stay as they are.`,
 			if err != nil {
 				return templateErr(err)
 			}
-			return e.p.Print(api.TemplateList{Templates: ts}, func(w io.Writer) {
+			ts = filterTemplates(ts, e.in.String("category"), e.in.String("query"))
+			var out any = api.TemplateList{Templates: ts}
+			if !e.in.Bool("full") {
+				out = briefTemplates(ts)
+			}
+			return e.p.Print(out, func(w io.Writer) {
 				if len(ts) == 0 {
+					if e.in.String("category") != "" || e.in.String("query") != "" {
+						fmt.Fprintln(w, "no templates match: try without --category or --query")
+						return
+					}
 					fmt.Fprintln(w, "no templates yet: start one with myco template init")
 					return
 				}
 				tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-				fmt.Fprintln(tw, "ID\tTEMPLATE\tNAME\tKIND\tVERSION\tBY")
+				fmt.Fprintln(tw, "TEMPLATE\tNAME\tCATEGORY\tVERSION\tWHAT IT IS")
 				for _, t := range ts {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Slug, t.Name, t.Kind, t.Version, t.Publisher)
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Slug, t.Name, categoryOf(t), t.Version, oneLine(t.Description, 60))
 				}
 				tw.Flush()
+				fmt.Fprintln(w, "\nHow to fill one: myco template get --template <template>")
 			})
 		}),
 	}
@@ -534,4 +555,78 @@ func dataErr(err error) error {
 		return errorf("not_supported", ExitNotFound, "the hub needs v0.20.5 or later (sudo myco upgrade on the server); until then, use myco page state", "this hub keeps no records for pages yet")
 	}
 	return pageErr(err)
+}
+
+// TemplateBrief is a template as the list shows it: enough to choose one.
+// Its data structure and guide come with myco template get.
+type TemplateBrief struct {
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Kind        string `json:"kind"`
+	Version     string `json:"version"`
+	Publisher   string `json:"publisher"`
+	Official    bool   `json:"official,omitempty"`
+}
+
+// TemplateBriefs is what myco template list prints (without --full).
+type TemplateBriefs struct {
+	Templates []TemplateBrief `json:"templates"`
+	Next      string          `json:"next"`
+}
+
+func briefTemplates(ts []api.Template) TemplateBriefs {
+	out := TemplateBriefs{Templates: make([]TemplateBrief, 0, len(ts)), Next: "one's data structure and guide: myco template get --template SLUG"}
+	for _, t := range ts {
+		out.Templates = append(out.Templates, TemplateBrief{ID: t.ID, Slug: t.Slug, Name: t.Name, Description: t.Description,
+			Category: categoryOf(t), Kind: t.Kind, Version: t.Version, Publisher: t.Publisher, Official: t.Official})
+	}
+	return out
+}
+
+// categoryOf is a template's shelf; hubs before v0.20.6 send none.
+func categoryOf(t api.Template) string {
+	if t.Category != "" {
+		return t.Category
+	}
+	return "other"
+}
+
+// filterTemplates keeps those in the category (if any) whose id, name or
+// description has every word of the query (if any), ignoring case.
+func filterTemplates(ts []api.Template, category, query string) []api.Template {
+	category = strings.ToLower(strings.TrimSpace(category))
+	words := strings.Fields(strings.ToLower(query))
+	if category == "" && len(words) == 0 {
+		return ts
+	}
+	out := make([]api.Template, 0, len(ts))
+	for _, t := range ts {
+		if category != "" && categoryOf(t) != category {
+			continue
+		}
+		hay := strings.ToLower(t.ID + " " + t.Slug + " " + t.Name + " " + t.Description)
+		ok := true
+		for _, w := range words {
+			if !strings.Contains(hay, w) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// oneLine is s on one line, cut to n characters.
+func oneLine(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
 }
