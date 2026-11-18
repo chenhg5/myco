@@ -1102,7 +1102,20 @@ async function runMatrix(browser, size, scheme) {
 
       await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
       await dialog.locator(".ws-computer.active").first().waitFor({ timeout: 10_000 });
-      await dialog.locator("input.app-input.mono").fill("~/code/website");
+      // A newer computer makes ~/myco/<name> when no folder is given; model,
+      // effort and access are under "more".
+      await dialog.locator(".app-field-label", { hasText: "文件夹干活（可以不填）" }).waitFor({ timeout: 5_000 });
+      const folder = dialog.locator("input.app-input.mono").first();
+      if (!/~\/myco\//.test(await folder.getAttribute("placeholder") || "")) throw new Error("文件夹可以不填时，提示里应写会新建的 ~/myco/… 文件夹");
+      await clickVisible(page, dialog.locator("details.app-advanced summary", { hasText: "更多选项" }));
+      await dialog.locator("select.app-select-field").selectOption("high");
+      await clickVisible(page, dialog.getByRole("tab", { name: "只读" }));
+      await dialog.locator(".app-field-hint", { hasText: "只看不改" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-new-options");
+      await clickVisible(page, dialog.getByRole("tab", { name: "这个文件夹" }));
+      await clickVisible(page, dialog.locator("details.app-advanced summary", { hasText: "更多选项" }));
+      await folder.fill("~/code/website");
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));

@@ -272,6 +272,18 @@ func (n *Node) access(requested string) (harness.Access, error) {
 	return a, nil
 }
 
+// AutoDirRoot is where new conversations get a folder when none is given:
+// ~/myco/<name>. Only a missing folder directly inside it is made.
+const AutoDirRoot = "myco"
+
+// autoDir: p is a folder directly inside ~/myco (no "..", not ~/myco
+// itself), the one place a missing working directory is made.
+func (n *Node) autoDir(p string) bool {
+	root := filepath.Join(n.Policy.Home, AutoDirRoot)
+	clean := filepath.Clean(p)
+	return n.Policy.Home != "" && filepath.Dir(clean) == root && filepath.Base(clean) != "." && !strings.HasPrefix(filepath.Base(clean), ".")
+}
+
 func (n *Node) expand(p string) string {
 	return osutil.ExpandHome(strings.TrimSpace(p), n.Policy.Home)
 }
@@ -287,6 +299,13 @@ func (n *Node) dir(requested string) (string, error) {
 		return "", fmt.Errorf("directory %q must be absolute or start with ~/", requested)
 	}
 	real, err := filepath.EvalSymlinks(p)
+	if err != nil && n.autoDir(p) {
+		// A new conversation the app named a folder for under ~/myco
+		// (docs/design/client-plan.md 5.2): make it, nothing else.
+		if mkErr := os.MkdirAll(p, 0o755); mkErr == nil {
+			real, err = filepath.EvalSymlinks(p)
+		}
+	}
 	if err != nil {
 		return "", fmt.Errorf("directory %s does not exist on machine %s", requested, n.Machine)
 	}

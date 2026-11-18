@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type SpawnCli } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
@@ -11,6 +11,10 @@ import { computerPrompt } from "@/app/agentSetup";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { Elapsed, Mushroom } from "@/app/Working";
 import { ErrorText, Modal } from "@/app/dialogs";
+import { LocalAgentLines } from "@/app/LocalAgents";
+import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
+import { machineMakesFolders } from "@/app/hubVersion";
+import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -391,12 +395,17 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
   const [cli, setCli] = useState<SpawnCli>("claude");
   const [dir, setDir] = useState("");
   const [role, setRole] = useState("");
+  const [model, setModel] = useState("");
+  const [effort, setEffort] = useState("");
+  const [access, setAccess] = useState<RuntimeAccess>("workspace");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
     if (!open) return;
     appApi.local().then(setLocal).catch(() => setLocal(null));
   }, [open]);
+  // A model or effort picked for one CLI means nothing to another.
+  useEffect(() => { setModel(""); setEffort(""); }, [cli]);
   const isHere = (m: Machine) => !!local && ((local.machines || []).includes(m.name) || (!!local.hostname && m.hostname === local.hostname));
   const ordered = [...machines].sort((a, b) => Number(isHere(b)) - Number(isHere(a)) || Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
   useEffect(() => {
@@ -405,21 +414,31 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
   }, [open, machines.length, local]);
   const machine = machines.find((m) => m.id === machineId);
   const folders = usedFolders(rows, hubId, machineId);
-  const ready = !!machine && !!dir.trim();
+  // Newer computers make ~/myco/<name> when no folder is given.
+  const autoDir = !!machine && machineMakesFolders(machine.myco_version);
+  const ready = !!machine && (!!dir.trim() || autoDir);
   useEffect(() => { onState({ ready, busy: !!busy }); }, [ready, busy, onState]);
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!machine || !dir.trim() || busy) return;
+    if (!machine || !ready || busy) return;
     setBusy(new Date().toISOString());
     setError(null);
     try {
-      const r = await appApi.spawn(hubId, machine.id, { cli, dir: dir.trim(), access: "workspace", ...(role.trim() ? { display_name: role.trim() } : {}) });
+      const where = dir.trim() || autoFolder(role, cli);
+      const r = await appApi.spawn(hubId, machine.id, { cli, dir: where, access, ...(role.trim() ? { display_name: role.trim() } : {}) });
+      // Model and effort go in its run settings, as the conversation's own
+      // controls set them; an older workspace without them just keeps the defaults.
+      if (model || effort) await appApi.setRunSettings(hubId, r.agent, { model, effort }).catch(() => undefined);
       setDir("");
       setRole("");
       onStarted(r.agent);
     } catch (err) {
-      setError(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(/above this machine's limit/.test(msg)
+        ? new Error(L("那台电脑不允许这么高的权限。在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access 可以放开，或者选低一档。",
+          "That computer does not allow this much access. Raise spawn.max_access in ~/.myco/machine.yaml there, or pick a lower level."))
+        : err);
     } finally {
       setBusy(null);
     }
@@ -455,9 +474,11 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
           ))}
         </div>
       </div>
+      {machine && isHere(machine) && <LocalAgentLines only={[cli]} hideReady />}
       <label className="app-field">
-        <span className="app-field-label">{L("在哪个文件夹干活", "Which folder it works in")}</span>
-        <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} placeholder={L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} disabled={!!busy} required />
+        <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
+        <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
+          placeholder={autoDir ? L(`不填就新建 ${autoFolder(role, cli)}`, `Empty: a new ${autoFolder(role, cli)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
       </label>
       {folders.length > 0 && (
         <div className="app-convpick-folders">
@@ -468,10 +489,56 @@ function NewAgentPane({ open, hubId, rows, onStarted, onState }: {
         <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
         <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
       </label>
+      <details className="app-advanced">
+        <summary>{L("更多选项：模型、思考强度、权限", "More: model, effort, access")}<ChevronDown /></summary>
+        <div className="app-advanced-body">
+          {MODELS[cli] && (
+            <label className="app-field">
+              <span className="app-field-label">{L("模型", "Model")}</span>
+              <input className="app-input mono" list={`models-${cli}`} value={model} onChange={(e) => setModel(e.target.value.trim())} disabled={!!busy}
+                placeholder={L("不填就跟随电脑设置", "Empty: the computer's setting")} spellCheck={false} />
+              <datalist id={`models-${cli}`}>{MODELS[cli].map((m) => <option key={m} value={m} />)}</datalist>
+            </label>
+          )}
+          {EFFORTS[cli] && (
+            <label className="app-field">
+              <span className="app-field-label">{L("思考强度", "Reasoning effort")}</span>
+              <select className="app-select-field" value={effort} onChange={(e) => setEffort(e.target.value)} disabled={!!busy}>
+                <option value="">{L("跟随电脑设置", "The computer's setting")}</option>
+                {EFFORTS[cli].map((x) => <option key={x} value={x}>{effortLabel(x)}</option>)}
+              </select>
+            </label>
+          )}
+          <div className="app-field">
+            <span className="app-field-label">{L("权限", "Access")}</span>
+            <div className="seg seg-fill" role="tablist" aria-label={L("权限", "Access")}>
+              {([["readonly", L("只读", "Read only")], ["workspace", L("这个文件夹", "This folder")], ["full", L("完全放开", "Full")]] as [RuntimeAccess, string][]).map(([a, label]) => (
+                <button key={a} type="button" role="tab" aria-selected={access === a} className={cn("seg-btn", access === a && "active")} onClick={() => setAccess(a)} disabled={!!busy}>{label}</button>
+              ))}
+            </div>
+            <span className="app-field-hint">{access === "full"
+              ? L("没有沙箱：能读写这台电脑上的任何文件、跑任何命令。那台电脑要先允许（spawn.max_access）。", "No sandbox: it may read and write any file and run any command. That computer must allow it first (spawn.max_access).")
+              : access === "readonly"
+                ? L("只看不改：能读文件、搜索，不改文件、不跑有副作用的命令。", "Looks, does not change: reads and searches, no edits, no commands with side effects.")
+                : L("能改这个文件夹里的文件；以后可以在对话里改。", "May change files in this folder; can be changed later in the conversation.")}</span>
+          </div>
+        </div>
+      </details>
       <ErrorText error={error} />
       {busy && <div className="app-convpick-starting"><Mushroom /><span>{L("正在开", "Starting it")} · <Elapsed since={busy} /></span></div>}
     </form>
   );
+}
+
+/** The folder a new conversation gets when none is given: ~/myco/<its
+ *  role>, or ~/myco/<cli>-<month><day>-<hour><minute>. Only letters, digits
+ *  and a few marks are kept, so it is a plain folder name. */
+export function autoFolder(role: string, cli: string): string {
+  const name = role.trim().replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^[.-]+|-+$/g, "").slice(0, 40);
+  if (name) return `~/myco/${name}`;
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `~/myco/${cli}-${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
 /** Folders already used on a computer, one per label as the chips show

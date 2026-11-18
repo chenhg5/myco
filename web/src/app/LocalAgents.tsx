@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Bot, ChevronDown, RotateCcw, Sparkles } from "lucide-react";
 import { appApi, type LocalAgent } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
@@ -44,7 +44,7 @@ function pillOf(a: LocalAgent): { cls: string; text: string } {
  *  to install or sign in. `only` limits it to some CLIs (the new-agent form
  *  shows the one picked). Checks again when the window comes back, which is
  *  when someone returns from the terminal. */
-export function LocalAgentLines({ only, onReady }: { only?: string[]; onReady?: (cli: string) => void }) {
+export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[]; onReady?: (cli: string) => void; hideReady?: boolean }) {
   const [agents, setAgents] = useState<LocalAgent[] | null>(() => recall<LocalAgent[]>("local-agents") ?? null);
   const [error, setError] = useState<unknown>(null);
   const [checking, setChecking] = useState(false);
@@ -97,9 +97,11 @@ export function LocalAgentLines({ only, onReady }: { only?: string[]; onReady?: 
   if (!agents) {
     return error ? <ErrorText error={error} onRetry={() => void load()} /> : <div className="app-empty-note">{L("正在看这台电脑上装了哪些 agent…", "Looking for agents on this computer…")}</div>;
   }
-  const list = only ? agents.filter((a) => only.includes(a.cli)) : agents;
+  const list = (only ? agents.filter((a) => only.includes(a.cli)) : agents).filter((a) => !hideReady || a.state !== "ready");
+  if (hideReady && list.length === 0 && !error) return null;
+  const Wrap = hideReady ? CardWrap : Fragment;
   return (
-    <>
+    <Wrap>
       {list.map((a) => {
         const Icon = iconOf(a.cli);
         const pill = pillOf(a);
@@ -149,8 +151,13 @@ export function LocalAgentLines({ only, onReady }: { only?: string[]; onReady?: 
         </div>
       )}
       {menu.element}
-    </>
+    </Wrap>
   );
+}
+
+/** Used outside Settings (the new-agent form): its own card. */
+function CardWrap({ children }: { children: ReactNode }) {
+  return <section className="app-setting-card app-setting-lines la-card">{children}</section>;
 }
 
 /** Settings › Agents: the agent CLIs on this computer. */

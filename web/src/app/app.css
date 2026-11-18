@@ -8013,3 +8013,5 @@ body.is-resizing {
 .la-line .app-command { margin-top: 6px; }
 .la-foot { align-items: center; }
 .la-foot-text { flex: 1; font-size: 11.5px; color: var(--muted); }
+.la-card { margin: 0; }
+.app-field-hint { display: block; margin-top: 5px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }

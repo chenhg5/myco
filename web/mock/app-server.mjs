@@ -552,7 +552,7 @@ const state = {
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
-          myco_version: "0.19.23", online: true, last_seen_at: iso(5), can_spawn: true,
+          myco_version: "0.20.12", online: true, last_seen_at: iso(5), can_spawn: true,
         },
         {
           id: "m_bench", name: "Bench Linux", hostname: "bench-01", os: "linux", arch: "x86_64",
