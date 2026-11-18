@@ -2334,7 +2334,8 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       await settle(page, 600);
-      const steps = await page.locator(".conv-detail .trace-group, .conv-detail .trace-think").count();
+      // (which files a finished task changed is what it did, not a step: it stays)
+      const steps = await page.locator(".conv-detail .trace-group:not(.trace-changes), .conv-detail .trace-think").count();
       if (steps) throw new Error(`只看进度时不该显示思考和命令，还有 ${steps} 处`);
       await shot(page, size, scheme, "chat-progress-only");
       await go(page, "设置", narrow);
