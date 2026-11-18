@@ -65,3 +65,21 @@ func TestRuntimeCarriesEffortAndQuota(t *testing.T) {
 		}
 	}
 }
+
+// A runner's features come back with its runtime, cleaned; a runner that
+// reports none shows none.
+func TestRuntimeCarriesFeatures(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	coder := h.register("coder", map[string]any{"binding": map[string]any{"harness": "claude", "session_id": "s-coder"}})
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "claude",
+		"features": []string{"changes", "ask_access", "changes", "Bad Name", ""}}).want(t, 200)
+	got := h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	if !strings.Contains(string(got.raw), `"features":["changes","ask_access"]`) {
+		t.Fatalf("features: %s", got.raw)
+	}
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "claude"}).want(t, 200)
+	got = h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	if strings.Contains(string(got.raw), `"features"`) {
+		t.Fatalf("features after an older runner's report: %s", got.raw)
+	}
+}

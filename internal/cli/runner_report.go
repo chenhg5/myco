@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -59,7 +60,7 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 				log.Debug("machine report failed (older hub?)", "err", err)
 			}
 		}
-		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess)}
+		rt := api.Runtime{CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h)}
 		if m := cliConfigModel(h.Name(), e.in.Getenv); m != "" {
 			rt.Model, rt.ModelSource = m, "cli-config"
 		} else if h.Name() != "exec" && h.Name() != "shell" && h.Name() != "machine" {
@@ -202,7 +203,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	if r.maxAccess != "" {
 		rt.MaxAccess = r.maxAccess
 	}
-	if rt == r.last {
+	if reflect.DeepEqual(rt, r.last) {
 		r.mu.Unlock()
 		return
 	}
@@ -270,4 +271,14 @@ func cliConfigModel(cli string, getenv func(string) string) string {
 		}
 	}
 	return ""
+}
+
+// runnerFeatures are what this runner supports for harness h beyond the
+// basics, reported with its runtime so apps can show the controls
+// (docs/design/client-plan.md section 4). Each capability adds its name
+// here when it lands.
+func runnerFeatures(h harness.Harness) []string {
+	var out []string
+	_ = h
+	return out
 }
