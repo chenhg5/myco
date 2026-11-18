@@ -126,6 +126,10 @@ type Runtime struct {
 	MaxAccess string `json:"max_access,omitempty"`
 	// Quota is the account's usage limits as the CLI last reported them.
 	Quota *Quota `json:"quota,omitempty"`
+	// Features are what the runner supports beyond the basics (e.g.
+	// "changes", "ask_access"); apps show a feature's controls only when it
+	// is listed. Absent from runners that predate it.
+	Features []string `json:"features,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).

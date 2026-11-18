@@ -255,6 +255,8 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
+		m.HandleFunc("GET /app/local/agents", b.getLocalAgents)
+		m.HandleFunc("POST /app/local/agents/{cli}/terminal", b.postAgentTerminal)
 		m.HandleFunc("GET /app/local/providers", b.listProviders)
 		m.HandleFunc("GET /app/local/agents/{name}/provider", b.getAgentProvider)
 		m.HandleFunc("PUT /app/local/agents/{name}/provider", b.putAgentProvider)

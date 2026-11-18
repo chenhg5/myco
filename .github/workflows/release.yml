@@ -8,6 +8,11 @@ on:
     paths: [VERSION]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      sign_only:
+        description: "Only build and sign the Mac app (checks the signing secrets; publishes nothing)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -32,12 +37,18 @@ jobs:
         run: |
           if gh release view "${{ steps.v.outputs.version }}" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
 
-  # The Mac app for both architectures, zipped (ad-hoc signed until the Apple
-  # signing secrets are configured). The app updates itself from these.
+  # The Mac app for both architectures, zipped (ad-hoc signed), and with the
+  # signing secrets also the signed, notarized universal app and DMG.
   app:
     needs: version
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' || inputs.sign_only
     runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      # Signing and notarizing happen here when the repository has the
+      # signing secrets (docs/release.md); without them the release gets
+      # unsigned app zips and a Mac signs it (scripts/mac-sign.sh).
+      SIGN: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -45,25 +56,92 @@ jobs:
           go-version-file: go.mod
       - name: build myco.app (arm64, amd64)
         run: |
-          mkdir -p dist
+          mkdir -p out
           for arch in arm64 amd64; do
             GOARCH=$arch make app VERSION=${{ needs.version.outputs.version }}
             lipo -archs bin/myco.app/Contents/MacOS/myco-app
-            ditto -c -k --keepParent bin/myco.app dist/myco-app-darwin-$arch.zip
+            ditto -c -k --keepParent bin/myco.app out/myco-app-darwin-$arch.zip
           done
       - name: the arm64 app runs
-        run: unzip -q dist/myco-app-darwin-arm64.zip -d check && check/myco.app/Contents/MacOS/myco-app --version
+        run: unzip -q out/myco-app-darwin-arm64.zip -d check && check/myco.app/Contents/MacOS/myco-app --version
+      - name: sign, notarize, DMG (universal)
+        if: env.SIGN == 'true'
+        # A failure here (Apple down, an expired certificate) still lets the
+        # release out, without myco.dmg; a Mac then signs it (docs/release.md).
+        # A sign-only run is the check, so there it fails the job.
+        continue-on-error: ${{ !inputs.sign_only }}
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          # A keychain of this job's own, holding the Developer ID identity
+          # and the notarytool profile; the runner is thrown away after.
+          kc="$RUNNER_TEMP/sign.keychain-db"
+          kcpw=$(openssl rand -hex 16)
+          security create-keychain -p "$kcpw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpw" "$kc"
+          p12="$RUNNER_TEMP/cert.p12"
+          printf '%s' "$MAC_CERT_P12_BASE64" | base64 --decode > "$p12"
+          if ! security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null; then
+            # A .p12 from a newer macOS can use algorithms this runner's
+            # import does not take: OpenSSL 3 reads it and packs it again in
+            # the older format. If OpenSSL cannot open it, the password is wrong.
+            ossl="$(brew --prefix openssl@3)/bin/openssl"
+            { "$ossl" pkcs12 -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null ||
+              "$ossl" pkcs12 -legacy -in "$p12" -passin env:MAC_CERT_PASSWORD -nodes -out "$RUNNER_TEMP/id.pem" 2>/dev/null; } || {
+              echo "::error::MAC_CERT_PASSWORD does not open the .p12 in MAC_CERT_P12_BASE64: set the password again (or export and set both again)"
+              exit 1
+            }
+            "$ossl" pkcs12 -export -legacy -in "$RUNNER_TEMP/id.pem" -passout env:MAC_CERT_PASSWORD -out "$p12"
+            rm -f "$RUNNER_TEMP/id.pem"
+            security import "$p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+            echo "imported the identity after packing the .p12 in the older format"
+          fi
+          rm -f "$p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          # Apple's Developer ID intermediate certificate: without it in reach
+          # the identity's chain does not verify and it is not valid.
+          for ca in DeveloperIDG2CA DeveloperIDCA; do
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer" &&
+              security import "$RUNNER_TEMP/$ca.cer" -k "$kc" >/dev/null 2>&1 || true
+          done
+          # Sign by the identity's hash, so its name stays out of the log.
+          id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
+          if [ -z "$id" ]; then
+            # Say why, showing each identity's kind but not its name: none at
+            # all means the .p12 has the certificate without its private key;
+            # "Apple Development" means the wrong certificate was exported.
+            echo "identities in the .p12 (kind only):"
+            security find-identity "$kc" | sed -E 's/"([^:"]*):[^"]*"/[\1]/'
+            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; another kind = export the Developer ID Application certificate instead)"
+            exit 1
+          fi
+          # The team is the Developer ID certificate's OU; NOTARY_TEAM_ID is
+          # only the fallback (another ID in brackets is easy to copy instead).
+          team=$(security find-certificate -c "Developer ID Application" -p "$kc" |
+            openssl x509 -noout -subject -nameopt RFC2253 | grep -o 'OU=[A-Z0-9]\{10\}' | head -1 | cut -c4-)
+          team=${team:-$NOTARY_TEAM_ID}
+          echo "::add-mask::$team"
+          xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$team" \
+            --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
+          MYCO_SIGN_IDENTITY="$id" MYCO_NOTARY_KEYCHAIN="$kc" scripts/mac-sign.sh ${{ needs.version.outputs.version }}
+          mv dist/myco.dmg dist/myco-app-darwin-universal.zip out/
       - uses: actions/upload-artifact@v4
         with:
           name: app
-          path: dist/*.zip
+          path: out/*
 
   cross:
     # The CLI for every platform and the Windows console app, at the same
     # time as the Mac app (tests already ran in ci on this commit): one
     # runner per OS, each building its two architectures.
     needs: version
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -95,7 +173,7 @@ jobs:
 
   release:
     needs: [version, app, cross]
-    if: needs.version.outputs.skip != 'true'
+    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +186,7 @@ jobs:
         with:
           name: app
           path: bin
-      - run: cd bin && sha256sum myco-* > SHA256SUMS && cat SHA256SUMS
+      - run: cd bin && sha256sum myco-* $([ -f myco.dmg ] && echo myco.dmg) > SHA256SUMS && cat SHA256SUMS
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |

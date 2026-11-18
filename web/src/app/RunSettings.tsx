@@ -13,11 +13,11 @@ import { L, lang } from "@/lib/i18n";
 
 /** The models a node may be told to use: aliases for Claude Code, and the
  *  names Codex is commonly started with. */
-const MODELS: Record<string, string[]> = {
+export const MODELS: Record<string, string[]> = {
   claude: ["fable", "opus", "sonnet", "haiku"],
   codex: ["gpt-6-sol", "gpt-6", "gpt-5-codex", "o3"],
 };
-const EFFORTS: Record<string, string[]> = {
+export const EFFORTS: Record<string, string[]> = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh"],
 };
@@ -32,7 +32,7 @@ const EFFORT_LABELS: Record<string, [string, string]> = {
   max: ["最高", "Max"],
 };
 
-function effortLabel(effort: string): string {
+export function effortLabel(effort: string): string {
   const pair = EFFORT_LABELS[effort];
   return pair ? L(pair[0], pair[1]) : effort;
 }

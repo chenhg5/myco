@@ -177,6 +177,26 @@ func TestDirectoryPolicy(t *testing.T) {
 	}
 }
 
+// A missing folder directly inside ~/myco is made (a new conversation the
+// app named one for); anywhere else a missing folder is still refused.
+func TestAutoDir(t *testing.T) {
+	r := newRig(t)
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/写周报"}); res.Denied {
+		t.Fatalf("~/myco/<name>: %+v", res)
+	}
+	if st, err := os.Stat(filepath.Join(r.home, "myco", "写周报")); err != nil || !st.IsDir() {
+		t.Fatalf("folder not made: %v", err)
+	}
+	for _, dir := range []string{"~/myco/a/b", "~/myco/../escape", "~/myco/.hidden", "~/elsewhere"} {
+		if res := r.run(t, "lead", api.SpawnRequest{Dir: dir}); !res.Denied || !strings.Contains(res.Error, "does not exist") {
+			t.Errorf("%s: %+v, want refused as missing", dir, res)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(r.home, "escape")); err == nil {
+		t.Fatal("made a folder outside ~/myco")
+	}
+}
+
 func TestAccessCap(t *testing.T) {
 	r := newRig(t)
 	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/code/app", Access: "full"}); !res.Denied || !strings.Contains(res.Error, "above this machine's limit (workspace)") {

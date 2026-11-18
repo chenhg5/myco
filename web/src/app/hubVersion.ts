@@ -32,3 +32,11 @@ export function hubHasHandover(version: string | undefined): boolean {
   if (hubAtLeast(version, "0.19.23")) return true;
   return !!version && /-g[0-9a-f]{4,}$/i.test(version) && hubAtLeast(version, "0.19.22");
 }
+
+/** Whether a computer makes a new conversation's folder under ~/myco when
+ *  none is given: its myco after v0.20.11 (a later release, or a build from
+ *  a later main). Older ones need an existing folder. */
+export function machineMakesFolders(version: string | undefined): boolean {
+  if (hubAtLeast(version, "0.20.12")) return true;
+  return !!version && /-g[0-9a-f]{4,}$/i.test(version) && hubAtLeast(version, "0.20.11");
+}

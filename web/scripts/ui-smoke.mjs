@@ -1173,7 +1173,20 @@ async function runMatrix(browser, size, scheme) {
 
       await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
       await dialog.locator(".ws-computer.active").first().waitFor({ timeout: 10_000 });
-      await dialog.locator("input.app-input.mono").fill("~/code/website");
+      // A newer computer makes ~/myco/<name> when no folder is given; model,
+      // effort and access are under "more".
+      await dialog.locator(".app-field-label", { hasText: "文件夹干活（可以不填）" }).waitFor({ timeout: 5_000 });
+      const folder = dialog.locator("input.app-input.mono").first();
+      if (!/~\/myco\//.test(await folder.getAttribute("placeholder") || "")) throw new Error("文件夹可以不填时，提示里应写会新建的 ~/myco/… 文件夹");
+      await clickVisible(page, dialog.locator("details.app-advanced summary", { hasText: "更多选项" }));
+      await dialog.locator("select.app-select-field").selectOption("high");
+      await clickVisible(page, dialog.getByRole("tab", { name: "只读" }));
+      await dialog.locator(".app-field-hint", { hasText: "只看不改" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-new-options");
+      await clickVisible(page, dialog.getByRole("tab", { name: "这个文件夹" }));
+      await clickVisible(page, dialog.locator("details.app-advanced summary", { hasText: "更多选项" }));
+      await folder.fill("~/code/website");
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
@@ -2190,6 +2203,33 @@ async function runMatrix(browser, size, scheme) {
       const hrefs = await bubble.locator("a").evaluateAll((els) => els.map((a) => a.getAttribute("href")));
       if (hrefs.join(" ") !== "https://a.example/x https://b.example/y https://c.example/z") throw new Error(`中文逗号隔开的应是三个链接，实际 ${JSON.stringify(hrefs)}`);
       await noRound(page);
+    });
+
+    // Settings › Agents: the agent CLIs on this computer, installed or not,
+    // signed in or not; a button opens a terminal for what is missing, or
+    // shows the command when no terminal could be opened.
+    await step("设置 · 本机 agent", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "本机 agent" }));
+      const lines = page.locator(".la-line");
+      await lines.first().waitFor({ timeout: 10_000 });
+      if (await lines.count() !== 4) throw new Error(`应列出 4 个 agent，实际 ${await lines.count()}`);
+      const codex = page.locator('.la-line[data-agent-cli="codex"]');
+      await codex.locator(".app-pill", { hasText: "未登录" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-agents");
+      await codex.getByRole("button", { name: "登录" }).click();
+      await codex.locator(".la-opened", { hasText: "已经在终端里打开了" }).waitFor({ timeout: 5_000 });
+      await page.locator(".la-foot").getByRole("button", { name: "重新检查" }).click();
+      await page.locator('.la-line[data-agent-cli="codex"][data-agent-state="ready"]').waitFor({ timeout: 5_000 });
+      // No terminal here: the command to copy instead.
+      const oc = page.locator('.la-line[data-agent-cli="opencode"]');
+      await oc.getByRole("button", { name: "安装" }).click();
+      await clickVisible(page, page.locator(".app-ctx-item, [role=menuitem]", { hasText: "用官方方式安装" }).first());
+      await oc.locator(".app-command code", { hasText: "opencode.ai/install" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-agents-command");
+      if (narrow) await sidebar(page, false);
     });
 
     // A proxy for the App: from the environment (as before), none, or one
