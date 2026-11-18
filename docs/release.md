@@ -96,7 +96,7 @@ scripts/release-verify.sh vX.Y.Z
 
 在 Mac 上：
 
-1. 打开「钥匙串访问」→「登录」→「我的证书」，右键 Developer ID Application 那一项 →「导出」，存成桌面上的 `myco-sign.p12`，设一个密码。
+1. 打开「钥匙串访问」→「登录」→「我的证书」，右键名字以 **Developer ID Application** 开头的那一项（不是 Apple Development）→「导出」，存成桌面上的 `myco-sign.p12`，设一个密码。
 2. 在仓库目录的终端里（`gh` 要已登录，对仓库有管理权限；会提示你输入值，输入时不显示）：
 
    ```bash

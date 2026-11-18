@@ -113,11 +113,12 @@ jobs:
           # Sign by the identity's hash, so its name stays out of the log.
           id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
           if [ -z "$id" ]; then
-            # Say why, with the identity's name masked: none at all means the
-            # .p12 has the certificate without its private key.
-            echo "identities in the .p12 (any kind, valid or not):"
-            security find-identity "$kc" | sed 's/"[^"]*"/"…"/'
-            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; export it from My Certificates)"
+            # Say why, showing each identity's kind but not its name: none at
+            # all means the .p12 has the certificate without its private key;
+            # "Apple Development" means the wrong certificate was exported.
+            echo "identities in the .p12 (kind only):"
+            security find-identity "$kc" | sed -E 's/"([^:"]*):[^"]*"/[\1]/'
+            echo "::error::no valid Developer ID Application identity in MAC_CERT_P12_BASE64 (see above: 0 identities = exported without the private key; another kind = export the Developer ID Application certificate instead)"
             exit 1
           fi
           xcrun notarytool store-credentials myco --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
