@@ -100,6 +100,9 @@ jobs:
     # main dialogs against the mock backend, one window size and theme per
     # runner, so a release no longer has to run it on a laptop first.
     runs-on: ubuntu-latest
+    # A hung download (apt, Playwright's Chromium) must not hold the run for
+    # GitHub's 6 hours: a release waits for main's ci to finish.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +115,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Dependencies, Playwright and Chromium (with CJK fonts)
+        timeout-minutes: 6
         run: |
           cd web && npm ci
           npm install -g playwright@1
