@@ -224,8 +224,10 @@ myco template publish --dir ./t                      # into the library; raise v
 People call templates 应用 (apps) in the App; the pages made from them are their tables,
 documents and decks. Every workspace has myco's own: `myco/table` (a table whose columns people add), `myco/base`
 (records seen as a table, board, calendar, gallery, form), `myco/doc` (a document, one record a
-block) and `myco/slides` (a deck: you write each slide's layout and content, the page lays it out
-and exports PowerPoint). Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
+block), `myco/slides` (a deck: you write each slide's layout and content, the page lays it out
+and exports PowerPoint); from hub v0.20.6 also `myco/code` (a project's files in a VS Code-like
+editor), `myco/devtools`, `myco/todo`, `myco/poll`, `myco/ledger`, `myco/habit`,
+`myco/whiteboard`, `myco/mindmap`, `myco/gomoku` (you can play it) and `myco/sudoku`. Use one when the person wants something to fill in together; follow the template's guide (`myco template get`): which collections and fields, what goes
 where. Write with `--if-version` when you read first; on a conflict read again. In a page
 you write, `myco.data.list/put/remove/on` reads and writes the records and
 `myco.download(name, content, type)` saves an export to the person's Downloads. What people

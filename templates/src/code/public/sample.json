@@ -1,0 +1,30 @@
+{
+  "project": [
+    {
+      "id": "main",
+      "title": "番茄钟"
+    }
+  ],
+  "files": [
+    {
+      "id": "f1",
+      "path": "index.html",
+      "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>番茄钟</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <main>\n    <h1>番茄钟</h1>\n    <div id=\"time\">25:00</div>\n    <button id=\"go\">开始</button>\n    <button id=\"reset\">重来</button>\n  </main>\n  <script src=\"app.js\"></script>\n</body>\n</html>\n"
+    },
+    {
+      "id": "f2",
+      "path": "style.css",
+      "content": "body {\n  margin: 0;\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  font-family: -apple-system, \"PingFang SC\", sans-serif;\n  background: #fff7ed;\n  color: #3b2a1a;\n}\nmain { text-align: center; }\n#time { font-size: 72px; font-weight: 700; margin: 12px 0 24px; font-variant-numeric: tabular-nums; }\nbutton {\n  font-size: 16px;\n  padding: 10px 22px;\n  margin: 0 6px;\n  border: 0;\n  border-radius: 999px;\n  background: #e8710a;\n  color: #fff;\n}\n#reset { background: #d6c3ad; }\n"
+    },
+    {
+      "id": "f3",
+      "path": "app.js",
+      "content": "// A 25-minute timer: start, pause, start again.\nconst time = document.getElementById(\"time\");\nconst go = document.getElementById(\"go\");\nlet left = 25 * 60, timer = null;\n\nconst show = () => {\n  const m = String(Math.floor(left / 60)).padStart(2, \"0\");\n  const s = String(left % 60).padStart(2, \"0\");\n  time.textContent = `${m}:${s}`;\n};\n\ngo.onclick = () => {\n  if (timer) { clearInterval(timer); timer = null; go.textContent = \"继续\"; return; }\n  go.textContent = \"暂停\";\n  timer = setInterval(() => {\n    left = Math.max(0, left - 1);\n    show();\n    if (!left) { clearInterval(timer); timer = null; go.textContent = \"开始\"; alert(\"休息一下吧\"); }\n  }, 1000);\n};\n\ndocument.getElementById(\"reset\").onclick = () => {\n  clearInterval(timer); timer = null; left = 25 * 60; go.textContent = \"开始\"; show();\n};\n"
+    },
+    {
+      "id": "f4",
+      "path": "README.md",
+      "content": "# 番茄钟\n\n一个 25 分钟的计时器，打开 `index.html` 点「预览」就能用。\n\n- `index.html`：页面\n- `style.css`：样式\n- `app.js`：计时的逻辑\n\n想改成 50 分钟？让 agent 改 `app.js` 里的 `25 * 60`。\n"
+    }
+  ]
+}

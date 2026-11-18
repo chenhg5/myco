@@ -160,7 +160,7 @@ export interface Page {
  *  ones (myco's own) first. */
 export interface Template {
   id: string; slug: string; name: string; description?: string; kind: string; version: string; publisher: string;
-  /** its shelf (hubs from v0.20.6): office, tools, life, creative, game, other */
+  /** its shelf (hubs from v0.20.6): office, dev, tools, life, creative, game, other */
   category?: string;
   official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; export?: string[];
   data?: Record<string, { fields: Record<string, string>; single?: boolean }>;

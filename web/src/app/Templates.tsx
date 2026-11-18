@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CalendarCheck, CircleDot, FileText, Hash, KanbanSquare, LayoutTemplate, ListChecks, Network, PenTool, Plus, Presentation, Table2, Vote, Wallet } from "lucide-react";
+import { CalendarCheck, CircleDot, Code2, FileText, Hash, KanbanSquare, Wrench, LayoutTemplate, ListChecks, Network, PenTool, Plus, Presentation, Table2, Vote, Wallet } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -18,14 +18,14 @@ import { cn, timeAgo } from "@/lib/utils";
 
 const BY_SLUG: Record<string, typeof FileText> = {
   "myco/whiteboard": PenTool, "myco/mindmap": Network, "myco/gomoku": CircleDot, "myco/sudoku": Hash,
-  "myco/todo": ListChecks, "myco/poll": Vote, "myco/ledger": Wallet, "myco/habit": CalendarCheck,
+  "myco/code": Code2, "myco/devtools": Wrench, "myco/todo": ListChecks, "myco/poll": Vote, "myco/ledger": Wallet, "myco/habit": CalendarCheck,
 };
 const iconOf = (kind: string, slug = "") => BY_SLUG[slug] || (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
 
 /** The shelves official apps are on (their manifest's category; hubs
  *  before v0.20.6 have none: the office kinds go on the first). */
 const SHELVES: [string, string, string][] = [
-  ["office", "办公套件", "Office"], ["tools", "效率工具", "Tools"], ["life", "生活", "Life"], ["creative", "创意设计", "Creative"], ["game", "游戏", "Games"], ["other", "其他", "Other"],
+  ["office", "办公套件", "Office"], ["dev", "编程开发", "Development"], ["tools", "效率工具", "Tools"], ["life", "生活", "Life"], ["creative", "创意设计", "Creative"], ["game", "游戏", "Games"], ["other", "其他", "Other"],
 ];
 const shelfOf = (t: Template) => t.category || (["table", "records", "doc", "slides"].includes(t.kind) ? "office" : "other");
 
