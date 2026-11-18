@@ -2,7 +2,8 @@
 # The GitHub Actions runs of one commit, for releasing:
 #   scripts/release-status.sh <sha>            ci and release
 #   scripts/release-status.sh <sha> ci         ci only (before a release: main must be green)
-#   scripts/release-status.sh <sha> ci --wait  ask every 30 s until they end
+#   scripts/release-status.sh <sha> ci --wait  ask every minute until they end
+# GitHub is asked through scripts/gh-get.sh (signed in when it can be).
 # Prints one line per workflow (name=status/conclusion). Exit 0: all of them
 # finished and succeeded; 1: one failed; 2: still running or not started.
 set -eu
@@ -11,7 +12,7 @@ WANT=${2:-all}
 WAIT=${3:-}
 REPO=${MYCO_REPO:-chenhg5/myco}
 while :; do
-  out=$(curl -fsS "https://api.github.com/repos/$REPO/actions/runs?head_sha=$SHA" | python3 -c '
+  out=$("$(dirname "$0")/gh-get.sh" "repos/$REPO/actions/runs?head_sha=$SHA" | python3 -c '
 import json, sys
 want = sys.argv[1]
 names = ["ci", "release"] if want == "all" else [want]
@@ -34,5 +35,5 @@ for n in names:
 sys.exit(code)
 ' "$WANT") && { echo "$out"; exit 0; } || code=$?
   if [ "$code" != 2 ] || [ "$WAIT" != --wait ]; then echo "$out"; exit "$code"; fi
-  sleep 30
+  sleep 60
 done
