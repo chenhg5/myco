@@ -1,0 +1,12 @@
+{
+  "game": [{ "id": "main", "title": "午休一局", "black": "Glenn", "white": "PM (Codex)", "round": 1 }],
+  "moves": [
+    { "id": "r1-1", "x": 7, "y": 7, "stone": "black", "round": 1, "n": 1 },
+    { "id": "r1-2", "x": 8, "y": 6, "stone": "white", "round": 1, "n": 2 },
+    { "id": "r1-3", "x": 8, "y": 8, "stone": "black", "round": 1, "n": 3 },
+    { "id": "r1-4", "x": 6, "y": 6, "stone": "white", "round": 1, "n": 4 },
+    { "id": "r1-5", "x": 9, "y": 9, "stone": "black", "round": 1, "n": 5 },
+    { "id": "r1-6", "x": 10, "y": 10, "stone": "white", "round": 1, "n": 6 },
+    { "id": "r1-7", "x": 7, "y": 8, "stone": "black", "round": 1, "n": 7 }
+  ]
+}

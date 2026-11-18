@@ -7873,9 +7873,8 @@ body.is-resizing {
 .tp-icon.is-records { background: color-mix(in srgb, #7b5cd6 14%, var(--card)); color: #7b5cd6; }
 .tp-icon.is-doc { background: color-mix(in srgb, #3a7bd5 14%, var(--card)); color: #3a7bd5; }
 .tp-icon.is-slides { background: color-mix(in srgb, #e8710a 14%, var(--card)); color: #e8710a; }
-.tp-icon.on-creative { background: color-mix(in srgb, #d6457d 14%, var(--card)); color: #d6457d; }
-.tp-icon.on-game { background: color-mix(in srgb, #d98b00 16%, var(--card)); color: #c27c00; }
-.tp-icon.on-tools { background: color-mix(in srgb, #0f9d8f 14%, var(--card)); color: #0f9d8f; }
+/* (one quiet look for every app: the icon tells them apart) */
+.tp-icon.tp-icon { background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
 .tp-hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .tp-made { display: flex; flex-direction: column; gap: 2px; }
 .tp-made-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; }

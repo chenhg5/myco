@@ -17,13 +17,14 @@ import (
 //go:embed official
 var files embed.FS
 
-// Order is how the library lists them: by shelf (office, creative,
-// games, tools), then as a person would reach for them.
+// Order is how the library lists them: by shelf (office, tools, life,
+// creative, games), then as a person would reach for them.
 var Order = []string{
 	"myco/table", "myco/base", "myco/doc", "myco/slides",
+	"myco/todo", "myco/poll",
+	"myco/ledger", "myco/habit",
 	"myco/whiteboard", "myco/mindmap",
 	"myco/gomoku", "myco/sudoku",
-	"myco/poll", "myco/picker",
 }
 
 func rank(id string) int {

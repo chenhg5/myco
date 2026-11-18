@@ -1455,7 +1455,7 @@ type Template struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Kind        string `json:"kind"`
-	// Category is its shelf: office, creative, game, tools or other
+	// Category is its shelf: office, tools, life, creative, game or other
 	// (hubs from v0.20.6; empty before, and when the manifest has none).
 	Category    string                        `json:"category,omitempty"`
 	Version     string                        `json:"version"`

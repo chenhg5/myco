@@ -104,8 +104,8 @@ type ManifestCollection struct {
 var FieldTypes = []string{"text", "markdown", "number", "bool", "date", "datetime", "person", "select", "multi", "url", "file", "json"}
 
 // TemplateCategories are the shelves of the library (apps, in the App):
-// office suite, creative, games, tools; others are "other".
-var TemplateCategories = []string{"office", "creative", "game", "tools", "other"}
+// office suite, tools, life, creative, games; others are "other".
+var TemplateCategories = []string{"office", "tools", "life", "creative", "game", "other"}
 
 // TemplateKinds are what a template may be (custom: anything else).
 var TemplateKinds = []string{"table", "records", "doc", "slides", "board", "form", "custom"}
