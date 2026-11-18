@@ -83,10 +83,6 @@ type Event struct {
 	// Output is the result (tool_result), Failed whether it failed.
 	Output string `json:"output,omitempty"`
 	Failed bool   `json:"failed,omitempty"`
-	// Added and Removed are a changed file's line counts (kind change: one
-	// file the run changed, Tool its path, Input A/M/D/R, Output its diff).
-	Added   int `json:"added,omitempty"`
-	Removed int `json:"removed,omitempty"`
 	// Usage (kind usage).
 	InputTokens  int64   `json:"input_tokens,omitempty"`
 	OutputTokens int64   `json:"output_tokens,omitempty"`

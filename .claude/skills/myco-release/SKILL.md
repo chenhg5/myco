@@ -9,14 +9,16 @@ The full manual is `docs/release.md` (Chinese); this is the short path. Release 
 
 A release takes about 10 minutes after the push, mostly Apple notarizing: GitHub's release workflow builds every platform and, with the signing secrets set, signs, notarizes and packs the DMG on its macOS runner. A Mac is only the fallback.
 
-## 1. main's CI is green
+## 1. No failing test on main
+
+Do not wait for CI to finish: the release workflow builds every platform itself and runs the smoke test on the Linux binary.
 
 ```bash
 git checkout main && git pull --rebase origin main
-scripts/release-status.sh "$(git rev-parse HEAD)" ci --wait
+scripts/release-status.sh "$(git rev-parse HEAD)" ci     # no --wait
 ```
 
-Exit 0 → go on. Exit 1 → stop, report the failing job and its link. Do not re-run the checks locally: CI already ran Go (vet, race tests, smoke), Windows, the Mac app, the web dist check and the UI smoke on that commit.
+A failed test (go, windows, web, a UI smoke check) → stop, report it with its link. Still running, or failed only on infrastructure (a stalled Playwright install, a macOS runner queue) → go on. CI runs the UI smoke only when `web/` changed, and a newer push cancels the older run on the same branch.
 
 ## 2. Version and CHANGELOG
 
@@ -40,7 +42,7 @@ sha=$(git rev-parse HEAD)
 ## 4. Wait
 
 ```bash
-scripts/release-status.sh "$sha" all --wait          # ci and release
+scripts/release-status.sh "$sha" release --wait
 ```
 
 - `release` failed → the release did not happen; report the step and log. A 403 at "create release": re-run that job once.

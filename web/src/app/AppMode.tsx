@@ -21,6 +21,7 @@ import { dragAgent } from "@/app/Panes";
 import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
+import { useSimpleMode } from "@/app/simpleMode";
 import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
@@ -87,6 +88,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 }) {
   const [theme, setTheme] = useThemeMode();
   const [textSize, setTextSize] = useTextSize();
+  const simple = useSimpleMode();
   const [langChoice, setLangChoiceState] = useState<LangChoice>(storedLangChoice());
   const chooseLang = (choice: LangChoice) => {
     setLangChoice(choice);
@@ -729,7 +731,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 )}
               </div>}
             </div>
-            <div className="app-nav-group sp-nav-pcs">
+            {!simple && <div className="app-nav-group sp-nav-pcs">
               <NavHead label={L("电脑", "Computers")} className="sp-nav-pcs-head" active={page === "computers"} title={L("管理电脑", "Manage computers")}
                 onOpen={() => { setNavChat(null); setPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
                 <button type="button" className="app-nav-add" aria-label={L("加一台电脑", "Add a computer")} title={L("加一台电脑", "Add a computer")}
@@ -776,7 +778,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   </button>
                 )}
               </>)}
-            </div>
+            </div>}
           </nav>
 
           <div className="app-sidebar-foot">
@@ -790,6 +792,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 onNewOnServer={serverWs?.allowed ? () => setNewServerOpen(true) : undefined}
                 serverName={serverWs ? hostName(serverWs.server) : undefined}
                 isLocal={(h) => isLocalUrl(local, h.url)}
+                simple={simple}
                 onSettings={() => setPage("settings")} />
             </div>
           </div>

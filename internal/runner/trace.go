@@ -88,11 +88,7 @@ func (t *tracer) add(ev harness.Event) {
 	}
 	ev.Text = clip(ev.Text, traceMaxText)
 	ev.Input = clip(ev.Input, traceMaxInput)
-	if ev.Kind == "change" {
-		ev.Output = clip(ev.Output, changesMaxDiff+8) // cut at a line end already
-	} else {
-		ev.Output = clip(ev.Output, traceMaxOutput)
-	}
+	ev.Output = clip(ev.Output, traceMaxOutput)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.queueOutput()

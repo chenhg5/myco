@@ -470,12 +470,6 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		res    harness.Result
 		runErr error
 	)
-	// What the run changes in its folder, recorded before it starts (only
-	// with a trace to put it in; not for shell nodes, whose commands say).
-	var snap *changeSnapshot
-	if tr != nil && !executor && r.opts.Trace != TraceSummary {
-		snap = snapshotChanges(ctx, r.opts.Workdir)
-	}
 	var run api.RunSettings
 	if !executor {
 		run = r.runSettings(ctx, log)
@@ -570,9 +564,6 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Info("task interrupted by a steer; resuming the session", "session_id", sessionID)
 	}
 	if tr != nil {
-		for _, ev := range snap.changes(ctx) {
-			tr.add(ev)
-		}
 		tr.close() // the whole trace is on the hub before the task finishes
 	}
 	r.mu.Lock()

@@ -1659,17 +1659,6 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 25_000 });
       if (await page.locator(".conv-detail .trace-foot").count()) throw new Error("耗时和费用应跟着回复（复制按钮那一行），不在过程下面");
       await page.locator(".conv-detail .conv-usage").first().waitFor({ state: "attached", timeout: 10_000 });
-      // What the finished run changed: one line that opens to the files, a
-      // file to its diff.
-      const changes = page.locator(".conv-detail [data-testid=trace-changes]").first();
-      await changes.waitFor({ timeout: 10_000 });
-      if (!/改了 2 个文件/.test(await changes.innerText())) throw new Error("改动应写成「改了 2 个文件」");
-      await clickVisible(page, changes.locator("button.trace-head"));
-      await clickVisible(page, changes.locator(".tc-file", { hasText: "CHANGELOG.md" }).locator("button.trace-line"));
-      await changes.locator(".tc-line.is-add", { hasText: "## v0.16.8" }).waitFor({ timeout: 5_000 });
-      await changes.scrollIntoViewIfNeeded();
-      await settle(page, 300);
-      await shot(page, size, scheme, "conversation-changes");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
@@ -2231,6 +2220,27 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // 简单模式 (Settings › 外观): one person on this computer. Workspaces,
+    // people and other computers hide; turning it off brings them back.
+    await step("设置 · 简单模式", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      const sw = page.locator('[data-setting="simple-mode"] [role=switch]');
+      await sw.waitFor({ timeout: 10_000 });
+      if (await sw.getAttribute("aria-checked") !== "false") throw new Error("已有工作区的用户默认不是简单模式");
+      await sw.click();
+      await page.locator('[data-setting="simple-mode"] [role=switch][aria-checked="true"]').waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-tab", { hasText: "工作区" }).count()) throw new Error("简单模式下设置里不该有「工作区」");
+      if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
+      if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-simple-mode");
+      await sw.click();
+      await page.locator(".app-settings-tab", { hasText: "工作区" }).waitFor({ timeout: 5_000 });
+      if (!narrow) await page.locator(".sp-nav-pcs").waitFor({ timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Settings › Agents: the agent CLIs on this computer, installed or not,
     // signed in or not; a button opens a terminal for what is missing, or
     // shows the command when no terminal could be opened.
@@ -2334,8 +2344,7 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       await settle(page, 600);
-      // (which files a finished task changed is what it did, not a step: it stays)
-      const steps = await page.locator(".conv-detail .trace-group:not(.trace-changes), .conv-detail .trace-think").count();
+      const steps = await page.locator(".conv-detail .trace-group, .conv-detail .trace-think").count();
       if (steps) throw new Error(`只看进度时不该显示思考和命令，还有 ${steps} 处`);
       await shot(page, size, scheme, "chat-progress-only");
       await go(page, "设置", narrow);
