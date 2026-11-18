@@ -130,6 +130,12 @@ type Runtime struct {
 	// "changes", "ask_access"); apps show a feature's controls only when it
 	// is listed. Absent from runners that predate it.
 	Features []string `json:"features,omitempty"`
+	// Away says why the runner went offline, sent as it stops: "stopped"
+	// (it was stopped: by hand, its service, logging out or shutting down).
+	// A runner that is running sends none. Env is where it runs when that
+	// explains going offline: "wsl" (Windows shuts WSL down when idle).
+	Away string `json:"away,omitempty"`
+	Env  string `json:"env,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).

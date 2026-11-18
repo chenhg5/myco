@@ -82,4 +82,15 @@ func TestRuntimeCarriesFeatures(t *testing.T) {
 	if strings.Contains(string(got.raw), `"features"`) {
 		t.Fatalf("features after an older runner's report: %s", got.raw)
 	}
+	// Stopping says so; the next report (a restart) clears it.
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "claude", "env": "wsl", "away": "stopped"}).want(t, 200)
+	got = h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	if !strings.Contains(string(got.raw), `"away":"stopped"`) || !strings.Contains(string(got.raw), `"env":"wsl"`) {
+		t.Fatalf("goodbye: %s", got.raw)
+	}
+	h.do("PUT", "/v1/me/runtime", coder, map[string]any{"cli": "claude", "env": "wsl"}).want(t, 200)
+	got = h.do("GET", "/v1/agents/coder", adminToken, nil).want(t, 200)
+	if strings.Contains(string(got.raw), `"away"`) {
+		t.Fatalf("away after a restart: %s", got.raw)
+	}
 }

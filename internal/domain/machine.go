@@ -83,6 +83,10 @@ type Runtime struct {
 	// (docs/design/client-plan.md section 4), space-separated, so that the
 	// struct stays comparable; "" from runners that predate them.
 	Features string `json:"features,omitempty"`
+	// Away is why the runner went offline ("stopped"), Env where it runs
+	// ("wsl"); see api.Runtime.
+	Away string `json:"away,omitempty"`
+	Env  string `json:"env,omitempty"`
 }
 
 // Quota is a CLI account's usage limits at one moment.
@@ -157,7 +161,7 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
-	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess} {
+	for _, s := range []string{r.CLI, r.CLIVersion, r.Model, r.ModelSource, r.Access, r.Provider, r.ProviderSource, r.Effort, r.EffortSource, r.MaxAccess, r.Away, r.Env} {
 		if len(s) > 120 || strings.ContainsAny(s, "\x00\n\r") {
 			return Errf(CodeInvalidArgument, "runtime fields must be single lines under 120 characters")
 		}
