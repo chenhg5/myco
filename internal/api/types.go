@@ -1458,7 +1458,7 @@ type Template struct {
 	// Category is its shelf: office, dev, tools, life, creative, game or other
 	// (hubs from v0.20.6; empty before, and when the manifest has none).
 	Category string `json:"category,omitempty"`
-	// Icon is its icon, SVG markup (hubs from v0.20.6): show its shape,
+	// Icon is its icon, SVG markup (hubs from v0.20.7): show its shape,
 	// e.g. as a CSS mask, never as HTML.
 	Icon        string                        `json:"icon,omitempty"`
 	Version     string                        `json:"version"`

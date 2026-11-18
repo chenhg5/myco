@@ -386,7 +386,7 @@ func Open(path string) (*sql.DB, error) {
 		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
 		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
-		// A template's icon (v0.20.6).
+		// A template's icon (v0.20.7).
 		"template_versions": {{"icon", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {

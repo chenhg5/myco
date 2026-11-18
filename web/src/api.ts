@@ -162,7 +162,7 @@ export interface Template {
   id: string; slug: string; name: string; description?: string; kind: string; version: string; publisher: string;
   /** its shelf (hubs from v0.20.6): office, dev, tools, life, creative, game, other */
   category?: string;
-  /** its icon, SVG markup (hubs from v0.20.6): shown as a mask, tinted */
+  /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
   official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; export?: string[];
   data?: Record<string, { fields: Record<string, string>; single?: boolean }>;

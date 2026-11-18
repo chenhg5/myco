@@ -96,9 +96,9 @@ type Manifest struct {
 	Agent       string                        `json:"agent,omitempty"`
 	Sample      string                        `json:"sample,omitempty"`
 	// Icon is an SVG in the template (its shape is shown, tinted by the
-	// App; v0.20.6).
+	// App; v0.20.7).
 	Icon string `json:"icon,omitempty"`
-	// Requires says what the template needs (v0.20.6): hubs older than
+	// Requires says what the template needs (v0.20.7): hubs older than
 	// Requires.Hub leave it out.
 	Requires *ManifestRequires `json:"requires,omitempty"`
 }
