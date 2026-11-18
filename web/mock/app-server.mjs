@@ -4,7 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
@@ -222,7 +222,13 @@ const tableFiles = { "index.html": kit("index.html"), "myco.json": kit("myco.jso
 const officialRoot = new URL("../../internal/templates/official/", import.meta.url);
 const officialFiles = (name) => {
   const out = { "kit.js": readFileSync(new URL("kit.js", officialRoot), "utf8"), "kit.css": readFileSync(new URL("kit.css", officialRoot), "utf8") };
-  for (const f of ["myco.json", "index.html", "app.js", "agent.md", "sample.json"]) out[f] = readFileSync(new URL(`${name}/${f}`, officialRoot), "utf8");
+  const walk = (dir, prefix) => {
+    for (const e of readdirSync(new URL(dir, officialRoot), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${dir}${e.name}/`, `${prefix}${e.name}/`);
+      else out[`${prefix}${e.name}`] = /\.(html|js|css|json|md)$/.test(e.name) ? readFileSync(new URL(`${dir}${e.name}`, officialRoot), "utf8") : readFileSync(new URL(`${dir}${e.name}`, officialRoot));
+    }
+  };
+  walk(`${name}/`, "");
   return out;
 };
 const templateFiles = new Map();
@@ -1718,7 +1724,8 @@ const server = http.createServer(async (req, res) => {
     const file = parts.slice(2).join("/") || "index.html";
     const body = pageFilesOf(k.page, k.version)[file];
     if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
-    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : file.endsWith(".md") ? "text/markdown; charset=utf-8" : "text/javascript";
+    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : file.endsWith(".md") ? "text/markdown; charset=utf-8"
+      : file.endsWith(".woff2") ? "font/woff2" : file.endsWith(".woff") ? "font/woff" : file.endsWith(".svg") ? "image/svg+xml" : file.endsWith(".png") ? "image/png" : "text/javascript";
     const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
     res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
     return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);

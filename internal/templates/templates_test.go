@@ -19,13 +19,15 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 	for _, o := range list {
 		m := o.Manifest
 		ids = append(ids, m.ID)
-		for _, f := range []string{m.Entry, "kit.js", "kit.css", "app.js", m.Agent, m.Sample} {
+		for _, f := range []string{m.Entry, m.Agent, m.Sample} {
 			if len(o.Files[f]) == 0 {
 				t.Errorf("%s has no %s", m.ID, f)
 			}
 		}
-		if !strings.Contains(string(o.Files[m.Entry]), "kit.js") {
-			t.Errorf("%s: its page does not load kit.js", m.ID)
+		// Its page loads what is in it, nothing from the internet.
+		page := string(o.Files[m.Entry])
+		if !strings.Contains(page, "<script") || strings.Contains(page, "http://") || strings.Contains(page, "https://") {
+			t.Errorf("%s: its page should load its own scripts only", m.ID)
 		}
 		var sample map[string][]map[string]json.RawMessage
 		if err := json.Unmarshal(o.Files[m.Sample], &sample); err != nil {

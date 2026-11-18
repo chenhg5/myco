@@ -842,16 +842,18 @@ async function runMatrix(browser, size, scheme) {
       await base.locator(".k-tab", { hasText: "表格" }).dispatchEvent("click");
       // 文档: typed with shortcuts, each block saved.
       const doc = await make("myco/doc", `计划（${mark}）`);
-      await doc.locator(".d-block").first().waitFor({ timeout: 15_000 });
-      const last = doc.locator(".d-text").last();
-      await last.focus();
+      await doc.locator(".bn-editor .bn-inline-content").first().waitFor({ timeout: 15_000 });
+      const last = doc.locator(".bn-editor .bn-inline-content").last();
+      await doc.locator(".bn-editor").focus();
       await last.evaluate((n) => { const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); });
+      await settle(page, 200);
+      await page.keyboard.press("End");
       await page.keyboard.press("Enter");
       await page.keyboard.type("## 风险");
       await page.keyboard.press("Enter");
       await page.keyboard.type("- 下载页 CDN 可能没刷新");
-      await doc.locator(".t-li .d-text", { hasText: "下载页 CDN" }).waitFor({ timeout: 5_000 });
-      await doc.locator(".t-h2 .d-text", { hasText: "风险" }).waitFor({ timeout: 5_000 });
+      await doc.locator('[data-content-type="bulletListItem"]', { hasText: "下载页 CDN" }).waitFor({ timeout: 5_000 });
+      await doc.locator('[data-content-type="heading"]', { hasText: "风险" }).waitFor({ timeout: 5_000 });
       await settle(page, 1200);
       await shot(page, size, scheme, "template-doc");
       // The pages made are listed under the templates.

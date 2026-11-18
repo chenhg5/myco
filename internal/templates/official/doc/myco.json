@@ -1,12 +1,12 @@
 {
   "id": "myco/doc",
   "name": "文档",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kind": "doc",
-  "description": "一篇大家一起写的文档：标题、正文、列表、待办、引用、代码，每段单独保存，导出 Markdown 和网页。",
+  "description": "像飞书文档一样一起写：「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动调整段落；每段单独保存，导出 Markdown 和网页。",
   "data": {
     "doc": { "single": true, "fields": { "title": "text" } },
-    "blocks": { "fields": { "type": "select", "text": "text", "checked": "bool", "order": "number" } }
+    "blocks": { "fields": { "type": "text", "text": "text", "checked": "bool", "block": "json", "order": "number" } }
   },
   "permissions": ["download"],
   "export": ["md", "html"]

@@ -113,11 +113,11 @@ weekly-report/
 
 ## 10. 官方模板（第二步，已做）
 
-随 Hub 一起提供（`internal/templates/official`，编进二进制），每个工作区的模板库里都有、排在最前、标「官方」，不能删，跟着 Hub 升级；`myco/` 开头的 id 留给它们。三个都只用原生 JS（`kit.js`、`kit.css` 共用：按顺序存一个集合、别人改的实时合进来、冲突时换成最新的、同一条记录的写入排队；CSV 和不依赖任何库的 .xlsx 生成），浅色、深色都有，离线能用。
+随 Hub 一起提供（`internal/templates/official`，编进二进制），每个工作区的模板库里都有、排在最前、标「官方」，不能删，跟着 Hub 升级；`myco/` 开头的 id 留给它们。表格和多维表格用原生 JS（`kit.js`、`kit.css` 共用：按顺序存一个集合、别人改的实时合进来、冲突时换成最新的、同一条记录的写入排队；CSV 和不依赖任何库的 .xlsx 生成），浅色、深色都有，离线能用。
 
 - **表格**（`myco/table`）：`sheet`（一条 main：标题、列）+ `rows`（每行 `cells` 按列 id 存、`order`）。列能加、改名、改类型（文本、多行、数字、日期、单选、勾选、人、链接）、删；按列排序、搜索（只在这个网页里，不存）；导出 Excel 和 CSV。
 - **多维表格**（`myco/base`）：`base`（一条 main：标题、字段）+ `records`（`values` 按字段 id 存、`order`）。视图：表格、看板（按单选字段分组，优先「状态 / 阶段 / 进度」，拖卡片改值）、日历（按日期字段，按月翻）、画廊、表单（填好提交就是一条新记录）；点一条在右侧打开，所有字段都能改。导出 Excel 和 CSV。
-- **文档**（`myco/doc`）：`doc`（一条 main：标题）+ `blocks`（每段一条：类型 p / h1–h3 / li / ol / todo / quote / code / hr、文字、勾选、`order`）。每段单独保存（停顿 0.6 秒），两个人改不同段落互不覆盖；新段落先显示、后保存，打字不会落到上一段；段首快捷写法 `#` `##` `###` `-` `1.` `[]` `>` ``` ``` ``` `---`；导出 Markdown 和网页。
+- **文档**（`myco/doc`，v2）：对标飞书文档，编辑器用 [BlockNote](https://www.blocknotejs.org/)（MPL-2.0，基于 ProseMirror），源码在仓库的 `templates/src/doc`（React + Vite，`make templates` 构建进 `internal/templates/official/doc`）。`doc`（一条 main：标题）+ `blocks`（每个顶层块一条：`type` p / h1–h3 / li / ol / todo / toggle / quote / code / hr / table、`text` 纯文字、`checked`、`order`，`block` 是编辑器自己的完整格式：加粗、颜色、链接、嵌套、表格）。「/」菜单插入各种块，`#` `-` `1.` `[]` `>` 等 Markdown 快捷写法，选中文字出格式工具条，左侧把手拖动调整段落；停顿 0.5 秒保存，只写改了的块，两个人改不同块互不覆盖；agent 只写 `type` 和 `text` 也行，网页据此画出来；导出 Markdown 和网页。
 
 每个模板都带 `agent.md`（怎么读写它的数据）和 `sample.json`（示例数据）。
 
