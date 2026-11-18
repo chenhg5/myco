@@ -1116,6 +1116,18 @@ func TestMachinesAreUniqueAndSeparateFromNodes(t *testing.T) {
 	if err := h.client(tok["mac-claude"]).RenameMachine(c, mac.ID, "x"); err == nil {
 		t.Fatal("an agent renamed a machine")
 	}
+	// A legacy machine (known only by its agents' host name) is removed by
+	// removing its agents: a dry run names them, then they are gone.
+	dry, err := h.admin().RemoveMachine(c, m["srv1"].ID, true)
+	if err != nil || len(dry.Removed) != 1 || dry.Removed[0] != "vps-shell" {
+		t.Fatalf("dry run removing a legacy machine: %v %+v", err, dry)
+	}
+	if _, err := h.admin().RemoveMachine(c, m["srv1"].ID, false); err != nil {
+		t.Fatalf("removing a legacy machine: %v", err)
+	}
+	if _, err := h.admin().GetAgent(c, "vps-shell"); err == nil {
+		t.Fatal("the legacy machine's agent is still there")
+	}
 	// No machine node: sessions cannot be started there.
 	_, err = h.admin().SpawnOnMachine(c, mac.ID, api.SpawnRequest{CLI: "claude", Dir: "~"}, 5*time.Second)
 	if e, ok := client.AsError(err); !ok || e.Code != "invalid_state" || !strings.Contains(e.Suggestion, "runner") {
