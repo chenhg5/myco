@@ -1547,7 +1547,18 @@ async function runMatrix(browser, size, scheme) {
       await box.fill("再检查旧任务的链接");
       await box.press("Enter");
       await sent;
-      await page.locator(".trace-steer", { hasText: "再检查旧任务的链接" }).waitFor({ timeout: 10000 });
+      // In time: sent after the newer task's answer, it is drawn there (at
+      // the foot, quoting the older task it adds to), not back up inside
+      // the older task's run above that answer.
+      const added = page.locator(".conv-detail .conv-msg.is-me", { hasText: "再检查旧任务的链接" }).last();
+      await added.waitFor({ timeout: 10000 });
+      if (!(await added.innerText()).includes("保留任务")) throw new Error("补充给旧任务的话应引用那条旧任务");
+      const below = await page.evaluate(([a, r]) => {
+        const add = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")].filter((e) => e.textContent.includes(a)).pop();
+        const rep = document.querySelector(`[data-msg="${r}"]`);
+        return !!add && !!rep && !!(rep.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }, ["再检查旧任务的链接", reply.id]);
+      if (!below) throw new Error("新任务回答之后才补充的话，应排在那条回答下面");
       await shot(page, size, scheme, "conversation-supplement-older-open");
       await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${older.id}/stop`, { method: "POST" });
       await noRound(page);

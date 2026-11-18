@@ -1657,8 +1657,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (m.type === "steer" && m.answers && byId.get(m.answers)) { answerTo.set(m.answers, m); continue; }
     if (m.type !== "steer" || !m.reply_to || !byId.get(m.reply_to)) continue;
     const task = byId.get(m.reply_to)!;
-    if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
+    // (sent after something else came, its own task's answer too: where it
+    // was sent, in time, not back up inside that task's run)
     if (between(task, m)) continue;
+    if (inRun(task)) { runSteers.set(task.id, [...(runSteers.get(task.id) || []), m]); continue; }
     steersOf.set(m.reply_to, [...(steersOf.get(m.reply_to) || []), m]);
   }
   const answerAsk = (task: Message) => async (text: string) => {
