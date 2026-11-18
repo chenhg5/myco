@@ -2169,12 +2169,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             })}
             {!shellMode && !execNode && trailing}
             {/* The run at work, when messages sit under it. */}
-            {liveFoot && liveRun && (
-              <WorkingLine key={liveRun.id} name={nameOf(liveRun.to)}
-                since={[liveRun.created_at, ...(runSteers.get(liveRun.id) || []).map((x) => x.created_at)]
-                  .reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a))}
-                status={progressOf.get(liveRun.id)?.slice(-1)[0]?.body.split("\n")[0]} side="left" />
-            )}
+            {liveFoot && liveRun && (() => {
+              // What it is doing now, not what it said when it took this one
+              // up: an agent in one long session goes on answering newer
+              // messages while this task stays open. Its newest progress
+              // (any task), unless it has answered since (then what it says
+              // it is doing, or a word); the clock from the latest thing in
+              // the chat.
+              const by = liveRun.to;
+              const newest = (pred: (m: Message) => boolean) => (shown || []).filter(pred).reduce<Message | null>((x, m) => (!x || m.created_at > x.created_at ? m : x), null);
+              const said = newest((m) => m.type === "progress" && m.from === by);
+              const answered = newest((m) => (m.type === "reply" || m.type === "event") && m.from === by);
+              const status = said && (!answered || said.created_at > answered.created_at) ? said.body.split("\n")[0]
+                : rowOf(by)?.st.agent.status_text || undefined;
+              const since = [liveRun.created_at, ...(runSteers.get(liveRun.id) || []).map((x) => x.created_at),
+                ...(visible || []).filter((m) => m.type !== "progress").map((m) => m.created_at)]
+                .reduce((a, c) => (new Date(c).getTime() > new Date(a).getTime() ? c : a));
+              return <WorkingLine key={liveRun.id} name={nameOf(by)} since={since} status={status} side="left" />;
+            })()}
             {working && footLive && (
               <WorkingLine key={working.task.id} name={nameOf(working.task.to)} since={working.task.created_at}
                 status={working.status} behind={working.behind}

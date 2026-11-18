@@ -914,9 +914,18 @@ async function runMatrix(browser, size, scheme) {
         window.dispatchEvent(new CustomEvent("myco-open-member", { detail: { hubId: hub.id, agent, project } }));
       }, { agent, project });
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+      // (pointed out for a moment: a busy machine may not look in time, so
+      // whether it happened at all is recorded)
+      const watchCalled = (sel) => page.evaluate((sel) => {
+        window.__called = false;
+        const mo = new MutationObserver(() => { if (document.querySelector(sel)) { window.__called = true; mo.disconnect(); } });
+        mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
+      }, sel);
+      const wasCalled = () => page.waitForFunction(() => window.__called === true, null, { timeout: 5_000 });
       // The coordinator, on screen: nothing moves, its pane is pointed out.
+      await watchCalled(".sp-home.is-called");
       await pick("pm-codex", "website");
-      await page.locator(".sp-home.is-called").waitFor({ timeout: 5_000 });
+      await wasCalled();
       if (await page.locator(".sp-pane-right").count()) throw new Error("协调者已经在屏幕上，不该再打开别的栏");
       // A member of this project: beside the coordinator.
       await pick("docs-claude", "website");
@@ -924,8 +933,9 @@ async function runMatrix(browser, size, scheme) {
       await right.locator(".conv-head h2", { hasText: "docs-claude" }).waitFor({ timeout: 10_000 });
       if (!(await page.locator(".sp-pane-left .sp-home").isVisible())) throw new Error("打开成员时，协调者应还在左边");
       // Again, while it shows: it stays, pointed out.
+      await watchCalled(".sp-pane-right.is-called");
       await pick("docs-claude", "website");
-      await page.locator(".sp-pane-right.is-called").waitFor({ timeout: 5_000 });
+      await wasCalled();
       // From Settings: the app goes to it.
       await go(page, "设置", narrow);
       await pick("docs-claude", "website");
