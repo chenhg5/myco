@@ -183,7 +183,9 @@ jobs:
 
   release:
     needs: [version, app, cross]
-    if: needs.version.outputs.skip != 'true' && !inputs.sign_only
+    # The Mac job may never get a runner (GitHub's macOS queue): publish the
+    # rest anyway, and a Mac adds the app afterwards (docs/release.md).
+    if: always() && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.cross.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -193,6 +195,7 @@ jobs:
           merge-multiple: true
           path: bin
       - uses: actions/download-artifact@v4
+        continue-on-error: true # no Mac build this time
         with:
           name: app
           path: bin
