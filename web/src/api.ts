@@ -173,6 +173,10 @@ export interface Pin {
   at: string;
 }
 export interface PinList { a: string; with: string; pins: Pin[]; max: number }
+/** A page's records (hubs from v0.20.5). */
+export interface PageRecord { collection: string; id: string; data: Record<string, unknown>; version: number; updated_by?: string; updated_at: string }
+export interface PageChange { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string; at: string }
+export interface PageChanges { changes: PageChange[]; seq: number; reset?: boolean }
 export interface PinCreate { a?: string; with: string; kind: Pin["kind"]; title?: string; target?: string; file?: Attachment }
 
 export interface Automation {

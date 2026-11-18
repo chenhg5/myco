@@ -1,4 +1,4 @@
-import type { Page, PageOpen, PageState, Pin, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -696,6 +696,22 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // A page's records and change feed (hubs from v0.20.5), for the bridge.
+  pageRecords: (hubId: string, id: string, collection?: string) =>
+    request<{ records: PageRecord[]; seq: number }>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data${collection ? `?collection=${enc(collection)}` : ""}`),
+  pageRecord: (hubId: string, id: string, collection: string, rid: string) =>
+    request<PageRecord>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}`),
+  /** A record written; on a conflict the error carries the latest. */
+  putPageRecord: (hubId: string, id: string, collection: string, rid: string, data: unknown, ifVersion: number | null) =>
+    request<PageRecord>(rid ? "PUT" : "POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}${rid ? `/${enc(rid)}` : ""}`,
+      { data, ...(ifVersion === null ? {} : { if_version: ifVersion }) }),
+  deletePageRecord: (hubId: string, id: string, collection: string, rid: string, ifVersion = 0) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}${ifVersion ? `?if_version=${ifVersion}` : ""}`),
+  pageChanges: (hubId: string, id: string, after: number) =>
+    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
+  /** A file a page made, saved to Downloads and shown. */
+  pageDownload: (name: string, bytes: Uint8Array, type: string) =>
+    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`, new Blob([bytes], { type: type || "application/octet-stream" })),
   // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
   // keeps at hand, for both its parties. a: the first party (default you).
   pins: (hubId: string, withWhom: string, a?: string) =>

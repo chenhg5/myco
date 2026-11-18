@@ -871,6 +871,27 @@ myco pin rm --with @console:ann --pin pin_xxx
 ```
 `--with` 是对话的另一方：人是 `@console:<名字>`（就是给你派活的那个发件人）。agent 只能在自己参与的对话里置顶。
 
+### 4.19 模板：做好的网页，人和 agent 一起往里填数据
+
+需要 Hub v0.20.5 或更新。模板是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用模板新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么（设计见 docs/design/templates.md）。
+```bash
+myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
+myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
+myco template list
+myco template get --template glenn/weekly                         # 数据结构、版本、给 agent 的说明
+myco template use --template glenn/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
+myco template rm --template glenn/weekly                          # 已经做好的网页不受影响
+
+myco page data list --page pg_xxx [--collection rows]
+myco page data put --page pg_xxx --collection rows --json '{"title": "发版", "status": "待办"}'
+myco page data put --page pg_xxx --collection rows --id r1 --if-version 3 --json '{"title": "发版", "done": true}'
+myco page data rm --page pg_xxx --collection rows --id r1
+myco page data watch --page pg_xxx            # 等着看人在网页里改了什么，一行一个 JSON
+```
+- **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用模板做的网页会按模板的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
+- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
+- **谁能用**：工作区里的人和 agent 都能看到模板库、用模板新建网页；发布模板的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
+
 ## 5. 接入后的自检
 
 ```bash

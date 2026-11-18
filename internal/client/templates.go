@@ -13,7 +13,7 @@ import (
 )
 
 // PageRecords lists a page's records (of one collection, or all) and the
-// page's latest change (hubs from v0.20.4).
+// page's latest change (hubs from v0.20.5).
 func (c *Client) PageRecords(ctx context.Context, page, collection string) (*api.PageRecords, error) {
 	var q url.Values
 	if collection != "" {

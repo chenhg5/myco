@@ -16,6 +16,9 @@ button { font: inherit; border: 0; border-radius: 7px; padding: 5px 10px; backgr
 button.primary { background: var(--accent); color: #fff; }
 .wrap { padding: 0 20px 24px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
+td:first-child input { min-width: 180px; }
+td input, td select { min-width: 96px; }
+td input[type=checkbox] { min-width: 0; }
 th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: 2px 2px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 td input, td select, td textarea { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; padding: 6px 4px; border-radius: 5px; }
@@ -23,7 +26,7 @@ td input:focus, td select:focus, td textarea:focus { outline: 2px solid color-mi
 td textarea { resize: vertical; min-height: 32px; }
 td input[type=checkbox] { width: auto; }
 tr.flash td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.del { background: none; color: var(--muted); padding: 2px 6px; }
+.del { background: none; color: var(--muted); padding: 2px 6px; white-space: nowrap; }
 .del:hover { color: var(--red); }
 #note { padding: 8px 20px; color: var(--muted); font-size: 12px; min-height: 30px; }
 .empty { color: var(--muted); padding: 24px 6px; }
@@ -116,7 +119,7 @@ function csv() {
   document.getElementById("title").textContent = manifest.name;
   try {
     const c = await myco.ready;
-    document.getElementById("who").textContent = c.me ? `你是 ${c.me}` : "";
+    document.getElementById("who").textContent = c.me && c.me.name ? `你是 ${c.me.name}` : "";
     rows = (await myco.data.list(coll)).records;
     draw();
     myco.data.on((ch) => apply(ch));

@@ -367,6 +367,10 @@ function PageView({ target, open, active, reload, onMeta }: {
   live.current = { page, opened };
   const known = useRef(0); // the state version the page has
   const bridged = useRef(false);
+  // Its records (myco.data): watched once the page listens; the change feed
+  // from where it last read.
+  const dataWatch = useRef(false);
+  const dataSeq = useRef(0);
   const [asking, setAsking] = useState<{ text: string; to: string; answer: (ok: boolean) => void } | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -380,10 +384,40 @@ function PageView({ target, open, active, reload, onMeta }: {
       if (d?.myco !== "call" || typeof d.id !== "number") return;
       const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
       if (!origin || e.origin !== origin) return;
-      const reply = (value: unknown, error?: string, code?: string) =>
-        win.postMessage(error ? { myco: "result", id: d.id, error, code } : { myco: "result", id: d.id, value }, origin);
+      const reply = (value: unknown, error?: string, code?: string, latest?: unknown) =>
+        win.postMessage(error ? { myco: "result", id: d.id, error, code, ...(latest ? { latest } : {}) } : { myco: "result", id: d.id, value }, origin);
       if (target.kind !== "page") { reply(null, L("这个网页不在 myco 上，没有桥", "This page is not on myco: no bridge"), "not_a_page"); return; }
-      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code));
+      void answer(target, d.method || "", d.args || {}).then((v) => reply(v), (err: unknown) => reply(null, (err as Error).message || "error", (err as ApiError).code, (err as ApiError).latest));
+    };
+    // The page's records (hubs from v0.20.5) and files it saves.
+    const answerData = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
+      const coll = String(args.collection || "");
+      switch (method) {
+        case "data.list": {
+          const r = await appApi.pageRecords(t.hubId, t.id, coll || undefined);
+          dataSeq.current = Math.max(dataSeq.current, r.seq);
+          return r;
+        }
+        case "data.get":
+          return appApi.pageRecord(t.hubId, t.id, coll, String(args.id || ""));
+        case "data.put":
+          return appApi.putPageRecord(t.hubId, t.id, coll, String(args.id || ""), args.data ?? {},
+            args.ifVersion === null || args.ifVersion === undefined ? null : Number(args.ifVersion));
+        case "data.remove":
+          await appApi.deletePageRecord(t.hubId, t.id, coll, String(args.id || ""), Number(args.ifVersion) || 0);
+          return true;
+        case "data.watch":
+          if (!dataSeq.current) dataSeq.current = (await appApi.pageRecords(t.hubId, t.id)).seq;
+          dataWatch.current = true;
+          return true;
+        case "download": {
+          const bin = atob(String(args.base64 || ""));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return appApi.pageDownload(String(args.name || ""), bytes, String(args.type || ""));
+        }
+      }
+      throw new Error(`myco: no such call: ${method}`);
     };
     const answer = async (t: { hubId: string; id: string }, method: string, args: Record<string, unknown>): Promise<unknown> => {
       const { page: p, opened: o } = live.current;
@@ -435,6 +469,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           return true;
         }
       }
+      if (method.startsWith("data.") || method === "download") return answerData(t, method, args);
       throw new Error(`myco: no such call: ${method}`);
     };
     window.addEventListener("message", on);
@@ -455,6 +490,23 @@ function PageView({ target, open, active, reload, onMeta }: {
         if (win && origin) win.postMessage({ myco: "change", state: st.state, version: st.version, by: st.updated_by ? nameOf(target.hubId, st.updated_by) : "" }, origin);
       }, () => undefined);
     }, 2000);
+    return () => window.clearInterval(t);
+  }, [open, active, target]);
+  // What others changed in its records, once it listens (myco.data.on).
+  useEffect(() => {
+    if (!open || !active || target.kind !== "page") return;
+    let busy = false;
+    const t = window.setInterval(() => {
+      if (!dataWatch.current || busy) return;
+      busy = true;
+      appApi.pageChanges(target.hubId, target.id, dataSeq.current).then((ch) => {
+        dataSeq.current = Math.max(dataSeq.current, ch.seq);
+        if (!ch.changes.length && !ch.reset) return;
+        const win = frame.current?.contentWindow;
+        const origin = (() => { try { return new URL(frame.current?.src || "").origin; } catch { return ""; } })();
+        if (win && origin) win.postMessage({ myco: "data", changes: ch.changes.map((c) => ({ ...c, by: c.by ? nameOf(target.hubId, c.by) : "" })), reset: !!ch.reset }, origin);
+      }, () => undefined).finally(() => { busy = false; });
+    }, 1500);
     return () => window.clearInterval(t);
   }, [open, active, target]);
 

@@ -765,6 +765,37 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, chat.getByRole("button", { name: "关掉这一栏" }));
     });
 
+    // A page made from a template (the table myco template init writes):
+    // its records through the bridge; you edit a cell (saved with its
+    // version), the agent adds a row (it shows up), and it exports a CSV to
+    // Downloads.
+    await step("模板 · 人和 agent 一起填表", async () => {
+      await go(page, "官网改版", narrow);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_table" } })));
+      const frame = page.frameLocator(".pg-frame");
+      await frame.locator("tbody tr").first().waitFor({ timeout: 15_000 });
+      const before = await frame.locator("tbody tr").count();
+      const title = frame.locator("tbody tr").first().locator("input").first();
+      const mark = `${size.width}-${scheme}`;
+      await title.fill(`第一行（${mark}）`);
+      await title.press("Tab");
+      await frame.locator("#note", { hasText: "已保存" }).waitFor({ timeout: 10_000 });
+      const saved = await (await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/pages/pg_table/data?collection=rows`)).json();
+      if (!saved.records.some((r) => r.data.title === `第一行（${mark}）`)) throw new Error("改的格子应存到网页的记录里");
+      // The agent adds a row: it shows up, saying who.
+      await fetch(`http://${HOST}:${mockPort()}/app/mock/pages/pg_table/data/rows`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { title: `agent 加的（${mark}）`, status: "待办" } }) });
+      await frame.locator("tbody tr").nth(before).waitFor({ timeout: 10_000 });
+      await frame.locator("#note", { hasText: "刚改了" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "template-table");
+      // Exported: a CSV saved to Downloads, with what is in the table.
+      await frame.locator("#export").dispatchEvent("click");
+      await frame.locator("#note", { hasText: "已存到" }).waitFor({ timeout: 10_000 });
+      const dl = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/last-page-download`)).json();
+      if (!dl.name?.endsWith(".csv") || !dl.text?.includes(`agent 加的（${mark}）`)) throw new Error(`导出的 CSV 不对：${JSON.stringify(dl).slice(0, 200)}`);
+      await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
+    });
+
     // A name picked in the notch's island (the Mac app): a chat already on
     // screen stays as it is (its pane is pointed out); a member of the
     // project you look at opens beside the coordinator; from elsewhere

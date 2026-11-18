@@ -1286,7 +1286,7 @@ type Page struct {
 	Live   bool `json:"live,omitempty"`
 	Port   int  `json:"port,omitempty"`
 	Online bool `json:"online,omitempty"`
-	// Template: the template it was made from (hubs from v0.20.4).
+	// Template: the template it was made from (hubs from v0.20.5).
 	Template *PageTemplate `json:"template,omitempty"`
 }
 
@@ -1393,7 +1393,7 @@ type PinOrder struct {
 	IDs  []string `json:"ids"`
 }
 
-// PageRecord is one record of a page's data (hubs from v0.20.4): a JSON
+// PageRecord is one record of a page's data (hubs from v0.20.5): a JSON
 // object in a named collection, with a version that counts its writes.
 type PageRecord struct {
 	Collection string          `json:"collection"`
@@ -1448,7 +1448,7 @@ type PageChanges struct {
 	Reset   bool         `json:"reset,omitempty"`
 }
 
-// Template is one template in the workspace's library (hubs from v0.20.4).
+// Template is one template in the workspace's library (hubs from v0.20.5).
 type Template struct {
 	ID          string                        `json:"id"`
 	Slug        string                        `json:"slug"`

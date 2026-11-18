@@ -190,6 +190,29 @@ From v0.20.3: what a conversation keeps at hand (置顶), shown as tabs above it
 | `PUT /v1/pins/order` | agent or person | `{a?, with, ids}` → the list, those named first in that order |
 | `DELETE /v1/pins/{id}?with=&a=` | agent or person | `204` |
 
+## Page records and templates
+
+From v0.20.5 ([design](design/templates.md)). A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one); a `single` collection holds one record, `main`. Older hubs answer 404.
+
+| Endpoint | What |
+| --- | --- |
+| `GET /v1/pages/{id}/data?collection=` | `{records: [{collection, id, data, version, updated_by, updated_at}], seq}` in their order; `seq` is the latest change, to watch from |
+| `GET /v1/pages/{id}/data/{collection}/{record}` | One record |
+| `POST /v1/pages/{id}/data/{collection}` | `{data}` → `201` a new record (its id made up) |
+| `PUT /v1/pages/{id}/data/{collection}/{record}` | `{data, if_version?}` → the record (`201` when new). `if_version` is the version read (0: it must be new); left out, it writes whatever it is. A conflict answers `409` with the record now in `latest` |
+| `DELETE /v1/pages/{id}/data/{collection}/{record}?if_version=` | `204` |
+| `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again |
+
+**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `description`, `entry`, `data` (collections → `{fields: {name: type}, single?}`; types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
+
+| Endpoint | What |
+| --- | --- |
+| `POST /v1/templates` | The body is a zip of the folder → the template (`201` new, `200` a new version; the version must be higher). 200 templates, 10 versions each |
+| `GET /v1/templates` | `{templates: [...]}`: `{id, slug, name, description, kind, version, publisher, data, permissions, export, versions, can_manage, created_at, updated_at}` |
+| `GET /v1/templates/{id}` | One, by `tp_…` or its slug (URL-escaped), with `guide` (agent.md) |
+| `DELETE /v1/templates/{id}` | `204`; pages made from it stay |
+| `POST /v1/templates/{id}/use` | `{name?, project?, version?, sample?}` → `201 {page, template}`: a page made from it (its `template` says which: `{id, slug, name, version, data, permissions}`), with the sample data when asked |
+
 ## Automations
 
 An automation sends a task, as its owner, to one agent when its schedule comes round or its webhook is called. It runs on the hub (each workspace's own), so it fires while the owner's computers are off. The message is an ordinary task from the owner's console address (`@console:<member>`) with `automation` set: it wakes the agent as usual, and the answer lands in the owner's chat with that agent. Older hubs answer `404` on these routes.

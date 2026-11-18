@@ -37,7 +37,7 @@ func (s *Server) pageDataCaller(h func(http.ResponseWriter, *http.Request, pageC
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.pageData == nil {
 			writeError(w, domain.Errf(domain.CodeNotFound, "pages have no records on this hub").
-				WithSuggestion("upgrade the hub to v0.20.4 or later; until then use the page's state (myco page state)"))
+				WithSuggestion("upgrade the hub to v0.20.5 or later; until then use the page's state (myco page state)"))
 			return
 		}
 		inner(w, r)
@@ -49,7 +49,7 @@ func (s *Server) templateCaller(h func(http.ResponseWriter, *http.Request, pageC
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.templates == nil {
 			writeError(w, domain.Errf(domain.CodeNotFound, "templates are not enabled on this hub").
-				WithSuggestion("upgrade the hub to v0.20.4 or later"))
+				WithSuggestion("upgrade the hub to v0.20.5 or later"))
 			return
 		}
 		inner(w, r)

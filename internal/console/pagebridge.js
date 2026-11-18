@@ -45,7 +45,7 @@
 
   var seq = 0;
   var waiting = {};
-  var handlers = { change: [] };
+  var handlers = { change: [], data: [] };
   var ctx = null;
 
   function call(method, args, ms) {
@@ -72,8 +72,16 @@
       if (d.error) {
         var err = new Error(d.error);
         err.code = d.code;
+        if (d.latest) err.latest = d.latest;
         w.reject(err);
       } else w.resolve(d.value);
+    } else if (d.myco === "data" && Array.isArray(d.changes)) {
+      // What others (an agent, another person) changed in the records.
+      d.changes.forEach(function (c) {
+        handlers.data.slice().forEach(function (f) {
+          try { f(c); } catch (x) { setTimeout(function () { throw x; }); }
+        });
+      });
     } else if (d.myco === "change") {
       if (ctx) { ctx.state = d.state; ctx.version = d.version; }
       var c = { state: d.state, version: d.version, by: d.by };
@@ -110,6 +118,37 @@
       });
     },
     send: function (text) { return call("send", { text: String(text) }, 120000); },
+    // The page's records (hubs from v0.20.5): collections of JSON objects,
+    // each written on its own with a version. put without opts.id makes a
+    // new one; with opts.ifVersion it is refused (err.code "conflict",
+    // err.latest the record now) if someone changed it since.
+    data: {
+      list: function (collection) { return call("data.list", { collection: collection || "" }); },
+      get: function (collection, id) { return call("data.get", { collection: collection, id: id }); },
+      put: function (collection, data, opts) {
+        opts = opts || {};
+        return call("data.put", { collection: collection, data: data, id: opts.id || "", ifVersion: opts.ifVersion === undefined ? null : opts.ifVersion });
+      },
+      remove: function (collection, id, opts) {
+        return call("data.remove", { collection: collection, id: id, ifVersion: (opts && opts.ifVersion) || 0 });
+      },
+      // f({seq, collection, record, op: "put" | "delete", data, version, by})
+      on: function (f) {
+        var unsub = window.myco.on("data", f);
+        call("data.watch", {}).catch(function () { /* (an older App) */ });
+        return unsub;
+      },
+    },
+    // Saves a file the page made (an export: csv, xlsx, pdf…) to the
+    // person's Downloads. content: a string, Blob, ArrayBuffer or bytes.
+    download: function (name, content, type) {
+      return Promise.resolve(content instanceof Blob ? content.arrayBuffer() : content).then(function (c) {
+        var bytes = typeof c === "string" ? new TextEncoder().encode(c) : c instanceof ArrayBuffer ? new Uint8Array(c) : new Uint8Array(c.buffer || c);
+        var bin = "";
+        for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return call("download", { name: String(name), type: type || "", base64: btoa(bin) }, 60000);
+      });
+    },
     storage: {
       get: function (key) { return call("storage.get", { key: String(key) }); },
       set: function (key, value) { return call("storage.set", { key: String(key), value: value }); },

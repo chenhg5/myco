@@ -1,6 +1,6 @@
 # 模板与套件：让网页成为人和 agent 一起用的工具（讨论稿）
 
-> 状态：讨论中，还没开始做。带图的版本是一个 myco 网页（`myco page get --page pg_eju6enrpgqcgc6vj`），内容和这里一样。
+> 状态：第一步已做（v0.20.5）：网页的记录和变化流、工作区里的模板库、`myco template` / `myco page data`、桥的 `myco.data.*` 和 `myco.download`。不做市场。带图的版本是一个 myco 网页（`myco page get --page pg_eju6enrpgqcgc6vj`），内容和这里一样。
 
 有了 App 里的网页（[browser.md](browser.md)）和 myco 桥，很多办公的东西都能做成网页：表格、多维表格、文档、幻灯片、表单、看板。思路是不让 agent 每次现写一个网页，而是做好**模板**，agent 和人都只往里写**数据**；用户也能自己做模板、上架、分享。
 
