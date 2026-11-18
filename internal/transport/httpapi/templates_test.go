@@ -160,3 +160,22 @@ func TestOfficialTemplates(t *testing.T) {
 		h.do("POST", "/v1/templates/"+slug+"/use", alice, map[string]any{"sample": true}).want(t, 201)
 	}
 }
+
+// A template brings its own icon (shown by the App), an SVG in it.
+func TestTemplateIconAndRequiredHub(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	icon := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>`
+	withIcon := strings.Replace(weeklyManifest, `"kind": "records",`, `"kind": "records", "icon": "icon.svg", "category": "tools",`, 1)
+	r := h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": withIcon, "index.html": "x", "icon.svg": icon}), zipHdr).want(t, 201)
+	if str(r.body, "icon") != icon || str(r.body, "category") != "tools" {
+		t.Fatalf("icon and category: %s", r.raw)
+	}
+	l := h.do("GET", "/v1/templates", alice, nil).want(t, 200)
+	if !strings.Contains(string(l.raw), "circle cx") {
+		t.Fatalf("the list should carry the icon: %s", l.raw)
+	}
+	noIcon := strings.Replace(withIcon, `"version": "1.0.0"`, `"version": "1.0.1"`, 1)
+	h.doReq("POST", "/v1/templates", alice, zipOf(t, map[string]string{"myco.json": noIcon, "index.html": "x"}), zipHdr).wantErr(t, 400, "invalid_argument")
+}

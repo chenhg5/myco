@@ -238,7 +238,7 @@ const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}
   const m = JSON.parse(files["myco.json"]);
   const id = `tp_myco_${name}`;
   templateFiles.set(id, files);
-  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, version: m.version, publisher: "myco", official: true, can_manage: false,
+  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
     data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
     created_at: iso(0), updated_at: iso(0) };
 });

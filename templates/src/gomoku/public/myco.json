@@ -4,9 +4,30 @@
   "version": "1.0.0",
   "kind": "custom",
   "category": "game",
+  "icon": "icon.svg",
   "description": "和同事或 agent 下一局五子棋：谁执黑谁执白随便坐，网页管轮次、判输赢，能悔棋、认输、再来一局。",
   "data": {
-    "game": { "single": true, "fields": { "title": "text", "black": "text", "white": "text", "round": "number", "resigned": "text" } },
-    "moves": { "fields": { "x": "number", "y": "number", "stone": "text", "round": "number", "n": "number" } }
+    "game": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "black": "text",
+        "white": "text",
+        "round": "number",
+        "resigned": "text"
+      }
+    },
+    "moves": {
+      "fields": {
+        "x": "number",
+        "y": "number",
+        "stone": "text",
+        "round": "number",
+        "n": "number"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.6"
   }
 }

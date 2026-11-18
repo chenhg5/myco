@@ -177,7 +177,7 @@ func pageTemplateDTO(p *domain.Page) *api.PageTemplate {
 
 func (s *Server) templateDTO(by app.Actor, tv *app.TemplateView) api.Template {
 	t := tv.Template
-	out := api.Template{ID: t.ID, Slug: t.Slug, Name: t.Name, Description: t.Description, Kind: t.Kind, Version: t.Latest,
+	out := api.Template{ID: t.ID, Slug: t.Slug, Name: t.Name, Description: t.Description, Kind: t.Kind, Icon: t.Icon, Version: t.Latest,
 		Publisher: t.Publisher, Guide: tv.Guide, Versions: []api.TemplateVersion{}, CanManage: s.templates.Manages(by, t), Official: t.Official,
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 	if tv.Manifest != nil {

@@ -4,6 +4,7 @@
   "version": "2.0.0",
   "kind": "records",
   "category": "office",
+  "icon": "icon.svg",
   "description": "像飞书多维表格：同一份记录，表格、看板、日历、画廊、表单几种视图，点一条在右侧展开；字段有类型，筛选、排序，导出 Excel。",
   "data": {
     "base": {
@@ -26,5 +27,8 @@
   "export": [
     "csv",
     "xlsx"
-  ]
+  ],
+  "requires": {
+    "hub": "0.20.6"
+  }
 }

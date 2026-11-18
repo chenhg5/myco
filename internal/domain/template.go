@@ -25,6 +25,8 @@ type Template struct {
 	Name        string
 	Description string
 	Kind        string
+	// Icon is its icon (SVG markup), when it has one.
+	Icon string
 	// Latest is the newest version (semver).
 	Latest    string
 	Publisher string
@@ -50,8 +52,10 @@ type TemplateVersion struct {
 	Manifest string
 	// Guide is the agent's guide (agent.md), when it has one.
 	Guide string
-	By    string
-	At    time.Time
+	// Icon is its icon (SVG markup), when it has one.
+	Icon string
+	By   string
+	At   time.Time
 }
 
 // TemplateRepository stores the library.
@@ -91,6 +95,36 @@ type Manifest struct {
 	Export      []string                      `json:"export,omitempty"`
 	Agent       string                        `json:"agent,omitempty"`
 	Sample      string                        `json:"sample,omitempty"`
+	// Icon is an SVG in the template (its shape is shown, tinted by the
+	// App; v0.20.6).
+	Icon string `json:"icon,omitempty"`
+	// Requires says what the template needs (v0.20.6): hubs older than
+	// Requires.Hub leave it out.
+	Requires *ManifestRequires `json:"requires,omitempty"`
+}
+
+// ManifestRequires is what a template needs to run.
+type ManifestRequires struct {
+	Hub string `json:"hub,omitempty"`
+}
+
+// MaxTemplateIcon bounds a template's icon (an SVG).
+const MaxTemplateIcon = 16 << 10
+
+// RequiredHub reads the hub version a manifest asks for ("" when none),
+// without checking anything else: a hub reads it before the rest, so it
+// can leave out templates made for newer hubs (whose manifests it may not
+// understand).
+func RequiredHub(raw []byte) string {
+	var m struct {
+		Requires struct {
+			Hub string `json:"hub"`
+		} `json:"requires"`
+	}
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.TrimSpace(m.Requires.Hub), "v")
 }
 
 // ManifestCollection is a collection of a template's data: its fields and
@@ -194,6 +228,17 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 			return bad("permission %q: one of %s", p, strings.Join(TemplatePermissions, ", "))
 		}
 	}
+	if m.Icon != "" {
+		if m.Icon, err = CleanPagePath(m.Icon); err != nil || !strings.HasSuffix(strings.ToLower(m.Icon), ".svg") {
+			return bad("icon %q: an .svg file in the template", m.Icon)
+		}
+	}
+	if m.Requires != nil && m.Requires.Hub != "" {
+		m.Requires.Hub = strings.TrimPrefix(m.Requires.Hub, "v")
+		if !semver.MatchString(m.Requires.Hub) {
+			return bad("requires.hub %q: a version like 0.20.6", m.Requires.Hub)
+		}
+	}
 	if m.Agent == "" {
 		m.Agent = "agent.md"
 	}
@@ -204,6 +249,9 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 }
 
 // CompareVersions compares two semver versions (-1, 0, 1).
+// IsVersion reports whether s is a version like 1.2.3.
+func IsVersion(s string) bool { return semver.MatchString(s) }
+
 func CompareVersions(a, b string) int {
 	pa, pb := semver.FindStringSubmatch(a), semver.FindStringSubmatch(b)
 	for i := 1; i <= 3; i++ {

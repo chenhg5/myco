@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CalendarCheck, CircleDot, Code2, FileText, Hash, KanbanSquare, Wrench, LayoutTemplate, ListChecks, Network, PenTool, Plus, Presentation, Table2, Vote, Wallet } from "lucide-react";
+import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, Table2 } from "lucide-react";
 import { ApiError, appApi } from "@/appapi";
 import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
@@ -16,11 +16,13 @@ import { cn, timeAgo } from "@/lib/utils";
  * templates are listed under them, to open again.
  */
 
-const BY_SLUG: Record<string, typeof FileText> = {
-  "myco/whiteboard": PenTool, "myco/mindmap": Network, "myco/gomoku": CircleDot, "myco/sudoku": Hash,
-  "myco/code": Code2, "myco/devtools": Wrench, "myco/todo": ListChecks, "myco/poll": Vote, "myco/ledger": Wallet, "myco/habit": CalendarCheck,
-};
-const iconOf = (kind: string, slug = "") => BY_SLUG[slug] || (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
+const iconOf = (kind: string) => (kind === "doc" ? FileText : kind === "records" ? KanbanSquare : kind === "table" ? Table2 : kind === "slides" ? Presentation : LayoutTemplate);
+/** An app's own icon (its SVG, as a mask in the text colour), else one by kind. */
+function AppIcon({ t }: { t?: Template }) {
+  if (t?.icon) return <span className="tp-svg" style={{ ["--icon" as string]: `url("data:image/svg+xml;utf8,${encodeURIComponent(t.icon)}")` }} aria-hidden="true" />;
+  const Icon = iconOf(t?.kind || "");
+  return <Icon />;
+}
 
 /** The shelves official apps are on (their manifest's category; hubs
  *  before v0.20.6 have none: the office kinds go on the first). */
@@ -48,11 +50,10 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const official = (list || []).filter((t) => t.official);
   const own = (list || []).filter((t) => !t.official);
   const card = (t: Template) => {
-    const Icon = iconOf(t.kind, t.slug);
     return (
       <button key={t.id} type="button" className="au-template tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
         title={L(`新建一份${t.name}`, `New ${t.name}`)}>
-        <span className={cn("au-icon", `tp-icon is-${t.kind} on-${shelfOf(t)}`)}><Icon /></span>
+        <span className={cn("au-icon", `tp-icon is-${t.kind} on-${shelfOf(t)}`)}><AppIcon t={t} /></span>
         <span className="au-template-text">
           <span className="au-template-name">{t.name}</span>
           {t.description && <span className="au-template-hint">{t.description}</span>}
@@ -98,10 +99,9 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
             <div className="pc-list tp-made" data-testid="templates-made">
               {made.map((p) => {
                 const t = (list || []).find((x) => x.id === p.template?.id);
-                const Icon = iconOf(t?.kind || "", t?.slug);
                 return (
                   <button key={p.id} type="button" className="tp-made-row" onClick={() => openPage({ kind: "page", hubId, id: p.id })}>
-                    <Icon />
+                    <AppIcon t={t} />
                     <span className="tp-made-name">{p.name}</span>
                     <span className="tp-made-meta">{[p.template?.name, p.project ? projects.find((x) => x.name === p.project)?.title || p.project : "", timeAgo(p.updated_at, now)].filter(Boolean).join(" · ")}</span>
                   </button>

@@ -7875,6 +7875,10 @@ body.is-resizing {
 .tp-icon.is-slides { background: color-mix(in srgb, #e8710a 14%, var(--card)); color: #e8710a; }
 /* (one quiet look for every app: the icon tells them apart) */
 .tp-icon.tp-icon { background: color-mix(in srgb, var(--fg) 5%, var(--card)); color: var(--fg-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent); }
+/* an app's own icon: its SVG's shape, in the text colour */
+.tp-svg { display: inline-block; width: 18px; height: 18px; flex: none; background: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.tp-made-row .tp-svg { width: 16px; height: 16px; color: var(--muted); }
 .tp-hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .tp-made { display: flex; flex-direction: column; gap: 2px; }
 .tp-made-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; }

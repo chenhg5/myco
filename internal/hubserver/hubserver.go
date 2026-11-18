@@ -206,6 +206,7 @@ func Build(o Options) (*Hub, error) {
 	pageData := app.NewPageDataService(pages, sqlite.NewPageDataRepo(db), ids, clock)
 	srv.SetPageData(pageData)
 	templateSvc := app.NewTemplateService(sqlite.NewTemplateRepo(db), blob.FS{Dir: filesDir}, pages, pageData, ids, clock)
+	templateSvc.SetHubVersion(o.Version)
 	if official, err := templates.Official(); err == nil {
 		templateSvc.SetOfficial(official)
 	} else {

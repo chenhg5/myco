@@ -28,6 +28,25 @@ type TemplateService struct {
 	clock Clock
 	// official are myco's own, offered in every workspace.
 	official []OfficialTemplate
+	// hubVersion is this hub's build: templates that need a newer hub
+	// (requires.hub) are refused.
+	hubVersion string
+}
+
+// SetHubVersion tells the library which hub it runs in.
+func (s *TemplateService) SetHubVersion(v string) { s.hubVersion = v }
+
+// HubTooOld reports whether this hub is older than want (a version like
+// 0.20.6). Unknown builds (dev) are taken to be new enough.
+func HubTooOld(have, want string) bool {
+	if want == "" {
+		return false
+	}
+	h := strings.TrimPrefix(strings.SplitN(strings.TrimSpace(have), "-", 2)[0], "v")
+	if !domain.IsVersion(h) {
+		return false
+	}
+	return domain.CompareVersions(h, want) < 0
 }
 
 // OfficialTemplate is one of myco's templates: its manifest and files
@@ -61,6 +80,9 @@ func (s *TemplateService) officialView(o *OfficialTemplate) *TemplateView {
 		size += int64(len(b))
 	}
 	t := &domain.Template{ID: officialID(m), Slug: m.ID, Name: m.Name, Description: m.Description, Kind: m.Kind, Latest: m.Version, Publisher: "myco", Official: true}
+	if m.Icon != "" {
+		t.Icon = string(o.Files[m.Icon])
+	}
 	return &TemplateView{Template: t, Manifest: m, Guide: string(o.Files[m.Agent]),
 		Versions: []*domain.TemplateVersion{{Template: t.ID, Version: m.Version, Size: size, Files: len(o.Files), By: "myco"}}}
 }
@@ -113,6 +135,7 @@ func (s *TemplateService) view(ctx context.Context, t *domain.Template) (*Templa
 	if len(vs) > 0 {
 		tv.Manifest, _ = domain.ParseManifest([]byte(vs[0].Manifest))
 		tv.Guide = vs[0].Guide
+		t.Icon = vs[0].Icon
 	}
 	return tv, nil
 }
@@ -206,6 +229,11 @@ func (s *TemplateService) Publish(ctx context.Context, by Actor, r io.Reader, by
 		closer()
 		return nil, err
 	}
+	if want := domain.RequiredHub(raw); HubTooOld(s.hubVersion, want) {
+		closer()
+		return nil, domain.Errf(domain.CodeInvalidArgument, "this template needs hub %s or newer (this hub is %s)", want, s.hubVersion).
+			WithSuggestion("upgrade the hub (sudo myco upgrade on the server), or lower requires.hub in myco.json")
+	}
 	m, err := domain.ParseManifest(raw)
 	if err != nil {
 		closer()
@@ -220,6 +248,18 @@ func (s *TemplateService) Publish(ctx context.Context, by Actor, r io.Reader, by
 	if err != nil {
 		closer()
 		return nil, err
+	}
+	var icon []byte
+	if m.Icon != "" {
+		b, ok, err := readZipFile(z, m.Icon, domain.MaxTemplateIcon)
+		if err == nil && (!ok || !strings.Contains(string(b), "<svg")) {
+			err = domain.Errf(domain.CodeInvalidArgument, "icon %s should be an SVG in the template", m.Icon)
+		}
+		if err != nil {
+			closer()
+			return nil, err
+		}
+		icon = b
 	}
 	if sample, ok, err := readZipFile(z, m.Sample, 4<<20); err != nil {
 		closer()
@@ -278,7 +318,7 @@ func (s *TemplateService) Publish(ctx context.Context, by Actor, r io.Reader, by
 	}
 	clean, _ := json.Marshal(m)
 	v := &domain.TemplateVersion{Template: t.ID, Version: m.Version, Blob: blob, SHA256: sum, Size: size, Files: files,
-		Manifest: string(clean), Guide: string(guide), By: byName, At: now}
+		Manifest: string(clean), Guide: string(guide), Icon: string(icon), By: byName, At: now}
 	if err := s.repo.AddVersion(ctx, v); err != nil {
 		return nil, err
 	}

@@ -22,6 +22,9 @@ func TestOfficialTemplatesAreWhole(t *testing.T) {
 		if m.Category == "" {
 			t.Errorf("%s has no category (its shelf in the App)", m.ID)
 		}
+		if m.Icon == "" || !strings.Contains(string(o.Files[m.Icon]), "<svg") {
+			t.Errorf("%s has no icon of its own", m.ID)
+		}
 		for _, f := range []string{m.Entry, m.Agent, m.Sample} {
 			if len(o.Files[f]) == 0 {
 				t.Errorf("%s has no %s", m.ID, f)

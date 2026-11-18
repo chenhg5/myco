@@ -96,11 +96,11 @@ func (r *TemplateRepo) Delete(ctx context.Context, id string) error {
 	return internal(err)
 }
 
-const templateVersionCols = `template, version, blob, sha256, size, files, manifest, guide, by_name, at`
+const templateVersionCols = `template, version, blob, sha256, size, files, manifest, guide, by_name, at, icon`
 
 func (r *TemplateRepo) AddVersion(ctx context.Context, v *domain.TemplateVersion) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO template_versions (`+templateVersionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		v.Template, v.Version, v.Blob, v.SHA256, v.Size, v.Files, v.Manifest, v.Guide, v.By, ms(v.At))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO template_versions (`+templateVersionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		v.Template, v.Version, v.Blob, v.SHA256, v.Size, v.Files, v.Manifest, v.Guide, v.By, ms(v.At), v.Icon)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "version %s of this template exists", v.Version).WithSuggestion("raise the version in myco.json")
 	}
@@ -119,7 +119,7 @@ func (r *TemplateRepo) Versions(ctx context.Context, template string) ([]*domain
 			v  domain.TemplateVersion
 			at int64
 		)
-		if err := rows.Scan(&v.Template, &v.Version, &v.Blob, &v.SHA256, &v.Size, &v.Files, &v.Manifest, &v.Guide, &v.By, &at); err != nil {
+		if err := rows.Scan(&v.Template, &v.Version, &v.Blob, &v.SHA256, &v.Size, &v.Files, &v.Manifest, &v.Guide, &v.By, &at, &v.Icon); err != nil {
 			return nil, internal(err)
 		}
 		v.At = fromMS(at)

@@ -4,9 +4,29 @@
   "version": "1.0.0",
   "kind": "custom",
   "category": "tools",
+  "icon": "icon.svg",
   "description": "一起记的待办：回车就加，认得「明天」「周五」「@名字」「!」；打勾完成，截止、负责人、备注，拖动排序；agent 能把会议里的待办整理进来。",
   "data": {
-    "list": { "single": true, "fields": { "title": "text" } },
-    "tasks": { "fields": { "title": "text", "done": "bool", "due": "date", "owner": "person", "star": "bool", "note": "text", "order": "number", "done_at": "datetime" } }
+    "list": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "tasks": {
+      "fields": {
+        "title": "text",
+        "done": "bool",
+        "due": "date",
+        "owner": "person",
+        "star": "bool",
+        "note": "text",
+        "order": "number",
+        "done_at": "datetime"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.6"
   }
 }
