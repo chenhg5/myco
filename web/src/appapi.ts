@@ -349,6 +349,9 @@ export class ApiError extends Error {
 export function isTransient(e: unknown): boolean {
   if (e instanceof ApiError) {
     if (e.code === "unavailable" || e.code === "timeout") return true;
+    // An error with a code of its own (fork_failed, say) is that error,
+    // whatever the status: not a hub that is down or slow.
+    if (e.code) return false;
     if (e.status === 502 || e.status === 503 || e.status === 504) return true;
     return /deadline exceeded|timed? ?out|connection (refused|reset)|no such host|EOF/i.test(e.message);
   }

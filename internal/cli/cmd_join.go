@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -844,6 +845,13 @@ func forkSession(e *env, b api.Binding, name string) (string, error) {
 		"Other agents will send you tasks later, and each one resumes this copy.\nDo not start any work yet. Reply with one short line confirming you are ready.\n"
 	out, err := h.Run(ctx, harness.Request{Prompt: prompt, SessionID: b.SessionID, Fork: true, Workdir: b.Workdir})
 	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
+			// Not the copy failing: the CLI is not where this process looks
+			// (an app started outside a terminal has a short PATH).
+			return "", errorf("cli_not_found", ExitError,
+				"check that `which "+spawnBinary(b.Harness)+"` finds it in a terminal; if it does, update and reopen the myco app (newer versions read the terminal's PATH), or run this join in that terminal",
+				"copying session %s failed: %s is not on this PATH (%v)", b.SessionID, spawnBinary(b.Harness), err)
+		}
 		return "", errorf("fork_failed", ExitError, "join without --fork, or check that the CLI works here", "copying session %s failed: %v", b.SessionID, err)
 	}
 	if out.SessionID == "" || out.SessionID == b.SessionID {
