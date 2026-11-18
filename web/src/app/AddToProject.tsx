@@ -14,6 +14,7 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
 import { machineMakesFolders, machineTellsInfo } from "@/app/hubVersion";
+import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from "@/app/machineInfoCache";
 import { PublicAccessDialog } from "@/app/SettingsPage";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
@@ -192,15 +193,17 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   const machineOf = (w: Where): Machine | undefined =>
     w === "here" ? hereMachine : w.startsWith("m:") ? machines.find((m) => m.id === w.slice(2)) : undefined;
   const picked = machineOf(where);
-  const loadInfo = (m: Machine) => {
-    setInfos((s) => ({ ...s, [m.id]: { loading: true } }));
-    appApi.machineInfo(hubId, m.id)
+  // The last answer shows at once; a fresh one replaces it when it comes.
+  const loadInfo = (m: Machine, fresh = false) => {
+    if (fresh) forgetMachineInfo(hubId, m.id);
+    const known = cachedMachineInfo(hubId, m.id);
+    setInfos((s) => ({ ...s, [m.id]: known?.info ? { info: known.info } : { loading: true } }));
+    fetchMachineInfo(hubId, m.id)
       .then((info) => setInfos((s) => ({ ...s, [m.id]: { info } })))
-      .catch((error) => setInfos((s) => ({ ...s, [m.id]: { error } })));
+      .catch((error) => setInfos((s) => (s[m.id]?.info ? s : { ...s, [m.id]: { error } })));
   };
   // Every computer that can answer is asked as soon as this opens (they
   // answer from memory), so picking one shows its sessions at once.
-  const askable = (m: Machine) => m.online && m.can_spawn && machineTellsInfo(m.myco_version);
   useEffect(() => {
     if (!open) return;
     for (const m of machines) if (askable(m) && !infos[m.id]) loadInfo(m);
@@ -261,7 +264,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     try {
       const r = await appApi.spawn(hubId, m.id, { cli: s.cli, dir: s.workdir, fork_from: s.session_id });
       await arrived(r.agent);
-      loadInfo(m);
+      loadInfo(m, true);
     } catch (e) {
       setJoinError(e);
     } finally {

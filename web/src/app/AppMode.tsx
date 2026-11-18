@@ -26,7 +26,8 @@ import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, nodeName, stuckCounts } from "@/app/nodes";
+import { agentKind, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
 import { recentChats } from "@/app/recentChats";
@@ -307,6 +308,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => { off = true; };
   }, [hubId, hubUrl, hubIsLocal]);
   const rows = useMemo(() => allRows.filter((r) => r.hub.id === hubId), [allRows, hubId]);
+  // Ask this workspace's computers what they have ahead of need (at most
+  // once a minute each): adding an agent then shows their sessions at once.
+  const hubMachines = rows.find((r) => r.hub.id === hubId)?.hub;
+  const machinesKey = (hubMachines ? machinesOfHub(hubMachines) : []).map((m) => `${m.id}:${m.online}:${m.myco_version}`).join(",");
+  useEffect(() => {
+    if (hubMachines) prefetchMachineInfos(hubMachines.id, machinesOfHub(hubMachines));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubId, machinesKey]);
   const hubProjects = useMemo(() => (projects || []).filter((x) => x.hubId === hubId), [projects, hubId]);
   // A project's computers are for every agent in it: one that joined by
   // itself (myco join --project) is let in here. Each pair is tried once.

@@ -6,6 +6,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, ver } from "@/app/nodes";
 import { shortDir } from "@/app/AddToProject";
 import { machineTellsInfo } from "@/app/hubVersion";
+import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { agentQuotaHint } from "@/app/quota";
 import { Avatar, isWorkspace } from "@/app/persona";
@@ -180,13 +181,14 @@ function ComputerDetails({ hubId, hub, machine, onChanged, onRemove }: {
   onChanged: () => void;
   onRemove: () => void;
 }) {
-  const [info, setInfo] = useState<MachineInfo | null>(null);
+  // The last answer at once (the App asks ahead), a fresh one behind it.
+  const [info, setInfo] = useState<MachineInfo | null>(() => cachedMachineInfo(hubId, machine.id)?.info || null);
   const [error, setError] = useState<unknown>(null);
   const asks = machine.online && machine.can_spawn && machineTellsInfo(machine.myco_version);
   useEffect(() => {
     if (!asks) return;
     let off = false;
-    appApi.machineInfo(hubId, machine.id).then((i) => { if (!off) setInfo(i); }, (e) => { if (!off) setError(e); });
+    fetchMachineInfo(hubId, machine.id).then((i) => { if (!off) setInfo(i); }, (e) => { if (!off) setError(e); });
     return () => { off = true; };
   }, [asks, hubId, machine.id]);
   const aiText = (a: MachineAI) => a.state === "ready" ? L("可用", "Ready") : a.state === "signed_out" ? L("没登录", "Signed out") : a.state === "missing" ? L("没装", "Not installed") : L("已安装", "Installed");
