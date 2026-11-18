@@ -83,6 +83,9 @@ export interface TraceStep {
   stream?: string;
   text?: string; tool?: string; id?: string; input?: string; output?: string; failed?: boolean;
   input_tokens?: number; output_tokens?: number; cost_usd?: number; duration_ms?: number;
+  /** kind change (runners from v0.20.12): one file the run changed (tool its
+   *  path, input A/M/D/R, output its diff), or "+N" in text for N more */
+  added?: number; removed?: number;
 }
 export interface TraceEvent { seq: number; kind: string; data: TraceStep; at?: string }
 export interface Trace { message: string; status: string; events: TraceEvent[] }
