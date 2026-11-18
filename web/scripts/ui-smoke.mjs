@@ -3209,8 +3209,7 @@ async function runMatrix(browser, size, scheme) {
       // Right click: rename it in place, or go straight to removing it.
       const last = page.locator(".sp-nav-pc").last();
       const oldName = (await last.locator(".app-nav-label").innerText()).trim();
-      await last.click({ button: "right" });
-      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await menuPick(page, last, "改名");
       await set.waitFor({ timeout: 10_000 });
       const nameBox = set.getByRole("textbox", { name: "名字" });
       await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "名字", null, { timeout: 5_000 });
@@ -3222,16 +3221,14 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-rename");
       await clickVisible(page, set.getByRole("button", { name: "好" }));
       await page.locator(".sp-nav-pc", { hasText: newName }).waitFor({ timeout: 20_000 });
-      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
-      await clickVisible(page, page.getByRole("menuitem", { name: "移除这台电脑" }));
+      await menuPick(page, page.locator(".sp-nav-pc", { hasText: newName }), "移除这台电脑");
       const sure = page.locator(".app-modal.app-confirm");
       await sure.waitFor({ timeout: 5_000 });
       if (await set.isVisible()) throw new Error("从右键直接移除时只该出现确认框");
       await clickVisible(page, sure.getByRole("button", { name: "取消" }));
       await sure.waitFor({ state: "hidden", timeout: 5_000 });
       // Back to its name for the steps after this one.
-      await page.locator(".sp-nav-pc", { hasText: newName }).click({ button: "right" });
-      await clickVisible(page, page.getByRole("menuitem", { name: "改名" }));
+      await menuPick(page, page.locator(".sp-nav-pc", { hasText: newName }), "改名");
       await set.waitFor({ timeout: 10_000 });
       await nameBox.fill(oldName);
       await nameBox.press("Enter");
