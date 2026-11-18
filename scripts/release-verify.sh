@@ -11,13 +11,14 @@ for f in SHA256SUMS myco.dmg myco-app-darwin-universal.zip; do
   curl -fsSL --retry 3 -o "$d/$f" "https://github.com/$REPO/releases/download/$V/$f"
 done
 (cd "$d" && grep -E ' (myco.dmg|myco-app-darwin-universal.zip)$' SHA256SUMS | sha256sum -c)
-curl -fsS "https://api.github.com/repos/$REPO/releases/tags/$V" | python3 -c '
+here=$(cd "$(dirname "$0")" && pwd)
+"$here/gh-get.sh" "repos/$REPO/releases/tags/$V" > "$d/release.json"
+python3 -c '
 import json, sys
-r = json.load(sys.stdin)
+r = json.load(open(sys.argv[1]))
 print("draft" if r["draft"] else "published", len(r["assets"]), "files:", r["html_url"])
-' 
-cd "$(dirname "$0")/.."
-want=$(scripts/changelog-section.sh "$V" | head -1)
-got=$(curl -fsS "https://api.github.com/repos/$REPO/releases/tags/$V" | python3 -c 'import json,sys; print(json.load(sys.stdin)["body"].splitlines()[0])')
+' "$d/release.json"
+want=$("$here/changelog-section.sh" "$V" "$here/../CHANGELOG.md" | head -1)
+got=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["body"].splitlines()[0])' "$d/release.json")
 if [ "$want" != "$got" ]; then echo "notes differ from the CHANGELOG section" >&2; exit 1; fi
 echo "notes: the CHANGELOG section"
