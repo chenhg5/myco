@@ -2231,6 +2231,27 @@ async function runMatrix(browser, size, scheme) {
       await noRound(page);
     });
 
+    // 简单模式 (Settings › 外观): one person on this computer. Workspaces,
+    // people and other computers hide; turning it off brings them back.
+    await step("设置 · 简单模式", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      const sw = page.locator('[data-setting="simple-mode"] [role=switch]');
+      await sw.waitFor({ timeout: 10_000 });
+      if (await sw.getAttribute("aria-checked") !== "false") throw new Error("已有工作区的用户默认不是简单模式");
+      await sw.click();
+      await page.locator('[data-setting="simple-mode"] [role=switch][aria-checked="true"]').waitFor({ timeout: 5_000 });
+      if (await page.locator(".app-settings-tab", { hasText: "工作区" }).count()) throw new Error("简单模式下设置里不该有「工作区」");
+      if (await page.locator(".app-settings-tab", { hasText: "成员" }).count()) throw new Error("简单模式下设置里不该有「成员」");
+      if (!narrow && await page.locator(".sp-nav-pcs").count()) throw new Error("简单模式下侧栏不该有「电脑」");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-simple-mode");
+      await sw.click();
+      await page.locator(".app-settings-tab", { hasText: "工作区" }).waitFor({ timeout: 5_000 });
+      if (!narrow) await page.locator(".sp-nav-pcs").waitFor({ timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // Settings › Agents: the agent CLIs on this computer, installed or not,
     // signed in or not; a button opens a terminal for what is missing, or
     // shows the command when no terminal could be opened.

@@ -16,6 +16,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection } from "@/app/MembersSection";
 import { LocalAgentsSection } from "@/app/LocalAgents";
+import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
@@ -170,6 +171,12 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
+/** What 简单模式 leaves out of Settings. */
+const SIMPLE_HIDDEN: Section[] = ["hubs", "members", "audit"];
+function simpleModeNow(): boolean {
+  try { return localStorage.getItem("myco-simple-mode") === "1"; } catch { return false; }
+}
+
 const SIZES: { size: TextSize; label: string }[] = [
   { size: "small", get label() { return L("小", "Small"); } },
   { size: "standard", get label() { return L("标准", "Standard"); } },
@@ -252,7 +259,11 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   onRefresh: () => Promise<void>;
   onAddHub: () => void;
 }) {
-  const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? "hubs");
+  const simple = useSimpleMode();
+  const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
+  // Simple mode hides the workspace, people and audit sections.
+  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key));
+  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section)) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
@@ -361,7 +372,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   return (
     <div className="app-page app-settings">
       <div className="app-settings-nav" role="tablist" aria-label={L("设置", "Settings")}>
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <button
             key={s.key}
             type="button"
@@ -550,6 +561,16 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="app-setting-line" data-setting="simple-mode">
+                <div className="app-setting-line-text">
+                  <b>{L("简单模式", "Simple mode")}</b>
+                  <span>{L("一个人在这台电脑上用：只显示对话和 agent，工作区、成员、其他电脑这些先藏起来。关掉就是完整模式，什么都不会删。",
+                    "One person on this computer: only conversations and agents show; workspaces, people and other computers are hidden. Turn it off for everything; nothing is removed.")}</span>
+                </div>
+                <button type="button" role="switch" aria-checked={simple} aria-label={simple ? L("关掉简单模式", "Turn simple mode off") : L("打开简单模式", "Turn simple mode on")}
+                  title={simple ? L("关掉简单模式", "Turn simple mode off") : L("打开简单模式", "Turn simple mode on")}
+                  className={cn("app-switch", simple && "is-on")} onClick={() => setSimpleMode(!simple)}><span className="app-switch-knob" /></button>
               </div>
               <div className="app-setting-line">
                 <div className="app-setting-line-text">

@@ -14,6 +14,7 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
 import { machineMakesFolders } from "@/app/hubVersion";
+import { useSimpleMode } from "@/app/simpleMode";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -105,6 +106,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
 }) {
   const hubId = hub?.id || "";
   const [tab, setTab] = useState<AddTab>("local");
+  // 简单模式: agents of this computer only (no sentence for agents elsewhere).
+  const simple = useSimpleMode();
   const touched = useRef(false);
   const [link, setLink] = useState<JoinLink | null>(null);
   const [linkError, setLinkError] = useState<unknown>(null);
@@ -239,7 +242,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
         {([
           ...(project ? [["members", L("已有的", "Already here")] as const] : []),
           ["local", L("这台电脑上的", "On this computer")],
-          ["link", L("发一句话", "Send a sentence")],
+          ...(simple ? [] : [["link", L("发一句话", "Send a sentence")] as const]),
           ["new", L("新开一个", "Start a new one")],
         ] as const).map(([v, label]) => (
           <button key={v} type="button" role="tab" aria-selected={tab === v} className={cn("seg-btn", tab === v && "active")} onClick={() => pick(v)}>{label}</button>

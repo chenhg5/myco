@@ -61,7 +61,9 @@ function switchKey(n: number): string {
   return /Mac|iPhone|iPad/.test(p) ? `⌘${n}` : `Ctrl+${n}`;
 }
 
-export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, isLocal, variant = "sidebar", down = false }: {
+export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, onNewOnServer, serverName, onSettings, isLocal, variant = "sidebar", down = false, simple = false }: {
+  /** 简单模式: no joining or making workspaces from here (Settings › 外观 turns it off) */
+  simple?: boolean;
   hubs: Hub[];
   hubsOv?: HubOverview[];
   /** the workspace on show */
@@ -92,11 +94,11 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
 
   const entries = useMemo<Entry[]>(() => [
     ...hubs.map((h) => ({ key: h.id, kind: "hub" as const, hub: h })),
-    { key: "add", kind: "add" },
-    ...(onNewOnServer ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
-    { key: "newLocal", kind: "newLocal" },
+    ...(simple ? [] : [{ key: "add", kind: "add" as const }]),
+    ...(onNewOnServer && !simple ? [{ key: "newOnServer", kind: "newOnServer" as const }] : []),
+    ...(simple ? [] : [{ key: "newLocal", kind: "newLocal" as const }]),
     { key: "settings", kind: "settings" },
-  ], [hubs, onNewOnServer]);
+  ], [hubs, onNewOnServer, simple]);
 
   const selectedIndex = (): number => {
     const i = entries.findIndex((e) => e.kind === "hub" && e.hub.id === value);

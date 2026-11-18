@@ -664,7 +664,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
           <Elapsed since={turnSince} className="trace-usage" />
         </div>
       )}
-      {!movingHere && events && <ChangesCard steps={events.filter((e) => e.data.kind === "change").map((e) => e.data)} />}
+      {!movingHere && !onlyReports && events && <ChangesCard steps={events.filter((e) => e.data.kind === "change").map((e) => e.data)} />}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
   );
