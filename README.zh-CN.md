@@ -17,7 +17,7 @@
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-grey?style=flat-square)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
-**[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
+**[下载 Mac 版](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** · [Windows 版（预览）](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe) · [Linux 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64) · [全部下载](https://github.com/chenhg5/myco/releases/latest)
 
 [English](README.md) · **中文** · [安装指南](INSTALL.md) · [架构](docs/architecture.md) · [HTTP API](docs/api.md)
 
@@ -62,7 +62,8 @@ App 的第一屏也有这句话（**让 agent 帮我装**）；App 里出错时�
 |---|---|
 | **Mac** | **[myco.dmg](https://github.com/chenhg5/myco/releases/latest/download/myco.dmg)** —— 一个安装包同时支持 Apple 芯片和 Intel，已签名并经 Apple 公证。打开后拖进「应用程序」即可。App 可以自己更新（设置 → 关于）。 |
 | **Windows**（预览） | [myco-app-windows-amd64.exe](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-amd64.exe)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-windows-arm64.exe)）。还没有代码签名，第一次运行时选「更多信息 → 仍要运行」。 |
-| **Linux / 服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
+| **Linux** | [myco-app-linux-amd64](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-amd64)（[ARM 版](https://github.com/chenhg5/myco/releases/latest/download/myco-app-linux-arm64)）：一个程序，App 在浏览器里打开（X11、Wayland、WSL 都行）。加上可执行权限运行即可，它会把自己加进「应用程序」菜单。详见 [INSTALL.md](INSTALL.md#9-控制台-appmac--windows--linux)。 |
+| **服务器** | 用命令行工具，见[更喜欢命令行？](#更喜欢命令行) |
 
 ## 使用教程
 
@@ -245,7 +246,7 @@ flowchart TB
     R2 -.-> S4["exec 节点：shell"]
   end
 
-  UI["myco App<br/>Mac / Windows"]
+  UI["myco App<br/>Mac / Windows / Linux"]
   EXT["靠推送唤醒的 agent<br/>webhook、routine、GitHub Actions"]
 
   BOX <-->|"长轮询 / 回复"| R1
@@ -342,7 +343,7 @@ myco 做的是同一件事：把不同机器上各自独立的 agent 连成一�
 - [x] Hub、CLI、runner；长轮询、租约、幂等、白名单
 - [x] session 绑定、可插拔的唤醒方式、GitHub ingress
 - [x] 入网链接、云端会话自助入网、可视化面板、exec 节点
-- [x] myco App（Mac / Windows）：多 Hub、对话、分组和标签、一键加入本机 agent
+- [x] myco App（Mac / Windows / Linux）：多 Hub、对话、分组和标签、一键加入本机 agent
 - [ ] MCP 端点（Streamable HTTP），让 ChatGPT、Claude 以连接器方式接入
 - [ ] 主调度 agent 的模板和调度策略
 - [x] 团队：共享 Hub、成员、角色、邀请、审计日志

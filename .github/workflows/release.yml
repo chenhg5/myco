@@ -163,6 +163,16 @@ jobs:
           done
           wait
           ls bin/myco-app-windows-amd64.exe bin/myco-app-windows-arm64.exe
+      - name: the Linux console app (opens in the browser; no cgo needed)
+        if: matrix.goos == 'linux'
+        run: |
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH=$arch CGO_ENABLED=0 go build -tags production \
+              -ldflags "-s -w -X main.version=${{ needs.version.outputs.version }}" \
+              -o bin/myco-app-linux-$arch ./cmd/myco-app &
+          done
+          wait
+          bin/myco-app-linux-amd64 --version
       - name: Smoke-test the linux/amd64 release binary
         if: matrix.goos == 'linux'
         run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh

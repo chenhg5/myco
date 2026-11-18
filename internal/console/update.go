@@ -27,6 +27,18 @@ func AppAsset(arch string) string { return "myco-app-darwin-" + arch + ".zip" }
 // WindowsAppAsset is the release asset holding the Windows app exe.
 func WindowsAppAsset(arch string) string { return "myco-app-windows-" + arch + ".exe" }
 
+// LinuxAppAsset is the release asset holding the Linux app (one binary
+// that opens the App in the browser).
+func LinuxAppAsset(arch string) string { return "myco-app-linux-" + arch }
+
+// exeAsset is the release asset that replaces Exe on goos.
+func exeAsset(goos, arch string) string {
+	if goos == "windows" {
+		return WindowsAppAsset(arch)
+	}
+	return LinuxAppAsset(arch)
+}
+
 const appZipMax = 300 << 20
 
 // Updater replaces the running app with a newer release and reopens it.
@@ -34,10 +46,11 @@ type Updater struct {
 	Version string
 	// Bundle is the running myco.app; "" when not running from one.
 	Bundle string
-	// Exe is the running app's exe on Windows ("" elsewhere): the update
-	// replaces it in place (Windows lets a running exe be renamed).
+	// Exe is the running app's program on Windows and Linux ("" on a Mac):
+	// the update replaces it in place (a running program can be renamed).
 	Exe  string
 	Arch string // default runtime.GOARCH
+	OS   string // default runtime.GOOS: which program Exe is
 	HTTP *http.Client
 	// API and Download are the release API and download base
 	// (release.APIURL / release.DownloadURL honour the env overrides).
@@ -61,6 +74,13 @@ func (u *Updater) arch() string {
 		return u.Arch
 	}
 	return runtime.GOARCH
+}
+
+func (u *Updater) goos() string {
+	if u.OS != "" {
+		return u.OS
+	}
+	return runtime.GOOS
 }
 
 func (u *Updater) client(timeout time.Duration) *http.Client {
@@ -146,17 +166,17 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.Exe != "" {
-		exe, err := release.FetchAsset(ctx, hc, u.Download, latest, WindowsAppAsset(u.arch()), appZipMax)
+		exe, err := release.FetchAsset(ctx, hc, u.Download, latest, exeAsset(u.goos(), u.arch()), appZipMax)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		if err := installExe(u.Exe, exe); err != nil {
+		if err := installExe(u.Exe, exe, u.goos()); err != nil {
 			writeErr(w, err)
 			return
 		}
-		// The myco CLI the app installed goes along (it has no service
-		// to restart on Windows); it runs on after the app quits.
+		// The myco CLI on this computer goes along; it runs on after the
+		// app quits (a runner keeps running until it is restarted).
 		if b.Local != nil {
 			b.Local.upgradeCLIDetached()
 		}
@@ -219,9 +239,12 @@ func installBundle(bundle string, zipped []byte) error {
 // written next to it, the running one renamed to <exe>.old (Windows allows
 // that, not overwriting it), then the new one takes its name. The old one
 // is removed when the new app starts (CleanOldExe).
-func installExe(exe string, data []byte) error {
-	if len(data) < 2 || data[0] != 'M' || data[1] != 'Z' {
+func installExe(exe string, data []byte, goos string) error {
+	if goos == "windows" && !bytes.HasPrefix(data, []byte("MZ")) {
 		return errors.New("the downloaded app is not a Windows program")
+	}
+	if goos != "windows" && !bytes.HasPrefix(data, []byte("\x7fELF")) {
+		return errors.New("the downloaded app is not a Linux program")
 	}
 	fresh := exe + ".new"
 	if err := os.WriteFile(fresh, data, 0o755); err != nil {

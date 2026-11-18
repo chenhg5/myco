@@ -152,7 +152,7 @@ myco console link        # 打印 http(s)://<hub>/c/<一次性代码>：只能�
   myco console link --open     # 输出里 opened: true 就是交过去了；没打开时会说原因，链接照样打印出来
   ```
 
-  （App 只有 Mac 和 Windows 版；Linux 上没有 App，把链接交给用户在他的 Mac 或 Windows 上用。）
+  （只有 Mac 版能这样直接收链接；Windows 和 Linux 版收不到，把链接交给用户，请他在 App 里点「加入已有的工作区」粘贴进去。）
 
   App 会弹出添加这个 Hub 的确认，请用户点一下。
 - **App 在别的电脑上**：把链接交给用户本人。让他在 App 里点「加入已有的工作区」粘贴进去，或者在那台电脑的浏览器里打开链接，点「用 myco App 打开」。

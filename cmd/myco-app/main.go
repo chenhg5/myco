@@ -1,7 +1,8 @@
-// Command myco-app is the myco console: a menu-bar app (macOS) that manages
-// one or more myco hubs with per-device console tokens kept in the system
-// keychain. With --serve it runs the same UI in a browser instead (any OS;
-// used for development and tests).
+// Command myco-app is the myco console: the App (a window on macOS and
+// Windows, the browser on Linux) that manages one or more myco hubs with
+// per-device console tokens kept in the system keychain. With --serve it
+// runs the same UI in a browser instead (any OS; used for development and
+// tests).
 package main
 
 import (
@@ -22,6 +23,7 @@ import (
 
 	"github.com/chenhg5/myco/internal/console"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/service"
 	"github.com/chenhg5/myco/internal/web"
 )
 
@@ -31,9 +33,17 @@ var version = "dev"
 func main() {
 	serve := flag.String("serve", "", "serve the console in a browser on this loopback address (e.g. 127.0.0.1:0) instead of opening the app window")
 	showVersion := flag.Bool("version", false, "print the version")
+	quit := flag.Bool("quit", false, "stop the running app (Linux, where it runs in the browser)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
+		return
+	}
+	if *quit {
+		if err := quitRunning(); err != nil {
+			fmt.Fprintln(os.Stderr, "myco-app:", err)
+			os.Exit(1)
+		}
 		return
 	}
 	storePath, err := console.DefaultStorePath()
@@ -45,19 +55,25 @@ func main() {
 		log.Fatal(err)
 	}
 	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath,
-		// No launchd/systemd: the app runs the local hub itself.
-		NoServiceManager: runtime.GOOS == "windows"}
-	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,
-		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: windowsExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
+		// No launchd/systemd --user (Windows; Linux in WSL, a container,
+		// a su shell): the app runs the local hub itself.
+		NoServiceManager: !serviceManager(home)}
+	keys := console.Keychain{}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		// No Secret Service on this computer: the tokens go to a 0600 file.
+		keys.File = filepath.Join(filepath.Dir(storePath), "console-secrets.json")
+	}
+	b := &console.Backend{Store: console.NewStore(storePath), Secrets: keys, Version: version, Local: local,
+		Update: &console.Updater{Version: version, Bundle: appBundle(), Exe: appExe(), API: release.APIURL(os.Getenv), Download: release.DownloadURL(os.Getenv)}}
 	// Pages open with what they showed last time (MYCO_APP_CACHE=off: no).
 	if os.Getenv("MYCO_APP_CACHE") != "off" {
-		if c, err := openCache(version); err != nil {
+		if c, err := openCache(version, keys); err != nil {
 			log.Printf("app cache off: %v", err)
 		} else {
 			b.Cache = c
 		}
 	}
-	// What a Windows update set aside is no longer running.
+	// What an update set aside (Windows, Linux) is no longer running.
 	console.CleanOldExe(b.Update.Exe)
 	if p, err := local.EnsureCLI(); err != nil {
 		log.Printf("could not install the bundled myco CLI: %v", err)
@@ -103,6 +119,19 @@ func main() {
 	}
 }
 
+// serviceManager says whether myco can install services for this user
+// here: launchd on a Mac, systemd --user on Linux when it answers.
+func serviceManager(home string) bool {
+	switch runtime.GOOS {
+	case "darwin":
+		return true
+	case "windows":
+		return false
+	}
+	m, err := service.Detect(home, service.ExecRunner{})
+	return err == nil && service.Reachable(m) == nil
+}
+
 // pickImage opens the system's panel for a picture (set by runGUI where
 // the web view's own panel cannot keep to pictures).
 var pickImage func() (string, error)
@@ -144,10 +173,10 @@ func appBundle() string {
 	return b
 }
 
-// windowsExe is the running app's exe on Windows ("" elsewhere), which an
-// update replaces in place.
-func windowsExe() string {
-	if runtime.GOOS != "windows" {
+// appExe is the running app's program on Windows and Linux ("" on a Mac,
+// where the update replaces the bundle), which an update replaces in place.
+func appExe() string {
+	if runtime.GOOS == "darwin" {
 		return ""
 	}
 	exe, err := os.Executable()
@@ -241,7 +270,7 @@ func guarded(h http.Handler, port int, k string) http.Handler {
 // openCache opens the page cache for this version of the app. The keychain
 // may ask the person first (a locked keychain): the app does not wait for
 // that, it starts without the cache this time.
-func openCache(version string) (*console.Cache, error) {
+func openCache(version string, keys console.Keychain) (*console.Cache, error) {
 	type result struct {
 		c   *console.Cache
 		err error
@@ -253,7 +282,7 @@ func openCache(version string) (*console.Cache, error) {
 			done <- result{nil, err}
 			return
 		}
-		key, err := console.KeychainCacheKey()
+		key, err := keys.CacheKey()
 		if err != nil {
 			done <- result{nil, err}
 			return
