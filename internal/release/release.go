@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -114,8 +115,25 @@ func Newer(a, b string) bool {
 	return ok1 && ok2 && va.cmp(vb) > 0
 }
 
-// Latest asks the release API for the latest published tag.
+// Latest asks the release API for the latest published tag. When the API
+// refuses (it allows 60 unauthenticated requests an hour per address, so a
+// shared network soon gets 403) or cannot be reached, the release page's
+// redirect is asked instead: github.com/<owner>/<repo>/releases/latest
+// answers with the tag's page in its Location, without that limit.
 func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
+	tag, err := latestFromAPI(ctx, hc, api)
+	if err == nil {
+		return tag, nil
+	}
+	if page := latestPage(api); page != "" {
+		if t, perr := latestFromPage(ctx, hc, page); perr == nil {
+			return t, nil
+		}
+	}
+	return "", err
+}
+
+func latestFromAPI(ctx context.Context, hc *http.Client, api string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
 	if err != nil {
 		return "", err
@@ -140,6 +158,50 @@ func Latest(ctx context.Context, hc *http.Client, api string) (string, error) {
 		return "", fmt.Errorf("release API returned an unexpected tag %q", out.TagName)
 	}
 	return out.TagName, nil
+}
+
+// latestPage is the release page that redirects to the latest tag, for an
+// API URL of the form <scheme>://<host>/repos/<owner>/<repo>/releases/latest
+// (api.github.com becomes github.com); "" for anything else.
+func latestPage(api string) string {
+	u, err := url.Parse(api)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 5 || parts[0] != "repos" || parts[3] != "releases" || parts[4] != "latest" {
+		return ""
+	}
+	host := u.Host
+	if host == "api.github.com" {
+		host = "github.com"
+	}
+	return u.Scheme + "://" + host + "/" + parts[1] + "/" + parts[2] + "/releases/latest"
+}
+
+func latestFromPage(ctx context.Context, hc *http.Client, page string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, page, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "myco-update-check")
+	c := *hc
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	i := strings.LastIndex(loc, "/tag/")
+	if resp.StatusCode/100 != 3 || i < 0 {
+		return "", fmt.Errorf("release page %s: HTTP %d", page, resp.StatusCode)
+	}
+	tag, _ := url.PathUnescape(loc[i+len("/tag/"):])
+	if _, ok := Parse(tag); !ok {
+		return "", fmt.Errorf("release page pointed at an unexpected tag %q", tag)
+	}
+	return tag, nil
 }
 
 // Checker keeps the latest release in memory, refreshed in the background.
