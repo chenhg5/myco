@@ -130,6 +130,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/files/") {
 		limit = domain.MaxProjectFile + 1 // ProjectService reports "too large" itself
 	}
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/pages" || r.URL.Path == "/v1/templates" ||
+		(strings.HasPrefix(r.URL.Path, "/v1/pages/") && strings.HasSuffix(r.URL.Path, "/versions"))) {
+		limit = domain.MaxPageSize + 1 // a page's or a template's zip; their handlers limit it themselves
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	s.mux.ServeHTTP(w, r)
 }
