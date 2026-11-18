@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(),
+	local := &console.Local{Home: home, Device: deviceName(), Bundled: bundledCLI(), ShellPath: console.LoginShellPath,
 		// No launchd/systemd: the app runs the local hub itself.
 		NoServiceManager: runtime.GOOS == "windows"}
 	b := &console.Backend{Store: console.NewStore(storePath), Secrets: console.Keychain{}, Version: version, Local: local,

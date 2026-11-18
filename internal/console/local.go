@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,13 @@ type Local struct {
 	NoServiceManager bool
 	// StartProcess starts a background process (tests replace it).
 	StartProcess func(command []string, logPath string, env []string) (pid int, err error)
+
+	// ShellPath returns the PATH a login shell of this user has: the App
+	// sets LoginShellPath; nil (tests) asks nothing.
+	ShellPath func() string
+
+	shellPathOnce sync.Once
+	shellPathVal  string
 
 	appHubMu      sync.Mutex
 	appHubStarted map[string]bool
@@ -146,9 +154,69 @@ func (l *Local) tailscalePath() string {
 		"/Applications/Tailscale.app/Contents/MacOS/Tailscale")...)
 }
 
+// loginShellPath is the PATH this user's login shell sets up, through
+// ShellPath (the App sets it to LoginShellPath; nil asks nothing, as in
+// tests). Asked once.
+func (l *Local) loginShellPath() string {
+	l.shellPathOnce.Do(func() {
+		if l.ShellPath != nil {
+			l.shellPathVal = l.ShellPath()
+		}
+	})
+	return l.shellPathVal
+}
+
+// LoginShellPath is the PATH this user's login shell sets up (~/.zshrc,
+// nvm, Homebrew, ...). A GUI app starts with a minimal PATH, so claude or
+// codex installed with npm, nvm, volta or bun would not be found by what
+// the App runs (myco join --fork, and the runner service it installs).
+// With a deadline; "" on Windows or when the shell does not answer.
+func LoginShellPath() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	sh := os.Getenv("SHELL")
+	if sh == "" {
+		sh = "/bin/zsh"
+		if runtime.GOOS != "darwin" {
+			sh = "/bin/bash"
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// A marker, since rc files may print their own lines.
+	out, _ := exec.CommandContext(ctx, sh, "-ilc", `printf '\n__MYCO_PATH__%s\n' "$PATH"`).Output()
+	path := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if v, ok := strings.CutPrefix(line, "__MYCO_PATH__"); ok {
+			path = strings.TrimSpace(v)
+		}
+	}
+	return path
+}
+
+// agentDirs are where agent CLIs are often installed without being on a
+// GUI app's PATH: Claude Code's own installer, npm, volta, bun, asdf, mise,
+// pnpm, and the newest nvm node.
+func (l *Local) agentDirs() []string {
+	h := l.Home
+	dirs := []string{
+		filepath.Join(h, ".claude", "local"), filepath.Join(h, ".npm-global", "bin"),
+		filepath.Join(h, ".volta", "bin"), filepath.Join(h, ".bun", "bin"),
+		filepath.Join(h, ".asdf", "shims"), filepath.Join(h, ".local", "share", "mise", "shims"),
+		filepath.Join(h, "Library", "pnpm"),
+	}
+	if nodes, _ := filepath.Glob(filepath.Join(h, ".nvm", "versions", "node", "*", "bin")); len(nodes) > 0 {
+		sort.Strings(nodes)
+		dirs = append(dirs, nodes[len(nodes)-1])
+	}
+	return dirs
+}
+
 // env is the environment for running myco: PATH extended with the
 // directories of the tools it may need (myco hub up runs cloudflared or
-// tailscale by name).
+// tailscale by name; join --fork and the runner run claude or codex), the
+// login shell's PATH, and the usual places agent CLIs are installed.
 func (l *Local) env() []string {
 	dirs := l.binDirs()
 	for _, p := range []string{l.cloudflaredPath(), l.tailscalePath(), l.mycoPath()} {
@@ -156,10 +224,22 @@ func (l *Local) env() []string {
 			dirs = append([]string{filepath.Dir(p)}, dirs...)
 		}
 	}
-	path := strings.Join(dirs, string(os.PathListSeparator))
-	if cur := os.Getenv("PATH"); cur != "" {
-		path += string(os.PathListSeparator) + cur
+	if sp := l.loginShellPath(); sp != "" {
+		dirs = append(dirs, filepath.SplitList(sp)...)
 	}
+	if cur := os.Getenv("PATH"); cur != "" {
+		dirs = append(dirs, filepath.SplitList(cur)...)
+	}
+	dirs = append(dirs, l.agentDirs()...)
+	seen := map[string]bool{}
+	var keep []string
+	for _, d := range dirs {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			keep = append(keep, d)
+		}
+	}
+	path := strings.Join(keep, string(os.PathListSeparator))
 	var env []string
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "PATH=") && !strings.HasPrefix(kv, "MYCO_") {
