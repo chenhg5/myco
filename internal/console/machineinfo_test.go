@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,8 +18,9 @@ func TestMachineInventoryCached(t *testing.T) {
 	write := func(id, text string) {
 		dir := filepath.Join(home, ".claude", "projects", "-code-app")
 		os.MkdirAll(dir, 0o755)
-		line := `{"type":"user","cwd":"` + home + `","sessionId":"` + id + `","timestamp":"2026-11-18T10:00:00Z","message":{"role":"user","content":"` + text + `"}}` + "\n"
-		os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(line), 0o644)
+		line, _ := json.Marshal(map[string]any{"type": "user", "cwd": home, "sessionId": id, "timestamp": "2026-11-18T10:00:00Z",
+			"message": map[string]any{"role": "user", "content": text}})
+		os.WriteFile(filepath.Join(dir, id+".jsonl"), append(line, '\n'), 0o644)
 	}
 	write("11111111-1111-4111-8111-111111111111", "first conversation")
 	_, s1 := MachineInventoryCached(context.Background(), home, "http://hub")

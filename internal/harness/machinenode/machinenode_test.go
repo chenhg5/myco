@@ -214,7 +214,8 @@ func TestAutoDirInsideAllowedFolders(t *testing.T) {
 	}
 	// An App that did not know asks for ~/myco/<name>: it goes in the
 	// first allowed folder instead, and nothing is made in ~/myco.
-	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); res.Denied || res.Workdir != filepath.Join(r.home, "code", "x") {
+	want, _ := filepath.EvalSymlinks(filepath.Join(r.home, "code")) // as the machine resolves it (8.3 names on Windows)
+	if res := r.run(t, "lead", api.SpawnRequest{Dir: "~/myco/x"}); res.Denied || res.Workdir != filepath.Join(want, "x") {
 		t.Fatalf("~/myco/<name> where ~/myco is not allowed: %+v", res)
 	}
 	if _, err := os.Stat(filepath.Join(r.home, "myco", "x")); err == nil {

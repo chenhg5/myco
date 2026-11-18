@@ -1219,7 +1219,9 @@ async function runMatrix(browser, size, scheme) {
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
-      if (!(await dialog.getByRole("button", { name: "开一个" }).isDisabled())) throw new Error("允许范围外的文件夹不能开");
+      // (The footer's button follows a render later.)
+      await page.waitForFunction(() => [...document.querySelectorAll(".app-modal-add button")].some((b) => b.textContent?.trim() === "开一个" && b.disabled), null, { timeout: 5_000 })
+        .catch(() => { throw new Error("允许范围外的文件夹不能开"); });
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-remote-new");
       await vpsFolder.fill("");
