@@ -1653,6 +1653,17 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-quote-text", { hasText: "第一件" }).waitFor({ timeout: 25_000 });
       if (await page.locator(".conv-detail .trace-foot").count()) throw new Error("耗时和费用应跟着回复（复制按钮那一行），不在过程下面");
       await page.locator(".conv-detail .conv-usage").first().waitFor({ state: "attached", timeout: 10_000 });
+      // What the finished run changed: one line that opens to the files, a
+      // file to its diff.
+      const changes = page.locator(".conv-detail [data-testid=trace-changes]").first();
+      await changes.waitFor({ timeout: 10_000 });
+      if (!/改了 2 个文件/.test(await changes.innerText())) throw new Error("改动应写成「改了 2 个文件」");
+      await clickVisible(page, changes.locator("button.trace-head"));
+      await clickVisible(page, changes.locator(".tc-file", { hasText: "CHANGELOG.md" }).locator("button.trace-line"));
+      await changes.locator(".tc-line.is-add", { hasText: "## v0.16.8" }).waitFor({ timeout: 5_000 });
+      await changes.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-changes");
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 

@@ -664,8 +664,68 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
           <Elapsed since={turnSince} className="trace-usage" />
         </div>
       )}
+      {!movingHere && events && <ChangesCard steps={events.filter((e) => e.data.kind === "change").map((e) => e.data)} />}
       {usageText && !onUsage && <div className="trace-foot">{usageText}</div>}
     </div>
+  );
+}
+
+/** What the run changed in its folder (runner/changes.go), once it ended:
+ *  one line, "改了 3 个文件 +12 −4", that opens to the files; a file opens
+ *  to its diff. */
+export function ChangesCard({ steps }: { steps: TraceStep[] }) {
+  const [open, setOpen] = useState(false);
+  const files = steps.filter((s) => s.tool);
+  if (files.length === 0) return null;
+  const more = steps.reduce((n, s) => (!s.tool && /^\+\d+$/.test(s.text || "") ? n + Number(s.text!.slice(1)) : n), 0);
+  const added = files.reduce((n, s) => n + (s.added || 0), 0);
+  const removed = files.reduce((n, s) => n + (s.removed || 0), 0);
+  const count = files.length + more;
+  return (
+    <div className={cn("trace-group trace-changes", open && "is-open")} data-testid="trace-changes">
+      <button type="button" className="trace-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <ChevronRight className="trace-chev" />
+        <span className="trace-title">{L(`改了 ${count} 个文件`, `Changed ${count} file${count === 1 ? "" : "s"}`)}</span>
+        <span className="tc-count"><span className="tc-add">+{added}</span> <span className="tc-del">−{removed}</span></span>
+      </button>
+      {open && (
+        <div className="trace-body">
+          {files.map((f) => <ChangeRow key={f.tool} step={f} />)}
+          {more > 0 && <div className="trace-note">{L(`还有 ${more} 个文件没列出来`, `${more} more files not listed`)}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CHANGE_LABELS: Record<string, [string, string]> = { A: ["新建", "Added"], M: ["修改", "Changed"], D: ["删除", "Deleted"], R: ["改名", "Renamed"] };
+
+function ChangeRow({ step }: { step: TraceStep }) {
+  const [open, setOpen] = useState(false);
+  const label = CHANGE_LABELS[step.input || "M"] || CHANGE_LABELS.M;
+  return (
+    <div className={cn("trace-row is-tool tc-file", open && "is-open")} data-change={step.input}>
+      <button type="button" className="trace-line" onClick={() => setOpen((o) => !o)} disabled={!step.output}>
+        <FileText />
+        <span className={cn("tc-kind", `is-${(step.input || "M").toLowerCase()}`)}>{L(label[0], label[1])}</span>
+        <span className="trace-arg mono" title={step.tool}>{step.tool}</span>
+        <span className="tc-count"><span className="tc-add">+{step.added || 0}</span> <span className="tc-del">−{step.removed || 0}</span></span>
+      </button>
+      {open && step.output && <DiffView diff={step.output} />}
+    </div>
+  );
+}
+
+/** A unified diff, its added and removed lines coloured; the file headers
+ *  (--- / +++ / diff --git / index) left out. */
+function DiffView({ diff }: { diff: string }) {
+  const lines = diff.replace(/\n$/, "").split("\n").filter((l) => !/^(diff --git |index |--- |\+\+\+ |new file mode|deleted file mode|similarity index|rename (from|to) )/.test(l));
+  return (
+    <pre className="trace-pre tc-diff">
+      {lines.map((l, i) => (
+        <span key={i} className={cn("tc-line", l.startsWith("+") ? "is-add" : l.startsWith("-") ? "is-del" : l.startsWith("@@") ? "is-hunk" : "")}>{l || " "}{"\n"}</span>
+      ))}
+    </pre>
   );
 }
 
