@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
+import { Activity, CalendarDays, Clock, Coffee, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
 import type { Automation, AutomationRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
@@ -56,6 +56,11 @@ const templates = (): (Start & { icon: typeof Clock; hint: string })[] => [
     body: L("检查一下服务、CI 和依赖有没有异常。一切正常就回一句「正常」，有问题说清楚是什么、影响多大。", "Check the services, CI and dependencies. If all is well, say so in a word; if not, say what is wrong and how much it matters."),
   },
   {
+    icon: NotebookPen, name: L("下班前写日报", "End-of-day notes"), every: { kind: "weekdays", hour: 18, minute: 0 }, hook: false,
+    hint: L("工作日 18:00，整理今天做完的、卡住的和明天要做的", "Weekdays at 18:00: what got done today, what is stuck, what is next"),
+    body: L("整理一下今天做完了什么、哪里卡住了、明天要做什么，写成几行日报回我。", "Write a few lines on what got done today, what is stuck, and what is next."),
+  },
+  {
     icon: Webhook, name: L("CI 失败时排查", "When CI fails"), every: null, hook: true,
     hint: L("CI 构建失败时调用，让它看日志找原因", "Called when a build fails: it reads the log and finds why"),
     body: L("CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}", "The CI build failed. Read the log and find why; fix it if you can, else tell me where it is stuck:\n{{payload}}"),
@@ -105,7 +110,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
     <div className="au-templates">
       {templates().map((t) => (
         <button key={t.name} type="button" className="au-template" onClick={() => setEditing({ start: t })}>
-          <span className={cn("au-icon", t.hook && "is-hook")}><t.icon /></span>
+          <span className="tp-icon"><t.icon /></span>
           <span className="au-template-text">
             <span className="au-template-name">{t.name}</span>
             <span className="au-template-hint">{t.hint}</span>
@@ -113,7 +118,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
         </button>
       ))}
       <button type="button" className="au-template is-blank" onClick={() => setEditing({ start: blank })}>
-        <span className="au-icon is-blank"><Plus /></span>
+        <span className="tp-icon"><Plus /></span>
         <span className="au-template-text">
           <span className="au-template-name">{L("从空白开始", "Start from blank")}</span>
           <span className="au-template-hint">{L("自己写要它做什么、什么时候做", "Write what it does, and when")}</span>
@@ -146,7 +151,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
       ) : list.length === 0 ? (
         <div data-testid="automations-empty">
           <div className="au-none">
-            <span className="au-none-icon"><Clock /></span>
+            <span className="tp-icon"><Clock /></span>
             <div>
               <b>{L("还没有自动化", "No automations yet")}</b>
               <p>{L("比如每天早上汇总 issue、CI 失败时看日志。它的回复在你和它的对话里，标着「自动」。从下面挑一个开始。", "Say, a morning summary of issues, or a look at the log when CI fails. Its answers are in your chat with it, marked 自动. Start from one below.")}</p>
