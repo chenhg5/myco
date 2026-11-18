@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarDays, Clock, Coffee, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
+import { Activity, CalendarDays, Clock, Coffee, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
 import type { Automation, AutomationRun } from "@/api";
 import { ApiError, appApi } from "@/appapi";
@@ -7,6 +7,8 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
+import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
+import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
 import { L } from "@/lib/i18n";
@@ -54,14 +56,23 @@ const templates = (): (Start & { icon: typeof Clock; hint: string })[] => [
     body: L("检查一下服务、CI 和依赖有没有异常。一切正常就回一句「正常」，有问题说清楚是什么、影响多大。", "Check the services, CI and dependencies. If all is well, say so in a word; if not, say what is wrong and how much it matters."),
   },
   {
+    icon: NotebookPen, name: L("下班前写日报", "End-of-day notes"), every: { kind: "weekdays", hour: 18, minute: 0 }, hook: false,
+    hint: L("工作日 18:00，整理今天做完的、卡住的和明天要做的", "Weekdays at 18:00: what got done today, what is stuck, what is next"),
+    body: L("整理一下今天做完了什么、哪里卡住了、明天要做什么，写成几行日报回我。", "Write a few lines on what got done today, what is stuck, and what is next."),
+  },
+  {
     icon: Webhook, name: L("CI 失败时排查", "When CI fails"), every: null, hook: true,
     hint: L("CI 构建失败时调用，让它看日志找原因", "Called when a build fails: it reads the log and finds why"),
     body: L("CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}", "The CI build failed. Read the log and find why; fix it if you can, else tell me where it is stuck:\n{{payload}}"),
   },
 ];
 
+/** What each hub's page showed last: back on the page, it shows that at
+ *  once and refreshes behind it (skeletons only the first time). */
+const seen = new Map<string, Automation[]>();
+
 export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: AgentRow[]; now: number }) {
-  const [list, setList] = useState<Automation[] | null>(null);
+  const [list, setList] = useState<Automation[] | null>(() => seen.get(hubId) ?? null);
   const [unsupported, setUnsupported] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -69,13 +80,13 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
   const [removing, setRemoving] = useState<Automation | null>(null);
   const menu = useContextMenu();
   const load = useCallback(() => {
-    appApi.automations(hubId).then((r) => { setList(r.automations || []); setUnsupported(false); }, (e) => {
+    appApi.automations(hubId).then((r) => { seen.set(hubId, r.automations || []); setList(r.automations || []); setUnsupported(false); }, (e) => {
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
       else setError(e);
       setList([]);
     });
   }, [hubId]);
-  useEffect(() => { setList(null); load(); const t = setInterval(load, 20_000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { setList(seen.get(hubId) ?? null); load(); const t = setInterval(load, 20_000); return () => clearInterval(t); }, [hubId, load]);
   const rowOf = (n: string) => rows.find((x) => x.hub.id === hubId && x.st.agent.name === n);
 
   const toggle = async (a: Automation) => {
@@ -95,14 +106,35 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
     try { await appApi.deleteAutomation(hubId, a.id); setRemoving(null); load(); } catch (e) { setError(e); setRemoving(null); } finally { setBusy(""); }
   };
 
+  const gallery = (
+    <div className="au-templates">
+      {templates().map((t) => (
+        <button key={t.name} type="button" className="au-template" onClick={() => setEditing({ start: t })}>
+          <span className="tp-icon"><t.icon /></span>
+          <span className="au-template-text">
+            <span className="au-template-name">{t.name}</span>
+            <span className="au-template-hint">{t.hint}</span>
+          </span>
+        </button>
+      ))}
+      <button type="button" className="au-template is-blank" onClick={() => setEditing({ start: blank })}>
+        <span className="tp-icon"><Plus /></span>
+        <span className="au-template-text">
+          <span className="au-template-name">{L("从空白开始", "Start from blank")}</span>
+          <span className="au-template-hint">{L("自己写要它做什么、什么时候做", "Write what it does, and when")}</span>
+        </span>
+      </button>
+    </div>
+  );
+  const on = (list || []).filter((a) => a.enabled).length;
+  const last = (list || []).map((a) => a.last_run).filter(Boolean).sort((x, y) => (y!.at > x!.at ? 1 : -1))[0];
+
   return (
     <div className="pc au">
-      {!(list && list.length === 0 && !unsupported) && <div className="pc-head">
-        <p className="pc-intro">{L("到点或者外部系统通知时，替你给 agent 派一个任务。跑在工作区的 Hub 上，电脑关着也照常。", "On a schedule, or when an outside system calls, a task goes to an agent for you. It runs on the workspace's hub, so it goes on while your computers are off.")}</p>
-        {!unsupported && list && list.length > 0 && (
-          <button type="button" className="app-btn app-btn-quiet" onClick={() => setEditing({ start: blank })}><Plus />{L("新建自动化", "New automation")}</button>
-        )}
-      </div>}
+      <PageHero title={L("自动化", "Automations")}
+        subtitle={L("让 agent 按时、按事件自己干活。跑在工作区的 Hub 上，电脑关着也照常。", "Agents at work on a schedule or when something happens. It runs on the workspace's hub, so it goes on while your computers are off.")}>
+        {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setEditing({ start: blank })}><Plus />{L("新建自动化", "New automation")}</button>}
+      </PageHero>
       <ErrorText error={error} />
       {unsupported ? (
         <div className="app-empty" data-testid="automations-unsupported">
@@ -110,33 +142,34 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
           <h2>{L("这个工作区还不能用自动化", "No automations in this workspace yet")}</h2>
           <p>{L("它的 Hub 版本太旧。在服务器上运行 sudo myco upgrade，升级到 v0.19.22 或更新。", "Its hub is too old: run sudo myco upgrade on the server (v0.19.22 or later).")}</p>
         </div>
-      ) : list === null ? null : list.length === 0 ? (
-        <div className="au-start" data-testid="automations-empty">
-          <div className="app-empty au-empty">
-            <div className="app-empty-icon"><Clock /></div>
-            <h2>{L("让 agent 按时自己干活", "Let agents work on their own schedule")}</h2>
-            <p>{L("比如每天早上汇总 issue、CI 失败时看日志。它的回复在你和它的对话里，标着「自动」。", "Say, a morning summary of issues, or a look at the log when CI fails. Its answers are in your chat with it, marked 自动.")}</p>
+      ) : list === null ? (
+        <>
+          <div className="au-stats" aria-hidden>{[0, 1, 2].map((i) => <div key={i} className="au-stat"><span className="skel skel-line is-thin" style={{ width: "40%" }} /><span className="skel skel-line" style={{ width: "60%", height: 18 }} /></div>)}</div>
+          <SectionSkeleton />
+          <RowsSkeleton rows={3} className="pc-list" />
+        </>
+      ) : list.length === 0 ? (
+        <div data-testid="automations-empty">
+          <div className="au-none">
+            <span className="tp-icon"><Clock /></span>
+            <div>
+              <b>{L("还没有自动化", "No automations yet")}</b>
+              <p>{L("比如每天早上汇总 issue、CI 失败时看日志。它的回复在你和它的对话里，标着「自动」。从下面挑一个开始。", "Say, a morning summary of issues, or a look at the log when CI fails. Its answers are in your chat with it, marked 自动. Start from one below.")}</p>
+            </div>
           </div>
-          <div className="au-templates">
-            {templates().map((t) => (
-              <button key={t.name} type="button" className="au-template" onClick={() => setEditing({ start: t })}>
-                <span className={cn("au-icon", t.hook && "is-hook")}><t.icon /></span>
-                <span className="au-template-text">
-                  <span className="au-template-name">{t.name}</span>
-                  <span className="au-template-hint">{t.hint}</span>
-                </span>
-              </button>
-            ))}
-            <button type="button" className="au-template is-blank" onClick={() => setEditing({ start: blank })}>
-              <span className="au-icon is-blank"><Plus /></span>
-              <span className="au-template-text">
-                <span className="au-template-name">{L("从空白开始", "Start from blank")}</span>
-                <span className="au-template-hint">{L("自己写要它做什么、什么时候做", "Write what it does, and when")}</span>
-              </span>
-            </button>
-          </div>
+          <SectionHead title={L("从模板开始", "Start from one of these")} />
+          {gallery}
         </div>
       ) : (
+        <>
+          <div className="au-stats">
+            <div className="au-stat"><span>{L("在运行", "Running")}</span><b>{on}</b></div>
+            <div className="au-stat"><span>{L("已暂停", "Paused")}</span><b className={on === list.length ? "is-quiet" : ""}>{list.length - on}</b></div>
+            <div className="au-stat"><span>{L("最近一次", "Last run")}</span>
+              {last ? <b className={cn("au-stat-last", outcomeTone(last))}>{timeAgo(last.at, now)}<small>{outcomeWords(last)}</small></b> : <b className="is-quiet">—</b>}
+            </div>
+          </div>
+          <SectionHead title={L("我的自动化", "Your automations")} count={list.length} />
         <div className="pc-list" data-testid="automations">
           {list.map((a) => {
             const r = rowOf(a.to);
@@ -185,6 +218,9 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
             );
           })}
         </div>
+          <SectionHead title={L("从模板开始", "Start from one of these")} />
+          {gallery}
+        </>
       )}
       <AutomationEditor hubId={hubId} rows={rows} editing={editing} now={now} onClose={() => setEditing(null)} onChanged={load} />
       <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={L("删除这个自动化？", "Delete this automation?")}

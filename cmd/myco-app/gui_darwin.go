@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -79,6 +80,18 @@ func runGUI(h http.Handler, onLink func(string), setRelaunch func(func())) error
 			TitleBar:                application.MacTitleBarHiddenInset,
 			InvisibleTitleBarHeight: 40,
 		},
+	})
+	// StartState alone is not always kept: Windows takes the first
+	// ShowWindow as the launcher says (a shortcut's "normal window"), so it
+	// is maximised once more when it first shows. After that it stays as
+	// the person leaves it.
+	var maximised sync.Once
+	window.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+		maximised.Do(func() {
+			if !window.IsMaximised() {
+				window.Maximise()
+			}
+		})
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		window.Hide()

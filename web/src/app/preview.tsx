@@ -259,7 +259,8 @@ export function DockPanel({ open, onOpenChange, onClose, closeLabel, keepMounted
           // Beside the chat, working in the chat does not close it; Esc
           // does, from the panel only (in the chat's box it is the box's).
           onInteractOutside={(e) => { if (docked) e.preventDefault(); }}
-          onEscapeKeyDown={(e) => { if (docked && !panel.current?.contains(document.activeElement)) e.preventDefault(); }}>
+          // (a picture opened from it, full size, takes Esc for itself)
+          onEscapeKeyDown={(e) => { if ((docked && !panel.current?.contains(document.activeElement)) || document.querySelector(".lightbox")) e.preventDefault(); }}>
           {!full && (
             <div className="fp-edge" role="separator" aria-orientation="vertical" aria-label={L("拖动调整宽度", "Drag to resize")}
               title={L("拖动调整宽度，双击恢复", "Drag to resize; double-click to reset")} {...edge} onPointerCancel={edge.onPointerUp} />

@@ -26,14 +26,22 @@ type LocalSession struct {
 	LastActive time.Time `json:"last_active"`
 	// Title is the session's first request, shortened.
 	Title string `json:"title,omitempty"`
-	// Joined is set when the session is already an agent here.
-	Joined *JoinedAs `json:"joined,omitempty"`
+	// Joined is set when the session is already an agent here (the first,
+	// for older apps); JoinedAll is every workspace it joined.
+	Joined    *JoinedAs  `json:"joined,omitempty"`
+	JoinedAll []JoinedAs `json:"joined_all,omitempty"`
+
+	// auto: a program ran it (claude -p or the Agent SDK, codex exec),
+	// not a person in a terminal.
+	auto bool
 }
 
-// JoinedAs names the agent a session joined as, and on which hub.
+// JoinedAs names the agent a session joined as, and on which hub (HubName:
+// the hub's name in this app, when it is one of the app's).
 type JoinedAs struct {
-	Agent string `json:"agent"`
-	Hub   string `json:"hub"`
+	Agent   string `json:"agent"`
+	Hub     string `json:"hub"`
+	HubName string `json:"hub_name,omitempty"`
 }
 
 const (
@@ -111,8 +119,9 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 
 	joined := l.joinedSessions()
 	var out []LocalSession
-	byID := map[string]int{}   // cli:session → index in out
-	byConv := map[string]int{} // a conversation's first request → index in out
+	byID := map[string]int{}    // cli:session → index in out
+	byConv := map[string]int{}  // a conversation's first request → index in out
+	byText := map[string]bool{} // cli, folder and first request of a listed unjoined session
 	for _, f := range files {
 		var s LocalSession
 		var first string
@@ -126,7 +135,7 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 			continue
 		}
 		id := f.cli + ":" + s.SessionID
-		j, isJoined := joined[id]
+		js := joined[id]
 		conv := ""
 		if first != "" {
 			conv = f.cli + "\x00" + s.Workdir + "\x00" + first
@@ -139,18 +148,26 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 			// An older copy of a conversation already listed (files come
 			// newest first): it only adds that the conversation joined.
 			byID[id] = i
-			if isJoined && out[i].Joined == nil {
-				out[i].Joined = &j
-			}
+			out[i].addJoined(js)
 			continue
+		}
+		if len(js) == 0 {
+			// Not joined yet: leave out what scripts ran (they repeat one
+			// prompt many times), and show a request asked again in the
+			// same folder once (the newest), since the rows would read alike.
+			text := f.cli + "\x00" + s.Workdir + "\x00" + firstText(first)
+			if s.auto || (first != "" && byText[text]) {
+				continue
+			}
+			if first != "" {
+				byText[text] = true
+			}
 		}
 		if len(out) >= sessionsMax {
 			continue
 		}
 		s.LastActive = f.mod
-		if isJoined {
-			s.Joined = &j
-		}
+		s.addJoined(js)
 		byID[id] = len(out)
 		if conv != "" {
 			byConv[conv] = len(out)
@@ -160,9 +177,29 @@ func (l *Local) LocalSessions(now time.Time) []LocalSession {
 	return out
 }
 
-// joinedSessions maps "cli:session" to the local agent profile bound to it.
-func (l *Local) joinedSessions() map[string]JoinedAs {
-	out := map[string]JoinedAs{}
+// addJoined adds workspaces the session joined (each once).
+func (s *LocalSession) addJoined(js []JoinedAs) {
+	for _, j := range js {
+		dup := false
+		for _, have := range s.JoinedAll {
+			if have.Agent == j.Agent && have.Hub == j.Hub {
+				dup = true
+			}
+		}
+		if !dup {
+			s.JoinedAll = append(s.JoinedAll, j)
+		}
+	}
+	if s.Joined == nil && len(s.JoinedAll) > 0 {
+		first := s.JoinedAll[0]
+		s.Joined = &first
+	}
+}
+
+// joinedSessions maps "cli:session" to the local agent profiles bound to it
+// (one per workspace the session joined).
+func (l *Local) joinedSessions() map[string][]JoinedAs {
+	out := map[string][]JoinedAs{}
 	profiles, err := config.ListProfiles(filepath.Join(l.Home, ".myco", "agents"))
 	if err != nil {
 		return out
@@ -172,8 +209,9 @@ func (l *Local) joinedSessions() map[string]JoinedAs {
 		if h == "" {
 			h = p.Config.Harness
 		}
-		if p.Config.SessionID != "" {
-			out[h+":"+p.Config.SessionID] = JoinedAs{Agent: p.Config.Agent, Hub: p.Config.Hub}
+		if p.Config.SessionID != "" && p.Config.Replaced == "" {
+			k := h + ":" + p.Config.SessionID
+			out[k] = append(out[k], JoinedAs{Agent: p.Config.Agent, Hub: p.Config.Hub})
 		}
 	}
 	return out
@@ -184,12 +222,14 @@ func (l *Local) joinedSessions() map[string]JoinedAs {
 // and text of the first request, which a copy keeps).
 func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 	s = LocalSession{CLI: "claude", SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl")}
+	entry := ""
 	eachLine(path, func(line []byte) bool {
 		var e struct {
 			Type        string `json:"type"`
 			Cwd         string `json:"cwd"`
 			IsSidechain bool   `json:"isSidechain"`
 			Timestamp   string `json:"timestamp"`
+			Entrypoint  string `json:"entrypoint"`
 			Message     struct {
 				Content json.RawMessage `json:"content"`
 			} `json:"message"`
@@ -200,6 +240,12 @@ func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 		if s.Workdir == "" && e.Cwd != "" {
 			s.Workdir = e.Cwd
 		}
+		if entry == "" && e.Entrypoint != "" {
+			// "cli" in a terminal, "claude-desktop" in the desktop app,
+			// "sdk-cli" for claude -p, "sdk-ts" / "sdk-py" for the Agent SDK.
+			entry = e.Entrypoint
+			s.auto = strings.HasPrefix(entry, "sdk")
+		}
 		if first == "" && e.Type == "user" && !e.IsSidechain {
 			text := contentText(e.Message.Content)
 			if t := shorten(text); t != "" {
@@ -207,7 +253,7 @@ func readClaudeSession(path string) (s LocalSession, first string, ok bool) {
 				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(text), " ")
 			}
 		}
-		return s.Workdir == "" || first == ""
+		return s.Workdir == "" || first == "" || entry == ""
 	})
 	return s, first, s.Workdir != ""
 }
@@ -219,10 +265,14 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 			Type      string `json:"type"`
 			Timestamp string `json:"timestamp"`
 			Payload   struct {
-				ID      string `json:"id"`
-				Cwd     string `json:"cwd"`
-				Type    string `json:"type"`
-				Message string `json:"message"`
+				ID         string          `json:"id"`
+				Cwd        string          `json:"cwd"`
+				Originator string          `json:"originator"`
+				Source     json.RawMessage `json:"source"`
+				Type       string          `json:"type"`
+				Message    string          `json:"message"`
+				Role       string          `json:"role"`
+				Content    json.RawMessage `json:"content"`
 			} `json:"payload"`
 		}
 		if json.Unmarshal(line, &e) != nil {
@@ -231,15 +281,45 @@ func readCodexSession(path string) (s LocalSession, first string, ok bool) {
 		switch {
 		case e.Type == "session_meta":
 			s.SessionID, s.Workdir = e.Payload.ID, e.Payload.Cwd
-		case e.Type == "event_msg" && e.Payload.Type == "user_message" && first == "":
-			if t := shorten(e.Payload.Message); t != "" {
+			// codex exec: originator codex_exec, source "exec".
+			s.auto = e.Payload.Originator == "codex_exec" || string(e.Payload.Source) == `"exec"`
+		case first != "":
+		case e.Type == "event_msg" && e.Payload.Type == "user_message",
+			// Newer versions write the request only as a message item.
+			e.Type == "response_item" && e.Payload.Type == "message" && e.Payload.Role == "user":
+			text := e.Payload.Message
+			if e.Type == "response_item" {
+				text = codexInputText(e.Payload.Content)
+			}
+			if t := shorten(text); t != "" && !strings.HasPrefix(t, "# AGENTS.md instructions") {
 				s.Title = t
-				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(e.Payload.Message), " ")
+				first = e.Timestamp + "\x00" + strings.Join(strings.Fields(text), " ")
 			}
 		}
 		return s.SessionID == "" || first == ""
 	})
 	return s, first, s.SessionID != "" && s.Workdir != ""
+}
+
+// codexInputText is the text a person typed in a Codex message item.
+func codexInputText(raw json.RawMessage) string {
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	json.Unmarshal(raw, &parts)
+	for _, p := range parts {
+		if p.Type == "input_text" && strings.TrimSpace(p.Text) != "" {
+			return p.Text
+		}
+	}
+	return ""
+}
+
+// firstText is the request's text without its time.
+func firstText(first string) string {
+	_, text, _ := strings.Cut(first, "\x00")
+	return text
 }
 
 // eachLine calls fn for the first scanLines lines while it returns true.
@@ -292,7 +372,27 @@ func shorten(s string) string {
 }
 
 func (b *Backend) listLocalSessions(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": nonNilSessions(b.Local.LocalSessions(time.Now()))})
+	sessions := b.Local.LocalSessions(time.Now())
+	// Name the workspaces as this app does.
+	if hubs, err := b.Store.List(); err == nil {
+		name := func(url string) string {
+			for _, h := range hubs {
+				if config.SameHub(h.URL, url) {
+					return h.Name
+				}
+			}
+			return ""
+		}
+		for i := range sessions {
+			for k := range sessions[i].JoinedAll {
+				sessions[i].JoinedAll[k].HubName = name(sessions[i].JoinedAll[k].Hub)
+			}
+			if j := sessions[i].Joined; j != nil {
+				j.HubName = name(j.Hub)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": nonNilSessions(sessions)})
 }
 
 func nonNilSessions(s []LocalSession) []LocalSession {

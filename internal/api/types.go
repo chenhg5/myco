@@ -1286,6 +1286,23 @@ type Page struct {
 	Live   bool `json:"live,omitempty"`
 	Port   int  `json:"port,omitempty"`
 	Online bool `json:"online,omitempty"`
+	// Template: the template it was made from (hubs from v0.20.5).
+	Template *PageTemplate `json:"template,omitempty"`
+}
+
+// PageTemplate says which template a page was made from, and its data's
+// structure (the manifest's collections).
+type PageTemplate struct {
+	ID      string                        `json:"id"`
+	Slug    string                        `json:"slug"`
+	Name    string                        `json:"name"`
+	Version string                        `json:"version"`
+	Data    map[string]TemplateCollection `json:"data,omitempty"`
+	// Permissions it asked for (send, download).
+	Permissions []string `json:"permissions,omitempty"`
+	// Latest is the app's newest version, when newer than the page's
+	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
+	Latest string `json:"latest,omitempty"`
 }
 
 // PageVersion is one publish of a page.
@@ -1326,4 +1343,185 @@ type PageStateRequest struct {
 type PageStateConflict struct {
 	Error
 	Latest PageState `json:"latest"`
+}
+
+// Pin is one thing a conversation keeps at hand (置顶), above its messages
+// in the App: a web address (link), a file, or one of its messages. Both
+// parties of the conversation see the same pins; either adds them.
+type Pin struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"` // link, file or message
+	Title string `json:"title"`
+	// Target is the address (link) or the message's id (message).
+	Target string      `json:"target,omitempty"`
+	File   *Attachment `json:"file,omitempty"`
+	// AddedBy is who pinned it: an agent's name or a console sender.
+	AddedBy string    `json:"added_by"`
+	At      time.Time `json:"at"`
+}
+
+// PinList is GET /v1/pins?with=X (and ?a=Y for a console looking at two
+// agents' conversation): the conversation's pins in their order.
+type PinList struct {
+	A    string `json:"a"`
+	With string `json:"with"`
+	Pins []Pin  `json:"pins"`
+	Max  int    `json:"max"`
+}
+
+// PinCreate is POST /v1/pins: pin something to the conversation between A
+// (the caller when empty: the agent itself, or the console's sender) and
+// With. The same thing pinned again is not added twice.
+type PinCreate struct {
+	A      string      `json:"a,omitempty"`
+	With   string      `json:"with"`
+	Kind   string      `json:"kind"`
+	Title  string      `json:"title,omitempty"`
+	Target string      `json:"target,omitempty"`
+	File   *Attachment `json:"file,omitempty"`
+}
+
+// PinUpdate is PATCH /v1/pins/{id}: a new title.
+type PinUpdate struct {
+	A     string `json:"a,omitempty"`
+	With  string `json:"with"`
+	Title string `json:"title"`
+}
+
+// PinOrder is PUT /v1/pins/order: the pins in this order (those not named
+// keep theirs, after); the answer is the PinList.
+type PinOrder struct {
+	A    string   `json:"a,omitempty"`
+	With string   `json:"with"`
+	IDs  []string `json:"ids"`
+}
+
+// PageRecord is one record of a page's data (hubs from v0.20.5): a JSON
+// object in a named collection, with a version that counts its writes.
+type PageRecord struct {
+	Collection string          `json:"collection"`
+	ID         string          `json:"id"`
+	Data       json.RawMessage `json:"data"`
+	Version    int             `json:"version"`
+	UpdatedBy  string          `json:"updated_by,omitempty"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
+// PageRecords is GET /v1/pages/{id}/data: the records (in their order) and
+// the page's latest change, to watch from.
+type PageRecords struct {
+	Records []PageRecord `json:"records"`
+	Seq     int64        `json:"seq"`
+}
+
+// PageRecordWrite is PUT /v1/pages/{id}/data/{collection}/{record} and
+// POST /v1/pages/{id}/data/{collection} (a new record, its id made up):
+// IfVersion is the version read (0: it must be new); leave it out to write
+// whatever it is. A conflict answers 409 with the latest in "latest".
+type PageRecordWrite struct {
+	Data      json.RawMessage `json:"data"`
+	IfVersion *int            `json:"if_version,omitempty"`
+}
+
+// PageRecordConflict is a 409 on a record write: the error and the record
+// as it is now.
+type PageRecordConflict struct {
+	Error
+	Latest PageRecord `json:"latest"`
+}
+
+// PageChange is one change of a page's data.
+type PageChange struct {
+	Seq        int64           `json:"seq"`
+	Collection string          `json:"collection"`
+	Record     string          `json:"record"`
+	Op         string          `json:"op"`
+	Data       json.RawMessage `json:"data,omitempty"`
+	Version    int             `json:"version"`
+	By         string          `json:"by,omitempty"`
+	At         time.Time       `json:"at"`
+}
+
+// PageChanges is GET /v1/pages/{id}/changes?after=&wait=: what changed
+// after a point, oldest first; Seq is where to go on from. Reset: the feed
+// no longer goes back that far; list the records again.
+type PageChanges struct {
+	Changes []PageChange `json:"changes"`
+	Seq     int64        `json:"seq"`
+	Reset   bool         `json:"reset,omitempty"`
+}
+
+// Template is one template in the workspace's library (hubs from v0.20.5).
+type Template struct {
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Kind        string `json:"kind"`
+	// Category is its shelf: office, dev, tools, life, creative, game or other
+	// (hubs from v0.20.6; empty before, and when the manifest has none).
+	Category string `json:"category,omitempty"`
+	// Icon is its icon, SVG markup (hubs from v0.20.7): show its shape,
+	// e.g. as a CSS mask, never as HTML.
+	Icon        string                        `json:"icon,omitempty"`
+	Version     string                        `json:"version"`
+	Publisher   string                        `json:"publisher"`
+	Data        map[string]TemplateCollection `json:"data,omitempty"`
+	Permissions []string                      `json:"permissions,omitempty"`
+	Export      []string                      `json:"export,omitempty"`
+	// Guide is its agent's guide (agent.md): how to fill its data.
+	Guide string `json:"guide,omitempty"`
+	// Official: one of myco's, in every workspace (hubs from v0.20.5).
+	Official  bool              `json:"official,omitempty"`
+	Versions  []TemplateVersion `json:"versions"`
+	CanManage bool              `json:"can_manage"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// AppSync is what POST /v1/templates/sync found: how many official apps
+// the hub offers, which came new or newer, where they come from (built in,
+// kept from an earlier fetch, the "apps" release), and a fetch error.
+type AppSync struct {
+	Apps    int        `json:"apps"`
+	Updated []string   `json:"updated,omitempty"`
+	Source  string     `json:"source"`
+	At      *time.Time `json:"fetched_at,omitempty"`
+	Error   string     `json:"error,omitempty"`
+}
+
+// TemplateCollection is a collection of a template's data.
+type TemplateCollection struct {
+	Fields map[string]string `json:"fields"`
+	Single bool              `json:"single,omitempty"`
+}
+
+// TemplateVersion is one publish of a template.
+type TemplateVersion struct {
+	Version string    `json:"version"`
+	Files   int       `json:"files"`
+	Size    int64     `json:"size"`
+	By      string    `json:"by"`
+	At      time.Time `json:"at"`
+}
+
+// TemplateList is GET /v1/templates.
+type TemplateList struct {
+	Templates []Template `json:"templates"`
+}
+
+// TemplateUse is POST /v1/templates/{id}/use: make a page from it.
+type TemplateUse struct {
+	Name    string `json:"name,omitempty"`
+	Project string `json:"project,omitempty"`
+	Version string `json:"version,omitempty"`
+	// Sample starts it with the template's sample data.
+	Sample bool `json:"sample,omitempty"`
+}
+
+// TemplateUsed is what POST /v1/templates/{id}/use answers: the page, and
+// the template (its guide says how to fill the page's data).
+type TemplateUsed struct {
+	Page     Page     `json:"page"`
+	Template Template `json:"template"`
 }

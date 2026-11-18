@@ -13,6 +13,7 @@ import (
 	"github.com/chenhg5/myco/internal/hubserver"
 	"github.com/chenhg5/myco/internal/infra/tunnel"
 	"github.com/chenhg5/myco/internal/release"
+	"github.com/chenhg5/myco/internal/templates"
 )
 
 func hubCommands() *Command {
@@ -79,8 +80,15 @@ func hubCommands() *Command {
 			if !in.Bool("no-update-check") && !release.Disabled(in.Getenv) {
 				check = &release.Checker{API: release.APIURL(in.Getenv), Log: newLogger(in.String("log-level"))}
 			}
+			// The official apps: the binary's, and newer ones as myco
+			// publishes them (fetched daily unless update checks are off).
+			apps := &templates.Catalog{Download: release.DownloadURL(in.Getenv), StateDir: filepath.Dir(in.String("db")), HubVersion: Version,
+				Offline: in.Bool("no-update-check") || release.Disabled(in.Getenv), Log: newLogger(in.String("log-level"))}
+			if err := apps.Load(); err != nil {
+				return errorf("internal", ExitError, "", "official apps: %v", err)
+			}
 			return hubserver.Run(in.Ctx, hubserver.Options{
-				Tunnel: tun, Version: Version, UpdateCheck: check,
+				Tunnel: tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},

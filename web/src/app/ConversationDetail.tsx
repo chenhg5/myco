@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -23,7 +23,8 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
-import { PageCards } from "@/app/pages";
+import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
+import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -34,6 +35,9 @@ import { TranslatableBody, TranslateToggle } from "@/app/translate";
 import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
+import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
+import { isPicture } from "@/app/attachments";
 
 /** Answers already grown in (once each, even if the view is drawn again),
  *  and when this App first had each message. */
@@ -288,6 +292,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const headMenu = useContextMenu();
   // (a reply done growing in shows its attachments: one more render)
   const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -956,6 +962,52 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // pane is a terminal.
   const termMode = shellMode || !!execNode;
 
+  // 置顶 (pins.tsx): what this conversation keeps at hand, above it; the
+  // same list for both parties (hubs from v0.20.3). Not in a terminal.
+  const pinState = usePins(target.hubId, termMode ? "" : target.agent, target.peer);
+  const pins = pinState.supported ? pinState.pins || [] : null;
+  const [pinAdding, setPinAdding] = useState(false);
+  const pinMenu = useContextMenu();
+  const pinOf = (m: Message) => pins?.find((p) => p.kind === "message" && p.target === m.id);
+  const pinMessage = async (m: Message, el: Element) => {
+    if (!pins) return;
+    const files = (m.attachments || []).filter((f) => !isPicture(f));
+    const one = (body: () => Promise<unknown>) => void body().catch((e) => setSendError(e));
+    const asMessage = () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "message", target: m.id, title: titleOfMessage(m.body) || L("一条消息", "A message") }));
+    const done = pinOf(m);
+    if (done) {
+      one(async () => { await appApi.removePin(target.hubId, done.id, target.agent, target.peer); pinsChanged(target.hubId); });
+      return;
+    }
+    if (!files.length) { asMessage(); return; }
+    // A message with files: the message, or one of its files.
+    pinMenu.openUnder(el, [
+      { label: L("置顶这条消息", "Pin this message"), onSelect: asMessage },
+      "sep",
+      ...files.map((f) => ({ label: L(`置顶文件「${f.name}」`, `Pin the file “${f.name}”`), onSelect: () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "file", file: f, title: f.name })) })),
+    ]);
+  };
+  // A page's card (in a message or a progress update): right-click pins
+  // its link above the conversation, or takes it off.
+  const pagePinOf = (id: string) => pins?.find((p) => {
+    if (p.kind !== "link" || !p.target) return false;
+    const t = pageTargetOf(p.target);
+    return t?.kind === "page" && t.id === id;
+  });
+  const pagePins: PagePins | null = pins ? {
+    pinned: (id) => !!pagePinOf(id),
+    toggle: ({ id, url, name }) => {
+      const done = pagePinOf(id);
+      const work = done
+        ? appApi.removePin(target.hubId, done.id, target.agent, target.peer).then(() => pinsChanged(target.hubId))
+        : pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "link", target: url, title: name });
+      void work.catch((e) => setSendError(e));
+    },
+  } : null;
+  // A pinned message: brought to the middle; in a long exchange, older
+  // pages load until it turns up (a few at most).
+  const [seek, setSeek] = useState<{ id: string; tries: number } | null>(null);
+
   // Commands sent here, for ↑ / ↓ (newest last); -1 = not browsing.
   const history = consoleTasks.map((m) => m.body).filter((b) => b && !b.includes("\n"));
   const histPos = useRef(-1);
@@ -1194,6 +1246,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return () => cancelAnimationFrame(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown?.length, more, loadingOlder, target.focus]);
+  useEffect(() => {
+    if (!seek || shown === null) return;
+    const t = requestAnimationFrame(() => {
+      if (jumpTo(seek.id)) { setSeek(null); return; }
+      if (exchange && more && !loadingOlder && seek.tries < 10) {
+        setSeek({ id: seek.id, tries: seek.tries + 1 });
+        void loadOlder();
+      } else if (!loadingOlder) {
+        setSeek(null);
+        setSendError(new Error(L("没找到这条消息：可能被删了，或者太早了", "Could not find that message: it may be deleted, or too far back")));
+      }
+    });
+    return () => cancelAnimationFrame(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seek, shown?.length, more, loadingOlder]);
 
   // The thread a message continues in the exchange view: the latest one you
   // take part in under your current name (older tasks were signed with the
@@ -1723,10 +1790,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
-              : growsIn(m) ? <Reveal body={m.body} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
+              : growsIn(m) ? <Reveal body={m.body} foldId={m.id} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
               // What an agent wrote can be read in the App's language.
               : !mine && m.type !== "event" ? <TranslatableBody id={m.id} body={m.body} />
-              : <MessageContent body={m.body} />}
+              : <MessageContent body={m.body} foldId={m.id} />}
             {/* (after its text has grown in: pictures first, then the
                 words filling in above them, reads oddly) */}
             {!growsIn(m) && m.attachments && m.attachments.length > 0 && <MessageAttachments hubId={target.hubId} items={m.attachments} />}
@@ -1757,6 +1824,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
+            {pins && !m.unreadable && (() => {
+              const on = !!pinOf(m);
+              return (
+                <button type="button" className={cn("conv-msg-copy conv-msg-pin", on && "is-on")} onClick={(e) => void pinMessage(m, e.currentTarget)}
+                  title={on ? L("取消置顶", "Unpin") : L("置顶：放到对话上方，点一下就到", "Pin: above the conversation, one click away")}
+                  aria-label={on ? L("取消置顶", "Unpin") : L("置顶", "Pin")} aria-pressed={on}>
+                  {on ? <PinOff /> : <PinIcon />}
+                </button>
+              );
+            })()}
             <button type="button" className="conv-msg-copy conv-msg-del" onClick={() => removeMessage(m)}
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
@@ -1819,8 +1896,22 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A file sent again under the same name is its next version.
   const versions = versionsOf(shown || []);
 
+  // The header's ⋯ menu: what is used now and then.
+  const headMore: MenuItem[] = [
+    ...(!termMode ? [{ label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) }, "sep" as const] : []),
+    ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
+    ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
+    ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
+  ].filter((it, i, all) => it !== "sep" || i < all.length - 1);
+  // Everything sent in the chat so far (what is loaded), for 图片和文件.
+  const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
+    ...(m.unreadable ? [] : (m.attachments || []).map((a) => ({ a, msg: m.id, from: m.from, at: m.created_at }))),
+    ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : (x.attachments || []).map((a) => ({ a, msg: m.id, from: x.from, at: x.created_at })))),
+  ]) : [];
+
   return (
     <VersionsContext.Provider value={versions}>
+    <PagePinsContext.Provider value={pagePins}>
     <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
       {!bare && <header className="conv-head">
         {(showBack || target.returnTo) && (
@@ -1866,30 +1957,33 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Settings2 />
               </button>
             )}
+            {/* Used now and then: one ⋯ menu; find stays out, next to the
+                pane's own buttons (full width, close). */}
+            {headMore.length > 0 && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="chat-more"
+                onClick={(e) => headMenu.openUnder(e.currentTarget, headMore)} title={L("更多", "More")} aria-label={L("更多", "More")} aria-haspopup="menu">
+                <MoreHorizontal />
+              </button>
+            )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
               </button>
             )}
-            {hoEntry.show && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="handover-head"
-                disabled={!!hoEntry.why} onClick={() => openHandover({ hubId: target.hubId, name: target.agent })}
-                title={hoEntry.why || L("换一个来接着做：另一个会话接手，聊天记录都在", "Hand over: another session carries on, the chat stays")}
-                aria-label={L("换一个来接着做", "Hand over to another session")}>
-                <ArrowRightLeft />
-              </button>
-            )}
-            {!observed && (shown?.length || 0) > 0 && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="export-open"
-                onClick={() => setExporting(true)} title={L("导出这段对话", "Export this conversation")} aria-label={L("导出这段对话", "Export this conversation")}>
-                <Download />
-              </button>
-            )}
             {headActions}
           </span>
         )}
       </header>}
+      {pins && (
+        <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
+          onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
+      )}
+      {pinMenu.element}
+      {headMenu.element}
+      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
+        nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
+        more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />
       <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
         messages={shown || []} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />
 
@@ -2042,7 +2136,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const prev = visible[i - 1];
               const runStart = !prev || !!divider || prev.from !== m.from || prev.type === "event" || m.type === "event";
               const item = renderMessage(m, runStart);
-              return [...(before || []), ...(divider ? [divider, item] : [item])];
+              // Keyed by the message, not its place: older messages loaded
+              // above (or one hidden) would remount everything below, and an
+              // unfolded long message would fold again.
+              return <Fragment key={"m" + m.id}>{before}{divider}{item}</Fragment>;
             })}
             {!shellMode && !execNode && trailing}
             {/* The run at work, when messages sit under it. */}
@@ -2210,6 +2307,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       </div>
       )}
     </div>
+    </PagePinsContext.Provider>
     </VersionsContext.Provider>
   );
 }

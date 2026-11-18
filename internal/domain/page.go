@@ -27,8 +27,15 @@ type Page struct {
 	Latest int
 	// Live: not files but a server on its publisher's computer (a dev
 	// server on Port there), forwarded while `myco page serve` runs.
-	Live      bool
-	Port      int
+	Live bool
+	Port int
+	// Template is the template it was made from ("" for none), at
+	// TemplateVersion: its data has that template's structure.
+	Template        string
+	TemplateVersion string
+	// Manifest is that template's myco.json, kept with the page so that it
+	// stands on its own (its data's structure, its permissions).
+	Manifest  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

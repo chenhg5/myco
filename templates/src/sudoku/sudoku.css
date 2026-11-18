@@ -1,0 +1,29 @@
+/* 数独 */
+.su-main { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; gap: 28px; padding: 20px; border-top: 1px solid var(--line2); background: var(--bg2); overflow: auto; }
+.su-board { display: grid; grid-template-columns: repeat(9, 1fr); width: min(100%, calc(100vh - 160px), 560px); aspect-ratio: 1; border: 2.5px solid var(--fg); border-radius: 8px; overflow: hidden; background: var(--bg); flex: none; }
+.su-cell { display: grid; place-items: center; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg); color: var(--accent);
+  font-size: clamp(16px, 3.6vmin, 30px); font-weight: 500; font-variant-numeric: tabular-nums; padding: 0; }
+.su-cell:nth-child(9n) { border-right: 0; }
+.su-cell:nth-child(n+73) { border-bottom: 0; }
+.su-cell.r3 { border-right: 2px solid var(--fg); }
+.su-cell.b3 { border-bottom: 2px solid var(--fg); }
+.su-cell.is-given { color: var(--fg); font-weight: 650; }
+.su-cell.is-near { background: color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.su-cell.is-same { background: color-mix(in srgb, var(--accent) 18%, var(--bg)); }
+.su-cell.is-at { background: color-mix(in srgb, var(--accent) 30%, var(--bg)); }
+.su-cell.is-bad { color: var(--red) !important; background: color-mix(in srgb, var(--red) 12%, var(--bg)); }
+.su-side { width: 240px; flex: none; display: flex; flex-direction: column; gap: 12px; }
+.su-status { display: flex; align-items: center; gap: 6px; padding: 12px; border-radius: 10px; background: var(--bg); font-size: 14px; }
+.su-status.is-done { background: color-mix(in srgb, var(--green) 16%, var(--bg)); font-weight: 600; }
+.su-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.su-pad button { position: relative; height: 52px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 22px; font-weight: 500; }
+.su-pad button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.su-pad button:disabled { opacity: 0.35; }
+.su-pad small { position: absolute; right: 6px; bottom: 3px; font-size: 10px; color: var(--faint); font-weight: 400; }
+.su-pad .su-erase { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; font-size: 14px; }
+.su-people { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 10px; background: var(--bg); font-size: 13px; }
+.su-person { display: flex; align-items: center; gap: 8px; }
+.su-person b { margin-left: auto; font-weight: 500; }
+.su-help { font-size: 12px; line-height: 1.6; margin: 0; }
+.btn.is-level { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) { .su-main { flex-direction: column; align-items: center; } .su-side { width: min(100%, 560px); } }

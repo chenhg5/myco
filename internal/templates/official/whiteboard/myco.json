@@ -1,0 +1,40 @@
+{
+  "id": "myco/whiteboard",
+  "name": "白板",
+  "version": "1.0.0",
+  "kind": "board",
+  "category": "creative",
+  "icon": "icon.svg",
+  "description": "一块无限大的画布：便签、文字、矩形、椭圆、连线，拖动、缩放、改颜色；agent 能往上贴便签，适合头脑风暴、复盘、画流程。",
+  "data": {
+    "board": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "items": {
+      "fields": {
+        "type": "text",
+        "x": "number",
+        "y": "number",
+        "w": "number",
+        "h": "number",
+        "text": "text",
+        "color": "text",
+        "from": "text",
+        "to": "text",
+        "z": "number"
+      }
+    }
+  },
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "svg"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

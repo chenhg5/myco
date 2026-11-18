@@ -59,6 +59,10 @@ type Server struct {
 	tun         tunnels
 	handovers   *app.HandoverService
 	hidden      *app.HiddenService
+	pins        *app.PinService
+	pageData    *app.PageDataService
+	templates   *app.TemplateService
+	appSync     func(context.Context) api.AppSync
 	voice       *app.VoiceSettingsService
 	activity    sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu   sync.Mutex // serialize alias permission checks with writes
@@ -126,6 +130,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/files/") {
 		limit = domain.MaxProjectFile + 1 // ProjectService reports "too large" itself
+	}
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/pages" || r.URL.Path == "/v1/templates" ||
+		(strings.HasPrefix(r.URL.Path, "/v1/pages/") && strings.HasSuffix(r.URL.Path, "/versions"))) {
+		limit = domain.MaxPageSize + 1 // a page's or a template's zip; their handlers limit it themselves
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	s.mux.ServeHTTP(w, r)
@@ -204,6 +212,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
 	s.pageRoutes(m)
+	s.pinRoutes(m)
+	s.pageDataRoutes(m)
 	s.liveRoutes(m)
 	s.handoverRoutes(m)
 	m.HandleFunc("GET /j/{token}", s.joinPage)

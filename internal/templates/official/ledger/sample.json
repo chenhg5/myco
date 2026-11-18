@@ -1,0 +1,124 @@
+{
+  "book": [
+    {
+      "id": "main",
+      "title": "家庭账本",
+      "currency": "¥",
+      "budget": 6000
+    }
+  ],
+  "entries": [
+    {
+      "id": "e1",
+      "kind": "out",
+      "amount": 32,
+      "category": "餐饮",
+      "note": "午饭",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "e2",
+      "kind": "out",
+      "amount": 46,
+      "category": "交通",
+      "note": "打车去客户那",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "e3",
+      "kind": "out",
+      "amount": 28,
+      "category": "餐饮",
+      "note": "咖啡",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "e4",
+      "kind": "in",
+      "amount": 15000,
+      "category": "工资",
+      "note": "11 月工资",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "e5",
+      "kind": "out",
+      "amount": 4200,
+      "category": "住房",
+      "note": "房租",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "e6",
+      "kind": "out",
+      "amount": 199,
+      "category": "购物",
+      "note": "耳机",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "e7",
+      "kind": "out",
+      "amount": 68,
+      "category": "娱乐",
+      "note": "电影",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "e8",
+      "kind": "out",
+      "amount": 120,
+      "category": "日用",
+      "note": "超市",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "e9",
+      "kind": "out",
+      "amount": 58,
+      "category": "餐饮",
+      "note": "火锅 AA",
+      "date": "2026-11-11"
+    },
+    {
+      "id": "e10",
+      "kind": "out",
+      "amount": 35,
+      "category": "学习",
+      "note": "技术书",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "e11",
+      "kind": "out",
+      "amount": 380,
+      "category": "人情",
+      "note": "同事婚礼份子",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "e12",
+      "kind": "in",
+      "amount": 860,
+      "category": "报销",
+      "note": "出差报销",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "e13",
+      "kind": "out",
+      "amount": 22,
+      "category": "交通",
+      "note": "地铁卡充值",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "e14",
+      "kind": "out",
+      "amount": 45,
+      "category": "医疗",
+      "note": "感冒药",
+      "date": "2026-11-04"
+    }
+  ]
+}

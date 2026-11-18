@@ -3,10 +3,13 @@ package httpapi_test
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"strings"
 	"testing"
 
 	"github.com/chenhg5/myco/internal/app"
+	"github.com/chenhg5/myco/internal/domain"
 )
 
 func zipOf(t *testing.T, files map[string]string) string {
@@ -120,4 +123,25 @@ func TestPages(t *testing.T) {
 	if p := h.doReq("GET", "/pages/"+id, "", nil, nil).want(t, 200); !strings.Contains(string(p.raw), "myco App") {
 		t.Fatalf("link page: %q", p.raw)
 	}
+}
+
+// A page or template bigger than a message (a bundled app is often a few
+// MB) is taken, as a new page, a new version and a template.
+func TestBigPageUploads(t *testing.T) {
+	h := newHub(t, app.DefaultMessagePolicy())
+	alice := h.register("alice", nil)
+	raw := make([]byte, 600<<10)
+	if _, err := rand.Read(raw); err != nil {
+		t.Fatal(err)
+	}
+	big := base64.StdEncoding.EncodeToString(raw) // (does not compress)
+	zipHdr := map[string]string{"Content-Type": "application/zip"}
+	site := zipOf(t, map[string]string{"index.html": "<script src=app.js></script>", "app.js": big})
+	if len(site) <= domain.MaxBodyBytes+64*1024 {
+		t.Fatalf("the zip should be bigger than a message: %d", len(site))
+	}
+	r := h.doReq("POST", "/v1/pages?name=big", alice, site, zipHdr).want(t, 201)
+	h.doReq("POST", "/v1/pages/"+str(r.body, "id")+"/versions", alice, site, zipHdr).want(t, 200)
+	tpl := zipOf(t, map[string]string{"myco.json": weeklyManifest, "index.html": "<script src=app.js></script>", "app.js": big})
+	h.doReq("POST", "/v1/templates", alice, tpl, zipHdr).want(t, 201)
 }

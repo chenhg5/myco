@@ -1,0 +1,35 @@
+{
+  "id": "myco/habit",
+  "name": "习惯打卡",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "life",
+  "icon": "icon.svg",
+  "description": "一起养成好习惯：每人给自己打卡，看这周打了几天、连续了几天、别人打了没；家人、团队一起坚持，agent 能帮你提醒和统计。",
+  "data": {
+    "tracker": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "habits": {
+      "fields": {
+        "name": "text",
+        "icon": "text",
+        "goal": "number",
+        "order": "number"
+      }
+    },
+    "checks": {
+      "fields": {
+        "habit": "text",
+        "date": "date",
+        "who": "person"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

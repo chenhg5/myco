@@ -153,12 +153,47 @@ export interface Page {
   /** a server on its publisher's computer (port there), forwarded while
    *  `myco page serve` runs; online: forwarded now */
   live?: boolean; port?: number; online?: boolean;
+  /** the template it was made from (hubs from v0.20.5) */
+  /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
+  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; latest?: string };
+}
+/** A template in the workspace's library (hubs from v0.20.5): official
+ *  ones (myco's own) first. */
+export interface Template {
+  id: string; slug: string; name: string; description?: string; kind: string; version: string; publisher: string;
+  /** its shelf (hubs from v0.20.6): office, dev, tools, life, creative, game, other */
+  category?: string;
+  /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
+  icon?: string;
+  official?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; export?: string[];
+  data?: Record<string, { fields: Record<string, string>; single?: boolean }>;
+  versions: { version: string; files: number; size: number; by: string; at: string }[];
+  created_at: string; updated_at: string;
 }
 /** What opening a page gives: where its files are served (a loopback origin
  *  of the App's own), for which version. */
 export interface PageOpen { url: string; version: number; latest: number; name: string; entry: string; live?: boolean; online?: boolean; port?: number }
 /** A page's shared state (the bridge's myco.update): null before anyone wrote. */
 export interface PageState { state: unknown; version: number; updated_by?: string; updated_at?: string }
+
+/** What a conversation keeps at hand (置顶; hubs from v0.20.3): a web
+ *  address, a file, or one of its messages. Both parties see the same. */
+export interface Pin {
+  id: string;
+  kind: "link" | "file" | "message";
+  title: string;
+  /** the address (link), the message's id (message) */
+  target?: string;
+  file?: Attachment;
+  added_by: string;
+  at: string;
+}
+export interface PinList { a: string; with: string; pins: Pin[]; max: number }
+/** A page's records (hubs from v0.20.5). */
+export interface PageRecord { collection: string; id: string; data: Record<string, unknown>; version: number; updated_by?: string; updated_at: string }
+export interface PageChange { seq: number; collection: string; record: string; op: "put" | "delete"; data?: Record<string, unknown>; version: number; by?: string; at: string }
+export interface PageChanges { changes: PageChange[]; seq: number; reset?: boolean }
+export interface PinCreate { a?: string; with: string; kind: Pin["kind"]; title?: string; target?: string; file?: Attachment }
 
 export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;

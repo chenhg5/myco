@@ -1,0 +1,6 @@
+{
+  "rows": [
+    { "id": "r1", "title": "列出这周要做的事", "owner": "你", "status": "进行中", "due": "2026-11-20", "done": false },
+    { "id": "r2", "title": "让 agent 补上截止日期", "owner": "agent", "status": "待办", "done": false }
+  ]
+}

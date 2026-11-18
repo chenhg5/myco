@@ -1,0 +1,19 @@
+{
+  "map": [{ "id": "main", "title": "v0.21 计划" }],
+  "nodes": [
+    { "id": "root", "text": "v0.21 计划", "parent": "", "order": 1 },
+    { "id": "app", "text": "应用", "parent": "root", "order": 1 },
+    { "id": "app1", "text": "表格直接打中文", "parent": "app", "order": 1 },
+    { "id": "app2", "text": "幻灯片自由文本框", "parent": "app", "order": 2 },
+    { "id": "app3", "text": "文档评论和 @人", "parent": "app", "order": 3 },
+    { "id": "chat", "text": "聊天", "parent": "root", "order": 2 },
+    { "id": "chat1", "text": "消息里直接打开应用", "parent": "chat", "order": 1 },
+    { "id": "chat2", "text": "语音转文字更快", "parent": "chat", "order": 2 },
+    { "id": "hub", "text": "Hub", "parent": "root", "order": 3 },
+    { "id": "hub1", "text": "应用市场", "parent": "hub", "order": 1 },
+    { "id": "hub2", "text": "备份和恢复", "parent": "hub", "order": 2 },
+    { "id": "rel", "text": "发布", "parent": "root", "order": 4 },
+    { "id": "rel1", "text": "12 月第一周", "parent": "rel", "order": 1 },
+    { "id": "rel2", "text": "发布说明和演示视频", "parent": "rel", "order": 2 }
+  ]
+}

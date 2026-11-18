@@ -630,7 +630,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
         <div key={seg.key} className={cn("trace-say", seg.delta && "trace-delta")}>
           {/* What it says while you watch grows in; what was there, is. */}
           {/* (something newer after it: all of it at once) */}
-          {seg.delta ? <Reveal body={seg.text} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+          {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
         </div>
       ) : seg.kind === "steer" ? (
         <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />

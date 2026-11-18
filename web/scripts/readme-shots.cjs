@@ -28,7 +28,7 @@ const { chromium } = require('playwright');
     // The mock keeps what ran before (the light pass): run it only once.
     if (!(await p.getByText('go test ./...').count())) {
       const c = p.locator('.term-input').first(); await c.fill('go test ./...'); await c.press('Enter');
-      await p.waitForTimeout(4200);
+      await p.waitForTimeout(8000); // until the command has finished
     }
   };
   // add an agent: the sessions found on this computer
@@ -36,8 +36,9 @@ const { chromium } = require('playwright');
     await p.locator(`[title="${T('添加 agent', 'Add an agent')}"]:visible`).first().click(); await p.waitForTimeout(600);
     await p.getByRole('dialog').getByText(T('这台电脑上的', 'On this computer'), { exact: true }).click(); await p.waitForTimeout(800);
   };
-  const members = async (p) => { await nav(p).getByText(T('成员', 'Members'), { exact: true }).click(); await p.waitForTimeout(800); };
-  const memberCard = async (p) => { await members(p); await p.getByText(T('后端（Codex）', 'Backend (Codex)')).first().click(); };
+  // Members is in the conversation list's menu (sort and members), not a sidebar line.
+  const members = async (p) => { await p.locator('.sp-nav-chat-sort').first().click(); await p.waitForTimeout(300); await p.getByText(T('管理成员', 'Manage members'), { exact: true }).click(); await p.waitForTimeout(900); };
+  const memberCard = async (p) => { await members(p); await p.locator('.mb-card-name', { hasText: T('后端（Codex）', 'Backend (Codex)') }).first().click(); };
   for (const dark of [false, true]) {
     await shot('nodes', dark, home);
     await shot('conversation', dark, terminal, 300);

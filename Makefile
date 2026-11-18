@@ -1,7 +1,7 @@
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/chenhg5/myco/internal/cli.Version=$(VERSION)
 
-.PHONY: build test test-integration smoke check vet cross clean web app
+.PHONY: build test test-integration smoke check vet cross clean web templates app
 
 build:
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco ./cmd/myco
@@ -40,6 +40,11 @@ clean:
 # internal/web/dist so Go builds never need Node.
 web:
 	cd web && npm ci && npm run build
+
+# Rebuild myco's official templates (templates/src) into
+# internal/templates/official, which the hub embeds; output is committed.
+templates:
+	cd templates && npm ci && npm run build
 
 # The console app (macOS only: the window links the system WebKit through cgo).
 # Produces bin/myco.app; signs it when MYCO_SIGN_IDENTITY names a Developer ID

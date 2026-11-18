@@ -1,0 +1,18 @@
+{
+  "base": [
+    { "id": "main", "title": "招聘进度", "fields": [
+      { "id": "f1", "name": "候选人", "type": "text" },
+      { "id": "f2", "name": "岗位", "type": "select", "options": ["前端", "后端", "设计"] },
+      { "id": "f3", "name": "阶段", "type": "select", "options": ["待联系", "面试中", "已发 offer", "已入职"] },
+      { "id": "f4", "name": "面试日期", "type": "date" },
+      { "id": "f5", "name": "面试官", "type": "person" },
+      { "id": "f6", "name": "备注", "type": "long" }
+    ] }
+  ],
+  "records": [
+    { "id": "a1", "values": { "f1": "张敏", "f2": "前端", "f3": "面试中", "f4": "2026-11-20", "f5": "Glenn" }, "order": 1 },
+    { "id": "a2", "values": { "f1": "李想", "f2": "后端", "f3": "待联系", "f6": "简历里提到做过 SQLite 迁移" }, "order": 2 },
+    { "id": "a3", "values": { "f1": "王一", "f2": "设计", "f3": "已发 offer", "f4": "2026-11-18", "f5": "Ann" }, "order": 3 },
+    { "id": "a4", "values": { "f1": "陈晨", "f2": "前端", "f3": "面试中", "f4": "2026-11-24", "f5": "Glenn" }, "order": 4 }
+  ]
+}

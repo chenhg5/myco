@@ -1,0 +1,30 @@
+{
+  "id": "myco/sudoku",
+  "name": "数独",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "game",
+  "icon": "icon.svg",
+  "description": "大家一起填一道数独：每格单独保存，谁填的显示谁的颜色，冲突标红；简单、中等、困难三档新题，每道只有一个答案。",
+  "data": {
+    "puzzle": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "givens": "text",
+        "level": "text",
+        "round": "number"
+      }
+    },
+    "cells": {
+      "fields": {
+        "i": "number",
+        "v": "number",
+        "round": "number"
+      }
+    }
+  },
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

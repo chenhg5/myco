@@ -1,0 +1,18 @@
+{
+  "board": [{ "id": "main", "title": "Q4 复盘" }],
+  "items": [
+    { "id": "h1", "type": "text", "text": "做得好的", "x": 40, "y": 20, "w": 440, "h": 44 },
+    { "id": "s1", "type": "sticky", "text": "应用上线后，agent 做表格和 PPT 快多了", "x": 40, "y": 80, "color": "green", "z": 1 },
+    { "id": "s2", "type": "sticky", "text": "语音切页面不断线，大家都在用", "x": 270, "y": 80, "color": "green", "z": 2 },
+    { "id": "h2", "type": "text", "text": "要改进的", "x": 560, "y": 20, "w": 440, "h": 44 },
+    { "id": "s3", "type": "sticky", "text": "表格里不能直接打中文", "x": 560, "y": 80, "color": "pink", "z": 3 },
+    { "id": "s4", "type": "sticky", "text": "发版前的检查清单太长", "x": 790, "y": 80, "color": "pink", "z": 4 },
+    { "id": "h3", "type": "text", "text": "下一步", "x": 40, "y": 300, "w": 440, "h": 44 },
+    { "id": "r1", "type": "rect", "text": "做中文输入", "x": 40, "y": 360, "w": 180, "h": 90, "color": "blue", "z": 5 },
+    { "id": "r2", "type": "rect", "text": "清单交给 agent 跑", "x": 300, "y": 360, "w": 180, "h": 90, "color": "blue", "z": 6 },
+    { "id": "e1", "type": "ellipse", "text": "v0.21 发布", "x": 560, "y": 355, "w": 180, "h": 100, "color": "purple", "z": 7 },
+    { "id": "a1", "type": "arrow", "from": "s3", "to": "r1", "color": "gray" },
+    { "id": "a2", "type": "arrow", "from": "s4", "to": "r2", "color": "gray" },
+    { "id": "a3", "type": "arrow", "from": "r2", "to": "e1", "color": "gray" }
+  ]
+}

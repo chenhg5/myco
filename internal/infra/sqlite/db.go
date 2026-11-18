@@ -286,6 +286,54 @@ CREATE TABLE IF NOT EXISTS page_state (
   updated_by TEXT NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS page_records (
+  page       TEXT NOT NULL,
+  collection TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  version    INTEGER NOT NULL,
+  updated_by TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL,
+  pos        INTEGER NOT NULL,
+  PRIMARY KEY (page, collection, id)
+);
+CREATE TABLE IF NOT EXISTS page_changes (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+  page       TEXT NOT NULL,
+  collection TEXT NOT NULL,
+  record     TEXT NOT NULL,
+  op         TEXT NOT NULL,
+  data       TEXT NOT NULL DEFAULT '',
+  version    INTEGER NOT NULL DEFAULT 0,
+  by_name    TEXT NOT NULL DEFAULT '',
+  at         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_page_changes ON page_changes(page, seq);
+CREATE TABLE IF NOT EXISTS templates (
+  id          TEXT PRIMARY KEY,
+  slug        TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL DEFAULT 'custom',
+  latest      TEXT NOT NULL DEFAULT '',
+  publisher   TEXT NOT NULL DEFAULT '',
+  owner       TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS template_versions (
+  template TEXT NOT NULL,
+  version  TEXT NOT NULL,
+  blob     TEXT NOT NULL,
+  sha256   TEXT NOT NULL DEFAULT '',
+  size     INTEGER NOT NULL DEFAULT 0,
+  files    INTEGER NOT NULL DEFAULT 0,
+  manifest TEXT NOT NULL,
+  guide    TEXT NOT NULL DEFAULT '',
+  by_name  TEXT NOT NULL DEFAULT '',
+  at       INTEGER NOT NULL,
+  PRIMARY KEY (template, version)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idempotency_key) WHERE idempotency_key IS NOT NULL;
 `
 
@@ -317,7 +365,8 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	// Live pages (a dev server forwarded): from the same release as pages.
-	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"}}); err != nil {
+	if err := addColumns(db, "pages", [][2]string{{"live", "INTEGER NOT NULL DEFAULT 0"}, {"port", "INTEGER NOT NULL DEFAULT 0"},
+		{"template", "TEXT NOT NULL DEFAULT ''"}, {"template_version", "TEXT NOT NULL DEFAULT ''"}, {"manifest", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -337,6 +386,8 @@ func Open(path string) (*sql.DB, error) {
 		"machines":       {{"owner", "TEXT NOT NULL DEFAULT ''"}},
 		"console_tokens": {{"member_id", "TEXT NOT NULL DEFAULT ''"}},
 		"project_docs":   {{"content_type", "TEXT NOT NULL DEFAULT ''"}, {"size", "INTEGER NOT NULL DEFAULT 0"}, {"blob", "TEXT NOT NULL DEFAULT ''"}},
+		// A template's icon (v0.20.7).
+		"template_versions": {{"icon", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()

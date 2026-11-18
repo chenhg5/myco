@@ -73,7 +73,7 @@ notes are never auto-answered. Logs go to stderr.`,
 			shared := runnerShared{
 				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
-				trace: e.in.String("trace"),
+				trace: e.in.String("trace"), locks: runner.NewSessionLocks(filepath.Join(config.Dir(e.defaultPath), "locks")),
 			}
 			e.watchVersions(log)
 			// The agent CLIs it wakes read the skill of this version (a runner
@@ -110,7 +110,10 @@ type runnerShared struct {
 	rebind     bool
 	trace      string
 	slots      chan struct{}
-	registry   *harness.Registry
+	// locks: one turn at a time per CLI session, across every agent
+	// (several workspaces can share a session) and runner process.
+	locks    *runner.SessionLocks
+	registry *harness.Registry
 	// rescan, when set (runner --all), asks for an immediate profile scan,
 	// e.g. right after a machine node spawned a new agent.
 	rescan chan struct{}
@@ -311,7 +314,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
-		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace,
+		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, Slots: sh.slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      filepath.Join(config.Dir(e.defaultPath), "state", me.Name+".json"),
 		HubURL:         cfg.Hub,
 		AttachmentsDir: filepath.Join(config.Dir(e.defaultPath), "attachments", me.Name),

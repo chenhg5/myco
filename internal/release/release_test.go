@@ -309,3 +309,30 @@ func TestFetchFallsBackToReleaseAPI(t *testing.T) {
 		t.Fatal("a mirror should not fall back to the GitHub API")
 	}
 }
+
+// GitHub allows 60 unauthenticated API requests an hour per address: when
+// the API refuses, the release page's redirect gives the latest tag.
+func TestLatestFallsBackToTheReleasePage(t *testing.T) {
+	var pageHits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/chenhg5/myco/releases/latest", "/elsewhere":
+			w.WriteHeader(http.StatusForbidden)
+		case "/chenhg5/myco/releases/latest":
+			pageHits++
+			http.Redirect(w, r, "/chenhg5/myco/releases/tag/v0.20.7", http.StatusFound)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	tag, err := Latest(context.Background(), srv.Client(), srv.URL+"/repos/chenhg5/myco/releases/latest")
+	if err != nil || tag != "v0.20.7" || pageHits != 1 {
+		t.Fatalf("Latest = %q, %v (page asked %d times)", tag, err, pageHits)
+	}
+	// Not the API's latest-release shape: no page to fall back to, the API's error stands.
+	if _, err := Latest(context.Background(), srv.Client(), srv.URL+"/elsewhere"); err == nil || !strings.Contains(err.Error(), "HTTP") {
+		t.Fatalf("other URL: %v", err)
+	}
+}

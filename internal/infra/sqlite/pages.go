@@ -16,11 +16,11 @@ func NewPageRepo(db *sql.DB) *PageRepo { return &PageRepo{db: db} }
 
 var _ domain.PageRepository = (*PageRepo)(nil)
 
-const pageCols = `id, name, project, publisher, owner, latest, live, port, created_at, updated_at`
+const pageCols = `id, name, project, publisher, owner, latest, live, port, template, template_version, manifest, created_at, updated_at`
 
 func (r *PageRepo) Create(ctx context.Context, p *domain.Page) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Name, p.Project, p.Publisher, p.Owner, p.Latest, p.Live, p.Port, ms(p.CreatedAt), ms(p.UpdatedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Name, p.Project, p.Publisher, p.Owner, p.Latest, p.Live, p.Port, p.Template, p.TemplateVersion, p.Manifest, ms(p.CreatedAt), ms(p.UpdatedAt))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "page %s exists", p.ID)
 	}
@@ -28,8 +28,8 @@ func (r *PageRepo) Create(ctx context.Context, p *domain.Page) error {
 }
 
 func (r *PageRepo) Save(ctx context.Context, p *domain.Page) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE pages SET name=?, project=?, latest=?, port=?, updated_at=? WHERE id=?`,
-		p.Name, p.Project, p.Latest, p.Port, ms(p.UpdatedAt), p.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE pages SET name=?, project=?, latest=?, port=?, template=?, template_version=?, manifest=?, updated_at=? WHERE id=?`,
+		p.Name, p.Project, p.Latest, p.Port, p.Template, p.TemplateVersion, p.Manifest, ms(p.UpdatedAt), p.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -44,7 +44,7 @@ func scanPage(s scanner) (*domain.Page, error) {
 		p                domain.Page
 		created, updated int64
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Project, &p.Publisher, &p.Owner, &p.Latest, &p.Live, &p.Port, &created, &updated); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Project, &p.Publisher, &p.Owner, &p.Latest, &p.Live, &p.Port, &p.Template, &p.TemplateVersion, &p.Manifest, &created, &updated); err != nil {
 		return nil, err
 	}
 	p.CreatedAt, p.UpdatedAt = fromMS(created), fromMS(updated)
@@ -89,6 +89,12 @@ func (r *PageRepo) Delete(ctx context.Context, id string) error {
 		return internal(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM page_state WHERE page=?`, id); err != nil {
+		return internal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM page_records WHERE page=?`, id); err != nil {
+		return internal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM page_changes WHERE page=?`, id); err != nil {
 		return internal(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM pages WHERE id=?`, id); err != nil {

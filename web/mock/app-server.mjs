@@ -4,7 +4,7 @@
 // Writes mutate in-memory state and are lost on restart.
 import http from "node:http";
 import zlib from "node:zlib";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
@@ -211,7 +211,47 @@ document.addEventListener("change",async(e)=>{const i=Number(e.target.dataset.i)
 document.getElementById("hand").addEventListener("click",async()=>{try{const n=((myco.state&&myco.state.done)||[]).length;await myco.send("清单勾完了 "+n+" 项，剩下的交给你。");document.getElementById("note").textContent="已发给 agent";}catch(err){document.getElementById("note").textContent=err.message;}});`;
 const livePage = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>下载页</title><style>body{font:15px/1.6 -apple-system,system-ui,sans-serif;margin:0;color:#1c1c21;background:#fff}main{max-width:560px;margin:0 auto;padding:32px 24px}h1{margin:0 0 6px;font-size:24px}.dl{display:flex;gap:8px;margin-top:18px}.dl a{padding:8px 14px;border-radius:9px;background:#26262c;color:#fff;text-decoration:none;font-size:14px}.tag{font-size:12px;color:#b45309}</style></head>
 <body><main><p class="tag">vite dev server · localhost:5173</p><h1>下载 myco</h1><p>Mac、Windows、Linux 都有。</p><div class="dl"><a href="#mac">macOS</a><a href="#win">Windows</a><a href="#linux">Linux</a></div></main></body></html>`;
-const pageFilesOf = (id, n) => (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : pageFiles(n));
+// A page made from a template: the starter myco template init writes (an
+// editable table over its records), as the CLI embeds it.
+const kit = (f) => readFileSync(new URL(`../../internal/cli/templatekit/${f}`, import.meta.url), "utf8")
+  .replaceAll("{{ID}}", "release/progress").replaceAll("{{NAME}}", "发布进度表");
+const tableFiles = { "index.html": kit("index.html"), "myco.json": kit("myco.json") };
+// The template library: myco's own (read from internal/templates, as the hub
+// embeds them) and the workspace's (the starter above). Using one makes a
+// page with its files (madeFiles) and, if asked, its sample data.
+const officialRoot = new URL("../../internal/templates/official/", import.meta.url);
+const officialFiles = (name) => {
+  const out = {};
+  const walk = (dir, prefix) => {
+    for (const e of readdirSync(new URL(dir, officialRoot), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${dir}${e.name}/`, `${prefix}${e.name}/`);
+      else out[`${prefix}${e.name}`] = /\.(html|js|css|json|md)$/.test(e.name) ? readFileSync(new URL(`${dir}${e.name}`, officialRoot), "utf8") : readFileSync(new URL(`${dir}${e.name}`, officialRoot));
+    }
+  };
+  walk(`${name}/`, "");
+  return out;
+};
+const templateFiles = new Map();
+const officialOrder = ["table", "base", "doc", "slides", "code", "devtools", "todo", "poll", "ledger", "habit", "whiteboard", "mindmap", "gomoku", "sudoku"];
+const mockTemplates = officialOrder.filter((name) => existsSync(new URL(`${name}/myco.json`, officialRoot))).map((name) => {
+  const files = officialFiles(name);
+  const m = JSON.parse(files["myco.json"]);
+  const id = `tp_myco_${name}`;
+  templateFiles.set(id, files);
+  return { id, slug: m.id, name: m.name, description: m.description, kind: m.kind, category: m.category, icon: m.icon ? String(files[m.icon] || "") : undefined, version: m.version, publisher: "myco", official: true, can_manage: false,
+    data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: Object.keys(files).length, size: 40000, by: "myco", at: iso(0) }],
+    created_at: iso(0), updated_at: iso(0) };
+});
+{
+  const files = { ...tableFiles, "agent.md": kit("agent.md"), "sample.json": kit("sample.json") };
+  const m = JSON.parse(files["myco.json"]);
+  templateFiles.set("tp_progress", files);
+  mockTemplates.push({ id: "tp_progress", slug: m.id, name: m.name, description: "", kind: m.kind, version: m.version, publisher: "release-cloud", can_manage: true,
+    data: m.data, permissions: m.permissions, export: m.export, guide: files["agent.md"], versions: [{ version: m.version, files: 4, size: 9000, by: "release-cloud", at: iso(17500) }],
+    created_at: iso(17500), updated_at: iso(17500) });
+}
+const madeFiles = new Map();
+const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
 const pageFiles = (n) => ({
   "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>v0.16.8 发布说明</title><link rel="stylesheet" href="style.css"></head>
 <body><main><h1>v0.16.8 发布说明</h1><p class="sub">第 ${n} 版 · 由 Release (Claude 云端) 整理</p>
@@ -238,6 +278,32 @@ pages.set("pg_live", {
   url: "http://192.168.1.20:7780/pages/pg_live", created_at: iso(18200), updated_at: iso(18200), can_manage: true,
   versions: [], live: true, port: 5173, online: true,
 });
+pages.set("pg_table", {
+  id: "pg_table", name: "发布进度表", project: "website", publisher: "release-cloud", version: 1, entry: "index.html",
+  url: "http://192.168.1.20:7780/pages/pg_table", created_at: iso(17000), updated_at: iso(17000), can_manage: true,
+  versions: [{ n: 1, entry: "index.html", files: 2, size: 9000, sha256: "t1", by: "release-cloud", at: iso(17000) }],
+  template: { id: "tp_progress", slug: "release/progress", name: "发布进度表", version: "1.0.0", permissions: ["download"],
+    data: { rows: { fields: JSON.parse(kit("myco.json")).data.rows.fields } } },
+});
+// Pages' records and change feeds (myco.data; hubs from v0.20.5).
+const pageData = new Map();
+const dataOf = (id) => {
+  if (!pageData.has(id)) pageData.set(id, { records: [], changes: [], seq: 0 });
+  return pageData.get(id);
+};
+const putRecord = (id, coll, rid, data, ifVersion, by) => {
+  const d = dataOf(id);
+  let rec = d.records.find((r) => r.collection === coll && r.id === rid);
+  if (ifVersion !== null && ifVersion !== undefined && (rec?.version || 0) !== ifVersion) return { conflict: rec };
+  if (!rec) { rec = { collection: coll, id: rid || `r_${(state.counter += 1)}`, data: {}, version: 0 }; d.records.push(rec); }
+  Object.assign(rec, { data, version: rec.version + 1, updated_by: by, updated_at: iso(0) });
+  d.changes.push({ seq: (d.seq += 1), collection: coll, record: rec.id, op: "put", data, version: rec.version, by, at: iso(0) });
+  return { rec };
+};
+for (const r of JSON.parse(kit("sample.json")).rows) {
+  const { id, ...data } = r;
+  putRecord("pg_table", "rows", id, data, null, "release-cloud");
+}
 // Pages' shared states (the bridge's myco.update).
 const pageStates = new Map([["pg_checklist", { state: { done: [0] }, version: 1, updated_by: "release-cloud", updated_at: iso(18000) }]]);
 const pageKeys = new Map();
@@ -453,7 +519,12 @@ const localSessions = [
     cli: "claude", session_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     workdir: "/Users/glenn/code/infra", last_active: iso(3600),
     title: "检查 Hub 的隧道配置",
-    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780" },
+    joined: { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
+    // The same session is an agent of a second workspace too.
+    joined_all: [
+      { agent: "glenn-mac-claude-x9k2", hub: "http://192.168.1.20:7780", hub_name: "Glenn 的 MacBook Pro 的工作区" },
+      { agent: "glenn-mac-claude-x9k2-tn", hub: "https://hub.tapnow.example.com/w/tapnow" },
+    ],
   },
   {
     cli: "codex", session_id: "019f0f11-3c2b-7a10-8d4e-9f8a7b6c5d4e",
@@ -1654,10 +1725,38 @@ const server = http.createServer(async (req, res) => {
     const file = parts.slice(2).join("/") || "index.html";
     const body = pageFilesOf(k.page, k.version)[file];
     if (body === undefined) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
-    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : "text/javascript";
+    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : file.endsWith(".md") ? "text/markdown; charset=utf-8"
+      : file.endsWith(".woff2") ? "font/woff2" : file.endsWith(".woff") ? "font/woff" : file.endsWith(".svg") ? "image/svg+xml" : file.endsWith(".png") ? "image/png" : "text/javascript";
     const csp = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'";
     res.writeHead(200, { "Content-Type": type, "Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff" });
     return res.end(file.endsWith(".html") ? body.replace("<head>", `<head><script src="/__myco/page.js"></script>`) : body);
+  }
+  // /app/hubs/{id}/templates… — the template library (v0.20.5; MOCK_OLD_HUB: none).
+  if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "templates") {
+    if (process.env.MOCK_OLD_HUB || parts[2] !== "hub_studio") return fail(res, 404, "", "404 page not found");
+    if (parts.length === 4 && method === "GET") return send(res, 200, { templates: mockTemplates.map(({ guide, ...t }) => t) });
+    // (fetching myco's apps: the mock has only the ones in the repo)
+    if (parts.length === 5 && parts[4] === "sync" && method === "POST") return send(res, 200, { apps: mockTemplates.length, source: "built in" });
+    const t = mockTemplates.find((x) => x.id === decodeURIComponent(parts[4]) || x.slug === decodeURIComponent(parts[4]));
+    if (!t) return fail(res, 404, "not_found", `template ${parts[4]} not found`);
+    if (parts.length === 5 && method === "GET") return send(res, 200, t);
+    if (parts.length === 6 && parts[5] === "use" && method === "POST") {
+      const body = (await readBody(req)) || {};
+      const files = templateFiles.get(t.id);
+      const id = `pg_t${(state.counter += 1)}`;
+      const p = { id, name: body.name || t.name, project: body.project || "", publisher: "glenn", version: 1, entry: "index.html",
+        url: `http://192.168.1.20:7780/pages/${id}`, created_at: iso(0), updated_at: iso(0), can_manage: true,
+        versions: [{ n: 1, entry: "index.html", files: Object.keys(files).length, size: 30000, sha256: "x", by: "glenn", at: iso(0) }],
+        template: { id: t.id, slug: t.slug, name: t.name, version: t.version, permissions: t.permissions, data: t.data } };
+      pages.set(id, p);
+      madeFiles.set(id, files);
+      if (body.sample) {
+        for (const [coll, recs] of Object.entries(JSON.parse(files["sample.json"]))) {
+          for (const r of recs) { const { id: rid, ...data } = r; putRecord(id, coll, rid || "", data, null, "glenn"); }
+        }
+      }
+      return send(res, 201, { page: p, template: t });
+    }
   }
   // /app/hubs/{id}/pages… — pages agents published (v0.19.24).
   if (parts[0] === "app" && parts[1] === "hubs" && parts[3] === "pages") {
@@ -1677,6 +1776,38 @@ const server = http.createServer(async (req, res) => {
         pageStates.set(p.id, next);
         return send(res, 200, next);
       }
+    }
+    if (parts[5] === "data") {
+      const d = dataOf(p.id);
+      const coll = parts[6] || "", rid = parts[7] || "";
+      if (parts.length === 6 && method === "GET") {
+        const c = url.searchParams.get("collection");
+        return send(res, 200, { records: d.records.filter((r) => !c || r.collection === c), seq: d.seq });
+      }
+      if (parts.length === 8 && method === "GET") {
+        const r = d.records.find((x) => x.collection === coll && x.id === rid);
+        return r ? send(res, 200, r) : fail(res, 404, "not_found", `no record ${rid} in ${coll}`);
+      }
+      if ((parts.length === 7 && method === "POST") || (parts.length === 8 && method === "PUT")) {
+        const body = (await readBody(req)) || {};
+        if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) return fail(res, 400, "invalid_argument", "a record is a JSON object");
+        const out = putRecord(p.id, coll, rid, body.data, body.if_version ?? null, CONSOLE);
+        if (out.conflict) return send(res, 409, { error: "conflict", message: `record ${rid} in ${coll} changed`, latest: out.conflict });
+        return send(res, 200, out.rec);
+      }
+      if (parts.length === 8 && method === "DELETE") {
+        const i = d.records.findIndex((x) => x.collection === coll && x.id === rid);
+        if (i < 0) return fail(res, 404, "not_found", `no record ${rid} in ${coll}`);
+        const [gone] = d.records.splice(i, 1);
+        d.changes.push({ seq: (d.seq += 1), collection: coll, record: rid, op: "delete", version: gone.version + 1, by: CONSOLE, at: iso(0) });
+        res.writeHead(204);
+        return res.end();
+      }
+    }
+    if (parts.length === 6 && parts[5] === "changes" && method === "GET") {
+      const d = dataOf(p.id);
+      const after = Number(url.searchParams.get("after") || 0);
+      return send(res, 200, { changes: d.changes.filter((c) => c.seq > after), seq: d.seq });
     }
     if (parts.length === 6 && parts[5] === "open" && method === "POST") {
       const body = (await readBody(req)) || {};
@@ -1704,6 +1835,12 @@ const server = http.createServer(async (req, res) => {
     if (body.prepare) return send(res, 200, { ok: true, thread: threadId });
     const long = (n) => `第 ${n} 段回答：改动已经合进去了，构建和测试都通过。\n\n首页在三种宽度下都看过了，导航栏在窄屏下收起成菜单按钮，下载按钮的位置没变。\n\n发布说明按新功能、修复、文档三类整理好了，措辞你再看一眼。`;
     const tag = String(body.tag || "");
+    // One long answer (lines: N), which starts folded in the App.
+    if (body.lines) {
+      msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done",
+        body: Array.from({ length: Number(body.lines) }, (_, i) => `长回复第 ${i + 1} 行${tag}`).join("\n"), created_at: iso(0), updated_at: iso(0) }));
+      return send(res, 200, { ok: true, thread: threadId });
+    }
     msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(1)}${tag}`, created_at: iso(0), updated_at: iso(0) }));
     setTimeout(() => {
       msgs.push(makeMessage({ thread_id: threadId, from: agent, to: CONSOLE, type: "reply", status: "done", body: `${long(2)}${tag}`, created_at: iso(0), updated_at: iso(0),
@@ -1711,6 +1848,22 @@ const server = http.createServer(async (req, res) => {
     }, Number(body.gap) || 600);
     return send(res, 200, { ok: true, thread: threadId });
   }
+  // (the smoke test writes a page's record, as its agent would)
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "data" && method === "POST") {
+    const body = (await readBody(req)) || {};
+    return send(res, 200, putRecord(parts[3], parts[5], body.id || "", body.data || {}, null, "release-cloud").rec);
+  }
+  // A file a page saved to Downloads (what the smoke test checks).
+  if (parts[0] === "app" && parts[1] === "page-download" && method === "POST") {
+    const name = url.searchParams.get("name") || "";
+    if (!/\.(csv|tsv|xlsx|xls|pdf|docx|pptx|json|md|txt|html|png|jpe?g|svg|gif|webp|zip|ics)$/i.test(name)) return fail(res, 400, "invalid_argument", "a page saves documents and pictures");
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const buf = Buffer.concat(chunks);
+    state.lastPageDownload = { name, size: buf.length, text: buf.toString("utf8").slice(0, 2000), base64: buf.length < 4e6 ? buf.toString("base64") : "" };
+    return send(res, 200, { path: `/Users/glenn/Downloads/${name}` });
+  }
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-page-download" && method === "GET") return send(res, 200, state.lastPageDownload || {});
   // (the smoke test writes a page's state, as its agent would)
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "pages" && parts[4] === "state" && method === "POST") {
     const cur = pageStates.get(parts[3]) || { state: null, version: 0 };
@@ -2657,6 +2810,41 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { messages: changed, since });
       }
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
+    }
+
+    // /app/hubs/{id}/pins — what a conversation keeps at hand (置顶), the
+    // same list for both its parties (hubs from v0.20.2; MOCK_OLD_HUB: none).
+    if (parts[3] === "pins" && (parts.length === 4 || parts.length === 5)) {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "", "404 page not found");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const body = method === "GET" || method === "DELETE" ? null : await readBody(req);
+      const a = (body?.a || url.searchParams.get("a") || CONSOLE), w = body?.with || url.searchParams.get("with") || "";
+      if (!w) return fail(res, 400, "invalid_argument", "with whom: the conversation's other party is required");
+      const key = [a, w].sort().join("\u0000");
+      const all = (hub.pins ||= {});
+      const list = (all[key] ||= []);
+      const out = () => send(res, 200, { a, with: w, pins: list, max: 20 });
+      if (parts.length === 4 && method === "GET") return out();
+      if (parts.length === 4 && method === "POST") {
+        const same = list.find((p) => p.kind === body.kind && (p.target || "") === (body.target || "") && (p.file?.file_id || "") === (body.file?.file_id || ""));
+        if (same) { if (body.title) same.title = body.title; return send(res, 201, same); }
+        if (list.length >= 20) return fail(res, 409, "conflict", "a conversation keeps 20 pins at most");
+        if (body.kind === "link" && !/^https?:\/\/\S+$/.test(body.target || "")) return fail(res, 400, "invalid_argument", "a link is an http or https address");
+        const title = body.title || (body.kind === "link" ? body.target.replace(/^https?:\/\//, "").replace(/\/$/, "") : body.kind === "file" ? body.file?.name : body.target);
+        const p = { id: `pin_${state.counter += 1}`, kind: body.kind, title, ...(body.target ? { target: body.target } : {}), ...(body.file ? { file: body.file } : {}), added_by: body.by || a, at: iso(0) };
+        list.push(p);
+        return send(res, 201, p);
+      }
+      if (parts.length === 5 && parts[4] === "order" && method === "PUT") {
+        const byId = new Map(list.map((p) => [p.id, p]));
+        const first = (body.ids || []).map((id) => byId.get(id)).filter(Boolean);
+        all[key] = [...first, ...list.filter((p) => !first.includes(p))];
+        return send(res, 200, { a, with: w, pins: all[key], max: 20 });
+      }
+      const i = list.findIndex((p) => p.id === parts[4]);
+      if (parts.length === 5 && i < 0) return fail(res, 404, "not_found", `no pin ${parts[4]} in this conversation`);
+      if (parts.length === 5 && method === "PATCH") { list[i].title = body.title; return send(res, 200, list[i]); }
+      if (parts.length === 5 && method === "DELETE") { list.splice(i, 1); res.writeHead(204); return res.end(); }
     }
 
     // /app/hubs/{id}/hidden — messages taken out of your own view.

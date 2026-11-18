@@ -1,0 +1,41 @@
+# Publishes myco's official apps on their own (templates.md): when the
+# built apps change on main, the "apps" release gets the new apps.zip and
+# SHA256SUMS. Hubs from v0.20.7 fetch it once a day (myco template sync
+# fetches it now), so apps ship without a hub release. It is a prerelease,
+# never "latest": myco upgrade and the hubs' update check ignore it.
+name: Official apps
+
+on:
+  push:
+    branches: [main]
+    paths: ["internal/templates/official/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: official-apps
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/pack-apps.sh
+      - name: Publish the apps release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="myco 的官方应用，Hub（v0.20.7 起）每天自动拉取，也可以运行 myco template sync 立刻拉取。来自 ${GITHUB_SHA::7}。"
+          if gh release view apps >/dev/null 2>&1; then
+            # (the archive first, its checksum after: a hub fetching in
+            # between finds them unmatched and tries again the next day)
+            gh release upload apps dist/apps/apps.zip --clobber
+            gh release upload apps dist/apps/SHA256SUMS --clobber
+            gh release edit apps --notes "$notes" --prerelease --latest=false
+          else
+            gh release create apps dist/apps/apps.zip dist/apps/SHA256SUMS --target "$GITHUB_SHA" \
+              --title "myco 官方应用" --notes "$notes" --prerelease --latest=false
+          fi

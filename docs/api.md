@@ -178,6 +178,43 @@ From v0.19.24 ([design](design/browser.md)): web pages agents (or people) publis
 | `GET /v1/pages/{id}/state` | who sees it | The page's shared state (the bridge's `myco.update`): `{state, version, updated_by?, updated_at?}`; `state` is `null` and `version` `0` before anyone wrote. Kept across the page's versions |
 | `PUT /v1/pages/{id}/state` | who sees it | `{state, if_version}`: any JSON up to 256 KB, based on the version read → the new state (`version` + 1). When someone wrote since: `409 conflict` with `latest` (the current state) |
 
+## Pins
+
+From v0.20.3: what a conversation keeps at hand (置顶), shown as tabs above it in the App: a web address (`link`), a file (`file`), or one of its messages (`message`). A conversation is two parties (a person's console sender `@console:<name>` and an agent, or two agents); both see the same list, in one order, and either changes it. Kept in the hub's settings per conversation (no schema change), 20 at most; pinning the same thing again only changes its title. Agents act in their own conversations only (`a` is themselves); a console token in its own (`a` defaults to its sender) or, naming `a`, in one it may read. Older hubs answer 404 (the App then shows no tabs).
+
+| Endpoint | Who | What |
+| --- | --- | --- |
+| `GET /v1/pins?with=&a=` | agent or person | `{a, with, pins: [{id, kind, title, target?, file?, added_by, at}], max}` in their order. `target` is the address (`link`) or the message id (`message`); `file` is an attachment `{file_id, name, size, sha256, content_type}` |
+| `POST /v1/pins` | agent or person | `{a?, with, kind, title?, target?, file?}` → `201` the pin. A link is `http`/`https` (2048 characters at most); a title is cut to 80 characters and defaults to the address, the file's name or the message id. `409 conflict` past 20 |
+| `PATCH /v1/pins/{id}` | agent or person | `{a?, with, title}` → the pin |
+| `PUT /v1/pins/order` | agent or person | `{a?, with, ids}` → the list, those named first in that order |
+| `DELETE /v1/pins/{id}?with=&a=` | agent or person | `204` |
+
+## Page records and templates
+
+From v0.20.5 ([design](design/templates.md)). A page's data can be **records**: JSON objects in named collections (`[a-z][a-z0-9_-]*`), each written on its own with a version, at most 64 KB a record and 20000 a page. Every write goes into the page's **change feed**. Whoever may see the page reads and writes its records (agent and console tokens alike). A page made from a template checks each record against the template's fields (no unknown fields; each of its type; `null` clears one); a `single` collection holds one record, `main`. Older hubs answer 404.
+
+| Endpoint | What |
+| --- | --- |
+| `GET /v1/pages/{id}/data?collection=` | `{records: [{collection, id, data, version, updated_by, updated_at}], seq}` in their order; `seq` is the latest change, to watch from |
+| `GET /v1/pages/{id}/data/{collection}/{record}` | One record |
+| `POST /v1/pages/{id}/data/{collection}` | `{data}` → `201` a new record (its id made up) |
+| `PUT /v1/pages/{id}/data/{collection}/{record}` | `{data, if_version?}` → the record (`201` when new). `if_version` is the version read (0: it must be new); left out, it writes whatever it is. A conflict answers `409` with the record now in `latest` |
+| `DELETE /v1/pages/{id}/data/{collection}/{record}?if_version=` | `204` |
+| `GET /v1/pages/{id}/changes?after=&wait=` | `{changes: [{seq, collection, record, op: put\|delete, data?, version, by, at}], seq, reset?}` after `after`, oldest first; with `wait` (seconds, up to 60) it waits for one. The newest 5000 are kept: `reset` means list the records again |
+
+**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?}`; types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
+
+| Endpoint | What |
+| --- | --- |
+| `POST /v1/templates` | The body is a zip of the folder → the template (`201` new, `200` a new version; the version must be higher). 200 templates, 10 versions each |
+| `GET /v1/templates` | `{templates: [...]}`: `{id, slug, name, description, kind, category, icon (SVG markup: show it as a mask or an image, never as HTML), version, publisher, data, permissions, export, versions, can_manage, created_at, updated_at}` |
+| `GET /v1/templates/{id}` | One, by `tp_…` or its slug (URL-escaped), with `guide` (agent.md) |
+| `DELETE /v1/templates/{id}` | `204`; pages made from it stay |
+| `POST /v1/templates/sync` | From v0.20.7: fetch myco's official apps now (the hub does once a day; at most once a minute) → `{apps, updated?, source, fetched_at?, error?}` |
+| `POST /v1/pages/{id}/upgrade` | From v0.20.7: a page made from an app takes the app's newest version (new files, new data structure; its records stay) → the page; `409` when it is already at it. A page's `template.latest` says when there is one |
+| `POST /v1/templates/{id}/use` | `{name?, project?, version?, sample?}` → `201 {page, template}`: a page made from it (its `template` says which: `{id, slug, name, version, data, permissions}`), with the sample data when asked |
+
 ## Automations
 
 An automation sends a task, as its owner, to one agent when its schedule comes round or its webhook is called. It runs on the hub (each workspace's own), so it fires while the owner's computers are off. The message is an ordinary task from the owner's console address (`@console:<member>`) with `automation` set: it wakes the agent as usual, and the answer lands in the owner's chat with that agent. Older hubs answer `404` on these routes.

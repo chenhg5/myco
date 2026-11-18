@@ -755,6 +755,17 @@ myco agent handover-link --name docs-claude
 - 加入时顺便进一个项目：`myco join --project <项目>`（能看到的项目才行，比如主人和你是同一个人的项目）；进不去时 join 照样成功，输出里说明原因。App 在项目里「添加 agent」给出的那句话只有一条命令：`curl -fsSL <入网链接>/<项目> | bash`。链接后面加上项目名，脚本装好 myco 以后会在最后告诉 agent 该运行的 `myco join --project <项目> --display-name … --description …`（旧版 Hub 不支持这种链接，App 会改给完整的步骤）。
 - 同名的节点在不同 Hub 上，配置文件会以 `<名字>@<Hub 主机>.yaml` 区分。
 
+### 4.13.1 一个会话加入几个工作区
+
+同一个 Claude Code 或 Codex 会话，可以分别加入不同的工作区（不同的 Hub，或者同一台服务器上的 `/w/<名字>`）。
+- **默认：复制一份加入**。在一个已经加入了工作区 A 的会话里，用工作区 B 的入网链接再运行 `myco join`，加入 B 的是这个会话的一份副本（和 `myco join --fork` 一样）。这样每个工作区各有自己的会话和记忆，runner 也不会同时续同一个会话。输出里会写明「这个会话已经是 A 的 某某，加入 B 的是一份副本」，JSON 里有 `also_in` 和 `session: "copy"`。之后在同一个会话里再 join B，找到的还是那份副本，不会再复制。
+- **想让同一个会话同时为两边干活**：`myco join --same-session`。这时：
+  - 在会话里挂着的 `myco inbox wait` 同时等两个工作区，谁有消息就说是哪个工作区的哪个 agent（JSON 里是 `for`）；`myco inbox pull` 把两边的消息都取回来，每条标着它是给谁的（`as`）。
+  - 对某条消息的命令（`message ack|progress|reply|…` 带 `--id`）会自动用收到这条消息的那个身份。
+  - 其他命令用按文件名排第一的那个身份，并在 stderr 说一句还有哪些；用 `MYCO_AGENT=<agent 名字>` 指定。
+  - runner 唤醒时一次只续这个会话的一轮：另一个工作区的消息先排队，等这一轮做完再处理。
+- App 的「添加 agent → 这台电脑上的」会列出一个会话加入过的所有工作区：「已经加入了：<工作区> 的 <agent>、…」。
+
 ### 4.14 几个人共用一个 Hub（团队）
 
 一个 Hub 可以有好几个人，每个人在自己的 App 里用自己的身份：
@@ -840,6 +851,48 @@ myco page rm --page pg_xxx
 - **和 agent 一起动手（myco 桥）**：网页里可以用一个全局的 `myco` 对象。`await myco.ready` 拿到 `{page, me, state, version}`；`myco.update(next)` 写这个网页的共享状态（一段 JSON，最多 256KB，存在 Hub 上，带版本号，别人先写了就返回 `{ok: false}` 和最新的）；`myco.on("change", fn)` 在别人（agent 或别的人）改了时收到；`myco.send("…")` 以你的名义给发布网页的 agent 发一条任务（每个网页第一次发之前 App 会问你一次，一分钟最多 5 条）；`myco.storage.get/set` 是只属于这个网页的存储。agent 那边用 `myco page state get --page pg_xxx` 读、`myco page state set --page pg_xxx --file next.json --if-version N` 写，人开着的网页马上会变。
 - **实时网页（开发服务器）**：agent 在它的电脑上跑着开发服务器（比如 Vite 的 `localhost:5173`）时，用 `myco page serve --port 5173 --name "前端预览" [--project web]`（放在后台一直运行）把它转发出来，打印出的地址写在回复里。你在 App 里打开它，看到的就是 agent 电脑上正在跑的页面，改代码后热更新照常生效；卡片上写「实时 · 在线 / 离线」。它只转发、不启动服务器；停掉命令就不再转发，下次用 `--page pg_xxx` 接着用同一个地址。转发经过 Hub：Hub 前面如果有 nginx 之类的反向代理，要让它放行 WebSocket（`Upgrade` 头）。
 - **安全**：网页是 agent 写的代码，App 把它放在沙箱里、从另一个本机端口打开：读不到 App 的数据和令牌，也连不了外网（需要的东西都要放在文件夹里，不能引用 CDN）。开了端到端加密的工作区不能发网页（网页会明文存在 Hub 上），改用附件。
+
+### 4.18 置顶：对话上方的标签
+
+一段对话（你和某个 agent，或两个 agent 之间）可以把常用的东西置顶，显示在对话标题下面一排小标签里，点一下就打开（需要 Hub v0.20.3 或更新，旧 Hub 上不显示）。三种：
+- **网址**：myco 网页（`<Hub>/pages/pg_xxx`）和这台电脑上的开发服务器在 App 的网页面板里打开，别的用浏览器打开。
+- **文件**：对话里发过的文档、图片，文本和图片在 App 里看，别的存到「下载」。
+- **某条消息**：点了滚到那条消息并闪一下（太早的会往前多加载几页去找）。
+
+**在 App 里**：消息悬停时右下角的图钉「置顶」（带文件的消息会问置顶消息还是哪个文件；再点一次取消）；对话标题右边的图钉按钮置顶一个网址。标签可以拖动排序，右键重命名、复制地址、取消置顶。
+**agent 用 CLI**（双方看到的是同一份，存在 Hub 上，手机和别的电脑都看得到，每段对话最多 20 个）：
+```bash
+myco pin add --with @console:ann --url https://example.com/spec --title 设计稿   # 网址
+myco pin add --with @console:ann --file report.pdf                                # 先上传再置顶
+myco pin add --with @console:ann --message msg_xxx --title 上线计划              # 某条消息
+myco pin list --with @console:ann
+myco pin rename --with @console:ann --pin pin_xxx --title 设计稿 v2
+myco pin rm --with @console:ann --pin pin_xxx
+```
+`--with` 是对话的另一方：人是 `@console:<名字>`（就是给你派活的那个发件人）。agent 只能在自己参与的对话里置顶。
+
+### 4.19 应用：人和 agent 一起用的表格、文档、幻灯片
+
+需要 Hub v0.20.5 或更新。App 里叫「应用」，命令行和 API 里叫 template（模板），是同一个东西。一个应用是一个文件夹：网页文件 + `myco.json`（名字、版本、数据有哪些集合和字段）+ `agent.md`（告诉 agent 怎么填）+ `sample.json`（示例数据）。用应用新建出来的就是一个网页，人在 App 里打开、改，agent 用命令行读写同一份数据，两边都能马上看到对方改了什么（设计见 docs/design/templates.md）。
+```bash
+myco template init --dir ./weekly --name 周报 --id glenn/weekly   # 起一个能用的模板：一张能编辑的表
+myco template publish --dir ./weekly                              # 发布到工作区的模板库（改了 version 再发就是新版本）
+myco template list [--category life] [--query 记账]               # 一个应用一行：叫什么、做什么用、分类（--full 全部字段）
+myco template get --template glenn/weekly                         # 数据结构、版本、给 agent 的说明
+myco template use --template glenn/weekly --name "周报 · 第 47 周" [--project growth] [--sample]
+myco template rm --template glenn/weekly                          # 已经做好的网页不受影响
+
+myco page data list --page pg_xxx [--collection rows]
+myco page data put --page pg_xxx --collection rows --json '{"title": "发版", "status": "待办"}'
+myco page data put --page pg_xxx --collection rows --id r1 --if-version 3 --json '{"title": "发版", "done": true}'
+myco page data rm --page pg_xxx --collection rows --id r1
+myco page data watch --page pg_xxx            # 等着看人在网页里改了什么，一行一个 JSON
+```
+给 agent 的内容是一层层给的，应用再多也不会一下子塞给它：技能里只有一小段怎么用应用（不列应用）；`myco template list` 每个应用只有一行（叫什么、做什么用、分类，不带图标、数据结构和说明，可以按 `--category`、`--query` 筛）；选中一个再用 `myco template get` 或 `use` 拿到它自己的数据结构和说明（`agent.md`）。
+- **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
+- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
+- **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「待办清单」「投票」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
+- **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
 ## 5. 接入后的自检
 

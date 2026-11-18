@@ -166,6 +166,20 @@
 .sp-nav-pc.is-away .pa {
   opacity: 0.55;
 }
+/* Someone to talk to, under Chat: their face, their name; one click
+   into the chat. Away ones are faded, as computers. */
+.sp-nav-person {
+  padding-left: 6px;
+}
+.sp-nav-person .pa {
+  flex: none;
+}
+.sp-nav-person.is-away {
+  color: var(--faint);
+}
+.sp-nav-person.is-away .pa {
+  opacity: 0.55;
+}
 .sp-nav-members .pa-stack,
 .sp-nav-chat .pa-stack {
   flex: none;
@@ -2724,4 +2738,116 @@ body.is-sorting * {
 }
 .add-agent-way .app-small-note {
   margin-top: 6px;
+}
+
+/* ---------- the sidebar: automations, projects, conversations,
+   computers. One heading style for all four (NavHead): a fold arrow (or
+   its space), the name in one size and weight, the section's buttons on
+   the right. Conversations take the height left and scroll. ---------- */
+.app-nav {
+  display: flex;
+  flex-direction: column;
+}
+.app-nav > .app-nav-group {
+  margin-top: 10px;
+}
+.app-nav > .app-nav-group:first-child {
+  margin-top: 2px;
+}
+.sp-nav-autos,
+.sp-nav-projects,
+.sp-nav-pcs {
+  flex: none;
+}
+.sp-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  height: 28px;
+  padding: 0 2px 0 2px;
+}
+.sp-nav-head .sp-nav-title-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sp-nav-head .sp-nav-title-link:hover,
+.sp-nav-head .sp-nav-title-link.active {
+  color: var(--fg);
+}
+.sp-nav-head .sp-nav-title-link.active {
+  font-weight: 600;
+}
+.sp-nav-head-count {
+  font-weight: 400;
+  color: var(--faint);
+}
+.sp-nav-head-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.sp-nav-chats {
+  flex: 1 1 auto;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+}
+.sp-nav-chats.is-folded {
+  flex: none;
+  min-height: 0;
+}
+.sp-nav-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.sp-nav-pinned {
+  flex: none;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: auto;
+  color: var(--faint) !important;
+}
+.sp-nav-fold {
+  flex: none;
+  display: inline-flex;
+  opacity: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--faint);
+  cursor: default;
+}
+/* the fold arrow shows on the heading's hover (always when folded) */
+.sp-nav-head:hover .sp-nav-fold,
+.sp-nav-fold:focus-visible,
+.sp-nav-fold[aria-expanded="false"] {
+  opacity: 1;
+}
+button.sp-nav-fold:hover {
+  background: var(--nav-hover);
+  color: var(--fg);
+}
+.sp-nav-fold svg {
+  width: 12px;
+  height: 12px;
+}
+.sp-nav-fold svg.is-open {
+  transform: rotate(90deg);
 }

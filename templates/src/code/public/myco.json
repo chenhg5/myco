@@ -1,0 +1,32 @@
+{
+  "id": "myco/code",
+  "name": "代码编辑器",
+  "version": "1.0.0",
+  "kind": "custom",
+  "category": "dev",
+  "icon": "icon.svg",
+  "description": "VS Code 同款的编辑器：文件树、多标签、语法高亮、查找替换、多光标、小地图；agent 直接写文件，你在里面改；HTML 和 Markdown 能直接预览，整个项目能下载成 zip。",
+  "data": {
+    "project": {
+      "single": true,
+      "fields": {
+        "title": "text"
+      }
+    },
+    "files": {
+      "fields": {
+        "path": "text",
+        "content": "text"
+      }
+    }
+  },
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "zip"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}

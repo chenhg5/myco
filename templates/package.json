@@ -1,0 +1,34 @@
+{
+  "name": "myco-templates",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Sources of myco's official templates (built into internal/templates/official)",
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blocknote/core": "0.57.0",
+    "@blocknote/mantine": "0.57.0",
+    "@blocknote/react": "0.57.0",
+    "@glideapps/glide-data-grid": "^6.0.3",
+    "@mantine/core": "8.3.11",
+    "@mantine/hooks": "8.3.11",
+    "lodash": "^4.17.21",
+    "lucide-react": "0.460.0",
+    "marked": "^4.3.0",
+    "monaco-editor": "0.52.2",
+    "pptxgenjs": "3.12.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-responsive-carousel": "^3.2.23"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.3",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}

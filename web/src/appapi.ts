@@ -1,4 +1,4 @@
-import type { Page, PageOpen, PageState, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -187,8 +187,10 @@ export interface LocalSession {
   last_active: string;
   /** The session's first request, shortened; may be empty. */
   title?: string;
-  /** Set when this session is already an agent somewhere. */
-  joined?: { agent: string; hub: string };
+  /** Set when this session is already an agent somewhere (the first one). */
+  joined?: { agent: string; hub: string; hub_name?: string };
+  /** Every workspace it joined (one session can be an agent of several). */
+  joined_all?: { agent: string; hub: string; hub_name?: string }[];
 }
 export interface LocalJoinInput {
   cli: string;
@@ -347,6 +349,9 @@ export class ApiError extends Error {
 export function isTransient(e: unknown): boolean {
   if (e instanceof ApiError) {
     if (e.code === "unavailable" || e.code === "timeout") return true;
+    // An error with a code of its own (fork_failed, say) is that error,
+    // whatever the status: not a hub that is down or slow.
+    if (e.code) return false;
     if (e.status === 502 || e.status === 503 || e.status === 504) return true;
     return /deadline exceeded|timed? ?out|connection (refused|reset)|no such host|EOF/i.test(e.message);
   }
@@ -694,6 +699,41 @@ export const appApi = {
   voice: () => request<VoiceInfo>("GET", "app/voice"),
   putVoiceConfig: (input: Partial<VoiceConfig> & { llm_key?: string; tts_key?: string; clear_llm_key?: boolean; clear_tts_key?: boolean; share?: boolean }) =>
     request<VoiceInfo>("PUT", "app/voice/config", input),
+  // The template library (hubs from v0.20.5; older ones answer 404).
+  templates: (hubId: string) => request<{ templates: Template[] }>("GET", `app/hubs/${enc(hubId)}/templates`),
+  template: (hubId: string, id: string) => request<Template>("GET", `app/hubs/${enc(hubId)}/templates/${enc(id)}`),
+  // Fetch myco's official apps now; give a page its app's newest version (hubs from v0.20.7).
+  syncApps: (hubId: string) => request<{ apps: number; updated?: string[]; source: string; error?: string }>("POST", `app/hubs/${enc(hubId)}/templates/sync`),
+  upgradePage: (hubId: string, id: string) => request<Page>("POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/upgrade`),
+  useTemplate: (hubId: string, id: string, input: { name?: string; project?: string; sample?: boolean }) =>
+    request<{ page: Page; template: Template }>("POST", `app/hubs/${enc(hubId)}/templates/${enc(id)}/use`, input),
+  // A page's records and change feed (hubs from v0.20.5), for the bridge.
+  pageRecords: (hubId: string, id: string, collection?: string) =>
+    request<{ records: PageRecord[]; seq: number }>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data${collection ? `?collection=${enc(collection)}` : ""}`),
+  pageRecord: (hubId: string, id: string, collection: string, rid: string) =>
+    request<PageRecord>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}`),
+  /** A record written; on a conflict the error carries the latest. */
+  putPageRecord: (hubId: string, id: string, collection: string, rid: string, data: unknown, ifVersion: number | null) =>
+    request<PageRecord>(rid ? "PUT" : "POST", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}${rid ? `/${enc(rid)}` : ""}`,
+      { data, ...(ifVersion === null ? {} : { if_version: ifVersion }) }),
+  deletePageRecord: (hubId: string, id: string, collection: string, rid: string, ifVersion = 0) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/pages/${enc(id)}/data/${enc(collection)}/${enc(rid)}${ifVersion ? `?if_version=${ifVersion}` : ""}`),
+  pageChanges: (hubId: string, id: string, after: number) =>
+    request<PageChanges>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}/changes?after=${after}`),
+  /** A file a page made, saved to Downloads and shown. */
+  pageDownload: (name: string, bytes: Uint8Array, type: string) =>
+    request<{ path: string }>("POST", `app/page-download?name=${encodeURIComponent(name)}`, new Blob([bytes], { type: type || "application/octet-stream" })),
+  // Pins (hubs from v0.20.3; older ones answer 404): what a conversation
+  // keeps at hand, for both its parties. a: the first party (default you).
+  pins: (hubId: string, withWhom: string, a?: string) =>
+    request<PinList>("GET", `app/hubs/${enc(hubId)}/pins?with=${enc(withWhom)}${a ? `&a=${enc(a)}` : ""}`),
+  addPin: (hubId: string, p: PinCreate) => request<Pin>("POST", `app/hubs/${enc(hubId)}/pins`, p),
+  renamePin: (hubId: string, id: string, withWhom: string, title: string, a?: string) =>
+    request<Pin>("PATCH", `app/hubs/${enc(hubId)}/pins/${enc(id)}`, { with: withWhom, title, ...(a ? { a } : {}) }),
+  removePin: (hubId: string, id: string, withWhom: string, a?: string) =>
+    request<void>("DELETE", `app/hubs/${enc(hubId)}/pins/${enc(id)}?with=${enc(withWhom)}${a ? `&a=${enc(a)}` : ""}`),
+  orderPins: (hubId: string, withWhom: string, ids: string[], a?: string) =>
+    request<PinList>("PUT", `app/hubs/${enc(hubId)}/pins/order`, { with: withWhom, ids, ...(a ? { a } : {}) }),
   // Pages (hubs from v0.19.24; older ones answer 404): agents' web pages
   pages: (hubId: string, project?: string) => request<{ pages: Page[] }>("GET", `app/hubs/${enc(hubId)}/pages${project ? `?project=${enc(project)}` : ""}`),
   page: (hubId: string, id: string) => request<Page>("GET", `app/hubs/${enc(hubId)}/pages/${enc(id)}`),

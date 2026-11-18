@@ -120,10 +120,10 @@ export function TranslatableBody({ id, body }: { id: string; body: string }) {
     translated(body, to).then((text) => live && setSt({ text }), (e) => live && setSt({ error: failure(e) }));
     return () => { live = false; };
   }, [want, body, to]);
-  if (!want) return <MessageContent body={body} />;
+  if (!want) return <MessageContent body={body} foldId={id} />;
   return (
     <>
-      <MessageContent body={st.text ?? body} />
+      <MessageContent body={st.text ?? body} foldId={id} />
       <div className="conv-translated">
         {st.error ? <span className="is-error">{st.error}</span>
           : st.text === undefined ? <span>{L("正在翻译…", "Translating…")}</span>

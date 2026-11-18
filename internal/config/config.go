@@ -47,6 +47,10 @@ type Config struct {
 	// (a handover): what it said. The runner no longer wakes it; saving a
 	// new identity here clears it.
 	Replaced string `yaml:"replaced,omitempty" json:"replaced,omitempty"`
+	// CopyOf is the session this agent's session was copied from when it
+	// joined (myco join --fork, or a second workspace): joining again from
+	// that session finds this copy instead of making another.
+	CopyOf string `yaml:"copy_of,omitempty" json:"copy_of,omitempty"`
 }
 
 // Runner configures `myco runner start`.
@@ -183,6 +187,28 @@ func ListProfiles(dir string) ([]Profile, error) {
 		out = append(out, Profile{Path: m, Config: c})
 	}
 	return out, nil
+}
+
+// SessionProfiles returns every profile bound to sessionID: one per
+// workspace the session joined, by file name, those another session took
+// over (a handover) last.
+func SessionProfiles(dir, sessionID string) []Profile {
+	if sessionID == "" {
+		return nil
+	}
+	ps, _ := ListProfiles(dir)
+	var live, replaced []Profile
+	for _, p := range ps {
+		if p.Config.SessionID != sessionID {
+			continue
+		}
+		if p.Config.Replaced != "" {
+			replaced = append(replaced, p)
+		} else {
+			live = append(live, p)
+		}
+	}
+	return append(live, replaced...)
 }
 
 // FindBySession returns the profile bound to sessionID, if any.

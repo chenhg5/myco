@@ -306,7 +306,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, onClos
                       <span className="add-local-icon"><Icon /></span>
                       <span className="add-local-main">
                         <span className="add-local-name">{s.title || folderOf(s.workdir)}</span>
-                        <span className="add-local-sub">{s.joined?.agent ? L(`已经加入了，是 ${s.joined.agent}`, `Already joined as ${s.joined.agent}`) : L("已经加入了", "Already joined")}</span>
+                        <span className="add-local-sub" title={joinedWhere(s).join("\n")}>{joinedLine(s)}</span>
                       </span>
                     </div>
                   );
@@ -493,6 +493,23 @@ export function shortDir(dir: string): string {
   const sep = d.includes("\\") && !d.includes("/") ? "\\" : "/";
   const parts = d.split(sep);
   return parts.length > 4 ? [parts[0], "…", ...parts.slice(-2)].join(sep) : d;
+}
+
+/** Where a local session joined: "<workspace> 的 <agent>", each workspace once. */
+function joinedWhere(s: LocalSession): string[] {
+  const all = s.joined_all?.length ? s.joined_all : s.joined ? [s.joined] : [];
+  return all.map((j) => {
+    let ws = j.hub_name || "";
+    if (!ws) {
+      try { const u = new URL(j.hub); ws = u.host + u.pathname.replace(/\/$/, ""); } catch { ws = j.hub; }
+    }
+    return L(`${ws} 的 ${j.agent}`, `${j.agent} in ${ws}`);
+  });
+}
+
+function joinedLine(s: LocalSession): string {
+  const where = joinedWhere(s);
+  return where.length ? L(`已经加入了：${where.join("、")}`, `Already joined: ${where.join(", ")}`) : L("已经加入了", "Already joined");
 }
 
 function folderOf(dir: string): string {

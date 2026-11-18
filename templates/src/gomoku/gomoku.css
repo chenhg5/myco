@@ -1,0 +1,33 @@
+/* 五子棋 */
+.gm-main { flex: 1; min-height: 0; display: flex; gap: 20px; padding: 16px 20px; border-top: 1px solid var(--line2); background: var(--bg2); overflow: auto; }
+.gm-side { width: 240px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.gm-seat { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: left; }
+.gm-seat:hover { border-color: var(--faint); }
+.gm-seat.is-turn { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.gm-seat-text { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 0; }
+.gm-seat-text b { font-size: 14px; }
+.gm-seat-text .faint { display: inline-flex; align-items: center; gap: 4px; }
+.gm-stone { width: 30px; height: 30px; border-radius: 50%; flex: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+.gm-stone.is-black { background: radial-gradient(circle at 35% 30%, #666, #111 70%); }
+.gm-stone.is-white { background: radial-gradient(circle at 35% 30%, #fff, #d6d6d6 75%); }
+.gm-status { padding: 10px 12px; border-radius: 10px; background: var(--bg); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.gm-status.is-mine { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+.gm-status.is-over { background: color-mix(in srgb, var(--green) 16%, var(--bg)); color: var(--fg); font-weight: 600; }
+.gm-moves { padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 12.5px; }
+.gm-moves-head { color: var(--muted); margin-bottom: 6px; }
+.gm-moves ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; color: var(--fg); }
+.gm-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; border: 1px solid #999; }
+.gm-dot.is-black { background: #222; } .gm-dot.is-white { background: #fff; }
+.gm-board-wrap { flex: 1; min-width: 0; display: flex; align-items: flex-start; justify-content: center; }
+.gm-board { width: min(100%, calc(100vh - 150px)); max-width: 680px; height: auto; filter: drop-shadow(0 4px 18px rgba(31, 35, 41, 0.18)); user-select: none; }
+.gm-board.is-mine { cursor: pointer; }
+.gm-wood { fill: #e9c88f; }
+.gm-grid { stroke: #6b4e22; stroke-width: 1; opacity: 0.75; }
+.gm-star { fill: #6b4e22; }
+.gm-coord { font-size: 10px; fill: #6b4e22; opacity: 0.8; }
+.gm-s { filter: drop-shadow(1px 2px 1.5px rgba(0, 0, 0, 0.35)); }
+.gm-s.is-win { stroke: #f54a45; stroke-width: 3; }
+.gm-ghost { opacity: 0.4; }
+.gm-ghost.is-black { fill: #111; } .gm-ghost.is-white { fill: #fff; }
+.gm-last.on-black { fill: #f54a45; } .gm-last.on-white { fill: #f54a45; }
+@media (max-width: 640px) { .gm-main { flex-direction: column; } .gm-side { width: auto; } }

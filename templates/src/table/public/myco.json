@@ -1,0 +1,34 @@
+{
+  "id": "myco/table",
+  "name": "表格",
+  "version": "2.0.0",
+  "kind": "table",
+  "category": "office",
+  "icon": "icon.svg",
+  "description": "像飞书表格一样一起填：列有类型（单选标签、日期、人员…），框选复制、从 Excel 粘贴、下拉填充，筛选、排序、搜索，导出 Excel 和 CSV。",
+  "data": {
+    "sheet": {
+      "single": true,
+      "fields": {
+        "title": "text",
+        "columns": "json"
+      }
+    },
+    "rows": {
+      "fields": {
+        "cells": "json",
+        "order": "number"
+      }
+    }
+  },
+  "permissions": [
+    "download"
+  ],
+  "export": [
+    "csv",
+    "xlsx"
+  ],
+  "requires": {
+    "hub": "0.20.7"
+  }
+}
