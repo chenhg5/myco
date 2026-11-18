@@ -59,7 +59,7 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
 /** A file that is not a picture: a text file (Markdown, a log, code)
  *  opens to read in the App; anything else saves to Downloads. A file sent
  *  again under the same name says which version it is. */
-function FileRow({ hubId, a }: { hubId: string; a: Attachment }) {
+export function FileRow({ hubId, a }: { hubId: string; a: Attachment }) {
   const version = useVersion(a.file_id);
   const [reading, setReading] = useState(false);
   if (isText(a)) {

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Loader2, Lock, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -23,6 +23,7 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
+import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
 import { PageCards } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
@@ -35,7 +36,7 @@ import { takePendingFind } from "@/app/CommandPalette";
 import { setHidden, useHidden } from "@/app/hidden";
 import { noteChat } from "@/app/recentChats";
 import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
-import { useContextMenu } from "@/app/ContextMenu";
+import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { isPicture } from "@/app/attachments";
 
 /** Answers already grown in (once each, even if the view is drawn again),
@@ -291,6 +292,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const [messages, setMessages] = useState<Message[] | null>(() => recall<SeenConversation>(cacheKey(target))?.messages ?? null);
   // Exporting this conversation (Markdown or JSON Lines, to Downloads).
   const [exporting, setExporting] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const headMenu = useContextMenu();
   // (a reply done growing in shows its attachments: one more render)
   const [, setRevealedTick] = useState(0);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -1876,6 +1879,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // A file sent again under the same name is its next version.
   const versions = versionsOf(shown || []);
 
+  // The header's ⋯ menu: what is used now and then.
+  const headMore: MenuItem[] = [
+    ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
+    ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
+    ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
+  ];
+  // Everything sent in the chat so far (what is loaded), for 图片和文件.
+  const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
+    ...(m.unreadable ? [] : (m.attachments || []).map((a) => ({ a, msg: m.id, from: m.from, at: m.created_at }))),
+    ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : (x.attachments || []).map((a) => ({ a, msg: m.id, from: x.from, at: x.created_at })))),
+  ]) : [];
+
   return (
     <VersionsContext.Provider value={versions}>
     <div className={cn("conv-detail", hasRail && "has-rail")} ref={rootRef} onPointerDown={() => markActivePane(rootRef.current)}>
@@ -1923,30 +1938,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 <Settings2 />
               </button>
             )}
-            {!termMode && pins && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="pin-add"
-                onClick={() => setPinAdding(true)} title={L("置顶一个网址：对话上方多一个标签", "Pin an address: a tab above the conversation")} aria-label={L("置顶一个网址", "Pin an address")}>
-                <PinIcon />
-              </button>
-            )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
                 title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
               </button>
             )}
-            {hoEntry.show && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="handover-head"
-                disabled={!!hoEntry.why} onClick={() => openHandover({ hubId: target.hubId, name: target.agent })}
-                title={hoEntry.why || L("换一个来接着做：另一个会话接手，聊天记录都在", "Hand over: another session carries on, the chat stays")}
-                aria-label={L("换一个来接着做", "Hand over to another session")}>
-                <ArrowRightLeft />
+            {!termMode && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", filesOpen && "is-on")} data-testid="chat-files-open"
+                onClick={() => setFilesOpen((v) => !v)} title={L("图片和文件：这段对话里发过的", "Pictures and files sent in this chat")} aria-label={L("图片和文件", "Pictures and files")}>
+                <Images />
               </button>
             )}
-            {!observed && (shown?.length || 0) > 0 && (
-              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="export-open"
-                onClick={() => setExporting(true)} title={L("导出这段对话", "Export this conversation")} aria-label={L("导出这段对话", "Export this conversation")}>
-                <Download />
+            {/* The rest, used now and then: one ⋯ menu. */}
+            {headMore.length > 0 && (
+              <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn")} data-testid="chat-more"
+                onClick={(e) => headMenu.openUnder(e.currentTarget, headMore)} title={L("更多", "More")} aria-label={L("更多", "More")} aria-haspopup="menu">
+                <MoreHorizontal />
               </button>
             )}
             {headActions}
@@ -1958,6 +1966,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
       {pinMenu.element}
+      {headMenu.element}
+      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
+        nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
+        more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />
       <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
         messages={shown || []} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />
 

@@ -732,8 +732,9 @@ async function runMatrix(browser, size, scheme) {
       if ((await msgTab.innerText()).includes("http")) throw new Error(`置顶消息的标签不该带链接，实际「${await msgTab.innerText()}」`);
       await msg.hover();
       await msg.getByRole("button", { name: "取消置顶" }).waitFor({ timeout: 5_000 });
-      // An address, from the header.
-      await clickVisible(page, chat.locator("[data-testid=pin-add]"));
+      // An address, from the header's ⋯ menu.
+      await clickVisible(page, chat.locator("[data-testid=chat-more]"));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "置顶一个网址" }));
       await page.locator("[data-testid=pin-url]").fill("https://example.com/design");
       await page.locator("[data-testid=pin-title]").fill("设计稿");
       await clickVisible(page, page.getByRole("button", { name: "置顶", exact: true }));
@@ -1722,6 +1723,34 @@ async function runMatrix(browser, size, scheme) {
       if (!await along.evaluate((img) => img.complete && img.naturalWidth > 0)) throw new Error("进展里的截图应显示缩略图");
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // What was sent in a chat, in one place: the header's 图片和文件 opens
+    // a panel with the pictures as a grid and the files as rows, each a way
+    // back to its message. The rest of the header's tools sit in ⋯.
+    await step("单聊 · 图片和文件", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const head = page.locator(".conv-detail .conv-head");
+      const icons = await head.locator(".conv-head-actions > .conv-head-find:visible").count();
+      if (icons > 3) throw new Error(`单聊顶栏右边最多三个按钮（找、图片和文件、更多），实际 ${icons} 个`);
+      await clickVisible(page, head.locator("[data-testid=chat-files-open]"));
+      const panel = page.locator(".cf-panel");
+      await panel.waitFor({ timeout: 5_000 });
+      const pics = panel.locator("[data-testid=chat-files-pictures] .cf-shot");
+      await pics.first().waitFor({ timeout: 5_000 });
+      if ((await pics.count()) < 2) throw new Error(`图片和文件里应列出这段对话发过的图片，实际 ${await pics.count()} 张`);
+      if (!(await panel.locator("[data-testid=chat-files-files] .cf-file", { hasText: "发布说明.md" }).count())) throw new Error("图片和文件里应列出发过的文件（发布说明.md）");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-files");
+      await pics.first().click();
+      await page.locator(".lightbox .lightbox-img").waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape");
+      await page.locator(".lightbox").waitFor({ state: "hidden", timeout: 5_000 });
+      await clickVisible(page, panel.getByRole("tab", { name: /^文件/ }));
+      if (await pics.count()) throw new Error("只看文件时不该有图片");
+      await clickVisible(page, panel.locator(".cf-locate").first());
+      if (await panel.isVisible()) await panel.getByRole("button", { name: "关闭" }).click();
+      await panel.waitFor({ state: "hidden", timeout: 5_000 });
     });
 
     // Speaking instead of typing: the microphone beside Send listens in the
@@ -2972,7 +3001,8 @@ async function runMatrix(browser, size, scheme) {
     // JSON Lines for programs, saved to Downloads.
     await step("单聊 · 导出对话", async () => {
       await openMember(page, narrow, "聊天", "Myco (Grok)");
-      await clickVisible(page, page.locator("[data-testid=export-open]").first());
+      await clickVisible(page, page.locator("[data-testid=chat-more]").first());
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "导出这段对话" }));
       const dlg = page.locator("[data-testid=export-chat]");
       await dlg.waitFor({ timeout: 10_000 });
       await clickVisible(page, dlg.getByRole("checkbox"));
