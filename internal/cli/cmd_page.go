@@ -137,6 +137,9 @@ otherwise your owner (and the workspace's admins).`,
 			}
 			return e.p.Print(p, func(w io.Writer) {
 				fmt.Fprintf(w, "%s  %s\n%s\n", p.ID, p.Name, p.URL)
+				if p.Template != nil {
+					fmt.Fprintf(w, "made from template %s %s: its data is in myco page data list --page %s; how to fill it: myco template get --template %s\n", p.Template.Slug, p.Template.Version, p.ID, p.Template.Slug)
+				}
 				if p.Project != "" {
 					fmt.Fprintf(w, "project: %s\n", p.Project)
 				}
@@ -314,7 +317,7 @@ takes up a live page it published before (same address).`,
 			return nil
 		}),
 	}
-	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, state)
+	return (&Command{Name: "page", Summary: "Web pages people open in the App (reports, slides, prototypes)"}).Add(publish, serve, list, get, rm, state, pageDataCommand())
 }
 
 // pageErr says what to do on a hub without pages.

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{NAME}}</title>
+<style>
+:root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --pill: #f2f2f4; --accent: #10a37f; --red: #d4493f; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f4; --muted: #9a9aa1; --line: #333336; --pill: #2a2a2d; --accent: #34c79a; --red: #f07167; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+header { display: flex; align-items: center; gap: 10px; padding: 16px 20px 10px; }
+h1 { font-size: 18px; margin: 0; flex: 1; }
+#who { color: var(--muted); font-size: 12px; }
+button { font: inherit; border: 0; border-radius: 7px; padding: 5px 10px; background: var(--pill); color: var(--fg); cursor: default; }
+button.primary { background: var(--accent); color: #fff; }
+.wrap { padding: 0 20px 24px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 2px 2px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td input, td select, td textarea { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; padding: 6px 4px; border-radius: 5px; }
+td input:focus, td select:focus, td textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+td textarea { resize: vertical; min-height: 32px; }
+td input[type=checkbox] { width: auto; }
+tr.flash td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.del { background: none; color: var(--muted); padding: 2px 6px; }
+.del:hover { color: var(--red); }
+#note { padding: 8px 20px; color: var(--muted); font-size: 12px; min-height: 30px; }
+.empty { color: var(--muted); padding: 24px 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">{{NAME}}</h1>
+  <span id="who"></span>
+  <button id="export">导出 CSV</button>
+  <button id="add" class="primary">+ 加一行</button>
+</header>
+<div class="wrap"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+<div id="note"></div>
+<script>
+// A table over one collection of the page's data (myco.json says its
+// fields). People edit it here; agents with `myco page data`. Both see what
+// the other changed as it happens.
+const note = (t) => { document.getElementById("note").textContent = t || ""; };
+let manifest, coll, fields, rows = [];
+
+function cell(row, name, type) {
+  const v = row.data[name];
+  let el;
+  if (type === "bool") {
+    el = document.createElement("input"); el.type = "checkbox"; el.checked = !!v;
+  } else if (type === "markdown") {
+    el = document.createElement("textarea"); el.value = v ?? "";
+  } else if (type === "select" && name === "status") {
+    el = document.createElement("select");
+    for (const o of ["", "待办", "进行中", "完成"]) { const op = document.createElement("option"); op.value = o; op.textContent = o || "—"; el.appendChild(op); }
+    el.value = v ?? "";
+  } else {
+    el = document.createElement("input");
+    el.type = type === "number" ? "number" : type === "date" ? "date" : "text";
+    el.value = v ?? "";
+  }
+  el.addEventListener("change", () => save(row, name, type === "bool" ? el.checked : type === "number" ? (el.value === "" ? null : Number(el.value)) : (el.value === "" ? null : el.value)));
+  return el;
+}
+
+function draw(flashId) {
+  const head = document.getElementById("head"), body = document.getElementById("body");
+  head.innerHTML = "<tr>" + Object.keys(fields).map((f) => `<th>${f}</th>`).join("") + "<th></th></tr>";
+  body.innerHTML = "";
+  if (!rows.length) { body.innerHTML = `<tr><td class="empty" colspan="${Object.keys(fields).length + 1}">还没有内容，点「加一行」，或者让 agent 来填。</td></tr>`; return; }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    if (row.id === flashId) { tr.className = "flash"; setTimeout(() => tr.classList.remove("flash"), 1200); }
+    for (const [name, type] of Object.entries(fields)) { const td = document.createElement("td"); td.appendChild(cell(row, name, type)); tr.appendChild(td); }
+    const td = document.createElement("td"); const b = document.createElement("button"); b.className = "del"; b.textContent = "删除"; b.title = "删除这一行";
+    b.onclick = async () => { try { await myco.data.remove(coll, row.id); } catch (e) { note(e.message); } };
+    td.appendChild(b); tr.appendChild(td); body.appendChild(tr);
+  }
+}
+
+async function save(row, name, value) {
+  const next = { ...row.data, [name]: value };
+  if (value === null) delete next[name];
+  try {
+    const r = await myco.data.put(coll, next, { id: row.id, ifVersion: row.version });
+    Object.assign(row, r); note("已保存");
+  } catch (e) {
+    // Someone changed it first: show theirs.
+    if (e.code === "conflict" && e.latest) { Object.assign(row, e.latest); draw(row.id); note("别人刚改过这一行，已显示最新的"); }
+    else note(e.message);
+  }
+}
+
+function apply(ch) {
+  const i = rows.findIndex((r) => r.id === ch.record);
+  if (ch.collection !== coll) return;
+  if (ch.op === "delete") { if (i >= 0) rows.splice(i, 1); }
+  else if (i >= 0) { rows[i] = { ...rows[i], data: ch.data, version: ch.version }; }
+  else rows.push({ collection: ch.collection, id: ch.record, data: ch.data, version: ch.version });
+  draw(ch.record);
+  if (ch.by) note(`${ch.by} 刚改了`);
+}
+
+function csv() {
+  const names = Object.keys(fields);
+  const esc = (v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  return "﻿" + [names.join(","), ...rows.map((r) => names.map((n) => esc(r.data[n])).join(","))].join("\n");
+}
+
+(async () => {
+  manifest = await (await fetch("myco.json")).json();
+  coll = Object.keys(manifest.data || {})[0];
+  fields = manifest.data[coll].fields;
+  document.getElementById("title").textContent = manifest.name;
+  try {
+    const c = await myco.ready;
+    document.getElementById("who").textContent = c.me ? `你是 ${c.me}` : "";
+    rows = (await myco.data.list(coll)).records;
+    draw();
+    myco.data.on((ch) => apply(ch));
+  } catch (e) {
+    note("在 myco App 里打开这个网页，才能读写数据。");
+  }
+  document.getElementById("add").onclick = async () => {
+    try { const r = await myco.data.put(coll, { status: "待办" }); rows.push(r); draw(r.id); } catch (e) { note(e.message); }
+  };
+  document.getElementById("export").onclick = async () => {
+    try { await myco.download(`${manifest.name}.csv`, csv(), "text/csv"); note("已存到「下载」"); } catch (e) { note(e.message); }
+  };
+})();
+</script>
+</body>
+</html>

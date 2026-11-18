@@ -1,0 +1,21 @@
+{
+  "id": "{{ID}}",
+  "name": "{{NAME}}",
+  "version": "1.0.0",
+  "kind": "table",
+  "description": "",
+  "data": {
+    "rows": {
+      "fields": {
+        "title": "text",
+        "owner": "person",
+        "status": "select",
+        "due": "date",
+        "done": "bool",
+        "note": "markdown"
+      }
+    }
+  },
+  "permissions": ["download"],
+  "export": ["csv"]
+}
