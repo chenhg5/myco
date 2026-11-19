@@ -152,6 +152,8 @@ export interface AutomationRun {
   /** what a webhook call carried (hubs from v0.20.18); in a list of runs
    *  without its body: appApi.automationRun has it */
   request?: WebhookRequest;
+  /** the workflow run it started (a workflow automation) */
+  workflow_run?: string;
 }
 export interface WebhookRequest { content_type?: string; headers?: Record<string, string>; body?: string; size: number }
 /** A web page published to a hub (hubs from v0.19.24): a folder of static
@@ -209,13 +211,49 @@ export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
   created_at: string; updated_at: string; next_run_at?: string; last_run?: AutomationRun;
+  /** It starts this workflow instead of sending a task (hubs from v0.21). */
+  workflow?: string; workflow_name?: string; inputs?: Record<string, string>;
 }
 export interface AutomationRequest {
   name?: string; to?: string; project?: string; body?: string;
   schedule?: AutomationSchedule; clear_schedule?: boolean;
   webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
+  workflow?: string; inputs?: Record<string, string>;
 }
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
+
+/** Workflows (hubs from v0.21): steps the workspace hands to agents,
+ *  computers and people, in order (docs/design/workflow.md). */
+export interface WfSchema {
+  type?: string; title?: string; description?: string; required?: string[];
+  properties?: Record<string, WfSchema>; items?: WfSchema; enum?: unknown[]; default?: unknown; format?: string;
+}
+export interface WfStepDef {
+  id: string; title?: string; agent?: string; prompt?: string; computer?: string; run?: string; parse?: string;
+  human?: string; options?: string[]; output?: WfSchema; timeout?: string; retry?: number; dispatch?: string; join?: string;
+}
+export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean }
+export interface WorkflowDef { name: string; description?: string; project?: string; inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[] }
+export interface Workflow {
+  id: string; name: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
+  steps: number; active: number; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
+}
+export type RunStatus = "running" | "waiting" | "succeeded" | "failed" | "cancelled";
+export type StepStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
+export interface RunStep {
+  id: string; step: string; title?: string; kind: "agent" | "computer" | "human"; attempt: number; status: StepStatus;
+  target?: string; message_id?: string; input?: string; output?: Record<string, unknown>; summary?: string; error?: string;
+  retries?: number; bounced?: boolean; options?: string[]; started_at: string; ended_at?: string; due_at?: string;
+}
+export interface RunEvent { at: string; kind: string; step?: string; text: string }
+export interface WorkflowRun {
+  id: string; workflow_id: string; name: string; version: number; project?: string; status: RunStatus;
+  inputs?: Record<string, unknown>; owner?: string; by?: string; trigger?: string; error?: string; current?: string[];
+  steps?: RunStep[]; events?: RunEvent[]; definition?: WorkflowDef; created_at: string; updated_at: string; ended_at?: string;
+}
+export interface WorkflowApplyResponse { workflow: Workflow; created: boolean; changed: boolean; warnings?: string[] }
+export interface WorkflowCheck { valid: boolean; problems?: string[]; warnings?: string[] }
+export interface WorkflowDecision { run: WorkflowRun; step: RunStep }
 export interface AutomationDetail { automation: Automation; runs: AutomationRun[] }
 /** Handing a node over to another session (「换一个来接着做」, hubs after
  *  v0.19.22): the name and conversations stay, the session changes. */
@@ -244,6 +282,10 @@ export interface Message {
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the automation that sent it (hubs from v0.19.22) */
   automation?: string;
+  /** On a task a workflow sent: its run (hubs from v0.21). */
+  workflow?: string;
+  /** On a reply: the structured result handed back with it. */
+  result?: Record<string, unknown>;
   /** the person behind the sender (member name) */
   from_owner?: string;
   /** a progress update asking the task's sender to decide (body: the

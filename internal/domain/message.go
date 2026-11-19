@@ -107,8 +107,13 @@ type Message struct {
 	Suggest string
 	// Automation is the automation that sent it ("" for none).
 	Automation string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// Workflow, on a task a workflow sent, is its run's id ("" for none).
+	Workflow string
+	// Result, on a reply, is the structured result its sender handed back
+	// with it (JSON; "" for none): what a workflow step reads.
+	Result    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	// ActiveAt is when its recipient last showed it is working on it (read
 	// it, reported progress, uploaded its trace); zero when never. Kept
 	// apart from UpdatedAt, which orders conversations.

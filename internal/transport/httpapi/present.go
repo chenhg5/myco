@@ -131,10 +131,13 @@ func messageDTO(m *domain.Message) api.Message {
 		Type: string(m.Type), Body: m.Body, Status: string(m.Status), Attempts: m.Attempts,
 		Error: m.Error, IdempotencyKey: m.IdempotencyKey, BroadcastID: m.BroadcastID, Project: m.Project, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		FromOwner: m.FromOwner, E2E: domain.IsSealed(m.Body),
-		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest, Automation: m.Automation,
+		Ask: m.Ask, Asking: m.Asking, Answers: m.Answers, Suggest: m.Suggest, Automation: m.Automation, Workflow: m.Workflow,
 	}
 	if m.Status == domain.StatusDelivered {
 		out.LeaseUntil = timePtr(m.LeaseUntil)
+	}
+	if m.Result != "" {
+		out.Result = json.RawMessage(m.Result)
 	}
 	for _, a := range m.Attachments {
 		out.Attachments = append(out.Attachments, api.Attachment{FileID: a.FileID, Name: a.Name, Size: a.Size, SHA256: a.SHA256, ContentType: a.ContentType})

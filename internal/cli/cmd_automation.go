@@ -117,10 +117,13 @@ plain text (not end-to-end encrypted).`,
 		Examples: []string{
 			`myco automation create --name "日报" --to pm --body "整理今天的进展，写成日报" --cron "0 18 * * 1-5" --tz Asia/Shanghai`,
 			`myco automation create --name "CI 失败" --to backend --body "CI 失败了，看一下：{{payload}}" --webhook`,
+			`myco automation create --name "新 issue" --workflow 写-审-改 --input 'task=修 issue：{{payload.issue.title}}' --webhook`,
 		},
 		Flags: append([]Flag{
 			{Name: "name", Kind: String, Required: true, Help: "What to call it"},
-			{Name: "to", Kind: String, Required: true, Help: "The agent it sends to"},
+			{Name: "to", Kind: String, Help: "The agent it sends to"},
+			{Name: "workflow", Kind: String, Help: "Start this workflow (name or id) instead of sending a task (hubs from v0.21)"},
+			{Name: "input", Kind: List, Help: "With --workflow: an input as key=template, {{payload.x}} reading the webhook call (repeatable)"},
 			{Name: "body", Kind: String, Help: "The message ({{payload}} = a webhook call's body)"},
 			{Name: "body-file", Kind: String, Help: "Read the message from a file ('-' = stdin)"},
 			{Name: "project", Kind: String, Help: "Put its tasks in this project"},
@@ -129,14 +132,26 @@ plain text (not end-to-end encrypted).`,
 			{Name: "disabled", Kind: Bool, Help: "Make it turned off"},
 		}, append(scheduleFlags, adminFlag)...),
 		Run: handler(func(e *env) error {
-			if err := e.in.Require("name", "to"); err != nil {
+			if err := e.in.Require("name"); err != nil {
 				return err
 			}
-			body, err := e.readBody("body", "body-file")
-			if err != nil {
-				return err
+			var req api.AutomationRequest
+			if wf := e.in.String("workflow"); wf != "" {
+				inputs, err := inputPairs(e.in.List("input"))
+				if err != nil {
+					return err
+				}
+				req = api.AutomationRequest{Name: strPtr(e.in.String("name")), Workflow: &wf, Inputs: inputs}
+			} else {
+				if err := e.in.Require("to"); err != nil {
+					return errorf("invalid_argument", ExitUsage, "pass --to <agent> --body <message>, or --workflow <name>", "an automation sends a task to an agent or starts a workflow")
+				}
+				body, err := e.readBody("body", "body-file")
+				if err != nil {
+					return err
+				}
+				req = api.AutomationRequest{Name: strPtr(e.in.String("name")), To: strPtr(e.in.String("to")), Body: &body}
 			}
-			req := api.AutomationRequest{Name: strPtr(e.in.String("name")), To: strPtr(e.in.String("to")), Body: &body}
 			if p := e.in.String("project"); p != "" {
 				req.Project = &p
 			}
@@ -182,6 +197,8 @@ plain text (not end-to-end encrypted).`,
 			idFlag,
 			{Name: "name", Kind: String, Help: "New name"},
 			{Name: "to", Kind: String, Help: "Send to another agent"},
+			{Name: "workflow", Kind: String, Help: "Start this workflow instead (name or id)"},
+			{Name: "input", Kind: List, Help: "With a workflow: the run's inputs as key=template (replaces them all)"},
 			{Name: "body", Kind: String, Help: "New message"},
 			{Name: "body-file", Kind: String, Help: "Read the new message from a file ('-' = stdin)"},
 			{Name: "project", Kind: String, Help: `Project for its tasks ("" for none)`},
@@ -197,7 +214,14 @@ plain text (not end-to-end encrypted).`,
 				return err
 			}
 			var req api.AutomationRequest
-			for flag, dst := range map[string]**string{"name": &req.Name, "to": &req.To, "project": &req.Project} {
+			if e.in.IsSet("input") {
+				inputs, err := inputPairs(e.in.List("input"))
+				if err != nil {
+					return err
+				}
+				req.Inputs = inputs
+			}
+			for flag, dst := range map[string]**string{"name": &req.Name, "to": &req.To, "project": &req.Project, "workflow": &req.Workflow} {
 				if e.in.IsSet(flag) {
 					*dst = strPtr(e.in.String(flag))
 				}
@@ -349,7 +373,11 @@ func automationLast(r *api.AutomationRun) string {
 }
 
 func printAutomation(w io.Writer, a api.Automation, secret string) {
-	fmt.Fprintf(w, "%s  %s → %s  (%s)\n", a.ID, a.Name, a.To, automationWhen(a))
+	to := a.To
+	if a.Workflow != "" {
+		to = "workflow " + a.WorkflowName
+	}
+	fmt.Fprintf(w, "%s  %s → %s  (%s)\n", a.ID, a.Name, to, automationWhen(a))
 	if a.NextRunAt != nil {
 		fmt.Fprintf(w, "next run: %s\n", a.NextRunAt.Local().Format(time.RFC1123))
 	}
@@ -360,5 +388,30 @@ func printAutomation(w io.Writer, a api.Automation, secret string) {
 		fmt.Fprintf(w, "webhook secret (shown once, keep it private): %s\n", secret)
 		fmt.Fprintf(w, "  curl -X POST %s -H \"Authorization: Bearer %s\" --data 'what happened'\n", a.WebhookURL, secret)
 	}
-	fmt.Fprintf(w, "message: %s\n", a.Body)
+	if a.Workflow != "" {
+		for k, v := range a.Inputs {
+			fmt.Fprintf(w, "input %s: %s\n", k, v)
+		}
+	} else {
+		fmt.Fprintf(w, "message: %s\n", a.Body)
+	}
+}
+
+// inputPairs reads key=value pieces (the flag parser splits at commas: a
+// piece without "key=" belongs to the value before it).
+func inputPairs(parts []string) (map[string]string, error) {
+	out := map[string]string{}
+	key := ""
+	for _, part := range parts {
+		if inputKeyRe.MatchString(part) {
+			k, v, _ := strings.Cut(part, "=")
+			key, out[k] = k, v
+			continue
+		}
+		if key == "" {
+			return nil, errorf("invalid_argument", ExitUsage, "pass --input key=value", "--input %q has no key", part)
+		}
+		out[key] += "," + part
+	}
+	return out, nil
 }

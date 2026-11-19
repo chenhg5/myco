@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -87,8 +88,13 @@ func hubCommands() *Command {
 			if err := apps.Load(); err != nil {
 				return errorf("internal", ExitError, "", "official apps: %v", err)
 			}
-			return hubserver.Run(in.Ctx, hubserver.Options{
-				Tunnel: tun, Version: Version, UpdateCheck: check, Apps: apps,
+			// Upgrading from the App ends with this process stopping (the
+			// service manager starts the new binary): as on SIGTERM.
+			ctx, stop := context.WithCancel(in.Ctx)
+			defer stop()
+			return hubserver.Run(ctx, hubserver.Options{
+				Upgrade: hubUpgrader(in.Getenv, in.String("db"), stop),
+				Tunnel:  tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},

@@ -65,6 +65,11 @@ func appMenu(app *application.App, zh trayText, send func(cmd string)) *applicat
 	view.Add(zh.s("搜索…", "Search…")).SetAccelerator("CmdOrCtrl+k").OnClick(do("search"))
 	view.Add(zh.s("显示 / 隐藏侧栏", "Show / Hide Sidebar")).SetAccelerator("CmdOrCtrl+\\").OnClick(do("sidebar"))
 	view.AddSeparator()
+	view.Add(zh.s("放大文字", "Larger Text")).SetAccelerator("CmdOrCtrl+=").OnClick(do("text-bigger"))
+	view.Add(zh.s("缩小文字", "Smaller Text")).SetAccelerator("CmdOrCtrl+-").OnClick(do("text-smaller"))
+	view.Add(zh.s("标准文字大小", "Standard Text Size")).SetAccelerator("CmdOrCtrl+0").OnClick(do("text-standard"))
+	view.Add(zh.s("切换浅色 / 深色", "Switch Light / Dark")).SetAccelerator("CmdOrCtrl+Shift+l").OnClick(do("theme"))
+	view.AddSeparator()
 	role(view, application.ToggleFullscreen, zh.s("进入 / 退出全屏", "Enter / Exit Full Screen"))
 
 	// Window
@@ -76,6 +81,8 @@ func appMenu(app *application.App, zh trayText, send func(cmd string)) *applicat
 
 	// Help
 	help := m.AddSubmenu(zh.s("帮助", "Help"))
+	help.Add(zh.s("键盘快捷键", "Keyboard Shortcuts")).SetAccelerator("CmdOrCtrl+/").OnClick(do("shortcuts"))
+	help.AddSeparator()
 	help.Add(zh.s("使用文档", "Documentation")).OnClick(open(zh.s("https://github.com/chenhg5/myco/blob/main/INSTALL.md", "https://github.com/chenhg5/myco#readme")))
 	help.Add(zh.s("更新记录", "Release Notes")).OnClick(open("https://github.com/chenhg5/myco/releases"))
 	help.AddSeparator()

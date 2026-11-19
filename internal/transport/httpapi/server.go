@@ -43,6 +43,7 @@ type Server struct {
 	e2e         *app.E2EService
 	version     string        // this hub's myco build
 	latest      func() string // newest known release ("" = unknown)
+	upgrade     func(ctx context.Context, version string) (api.HubUpgrade, error)
 	mux         *http.ServeMux
 	ingress     map[string]Ingress
 	files       *app.FileService
@@ -55,6 +56,7 @@ type Server struct {
 	resume      *app.ResumeService
 	traces      *app.TraceService
 	automations *app.AutomationService
+	workflows   *app.WorkflowService
 	pages       *app.PageService
 	tun         tunnels
 	handovers   *app.HandoverService
@@ -154,6 +156,7 @@ func (s *Server) routes() {
 	})
 
 	// Administration (admin token).
+	m.HandleFunc("POST /v1/admin/upgrade", s.admin(s.upgradeHub))
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))
 	m.HandleFunc("POST /v1/agents/cleanup", s.admin(s.cleanupAgents))
@@ -211,6 +214,7 @@ func (s *Server) routes() {
 	// A machine joins with a link; /j/{token} serves the link's script/page.
 	m.HandleFunc("POST /v1/join", s.join)
 	s.automationRoutes(m)
+	s.workflowRoutes(m)
 	s.pageRoutes(m)
 	s.pinRoutes(m)
 	s.pageDataRoutes(m)
@@ -793,6 +797,36 @@ func (s *Server) SetVersion(version string, latest func() string) {
 	s.version, s.latest = version, latest
 }
 
+// SetUpgrade lets the hub's owner upgrade its myco from the App (nil:
+// not offered here, e.g. a hub run by hand).
+func (s *Server) SetUpgrade(f func(ctx context.Context, version string) (api.HubUpgrade, error)) {
+	s.upgrade = f
+}
+
+func (s *Server) upgradeHub(w http.ResponseWriter, r *http.Request) {
+	if !s.mayManage(w, r, "upgrade the hub") {
+		return
+	}
+	if s.upgrade == nil {
+		writeError(w, domain.Errf(domain.CodeInvalidState, "this hub cannot upgrade itself").
+			WithSuggestion("run sudo myco upgrade on the server"))
+		return
+	}
+	var in struct {
+		Version string `json:"version"`
+	}
+	if r.ContentLength != 0 && !decode(w, r, &in) {
+		return
+	}
+	up, err := s.upgrade(r.Context(), strings.TrimSpace(in.Version))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.record(r, "hub.upgrade", up.To, up.From+" -> "+up.To+" ("+up.Via+")")
+	writeJSON(w, http.StatusAccepted, up)
+}
+
 // PublicURL is the configured public URL ("" if unknown).
 func (s *Server) PublicURL() string { u, _ := s.publicURL.Load().(string); return u }
 
@@ -1349,7 +1383,7 @@ func (s *Server) reply(w http.ResponseWriter, r *http.Request, a *domain.Agent) 
 		return
 	}
 	dry := dryRun(r)
-	m, err := s.messages.ReplyWith(r.Context(), a, r.PathValue("id"), req.Body, req.Attachments, dry)
+	m, err := s.messages.ReplyResult(r.Context(), a, r.PathValue("id"), req.Body, string(req.Result), req.Attachments, dry)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1669,6 +1703,10 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		// Asking the machine about itself: nothing else goes with it.
 		in = api.SpawnRequest{CLI: api.InfoCLI}
 	}
+	if strings.TrimSpace(in.CLI) == api.UpgradeCLI {
+		// Upgrading its myco: the release, nothing else.
+		in = api.SpawnRequest{CLI: api.UpgradeCLI, Version: strings.TrimSpace(in.Version)}
+	}
 	if in.JoinLink != "" {
 		// Joining another workspace, nothing else: a machine whose myco
 		// predates join_link then refuses (no directory) instead of
@@ -1725,6 +1763,11 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
 	case in.CLI == api.InfoCLI:
 		// Only looking: nothing to record.
+		writeJSON(w, http.StatusOK, res)
+	case in.CLI == api.UpgradeCLI:
+		if res.Upgrade != nil {
+			s.record(r, "machine.upgrade", r.PathValue("id"), res.Upgrade.From+" -> "+orNone(res.Upgrade.To))
+		}
 		writeJSON(w, http.StatusOK, res)
 	default:
 		kind := orNone(res.CLI)

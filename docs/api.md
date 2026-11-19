@@ -81,6 +81,8 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `DELETE /v1/members/{member}` | owner/admin | Removes a person and revokes all their console tokens; what they own stays |
 | `PUT /v1/agents/{name}/owner`, `PUT /v1/machines/{id}/owner` | owner/admin | `{owner}` (member name or id) |
 | `POST /v1/machines/{id}/spawn?wait=` | machine owner or owner/admin | A spawn request (`api.SpawnRequest`) to the machine's machine node, answered with its `SpawnResult` (default wait 5m). With `join_link` (from v0.19.9) it starts no session: the machine joins another workspace of the same hub server with that workspace's join link (`<hub>/w/<name>/j/<token>`), through the connection it already has, and answers `{joined: <workspace URL>, machine_node}`. The hub sends only `join_link` on; the machine refuses a link to any other server (scheme, host and port must match its hub), and a myco older than v0.19.9 refuses the request (no directory). With `cli: "info"` (from v0.20.14) it starts nothing: the machine answers with `info` (`api.MachineInfo`: `dirs` sessions may start in as configured, `["~"]` when not limited; `new_dir`, where a folder given to no conversation goes; `max_access`; `ais`, each agent CLI's `state` missing/signed_out/ready/unknown with `version`, `install` and `login` commands; `sessions`, its Claude Code and Codex sessions of the last 180 days (at most 200) with `joined` naming the agent one already is in this workspace and `auto` marking one a program ran; `home`). The same JSON is in `reply` for hubs older than `info`, which re-encode the result; the hub sends nothing else with it and does not audit it. Older machines refuse it as an unknown CLI. A recent session joins as a copy with `fork_from: <session_id>` and `dir: <its workdir>` |
+| `POST /v1/machines/{id}/spawn` with `cli: "upgrade"` | owner/admin | (from v0.20.29) The machine brings its myco to `version` (`""` = the latest release) with `myco upgrade --no-restart` and answers `upgrade` (`api.MachineUpgrade`: `from`, `to` (`""` when it already runs it), `restarting`, `note`); a few seconds later its runner service restarts onto the new binary (tasks running there are cut short). Only the console's administrator sender may ask; the hub passes only `version` on and audits `machine.upgrade`. Older machines refuse it as an unknown CLI |
+| `POST /v1/admin/upgrade` | owner/admin | (from v0.20.29) `{version?}` → 202 `api.HubUpgrade` (`from`, `to`, `via`): the hub brings its own myco to `version` (`""` = the latest; already the latest: `invalid_state`) and restarts. `via: "service"`: a server set up by `install-hub.sh` (or upgraded once with `sudo myco upgrade`) has a root path unit `myco-upgrade.path`; the hub leaves `upgrade.request` in its state directory and the unit runs `myco upgrade`. `via: "self"`: a hub under the user's own service manager (`myco hub up`: launchd, systemd --user) replaces its binary and stops; the service manager starts the new one. Otherwise `invalid_state` with the command to run on the server. Watch `GET /v1/health`'s `server_version` |
 | `PATCH /v1/machines/{id}` | owner/admin | `{name}` → the machine. 1–64 characters on one line; a name another machine of the hub has (letter case aside) is refused with `conflict` (from v0.20.16). Machines joining with a name already taken get `-2`, `-3`… |
 | `DELETE /v1/machines/{id}?dry_run=` | machine owner or owner/admin | `{machine, removed:[agent names], dry_run}`; revokes the machine enrollment, removes its nodes (including the machine node), aliases and project memberships, then the machine record. Message history stays. Dry-run only previews |
 | `GET /v1/audit?actor=&target=&before=&limit=` | owner/admin | `{entries: [{id, at, actor, actor_kind, action, target, detail}]}`, newest first; append-only; never message bodies |
@@ -124,7 +126,7 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `POST /v1/messages/{id}/ack` | recipient | Start work on a pulled task (stops redelivery and makes it `working` in overview); an inbox-wait session should ack before doing the work |
 | `POST /v1/messages/{id}/hold` | recipient | Accept, answer later |
 | `POST /v1/messages/{id}/done` | recipient | Close without reply; also works on a queued message (drop it without pulling) |
-| `POST /v1/messages/{id}/reply` | recipient | `{body}` → `{message: <reply>}`; closes the original |
+| `POST /v1/messages/{id}/reply` | recipient | `{body, attachments?, result?}` → `{message: <reply>}`; closes the original. `result` (v0.21+): a JSON object, the structured result a workflow step reads (at most 64 KiB; not end-to-end encrypted, the hub reads it). Older hubs refuse the field: the CLI then puts it at the end of the body as a `` ```json `` block, which workflows read the same way |
 | `POST /v1/messages/{id}/release` | recipient | `{delay_seconds, reason?}` (≤ 3600) — hand back for redelivery later; not counted as a failed attempt. `reason: "in_use"` marks the agent's session as in use, shown in the console |
 | `POST /v1/messages/{id}/fail` | recipient | `{reason}`; for tasks the sender gets an `event` |
 | `GET /v1/messages/{id}/reply?wait_seconds=&progress_since=` | sender | Long-poll for the reply → `{reply, timed_out}`; a returned reply is marked done. With `progress_since` (RFC 3339, or `0`) it also returns as soon as there are newer progress updates → `{reply, progress, timed_out}` |
@@ -223,7 +225,7 @@ An automation sends a task, as its owner, to one agent when its schedule comes r
 | Endpoint | Who | Notes |
 |---|---|---|
 | `GET /v1/console/automations` | console | `{automations: [automation]}`: everyone's for the hub's owner, admins and the admin token; a member's own otherwise |
-| `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
+| `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. Or, instead of `to` and `body` (v0.21+), `workflow` (a workflow's id or name the caller may run) and `inputs` (`{key: template}`; `{{payload}}` is a webhook call's body, `{{payload.issue.title}}` a field of its JSON): each run starts that workflow in the owner's name (`trigger: automation`), and the run records `workflow_run`; with `skip_if_busy`, a run is skipped while the last workflow run it started is going. `workflow: ""` on an update goes back to sending a task. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
 | `GET /v1/console/automations/{id}` | its owner, or who manages the hub | `{automation, runs}`: its runs (up to 200), newest first; a webhook run's `request` without its `body` (hubs before v0.20.18: the last 50) |
 | `PATCH /v1/console/automations/{id}` | its owner, or who manages the hub | The same fields, each optional (absent: unchanged), plus `clear_schedule`, `webhook: false` (removes the webhook), `rotate_secret` (a new secret; the old one stops working) → `{automation, webhook_secret?}` |
 | `DELETE /v1/console/automations/{id}` | its owner, or who manages the hub | `204`. Its runs go too; the messages it sent stay |
@@ -260,6 +262,91 @@ Rules:
 - Limits: 200 automations per workspace, `name` 80 characters, `body` 8 KiB.
 - End-to-end encryption: the hub writes the message, so it is sent in plain text even when the hub has encryption on.
 
+## Workflows
+
+A workflow is a graph the hub walks (v0.21+; design: [design/workflow.md](design/workflow.md)). Each agent step is an ordinary task sent from the run's owner's console address (`@console:<member>`) with `workflow` set to the run's id; the agent answers with `myco message reply --result` and the hub moves on. Computer steps are commands for an exec node; human steps wait for a decision (`POST …/decide`). The hub alone decides what comes next. Older hubs answer `404` on these routes.
+
+Both people (a console or admin token) and agents (their own token, acting for the member who added them; on hubs without members, for the owner) may use them. Others' workflows and runs answer `404`; `…/decide` also takes the person the step names.
+
+| Endpoint | Notes |
+|---|---|
+| `GET /v1/workflows` | `{workflows: [workflow]}` (without `definition`): the caller's; everyone's for those who manage the hub |
+| `POST /v1/workflows/validate` | `{definition}` → `{valid, problems?, warnings?}`. Warnings (an agent that does not exist yet, a computer step to something that is not an exec node) do not block saving |
+| `POST /v1/workflows` | `{definition}` → `201 {workflow, created, changed, warnings?}` (or `200` when it exists): creates the workflow named in the definition, or gives it a new `version` when the definition differs. Runs going on keep the version they started with. `?dry_run=true` checks only. Someone else's name: `permission_denied` |
+| `GET /v1/workflows/{ref}` | `ref` is the id or the name → the workflow with `definition` |
+| `PATCH /v1/workflows/{ref}` | `{enabled}`: a workflow turned off cannot be started |
+| `DELETE /v1/workflows/{ref}` | `204`. Its runs go too (the ones going are cancelled first); the tasks they sent stay |
+| `POST /v1/workflows/{ref}/runs` | `{inputs?}` → `201` the run (with steps). Inputs are checked against the definition's `inputs` schema (text is turned into the numbers, booleans and lists it asks for; defaults filled). `?dry_run=true` → `{inputs, step, target, body, dry_run}`: the first step's task, unsent |
+| `GET /v1/workflow-runs?workflow=&active=true&limit=` | `{runs: [run]}` (without steps), newest first; `limit` default 50, at most 200 |
+| `GET /v1/workflow-runs/{id}` | The run with `steps`, `events` (its log, the last 500 lines) and the `definition` it follows |
+| `POST /v1/workflow-runs/{id}/cancel` | Stops it: open tasks are stopped, decisions withdrawn → the run |
+| `POST /v1/workflow-runs/{id}/retry` | `{from?}`: a failed or cancelled run starts again at that step (default: the step that failed), keeping earlier results → the run |
+| `POST /v1/workflow-runs/{id}/decide` | `{step, choice, note?}`: `choice` must be one of the step's `options` → the run |
+| `GET /v1/workflow-decisions` | `{decisions: [{run, step}]}`: decisions waiting for the caller |
+
+Saving and removing a workflow are audited (`workflow.*`).
+
+A run an agent started (`trigger: agent`) tells it when it ends: a note from the run's owner, with `workflow` set, `[工作流「<name>」完成了|失败了：…|取消了：…]`, each step's summary and how to see the rest (not when the agent cancelled it itself). Automations can start workflows too (see [Automations](#automations)).
+
+A workflow definition (all of it is checked; unknown fields are refused):
+
+```json
+{
+  "name": "写-审-改", "description": "", "project": "myco",
+  "inputs": {"required": ["task"], "properties": {"task": {"type": "string", "title": "要做什么", "format": "textarea"}}},
+  "steps": [
+    {"id": "write", "agent": "coder", "prompt": "完成：{{inputs.task}}",
+     "output": {"required": ["branch"], "properties": {"branch": {"type": "string"}}}, "timeout": "2h", "retry": 1},
+    {"id": "review", "agent": "reviewer", "prompt": "审一下 {{steps.write.output.branch}}",
+     "output": {"required": ["approved"], "properties": {"approved": {"type": "boolean"}, "comments": {"type": "array"}}}},
+    {"id": "test", "computer": "studio-mac", "run": "make test"},
+    {"id": "ok", "human": "$starter", "prompt": "合并吗？", "options": ["合并", "不合并"], "timeout": "1d"}
+  ],
+  "edges": [
+    {"from": "write", "to": "review"},
+    {"from": "review", "to": "test", "when": "output.approved"},
+    {"from": "review", "to": "write", "when": "!output.approved", "maxIterations": 3, "else": "$fail"},
+    {"from": "test", "to": "ok"},
+    {"from": "test", "to": "write", "onError": true, "maxIterations": 2},
+    {"from": "ok", "to": "$end", "when": "output.choice == '合并'"},
+    {"from": "ok", "to": "$fail", "when": "output.choice != '合并'"}
+  ]
+}
+```
+
+Rules:
+
+- A step sets exactly one of `agent` (with `prompt`, optional `output` schema), `computer` (an exec node, with `run`; `parse: "json"` reads stdout into `output.json`) or `human` (a member name or `$starter`, with `prompt` and at least two `options`). Ids: letters, digits, `_`, `-`, at most 40. At most 50 steps and 200 edges.
+- `timeout`: `30m`, `2h`, `1d`, `1d12h`. A step past it fails (its task is stopped). A decision with no timeout waits 3 days; one that expires counts as no answer (`output.choice` is `""`, `output.timed_out` is `true`), never as yes.
+- `retry` (0-5): a failed agent or computer step is sent again that many times.
+- An agent step's result: the reply's `result`, else the last `` ```json `` block of its body. With an `output` schema, a result that does not fit (or none) is sent back once with what is wrong; a second miss fails the step. The output always has `text` (the reply's body). `summary` is the result's `summary`, else the reply's first line.
+- A computer step's output is the exec result (`exit_code`, `stdout`, `stderr`, …); a non-zero exit fails it. A human step's output is `{choice, note, by}`.
+- Edges out of a step are tried in order and the first whose `when` holds is taken (all of them with `"dispatch": "all"` on the step). `onError` edges are tried only when the step failed, the others only when it succeeded; a failed step with no `onError` edge fails the run, and a step with edges none of which holds fails it too ("no way on"). A step with no edges ends its branch. With no `edges` at all, steps run in order.
+- An edge to the same or an earlier step (in `steps` order) needs `maxIterations`; once taken that many times, `else` is taken instead (`$fail` when unset). `else` cannot go back.
+- `"join": "all"` on a step: it starts once every step with an edge into it has arrived. The run fails if it ends with a join that never filled.
+- `$end` ends a branch; the run succeeds when nothing is open. `$fail` fails it. A run that has started 200 steps stops.
+- `when`, and `{{…}}` in `prompt`, `run`, `title`, `agent` and `computer`, are expressions over `inputs`, `steps.<id>.output|summary|status|error|attempt`, `run.id|name|by`, and (in `when`) `output`, `status`, `error`, `attempt` of the step that ended: paths (`a.b`, `a[0]`, `a["k"]`), literals, `== != < <= > >= && || !`, `len(x)`, `contains(x, y)`. Missing values are `null`; comparing different kinds is false. `{{#if expr}}…{{else}}…{{/if}}` keeps one part.
+- `inputs` and `output` use a JSON Schema subset: `type` (`object`, `string`, `number`, `integer`, `boolean`, `array`), `required`, `properties`, `items`, `enum`, `default`, `title`, `description`, `format`.
+
+A run:
+
+```json
+{
+  "id": "run_...", "workflow_id": "wf_...", "name": "写-审-改", "version": 2, "project": "myco",
+  "status": "running|waiting|succeeded|failed|cancelled", "inputs": {"task": "加导出按钮"},
+  "owner": "glenn", "by": "glenn", "trigger": "manual|agent|automation", "error": "",
+  "current": ["review"],
+  "steps": [{"id": "rs_...", "step": "write", "title": "", "kind": "agent", "attempt": 1, "status": "done",
+             "target": "coder", "message_id": "msg_...", "input": "…the task as sent…",
+             "output": {"branch": "feat/x", "summary": "加好了", "text": "…"}, "summary": "加好了",
+             "started_at": "...", "ended_at": "..."}],
+  "events": [{"at": "...", "kind": "started|step|done|failed|bounced|edge|decided|timeout|retry|finished", "step": "write", "text": "…"}],
+  "created_at": "...", "updated_at": "...", "ended_at": "..."
+}
+```
+
+`waiting`: only decisions are open. A step's `status` is `running`, `waiting` (a decision), `done`, `failed` or `cancelled`; `options` and `due_at` come with decisions.
+
 ## Message object
 
 ```json
@@ -269,12 +356,13 @@ Rules:
   "type": "task|note|reply|event",
   "body": "...",
   "status": "queued|delivered|acked|held|done|failed",
-  "attempts": 1, "error": "", "idempotency_key": "", "automation": "aut_...",
+  "attempts": 1, "error": "", "idempotency_key": "", "automation": "aut_...", "workflow": "run_...",
+  "result": {"approved": true},
   "lease_until": "...", "created_at": "...", "updated_at": "..."
 }
 ```
 
-`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
+`after` is optional and omitted when empty (from v0.19.2). `automation` names the automation that sent the message, omitted otherwise. `workflow` (v0.21+) is the workflow run that sent a task; `result` is the structured result on a reply that has one. Adding fields is non-breaking; renaming/removing fields requires `/v2`.
 
 ## Exec nodes
 

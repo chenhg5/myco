@@ -322,6 +322,8 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 					}
 				}
 			},
+			// The console asks this machine to bring myco up to date.
+			Upgrade: e.upgradeThisMachine,
 			// Another workspace of this server: the same machine joins it
 			// (its machine node there is served at the runner's next scan,
 			// asked for right away).

@@ -1,4 +1,4 @@
-import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
+import type { Page, PageChanges, PageOpen, PageRecord, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, Overview, Peer, RuntimeAccess, Whoami, Trace } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -824,6 +824,14 @@ export const appApi = {
   shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
+  /** A computer upgrades its own myco (its machine node does it, then its
+   *  runner restarts); too_old from machines before v0.20.29. */
+  upgradeMachine: (hubId: string, machineId: string) =>
+    request<{ from: string; to?: string; restarting: boolean; note?: string }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/upgrade`, {}),
+  /** The workspace upgrades its own myco and restarts (answers at once;
+   *  too_old from hubs before v0.20.29). */
+  upgradeHub: (hubId: string) =>
+    request<{ from: string; to: string; via: string }>("POST", `app/hubs/${enc(hubId)}/upgrade`, {}),
   /** Brings this computer's myco to the latest release and restarts its runner. */
   upgradeMyco: () => request<{ from: string; version: string; restarted: string[] }>("POST", "app/local/myco/upgrade"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
@@ -891,6 +899,28 @@ export const appApi = {
   deleteAutomation: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),
   automationRun: (hubId: string, id: string, run: string) => request<AutomationRun>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}/runs/${enc(run)}`),
   runAutomation: (hubId: string, id: string) => request<AutomationRun>("POST", `app/hubs/${enc(hubId)}/automations/${enc(id)}/run`, {}),
+  // Workflows (hubs from v0.21; older ones answer 404)
+  workflows: (hubId: string) => request<{ workflows: Workflow[] }>("GET", `app/hubs/${enc(hubId)}/workflows`),
+  workflow: (hubId: string, ref: string) => request<Workflow>("GET", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`),
+  applyWorkflow: (hubId: string, definition: WorkflowDef) => request<WorkflowApplyResponse>("POST", `app/hubs/${enc(hubId)}/workflows`, { definition }),
+  validateWorkflow: (hubId: string, definition: WorkflowDef) => request<WorkflowCheck>("POST", `app/hubs/${enc(hubId)}/workflows/validate`, { definition }),
+  setWorkflowEnabled: (hubId: string, ref: string, enabled: boolean) => request<Workflow>("PATCH", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`, { enabled }),
+  deleteWorkflow: (hubId: string, ref: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`),
+  startWorkflow: (hubId: string, ref: string, inputs: Record<string, unknown>) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}/runs`, { inputs }),
+  workflowRuns: (hubId: string, opts: { workflow?: string; active?: boolean; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.workflow) q.set("workflow", opts.workflow);
+    if (opts.active) q.set("active", "true");
+    if (opts.limit) q.set("limit", String(opts.limit));
+    const s = q.toString();
+    return request<{ runs: WorkflowRun[] }>("GET", `app/hubs/${enc(hubId)}/workflow-runs${s ? `?${s}` : ""}`);
+  },
+  workflowRun: (hubId: string, id: string) => request<WorkflowRun>("GET", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}`),
+  cancelWorkflowRun: (hubId: string, id: string) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/cancel`, {}),
+  retryWorkflowRun: (hubId: string, id: string, from?: string) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/retry`, from ? { from } : {}),
+  decideWorkflowRun: (hubId: string, id: string, step: string, choice: string, note?: string) =>
+    request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/decide`, { step, choice, ...(note ? { note } : {}) }),
+  workflowDecisions: (hubId: string) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),
   /** One line in that voice, as WAV audio, to try it before saving (the key typed, else the one kept). */

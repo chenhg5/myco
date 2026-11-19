@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
+import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
@@ -71,7 +72,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "templates" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -80,6 +81,56 @@ function initialCollapsed() {
     if (v === "closed") return true;
   } catch { /* storage unavailable */ }
   return window.innerWidth < 760;
+}
+
+/** Settings › 快捷键: asked for while Settings shows, it moves there;
+ *  otherwise Settings opens on it. */
+function openShortcuts(settingsShown: boolean) {
+  if (settingsShown) window.dispatchEvent(new CustomEvent("myco-open-settings", { detail: { section: "shortcuts" } }));
+  else openSettingsSection("shortcuts");
+}
+
+/** ⌥↑ / ⌥↓: open the project or chat above or below the one open, in the
+ *  sidebar's order (from the top or the bottom when none is). False when
+ *  there is nowhere to go (the sidebar hidden, the end of the list). The
+ *  order is kept while you keep stepping: a chat opened can move up its
+ *  list (most recent first), which must not send the next step back. */
+let stepRun: { keys: string[]; at: string; t: number } | null = null;
+function stepConversation(by: -1 | 1): boolean {
+  const items = Array.from(document.querySelectorAll<HTMLElement>(".app-sidebar .app-nav [data-nav-key]"));
+  if (!items.length) return false;
+  const live = items.map((el) => el.dataset.navKey || "");
+  const now = Date.now();
+  let keys = live;
+  // (a chat open inside a project marks both: the chat is where you are)
+  let at = items.map((el) => el.classList.contains("active")).lastIndexOf(true);
+  if (stepRun && now - stepRun.t < 4000 && live.includes(stepRun.at)) {
+    keys = stepRun.keys.filter((k) => live.includes(k));
+    at = keys.indexOf(stepRun.at);
+  }
+  const key = keys[at < 0 ? (by > 0 ? 0 : keys.length - 1) : at + by];
+  const el = key ? items.find((x) => x.dataset.navKey === key) : undefined;
+  if (!key || !el) return false;
+  el.click();
+  el.scrollIntoView({ block: "nearest" });
+  stepRun = { keys, at: key, t: now };
+  return true;
+}
+
+/** ⌘U: the paperclip of the box being written in, else of the chat that
+ *  shows (the last one, with panes side by side). */
+function pickFiles(): boolean {
+  const visible = (b: HTMLButtonElement) => !b.disabled && b.offsetParent !== null;
+  for (let n = document.activeElement as HTMLElement | null; n && n !== document.body; n = n.parentElement) {
+    const b = n.querySelector<HTMLButtonElement>(".att-pick");
+    if (b && visible(b)) { b.click(); return true; }
+    if (n.classList.contains("app-main")) break;
+  }
+  const all = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-main .att-pick")).filter(visible);
+  const b = all[all.length - 1];
+  if (!b) return false;
+  b.click();
+  return true;
 }
 
 function spaceKey(s: SpaceRef): string {
@@ -138,7 +189,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "templates" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -524,9 +575,46 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
+  // The window-wide keys (all listed in Settings › 快捷键, Shortcuts.tsx;
+  // a new one goes there too). ⌘ on a Mac, Ctrl elsewhere. On the Mac the
+  // menu bar offers some of them as well: a key the page takes
+  // (preventDefault) does not reach the menu, so each acts once.
+  const keysRef = useRef({ settingsOpen, hasHub: false });
+  keysRef.current = { settingsOpen, hasHub: !!hub };
   useEffect(() => {
+    const overlay = () => !!document.querySelector(".app-modal, .cp, .app-menu, .lightbox");
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.isComposing || e.defaultPrevented) return;
+      // ⌥↑ / ⌥↓ (Alt): the conversation above or below in the sidebar.
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (!overlay() && !keysRef.current.settingsOpen && stepConversation(e.key === "ArrowUp" ? -1 : 1)) e.preventDefault();
+        return;
+      }
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      // Text size: ⌘= (⌘+ too) / ⌘- / ⌘0, in place of the page zoom.
+      if (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        setTextSize((s) => (s === "small" ? "standard" : "large"));
+        return;
+      }
+      if (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-") {
+        e.preventDefault();
+        setTextSize((s) => (s === "large" ? "standard" : "small"));
+        return;
+      }
+      if (e.shiftKey) {
+        // ⌘⇧L: light ⇄ dark (from what shows now, also when following the system).
+        if (e.code === "KeyL") {
+          e.preventDefault();
+          setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+        }
+        return;
+      }
+      if (e.code === "Digit0" || e.code === "Numpad0") {
+        e.preventDefault();
+        setTextSize("standard");
+        return;
+      }
       // ⌘1…⌘9 (Ctrl on Windows): the workspaces, in the switcher's order.
       const digit = /^Digit([1-9])$/.exec(e.code);
       if (digit) {
@@ -537,6 +625,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if (e.key === ",") {
         e.preventDefault();
         setPage("settings");
+      } else if (e.key === "/" || e.code === "Slash") {
+        e.preventDefault();
+        openShortcuts(keysRef.current.settingsOpen);
+        setPage("settings");
+      } else if (e.key === "\\" || e.code === "Backslash") {
+        e.preventDefault();
+        toggleSidebarRef.current();
+      } else if (e.code === "KeyN") {
+        if (overlay() || !keysRef.current.hasHub) return;
+        e.preventDefault();
+        setNewProjectOpen(true);
+      } else if (e.code === "KeyU") {
+        if (overlay()) return;
+        if (pickFiles()) e.preventDefault();
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         void refreshRef.current();
@@ -547,6 +649,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A top page picked again while on it goes back to its first view (the
@@ -567,6 +670,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-automations", on);
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
+  // A workflow run to open on the 工作流 page (from an automation's runs).
+  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
+  // Decisions a workflow waits on you for: a count on its nav item.
+  const [decisionCount, setDecisionCount] = useState(0);
+  useEffect(() => {
+    let off = false;
+    setDecisionCount(0);
+    if (!hubId) return;
+    const read = () => appApi.workflowDecisions(hubId).then((r) => { if (!off) setDecisionCount((r.decisions || []).length); }, () => undefined);
+    void read();
+    const t = window.setInterval(read, 20_000);
+    // The workflows page says how many each time it reads them.
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; count: number }>).detail; if (d?.hubId === hubId && !off) setDecisionCount(d.count); };
+    window.addEventListener("myco-workflow-decisions", on);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-workflow-decisions", on); };
+  }, [hubId]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
   const [preparing, setPreparing] = useState<string | null>(() => preparePending());
@@ -609,6 +728,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return next;
     });
   };
+  const toggleSidebarRef = useRef(toggleSidebar);
+  toggleSidebarRef.current = toggleSidebar;
   // The Mac's menu bar (appmenu_darwin.go) asks for what it offers.
   const menuRef = useRef<(cmd: string) => void>(() => undefined);
   menuRef.current = (cmd: string) => {
@@ -621,6 +742,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "connect": setConnectOpen(true); break;
       case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
+      case "shortcuts": openShortcuts(settingsOpen); setPage("settings"); break;
+      case "text-bigger": setTextSize((s) => (s === "small" ? "standard" : "large")); break;
+      case "text-smaller": setTextSize((s) => (s === "large" ? "standard" : "small")); break;
+      case "text-standard": setTextSize("standard"); break;
+      case "theme": setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark"); break;
     }
   };
   useEffect(() => {
@@ -708,6 +834,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
+    : page === "workflows" ? L("工作流", "Workflows")
     : page === "templates" ? L("应用", "Apps")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
@@ -763,8 +890,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </button>
 
           <nav className="app-nav">
-            {/* Two pages on top, rows like the ones below (an icon each):
-                automations and apps. Then three lists under one heading
+            {/* Pages on top, rows like the ones below (an icon each):
+                automations, workflows, apps, computers. Then three lists under one heading
                 style: projects first (the work), conversations (everyone you
                 can talk to, one click into a chat, pinned ones first, in the
                 order you pick; the height left, scrolling), computers last.
@@ -773,6 +900,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("workflows"); }}>
+                <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
+                {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
@@ -796,7 +928,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
-                    aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
+                    aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)} data-nav-key={`p:${x.hubId}/${x.p.name}`}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
                       { label: L("加一个终端", "Add a terminal"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
@@ -849,7 +981,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   const isPinned = pinned.includes(r.st.agent.name);
                   return (
                     <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", isPinned && "is-pinned", page === "space" && navChat === key && "active")}
-                      onClick={() => { setNavChat(key); chatWithMember(r); }}
+                      onClick={() => { setNavChat(key); chatWithMember(r); }} data-nav-key={`c:${key}`}
                       draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: r.st.agent.name })}
                       onContextMenu={(e) => navMenu.open(e, [
                         { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },
@@ -1010,6 +1142,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "automations" && hub && (
           <div className="app-scroll">
             <AutomationsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
+              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }}
+              onOpenRun={(workflow, run) => { setWfOpen({ workflow, run, at: Date.now() }); setPage("workflows"); }} />
+          </div>
+        )}
+
+        {page === "workflows" && hub && (
+          <div className="app-scroll">
+            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now} open={wfOpen} onOpened={() => setWfOpen(undefined)}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}

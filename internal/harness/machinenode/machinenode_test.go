@@ -451,3 +451,27 @@ func TestSpawnTakesANodeOver(t *testing.T) {
 		t.Fatalf("switch back: %+v / %+v / %v", res, r.cli.got, took)
 	}
 }
+
+// Only the workspace's administrator may upgrade the machine's myco; the
+// answer says from what to what, and whether the runner restarts.
+func TestUpgradeRequest(t *testing.T) {
+	r := newRig(t)
+	var asked []string
+	r.node.Deps.Upgrade = func(_ context.Context, v string) (api.MachineUpgrade, error) {
+		asked = append(asked, v)
+		return api.MachineUpgrade{From: "v0.20.19", To: "v0.20.29", Restarting: true}, nil
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.UpgradeCLI}); !res.Denied || len(asked) != 0 {
+		t.Fatalf("an agent upgraded the machine: %+v", res)
+	}
+	res := r.run(t, AdminSender, api.SpawnRequest{CLI: api.UpgradeCLI, Version: "v0.20.29"})
+	if res.Upgrade == nil || res.Upgrade.To != "v0.20.29" || !res.Upgrade.Restarting || len(asked) != 1 || asked[0] != "v0.20.29" {
+		t.Fatalf("upgrade: %+v %v", res, asked)
+	}
+	r.node.Deps.Upgrade = func(context.Context, string) (api.MachineUpgrade, error) {
+		return api.MachineUpgrade{}, errors.New("cannot replace /usr/local/bin/myco")
+	}
+	if res := r.run(t, AdminSender, api.SpawnRequest{CLI: api.UpgradeCLI}); res.Error == "" || res.Upgrade != nil {
+		t.Fatalf("failure: %+v", res)
+	}
+}

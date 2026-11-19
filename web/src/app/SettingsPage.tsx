@@ -3,7 +3,7 @@ import { CopyButton } from "@/app/copy";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -26,8 +26,10 @@ import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
+import { ShortcutsSection } from "@/app/Shortcuts";
+import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 
-type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
+type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -178,6 +180,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
   { key: "voice", get label() { return L("语音", "Voice"); }, icon: AudioLines },
   { key: "network", get label() { return L("代理", "Proxy"); }, icon: Globe },
+  { key: "shortcuts", get label() { return L("快捷键", "Shortcuts"); }, icon: Keyboard },
   { key: "about", get label() { return L("关于", "About"); }, icon: Info },
 ];
 
@@ -186,7 +189,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
 const GROUPS: { title: () => string; keys: Section[] }[] = [
   { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "agents"] },
   { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
-  { title: () => "", keys: ["about"] },
+  { title: () => "", keys: ["shortcuts", "about"] },
 ];
 
 /** Each section's one line, under its title. */
@@ -199,6 +202,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
   voice: () => L("和 agent 语音聊天，以及语音输入。", "Voice chat with agents, and dictation."),
   network: () => L("这台电脑连外网时走的代理。", "The proxy this computer uses to reach the internet."),
+  shortcuts: () => L("App 里能用的键盘快捷键。", "The keyboard shortcuts in this app."),
   about: () => L("版本、更新和这个 App。", "Version, updates and this app."),
 };
 
@@ -220,6 +224,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
+  { section: "shortcuts", title: () => L("快捷键", "Keyboard shortcuts"), words: "快捷键 键盘 按键 热键 shortcuts keyboard hotkeys keys" },
   { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
   { section: "about", key: "prepare", title: () => L("上手引导", "Getting started"), words: "上手 引导 新手 准备这台电脑 onboarding getting started setup guide" },
 ];
@@ -254,7 +259,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs" | "shortcuts") { nextSettingsSection = s; }
 /** (read as the page starts; cleared once it is up, so a second run of
  *  its first render, as React's strict mode does, reads the same) */
 function takeSettingsSection(): Section | null {
@@ -400,6 +405,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
   const [stopTarget, setStopTarget] = useState<LocalWorkspace | null>(null);
   const [publicTarget, setPublicTarget] = useState<LocalWorkspace | null>(null);
+  const latest = useLatestRelease();
 
   // "Hub 设置" in the switcher should land on the Hub list, even when this
   // page was last left on another section.
@@ -599,6 +605,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     </div>
                     {linked && <E2ERow hubId={linked.id} ov={hubsOv?.find((o) => o.id === linked.id)} onChanged={onRefresh} />}
                   </div>
+                  {w.running && <HubUpgrade version={w.version || linked?.hub_version} local manages latest={latest} onDone={() => { void reloadLocal(); onRefresh(); }} />}
                   {!w.running && (
                     <div className="app-small-note" style={{ marginTop: 8 }}>{L("这个工作区已停止，点「启动」重新运行。", "This workspace is stopped. Start it again to bring it back.")}</div>
                   )}
@@ -654,6 +661,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   </div>
                   <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
                 </div>
+                {h.ok && <HubUpgrade hubId={h.id} version={h.hub_version} local={false} manages={!!hubsOv?.find((o) => o.id === h.id)?.me?.can_manage} latest={latest} onDone={onRefresh} />}
 
                 <div className="app-setting-actions">
                   <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>
@@ -688,6 +696,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
           </>
         )}
 
+        {section === "shortcuts" && <ShortcutsSection />}
         {section === "appearance" && (
           <>
             <section className="app-setting-card app-setting-lines">

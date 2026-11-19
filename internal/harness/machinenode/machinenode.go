@@ -86,6 +86,10 @@ type Deps struct {
 	// already checked to be on this node's server; it returns the machine
 	// node there ("" if none). Nil: joining is not offered.
 	JoinHub func(ctx context.Context, hub, token string) (string, error)
+	// Upgrade brings this machine's myco to version ("" = latest) and has
+	// its runner restart onto it shortly after the answer is sent. Nil:
+	// upgrading is not offered.
+	Upgrade func(ctx context.Context, version string) (api.MachineUpgrade, error)
 	// Machine fills in the agent CLIs and the recent sessions on this
 	// machine for an info request (api.InfoCLI). Nil: they are left empty.
 	Machine func(ctx context.Context) (ais []api.MachineAI, sessions []api.MachineSession)
@@ -139,6 +143,22 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 		if p, err := n.LoadPolicy(); err == nil {
 			n.Policy = p // one request at a time per node: no concurrent reader
 		}
+	}
+	if strings.TrimSpace(sr.CLI) == api.UpgradeCLI {
+		// Only the hub's administrator (the console): it replaces myco
+		// and restarts the runner of everything on this machine.
+		if req.From != AdminSender {
+			return denied("only the workspace's administrator can upgrade machine %s", n.Machine)
+		}
+		if n.Deps.Upgrade == nil {
+			return denied("this machine cannot upgrade itself; run myco upgrade on it")
+		}
+		up, err := n.Deps.Upgrade(ctx, strings.TrimSpace(sr.Version))
+		if err != nil {
+			return api.SpawnResult{CLI: api.UpgradeCLI, Error: "upgrading myco failed: " + err.Error()}
+		}
+		b, _ := json.Marshal(up)
+		return api.SpawnResult{CLI: api.UpgradeCLI, Upgrade: &up, Reply: string(b)}
 	}
 	if strings.TrimSpace(sr.CLI) == api.InfoCLI {
 		info := n.info(ctx)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -43,6 +44,18 @@ type MessageService struct {
 	memberName func(ctx context.Context, id string) string
 	projects   domain.ProjectRepository // nil: no projects
 	touched    touches
+	// workflowHook is told when a task a workflow sent ends (nil: none).
+	workflowHook func(runID string)
+}
+
+// SetWorkflowHook sets what is told when a task a workflow sent is
+// answered, fails or is stopped.
+func (s *MessageService) SetWorkflowHook(f func(runID string)) { s.workflowHook = f }
+
+func (s *MessageService) workflowEnded(runID string) {
+	if runID != "" && s.workflowHook != nil {
+		s.workflowHook(runID)
+	}
 }
 
 // SetProjects lets messages belong to a project.
@@ -110,7 +123,9 @@ type SendInput struct {
 	Project string
 	// Automation marks a task an automation sent (its id).
 	Automation string
-	DryRun     bool
+	// Workflow marks a task a workflow run sent (the run's id).
+	Workflow string
+	DryRun   bool
 }
 
 // SendOutput reports the stored message; Duplicate is true when an earlier
@@ -196,6 +211,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 	}
 	m.Project = project
 	m.Automation = in.Automation
+	m.Workflow = in.Workflow
 	m.After = in.After
 	m.FromOwner = s.ownerName(ctx, sender)
 	if m.Attachments, err = resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments); err != nil {
@@ -413,6 +429,7 @@ func (s *MessageService) Transition(ctx context.Context, agent *domain.Agent, id
 	})
 	if err == nil && t == TransitionComplete {
 		s.wakeAfter(ctx, id)
+		s.workflowEnded(m.Workflow)
 	}
 	return m, err
 }
@@ -438,18 +455,39 @@ func (s *MessageService) Reply(ctx context.Context, agent *domain.Agent, id, bod
 
 // ReplyWith answers message id with optional attachments (file ids).
 func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id, body string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	return s.ReplyResult(ctx, agent, id, body, "", attachIDs, dryRun)
+}
+
+// MaxResultBytes bounds a reply's structured result.
+const MaxResultBytes = 64 << 10
+
+// ReplyResult answers message id with a structured result too (a JSON
+// object, "" for none): what a workflow step hands back.
+func (s *MessageService) ReplyResult(ctx context.Context, agent *domain.Agent, id, body, result string, attachIDs []string, dryRun bool) (*domain.Message, error) {
+	if result = strings.TrimSpace(result); result != "" {
+		if len(result) > MaxResultBytes {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "the result is %d bytes, more than %d", len(result), MaxResultBytes)
+		}
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(result), &obj); err != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "the result must be a JSON object: %v", err).
+				WithSuggestion(`write it like {"approved": true, "summary": "...", "reason": "..."}`)
+		}
+	}
 	atts, err := resolveAttachments(ctx, s.files, s.clock, agent.Name, attachIDs)
 	if err != nil {
 		return nil, err
 	}
 	var reply *domain.Message
+	var workflow string
 	owner := s.ownerName(ctx, agent)
 	fn := func(m *domain.Message) ([]*domain.Message, error) {
+		workflow = m.Workflow
 		r, err := m.Reply(agent.Name, s.ids.New("msg"), body, s.clock.Now())
 		if err != nil {
 			return nil, err
 		}
-		r.Attachments, r.FromOwner = atts, owner
+		r.Attachments, r.FromOwner, r.Result = atts, owner, result
 		closeIfResult(agent, r)
 		reply = r
 		return []*domain.Message{r}, nil
@@ -471,6 +509,7 @@ func (s *MessageService) ReplyWith(ctx context.Context, agent *domain.Agent, id,
 		}
 		s.notifier.Publish(replyTopic(id))
 		s.wakeAfter(ctx, id)
+		s.workflowEnded(workflow)
 	}
 	return reply, nil
 }
@@ -706,6 +745,7 @@ func (s *MessageService) Fail(ctx context.Context, agent *domain.Agent, id, reas
 		s.notifier.Publish(replyTopic(id))
 	}
 	s.wakeAfter(ctx, id)
+	s.workflowEnded(m.Workflow)
 	return m, nil
 }
 

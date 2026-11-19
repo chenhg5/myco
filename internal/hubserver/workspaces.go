@@ -134,6 +134,7 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 	go h.Files.Run(ctx, time.Hour)
 	go h.Traces.Run(ctx, time.Hour)
 	go h.Automations.Run(ctx, AutomationTick)
+	go h.Workflows.Run(ctx, WorkflowTick)
 	info, _ := os.Stat(o.DBPath)
 	w := &workspaceHub{hub: h, stop: stop, created: time.Now()}
 	if info != nil {

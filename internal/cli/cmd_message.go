@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -157,10 +159,12 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 		Examples: []string{
 			`myco message reply --id msg_abc123 --body "Done: PR #42 opened"`,
 			"myco message reply --body-file result.md   # inside a runner, --id defaults to $MYCO_MESSAGE_ID",
+			`myco message reply --body "审完了" --result result.json   # a workflow step's structured result`,
 		},
 		Flags: []Flag{idFlag,
 			{Name: "body", Kind: String, Help: "Reply text"},
 			{Name: "body-file", Kind: String, Help: "Read the reply from a file ('-' = stdin)"},
+			{Name: "result", Kind: String, Help: "A structured result for a workflow step: a JSON object, or a file holding one ('-' = stdin)"},
 			{Name: "anyway", Kind: Bool, Help: "Reply even if unread corrections from the sender remain"},
 			suggestFlag,
 			attachFlag,
@@ -198,7 +202,11 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 					fmt.Fprintf(e.in.Stderr, "note: the suggestion was not kept: %v\n", err)
 				}
 			}
-			m, err := c.ReplyWith(e.in.Ctx, e.in.String("id"), body, atts, dry)
+			result, err := e.readResult()
+			if err != nil {
+				return err
+			}
+			m, err := c.ReplyResult(e.in.Ctx, e.in.String("id"), body, result, atts, dry)
 			if err != nil {
 				return err
 			}
@@ -940,4 +948,29 @@ func parseAsk(body string) (question string, options []string) {
 		options = append(options, strings.TrimSpace(l[strings.Index(l, ". ")+2:]))
 	}
 	return strings.TrimSpace(strings.Join(lines[:start], "\n")), options
+}
+
+// readResult reads --result: a JSON object, or a file holding one.
+func (e *env) readResult() (json.RawMessage, error) {
+	v := strings.TrimSpace(e.in.String("result"))
+	if v == "" {
+		return nil, nil
+	}
+	b := []byte(v)
+	if !strings.HasPrefix(v, "{") {
+		var err error
+		if v == "-" {
+			b, err = io.ReadAll(e.in.Stdin)
+		} else {
+			b, err = os.ReadFile(v)
+		}
+		if err != nil {
+			return nil, errorf("invalid_argument", ExitUsage, `pass a JSON object, e.g. --result '{"approved": true}', or a file holding one`, "cannot read --result %s: %v", v, err)
+		}
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(b, &obj); err != nil {
+		return nil, errorf("invalid_argument", ExitUsage, `write it like {"approved": true, "summary": "...", "reason": "..."}`, "--result must be a JSON object: %v", err)
+	}
+	return json.RawMessage(strings.TrimSpace(string(b))), nil
 }

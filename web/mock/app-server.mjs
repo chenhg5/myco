@@ -1781,6 +1781,15 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/hub-version {version} — how old the studio workspace's myco is.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "hub-version" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    if (hub && body?.version) hub.hub_version = body.version;
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/held-for-other {on} — Myco (Grok) waits on PM's answer.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "held-for-other" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -1812,6 +1821,9 @@ const server = http.createServer(async (req, res) => {
       hub.machines = [...(hub.machines || []).filter((m) => m.id !== machine.id), machine];
       hub.agents = hub.agents.filter((a) => a.machine_id !== machine.id);
       hub.agents.push(...deletableAgents());
+      // Upgraded from the App in a smoke step: back to its old myco.
+      const office = hub.machines.find((m) => m.id === "m_office");
+      if (office) office.myco_version = "0.16.6";
     }
     return send(res, 200, { ok: true });
   }
@@ -2655,6 +2667,100 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, msg);
     }
 
+    // /app/hubs/{id}/workflows… and /workflow-runs… — workflows (v0.21):
+    // the mock keeps them per hub; a run walks its steps on timers (each
+    // agent or computer step done after a moment, the first edge taken),
+    // stops at a decision until one is made.
+    if (parts[3] === "workflows" || parts[3] === "workflow-runs" || parts[3] === "workflow-decisions") {
+      if (hub.id === "hub_lab") return fail(res, 404, "not_found", "no such route"); // an older hub
+      state.workflows ||= {};
+      const wf = (state.workflows[hub.id] ||= seedWorkflows(hub));
+      const view = (w, def) => ({ id: w.id, name: w.name, description: w.def.description, project: w.def.project, owner: "glenn", version: w.version,
+        enabled: w.enabled, steps: w.def.steps.length, created_at: w.created_at, updated_at: w.updated_at,
+        active: wf.runs.filter((r) => r.workflow_id === w.id && (r.status === "running" || r.status === "waiting")).length,
+        last_run: (() => { const r = wf.runs.find((x) => x.workflow_id === w.id); return r ? runView(r, false) : undefined; })(),
+        ...(def ? { definition: w.def } : {}) });
+      const runView = (r, full) => {
+        const { steps, events, def, ...rest } = r;
+        const current = steps.filter((x) => x.status === "running" || x.status === "waiting").map((x) => x.step);
+        return full ? { ...rest, current, steps, events, definition: def } : { ...rest, current };
+      };
+      const findWf = (ref) => wf.list.find((w) => w.id === ref || w.name === ref);
+      if (parts[3] === "workflow-decisions" && method === "GET") {
+        const out = [];
+        for (const r of wf.runs) for (const st of r.steps) if (st.status === "waiting") out.push({ run: runView(r, false), step: st });
+        return send(res, 200, { decisions: out });
+      }
+      if (parts[3] === "workflows") {
+        if (parts.length === 4 && method === "GET") return send(res, 200, { workflows: wf.list.map((w) => view(w, false)) });
+        if (parts.length === 4 && method === "POST") {
+          const b = await readBody(req);
+          const d = b?.definition;
+          if (!d?.name || !Array.isArray(d.steps) || !d.steps.length) return fail(res, 400, "invalid_argument", "the workflow has 1 problem(s): steps: a workflow needs at least one step");
+          let w = wf.list.find((x) => x.name === d.name);
+          if (w) { w.def = d; w.version += 1; w.updated_at = iso(0); return send(res, 200, { workflow: view(w, true), created: false, changed: true }); }
+          state.counter += 1;
+          w = { id: `wf_${state.counter}`, name: d.name, def: d, version: 1, enabled: true, created_at: iso(0), updated_at: iso(0) };
+          wf.list.unshift(w);
+          return send(res, 201, { workflow: view(w, true), created: true, changed: true });
+        }
+        if (parts.length === 5 && parts[4] === "validate" && method === "POST") return send(res, 200, { valid: true });
+        const w = findWf(decodeURIComponent(parts[4] || ""));
+        if (!w) return fail(res, 404, "not_found", "workflow not found");
+        if (parts.length === 5 && method === "GET") return send(res, 200, view(w, true));
+        if (parts.length === 5 && method === "PATCH") { const b = await readBody(req); if (typeof b?.enabled === "boolean") w.enabled = b.enabled; return send(res, 200, view(w, true)); }
+        if (parts.length === 5 && method === "DELETE") { wf.list.splice(wf.list.indexOf(w), 1); wf.runs = wf.runs.filter((r) => r.workflow_id !== w.id); res.writeHead(204); return res.end(); }
+        if (parts.length === 6 && parts[5] === "runs" && method === "POST") {
+          if (!w.enabled) return fail(res, 409, "invalid_state", `workflow ${w.name} is turned off`);
+          const b = await readBody(req);
+          const required = w.def.inputs?.required || [];
+          const missing = required.find((k) => !b?.inputs?.[k]);
+          if (missing) return fail(res, 400, "invalid_argument", `the inputs do not fit: ${missing} is missing`);
+          return send(res, 201, runView(wfStartRun(hub, wf, w, b?.inputs || {}, "manual"), true));
+        }
+        return fail(res, 404, "not_found", "no such route");
+      }
+      // workflow-runs
+      if (parts.length === 4 && method === "GET") {
+        const q = new URL(req.url, "http://x").searchParams;
+        let runs = wf.runs;
+        if (q.get("workflow")) { const w = findWf(q.get("workflow")); runs = runs.filter((r) => r.workflow_id === w?.id); }
+        if (q.get("active") === "true") runs = runs.filter((r) => r.status === "running" || r.status === "waiting");
+        return send(res, 200, { runs: runs.slice(0, Number(q.get("limit")) || 50).map((r) => runView(r, false)) });
+      }
+      const r = wf.runs.find((x) => x.id === parts[4]);
+      if (!r) return fail(res, 404, "not_found", "workflow run not found");
+      if (parts.length === 5 && method === "GET") return send(res, 200, runView(r, true));
+      if (parts.length === 6 && method === "POST") {
+        const b = await readBody(req).catch(() => ({}));
+        if (parts[5] === "cancel") {
+          if (r.status === "running" || r.status === "waiting") wfEnd(r, "cancelled", "glenn 取消了");
+          return send(res, 200, runView(r, true));
+        }
+        if (parts[5] === "retry") {
+          if (r.status !== "failed" && r.status !== "cancelled") return fail(res, 409, "invalid_state", "run is still going");
+          const from = b?.from || [...r.steps].reverse().find((x) => x.status === "failed" || x.status === "cancelled")?.step;
+          if (!from) return fail(res, 400, "invalid_argument", "no step failed");
+          r.status = "running"; r.error = undefined; r.ended_at = undefined;
+          r.events.push({ at: iso(0), kind: "retry", step: from, text: "glenn 从这一步重新开始" });
+          wfActivate(hub, r, from);
+          return send(res, 200, runView(r, true));
+        }
+        if (parts[5] === "decide") {
+          const st = r.steps.find((x) => x.step === b?.step && x.status === "waiting");
+          if (!st) return fail(res, 409, "invalid_state", "not waiting for a decision");
+          if (!(st.options || []).includes(b.choice)) return fail(res, 400, "invalid_argument", `choose one of: ${(st.options || []).join(", ")}`);
+          st.status = "done"; st.ended_at = iso(0); st.output = { choice: b.choice, note: b.note || "", by: "glenn" };
+          st.summary = b.choice + (b.note ? `：${b.note}` : "");
+          r.events.push({ at: iso(0), kind: "decided", step: st.step, text: `glenn 选了「${b.choice}」` });
+          if (b.choice === st.options[0]) wfNext(hub, r, st);
+          else wfEnd(r, "failed", `选了「${b.choice}」`);
+          return send(res, 200, runView(r, true));
+        }
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
+
     // /app/hubs/{id}/automations… — automations on the hub (v0.19.22): the
     // mock keeps them per hub; a run sends a task from you, marked.
     if (parts[3] === "automations") {
@@ -2665,6 +2771,18 @@ const server = http.createServer(async (req, res) => {
       const runOnce = (a, trigger) => {
         state.counter += 1;
         const run = { id: `run_${state.counter}`, automation_id: a.id, at: iso(0), trigger, outcome: "sent" };
+        if (a.workflow) {
+          state.workflows ||= {};
+          const wfs = (state.workflows[hub.id] ||= seedWorkflows(hub));
+          const w = wfs.list.find((x) => x.id === a.workflow);
+          const last = wfs.runs.find((x) => x.id === a.last_task);
+          if (!w) { run.outcome = "failed"; run.error = "workflow not found"; }
+          else if (a.skip_if_busy && last && (last.status === "running" || last.status === "waiting")) { run.outcome = "skipped"; run.error = "the last workflow run it started is not finished"; }
+          else { const r = wfStartRun(hub, wfs, w, Object.fromEntries(Object.entries(a.inputs || {}).map(([k, v]) => [k, String(v).replace(/\{\{[^}]*\}\}/g, "")])), "automation"); run.workflow_run = r.id; a.last_task = r.id; }
+          a.runs = [run, ...(a.runs || [])];
+          a.last_run = run;
+          return run;
+        }
         const busy = a.skip_if_busy && Object.values(hub.threads || {}).flat().some((m) => m.automation === a.id && ["queued", "delivered", "acked", "held"].includes(m.status));
         if (busy) { run.outcome = "skipped"; run.error = "the last task it sent is not finished"; }
         else {
@@ -2679,9 +2797,16 @@ const server = http.createServer(async (req, res) => {
         a.last_run = run;
         return run;
       };
-      const view = (a) => { const { runs, ...rest } = a; return rest; };
+      const view = (a) => {
+        const { runs, ...rest } = a;
+        if (!a.workflow) return rest;
+        state.workflows ||= {};
+        const wfs = (state.workflows[hub.id] ||= seedWorkflows(hub));
+        return { ...rest, workflow_name: wfs.list.find((w) => w.id === a.workflow)?.name || a.workflow };
+      };
       const apply = (a, b) => {
-        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled"]) if (b?.[k] !== undefined) a[k] = b[k];
+        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled", "workflow", "inputs"]) if (b?.[k] !== undefined) a[k] = b[k];
+        if (a.workflow === "") { delete a.workflow; delete a.inputs; }
         if (b?.schedule) { a.schedule = b.schedule; a.next_run_at = new Date(Date.now() + 3600e3).toISOString(); }
         if (b?.clear_schedule) { delete a.schedule; delete a.next_run_at; }
         let secret;
@@ -2694,7 +2819,7 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 4 && method === "GET") return send(res, 200, { automations: list.map(view) });
       if (parts.length === 4 && method === "POST") {
         const b = await readBody(req);
-        if (!b?.name || !b?.to || !b?.body || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body and a schedule or webhook are required");
+        if (!b?.name || (!b.workflow && (!b?.to || !b?.body)) || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body (or a workflow) and a schedule or webhook are required");
         state.counter += 1;
         const a = { id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
         const secret = apply(a, b);
@@ -3210,6 +3335,22 @@ const server = http.createServer(async (req, res) => {
     // /app/hubs/{id}/machines/{mid}/reach|diagnose|fix — a computer's
     // check-up over SSH (ComputerCheck.tsx). VPS 东京 runs its runner through
     // a proxy that no longer gets through (as a WSL did once).
+    // /app/hubs/{id}/machines/{mid}/upgrade — the computer upgrades its myco.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "upgrade" && method === "POST") {
+      const m = (hub.machines || []).find((x) => x.id === parts[4]);
+      if (!m) return fail(res, 404, "not_found", "没有这台电脑");
+      await sleep(900);
+      const from = "v" + String(m.myco_version || "").replace(/^v/, "");
+      m.myco_version = "0.17.2";
+      return send(res, 200, { from, to: "v0.17.2", restarting: true });
+    }
+    // /app/hubs/{id}/upgrade — the workspace upgrades itself and restarts.
+    if (parts.length === 4 && parts[3] === "upgrade" && method === "POST") {
+      await sleep(600);
+      const from = "v" + String(hub.hub_version || "").replace(/^v/, "");
+      hub.hub_version = "0.17.2";
+      return send(res, 202, { from, to: "v0.17.2", via: "service" });
+    }
     if (parts.length === 6 && parts[3] === "machines" && ["reach", "diagnose", "fix"].includes(parts[5])) {
       const mid = parts[4];
       const key = `${hub.id}/${mid}`;
@@ -3660,6 +3801,163 @@ function seedHandovers(name) {
   ];
 }
 
+/* ---------- workflows (mock): a run walks its steps on timers ---------- */
+function wfStartRun(hub, wf, w, inputs, trigger) {
+  state.counter += 1;
+  const r = { id: `run_${state.counter}`, workflow_id: w.id, name: w.name, version: w.version, status: "running", inputs,
+    owner: "glenn", by: "glenn", trigger, created_at: iso(0), updated_at: iso(0), steps: [], events: [], def: w.def };
+  wf.runs.unshift(r);
+  r.events.push({ at: iso(0), kind: "started", text: trigger === "automation" ? "自动化启动了" : "glenn 启动了" });
+  wfActivate(hub, r, w.def.steps[0].id);
+  return r;
+}
+function wfEdges(def) {
+  if (def.edges && def.edges.length) return def.edges;
+  return def.steps.slice(0, -1).map((x, i) => ({ from: x.id, to: def.steps[i + 1].id }));
+}
+function wfFill(text, r) {
+  return String(text || "").replace(/\{\{#if [^}]*\}\}[\s\S]*?\{\{\/if\}\}/g, "").replace(/\{\{\s*inputs\.([\w-]+)\s*\}\}/g, (_, k) => String(r.inputs?.[k] ?? ""))
+    .replace(/\{\{\s*steps\.([\w-]+)\.summary\s*\}\}/g, (_, k) => [...r.steps].reverse().find((x) => x.step === k)?.summary || "")
+    .replace(/\{\{[^}]*\}\}/g, "…");
+}
+function wfActivate(hub, r, id) {
+  const def = r.def.steps.find((x) => x.id === id);
+  if (!def || r.status === "failed" || r.status === "cancelled") return;
+  const kind = def.computer ? "computer" : def.human ? "human" : "agent";
+  const st = { id: `rs_${r.id}_${r.steps.length + 1}`, step: id, title: def.title, kind, attempt: r.steps.filter((x) => x.step === id).length + 1,
+    status: kind === "human" ? "waiting" : "running", target: kind === "human" ? "glenn" : def.agent || def.computer, started_at: iso(0),
+    input: kind === "computer" ? wfFill(def.run, r) : wfFill(def.prompt || def.title, r) };
+  if (kind === "human") { st.options = def.options; st.due_at = iso(-20 * 3600); }
+  r.steps.push(st);
+  r.status = kind === "human" && !r.steps.some((x) => x.status === "running") ? "waiting" : "running";
+  r.events.push({ at: iso(0), kind: "step", step: id, text: kind === "human" ? "等 glenn 决定" : `交给 ${st.target}` });
+  if (kind === "human") return;
+  const threadId = `th_wf_${r.id}_${r.steps.length}`;
+  const m = makeMessage({ thread_id: threadId, from: CONSOLE, to: st.target, type: "task", status: "acked", body: `[工作流「${r.name}」· ${def.title || id}]\n\n${st.input}`, workflow: r.id, created_at: iso(0), updated_at: iso(0) });
+  (hub.threads ||= {})[threadId] = [m];
+  st.message_id = m.id;
+  setTimeout(() => {
+    if (st.status !== "running") return;
+    st.status = "done"; st.ended_at = iso(0);
+    st.summary = kind === "computer" ? "退出码 0" : `${def.title || id}做完了`;
+    st.output = kind === "computer" ? { exit_code: 0, stdout: "ok\n" } : { summary: st.summary, text: st.summary };
+    m.status = "done";
+    hub.threads[threadId].push(makeMessage({ thread_id: threadId, from: st.target, to: CONSOLE, type: "reply", status: "done", body: st.summary, reply_to: m.id, created_at: iso(0), updated_at: iso(0) }));
+    r.events.push({ at: iso(0), kind: "done", step: id, text: st.summary });
+    wfNext(hub, r, st);
+  }, 2500);
+}
+function wfNext(hub, r, st) {
+  const out = wfEdges(r.def).filter((e) => e.from === st.step && !e.onError);
+  const def = r.def.steps.find((x) => x.id === st.step);
+  const take = def?.dispatch === "all" ? out : out.slice(0, 1);
+  for (const e of take) {
+    if (e.to === "$fail") return wfEnd(r, "failed", `从 ${st.step} 走到了「失败」`);
+    if (e.to !== "$end") {
+      const target = r.def.steps.find((x) => x.id === e.to);
+      if (target?.join === "all") {
+        const preds = [...new Set(wfEdges(r.def).filter((x) => x.to === e.to).map((x) => x.from))];
+        if (!preds.every((p) => r.steps.some((x) => x.step === p && x.status === "done"))) continue;
+      }
+      wfActivate(hub, r, e.to);
+    }
+  }
+  if (!r.steps.some((x) => x.status === "running" || x.status === "waiting") && r.status !== "failed" && r.status !== "cancelled") wfEnd(r, "succeeded", "");
+  else if (r.status === "running" && !r.steps.some((x) => x.status === "running")) r.status = "waiting";
+}
+function wfEnd(r, status, why) {
+  for (const x of r.steps) if (x.status === "running" || x.status === "waiting") { x.status = "cancelled"; x.ended_at = iso(0); x.error = "运行结束了"; }
+  r.status = status; r.error = why || undefined; r.ended_at = iso(0); r.updated_at = iso(0);
+  r.events.push({ at: iso(0), kind: "finished", text: ({ succeeded: "完成了", failed: "失败了", cancelled: "取消了" })[status] + (why ? `：${why}` : "") });
+}
+function seedWorkflows(hub) {
+  if (hub.id !== "hub_studio") return { list: [], runs: [] };
+  const review = {
+    name: "写-审-改", description: "一个做、一个审，没过就改，最多 3 轮；最后你点头。",
+    inputs: { required: ["task"], properties: { task: { type: "string", title: "要做什么", format: "textarea" } } },
+    steps: [
+      { id: "write", title: "做", agent: "pm-codex", prompt: "完成这件事：{{inputs.task}}", output: { required: ["where"], properties: { where: { type: "string" } } } },
+      { id: "review", title: "审", agent: "docs-claude", prompt: "审一下这个改动：{{steps.write.summary}}", output: { required: ["approved"], properties: { approved: { type: "boolean" }, comments: { type: "array" } } } },
+      { id: "ok", title: "你来定", human: "$starter", prompt: "「{{steps.write.summary}}」审过了。就这样吗？", options: ["就这样", "不要了"] },
+    ],
+    edges: [
+      { from: "write", to: "review" }, { from: "review", to: "ok", when: "output.approved" },
+      { from: "review", to: "write", when: "!output.approved", maxIterations: 3, else: "$fail" },
+      { from: "ok", to: "$end", when: "output.choice == '就这样'" }, { from: "ok", to: "$fail", when: "output.choice != '就这样'" },
+    ],
+  };
+  const test = {
+    name: "改完跑测试", description: "改完在 Studio Mac 上跑测试，没过把报错交回去，最多 3 次。",
+    inputs: { required: ["task"], properties: { task: { type: "string", title: "要改什么", format: "textarea" }, command: { type: "string", title: "测试命令", default: "make test" } } },
+    steps: [
+      { id: "fix", title: "改", agent: "pm-codex", prompt: "{{inputs.task}}" },
+      { id: "test", title: "跑测试", computer: "mac-exec", run: "{{inputs.command}}" },
+    ],
+    edges: [{ from: "fix", to: "test" }, { from: "test", to: "fix", onError: true, maxIterations: 3, else: "$fail" }],
+  };
+  const list = [
+    { id: "wf_review", name: review.name, def: review, version: 2, enabled: true, created_at: iso(9 * 86400), updated_at: iso(2 * 86400) },
+    { id: "wf_test", name: test.name, def: test, version: 1, enabled: true, created_at: iso(6 * 86400), updated_at: iso(6 * 86400) },
+  ];
+  const task = (to, body, reply, at, runId) => {
+    const threadId = `th_wf_seed_${msgSeq + 1}`;
+    const m = makeMessage({ thread_id: threadId, from: CONSOLE, to, type: "task", status: "done", body, workflow: runId, created_at: iso(at), updated_at: iso(at - 60) });
+    const rep = makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "reply", status: "done", body: reply, reply_to: m.id, created_at: iso(at - 60), updated_at: iso(at - 60) });
+    (hub.threads ||= {})[threadId] = [m, rep];
+    return m.id;
+  };
+  const st = (runId, i, step, kind, attempt, status, target, at, took, extra = {}) => ({
+    id: `rs_${runId}_${i}`, step, kind, attempt, status, target, started_at: iso(at), ...(status === "running" || status === "waiting" ? {} : { ended_at: iso(at - took) }), ...extra,
+  });
+  const a = "run_seed_a";
+  const runA = {
+    id: a, workflow_id: "wf_review", name: review.name, version: 2, status: "waiting", inputs: { task: "设置页加一个「导出对话」按钮" },
+    owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(5400), updated_at: iso(300), def: review,
+    steps: [
+      st(a, 1, "write", "agent", 1, "done", "pm-codex", 5400, 1500, { title: "做", summary: "加好了导出按钮，放在设置 › 对话", output: { where: "feat/export-chat", summary: "加好了导出按钮，放在设置 › 对话" },
+        input: "完成这件事：设置页加一个「导出对话」按钮", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做]\n\n完成这件事：设置页加一个「导出对话」按钮", "加好了导出按钮，放在设置 › 对话。分支 feat/export-chat。", 5400, a) }),
+      st(a, 2, "review", "agent", 1, "done", "docs-claude", 3900, 600, { title: "审", summary: "少了导出失败时的提示", output: { approved: false, comments: ["导出失败时没有提示", "按钮文字和别处不一致"] },
+        input: "审一下这个改动：加好了导出按钮", message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审]\n\n审一下这个改动：加好了导出按钮", "两处要改：导出失败时没有提示；按钮文字和别处不一致。", 3900, a) }),
+      st(a, 3, "write", "agent", 2, "done", "pm-codex", 3300, 1200, { title: "做", summary: "补上失败提示，按钮改成「导出这段对话」", output: { where: "feat/export-chat" },
+        input: "完成这件事：设置页加一个「导出对话」按钮\n上一轮审查的意见：导出失败时没有提示；按钮文字和别处不一致", message_id: task("pm-codex", "[工作流「写-审-改」· 第 1 步 做 · 第 2 次]\n\n补上审查意见", "补上失败提示，按钮改成「导出这段对话」。", 3300, a) }),
+      st(a, 4, "review", "agent", 2, "done", "docs-claude", 2000, 500, { title: "审", summary: "通过", output: { approved: true }, input: "审一下这个改动：补上失败提示",
+        message_id: task("docs-claude", "[工作流「写-审-改」· 第 2 步 审 · 第 2 次]\n\n审一下这个改动", "通过，没有别的问题。", 2000, a) }),
+      st(a, 5, "ok", "human", 1, "waiting", "glenn", 1500, 0, { title: "你来定", input: "「补上失败提示，按钮改成「导出这段对话」」审过了。就这样吗？", options: ["就这样", "不要了"], due_at: iso(-20 * 3600) }),
+    ],
+    events: [
+      { at: iso(5400), kind: "started", text: "glenn 启动了（第 2 版）" }, { at: iso(5400), kind: "step", step: "write", text: "交给 pm-codex" },
+      { at: iso(3900), kind: "done", step: "write", text: "加好了导出按钮，放在设置 › 对话" }, { at: iso(3900), kind: "edge", step: "write", text: "write → review" },
+      { at: iso(3300), kind: "done", step: "review", text: "少了导出失败时的提示" }, { at: iso(3300), kind: "edge", step: "review", text: "review → write" },
+      { at: iso(2000), kind: "done", step: "write", text: "补上失败提示，按钮改成「导出这段对话」" },
+      { at: iso(1500), kind: "done", step: "review", text: "通过" }, { at: iso(1500), kind: "step", step: "ok", text: "等 glenn 决定" },
+    ],
+  };
+  const b = "run_seed_b";
+  const runB = {
+    id: b, workflow_id: "wf_review", name: review.name, version: 1, status: "succeeded", inputs: { task: "README 补上 Windows 安装说明" },
+    owner: "glenn", by: "pm-codex", trigger: "agent", created_at: iso(30 * 3600), updated_at: iso(28 * 3600), ended_at: iso(28 * 3600), def: review,
+    steps: [
+      st(b, 1, "write", "agent", 1, "done", "pm-codex", 30 * 3600, 1800, { title: "做", summary: "写好了 Windows 安装一节", input: "完成这件事：README 补上 Windows 安装说明" }),
+      st(b, 2, "review", "agent", 1, "done", "docs-claude", 29.4 * 3600, 900, { title: "审", summary: "通过", output: { approved: true } }),
+      st(b, 3, "ok", "human", 1, "done", "glenn", 29 * 3600, 3600, { title: "你来定", summary: "就这样", output: { choice: "就这样", by: "glenn" }, options: ["就这样", "不要了"] }),
+    ],
+    events: [{ at: iso(30 * 3600), kind: "started", text: "pm-codex 启动了（第 1 版）" }, { at: iso(28 * 3600), kind: "finished", text: "完成了" }],
+  };
+  const c = "run_seed_c";
+  const runC = {
+    id: c, workflow_id: "wf_test", name: test.name, version: 1, status: "failed", inputs: { task: "修 Safari 上登录闪退", command: "make test" },
+    owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(3 * 86400), updated_at: iso(3 * 86400 - 3000), ended_at: iso(3 * 86400 - 3000), def: test,
+    error: "test → fix 到了最多 3 次",
+    steps: [1, 2, 3, 4].flatMap((n) => [
+      st(c, n * 2 - 1, "fix", "agent", n, "done", "pm-codex", 3 * 86400 - (n - 1) * 700, 400, { title: "改", summary: n === 1 ? "改了登录页的 cookie 处理" : `第 ${n} 次修：调整了重试` }),
+      st(c, n * 2, "test", "computer", n, "failed", "mac-exec", 3 * 86400 - (n - 1) * 700 - 400, 120, { title: "跑测试", error: "退出码 2：FAIL web/login.test.ts › keeps the session", input: "make test",
+        output: { exit_code: 2, stdout: "", stderr: "FAIL web/login.test.ts › keeps the session\n" } }),
+    ]).slice(0, 8),
+    events: [{ at: iso(3 * 86400), kind: "started", text: "glenn 启动了（第 1 版）" }, { at: iso(3 * 86400 - 3000), kind: "finished", text: "失败了：test → fix 到了最多 3 次" }],
+  };
+  return { list, runs: [runA, runB, runC] };
+}
+
 function seedAutomations(hub) {
   if (hub.id !== "hub_studio") return [];
   // Each run that went out has its task in the chat with its agent, done
@@ -3696,6 +3994,11 @@ function seedAutomations(hub) {
     mk("aut_ci", "release-cloud", 3, 3 * day, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[2]}`, request: hookReq(ciBodies[2]) }),
     mk("aut_ci", "release-cloud", 4, 6 * day, "webhook", "failed", { error: "release-cloud is not in this workspace any more", request: { content_type: "text/plain", size: 0, headers: { "User-Agent": "curl/8.7.1" } } }),
   ];
+  const issueBody = JSON.stringify({ action: "opened", issue: { number: 231, title: "设置页加一个「导出对话」按钮" } });
+  const issueRuns = [
+    { id: "run_seed_aut_issue_1", automation_id: "aut_issue", at: iso(5400), trigger: "webhook", outcome: "sent", workflow_run: "run_seed_a",
+      request: { content_type: "application/json", size: issueBody.length, headers: { "User-Agent": "GitHub-Hookshot/5c3a2e1", "X-Github-Event": "issues" }, body: issueBody } },
+  ];
   return [{
     id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
     body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
@@ -3707,5 +4010,12 @@ function seedAutomations(hub) {
     body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
     webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_ci`, skip_if_busy: true, enabled: true, created_at: iso(10 * 86400), updated_at: iso(10 * 86400),
     last_run: hooks[0], runs: hooks,
+  }, {
+    // Starts a workflow: each new issue goes through 写-审-改.
+    id: "aut_issue", name: "新 issue 走写-审-改", owner: "glenn", from: CONSOLE, to: "",
+    body: "", workflow: "wf_review", inputs: { task: "修 issue：{{payload.issue.title}}" },
+    webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_issue`, skip_if_busy: false, enabled: true, created_at: iso(4 * 86400), updated_at: iso(4 * 86400),
+    last_task: "run_seed_a",
+    last_run: issueRuns[0], runs: issueRuns,
   }];
 }

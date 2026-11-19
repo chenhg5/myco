@@ -248,6 +248,34 @@ myco pin list --with @console:ann        # rename / rm to keep it tidy: 20 at mo
 
 Pin a few things that matter, not every link.
 
+## Workflows: steps the workspace hands out in order
+
+A workflow is a fixed way of working (write → review → fix → test → a person approves) that
+the workspace walks for you: each step goes to an agent as an ordinary task, to a computer as
+a command, or to a person as a decision in the App. Write one when the person wants the same
+steps every time; see the format with `myco workflow validate --help`.
+
+```bash
+myco workflow validate --file wf.json        # problems, and agents that are not there yet
+myco workflow apply --file wf.json           # create it, or a new version
+myco workflow run start --name 写-审-改 --input task="加导出按钮" [--wait]
+myco workflow run show --id run_...          # each step, who, its summary
+```
+
+A run you start tells you when it ends: a note `[工作流「…」完成了]` (or 失败了) with each
+step's summary arrives in your inbox, so you can go on from there instead of waiting.
+
+When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a workflow: do that step
+only, do not hand out the next one (the workspace does), and answer with the result it asks
+for, plus `summary` (one sentence) and `reason`:
+
+```bash
+myco message reply --id <id> --body "审完了：两处要改" --result '{"approved": false, "comments": ["…"], "summary": "…", "reason": "…"}'
+```
+
+`--result` also takes a file. A result that does not fit is sent back once, saying what is
+missing.
+
 ## When you were started by `myco runner`
 
 The runner sets `MYCO_MESSAGE_ID`, `MYCO_THREAD_ID`, `MYCO_FROM`, `MYCO_MESSAGE_TYPE`, `MYCO_PROJECT`.
