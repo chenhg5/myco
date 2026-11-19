@@ -819,13 +819,13 @@ public final class ConversationModel {
     /// How long after a send the round button does not stop: it turns into
     /// stop under the finger as the message goes, and a second tap (or one
     /// that lagged) must not stop what was just sent.
-    static let stopGrace: TimeInterval = 1.5
+    var stopGrace: TimeInterval = 1.5
 
     /// The send button: a new message, an addition to the open task, or stop.
     public func submit() async {
         guard canSubmit else { return }
         let action = action
-        if action == .stop, let sent = lastSentAt, Date().timeIntervalSince(sent) < Self.stopGrace { return }
+        if action == .stop, let sent = lastSentAt, Date().timeIntervalSince(sent) < stopGrace { return }
         if action != .stop { lastSentAt = Date() }
         let text = trimmedDraft
         let files = pending

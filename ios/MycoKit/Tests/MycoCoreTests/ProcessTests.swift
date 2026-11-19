@@ -476,7 +476,7 @@ struct RunStateAlignmentTests {
         let after = try #require(await hub.messages(to: "studio-claude-c41f").first { $0.id == sent.id })
         #expect(after.isOpen, "a stop right after sending is not taken")
         // Later, the button stops it.
-        try await Task.sleep(for: .seconds(ConversationModel.stopGrace + 0.2))
+        try await Task.sleep(for: .seconds(model.stopGrace + 0.2))
         await model.submit()
         let stopped = try #require(await hub.messages(to: "studio-claude-c41f").first { $0.id == sent.id })
         #expect(stopped.error == RunState.stoppedBySender)
