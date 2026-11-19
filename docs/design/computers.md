@@ -71,11 +71,11 @@ App 经 Hub 给那台电脑的 machine 节点发一个 `cli: "info"` 的请求�
 - Hub 不用升级。老 Hub 会把回答重新编码、丢掉不认识的 `info` 字段，所以 machine 节点在 `reply` 里放一份同样的 JSON 文字，App 后端两处都认。老 Hub 会把这次询问记成一条 `machine.spawn` 审计，新 Hub 不记。
 - 不填文件夹时新建：新文件夹可以建在 `~/myco` 下，也可以直接建在某个允许的文件夹下；不在允许范围里的一律不建（以前会先建好再报错，留下空文件夹）。App 还不知道那台电脑允许哪些文件夹时请求的是 `~/myco/<名字>`；`~/myco` 不在允许范围里的电脑会把同名文件夹建到第一个允许的文件夹里，而不是报"不存在"。App 那边也会等问到允许的文件夹再让「开一个」能点。
 
-## 从 SSH 或 WSL 加电脑（设计）
+## 从 SSH 或 WSL 加电脑
 
 现在连一台电脑要：复制命令 → 自己登录那台电脑 → 粘贴运行。能 SSH 上去的电脑、这台 Windows 里的 WSL，App 可以替你做完。思路参考了 Kettu（AGPL，只借思路），但我们的电脑自己连 Hub，不需要它那套 SSH 隧道。
 
-**入口**：「连一台电脑」里多两种方式，排在「复制命令」前面：
+**入口**：「连一台电脑」里多两种方式，排在「复制命令」前面（App 后端：`GET /app/local/ssh-hosts`、`GET /app/local/wsl`、`POST /app/hubs/{id}/machines/connect`、`GET /app/connect/{job}`，`remote.go`、`remote_connect.go`）：
 
 - **从 SSH 配置里选**：列出 `~/.ssh/config` 里的主机（跟着 `Include` 读），每个用系统的 `ssh -G <名字>` 算出真正的用户、地址、端口和跳板，显示成「名字 · user@host:port · 经 跳板」。只拿 Git 用的主机（github.com、gitlab.com、gitee.com 等）不列。也可以手填 `user@host`、端口。
 - **这台 Windows 里的 WSL**（只在 Windows 上）：`wsl.exe -l -v` 列出发行版；已经连在这个工作区的标出来。
@@ -102,7 +102,7 @@ App 经 Hub 给那台电脑的 machine 节点发一个 `cli: "info"` 的请求�
 
 **记住怎么连回去**：加成功后，App 在本机记下「这台电脑 ← SSH 名字 / WSL 发行版」（`~/.myco/app-reach.json`，只记名字，不记地址和密钥）。之后：
 
-- **诊断**：电脑页上一个按钮，通过同一条路跑一段只读脚本，逐项给结论：myco 版本；后台服务在不在跑；linger（Linux）；服务配置里的代理；经那个代理和直连各能不能连上 Hub；runner 日志最后 20 行。比如「代理 127.0.0.1:7890 连不上任何网站，直连 Hub 是通的」。
+- **诊断**（还没做）：电脑页上一个按钮，通过同一条路跑一段只读脚本，逐项给结论：myco 版本；后台服务在不在跑；linger（Linux）；服务配置里的代理；经那个代理和直连各能不能连上 Hub；runner 日志最后 20 行。比如「代理 127.0.0.1:7890 连不上任何网站，直连 Hub 是通的」。
 - **重启后台**、**升级 myco**：`myco runner service install`（会重启）、`myco upgrade`。
 - 不是从 App 加的电脑没有这条路，电脑页给一个「用 SSH 连这台」，选一个 SSH 名字记下来，之后一样能诊断。
 

@@ -31,6 +31,9 @@ type SSHHost struct {
 	Host string `json:"host"`
 	Port int    `json:"port,omitempty"`
 	Jump string `json:"jump,omitempty"`
+	// Connected is the computer it became on the workspace asked about
+	// (?hub=), when this App connected it.
+	Connected string `json:"connected,omitempty"`
 }
 
 // WSLDistro is a WSL distribution on this Windows computer.
@@ -39,6 +42,8 @@ type WSLDistro struct {
 	Default bool   `json:"default,omitempty"`
 	Running bool   `json:"running,omitempty"`
 	Version int    `json:"version,omitempty"`
+	// Connected: as for SSHHost.
+	Connected string `json:"connected,omitempty"`
 }
 
 // Route is how to reach a computer: "ssh" to a config name or user@host
@@ -423,7 +428,29 @@ func (b *Backend) getSSHHosts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	conn := b.connectedVia(r.URL.Query().Get("hub"), "ssh")
+	for i := range hosts {
+		hosts[i].Connected = conn[hosts[i].Name]
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"hosts": hosts})
+}
+
+// connectedVia maps the targets this App connected over via to the
+// computers they became on hub.
+func (b *Backend) connectedVia(hub, via string) map[string]string {
+	out := map[string]string{}
+	if hub == "" {
+		return out
+	}
+	reachMu.Lock()
+	defer reachMu.Unlock()
+	for k, rt := range b.reaches() {
+		h, mid, ok := strings.Cut(k, "/")
+		if ok && h == hub && rt.Via == via && rt.Port == 0 {
+			out[rt.Target] = mid
+		}
+	}
+	return out
 }
 
 // getWSL is GET /app/local/wsl: {supported, distros}.
@@ -435,6 +462,10 @@ func (b *Backend) getWSL(w http.ResponseWriter, r *http.Request) {
 	}
 	if ds == nil {
 		ds = []WSLDistro{}
+	}
+	conn := b.connectedVia(r.URL.Query().Get("hub"), "wsl")
+	for i := range ds {
+		ds[i].Connected = conn[ds[i].Name]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"supported": wslHost, "distros": ds})
 }

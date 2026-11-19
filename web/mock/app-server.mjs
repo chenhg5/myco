@@ -376,6 +376,45 @@ const vpsMachine = () => ({
   id: "m_vps", name: "VPS 东京", hostname: "tokyo-vps", os: "linux", arch: "x86_64",
   myco_version: "0.20.14", online: true, last_seen_at: iso(8), can_spawn: true,
 });
+// Hosts in the mock SSH config, and computers being connected over SSH or WSL.
+const sshHosts = [
+  { name: "tokyo-vps", user: "glenn", host: "203.0.113.20", port: 22 },
+  { name: "gpu-box", user: "ubuntu", host: "10.0.4.12", port: 22, jump: "bastion" },
+  { name: "hk-vps", user: "root", host: "203.0.113.7", port: 2222 },
+  { name: "old-pi", user: "pi", host: "192.168.1.40", port: 22 },
+  { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
+];
+const connectJobs = new Map();
+// What a job shows at this moment: log in (0.8 s), install (2 s), show up
+// (1 s); old-pi fails to log in. Once done, the computer is on the workspace.
+function connectView(job) {
+  const t = Date.now() - job.started;
+  const steps = [{ key: "login", state: "running" }, { key: "install", state: "pending" }, { key: "online", state: "pending" }];
+  const view = { id: job.id, hub: job.hub, route: job.route, steps, done: false };
+  const name = job.route.target.replace(/^[^@]*@/, "");
+  if (name === "old-pi") {
+    if (t < 700) return view;
+    steps[0].state = "failed";
+    return { ...view, done: true, error: { code: "auth", message: "pi@192.168.1.40: Permission denied (publickey,password).", command: "ssh old-pi" } };
+  }
+  if (t < 800) return view;
+  steps[0].state = "done";
+  view.found = { os: "Linux", arch: "x86_64", host: name, curl: "yes", bash: "yes" };
+  view.log = ["==> installing myco", "myco v0.20.17 installed to ~/.local/bin/myco"];
+  if (t < 2800) { steps[1].state = "running"; return view; }
+  steps[1].state = "done";
+  view.log.push("joined: this machine is on myco", "runner service installed (systemd)");
+  if (t < 3800) { steps[2].state = "running"; return view; }
+  steps[2].state = "done";
+  if (!job.machine) {
+    const hub = state.hubs.find((h) => h.id === job.hub);
+    state.counter += 1;
+    const wsl = job.route.via === "wsl";
+    job.machine = { ...vpsMachine(), id: `m_cx${state.counter}`, name: wsl ? `Glenn 的 Windows-wsl` : name, hostname: wsl ? "GLENN-PC" : name, last_seen_at: iso(0), myco_version: "0.20.17" };
+    if (hub) hub.machines = [...(hub.machines || []), job.machine];
+  }
+  return { ...view, done: true, machine_id: job.machine.id };
+}
 const vpsInfo = {
   dirs: ["~/code/myco-team"], new_dir: "~/code/myco-team", max_access: "workspace", home: "/home/glenn",
   ais: [
@@ -1536,6 +1575,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { agent: agent.name });
   }
 
+  // /app/connect/{job}: a computer being connected (see machines/connect).
+  if (parts[0] === "app" && parts[1] === "connect" && parts.length === 3 && method === "GET") {
+    const job = connectJobs.get(parts[2]);
+    if (!job) return fail(res, 404, "not_found", "no such connection");
+    return send(res, 200, connectView(job));
+  }
+
   // /app/mock/run-connect — the UI smoke "runs" the last connect command on
   // a computer: it shows up as a computer of the workspace.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-connect" && parts.length === 3 && method === "POST") {
@@ -2128,6 +2174,19 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       local.shell_allowed = !!body.allow;
       return send(res, 200, { shell_allowed: local.shell_allowed });
+    }
+
+    // /app/local/ssh-hosts and /app/local/wsl: computers this one can reach
+    // (ConnectOver.tsx). tokyo-vps is the VPS already connected.
+    if (parts.length === 3 && parts[2] === "ssh-hosts" && method === "GET") {
+      await sleep(300);
+      return send(res, 200, { hosts: sshHosts.map((h) => ({ ...h, connected: h.name === "tokyo-vps" ? "m_vps" : undefined })) });
+    }
+    if (parts.length === 3 && parts[2] === "wsl" && method === "GET") {
+      return send(res, 200, { supported: true, distros: [
+        { name: "Ubuntu-22.04", default: true, running: true, version: 2 },
+        { name: "Debian", running: false, version: 2 },
+      ] });
     }
 
     // /app/local/agents: the agent CLIs on this computer (LocalAgents.tsx).
@@ -3009,6 +3068,20 @@ const server = http.createServer(async (req, res) => {
         uses,
         expires_hours: hours,
       });
+    }
+
+    // /app/hubs/{id}/machines/connect — connect a computer over SSH or WSL:
+    // the job moves on with time; old-pi has a key the App cannot use.
+    if (parts.length === 5 && parts[3] === "machines" && parts[4] === "connect" && method === "POST") {
+      const body = await readBody(req);
+      const target = String(body.target || "").trim();
+      if (!["ssh", "wsl"].includes(body.via) || !target || /^-|[\s'"`;|&$<>]/.test(target)) {
+        return fail(res, 400, "invalid_argument", "say how to reach it: via ssh or wsl, and a plain name");
+      }
+      state.counter += 1;
+      const job = { id: `cj_${state.counter}`, hub: hub.id, route: { via: body.via, target, ...(body.port ? { port: body.port } : {}) }, started: Date.now() };
+      connectJobs.set(job.id, job);
+      return send(res, 200, connectView(job));
     }
 
     // /app/hubs/{id}/machines/{mid}

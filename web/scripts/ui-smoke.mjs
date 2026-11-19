@@ -1235,6 +1235,29 @@ async function runMatrix(browser, size, scheme) {
       // network only (a VPS cannot reach it), gives the command, and picks
       // the computer once it connects.
       await clickVisible(page, dialog.getByRole("tab", { name: "连一台电脑" }));
+      // Over SSH (the default where the App runs): the hosts in the SSH
+      // config, the one already connected marked; a key the App cannot use
+      // is told in words with the command to try.
+      const ssh = dialog.locator("[data-testid=connect-ssh]");
+      await ssh.locator(".cx-row", { hasText: "gpu-box" }).waitFor({ timeout: 10_000 });
+      if (!(await ssh.locator(".cx-row", { hasText: "tokyo-vps" }).innerText()).includes("连过")) throw new Error("已经连过的 SSH 主机应标出来");
+      if (!(await ssh.locator(".cx-row", { hasText: "gpu-box" }).innerText()).includes("经 bastion")) throw new Error("经跳板机的主机应写出跳板");
+      if (await ssh.locator(".cx-row", { hasText: "github" }).count()) throw new Error("只给 git 用的主机不该列出来");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-ssh");
+      await clickVisible(page, ssh.locator(".cx-row", { hasText: "old-pi" }));
+      await clickVisible(page, ssh.getByRole("button", { name: "连上" }));
+      await ssh.locator(".cx-error", { hasText: "ssh-add" }).waitFor({ timeout: 10_000 });
+      await ssh.locator(".cx-error .app-command code", { hasText: "ssh old-pi" }).waitFor({ timeout: 5_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-ssh-error");
+      await clickVisible(page, ssh.getByRole("button", { name: "再连别的" }));
+      // WSL on a Windows computer: its distributions, the default marked.
+      await clickVisible(page, dialog.getByRole("tab", { name: "这台 Windows 里的 WSL" }));
+      await dialog.locator("[data-testid=connect-wsl] .cx-row", { hasText: "Ubuntu-22.04" }).filter({ hasText: "默认" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-connect-wsl");
+      await clickVisible(page, dialog.getByRole("tab", { name: "复制命令" }));
       await dialog.locator("[data-testid=reach-note]", { hasText: "局域网" }).waitFor({ timeout: 10_000 });
       await dialog.locator("[data-testid=connect-computer] .app-command code", { hasText: "| bash" }).waitFor({ timeout: 10_000 });
       await settle(page, 300);
@@ -1242,6 +1265,16 @@ async function runMatrix(browser, size, scheme) {
       const ran = await page.evaluate(async () => (await fetch("/app/mock/run-connect", { method: "POST" })).status);
       if (ran !== 200) throw new Error(`run-connect: ${ran}`);
       await dialog.getByRole("tab", { name: /新服务器/, selected: true }).waitFor({ timeout: 20_000 });
+
+      // Connecting one over SSH: each step ticks, then it is picked.
+      await clickVisible(page, dialog.getByRole("tab", { name: "连一台电脑" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "用 SSH 连" }));
+      await clickVisible(page, ssh.locator(".cx-row", { hasText: "hk-vps" }));
+      await clickVisible(page, ssh.getByRole("button", { name: "连上" }));
+      await ssh.locator(".cx-step.is-running").first().waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "add-agent-connect-ssh-steps");
+      await dialog.getByRole("tab", { name: "hk-vps", selected: true }).waitFor({ timeout: 30_000 });
 
       await clickVisible(page, dialog.getByRole("tab", { name: "云端或别处的 AI" }));
       await page.waitForFunction(() => {
