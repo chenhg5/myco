@@ -2491,6 +2491,32 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // Settings › 快捷键: ⌘/ (Ctrl+/) opens it from anywhere, and moves
+    // there when Settings is already open; a list to read, by group.
+    await step("设置 · 快捷键", async () => {
+      await closeSettings(page);
+      await page.keyboard.press("Control+Slash");
+      const list = page.locator("[data-testid=shortcuts]");
+      await list.waitFor({ timeout: 10_000 });
+      for (const g of ["全局", "对话", "输入框", "终端"]) {
+        if (!(await list.locator(".app-setting-group", { hasText: g }).count())) throw new Error(`快捷键应有「${g}」一组`);
+      }
+      if (await list.locator(".kb-line").count() < 20) throw new Error("快捷键应列全");
+      await settle(page, 150);
+      await shot(page, size, scheme, "settings-shortcuts");
+      await page.locator(".app-settings-search input").fill("外观");
+      await page.locator(".app-settings-search input").press("Enter");
+      await page.locator('[data-setting="theme"]').waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Control+Slash");
+      await list.waitFor({ timeout: 5_000 });
+      await closeSettings(page);
+      // ⌘, afterwards opens Settings where it usually does, not here.
+      await page.keyboard.press("Control+Comma");
+      await page.locator(".app-settings-head h2").waitFor({ timeout: 5_000 });
+      if (await list.count()) throw new Error("⌘, 不应还停在快捷键");
+      await closeSettings(page);
+    });
+
     // 上手引导 again (Settings › About): this computer's agent CLIs and its
     // sessions to bring in; skipping leaves things as they were.
     await step("设置 · 上手引导", async () => {

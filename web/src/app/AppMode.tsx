@@ -82,6 +82,56 @@ function initialCollapsed() {
   return window.innerWidth < 760;
 }
 
+/** Settings › 快捷键: asked for while Settings shows, it moves there;
+ *  otherwise Settings opens on it. */
+function openShortcuts(settingsShown: boolean) {
+  if (settingsShown) window.dispatchEvent(new CustomEvent("myco-open-settings", { detail: { section: "shortcuts" } }));
+  else openSettingsSection("shortcuts");
+}
+
+/** ⌥↑ / ⌥↓: open the project or chat above or below the one open, in the
+ *  sidebar's order (from the top or the bottom when none is). False when
+ *  there is nowhere to go (the sidebar hidden, the end of the list). The
+ *  order is kept while you keep stepping: a chat opened can move up its
+ *  list (most recent first), which must not send the next step back. */
+let stepRun: { keys: string[]; at: string; t: number } | null = null;
+function stepConversation(by: -1 | 1): boolean {
+  const items = Array.from(document.querySelectorAll<HTMLElement>(".app-sidebar .app-nav [data-nav-key]"));
+  if (!items.length) return false;
+  const live = items.map((el) => el.dataset.navKey || "");
+  const now = Date.now();
+  let keys = live;
+  // (a chat open inside a project marks both: the chat is where you are)
+  let at = items.map((el) => el.classList.contains("active")).lastIndexOf(true);
+  if (stepRun && now - stepRun.t < 4000 && live.includes(stepRun.at)) {
+    keys = stepRun.keys.filter((k) => live.includes(k));
+    at = keys.indexOf(stepRun.at);
+  }
+  const key = keys[at < 0 ? (by > 0 ? 0 : keys.length - 1) : at + by];
+  const el = key ? items.find((x) => x.dataset.navKey === key) : undefined;
+  if (!key || !el) return false;
+  el.click();
+  el.scrollIntoView({ block: "nearest" });
+  stepRun = { keys, at: key, t: now };
+  return true;
+}
+
+/** ⌘U: the paperclip of the box being written in, else of the chat that
+ *  shows (the last one, with panes side by side). */
+function pickFiles(): boolean {
+  const visible = (b: HTMLButtonElement) => !b.disabled && b.offsetParent !== null;
+  for (let n = document.activeElement as HTMLElement | null; n && n !== document.body; n = n.parentElement) {
+    const b = n.querySelector<HTMLButtonElement>(".att-pick");
+    if (b && visible(b)) { b.click(); return true; }
+    if (n.classList.contains("app-main")) break;
+  }
+  const all = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-main .att-pick")).filter(visible);
+  const b = all[all.length - 1];
+  if (!b) return false;
+  b.click();
+  return true;
+}
+
 function spaceKey(s: SpaceRef): string {
   return isLoose(s) ? `${s.hubId}\u0000*` : `${s.hubId}\u0000${s.name}`;
 }
@@ -510,9 +560,46 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
+  // The window-wide keys (all listed in Settings › 快捷键, Shortcuts.tsx;
+  // a new one goes there too). ⌘ on a Mac, Ctrl elsewhere. On the Mac the
+  // menu bar offers some of them as well: a key the page takes
+  // (preventDefault) does not reach the menu, so each acts once.
+  const keysRef = useRef({ settingsOpen, hasHub: false });
+  keysRef.current = { settingsOpen, hasHub: !!hub };
   useEffect(() => {
+    const overlay = () => !!document.querySelector(".app-modal, .cp, .app-menu, .lightbox");
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.isComposing || e.defaultPrevented) return;
+      // ⌥↑ / ⌥↓ (Alt): the conversation above or below in the sidebar.
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (!overlay() && !keysRef.current.settingsOpen && stepConversation(e.key === "ArrowUp" ? -1 : 1)) e.preventDefault();
+        return;
+      }
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      // Text size: ⌘= (⌘+ too) / ⌘- / ⌘0, in place of the page zoom.
+      if (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        setTextSize((s) => (s === "small" ? "standard" : "large"));
+        return;
+      }
+      if (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-") {
+        e.preventDefault();
+        setTextSize((s) => (s === "large" ? "standard" : "small"));
+        return;
+      }
+      if (e.shiftKey) {
+        // ⌘⇧L: light ⇄ dark (from what shows now, also when following the system).
+        if (e.code === "KeyL") {
+          e.preventDefault();
+          setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+        }
+        return;
+      }
+      if (e.code === "Digit0" || e.code === "Numpad0") {
+        e.preventDefault();
+        setTextSize("standard");
+        return;
+      }
       // ⌘1…⌘9 (Ctrl on Windows): the workspaces, in the switcher's order.
       const digit = /^Digit([1-9])$/.exec(e.code);
       if (digit) {
@@ -523,6 +610,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
       if (e.key === ",") {
         e.preventDefault();
         setPage("settings");
+      } else if (e.key === "/" || e.code === "Slash") {
+        e.preventDefault();
+        openShortcuts(keysRef.current.settingsOpen);
+        setPage("settings");
+      } else if (e.key === "\\" || e.code === "Backslash") {
+        e.preventDefault();
+        toggleSidebarRef.current();
+      } else if (e.code === "KeyN") {
+        if (overlay() || !keysRef.current.hasHub) return;
+        e.preventDefault();
+        setNewProjectOpen(true);
+      } else if (e.code === "KeyU") {
+        if (overlay()) return;
+        if (pickFiles()) e.preventDefault();
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         void refreshRef.current();
@@ -533,6 +634,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A top page picked again while on it goes back to its first view (the
@@ -595,6 +697,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
       return next;
     });
   };
+  const toggleSidebarRef = useRef(toggleSidebar);
+  toggleSidebarRef.current = toggleSidebar;
   // The Mac's menu bar (appmenu_darwin.go) asks for what it offers.
   const menuRef = useRef<(cmd: string) => void>(() => undefined);
   menuRef.current = (cmd: string) => {
@@ -607,6 +711,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
       case "connect": setConnectOpen(true); break;
       case "add-computer": if (hub) setAddWorkspace({ hubId: hub.id, loose: true }); break;
       case "refresh": void refreshRef.current(); break;
+      case "shortcuts": openShortcuts(settingsOpen); setPage("settings"); break;
+      case "text-bigger": setTextSize((s) => (s === "small" ? "standard" : "large")); break;
+      case "text-smaller": setTextSize((s) => (s === "large" ? "standard" : "small")); break;
+      case "text-standard": setTextSize("standard"); break;
+      case "theme": setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark"); break;
     }
   };
   useEffect(() => {
@@ -766,7 +875,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
-                    aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)}
+                    aria-current={active ? "page" : undefined} onClick={() => { setNavChat(null); openSpace(ref); }} data-nav-key={`p:${x.hubId}/${x.p.name}`}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
                       { label: L("加一个终端", "Add a terminal"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
@@ -819,7 +928,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   const isPinned = pinned.includes(r.st.agent.name);
                   return (
                     <button key={key} type="button" className={cn("app-nav-item sp-nav sp-nav-person", r.st.state === "offline" && "is-away", isPinned && "is-pinned", page === "space" && navChat === key && "active")}
-                      onClick={() => { setNavChat(key); chatWithMember(r); }}
+                      onClick={() => { setNavChat(key); chatWithMember(r); }} data-nav-key={`c:${key}`}
                       draggable onDragStart={(e) => dragAgent(e, { hubId: r.hub.id, agent: r.st.agent.name })}
                       onContextMenu={(e) => navMenu.open(e, [
                         { label: L("聊天", "Chat"), onSelect: () => { setNavChat(key); chatWithMember(r); } },

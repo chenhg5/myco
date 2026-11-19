@@ -127,7 +127,7 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button type="button" className="att-btn" disabled={disabled} onClick={(e) => { e.stopPropagation(); input.current?.click(); }}
+      <button type="button" className="att-btn att-pick" disabled={disabled} onClick={(e) => { e.stopPropagation(); input.current?.click(); }}
         title={L("加文件（也可以直接粘贴或拖进来）", "Add files (or paste or drop them here)")} aria-label={L("加文件", "Add files")}>
         <Paperclip />
       </button>
