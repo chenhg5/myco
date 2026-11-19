@@ -3998,6 +3998,10 @@ async function runMatrix(browser, size, scheme) {
       // cancelled while it opens (it used to hang there with no way out).
       await clickVisible(page, page.getByRole("button", { name: "开放到公网" }));
       const pub = page.locator(".app-modal", { hasText: "让不在同一局域网的电脑" });
+      // One click is the default, even before cloudflared is installed.
+      await pub.locator(".app-choice:not(.disabled)", { hasText: "一键开放（推荐）" }).locator("input:checked").waitFor({ state: "attached", timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "open-to-internet");
       await clickVisible(page, pub.getByRole("button", { name: "开放", exact: true }));
       await pub.getByRole("button", { name: "正在开放…" }).waitFor({ timeout: 5_000 });
       await clickVisible(page, pub.getByRole("button", { name: "取消" }));

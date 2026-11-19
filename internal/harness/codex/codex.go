@@ -85,7 +85,10 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	lastMsg := filepath.Join(dir, "last.txt")
 
 	// codex exec [flags] [resume <id>] -   (prompt read from stdin)
-	args := []string{"exec", "--json", "--output-last-message", lastMsg}
+	// --skip-git-repo-check: an agent's folder need not be a git repository
+	// (a new one under ~/myco never is), and Codex otherwise refuses with
+	// "Not inside a trusted directory".
+	args := []string{"exec", "--json", "--skip-git-repo-check", "--output-last-message", lastMsg}
 	model := req.Model
 	if model == "" {
 		model = c.opts.Model

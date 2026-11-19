@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -193,6 +194,13 @@ func appExe() string {
 // lower-cased, without ".local", e.g. "glenns-macbook-pro".
 func deviceName() string {
 	h, err := os.Hostname()
+	// On a Mac the host name can be whatever the network handed out (an IP
+	// address, "192.168.1.210"): the name set in System Settings is better.
+	if runtime.GOOS == "darwin" {
+		if out, err2 := exec.Command("scutil", "--get", "LocalHostName").Output(); err2 == nil && strings.TrimSpace(string(out)) != "" {
+			h, err = strings.TrimSpace(string(out)), nil
+		}
+	}
 	if err != nil || h == "" {
 		return "this-computer"
 	}
