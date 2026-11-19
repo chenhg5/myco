@@ -6,7 +6,7 @@ import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, ty
 import { IconAsterisk, IconCode } from "@/components/icons";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, thisComputerId } from "@/app/nodes";
+import { agentKind, machineShell, machinesOfHub, nodeName, osInfo, sessionDisplayName, thisComputerId } from "@/app/nodes";
 import { Avatar, isWorkspace, whereOf } from "@/app/persona";
 import { CopyButton } from "@/app/copy";
 import { computerPrompt } from "@/app/agentSetup";
@@ -16,6 +16,7 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { EFFORTS, MODELS, effortLabel } from "@/app/RunSettings";
 import { machineMakesFolders, machineTellsInfo } from "@/app/hubVersion";
+import { ComputerFix } from "@/app/ComputerFix";
 import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from "@/app/machineInfoCache";
 import { PublicAccessDialog } from "@/app/SettingsPage";
 import { localWorkspaceOf } from "@/app/localHubs";
@@ -263,7 +264,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     setJoining(s.session_id);
     setJoinError(null);
     try {
-      const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true });
+      const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true, display_name: sessionDisplayName(s.title) });
       await arrived(r.agent);
     } catch (e) {
       setJoinError(e);
@@ -276,7 +277,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     setJoining(s.session_id);
     setJoinError(null);
     try {
-      const r = await appApi.spawn(hubId, m.id, { cli: s.cli, dir: s.workdir, fork_from: s.session_id });
+      const r = await appApi.spawn(hubId, m.id, { cli: s.cli, dir: s.workdir, fork_from: s.session_id, display_name: sessionDisplayName(s.title) });
       await arrived(r.agent);
       loadInfo(m, true);
     } catch (e) {
@@ -427,7 +428,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
       )}
 
       {where.startsWith("m:") && how === "existing" && picked && (
-        <RemoteSessions machine={picked} state={pickedInfo} joining={joining} joinError={joinError}
+        <RemoteSessions hubId={hubId} machine={picked} state={pickedInfo} joining={joining} joinError={joinError}
           onJoin={(s) => void joinRemote(picked, s)} onRetry={() => loadInfo(picked)} />
       )}
 
@@ -536,25 +537,9 @@ function ByProgram({ count, open, children }: { count: number; open: boolean; ch
   );
 }
 
-/** Says why a computer could not tell what it has. */
-function infoErrorText(error: unknown): React.ReactNode {
-  const code = (error as { code?: string })?.code;
-  if (code === "too_old") {
-    return (
-      <div className="app-notice" data-testid="info-too-old">
-        <Info />
-        <div>
-          <div>{L("那台电脑上的 myco 版本太旧，看不到它上面的会话和 AI。在那台电脑上运行下面这行升级，再回来：", "The myco on that computer is too old to list its sessions and AIs. Upgrade it there with this, then come back:")}</div>
-          <div className="app-command"><code>myco upgrade</code><CopyButton value="myco upgrade" /></div>
-        </div>
-      </div>
-    );
-  }
-  return <ErrorText error={error} />;
-}
-
 /** The sessions on another computer: a copy of one joins (it starts there). */
-function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }: {
+function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onRetry }: {
+  hubId: string;
   machine: Machine;
   state?: InfoState;
   joining: string;
@@ -567,13 +552,15 @@ function RemoteSessions({ machine, state, joining, joinError, onJoin, onRetry }:
     return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线：它开机、myco 在运行时，这里会列出它上面的会话。`, `“${machine.name}” is away: once it is on and myco runs there, its sessions show here.`)}</div></div>;
   }
   if (!machine.can_spawn || !machineTellsInfo(machine.myco_version)) {
-    return <div className="add-pane">{infoErrorText({ code: "too_old" })}</div>;
+    return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={false} /></div>;
   }
   if (!state || state.loading) {
     return <div className="add-pane"><div className="add-waiting"><Mushroom /><span>{L(`正在问「${machine.name}」上有哪些会话…`, `Asking “${machine.name}” for its sessions…`)}</span></div></div>;
   }
   if (state.error || !state.info) {
-    return <div className="add-pane">{infoErrorText(state.error)}{(state.error as { code?: string })?.code !== "too_old" && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("再试一次", "Try again")}</button>}</div>;
+    return (state.error as { code?: string })?.code === "too_old"
+      ? <div className="add-pane"><ComputerFix hubId={hubId} machine={{ ...machine, myco_version: "" }} here={false} /></div>
+      : <div className="add-pane"><ErrorText error={state.error} /><button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("再试一次", "Try again")}</button></div>;
   }
   const info = state.info;
   const q = query.trim().toLowerCase();
@@ -931,7 +918,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
     return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线，开不了新会话。`, `“${machine.name}” is away, so it cannot start a session now.`)}</div></div>;
   }
   if (!machine.can_spawn) {
-    return <div className="add-pane">{infoErrorText({ code: "too_old" })}</div>;
+    return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={here} /></div>;
   }
   return (
     <form id="add-new-agent" className="add-pane" onSubmit={start}>

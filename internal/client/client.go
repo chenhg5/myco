@@ -58,7 +58,7 @@ func New(base, token string) (*Client, error) {
 		return nil, err
 	}
 	// No global timeout: do bounds each call (long-polls by their wait).
-	return &Client{base: u, token: token, http: &http.Client{Transport: hubTransport}}, nil
+	return &Client{base: u, token: token, http: &http.Client{Transport: forLANHub(u, hubTransport)}}, nil
 }
 
 // ValidateHubURL accepts only http(s) URLs without embedded credentials.

@@ -9,6 +9,7 @@ import { LocalAgentLines } from "@/app/LocalAgents";
 import { Avatar } from "@/app/persona";
 import { Logo } from "@/components/brand";
 import { L } from "@/lib/i18n";
+import { sessionDisplayName } from "@/app/nodes";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -92,7 +93,7 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
       setBusy({ at: i + 1, of: chosen.length });
       const s = chosen[i];
       try {
-        const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true });
+        const r = await appApi.localJoin(hubId, { cli: s.cli, session_id: s.session_id, workdir: s.workdir, fork: true, display_name: sessionDisplayName(s.title) });
         joined.push(r.agent);
       } catch (error) {
         bad.push({ s, error });

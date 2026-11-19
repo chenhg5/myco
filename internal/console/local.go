@@ -510,6 +510,52 @@ func (b *Backend) installMyco(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, Tool{Path: p})
 }
 
+// UpgradeResult is POST /app/local/myco/upgrade.
+type UpgradeResult struct {
+	From      string   `json:"from"`
+	Version   string   `json:"version"`
+	Restarted []string `json:"restarted"`
+}
+
+// upgradeMyco brings this computer's myco CLI to the latest release and
+// restarts its services (`myco upgrade`), so its nodes come back on the
+// new version: the App does it instead of sending people to a terminal.
+func (b *Backend) upgradeMyco(w http.ResponseWriter, r *http.Request) {
+	l := b.Local
+	if l.mycoPath() == "" {
+		b.installMyco(w, r)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	out, err := l.run(ctx, "upgrade")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var up struct {
+		Current   string   `json:"current"`
+		Target    string   `json:"target"`
+		Restarted []string `json:"restarted"`
+	}
+	if err := json.Unmarshal(out, &up); err != nil {
+		writeErr(w, fmt.Errorf("unexpected output from myco upgrade: %s", lastLine(out)))
+		return
+	}
+	res := UpgradeResult{From: up.Current, Version: up.Target, Restarted: up.Restarted}
+	if len(res.Restarted) == 0 {
+		// Already the latest (an App update can replace the binary without
+		// restarting what runs it): the runner still has to restart onto it.
+		res.Restarted = []string{}
+		if st := l.restartRunner(ctx); st != "running" {
+			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "runner_failed", Message: st})
+			return
+		}
+		res.Restarted = append(res.Restarted, "runner")
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func installLatest(ctx context.Context, dir string) (string, error) {
 	hc := &http.Client{Timeout: 30 * time.Minute} // slow links: 15 MB at 40 KB/s is ~7 minutes
 	tag, err := release.Latest(ctx, hc, release.APIURL(os.Getenv))

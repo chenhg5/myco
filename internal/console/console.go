@@ -253,6 +253,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/hubs/{id}/local-join", b.withHubAndHubTimeout(6*time.Minute, b.localJoin))
 		m.HandleFunc("GET /app/local", b.getLocal)
 		m.HandleFunc("POST /app/local/myco", b.installMyco)
+		m.HandleFunc("POST /app/local/myco/upgrade", b.upgradeMyco)
 		m.HandleFunc("POST /app/local/hub", b.startLocal)
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)

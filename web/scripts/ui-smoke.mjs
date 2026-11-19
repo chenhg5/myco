@@ -1330,6 +1330,33 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-modal").waitFor({ state: "hidden" });
     });
 
+    await step("这台电脑 · 一键修复", async () => {
+      // This computer's part of myco that starts sessions is not connected:
+      // the dialog says so (not "too old") and fixes it from the App.
+      await page.evaluate(async () => { await fetch("/app/mock/no-spawn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: true }) }); });
+      try {
+        if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
+        else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
+        const dialog = page.locator(".app-modal-add");
+        await dialog.waitFor();
+        await clickVisible(page, dialog.getByRole("tab", { name: "这台电脑" }));
+        await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
+        const fix = dialog.locator("[data-testid=info-no-spawn]");
+        await fix.waitFor({ timeout: 30_000 });
+        if ((await fix.innerText()).includes("myco upgrade")) throw new Error("这台电脑能在 App 里修，不该让人去终端");
+        await settle(page, 300);
+        await shot(page, size, scheme, "add-agent-fix-here");
+        await clickVisible(page, fix.getByRole("button", { name: "修复" }));
+        await fix.locator(".ca-text", { hasText: "已升级到 v0.20.24 并重启" }).waitFor({ timeout: 10_000 });
+        // Back once the overview says it can start sessions again.
+        await dialog.locator(".app-field-label", { hasText: "文件夹干活" }).waitFor({ timeout: 30_000 });
+        await clickVisible(page, dialog.getByRole("button", { name: "取消" }));
+        await page.locator(".app-modal").waitFor({ state: "hidden" });
+      } finally {
+        await page.evaluate(async () => { await fetch("/app/mock/no-spawn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: false }) }); });
+      }
+    });
+
     if (!narrow) {
       await step("项目 · 添加工作空间", async () => {
         // Adding a computer is one command, as adding an agent is: run it in

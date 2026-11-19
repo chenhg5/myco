@@ -424,3 +424,12 @@ export function thisComputerId(hub: AgentRow["hub"], local: { machines?: string[
   return (ms.find((m) => (local.machines || []).includes(m.name))
     || ms.find((m) => !!local.hostname && m.hostname === local.hostname))?.id;
 }
+
+/** The name a session joins with: its title (its own, or its first
+ *  request), on one line and short; undefined when it has none. */
+export function sessionDisplayName(title?: string): string | undefined {
+  const t = (title || "").replace(/\s+/g, " ").trim().replace(/…$/, "");
+  if (!t) return undefined;
+  const chars = Array.from(t);
+  return chars.length > 24 ? chars.slice(0, 24).join("").trim() + "…" : t;
+}
