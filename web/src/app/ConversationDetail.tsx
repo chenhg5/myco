@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -387,7 +387,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Which answers came while you were looking (they grow in, Reveal.tsx):
   // not the ones there when the conversation opened, nor ones loaded in its
   // first moments.
-  const arrived = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  const arrived = useRef<{ key: string; at: number; first: Set<string> | null }>({ key: "", at: 0, first: null });
   /** Queued messages withdrawn here (a stopped one may still be polled back). */
   const [withdrawn, setWithdrawn] = useState<ReadonlySet<string>>(() => new Set());
   const [queueError, setQueueError] = useState<unknown>(null);
@@ -1395,6 +1395,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     setSending(true);
     setSendError(null);
     setQueueError(null);
+    const startedAt = Date.now();
     try {
       if (!target.peer && !target.threadId) {
         // The first message of a new conversation: then the whole one.
@@ -1466,10 +1467,30 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       atBottom.current = true;
       inputRef.current?.focus();
     } catch (e) {
+      // Slow or dropped: it may have got there all the same. Look before
+      // saying it did not (and before anyone sends it twice).
+      if (isTransient(e)) {
+        const got = await landed(body, startedAt).catch(() => null);
+        if (got) {
+          setMessages((prev) => mergeById(prev || [], [got]));
+          writeDraft("");
+          att.clear();
+          histPos.current = -1;
+          chatHistory.reset();
+          return;
+        }
+      }
       setSendError(e);
     } finally {
       setSending(false);
     }
+  };
+  /** A message of yours with this text, sent since then, if the hub has it. */
+  const landed = async (body: string, since: number): Promise<Message | null> => {
+    await new Promise((r) => setTimeout(r, 1500));
+    const list = target.peer ? (await appApi.exchanges(target.hubId, target.agent, target.peer)).messages
+      : target.threadId ? (await appApi.thread(target.hubId, target.threadId)).messages : [];
+    return list.find((m) => m.body === body && isMe(m.from, row?.hub) && new Date(m.created_at).getTime() >= since - 10_000) || null;
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1747,11 +1768,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const end = answerOf.get(prev.id);
     return Math.max(t, end ? new Date(end.created_at).getTime() + 1 : !isOpen(prev.status) ? new Date(prev.updated_at).getTime() : t);
   };
-  if (arrived.current.key !== cacheKey(target)) arrived.current = { key: cacheKey(target), at: Date.now() };
+  if (arrived.current.key !== cacheKey(target)) arrived.current = { key: cacheKey(target), at: Date.now(), first: null };
   const now0 = Date.now();
   for (const m of messages || []) if (!firstSeen.has(m.id)) firstSeen.set(m.id, now0);
+  // What the first load brought (however long it took): already there, so
+  // it never grows in again.
+  if (messages && !arrived.current.first) arrived.current.first = new Set(messages.map((m) => m.id));
   const growsIn = (m: Message) => m.type === "reply" && !isMe(m.from, row?.hub) && !m.unreadable && !revealed.has(m.id)
     && !(m.reply_to && drafted.has(m.reply_to))
+    && !arrived.current.first?.has(m.id)
+    // (written before you opened the conversation: you are not watching it come)
+    && new Date(m.created_at).getTime() > arrived.current.at - 30_000
     && (firstSeen.get(m.id) ?? 0) - arrived.current.at > 2000;
   const visible = (shown || []).filter((m) => {
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
@@ -2337,6 +2364,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {voiceOn && !shellMode && (
           <VoiceBar />
         )}
+        <SendTrouble error={sendError} stop={stopError} onRetry={sendError ? () => void send() : undefined}
+          onClose={() => { setSendError(null); setStopError(null); }} />
         <div className="conv-compose-box" onClick={() => inputRef.current?.focus()} {...dropFiles(att.add)}>
           <AttachList items={att.items} onRemove={att.remove} />
           <textarea
@@ -2418,7 +2447,6 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             )}
           </div>
         </div>
-        <ErrorText error={sendError || stopError} />
       </div>
       )}
     </div>
@@ -2434,5 +2462,27 @@ function CopyMessage({ text }: { text: string }) {
     <button type="button" className="conv-msg-copy" onClick={() => void copy()} title={L("复制", "Copy")} aria-label={L("复制", "Copy")}>
       {copied ? <Check /> : <Copy />}
     </button>
+  );
+}
+
+/** Why a message did not go (or a stop did not take), above the box: in
+ *  words, the text still in the box, 重试 and ✕; the raw error on hover. */
+function SendTrouble({ error, stop, onRetry, onClose }: { error: unknown; stop: unknown; onRetry?: () => void; onClose: () => void }) {
+  const e = error || stop;
+  if (!e) return null;
+  const transient = isTransient(e);
+  const raw = e instanceof Error ? e.message : String(e);
+  const said = (e as { suggestion?: string } | null)?.suggestion;
+  const head = error ? L("没发出去", "Not sent") : L("没能停下", "Did not stop");
+  const why = transient
+    ? L("工作区暂时连不上，或者响应太慢。", "The workspace can't be reached right now, or is answering too slowly.")
+    : raw;
+  return (
+    <div className="conv-trouble" role="alert" data-testid="send-trouble" title={transient ? raw : undefined}>
+      <AlertTriangle />
+      <span className="conv-trouble-text"><b>{head}</b>{why}{error ? L("内容还在输入框里。", " What you wrote is still in the box.") : ""}{said && !transient ? <small>{said}</small> : null}</span>
+      {onRetry && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("重试", "Retry")}</button>}
+      <button type="button" className="conv-trouble-x" onClick={onClose} aria-label={L("关掉", "Dismiss")}><X /></button>
+    </div>
   );
 }

@@ -4738,11 +4738,15 @@ html.fp-docked .app-main .sp-side {
 .md-img-missing {
   display: inline-block;
   padding: 3px 8px;
+  border: 0;
   border-radius: 6px;
   background: var(--pill);
   color: var(--muted);
+  font: inherit;
   font-size: 11.5px;
+  cursor: default;
 }
+.md-img-missing:hover { background: var(--nav-hover); color: var(--fg); }
 .md hr {
   margin: 10px 0;
   border: 0;
