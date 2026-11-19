@@ -1544,6 +1544,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setStopError(e);
     }
   };
+  // Its open tasks that are not in this conversation (other agents gave
+  // them, or other chats): said above the box, with a way to them, since
+  // nothing here would show them (a question it asked their sender, say).
+  const elsewhere = (row?.st.current || []).filter((m) => m.to === target.agent && m.type === "task"
+    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id));
+  const askingOthers = elsewhere.filter((m) => m.status === "held" && !!m.asking && !isMe(m.from, row?.hub));
+  const whoIs = (n: string) => {
+    const x = (row?.hub.overview?.agents || []).find((y) => y.agent.name === n);
+    return x ? nodeName(x.agent, row?.hub) : personLabel(n, row?.hub);
+  };
   // A task left open: close it as done (nothing more to come), or ask its
   // agent where it stands (a note in the task it reads with it).
   const [nudged, setNudged] = useState<Set<string>>(new Set());
@@ -2370,6 +2380,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {busy && <ErrorText error={copyError} />}
+        {elsewhere.length > 0 && (
+          <div className="conv-busy" data-testid="open-elsewhere">
+            <span className="dot idle" />
+            <span className="conv-busy-text">
+              {L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+              {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
+                `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
+              {L("。", ".")}
+            </span>
+            <button type="button" className="conv-steer-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent } }))}>
+              {L("查看并处理", "See and handle")}
+            </button>
+          </div>
+        )}
         {!busy && offline && (
           <div className="conv-busy">
             <span className="dot idle" />

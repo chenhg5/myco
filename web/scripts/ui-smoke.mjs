@@ -2906,6 +2906,42 @@ async function runMatrix(browser, size, scheme) {
     // A task the node accepted long ago and went quiet on may have lost its
     // result: the chat says so instead of spinning, and one click stops it
     // and sends the same message again.
+    // An agent holding a task on a question to another agent: not amber
+    // ("needs your decision") but a quiet ring; its chat says what waits on
+    // whom and leads to its open work, where it can be stopped.
+    await step("单聊 · 在等别的 agent 回答", async () => {
+      const held = (on) => page.evaluate(async (v) => { await fetch("/app/mock/held-for-other", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: v }) }); }, on);
+      await held(true);
+      try {
+      await sidebar(page, true);
+      const nav = page.locator(".sp-nav-person", { hasText: "Myco (Grok)" });
+      await nav.waitFor({ timeout: 10_000 });
+      if (await nav.locator(".sp-nav-busy.is-asking").count()) throw new Error("问题是问别的 agent 的，不该显示「在等你决定」");
+      await nav.locator(".sp-nav-busy.is-open").waitFor({ timeout: 10_000 });
+      await clickVisible(page, nav);
+      if (narrow) await sidebar(page, false);
+      const note = page.locator("[data-testid=open-elsewhere]");
+      await note.waitFor({ timeout: 20_000 });
+      const text = compactText(await note.innerText());
+      if (!text.includes("在等 PM (Codex) 回答")) throw new Error(`对话里应说明在等谁回答，实际「${text}」`);
+      await settle(page, 300);
+      await shot(page, size, scheme, "conversation-open-elsewhere");
+      await clickVisible(page, note.getByRole("button", { name: "查看并处理" }));
+      const row = page.locator(".app-msg-wrap", { hasText: "给官网首页写三条 slogan 候选" });
+      await row.waitFor({ timeout: 20_000 });
+      if (!compactText(await row.innerText()).includes("在等 PM (Codex) 回答")) throw new Error("当前工作里应写在等谁回答");
+      await row.hover();
+      await settle(page, 200);
+      await shot(page, size, scheme, "profile-open-work");
+      await clickVisible(page, row.getByRole("button", { name: "停止" }));
+      await row.waitFor({ state: "detached", timeout: 15_000 });
+      await clickVisible(page, page.locator(".ms-close"));
+      await page.locator(".ms-scrim").waitFor({ state: "detached", timeout: 10_000 });
+      } finally {
+        await held(false);
+      }
+    });
+
     await step("单聊 · 可能卡住", async () => {
       await openMember(page, narrow, "聊天", "legacy-codex");
       await page.waitForFunction(

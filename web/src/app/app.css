@@ -1199,6 +1199,17 @@ textarea.app-input {
 .app-msg-wrap {
   position: relative;
 }
+/* Mark done and stop, top right of an open message (on hover). */
+.app-msg-actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+.app-msg-actions .app-msg-dismiss {
+  position: static;
+}
 .app-msg-dismiss {
   position: absolute;
   top: 6px;

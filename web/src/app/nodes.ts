@@ -288,11 +288,13 @@ export function receivesInSession(a?: Agent, receiving?: string): boolean {
  * cannot finish the task while it is away.
  */
 export function possiblyStuck(
-  m: { status: string; active_at?: string; updated_at: string },
+  m: { status: string; active_at?: string; updated_at: string; asking?: string },
   node: { agent?: Agent; receiving?: string; offline?: boolean } | undefined,
   now: number,
 ): boolean {
   if (m.status !== "acked" && m.status !== "held") return false;
+  // Held on a question to its sender: it waits for an answer, it is not stuck.
+  if (m.status === "held" && m.asking) return false;
   if (node?.offline) return true;
   const wait = receivesInSession(node?.agent, node?.receiving) ? STUCK_AFTER_SESSION_MS : STUCK_AFTER_MS;
   const at = lastActivityAt(m);

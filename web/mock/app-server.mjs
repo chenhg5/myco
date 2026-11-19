@@ -968,6 +968,15 @@ function consoleReply() {
 const replyTimers = new Map();
 // Agents waiting on a question they asked, by agent name: the task.
 const askingBy = new Map();
+// Myco (Grok) holds a task PM (Codex) gave it, waiting on a question it
+// asked PM: open, but not a decision of yours. Only while the smoke test
+// that looks at it runs (/app/mock/held-for-other {on}).
+let heldForOtherOn = false;
+const heldForOther = makeMessage({
+  id: "msg_grok_held", thread_id: "th_grok_held", from: "pm-codex", to: "grok-agent-7c2e", type: "task",
+  status: "held", asking: "msg_grok_q", body: "给官网首页写三条 slogan 候选。",
+  created_at: iso(3 * 3600), updated_at: iso(2 * 3600),
+});
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const had = replyTimers.get(taskId);
   if (had && !restart) return;
@@ -1422,6 +1431,9 @@ function agentStatus(a) {
   const atWork = working
     ? [stuck || makeMessage({ thread_id: a.current_thread || "th_release", from: a.current_from || "glenn", to: a.name, status: "acked", body: a.status_text || "处理中…" })]
     : [];
+  if (heldForOtherOn && a.name === heldForOther.to && heldForOther.status === "held" && !dismissed.has(heldForOther.id)) {
+    return { agent: a, state: a.online ? "pending" : "offline", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: a.online ? "session" : undefined, current: [heldForOther] };
+  }
   const asking = askingBy.get(a.name);
   if (asking) {
     return { agent: a, state: "pending", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: "runner", current: [asking] };
@@ -1653,6 +1665,9 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "stuck" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     localSessions.forEach((x, k) => { if (localJoinedAtStart[k]) x.joined = localJoinedAtStart[k]; else delete x.joined; });
+    heldForOther.status = "held";
+    delete heldForOther.error;
+    dismissed.delete(heldForOther.id);
     projects.forEach((p, k) => { if (projectMembersAtStart[k]) p.members = JSON.parse(projectMembersAtStart[k]); });
     const hub = state.hubs.find((h) => h.id === "hub_studio") || state.hubs[0];
     stuckTask.status = "acked";
@@ -1763,6 +1778,17 @@ const server = http.createServer(async (req, res) => {
     const hub = state.hubs.find((h) => h.id === "hub_studio");
     if (hub) hub.agents = hub.agents.filter((a) => !/^pm-codex-\d+$/.test(a.name));
     projects.forEach((p) => { p.members = p.members.filter((m) => !/^pm-codex-\d+$/.test(m.name)); });
+    return send(res, 200, { ok: true });
+  }
+
+  // /app/mock/held-for-other {on} — Myco (Grok) waits on PM's answer.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "held-for-other" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    heldForOtherOn = !!body?.on;
+    heldForOther.status = "held";
+    delete heldForOther.error;
+    dismissed.delete(heldForOther.id);
     return send(res, 200, { ok: true });
   }
 
@@ -2694,6 +2720,7 @@ const server = http.createServer(async (req, res) => {
       // (the terminal lists it from the recipient's current work).
       let task = Object.values(hub.threads || {}).flat().find((m) => m.id === parts[4]);
       if (!task) task = [...stuckCurrent.values()].find((m) => m.id === parts[4]);
+      if (!task && parts[4] === heldForOther.id) task = heldForOther;
       if (!task) return fail(res, 404, "not_found", "没有这条消息");
       // Who sent it, or someone who manages the hub.
       if (!task.from.startsWith("@console:") && !whoami(hub)?.can_manage) {

@@ -28,7 +28,7 @@ import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { agentKind, isMe, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
 import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -211,6 +211,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const on = (e: Event) => { const d = (e as CustomEvent<HandoverTarget>).detail; if (d) setHandover(d); };
     window.addEventListener("myco-handover", on);
     return () => window.removeEventListener("myco-handover", on);
+  }, []);
+  // An agent's profile (its open work), from anywhere: { hubId, name }.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId: string; name: string }>).detail;
+      if (!d) return;
+      setNavChat(null);
+      setPage("members");
+      // Its details open: where its open work is.
+      setProfile({ hubId: d.hubId, name: d.name, details: true });
+      window.setTimeout(() => document.getElementById("agent-current-work")?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
+    };
+    window.addEventListener("myco-open-profile", on);
+    return () => window.removeEventListener("myco-open-profile", on);
   }, []);
   // 复制一份 (Fork.tsx): the dialog, from any menu.
   const [fork, setFork] = useState<ForkTarget | null>(null);
@@ -706,13 +720,23 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Tasks left open with no life in them (the hub says so: stale) only get a
   // quiet ring: nothing is running; their chat says which and offers to
   // close them.
+  const askingYou = (r: AgentRow): boolean => {
+    if (!(r.st.asking || 0)) return false;
+    const held = (r.st.current || []).filter((m) => m.status === "held" && !!m.asking);
+    // Not told which (a member who cannot see its messages): as before.
+    if (held.length === 0) return true;
+    return held.some((m) => isMe(m.from, r.hub));
+  };
   const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | "open" | null => {
-    if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
+    // Amber "needs your decision" only for a question to you: a task you
+    // gave it, held on a question back to you. One to another agent (it
+    // asked whoever gave it the task) only leaves something open.
+    if (rs.some((r) => askingYou(r))) return "asking";
     let busy = false;
     let stuck = false;
     let open = false;
     for (const r of rs) {
-      if ((r.st.stale || 0) > 0) open = true;
+      if ((r.st.stale || 0) > 0 || (r.st.asking || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
       // A hub that tells live from stale: what it calls in progress runs.
       if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
@@ -840,7 +864,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                       {dot ? (
                         <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
-                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有任务没收尾：没在干活，点开对话可以收尾", "Tasks left open: nothing is running; close them in the chat") : L("在干活", "At work")} />
+                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有任务没做完：没在干活（没收尾，或在等别的 agent），点开对话看是哪些", "Tasks still open: nothing is running (left open, or waiting on another agent); open the chat to see which") : L("在干活", "At work")} />
                       ) : isPinned && <Pin className="sp-nav-pinned" aria-label={L("已置顶", "Pinned")} />}
                     </button>
                   );
