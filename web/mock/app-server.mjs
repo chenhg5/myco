@@ -2716,13 +2716,7 @@ const server = http.createServer(async (req, res) => {
           const required = w.def.inputs?.required || [];
           const missing = required.find((k) => !b?.inputs?.[k]);
           if (missing) return fail(res, 400, "invalid_argument", `the inputs do not fit: ${missing} is missing`);
-          state.counter += 1;
-          const r = { id: `run_${state.counter}`, workflow_id: w.id, name: w.name, version: w.version, status: "running", inputs: b?.inputs || {},
-            owner: "glenn", by: "glenn", trigger: "manual", created_at: iso(0), updated_at: iso(0), steps: [], events: [], def: w.def };
-          wf.runs.unshift(r);
-          r.events.push({ at: iso(0), kind: "started", text: "glenn 启动了" });
-          wfActivate(hub, r, w.def.steps[0].id);
-          return send(res, 201, runView(r, true));
+          return send(res, 201, runView(wfStartRun(hub, wf, w, b?.inputs || {}, "manual"), true));
         }
         return fail(res, 404, "not_found", "no such route");
       }
@@ -2777,6 +2771,18 @@ const server = http.createServer(async (req, res) => {
       const runOnce = (a, trigger) => {
         state.counter += 1;
         const run = { id: `run_${state.counter}`, automation_id: a.id, at: iso(0), trigger, outcome: "sent" };
+        if (a.workflow) {
+          state.workflows ||= {};
+          const wfs = (state.workflows[hub.id] ||= seedWorkflows(hub));
+          const w = wfs.list.find((x) => x.id === a.workflow);
+          const last = wfs.runs.find((x) => x.id === a.last_task);
+          if (!w) { run.outcome = "failed"; run.error = "workflow not found"; }
+          else if (a.skip_if_busy && last && (last.status === "running" || last.status === "waiting")) { run.outcome = "skipped"; run.error = "the last workflow run it started is not finished"; }
+          else { const r = wfStartRun(hub, wfs, w, Object.fromEntries(Object.entries(a.inputs || {}).map(([k, v]) => [k, String(v).replace(/\{\{[^}]*\}\}/g, "")])), "automation"); run.workflow_run = r.id; a.last_task = r.id; }
+          a.runs = [run, ...(a.runs || [])];
+          a.last_run = run;
+          return run;
+        }
         const busy = a.skip_if_busy && Object.values(hub.threads || {}).flat().some((m) => m.automation === a.id && ["queued", "delivered", "acked", "held"].includes(m.status));
         if (busy) { run.outcome = "skipped"; run.error = "the last task it sent is not finished"; }
         else {
@@ -2791,9 +2797,16 @@ const server = http.createServer(async (req, res) => {
         a.last_run = run;
         return run;
       };
-      const view = (a) => { const { runs, ...rest } = a; return rest; };
+      const view = (a) => {
+        const { runs, ...rest } = a;
+        if (!a.workflow) return rest;
+        state.workflows ||= {};
+        const wfs = (state.workflows[hub.id] ||= seedWorkflows(hub));
+        return { ...rest, workflow_name: wfs.list.find((w) => w.id === a.workflow)?.name || a.workflow };
+      };
       const apply = (a, b) => {
-        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled"]) if (b?.[k] !== undefined) a[k] = b[k];
+        for (const k of ["name", "to", "project", "body", "skip_if_busy", "enabled", "workflow", "inputs"]) if (b?.[k] !== undefined) a[k] = b[k];
+        if (a.workflow === "") { delete a.workflow; delete a.inputs; }
         if (b?.schedule) { a.schedule = b.schedule; a.next_run_at = new Date(Date.now() + 3600e3).toISOString(); }
         if (b?.clear_schedule) { delete a.schedule; delete a.next_run_at; }
         let secret;
@@ -2806,7 +2819,7 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 4 && method === "GET") return send(res, 200, { automations: list.map(view) });
       if (parts.length === 4 && method === "POST") {
         const b = await readBody(req);
-        if (!b?.name || !b?.to || !b?.body || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body and a schedule or webhook are required");
+        if (!b?.name || (!b.workflow && (!b?.to || !b?.body)) || (!b.schedule && !b.webhook)) return fail(res, 400, "invalid_argument", "name, to, body (or a workflow) and a schedule or webhook are required");
         state.counter += 1;
         const a = { id: `aut_${state.counter}`, owner: "glenn", from: CONSOLE, webhook: false, skip_if_busy: true, enabled: true, created_at: iso(0), runs: [] };
         const secret = apply(a, b);
@@ -3789,6 +3802,15 @@ function seedHandovers(name) {
 }
 
 /* ---------- workflows (mock): a run walks its steps on timers ---------- */
+function wfStartRun(hub, wf, w, inputs, trigger) {
+  state.counter += 1;
+  const r = { id: `run_${state.counter}`, workflow_id: w.id, name: w.name, version: w.version, status: "running", inputs,
+    owner: "glenn", by: "glenn", trigger, created_at: iso(0), updated_at: iso(0), steps: [], events: [], def: w.def };
+  wf.runs.unshift(r);
+  r.events.push({ at: iso(0), kind: "started", text: trigger === "automation" ? "自动化启动了" : "glenn 启动了" });
+  wfActivate(hub, r, w.def.steps[0].id);
+  return r;
+}
 function wfEdges(def) {
   if (def.edges && def.edges.length) return def.edges;
   return def.steps.slice(0, -1).map((x, i) => ({ from: x.id, to: def.steps[i + 1].id }));
@@ -3972,6 +3994,11 @@ function seedAutomations(hub) {
     mk("aut_ci", "release-cloud", 3, 3 * day, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[2]}`, request: hookReq(ciBodies[2]) }),
     mk("aut_ci", "release-cloud", 4, 6 * day, "webhook", "failed", { error: "release-cloud is not in this workspace any more", request: { content_type: "text/plain", size: 0, headers: { "User-Agent": "curl/8.7.1" } } }),
   ];
+  const issueBody = JSON.stringify({ action: "opened", issue: { number: 231, title: "设置页加一个「导出对话」按钮" } });
+  const issueRuns = [
+    { id: "run_seed_aut_issue_1", automation_id: "aut_issue", at: iso(5400), trigger: "webhook", outcome: "sent", workflow_run: "run_seed_a",
+      request: { content_type: "application/json", size: issueBody.length, headers: { "User-Agent": "GitHub-Hookshot/5c3a2e1", "X-Github-Event": "issues" }, body: issueBody } },
+  ];
   return [{
     id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
     body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
@@ -3983,5 +4010,12 @@ function seedAutomations(hub) {
     body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
     webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_ci`, skip_if_busy: true, enabled: true, created_at: iso(10 * 86400), updated_at: iso(10 * 86400),
     last_run: hooks[0], runs: hooks,
+  }, {
+    // Starts a workflow: each new issue goes through 写-审-改.
+    id: "aut_issue", name: "新 issue 走写-审-改", owner: "glenn", from: CONSOLE, to: "",
+    body: "", workflow: "wf_review", inputs: { task: "修 issue：{{payload.issue.title}}" },
+    webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_issue`, skip_if_busy: false, enabled: true, created_at: iso(4 * 86400), updated_at: iso(4 * 86400),
+    last_task: "run_seed_a",
+    last_run: issueRuns[0], runs: issueRuns,
   }];
 }

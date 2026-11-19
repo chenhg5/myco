@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync"
@@ -23,7 +24,12 @@ type AutomationService struct {
 	log      *slog.Logger
 	// One run at a time per automation (a webhook racing the schedule).
 	mu sync.Mutex
+	// workflows starts the workflows automations run (nil: none).
+	workflows *WorkflowService
 }
+
+// SetWorkflows lets automations start workflows.
+func (s *AutomationService) SetWorkflows(w *WorkflowService) { s.workflows = w }
 
 // WebhookRate is how many webhook calls an automation takes per hour.
 const WebhookRate = 30
@@ -70,6 +76,10 @@ type AutomationInput struct {
 	RotateSecret  bool
 	SkipIfBusy    *bool
 	Enabled       *bool
+	// Workflow (its id or name; "" = send a task instead) and the run's
+	// inputs (templates over {{payload}}).
+	Workflow *string
+	Inputs   map[string]string
 }
 
 // AutomationOut is an automation and, when one was just made, its webhook
@@ -89,7 +99,11 @@ func (s *AutomationService) apply(a *domain.Automation, in AutomationInput) (sec
 	set(&a.Name, in.Name)
 	set(&a.Body, in.Body)
 	set(&a.Project, in.Project)
-	if in.To != nil {
+	set(&a.Workflow, in.Workflow)
+	if in.Inputs != nil {
+		a.Inputs = in.Inputs
+	}
+	if in.To != nil && strings.TrimSpace(*in.To) != "" {
 		to, err := domain.ParseAgentName(strings.TrimSpace(*in.To))
 		if err != nil {
 			return "", err
@@ -163,7 +177,7 @@ func (s *AutomationService) Create(ctx context.Context, c Caller, in AutomationI
 	if err := a.Validate(); err != nil {
 		return nil, err
 	}
-	if err := s.checkTarget(ctx, a); err != nil {
+	if err := s.checkTarget(ctx, c, a); err != nil {
 		return nil, err
 	}
 	s.schedule(a, now)
@@ -173,8 +187,20 @@ func (s *AutomationService) Create(ctx context.Context, c Caller, in AutomationI
 	return &AutomationOut{Automation: a, Secret: secret}, nil
 }
 
-// checkTarget: the agent exists (or is an alias of one).
-func (s *AutomationService) checkTarget(ctx context.Context, a *domain.Automation) error {
+// checkTarget: the agent exists (or is an alias of one); or the workflow
+// does and the caller may run it (kept by its id).
+func (s *AutomationService) checkTarget(ctx context.Context, c Caller, a *domain.Automation) error {
+	if a.StartsWorkflow() {
+		if s.workflows == nil {
+			return domain.Errf(domain.CodeInvalidArgument, "this hub cannot start workflows")
+		}
+		w, err := s.workflows.find(ctx, c, a.Workflow)
+		if err != nil {
+			return err
+		}
+		a.Workflow, a.To, a.Body = w.ID, "", ""
+		return nil
+	}
 	if _, _, err := (aliasResolver{agents: s.messages.agents, aliases: s.messages.aliases}).resolve(ctx, a.To); err != nil {
 		if domain.IsCode(err, domain.CodeNotFound) {
 			return domain.Errf(domain.CodeNotFound, "agent %s not found", a.To).WithSuggestion("list agents with: myco agent list")
@@ -247,8 +273,8 @@ func (s *AutomationService) Update(ctx context.Context, c Caller, id string, in 
 	if err := a.Validate(); err != nil {
 		return nil, err
 	}
-	if a.To != was.To {
-		if err := s.checkTarget(ctx, a); err != nil {
+	if a.To != was.To || a.Workflow != was.Workflow {
+		if err := s.checkTarget(ctx, c, a); err != nil {
 			return nil, err
 		}
 	}
@@ -389,6 +415,13 @@ func (s *AutomationService) run(ctx context.Context, a *domain.Automation, trigg
 		a.LastTask = fresh.LastTask
 	}
 	r := &domain.AutomationRun{ID: s.ids.New("arun"), AutomationID: a.ID, At: s.clock.Now(), Trigger: trigger, Request: call}
+	if a.StartsWorkflow() {
+		s.startWorkflow(ctx, a, r, call)
+		if err := s.repo.AddRun(ctx, r, domain.MaxAutomationRuns); err != nil {
+			return nil, err
+		}
+		return r, nil
+	}
 	if a.SkipIfBusy && a.LastTask != "" {
 		if m, err := s.msgRepo.Get(ctx, a.LastTask); err == nil && !m.Status.Terminal() {
 			r.Outcome, r.Error = domain.RunSkipped, "the last task it sent is not finished"
@@ -431,4 +464,51 @@ func errText(err error) string {
 		msg = msg[:300]
 	}
 	return msg
+}
+
+// startWorkflow is a run of an automation that starts a workflow: its
+// inputs filled from the webhook call, skipped while the last run it
+// started is still going (with skip-if-busy).
+func (s *AutomationService) startWorkflow(ctx context.Context, a *domain.Automation, r *domain.AutomationRun, call *domain.WebhookRequest) {
+	if s.workflows == nil {
+		r.Outcome, r.Error = domain.RunFailed, "this hub cannot start workflows"
+		return
+	}
+	if a.SkipIfBusy && a.LastTask != "" {
+		if last, err := s.workflows.repo.GetRun(ctx, a.LastTask); err == nil && !domain.FlowOver(last.Status) {
+			r.Outcome, r.Error = domain.RunSkipped, "the last workflow run it started is not finished"
+			return
+		}
+	}
+	var payload any = ""
+	if call != nil {
+		payload = call.Body
+		var v any
+		if json.Unmarshal([]byte(call.Body), &v) == nil {
+			payload = v
+		}
+	}
+	env := map[string]any{"payload": payload}
+	inputs := map[string]any{}
+	for k, t := range a.Inputs {
+		v, err := domain.RenderTemplate(t, env)
+		if err != nil {
+			r.Outcome, r.Error = domain.RunFailed, errText(domain.Errf(domain.CodeInvalidArgument, "input %s: %v", k, err))
+			return
+		}
+		inputs[k] = v
+	}
+	owner := Caller{Name: a.Owner, MemberID: a.OwnerID, Manages: true}
+	d, _, err := s.workflows.Start(ctx, owner, a.Workflow, StartInput{Inputs: inputs, Trigger: domain.FlowByAutomation})
+	if err != nil {
+		r.Outcome, r.Error = domain.RunFailed, errText(err)
+		return
+	}
+	r.Outcome, r.WorkflowRun = domain.RunSent, d.Run.ID
+	if fresh, err := s.repo.Get(ctx, a.ID); err == nil {
+		fresh.LastTask = d.Run.ID
+		if err := s.repo.Save(ctx, fresh); err != nil {
+			s.log.Warn("automations: recording the last run failed", "automation", a.ID, "err", err)
+		}
+	}
 }

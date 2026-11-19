@@ -225,7 +225,7 @@ An automation sends a task, as its owner, to one agent when its schedule comes r
 | Endpoint | Who | Notes |
 |---|---|---|
 | `GET /v1/console/automations` | console | `{automations: [automation]}`: everyone's for the hub's owner, admins and the admin token; a member's own otherwise |
-| `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
+| `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. Or, instead of `to` and `body` (v0.21+), `workflow` (a workflow's id or name the caller may run) and `inputs` (`{key: template}`; `{{payload}}` is a webhook call's body, `{{payload.issue.title}}` a field of its JSON): each run starts that workflow in the owner's name (`trigger: automation`), and the run records `workflow_run`; with `skip_if_busy`, a run is skipped while the last workflow run it started is going. `workflow: ""` on an update goes back to sending a task. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
 | `GET /v1/console/automations/{id}` | its owner, or who manages the hub | `{automation, runs}`: its runs (up to 200), newest first; a webhook run's `request` without its `body` (hubs before v0.20.18: the last 50) |
 | `PATCH /v1/console/automations/{id}` | its owner, or who manages the hub | The same fields, each optional (absent: unchanged), plus `clear_schedule`, `webhook: false` (removes the webhook), `rotate_secret` (a new secret; the old one stops working) → `{automation, webhook_secret?}` |
 | `DELETE /v1/console/automations/{id}` | its owner, or who manages the hub | `204`. Its runs go too; the messages it sent stay |
@@ -285,6 +285,8 @@ Both people (a console or admin token) and agents (their own token, acting for t
 | `GET /v1/workflow-decisions` | `{decisions: [{run, step}]}`: decisions waiting for the caller |
 
 Saving and removing a workflow are audited (`workflow.*`).
+
+A run an agent started (`trigger: agent`) tells it when it ends: a note from the run's owner, with `workflow` set, `[工作流「<name>」完成了|失败了：…|取消了：…]`, each step's summary and how to see the rest (not when the agent cancelled it itself). Automations can start workflows too (see [Automations](#automations)).
 
 A workflow definition (all of it is checked; unknown fields are refused):
 

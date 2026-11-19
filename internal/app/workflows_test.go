@@ -24,6 +24,7 @@ type wfEnv struct {
 	msgs   *app.MessageService
 	agents map[string]*domain.Agent
 	glenn  app.Caller
+	aut    *app.AutomationService
 }
 
 func newWF(t *testing.T, names ...string) *wfEnv {
@@ -38,8 +39,10 @@ func newWF(t *testing.T, names ...string) *wfEnv {
 	msgs := app.NewMessageService(ar, mr, notify.NewMemory(), security.IDs{}, clock, app.DefaultMessagePolicy())
 	reg := app.NewAgentService(ar, security.Tokens{}, security.IDs{}, clock, time.Minute, nil)
 	svc := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), msgs, mr, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	aut := app.NewAutomationService(sqlite.NewAutomationRepo(db), msgs, mr, security.Tokens{}, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	aut.SetWorkflows(svc)
 	e := &wfEnv{t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
-		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}}
+		glenn: app.Caller{Name: "glenn", MemberID: "mem_1"}, aut: aut}
 	for _, n := range names {
 		in := app.RegisterInput{Name: n}
 		if strings.HasPrefix(n, "box") {
@@ -340,4 +343,72 @@ func TestWorkflowApplyVersionsAndOwnership(t *testing.T) {
 	if len(chk.Problems) != 0 || len(chk.Warnings) != 1 {
 		t.Fatalf("check: %+v", chk)
 	}
+}
+
+func TestAutomationStartsAWorkflowFromAWebhookCall(t *testing.T) {
+	e := newWF(t, "coder", "reviewer")
+	w := e.apply(writeReview)
+	str := func(v string) *string { return &v }
+	on := true
+	out, err := e.aut.Create(e.ctx, e.glenn, app.AutomationInput{Name: str("issue → 写-审-改"), Workflow: str("写-审-改"),
+		Inputs: map[string]string{"task": "修 issue：{{payload.issue.title}}"}, Webhook: &on, SkipIfBusy: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := out.Automation
+	if a.Workflow != w.ID || a.To != "" {
+		t.Fatalf("automation: %+v", a)
+	}
+	secret := out.Secret
+	call := &domain.WebhookRequest{Body: `{"issue": {"title": "登录闪退"}}`}
+	r, err := e.aut.Webhook(e.ctx, a.ID, secret, call)
+	if err != nil || r.Outcome != domain.RunSent || r.WorkflowRun == "" {
+		t.Fatalf("run: %+v %v", r, err)
+	}
+	m := e.task("coder")
+	if m.Workflow != r.WorkflowRun || !strings.Contains(m.Body, "做：修 issue：登录闪退") {
+		t.Fatalf("task: %s", m.Body)
+	}
+	if d := e.run(r.WorkflowRun); d.Run.Trigger != domain.FlowByAutomation || d.Run.Owner != "glenn" {
+		t.Fatalf("run: %+v", d.Run)
+	}
+	// The last run is still going: skipped.
+	if r2, err := e.aut.Webhook(e.ctx, a.ID, secret, call); err != nil || r2.Outcome != domain.RunSkipped {
+		t.Fatalf("second: %+v %v", r2, err)
+	}
+	if _, err := e.svc.Cancel(e.ctx, e.glenn, r.WorkflowRun); err != nil {
+		t.Fatal(err)
+	}
+	if r3, err := e.aut.RunNow(e.ctx, e.glenn, a.ID); err != nil || r3.Outcome != domain.RunSent {
+		t.Fatalf("after it ended: %+v %v", r3, err)
+	}
+	// Someone who may not see the workflow cannot point one at it.
+	if _, err := e.aut.Create(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"}, app.AutomationInput{Name: str("x"), Workflow: str(w.ID), Webhook: &on}); err == nil {
+		t.Fatal("bob used glenn's workflow")
+	}
+}
+
+func TestWorkflowTellsTheAgentThatStartedIt(t *testing.T) {
+	e := newWF(t, "lead", "coder")
+	e.apply(`{"name": "one", "steps": [{"id": "do", "title": "做", "agent": "coder", "prompt": "x"}]}`)
+	lead := app.Caller{Name: "glenn", MemberID: "mem_1", Agent: "lead"}
+	d, _, err := e.svc.Start(e.ctx, lead, "one", app.StartInput{})
+	if err != nil || d.Run.Trigger != domain.FlowByAgent || d.Run.By != "lead" {
+		t.Fatalf("start: %+v %v", d, err)
+	}
+	e.reply("coder", e.task("coder"), "改好了", nil)
+	n := e.task("lead")
+	if n.Type != domain.TypeNote || n.Workflow != d.Run.ID || !strings.Contains(n.Body, "完成了") || !strings.Contains(n.Body, "做（coder）：改好了") {
+		t.Fatalf("note: %+v\n%s", n, n.Body)
+	}
+	// Cancelled by the agent itself: nothing to tell.
+	d, _, _ = e.svc.Start(e.ctx, lead, "one", app.StartInput{})
+	if _, err := e.svc.Cancel(e.ctx, lead, d.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.noTask("lead")
+	// Started by a person: no note to anyone.
+	e.start("one", nil)
+	e.reply("coder", e.task("coder"), "ok", nil)
+	e.noTask("lead")
 }

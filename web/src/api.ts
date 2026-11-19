@@ -152,6 +152,8 @@ export interface AutomationRun {
   /** what a webhook call carried (hubs from v0.20.18); in a list of runs
    *  without its body: appApi.automationRun has it */
   request?: WebhookRequest;
+  /** the workflow run it started (a workflow automation) */
+  workflow_run?: string;
 }
 export interface WebhookRequest { content_type?: string; headers?: Record<string, string>; body?: string; size: number }
 /** A web page published to a hub (hubs from v0.19.24): a folder of static
@@ -209,11 +211,14 @@ export interface Automation {
   id: string; name: string; owner: string; from: string; to: string; project?: string; body: string;
   schedule?: AutomationSchedule; webhook: boolean; webhook_url?: string; skip_if_busy: boolean; enabled: boolean;
   created_at: string; updated_at: string; next_run_at?: string; last_run?: AutomationRun;
+  /** It starts this workflow instead of sending a task (hubs from v0.21). */
+  workflow?: string; workflow_name?: string; inputs?: Record<string, string>;
 }
 export interface AutomationRequest {
   name?: string; to?: string; project?: string; body?: string;
   schedule?: AutomationSchedule; clear_schedule?: boolean;
   webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
+  workflow?: string; inputs?: Record<string, string>;
 }
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
 

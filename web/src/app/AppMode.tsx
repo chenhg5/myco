@@ -670,6 +670,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-automations", on);
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
+  // A workflow run to open on the 工作流 page (from an automation's runs).
+  const [wfOpen, setWfOpen] = useState<{ workflow: string; run?: string; at: number } | undefined>();
   // Decisions a workflow waits on you for: a count on its nav item.
   const [decisionCount, setDecisionCount] = useState(0);
   useEffect(() => {
@@ -1140,13 +1142,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "automations" && hub && (
           <div className="app-scroll">
             <AutomationsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
-              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
+              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }}
+              onOpenRun={(workflow, run) => { setWfOpen({ workflow, run, at: Date.now() }); setPage("workflows"); }} />
           </div>
         )}
 
         {page === "workflows" && hub && (
           <div className="app-scroll">
-            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
+            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now} open={wfOpen} onOpened={() => setWfOpen(undefined)}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}

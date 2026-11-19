@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
+import { Activity, ArrowLeft, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook, Workflow as WorkflowIcon } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
-import type { Automation, AutomationRun, WebhookRequest } from "@/api";
+import type { Automation, AutomationRun, WebhookRequest, Workflow, WorkflowDef } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
@@ -74,10 +74,12 @@ const templates = (): (Start & { icon: typeof Clock; hint: string })[] => [
  *  once and refreshes behind it (skeletons only the first time). */
 const seen = new Map<string, Automation[]>();
 
-export function AutomationsPage({ hubId, rows, now, onOpenMessage }: {
+export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: {
   hubId: string; rows: AgentRow[]; now: number;
   /** a task it sent, in its conversation */
   onOpenMessage?: (agent: string, messageId: string) => void;
+  /** a workflow run it started, on the 工作流 page */
+  onOpenRun?: (workflow: string, run: string) => void;
 }) {
   const [list, setList] = useState<Automation[] | null>(() => seen.get(hubId) ?? null);
   const [unsupported, setUnsupported] = useState(false);
@@ -155,7 +157,7 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage }: {
       <div className="pc au pcd aud" data-testid="automation-detail">
         <AutomationDetail hubId={hubId} a={opened} row={rowOf(opened.to)} now={now} stamp={stamp} busy={busy === opened.id} error={error}
           onBack={() => setOpenId(null)} onEdit={() => setEditing(opened)} onRun={() => void runNow(opened)} onToggle={() => void toggle(opened)}
-          onDelete={() => setRemoving(opened)} onOpenMessage={onOpenMessage} />
+          onDelete={() => setRemoving(opened)} onOpenMessage={onOpenMessage} onOpenRun={onOpenRun} />
         {dialogs}
       </div>
     );
@@ -229,11 +231,15 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage }: {
                     <span className="au-row-name">{a.name}</span>
                     <span className="au-row-what">
                       <span>{when}</span>
-                      <span className="au-row-to">
-                        {L("发给", "to")}
-                        {r && <Avatar agent={r.st.agent} size={16} badge={false} />}
-                        <b>{r ? nodeName(r.st.agent, r.hub) : a.to}</b>
-                      </span>
+                      {a.workflow ? (
+                        <span className="au-row-to">{L("启动工作流", "starts")}<WorkflowIcon className="au-row-wf" /><b>{a.workflow_name || a.workflow}</b></span>
+                      ) : (
+                        <span className="au-row-to">
+                          {L("发给", "to")}
+                          {r && <Avatar agent={r.st.agent} size={16} badge={false} />}
+                          <b>{r ? nodeName(r.st.agent, r.hub) : a.to}</b>
+                        </span>
+                      )}
                     </span>
                     <span className="au-row-status">
                       {!a.enabled ? <span>{L("已暂停", "Paused")}</span>
@@ -280,10 +286,11 @@ function whenAt(iso: string, now: number): string {
 type RunFilter = "all" | "sent" | "skipped" | "failed";
 
 /** One automation: what it is set to, then every run (newest first). */
-function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEdit, onRun, onToggle, onDelete, onOpenMessage }: {
+function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEdit, onRun, onToggle, onDelete, onOpenMessage, onOpenRun }: {
   hubId: string; a: Automation; row?: AgentRow; now: number; stamp: number; busy: boolean; error: unknown;
   onBack: () => void; onEdit: () => void; onRun: () => void; onToggle: () => void; onDelete: () => void;
   onOpenMessage?: (agent: string, messageId: string) => void;
+  onOpenRun?: (workflow: string, run: string) => void;
 }) {
   const [runs, setRuns] = useState<AutomationRun[] | null>(null);
   const [filter, setFilter] = useState<RunFilter>("all");
@@ -329,18 +336,27 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEd
 
       <SectionHead title={L("设置", "Settings")} />
       <div className="aud-card" data-testid="automation-settings">
-        <div className="app-kv"><span className="app-kv-label">{L("发给", "To")}</span>
-          <span className="app-kv-value aud-to">{row && <Avatar agent={row.st.agent} size={18} badge={false} />}<b>{row ? nodeName(row.st.agent, row.hub) : a.to}</b></span></div>
+        {a.workflow ? (
+          <div className="app-kv"><span className="app-kv-label">{L("启动工作流", "Starts")}</span>
+            <span className="app-kv-value aud-to"><WorkflowIcon className="au-row-wf" /><b>{a.workflow_name || a.workflow}</b></span></div>
+        ) : (
+          <div className="app-kv"><span className="app-kv-label">{L("发给", "To")}</span>
+            <span className="app-kv-value aud-to">{row && <Avatar agent={row.st.agent} size={18} badge={false} />}<b>{row ? nodeName(row.st.agent, row.hub) : a.to}</b></span></div>
+        )}
         <div className="app-kv"><span className="app-kv-label">{L("什么时候", "When")}</span>
           <span className="app-kv-value">{when}{a.schedule && <span className="app-kv-sub">{L(`按 ${a.schedule.tz || "UTC"} 时间`, `${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
         {a.webhook && a.webhook_url && (
           <div className="app-kv"><span className="app-kv-label">{L("Webhook 地址", "Webhook address")}</span>
             <span className="app-kv-value mono aud-url"><span>{a.webhook_url}</span><CopyButton value={a.webhook_url} /></span></div>
         )}
-        <div className="app-kv"><span className="app-kv-label">{L("上一次没做完", "Last one unfinished")}</span>
+        <div className="app-kv"><span className="app-kv-label">{a.workflow ? L("上一次还没结束", "Last one still going") : L("上一次没做完", "Last one unfinished")}</span>
           <span className="app-kv-value">{a.skip_if_busy ? L("跳过这次", "Skip this run") : L("照样发", "Send anyway")}</span></div>
-        <div className="app-kv aud-what"><span className="app-kv-label">{L("让它做什么", "What it asks")}</span>
-          <div className="aud-body">{a.body}</div></div>
+        {a.workflow ? Object.entries(a.inputs || {}).map(([k, v]) => (
+          <div key={k} className="app-kv"><span className="app-kv-label">{L(`输入 ${k}`, `Input ${k}`)}</span><span className="app-kv-value mono">{v}</span></div>
+        )) : (
+          <div className="app-kv aud-what"><span className="app-kv-label">{L("让它做什么", "What it asks")}</span>
+            <div className="aud-body">{a.body}</div></div>
+        )}
       </div>
 
       <SectionHead title={L("运行记录", "Runs")} count={runs?.length} />
@@ -363,7 +379,8 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEd
           <div className="pc-list aud-runs" data-testid="automation-runs">
             {shown.map((r) => (
               <RunRow key={r.id} hubId={hubId} r={r} now={now} open={open === r.id} onToggle={() => setOpen((o) => (o === r.id ? null : r.id))}
-                onChat={r.message_id && onOpenMessage ? () => onOpenMessage(a.to, r.message_id!) : undefined} />
+                onChat={r.message_id && onOpenMessage ? () => onOpenMessage(a.to, r.message_id!) : undefined}
+                onRun={r.workflow_run && a.workflow && onOpenRun ? () => onOpenRun(a.workflow!, r.workflow_run!) : undefined} />
             ))}
           </div>
           {runs.length >= 200 && <p className="app-small-note aud-kept">{L("只保留最近 200 次。", "Only the last 200 runs are kept.")}</p>}
@@ -382,8 +399,8 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEd
 }
 
 /** One run: how it went and when; its chat; a webhook call's content. */
-function RunRow({ hubId, r, now, open, onToggle, onChat }: {
-  hubId: string; r: AutomationRun; now: number; open: boolean; onToggle: () => void; onChat?: () => void;
+function RunRow({ hubId, r, now, open, onToggle, onChat, onRun }: {
+  hubId: string; r: AutomationRun; now: number; open: boolean; onToggle: () => void; onChat?: () => void; onRun?: () => void;
 }) {
   const hook = r.trigger === "webhook";
   return (
@@ -399,6 +416,7 @@ function RunRow({ hubId, r, now, open, onToggle, onChat }: {
             </button>
           )}
           {onChat && <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={onChat}><MessageSquare />{L("看对话", "Chat")}</button>}
+          {onRun && <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={onRun}><WorkflowIcon />{L("看运行", "The run")}</button>}
         </span>
       </div>
       {hook && open && <CallContent hubId={hubId} r={r} />}
@@ -484,6 +502,12 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   const [tz, setTz] = useState(localZone());
   const [hook, setHook] = useState(false);
   const [skip, setSkip] = useState(true);
+  // What it does: send a task, or start a workflow (with its inputs).
+  const [target, setTarget] = useState<"task" | "workflow">("task");
+  const [wfId, setWfId] = useState("");
+  const [wfInputs, setWfInputs] = useState<Record<string, string>>({});
+  const [wfs, setWfs] = useState<Workflow[] | null>(null);
+  const [wfDef, setWfDef] = useState<WorkflowDef | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [secret, setSecret] = useState<{ url: string; secret: string } | null>(null);
@@ -503,16 +527,32 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
     if ("start" in editing) {
       const s = editing.start;
       setName(s.name); setTo(agents[0]?.st.agent.name || ""); setBody(s.body); setTimed(!!s.every); setHook(s.hook); setSkip(true);
+      setTarget("task"); setWfId(""); setWfInputs({});
       setTz(localZone()); setHour(9); setMinute(0); setDay(1); setHours(2);
       setEvery(s.every || blank.every!);
       return;
     }
-    setName(editing.name); setTo(editing.to); setBody(editing.body); setHook(editing.webhook); setSkip(editing.skip_if_busy);
+    setName(editing.name); setTo(editing.to || agents[0]?.st.agent.name || ""); setBody(editing.body); setHook(editing.webhook); setSkip(editing.skip_if_busy);
+    setTarget(editing.workflow ? "workflow" : "task"); setWfId(editing.workflow || ""); setWfInputs(editing.inputs || {});
     setTimed(!!editing.schedule); setTz(editing.schedule?.tz || localZone());
     setEvery(fromCron(editing.schedule?.cron || "0 9 * * 1-5"));
     // Only when another one is opened (a refresh must not undo edits).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  // The workflows it can start, and the inputs of the one picked.
+  useEffect(() => {
+    if (!editing) return;
+    let off = false;
+    appApi.workflows(hubId).then((r) => { if (!off) setWfs(r.workflows || []); }, () => { if (!off) setWfs([]); });
+    return () => { off = true; };
+  }, [hubId, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setWfDef(null);
+    if (!wfId) return;
+    let off = false;
+    appApi.workflow(hubId, wfId).then((w) => { if (!off) setWfDef(w.definition || null); }, () => undefined);
+    return () => { off = true; };
+  }, [hubId, wfId]);
   if (!editing) return null;
 
   const every: Every = mode === "daily" ? { kind: "daily", hour, minute }
@@ -521,7 +561,11 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
         : mode === "hours" ? { kind: "hours", every: hours, minute }
           : { kind: "cron", cron };
   const cronOk = cron.trim().split(/\s+/).length === 5;
+  const wfProps = Object.entries(wfDef?.inputs?.properties || {});
+  const wfMissing = target === "workflow" && !hook ? (wfDef?.inputs?.required || []).find((k) => !(wfInputs[k] || "").trim()) : undefined;
   const missing = !name.trim() ? L("还没写名字", "It needs a name")
+    : target === "workflow" ? (!wfId ? L("选一个工作流", "Pick a workflow")
+      : wfMissing ? L(`还没填「${wfDef?.inputs?.properties?.[wfMissing]?.title || wfMissing}」`, `Fill in "${wfMissing}"`) : !timed && !hook ? L("选一种触发方式：定时或 Webhook", "Pick when: on a schedule, or by webhook") : "")
     : !to ? L("还没选发给谁", "Pick whom it goes to")
       : !body.trim() ? L("还没写让它做什么", "Say what to ask")
         : !timed && !hook ? L("选一种触发方式：定时或 Webhook", "Pick when: on a schedule, or by webhook")
@@ -533,8 +577,9 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
     setBusy(true);
     setError(null);
     try {
+      const what = target === "workflow" ? { workflow: wfId, inputs: wfInputs } : { to, body, ...(a?.workflow ? { workflow: "" } : {}) };
       const input = {
-        name: name.trim(), to, body, skip_if_busy: skip, webhook: hook,
+        name: name.trim(), ...what, skip_if_busy: skip, webhook: hook,
         ...(timed ? { schedule: { cron: toCron(every), tz } } : a?.schedule ? { clear_schedule: true } : {}),
       };
       const r = a ? await appApi.updateAutomation(hubId, a.id, input) : await appApi.createAutomation(hubId, { ...input, enabled: true });
@@ -584,26 +629,57 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
         <form data-testid="automation-editor" onSubmit={(e) => { e.preventDefault(); if (!missing) void save(); }}>
           <label className="app-field"><span className="app-field-label">{L("名字", "Name")}</span>
             <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={L("比如：每天早上汇总 issue", "e.g. Morning issue summary")} disabled={busy} /></label>
-          <label className="app-field"><span className="app-field-label">{L("发给谁", "To whom")}</span>
-            <span className="au-to">
-              {toRow && <Avatar agent={toRow.st.agent} size={20} badge={false} />}
-              <select className="app-select-field" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} aria-label={L("发给谁", "To whom")}>
-                {agents.map((r) => <option key={r.st.agent.name} value={r.st.agent.name}>{nodeName(r.st.agent, r.hub)}</option>)}
-              </select>
-            </span></label>
-          <label className="app-field"><span className="app-field-label">{L("让它做什么", "What to ask")}</span>
-            <textarea className="app-input au-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy}
-              placeholder={L("比如：看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", "e.g. Look at yesterday's new issues, pick the urgent ones, and reply with a list.")} />
-            {hook && (
-              <span className="app-small-note au-payload">
-                {L("外部系统调用时带来的内容，会放在 ", "What a call sends goes where ")}
-                <button type="button" className="au-token" disabled={busy || body.includes("{{payload}}")}
-                  onClick={() => setBody((b) => (b.trimEnd() ? `${b.trimEnd()}\n{{payload}}` : "{{payload}}"))}
-                  title={L("插入到最后", "Insert at the end")}>{"{{payload}}"}</button>
-                {L(" 的位置；没写就接在最后。", " is; without it, at the end.")}
-              </span>
-            )}
-          </label>
+          <div className="app-field">
+            <span className="app-field-label">{L("做什么", "What it does")}</span>
+            <div className="seg seg-sm seg-fill" role="radiogroup" aria-label={L("做什么", "What it does")}>
+              <button type="button" role="radio" aria-checked={target === "task"} className={cn("seg-btn", target === "task" && "active")}
+                onClick={() => setTarget("task")} disabled={busy}>{L("给一个 agent 发任务", "Send an agent a task")}</button>
+              <button type="button" role="radio" aria-checked={target === "workflow"} className={cn("seg-btn", target === "workflow" && "active")}
+                onClick={() => setTarget("workflow")} disabled={busy}>{L("启动一个工作流", "Start a workflow")}</button>
+            </div>
+          </div>
+          {target === "workflow" ? (
+            <>
+              <label className="app-field"><span className="app-field-label">{L("哪个工作流", "Which workflow")}</span>
+                <select className="app-select-field" value={wfId} onChange={(e) => { setWfId(e.target.value); setWfInputs({}); }} disabled={busy || !wfs?.length} aria-label={L("哪个工作流", "Which workflow")}>
+                  <option value="">{wfs === null ? L("正在读…", "Loading…") : wfs.length ? L("选一个", "Pick one") : L("还没有工作流", "No workflows yet")}</option>
+                  {(wfs || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select></label>
+              {wfProps.map(([k, p]) => (
+                <label key={k} className="app-field"><span className="app-field-label">{p.title || k}</span>
+                  <input className="app-input" value={wfInputs[k] || ""} disabled={busy} placeholder={p.default !== undefined ? String(p.default) : hook ? `{{payload.${k}}}` : ""}
+                    onChange={(e) => setWfInputs((x) => ({ ...x, [k]: e.target.value }))} /></label>
+              ))}
+              {hook && wfId && (
+                <span className="app-small-note au-payload">
+                  {L("Webhook 调用时带来的内容：整段用 {{payload}}，JSON 里的字段用 {{payload.字段}}，比如 {{payload.issue.title}}。", "What a webhook call sends: all of it is {{payload}}; a field of its JSON is {{payload.field}}, e.g. {{payload.issue.title}}.")}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="app-field"><span className="app-field-label">{L("发给谁", "To whom")}</span>
+                <span className="au-to">
+                  {toRow && <Avatar agent={toRow.st.agent} size={20} badge={false} />}
+                  <select className="app-select-field" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} aria-label={L("发给谁", "To whom")}>
+                    {agents.map((r) => <option key={r.st.agent.name} value={r.st.agent.name}>{nodeName(r.st.agent, r.hub)}</option>)}
+                  </select>
+                </span></label>
+              <label className="app-field"><span className="app-field-label">{L("让它做什么", "What to ask")}</span>
+                <textarea className="app-input au-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy}
+                  placeholder={L("比如：看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", "e.g. Look at yesterday's new issues, pick the urgent ones, and reply with a list.")} />
+                {hook && (
+                  <span className="app-small-note au-payload">
+                    {L("外部系统调用时带来的内容，会放在 ", "What a call sends goes where ")}
+                    <button type="button" className="au-token" disabled={busy || body.includes("{{payload}}")}
+                      onClick={() => setBody((b) => (b.trimEnd() ? `${b.trimEnd()}\n{{payload}}` : "{{payload}}"))}
+                      title={L("插入到最后", "Insert at the end")}>{"{{payload}}"}</button>
+                    {L(" 的位置；没写就接在最后。", " is; without it, at the end.")}
+                  </span>
+                )}
+              </label>
+            </>
+          )}
 
           <div className="app-field">
             <span className="app-field-label">{L("什么时候", "When")}</span>
@@ -670,7 +746,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
 
           <label className="app-check-line au-skip">
             <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={busy} />
-            <span>{L("上一次的任务还没做完，就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span>
+            <span>{target === "workflow" ? L("上一次的运行还没结束，就跳过这次", "Skip a run while the last one is still going") : L("上一次的任务还没做完，就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span>
           </label>
 
           <div className="au-note">{L("自动化的内容存在工作区的 Hub 上，不是端到端加密的。", "An automation's text is kept on the workspace's hub, not end-to-end encrypted.")}</div>

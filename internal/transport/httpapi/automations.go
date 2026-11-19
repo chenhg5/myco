@@ -47,7 +47,8 @@ func (s *Server) caller(r *http.Request) app.Caller {
 
 func automationInput(req api.AutomationRequest) app.AutomationInput {
 	in := app.AutomationInput{Name: req.Name, To: req.To, Project: req.Project, Body: req.Body, ClearSchedule: req.ClearSchedule,
-		Webhook: req.Webhook, RotateSecret: req.RotateSecret, SkipIfBusy: req.SkipIfBusy, Enabled: req.Enabled}
+		Webhook: req.Webhook, RotateSecret: req.RotateSecret, SkipIfBusy: req.SkipIfBusy, Enabled: req.Enabled,
+		Workflow: req.Workflow, Inputs: req.Inputs}
 	if req.Schedule != nil {
 		cron, tz := req.Schedule.Cron, req.Schedule.TZ
 		in.Cron, in.TZ = &cron, &tz
@@ -59,7 +60,8 @@ func automationRunDTO(r *domain.AutomationRun) *api.AutomationRun {
 	if r == nil {
 		return nil
 	}
-	out := &api.AutomationRun{ID: r.ID, AutomationID: r.AutomationID, At: r.At, Trigger: r.Trigger, Outcome: r.Outcome, MessageID: r.MessageID, Error: r.Error}
+	out := &api.AutomationRun{ID: r.ID, AutomationID: r.AutomationID, At: r.At, Trigger: r.Trigger, Outcome: r.Outcome, MessageID: r.MessageID, Error: r.Error,
+		WorkflowRun: r.WorkflowRun}
 	if q := r.Request; q != nil {
 		out.Request = &api.WebhookRequest{ContentType: q.ContentType, Headers: q.Headers, Body: q.Body, Size: q.Size}
 	}
@@ -70,7 +72,10 @@ func (s *Server) automationDTO(r *http.Request, o *app.AutomationOut) api.Automa
 	a := o.Automation
 	out := api.Automation{ID: a.ID, Name: a.Name, Owner: a.Owner, From: string(a.From), To: string(a.To), Project: a.Project, Body: a.Body,
 		Webhook: a.WebhookHash != "", SkipIfBusy: a.SkipIfBusy, Enabled: a.Enabled, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
-		LastRun: automationRunDTO(o.LastRun)}
+		LastRun: automationRunDTO(o.LastRun), Workflow: a.Workflow, Inputs: a.Inputs}
+	if a.Workflow != "" && s.workflows != nil {
+		out.WorkflowName = s.workflows.NameOf(r.Context(), a.Workflow)
+	}
 	if a.Cron != "" {
 		out.Schedule = &api.AutomationSchedule{Cron: a.Cron, TZ: a.TZ}
 	}

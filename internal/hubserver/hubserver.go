@@ -219,6 +219,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetAutomations(automations)
 	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
 	srv.SetWorkflows(workflows)
+	automations.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)
 	pages.SetEncrypted(e2e.Enabled)
 	srv.SetPages(pages)

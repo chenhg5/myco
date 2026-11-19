@@ -18,12 +18,12 @@ func NewAutomationRepo(db *sql.DB) *AutomationRepo { return &AutomationRepo{db: 
 
 var _ domain.AutomationRepository = (*AutomationRepo)(nil)
 
-const autCols = `id, name, owner, owner_id, from_agent, to_agent, project, body, cron, tz, webhook_hash, skip_if_busy, enabled, created_at, updated_at, next_run_at, last_task`
+const autCols = `id, name, owner, owner_id, from_agent, to_agent, project, body, cron, tz, webhook_hash, skip_if_busy, enabled, created_at, updated_at, next_run_at, last_task, workflow, inputs`
 
 func (r *AutomationRepo) Create(ctx context.Context, a *domain.Automation) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO automations (`+autCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO automations (`+autCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Name, a.Owner, a.OwnerID, a.From, a.To, a.Project, a.Body, a.Cron, a.TZ, a.WebhookHash, a.SkipIfBusy, a.Enabled,
-		ms(a.CreatedAt), ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask)
+		ms(a.CreatedAt), ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask, a.Workflow, inputsJSON(a.Inputs))
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "automation %s exists", a.ID)
 	}
@@ -32,8 +32,9 @@ func (r *AutomationRepo) Create(ctx context.Context, a *domain.Automation) error
 
 func (r *AutomationRepo) Save(ctx context.Context, a *domain.Automation) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE automations SET name=?, to_agent=?, project=?, body=?, cron=?, tz=?, webhook_hash=?,
-		skip_if_busy=?, enabled=?, updated_at=?, next_run_at=?, last_task=? WHERE id=?`,
-		a.Name, a.To, a.Project, a.Body, a.Cron, a.TZ, a.WebhookHash, a.SkipIfBusy, a.Enabled, ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask, a.ID)
+		skip_if_busy=?, enabled=?, updated_at=?, next_run_at=?, last_task=?, workflow=?, inputs=? WHERE id=?`,
+		a.Name, a.To, a.Project, a.Body, a.Cron, a.TZ, a.WebhookHash, a.SkipIfBusy, a.Enabled, ms(a.UpdatedAt), ms(a.NextRunAt), a.LastTask,
+		a.Workflow, inputsJSON(a.Inputs), a.ID)
 	if err != nil {
 		return internal(err)
 	}
@@ -47,11 +48,15 @@ func scanAutomation(s scanner) (*domain.Automation, error) {
 	var (
 		a                      domain.Automation
 		created, updated, next int64
+		inputs                 string
 	)
 	err := s.Scan(&a.ID, &a.Name, &a.Owner, &a.OwnerID, &a.From, &a.To, &a.Project, &a.Body, &a.Cron, &a.TZ, &a.WebhookHash,
-		&a.SkipIfBusy, &a.Enabled, &created, &updated, &next, &a.LastTask)
+		&a.SkipIfBusy, &a.Enabled, &created, &updated, &next, &a.LastTask, &a.Workflow, &inputs)
 	if err != nil {
 		return nil, err
+	}
+	if inputs != "" {
+		_ = json.Unmarshal([]byte(inputs), &a.Inputs)
 	}
 	a.CreatedAt, a.UpdatedAt, a.NextRunAt = fromMS(created), fromMS(updated), fromMS(next)
 	return &a, nil
@@ -133,8 +138,8 @@ func (r *AutomationRepo) AddRun(ctx context.Context, run *domain.AutomationRun, 
 		}
 		req = string(b)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (id, automation_id, at, run_trigger, outcome, message_id, error, request) VALUES (?,?,?,?,?,?,?,?)`,
-		run.ID, run.AutomationID, ms(run.At), run.Trigger, run.Outcome, run.MessageID, run.Error, req); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (id, automation_id, at, run_trigger, outcome, message_id, error, request, workflow_run) VALUES (?,?,?,?,?,?,?,?,?)`,
+		run.ID, run.AutomationID, ms(run.At), run.Trigger, run.Outcome, run.MessageID, run.Error, req, run.WorkflowRun); err != nil {
 		return internal(err)
 	}
 	if keep > 0 {
@@ -172,7 +177,7 @@ func (r *AutomationRepo) Run(ctx context.Context, automationID, id string) (*dom
 	return run, err
 }
 
-const runColumns = `id, automation_id, at, run_trigger, outcome, message_id, error, request`
+const runColumns = `id, automation_id, at, run_trigger, outcome, message_id, error, request, workflow_run`
 
 func scanRun(row interface{ Scan(...any) error }) (*domain.AutomationRun, error) {
 	var (
@@ -180,7 +185,7 @@ func scanRun(row interface{ Scan(...any) error }) (*domain.AutomationRun, error)
 		at  int64
 		req string
 	)
-	if err := row.Scan(&run.ID, &run.AutomationID, &at, &run.Trigger, &run.Outcome, &run.MessageID, &run.Error, &req); err != nil {
+	if err := row.Scan(&run.ID, &run.AutomationID, &at, &run.Trigger, &run.Outcome, &run.MessageID, &run.Error, &req, &run.WorkflowRun); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
@@ -201,4 +206,12 @@ func (r *AutomationRepo) RunsSince(ctx context.Context, automationID, trigger st
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM automation_runs WHERE automation_id=? AND run_trigger=? AND at >= ?`,
 		automationID, trigger, ms(since)).Scan(&n)
 	return n, internal(err)
+}
+
+func inputsJSON(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
 }

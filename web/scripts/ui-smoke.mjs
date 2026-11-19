@@ -3614,6 +3614,40 @@ async function runMatrix(browser, size, scheme) {
       if (narrow) await sidebar(page, false);
     });
 
+    // An automation can start a workflow instead of sending a task: its
+    // inputs filled from the webhook call; a run opens the workflow run.
+    await step("自动化 · 启动工作流", async () => {
+      await go(page, "自动化", narrow);
+      const row = page.locator("[data-testid=automations] .au-row", { hasText: "新 issue 走写-审-改" });
+      await row.waitFor({ timeout: 20_000 });
+      if (!(await row.innerText()).includes("启动工作流")) throw new Error("启动工作流的自动化应写清启动哪个");
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=automation-detail]");
+      const set = det.locator("[data-testid=automation-settings]");
+      await set.waitFor({ timeout: 10_000 });
+      for (const w of ["启动工作流", "写-审-改", "{{payload.issue.title}}"]) if (!(await set.innerText()).includes(w)) throw new Error(`设置卡里应有「${w}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-workflow");
+      await clickVisible(page, det.locator("[data-testid=automation-run]").first().getByRole("button", { name: "看运行" }));
+      await page.locator("[data-testid=workflow-run] [data-testid=workflow-step]").first().waitFor({ timeout: 10_000 });
+      // The editor: start a workflow, its inputs as templates.
+      await go(page, "自动化", narrow);
+      await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建自动化" }));
+      const ed = page.locator("[data-testid=automation-editor]");
+      await ed.waitFor({ timeout: 10_000 });
+      await clickVisible(page, ed.getByRole("radio", { name: "启动一个工作流" }));
+      await ed.getByRole("combobox", { name: "哪个工作流" }).selectOption({ label: "改完跑测试" });
+      const task = ed.locator("label.app-field", { hasText: "要改什么" }).locator("input");
+      await task.waitFor({ timeout: 10_000 });
+      await clickVisible(page, ed.locator(".au-kind", { hasText: "Webhook" }));
+      await task.fill("修 CI：{{payload.workflow_run.name}}");
+      await ed.locator(".au-payload", { hasText: "payload.issue.title" }).waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-editor-workflow");
+      await clickVisible(page, ed.getByRole("button", { name: "取消" }));
+      await ed.waitFor({ state: "detached", timeout: 5_000 });
+    });
+
     // 工作流: decisions waiting for you on top, then the workflows, then
     // ready-made ones (pick who does what) and "have an agent write one".
     await step("工作流", async () => {
@@ -3731,6 +3765,30 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail", { hasText: "导出对话" }).first().waitFor({ timeout: 15_000 });
       await page.locator("[data-testid=via-workflow]").first().waitFor({ timeout: 10_000 });
       if (narrow) await sidebar(page, false);
+    });
+
+    // Editing a workflow: who does each step, timeouts, retries, rounds;
+    // saved as a new version.
+    await step("工作流 · 编辑", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await row.waitFor({ timeout: 20_000 });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=workflow-detail]");
+      await det.waitFor({ timeout: 10_000 });
+      const before = await det.locator(".pcd-sub").innerText();
+      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "编辑" }));
+      const ed = page.locator("[data-testid=workflow-edit]");
+      await ed.locator("[data-testid=workflow-edit-step]").nth(2).waitFor({ timeout: 10_000 });
+      await ed.getByRole("combobox", { name: "第 2 步交给谁" }).selectOption({ index: 0 });
+      await ed.locator(".wf-edit-loop select").selectOption("5");
+      await clickVisible(page, ed.locator("[data-testid=workflow-edit-step]").first().locator("summary"));
+      await settle(page, 200);
+      await shot(page, size, scheme, "workflow-edit");
+      await clickVisible(page, ed.getByRole("button", { name: "保存新版本" }));
+      await ed.waitFor({ state: "detached", timeout: 10_000 });
+      await det.locator(".wf-edge text", { hasText: "最多 5 次" }).waitFor({ timeout: 10_000 });
+      if ((await det.locator(".pcd-sub").innerText()) === before) throw new Error("保存后应是新的一版");
     });
 
     // A conversation is exported from its header: Markdown for people or

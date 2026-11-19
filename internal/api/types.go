@@ -1310,6 +1310,8 @@ type AutomationRun struct {
 	Error string `json:"error,omitempty"`
 	// What a webhook call carried (hubs from v0.20.18; webhook runs only).
 	Request *WebhookRequest `json:"request,omitempty"`
+	// WorkflowRun is the run a workflow automation started (v0.21+).
+	WorkflowRun string `json:"workflow_run,omitempty"`
 }
 
 // WebhookRequest is what a webhook call carried: its content type, the
@@ -1344,6 +1346,11 @@ type Automation struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 	NextRunAt  *time.Time     `json:"next_run_at,omitempty"`
 	LastRun    *AutomationRun `json:"last_run,omitempty"`
+	// Workflow (v0.21+): the workflow it starts instead of sending a task
+	// (its id and name), with the run's inputs (templates over {{payload}}).
+	Workflow     string            `json:"workflow,omitempty"`
+	WorkflowName string            `json:"workflow_name,omitempty"`
+	Inputs       map[string]string `json:"inputs,omitempty"`
 }
 
 // AutomationRequest is POST /v1/console/automations (create) and PATCH
@@ -1361,6 +1368,11 @@ type AutomationRequest struct {
 	RotateSecret bool  `json:"rotate_secret,omitempty"`
 	SkipIfBusy   *bool `json:"skip_if_busy,omitempty"`
 	Enabled      *bool `json:"enabled,omitempty"`
+	// Workflow (v0.21+): a workflow's id or name to start instead of
+	// sending a task ("" goes back to sending one); Inputs replace the
+	// run's inputs.
+	Workflow *string           `json:"workflow,omitempty"`
+	Inputs   map[string]string `json:"inputs,omitempty"`
 }
 
 // AutomationResponse answers create and update. WebhookSecret is set only

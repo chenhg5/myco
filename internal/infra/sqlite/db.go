@@ -464,7 +464,11 @@ func Open(path string) (*sql.DB, error) {
 		// A template's icon (v0.20.7).
 		"template_versions": {{"icon", "TEXT NOT NULL DEFAULT ''"}},
 		// What a webhook call carried (JSON; '' for other runs).
-		"automation_runs": {{"request", "TEXT NOT NULL DEFAULT ''"}},
+		"automation_runs": {{"request", "TEXT NOT NULL DEFAULT ''"},
+			// The workflow run a workflow automation started (v0.21).
+			{"workflow_run", "TEXT NOT NULL DEFAULT ''"}},
+		// A workflow an automation starts, and the run's inputs (v0.21).
+		"automations": {{"workflow", "TEXT NOT NULL DEFAULT ''"}, {"inputs", "TEXT NOT NULL DEFAULT ''"}},
 	} {
 		if err := addColumns(db, table, cols); err != nil {
 			db.Close()

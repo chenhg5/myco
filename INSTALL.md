@@ -865,6 +865,8 @@ agent 收到工作流的任务时，用 `myco message reply --result '{"approved
 - 等你决定的步骤过期（默认 3 天）当作「不做」，从不默认同意。
 - 电脑步骤退出码不是 0 就算失败，可以用 `onError` 的边接住（比如把报错交回去再改）。
 - 结构化结果不做端到端加密（Hub 要读它来决定下一步）。
+- agent 启动的运行结束时，Hub 给它发一条通知（完成了 / 失败了，每一步的总结），它可以接着做。
+- 自动化可以启动工作流：App 里编辑自动化选「启动一个工作流」；命令行 `myco automation create --name 新issue --workflow 写-审-改 --input 'task=修 issue：{{payload.issue.title}}' --webhook`。Webhook 调用的内容整段是 `{{payload}}`，JSON 里的字段用 `{{payload.字段}}` 取。
 
 格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
 

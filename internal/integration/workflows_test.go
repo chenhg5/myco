@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,5 +96,31 @@ func TestWorkflowAcrossHubClientAndCLI(t *testing.T) {
 	}
 	if out := cli.must(c, "workflow", "list"); !strings.Contains(out, `"name": "写-审-改"`) {
 		t.Fatalf("list: %s", out)
+	}
+
+	// An automation starts it: its inputs filled from the webhook call.
+	out := cli.must(c, "automation", "create", "--name", "新 issue", "--workflow", "写-审-改", "--input", "task=修：{{payload.issue.title}}", "--webhook")
+	var made api.AutomationResponse
+	if err := json.Unmarshal([]byte(out), &made); err != nil || made.Automation.WorkflowName != "写-审-改" || made.WebhookSecret == "" {
+		t.Fatalf("automation: %s %v", out, err)
+	}
+	req, _ := http.NewRequest(http.MethodPost, made.Automation.WebhookURL, strings.NewReader(`{"issue": {"title": "闪退"}}`))
+	req.Header.Set("Authorization", "Bearer "+made.WebhookSecret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooked struct {
+		Run api.AutomationRun `json:"run"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&hooked)
+	resp.Body.Close()
+	if hooked.Run.WorkflowRun == "" {
+		t.Fatalf("webhook run: %+v", hooked)
+	}
+	// (the coder started the first run: a note says it ended)
+	ms, err = coder.PullTypes(c, 1, 0, []string{"task"})
+	if err != nil || len(ms) != 1 || !strings.Contains(ms[0].Body, "做：修：闪退") {
+		t.Fatalf("task from the automation's run: %+v %v", ms, err)
 	}
 }

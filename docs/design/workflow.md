@@ -249,7 +249,7 @@ API：`/v1/workflows`、`/v1/workflows/{id}/versions`、`/v1/workflow-runs`、`/
 
 ## 10. 分期
 
-**第一期：能跑起来**（引擎 + CLI + skill + 只读 App）
+**第一期：能跑起来**（引擎 + CLI + skill + 只读 App）——已做
 
 - `WorkflowService`、五张表、迁移；agent / 电脑 / 人三种步骤；`when`、`maxIterations`、`dispatch all` + `join all`、超时、重试、取消、从某步重跑；Hub 重启对账。
 - `message reply --result`；正文 JSON 块兜底。
@@ -259,9 +259,9 @@ API：`/v1/workflows`、`/v1/workflows/{id}/versions`、`/v1/workflow-runs`、`/
 
 **第二期：用起来顺手**
 
-- 自动化可以启动工作流（定时、Webhook payload 映射）。
-- 模板库（发版、日报、issue 分诊）；「新建工作流」对话框（交给 agent 写）。
-- App 里改参数；`role:` 按分工挑空闲的 agent；运行结束通知启动者。
+- 自动化可以启动工作流（定时、Webhook payload 映射）。——已做
+- 模板库（发版、日报、issue 分诊）；「新建工作流」对话框（交给 agent 写）。——已做（写-审-改、改完跑测试、分头做再汇总、发布前问你一句；让 agent 写一个）
+- App 里改参数（已做：换人、超时、重试、轮数、任务文字）；运行结束通知启动它的 agent（已做）；`role:` 按分工挑空闲的 agent（还没做）。
 
 **第三期：规模**
 

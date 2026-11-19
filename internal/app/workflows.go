@@ -209,6 +209,14 @@ func (s *WorkflowService) find(ctx context.Context, c Caller, ref string) (*doma
 	return w, nil
 }
 
+// NameOf is a workflow's name ("" when it is gone).
+func (s *WorkflowService) NameOf(ctx context.Context, id string) string {
+	if w, err := s.repo.Get(ctx, id); err == nil {
+		return w.Name
+	}
+	return ""
+}
+
 // WorkflowOut is a workflow with how its runs are going.
 type WorkflowOut struct {
 	Workflow *domain.Workflow
@@ -483,6 +491,7 @@ func (s *WorkflowService) Cancel(ctx context.Context, c Caller, id string) (*dom
 	if domain.FlowOver(f.run.Status) {
 		return f.run, nil
 	}
+	f.quiet = c.Agent != "" && string(c.Agent) == f.run.By
 	f.end(domain.FlowCancelled, c.who()+" 取消了")
 	return f.run, f.save()
 }
@@ -619,6 +628,9 @@ type flow struct {
 	dirty map[*domain.RunStep]bool
 	// changed: the run itself needs saving.
 	changed bool
+	// quiet: do not tell the agent that started it that it ended (it
+	// cancelled the run itself).
+	quiet bool
 }
 
 func (f *flow) now() time.Time { return f.s.clock.Now() }
@@ -1161,6 +1173,39 @@ func (f *flow) end(status, why string) {
 		text += "：" + why
 	}
 	f.event(domain.EvFinished, "", text)
+	f.tellStarter(text)
+}
+
+// tellStarter sends the agent that started the run a note that it ended,
+// with each step's summary, so it can go on with what it was doing.
+func (f *flow) tellStarter(text string) {
+	if f.quiet || f.run.Trigger != domain.FlowByAgent || f.run.By == "" {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "[工作流「%s」%s]\n运行 %s\n", f.run.Name, text, f.run.ID)
+	latest := map[string]*domain.RunStep{}
+	var order []string
+	for _, st := range f.steps {
+		if _, seen := latest[st.StepID]; !seen {
+			order = append(order, st.StepID)
+		}
+		latest[st.StepID] = st
+	}
+	for _, id := range order {
+		st := latest[id]
+		line := st.Summary
+		if st.Status == domain.StepFailed || st.Status == domain.StepCancelled {
+			line = st.Error
+		}
+		fmt.Fprintf(&b, "- %s（%s）：%s\n", f.def.Step(id).Label(), st.Target, line)
+	}
+	fmt.Fprintf(&b, "详情：myco workflow run show --id %s", f.run.ID)
+	if _, err := f.s.messages.SendFromMember(f.ctx, f.run.Owner, f.run.OwnerID, SendInput{
+		To: f.run.By, Type: string(domain.TypeNote), Body: b.String(), Workflow: f.run.ID,
+	}); err != nil {
+		f.s.log.Warn("workflows: telling the agent that started a run failed", "run", f.run.ID, "agent", f.run.By, "err", err)
+	}
 }
 
 var jsonBlockRe = regexp.MustCompile("(?s)```json\\s*\\n(.*?)```")

@@ -34,9 +34,19 @@ type Automation struct {
 	UpdatedAt   time.Time
 	// NextRunAt is the next scheduled run (zero: none).
 	NextRunAt time.Time
-	// LastTask is the id of the last task it sent.
+	// LastTask is the id of the last task it sent (or, for a workflow,
+	// the last run it started).
 	LastTask string
+	// Workflow, when set, is the workflow it starts (its id) instead of
+	// sending Body to To; Inputs are the run's inputs, each a template
+	// that may use the webhook call ({{payload}}, {{payload.issue.title}}).
+	Workflow string
+	Inputs   map[string]string
 }
+
+// StartsWorkflow reports whether it starts a workflow rather than sending a
+// task.
+func (a *Automation) StartsWorkflow() bool { return a.Workflow != "" }
 
 // Run triggers.
 const (
@@ -60,7 +70,9 @@ type AutomationRun struct {
 	Trigger      string
 	Outcome      string
 	MessageID    string
-	Error        string
+	// WorkflowRun is the run it started (workflow automations).
+	WorkflowRun string
+	Error       string
 	// Request is what a webhook call carried (webhook runs only).
 	Request *WebhookRequest
 }
@@ -116,14 +128,28 @@ func (a *Automation) Validate() error {
 	if utf8.RuneCountInString(a.Name) > MaxAutomationName {
 		return Errf(CodeInvalidArgument, "automation name is longer than %d characters", MaxAutomationName)
 	}
-	if strings.TrimSpace(a.Body) == "" {
-		return Errf(CodeInvalidArgument, "an automation needs the message it sends (body)")
-	}
-	if len(a.Body) > MaxAutomationBody {
-		return Errf(CodeInvalidArgument, "automation body is larger than %d bytes", MaxAutomationBody)
-	}
-	if a.To == "" {
-		return Errf(CodeInvalidArgument, "an automation needs the agent it sends to (to)")
+	if a.StartsWorkflow() {
+		size := 0
+		for k, v := range a.Inputs {
+			size += len(k) + len(v)
+			if err := CheckTemplate(v); err != nil {
+				return Errf(CodeInvalidArgument, "input %s: %v", k, err)
+			}
+		}
+		if size > MaxAutomationBody {
+			return Errf(CodeInvalidArgument, "the inputs are larger than %d bytes", MaxAutomationBody)
+		}
+	} else {
+		if strings.TrimSpace(a.Body) == "" {
+			return Errf(CodeInvalidArgument, "an automation needs the message it sends (body)").
+				WithSuggestion("or have it start a workflow (workflow)")
+		}
+		if len(a.Body) > MaxAutomationBody {
+			return Errf(CodeInvalidArgument, "automation body is larger than %d bytes", MaxAutomationBody)
+		}
+		if a.To == "" {
+			return Errf(CodeInvalidArgument, "an automation needs the agent it sends to (to)")
+		}
 	}
 	if a.Cron == "" && a.WebhookHash == "" {
 		return Errf(CodeInvalidArgument, "an automation needs a schedule or a webhook (or both)").

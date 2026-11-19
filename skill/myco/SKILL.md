@@ -262,6 +262,9 @@ myco workflow run start --name 写-审-改 --input task="加导出按钮" [--wai
 myco workflow run show --id run_...          # each step, who, its summary
 ```
 
+A run you start tells you when it ends: a note `[工作流「…」完成了]` (or 失败了) with each
+step's summary arrives in your inbox, so you can go on from there instead of waiting.
+
 When a task starts with `[工作流「…」· 第 N 步 …]`, it is one step of a workflow: do that step
 only, do not hand out the next one (the workspace does), and answer with the result it asks
 for, plus `summary` (one sentence) and `reason`:
