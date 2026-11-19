@@ -109,6 +109,16 @@ App 经 Hub 给那台电脑的 machine 节点发一个 `cli: "info"` 的请求�
 
 **范围**：先做 SSH 到 Linux、macOS，和 Windows 上的 WSL。SSH 到 Windows 本身（PowerShell）先不做。App 后端只用系统自带的 `ssh`、`wsl.exe`，不引新依赖。Hub 和那台电脑的 myco 都不用升级。
 
+## 用 SSH 在服务器上装工作区
+
+「加入工作区 › 还没有链接？」里先是「用 SSH 装到服务器上」（和连电脑同一个列表，一次选一台），再是「复制命令」。App 依次：
+
+1. **登录，看看那台服务器**：系统（要 Linux 和 systemd）、是不是 root 或有不要密码的 sudo、有没有 curl、是不是已经装过工作区（`/etc/myco/hub.env`）。
+2. **装好工作区**：没装过就运行 `install-hub.sh --domain auto --yes`（自动 HTTPS，地址 `<IP>.sslip.io`，要能开 80、443）；装过就跳过，不改它原来的设置。然后在服务器上 `myco console link` 生成一个 App 链接，只从 SSH 的输出里拿，不显示、不记日志（安装输出里的链接也遮掉）。
+3. **加进这个 App**：用这个链接加进来，弹窗关掉，切到新的工作区。
+
+不是 root、sudo 又要密码时不硬来：说清楚，给一条带 `ssh -t` 的命令在终端里跑（会问 sudo 密码）。装好了但这台电脑连不上新地址时（多半是防火墙、安全组没放开 80、443），说清楚，放开后点「重试」会直接加进来，不会重装。App 后端：`POST /app/local/hub-over-ssh`，进度同样用 `GET /app/connect/{job}`（`remote_hub.go`）。
+
 ## 还没做
 
 - 在 App 里改一台电脑允许的文件夹和最高权限（现在只显示，说明在那台电脑上改 `spawn.dirs`、`spawn.max_access`）。远程放宽权限要另外想清楚，暂时只能在那台电脑上改。

@@ -3962,13 +3962,31 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, add.first());
         const dlg = page.locator(".app-modal");
         await clickVisible(page, dlg.getByRole("button", { name: "还没有链接？" }));
+        // Over SSH first: the SSH hosts, one server picked at a time.
+        const hubSSH = dlg.locator("[data-testid=connect-ssh]");
+        await hubSSH.locator(".cx-row", { hasText: "hk-vps" }).waitFor({ timeout: 10_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "connect-hub-ssh");
+        await clickVisible(page, dlg.getByRole("tab", { name: "复制命令" }));
         const way = dlg.locator("[data-testid=connect-agent-way] .add-sentence-text");
         await way.waitFor({ timeout: 5_000 });
         if (!(await way.innerText()).includes("agent-setup.md")) throw new Error("添加工作区里应有让 agent 帮你装的那句话");
         await settle(page, 200);
         await shot(page, size, scheme, "connect-agent");
-        await page.keyboard.press("Escape");
-        await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+        // A server where sudo wants a password: what to run instead.
+        await clickVisible(page, dlg.getByRole("tab", { name: "用 SSH 装到服务器上" }));
+        await clickVisible(page, hubSSH.locator(".cx-row", { hasText: "old-pi" }));
+        await clickVisible(page, hubSSH.getByRole("button", { name: "装好并加进来" }));
+        await hubSSH.locator(".cx-error", { hasText: "sudo" }).waitFor({ timeout: 10_000 });
+        await hubSSH.locator(".cx-error .app-command code", { hasText: "install-hub.sh" }).waitFor({ timeout: 5_000 });
+        await settle(page, 200);
+        await shot(page, size, scheme, "connect-hub-ssh-error");
+        // One that works: installed, added, and the dialog closes.
+        await clickVisible(page, hubSSH.getByRole("button", { name: "再连别的" }));
+        await clickVisible(page, hubSSH.locator(".cx-row", { hasText: "hk-vps" }));
+        await clickVisible(page, hubSSH.getByRole("button", { name: "装好并加进来" }));
+        await hubSSH.locator(".cx-step.is-running").first().waitFor({ timeout: 10_000 });
+        await dlg.waitFor({ state: "hidden", timeout: 20_000 });
       }
       // Opening a workspace of this computer to the internet can be
       // cancelled while it opens (it used to hang there with no way out).
