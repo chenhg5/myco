@@ -175,8 +175,12 @@ export MYCO_HUB={{shq .Hub}}
 export MYCO_JOIN_TOKEN={{shq .Token}}
 
 echo "==> installing myco"
+MYCO_INSTALLED_FILE="$(mktemp)"
+export MYCO_INSTALLED_FILE
 curl -fsSL --retry 5 --retry-delay 2 https://raw.githubusercontent.com/chenhg5/myco/main/deploy/install-client.sh | MYCO_NO_DOCTOR=1 MYCO_ADD_PATH=1 bash
-MYCO="$(command -v myco 2>/dev/null || true)"
+MYCO="$(cat "$MYCO_INSTALLED_FILE" 2>/dev/null || true)"
+rm -f "$MYCO_INSTALLED_FILE"
+[ -n "$MYCO" ] && [ -x "$MYCO" ] || MYCO="$(command -v myco 2>/dev/null || true)"
 if [ -z "$MYCO" ]; then
   MYCO="${MYCO_INSTALL_DIR:-$HOME/.local/bin}/myco"
   [ -f "$MYCO.exe" ] && MYCO="$MYCO.exe" # Windows (Git Bash)

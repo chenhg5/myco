@@ -10,6 +10,7 @@
 #                           an existing `myco`, else ~/.local/bin)
 #   MYCO_ADD_PATH=1         add that directory to PATH in your shell profile
 #   MYCO_NO_DOCTOR=1        skip the health check (used by join links)
+#   MYCO_INSTALLED_FILE=... write the installed binary's path there (join links)
 # No secrets are read or printed.
 set -euo pipefail
 
@@ -70,10 +71,20 @@ if [[ -w "$DIR" || "$OS" == windows ]]; then
   # Windows: a running myco.exe cannot be overwritten, but it can be renamed.
   [[ "$OS" == windows && -f "$DIR/myco.exe" ]] && mv -f "$DIR/myco.exe" "$DIR/myco.exe.old" 2>/dev/null || true
   mv -f "$tmp/myco$EXE" "$DIR/myco$EXE"
-else
+elif sudo -n true 2>/dev/null || ( : </dev/tty ) 2>/dev/null; then
   echo "==> $DIR is not writable, using sudo"
   sudo mv "$tmp/myco" "$DIR/myco"
+else
+  # No one to type sudo's password (over ssh without a terminal, from the
+  # App): install for this user instead.
+  echo "==> $DIR is not writable and sudo needs a password; installing into ~/.local/bin instead"
+  [[ -n "${existing:-}" ]] && echo "NOTE: the older $existing comes first on PATH; remove it (sudo rm $existing) or upgrade it in a terminal"
+  DIR="$HOME/.local/bin"
+  mkdir -p "$DIR"
+  mv -f "$tmp/myco$EXE" "$DIR/myco$EXE"
 fi
+# Tell the join script which myco this is (it may not be first on PATH).
+[[ -n "${MYCO_INSTALLED_FILE:-}" ]] && printf '%s\n' "$DIR/myco$EXE" > "$MYCO_INSTALLED_FILE" || true
 # Downloads via curl are not quarantined, but clear the flag just in case.
 [[ "$OS" == darwin ]] && xattr -d com.apple.quarantine "$DIR/myco" 2>/dev/null || true
 
