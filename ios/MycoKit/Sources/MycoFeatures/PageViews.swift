@@ -216,12 +216,7 @@ struct PageScreen: View {
                     .accessibilityIdentifier("page.close")
                 }
                 ToolbarItem(placement: .principal) {
-                    VStack(spacing: 1) {
-                        Text(page?.name ?? L("网页", "Page")).font(.headline).foregroundStyle(MycoColor.fg).lineLimit(1)
-                        if let page {
-                            Text(title(of: page)).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
-                        }
-                    }
+                    BarTitle(page?.name ?? L("网页", "Page"), subtitle: page.map(title(of:)))
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("page.title")
                 }

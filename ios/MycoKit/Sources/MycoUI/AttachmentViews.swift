@@ -79,7 +79,12 @@ public struct MessageFiles: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
-        .quickLookPreview($preview, in: previewList)
+        // (opened as UIKit apps do: a swipe down closes it)
+        .onChange(of: preview) { _, url in
+            guard let url else { return }
+            FilePreview.show(previewList, at: url)
+            preview = nil
+        }
     }
 
     private func tile(_ picture: MessageFile, side: CGFloat, radius: CGFloat) -> some View {

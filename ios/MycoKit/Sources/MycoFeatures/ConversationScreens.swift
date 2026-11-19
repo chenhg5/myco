@@ -23,12 +23,7 @@ struct AgentScreen: View {
                     Button {
                         router.sheet = .memberCard(name)
                     } label: {
-                        VStack(spacing: 1) {
-                            Text(session.displayName(of: name)).font(.headline).foregroundStyle(MycoColor.fg)
-                            if let status = session.status(of: name) {
-                                Text(Words.member(status)).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
-                            }
-                        }
+                        BarTitle(session.displayName(of: name), subtitle: session.status(of: name).map(Words.member))
                     }
                     .accessibilityIdentifier("conversation.title")
                 }
@@ -84,12 +79,9 @@ struct ExchangeScreen: View {
         .solidTopBar()
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    Text(session.displayName(of: other) + " → " + session.displayName(of: agent))
-                        .font(.headline).foregroundStyle(MycoColor.fg).lineLimit(1)
-                    Text(L("它们之间的往来 · 只读", "What they said to each other · read-only"))
-                        .font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
-                }
+                BarTitle(
+                    session.displayName(of: other) + " → " + session.displayName(of: agent),
+                    subtitle: L("它们之间的往来 · 只读", "What they said to each other · read-only"))
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("exchange.title")
             }
@@ -129,13 +121,8 @@ struct ProjectScreen: View {
         .solidTopBar()
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    let project = session.project(name)
-                    Text(project.map { $0.title.isEmpty ? $0.name : $0.title } ?? name).font(.headline).foregroundStyle(MycoColor.fg)
-                    if let goal = project?.goal, !goal.isEmpty {
-                        Text(goal).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
-                    }
-                }
+                let project = session.project(name)
+                BarTitle(project.map { $0.title.isEmpty ? $0.name : $0.title } ?? name, subtitle: project?.goal)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -572,7 +559,12 @@ struct ConversationBody: View {
             if let pins { await pins.run() }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: pulls)
-        .quickLookPreview($lookingAt)
+        // (opened as UIKit apps do: a swipe down closes it)
+        .onChange(of: lookingAt) { _, url in
+            guard let url else { return }
+            FilePreview.show([url], at: url)
+            lookingAt = nil
+        }
         // A link to a page of this workspace opens in the app, like its
         // card; any other link goes where links go.
         .environment(\.openURL, OpenURLAction { url in

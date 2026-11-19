@@ -380,6 +380,14 @@ final class ConversationTests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertTrue(open.firstMatch.exists)
         XCTAssertTrue(submit.isEnabled)
+        // A swipe down closes it too, as the system's preview does elsewhere.
+        open.firstMatch.tap()
+        let preview = app.descendants(matching: .any)["QLPreviewControllerView"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        sleep(1)
+        app.swipeDown(velocity: .fast)
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
+        waitForExpectations(timeout: 10)
     }
 
     @MainActor
