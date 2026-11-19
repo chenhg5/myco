@@ -821,6 +821,8 @@ export const appApi = {
   shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
+  /** Brings this computer's myco to the latest release and restarts its runner. */
+  upgradeMyco: () => request<{ from: string; version: string; restarted: string[] }>("POST", "app/local/myco/upgrade"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
   // Voice chat with an agent (the Mac app; voice.go)
   voice: () => request<VoiceInfo>("GET", "app/voice"),

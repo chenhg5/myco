@@ -1746,6 +1746,16 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/no-spawn {on} — this computer's part of myco that starts
+  // sessions is (not) connected (the smoke test fixes it from the App).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "no-spawn" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    const studio = state.hubs.find((h) => h.id === "hub_studio")?.machines?.find((m) => m.id === "m_studio");
+    if (studio) studio.can_spawn = !body.on;
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/machine — the smoke test deletes the demo machine; put it and its
   // nodes back, because the mock keeps running across widths and themes.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "machine" && parts.length === 3) {
@@ -2303,6 +2313,15 @@ const server = http.createServer(async (req, res) => {
         local.myco = { path: "/Users/glenn/.local/bin/myco", version: "0.16.8" };
       }
       return send(res, 200, local.myco);
+    }
+
+    // /app/local/myco/upgrade — myco brought up to date here and its runner
+    // restarted: this computer starts sessions again.
+    if (parts.length === 4 && parts[2] === "myco" && parts[3] === "upgrade" && method === "POST") {
+      await sleep(1200);
+      const studio = state.hubs.find((h) => h.id === "hub_studio")?.machines?.find((m) => m.id === "m_studio");
+      if (studio) studio.can_spawn = true;
+      return send(res, 200, { from: "v0.20.19", version: "v0.20.24", restarted: ["runner", "hub"] });
     }
 
     if (parts.length === 3 && parts[2] === "runner" && method === "POST") {
