@@ -875,7 +875,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 return (
                   <button key={`${x.hubId}/${x.p.name}`} type="button" {...projectSort.bind(x.p.name)}
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
-                    aria-current={active ? "page" : undefined} onClick={() => { setNavChat(null); openSpace(ref); }} data-nav-key={`p:${x.hubId}/${x.p.name}`}
+                    aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)} data-nav-key={`p:${x.hubId}/${x.p.name}`}
                     onContextMenu={(e) => navMenu.open(e, [
                       { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
                       { label: L("加一个终端", "Add a terminal"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
