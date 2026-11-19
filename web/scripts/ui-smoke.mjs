@@ -1350,7 +1350,14 @@ async function runMatrix(browser, size, scheme) {
       try {
         await go(page, "官网改版", narrow);
         const who = narrow ? page.locator('.sp-strip-face[title="PM (Codex)"]') : page.locator(".sp-nav-person", { hasText: "PM (Codex)" });
-        await who.first().click({ button: "right" });
+        // (Scrolled into view first: a menu closes when the list scrolls.)
+        const forkMenu = page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true });
+        for (let i = 0; i < 3 && !(await forkMenu.isVisible()); i++) {
+          await who.first().scrollIntoViewIfNeeded();
+          await settle(page, 250);
+          await who.first().click({ button: "right" });
+          await forkMenu.waitFor({ timeout: 3_000 }).catch(() => {});
+        }
         await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true }));
         const dialog = page.locator("[data-testid=fork-dialog]");
         await dialog.waitFor({ timeout: 10_000 });
@@ -1365,6 +1372,8 @@ async function runMatrix(browser, size, scheme) {
       } finally {
         await page.evaluate(async () => { await fetch("/app/mock/forks", { method: "POST" }); });
       }
+      // Back to the project as it was (the copy's chat closes with it).
+      await go(page, "官网改版", narrow);
     });
 
     await step("这台电脑 · 一键修复", async () => {

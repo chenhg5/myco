@@ -1752,6 +1752,7 @@ const server = http.createServer(async (req, res) => {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     const hub = state.hubs.find((h) => h.id === "hub_studio");
     if (hub) hub.agents = hub.agents.filter((a) => !/^pm-codex-\d+$/.test(a.name));
+    projects.forEach((p) => { p.members = p.members.filter((m) => !/^pm-codex-\d+$/.test(m.name)); });
     return send(res, 200, { ok: true });
   }
 
