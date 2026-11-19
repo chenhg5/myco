@@ -385,7 +385,10 @@ final class ConversationTests: XCTestCase {
         let preview = app.descendants(matching: .any)["QLPreviewControllerView"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
         sleep(1)
+        snap("files-look-before-swipe")
         app.swipeDown(velocity: .fast)
+        sleep(1)
+        snap("files-look-after-swipe")
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: submit)
         waitForExpectations(timeout: 10)
     }
