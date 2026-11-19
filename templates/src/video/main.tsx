@@ -154,15 +154,15 @@ function App() {
   // ---- export ----
   /** Saves the mp4 to Downloads through the App; when that fails, the video
    *  is kept here to try again (an older App saves no video). */
-  async function keepFile(name: string, bytes: Uint8Array, silent: boolean, secs: number) {
-    const blob = new Blob([bytes as BlobPart], { type: "video/mp4" });
+  async function keepFile(name: string, blob: Blob, silent: boolean, secs: number, drop: () => void) {
     try {
       const where = (await save(name, blob, "video/mp4")).path;
-      setExporting({ stage: "done", where, size: bytes.length, silent, secs });
+      drop();
+      setExporting({ stage: "done", where, size: blob.size, silent, secs });
     } catch (e) {
       const err = e as { code?: string; message?: string };
       const old = err.code === "invalid_argument" || err.code === "too_large" || /no such call|documents and pictures/.test(err.message || "");
-      setExporting({ stage: "unsaved", name, bytes, silent, secs,
+      setExporting({ stage: "unsaved", name, blob, silent, secs, drop,
         error: old ? "这个版本的 myco App 还存不了视频：升级 App 后点「再存一次」。" : `没存上：${err.message || "不知道为什么"}` });
     }
   }
@@ -173,9 +173,9 @@ function App() {
     const at = performance.now();
     setExporting({ stage: "run", p: { phase: "audio", done: 0 }, at, opts });
     try {
-      const { bytes, silent } = await render(opts, (p) => setExporting((x) => (x && x.stage === "run" ? { ...x, p } : x)), () => cancelRef.current);
+      const { file, silent, drop } = await render(opts, (p) => setExporting((x) => (x && x.stage === "run" ? { ...x, p } : x)), () => cancelRef.current);
       const name = `${(title.get("") || "视频").replace(/[\\/:*?"<>|]+/g, " ").trim() || "视频"}.mp4`;
-      await keepFile(name, bytes, silent, (performance.now() - at) / 1000);
+      await keepFile(name, file, silent, (performance.now() - at) / 1000, drop);
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "cancelled") setExporting(null);
@@ -247,8 +247,12 @@ function App() {
         </Popover>
       )}
       {exporting && <ExportDialog state={exporting} onStart={doExport}
-        onRetry={(x) => void keepFile(x.name, x.bytes, x.silent, x.secs)}
-        onClose={() => { if (exporting.stage === "run") cancelRef.current = true; else setExporting(null); }} />}
+        onRetry={(x) => void keepFile(x.name, x.blob, x.silent, x.secs, x.drop)}
+        onClose={() => {
+          if (exporting.stage === "run") { cancelRef.current = true; return; }
+          if (exporting.stage === "unsaved") exporting.drop();
+          setExporting(null);
+        }} />}
       <Toast kit={kit} />
     </div>
   );
@@ -257,7 +261,7 @@ function App() {
 type Exp = { stage: "setup" } | { stage: "run"; p: Progress; at: number; opts: ExportOptions }
   | { stage: "done"; where: string; size: number; silent: boolean; secs: number } | { stage: "error"; error: string }
   | Unsaved;
-type Unsaved = { stage: "unsaved"; name: string; bytes: Uint8Array; silent: boolean; secs: number; error: string };
+type Unsaved = { stage: "unsaved"; name: string; blob: Blob; silent: boolean; secs: number; error: string; drop: () => void };
 
 const SIZE_NAME: Record<number, string> = { 2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p", 480: "480p" };
 function savedOptions(): ExportOptions {
@@ -342,13 +346,13 @@ function ExportDialog({ state, onStart, onRetry, onClose }: { state: Exp; onStar
     const x = state;
     const browser = () => {
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([x.bytes as BlobPart], { type: "video/mp4" }));
+      a.href = URL.createObjectURL(x.blob);
       a.download = x.name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 120000);
     };
     body = (
       <>
-        <p>视频做好了（{(x.bytes.length / 1024 / 1024).toFixed(1)} MB，用了 {mmss(x.secs)}），但没存到「下载」：</p>
+        <p>视频做好了（{(x.blob.size / 1024 / 1024).toFixed(1)} MB，用了 {mmss(x.secs)}），但没存到「下载」：</p>
         <p className="modal-err">{x.error}</p>
         <p className="faint">关掉这个框之前它一直在，不用重新导出。</p>
         <div className="modal-foot">
