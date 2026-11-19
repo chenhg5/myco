@@ -837,17 +837,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (t > (saidAt.get(m.reply_to) || 0)) saidAt.set(m.reply_to, t);
   }
   const activeAt = (m: Message) => Math.max(lastActivityAt(m) || 0, saidAt.get(m.id) || 0, runActivity.get(m.id)?.at || 0);
+  // The hub says which tasks show no life (hubs from v0.20.28): left open
+  // after the work ended, or their worker went away.
+  const hubStale = new Set(row?.st.stale_tasks || []);
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
+    if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
     return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline }, now);
   };
   const stuckLine = (m: Message): string => {
     const quiet = quietFor(now, activeAt(m));
-    return L(
-      `${quiet}没有动静，可能卡住了（结果可能没送回来）`,
-      `No activity for ${quiet}; it may be stuck (the result may not have made it back)`,
-    );
+    return row?.st.state === "offline"
+      ? L(`${quiet}没有动静，它也不在线：这条任务没收尾`, `No activity for ${quiet} and it is offline: this task was left open`)
+      : L(
+        `${quiet}没有动静：可能做完了没收尾，也可能卡住了`,
+        `No activity for ${quiet}: it may be done but left open, or stuck`,
+      );
   };
   // Every task of yours still open in this conversation, not only the newest:
   // an older one that went quiet may be stuck too. (One waiting behind the
@@ -1538,6 +1544,38 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setStopError(e);
     }
   };
+  // A task left open: close it as done (nothing more to come), or ask its
+  // agent where it stands (a note in the task it reads with it).
+  const [nudged, setNudged] = useState<Set<string>>(new Set());
+  // Closing it for its recipient is for whoever manages that agent.
+  const canClose = !!row && canManage(row.hub, row.st.agent.owner_id);
+  const markDone = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const m = await appApi.dismissMessage(target.hubId, task.id);
+      setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
+      onRefresh?.();
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+  const nudge = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      await appApi.steer(target.hubId, task.id, L(
+        "这条任务现在怎么样了？做完了就回复结果；还没做完就接着做，并发一下进度。",
+        "Where does this task stand? If it is done, reply with the result; if not, carry on and send your progress."));
+      setNudged((s) => new Set(s).add(task.id));
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
 
   // Commands other nodes sent to the computer in view. The terminal shows
   // only your own conversation with it, so these have no row there: the
@@ -1966,6 +2004,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
             <span className="conv-stuck-actions">
+              {canClose && (
+                <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void markDone(m)}
+                  title={L("已经做完了：关掉这条任务，不再算在干活", "It is done: close this task so it no longer counts as work")}>
+                  {L("标记完成", "Mark done")}
+                </button>
+              )}
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id || nudged.has(m.id)} onClick={() => void nudge(m)}
+                title={L("问它这条任务怎么样了", "Ask it where this task stands")}>
+                {nudged.has(m.id) ? L("已经催了", "Asked") : L("再催一下", "Nudge")}
+              </button>
               <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void stop(m)}>
                 {L("停止", "Stop")}
               </button>

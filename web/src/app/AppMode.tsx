@@ -703,16 +703,22 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // amber when all the work in progress may be stuck (it was picked up, but
   // nothing is moving). A node with both reads as working: something is live.
   // An agent waiting on your decision comes first: amber, saying so.
-  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | null => {
+  // Tasks left open with no life in them (the hub says so: stale) only get a
+  // quiet ring: nothing is running; their chat says which and offers to
+  // close them.
+  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | "open" | null => {
     if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
     let busy = false;
     let stuck = false;
+    let open = false;
     for (const r of rs) {
+      if ((r.st.stale || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
-      if (r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      // A hub that tells live from stale: what it calls in progress runs.
+      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
       else stuck = true;
     }
-    return busy ? "busy" : stuck ? "stuck" : null;
+    return busy ? "busy" : stuck ? "stuck" : open ? "open" : null;
   };
 
   return (
@@ -775,8 +781,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : dot === "open" ? L("有任务没收尾", "Some tasks were left open") : L("有成员在干活", "Someone is at work")} />
                     )}
                   </button>
                 );
@@ -833,8 +839,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                       {dot ? (
-                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("在干活", "At work")} />
+                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有任务没收尾：没在干活，点开对话可以收尾", "Tasks left open: nothing is running; close them in the chat") : L("在干活", "At work")} />
                       ) : isPinned && <Pin className="sp-nav-pinned" aria-label={L("已置顶", "Pinned")} />}
                     </button>
                   );
@@ -871,8 +877,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                         <Avatar agent={r.st.agent} size={20} badge={false} />
                         <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                         {dot && (
-                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有命令没收尾", "Commands left open") : L("正在跑命令", "Running a command")} />
                         )}
                       </button>
                       <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}

@@ -134,3 +134,28 @@ func TestUnreachableAckStaysPendingForRecovery(t *testing.T) {
 		t.Fatal("an ack that may have reached the hub must stay pending, so a restart closes the task")
 	}
 }
+
+// A result the hub could not take within the finish budget is kept and
+// sent once the hub answers again, while the runner runs: the task gets
+// its real reply instead of staying acked ("working") until a restart.
+func TestUndeliveredResultIsSentLater(t *testing.T) {
+	m := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
+	hub := &flakyFinishHub{fakeHub: newFakeHub(m), getFailures: 1000}
+	h := fakeHarness{fn: func(harness.Request) (harness.Result, error) {
+		return harness.Result{Output: "the answer"}, nil
+	}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{}, quiet())
+	r.finishRetryMin, r.finishTimeout = time.Millisecond, 20*time.Millisecond
+	r.Handle(context.Background(), m)
+	if p := r.pending[m.ID]; p.Finish != "reply" || p.Text != "the answer" {
+		t.Fatalf("kept: %+v", p)
+	}
+	hub.getFailures = 0 // the hub is back
+	r.retryUndelivered(context.Background())
+	if hub.replies[m.ID] != "the answer" {
+		t.Fatalf("delivered %q", hub.replies[m.ID])
+	}
+	if _, ok := r.pending[m.ID]; ok {
+		t.Fatal("still pending after delivery")
+	}
+}

@@ -215,6 +215,12 @@
 .sp-nav-busy.is-stuck {
   background: var(--amber);
 }
+/* Tasks left open with nothing running (the hub says they are stale): a
+   quiet ring, not a light. */
+.sp-nav-busy.is-open {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
+}
 .sp-nav-count {
   flex: none;
   margin-left: auto;

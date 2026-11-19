@@ -308,6 +308,10 @@ If you were woken with a "[myco] You are agent ... You have N new message(s)" te
    progress` print any unread additions. If `myco message reply` reports unread additions,
    read them first; use `--anyway` only when you intentionally ignore them.
 4. Repeat until `myco inbox pull` returns no messages.
+5. Close every task you acked, each by its own id: a task you never reply to (or `done` /
+   `fail`) stays open, and its sender keeps seeing it as unfinished. When the same person
+   sends a follow-up, answering the new message does not close the earlier one. `myco inbox
+   pull` lists the ones you left open (`open`): reply to them now if they are finished.
 
 In a Claude Code or Codex session, `myco message ack` also starts showing your steps (thoughts,
 commands, results) to the sender as you work, read from the session's own file (`myco trace

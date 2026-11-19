@@ -1426,14 +1426,24 @@ function agentStatus(a) {
   if (asking) {
     return { agent: a, state: "pending", queued: 0, in_progress: 0, held: 1, asking: 1, receiving: "runner", current: [asking] };
   }
+  const receiving = a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner");
+  // As the hub (v0.20.28): an acked task with no life in it (the agent is
+  // away, or quiet for 5 minutes under a runner, 30 in a session) is open
+  // but not work in progress.
+  const limit = receiving === "runner" ? 5 * 60_000 : 30 * 60_000;
+  const quiet = atWork.filter((m) => m.status === "acked" && !dismissed.has(m.id)
+    && (!a.online || Date.now() - new Date(m.active_at || m.updated_at).getTime() >= limit));
+  const live = atWork.filter((m) => m.status === "acked" && !dismissed.has(m.id)).length - quiet.length;
   return {
-    agent: a, state,
+    agent: a, state: working && live <= 0 ? (a.online ? (stale.length ? "pending" : "idle") : "offline") : state,
     queued: (a.queued ?? (working ? 1 + stale.length : 0)) + delivered.length,
-    in_progress: working ? 1 : 0,
+    in_progress: working ? Math.max(0, live) : 0,
+    stale: quiet.length,
+    stale_tasks: quiet.map((m) => m.id),
     held: 0,
-    receiving: a.receiving ?? (!a.online || a.kind === "human" ? undefined : /cloud/.test(a.binding?.harness || "") ? "session" : "runner"),
+    receiving,
     session_in_use: a.session_in_use || undefined,
-    current: atWork.length || delivered.length ? [...atWork, ...delivered, ...stale] : [],
+    current: atWork.length || delivered.length ? [...atWork.filter((m) => !dismissed.has(m.id)), ...delivered, ...stale] : [],
   };
 }
 

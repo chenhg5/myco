@@ -141,6 +141,10 @@ var errSteered = errors.New("interrupted by a steer from the task's sender")
 // while it ran (the sender stopped it).
 var errStopped = errors.New("the task was stopped")
 
+// retryUndeliveredEvery is how often results the hub could not be told are
+// sent again.
+var retryUndeliveredEvery = 2 * time.Minute
+
 // stopCheckEvery is how often a running task's status is checked.
 const stopCheckEvery = 3 * time.Second
 
@@ -289,6 +293,20 @@ func (r *Runner) Run(ctx context.Context) error {
 		}()
 	}
 	r.recoverPending(ctx)
+	keptCtx, stopKept := context.WithCancel(ctx)
+	defer stopKept()
+	go func() {
+		t := time.NewTicker(retryUndeliveredEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-keptCtx.Done():
+				return
+			case <-t.C:
+				r.retryUndelivered(keptCtx)
+			}
+		}
+	}()
 	slots := make(chan struct{}, r.opts.Concurrency)
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -606,6 +624,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	})
 	if err != nil {
 		r.logFinishFailure(log, "get message", err, exhausted, res.Output)
+		if exhausted {
+			r.keepIntended(m, res.Output, runErr)
+		}
 		return
 	}
 	if cur.Status != "acked" {
@@ -658,8 +679,31 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	if err != nil {
 		r.logFinishFailure(log, "finish message", err, exhausted, res.Output)
+		if exhausted {
+			r.keepIntended(m, res.Output, runErr)
+		}
 	} else {
 		r.clearPending(m.ID)
+	}
+}
+
+// keepIntended keeps how m was to be finished, to be sent once the hub
+// answers again (retryUndelivered).
+func (r *Runner) keepIntended(m api.Message, output string, runErr error) {
+	switch {
+	case errors.Is(runErr, harness.ErrSessionBusy):
+		// Handed back, not finished: the lease brings it back.
+		r.clearPending(m.ID)
+	case m.Type == "task" && runErr != nil:
+		r.keepFinish(m.ID, "fail", runErr.Error())
+	case m.Type == "task":
+		out := strings.TrimSpace(output)
+		if out == "" {
+			out = "(agent produced no output)"
+		}
+		r.keepFinish(m.ID, "reply", out)
+	default:
+		r.keepFinish(m.ID, "complete", "")
 	}
 }
 

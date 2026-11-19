@@ -42,6 +42,7 @@ type MessageService struct {
 	// memberName resolves a member id to their name (nil: no members).
 	memberName func(ctx context.Context, id string) string
 	projects   domain.ProjectRepository // nil: no projects
+	touched    touches
 }
 
 // SetProjects lets messages belong to a project.

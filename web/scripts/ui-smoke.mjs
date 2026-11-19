@@ -2935,8 +2935,12 @@ async function runMatrix(browser, size, scheme) {
         return !!r && r.getBoundingClientRect().bottom <= el.getBoundingClientRect().top + 1;
       }, "整理到一半");
       if (!below) throw new Error("「可能卡住」那一行应在它的过程下面");
+      // Left open or stuck: close it as done, ask where it stands, stop or resend.
+      await note.getByRole("button", { name: "标记完成" }).waitFor({ timeout: 10_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-stuck");
+      await clickVisible(page, note.getByRole("button", { name: "再催一下" }));
+      await note.getByRole("button", { name: "已经催了" }).waitFor({ timeout: 10_000 });
       const body = "把旧版 runner 的日志整理到 docs/legacy.md。";
       await clickVisible(page, note.getByRole("button", { name: "重发" }));
       await page.waitForFunction((t) => ![...document.querySelectorAll(".conv-stuck")].some((e) => (e.textContent || "").includes(t)), "分钟没有动静", { timeout: 10_000 });
@@ -3652,10 +3656,12 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });
       await pc.waitFor({ timeout: 10_000 });
-      if (!(await pc.locator(".sp-nav-busy.is-stuck").count())) {
-        throw new Error("mac-exec 的侧栏小点应表示可能卡住（琥珀色）");
+      // The hub says the command shows no life: not "working", only a quiet
+      // ring (a command left open).
+      if (!(await pc.locator(".sp-nav-busy.is-open").count())) {
+        throw new Error("mac-exec 只剩没收尾的命令：侧栏应是一个空心圈");
       }
-      if (await pc.locator(".sp-nav-busy:not(.is-stuck)").count()) throw new Error("mac-exec 不该同时亮绿点");
+      if (await pc.locator(".sp-nav-busy:not(.is-open)").count()) throw new Error("mac-exec 不该亮绿点或琥珀点");
       await clickVisible(page, pc);
       if (narrow) await sidebar(page, false);
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });

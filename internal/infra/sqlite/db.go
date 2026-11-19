@@ -377,6 +377,8 @@ func Open(path string) (*sql.DB, error) {
 		{"ask", "INTEGER NOT NULL DEFAULT 0"}, {"asking", "TEXT NOT NULL DEFAULT ''"}, {"answers", "TEXT NOT NULL DEFAULT ''"},
 		// What a task's recipient suggests its sender says next.
 		{"suggest", "TEXT NOT NULL DEFAULT ''"},
+		// When its recipient last showed it is working on it (ms).
+		{"active_at", "INTEGER NOT NULL DEFAULT 0"},
 		// The automation that sent it (v0.19.22).
 		{"automation", "TEXT NOT NULL DEFAULT ''"}}); err != nil {
 		db.Close()

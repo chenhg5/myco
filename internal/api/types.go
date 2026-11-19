@@ -638,8 +638,14 @@ type AgentStatus struct {
 	Held       int    `json:"held"`
 	// Asking counts held tasks waiting on a question to their sender
 	// (myco message ask); they are in Held too. Absent on older hubs.
-	Asking  int       `json:"asking,omitempty"`
-	Current []Message `json:"current,omitempty"`
+	Asking int `json:"asking,omitempty"`
+	// Stale counts tasks it acked that show no life: it is away, or none
+	// was worked on lately (5 minutes for a runner, 30 for a session). They
+	// are open but not in InProgress, and do not make it "working".
+	// StaleTasks are their ids. Absent on older hubs.
+	Stale      int       `json:"stale,omitempty"`
+	StaleTasks []string  `json:"stale_tasks,omitempty"`
+	Current    []Message `json:"current,omitempty"`
 	// Receiving is how the agent gets messages right now: "session" (a
 	// session keeps `inbox wait` running), "runner" (a runner wakes the
 	// session per message) or empty (nothing is receiving).

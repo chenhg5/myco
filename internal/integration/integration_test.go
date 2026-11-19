@@ -1275,3 +1275,43 @@ func TestConsoleConversations(t *testing.T) {
 		t.Fatal("stopped a finished task")
 	}
 }
+
+// A task acked earlier and never closed is named on the next pull, with a
+// hint to close it; once replied it is no longer named.
+func TestInboxPullNamesTasksLeftOpen(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	alice := newCLI(t, h, filepath.Join(home, "alice.yaml"))
+	bob := newCLI(t, h, filepath.Join(home, "bob.yaml"))
+	alice.must(c, "agent", "register", "--name", "alice")
+	bob.must(c, "agent", "register", "--name", "bob")
+	var sent api.SendResponse
+	if err := json.Unmarshal([]byte(alice.must(c, "message", "send", "--to", "bob", "--body", "first job")), &sent); err != nil {
+		t.Fatal(err)
+	}
+	bob.must(c, "inbox", "pull")
+	bob.must(c, "message", "ack", "--id", sent.Message.ID)
+	alice.must(c, "message", "send", "--to", "bob", "--body", "second job")
+	var pulled struct {
+		Messages []api.Message `json:"messages"`
+		Open     []struct {
+			ID string `json:"id"`
+		} `json:"open"`
+		Hint string `json:"hint"`
+	}
+	if err := json.Unmarshal([]byte(bob.must(c, "inbox", "pull")), &pulled); err != nil {
+		t.Fatal(err)
+	}
+	if len(pulled.Messages) != 1 || len(pulled.Open) != 1 || pulled.Open[0].ID != sent.Message.ID || !strings.Contains(pulled.Hint, sent.Message.ID) {
+		t.Fatalf("pull: %+v", pulled)
+	}
+	bob.must(c, "message", "reply", "--id", sent.Message.ID, "--body", "done")
+	pulled.Open = nil
+	if err := json.Unmarshal([]byte(bob.must(c, "inbox", "pull")), &pulled); err != nil {
+		t.Fatal(err)
+	}
+	if len(pulled.Open) != 0 {
+		t.Fatalf("still open after the reply: %+v", pulled.Open)
+	}
+}
