@@ -34,7 +34,8 @@ struct PinTests {
         let added = pins.list.last!
         await pins.remove(added)
         #expect(pins.list.count == 2)
-        #expect(await hub.pins(with: "cloud-lead").count == 2)
+        let kept = try? await hub.pins(with: "cloud-lead")
+        #expect(kept?.count == 2)
 
         // The workspace does not answer: the pin comes back, and why is said.
         await hub.setUnreachable(true)
