@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, Search } from "lucide-react";
 import type { Agent } from "@/api";
 import { appApi, type LocalSession, type LocalState } from "@/appapi";
 import { accessLabel, localWorkspaceOf } from "@/app/localHubs";
@@ -50,7 +50,7 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
 }) {
   const [sessions, setSessions] = useState<LocalSession[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [all, setAll] = useState(false);
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<{ at: number; of: number } | null>(null);
   const [failed, setFailed] = useState<{ s: LocalSession; error: unknown }[]>([]);
   const [joinedSoFar, setJoinedSoFar] = useState<string[]>([]);
@@ -77,7 +77,10 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
     }, () => setSessions([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const shown = sessions ? (all ? sessions : sessions.slice(0, 5)) : [];
+  // All of them, in a box that scrolls (about five rows high); with many,
+  // a search above (title, folder, CLI).
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = (sessions || []).filter((s) => words.every((w) => `${s.title || ""} ${s.workdir} ${cliName(s.cli)}`.toLowerCase().includes(w)));
   const chosen = useMemo(() => (sessions || []).filter((s) => picked.has(s.session_id)), [sessions, picked]);
   const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -150,7 +153,17 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
               "No Claude Code or Codex sessions on this computer yet. Inside, Add agent starts a new one.",
             )}</div>
           ) : (
-            <div className="wl-card wl-sessions" role="group" aria-label={L("把已有的会话加进来", "Bring in sessions you have")}>
+            <div className="wl-card wl-sessions-card">
+            {sessions.length > 8 && (
+              <label className="wl-sessions-search">
+                <Search />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L(`在 ${sessions.length} 个会话里找（标题、文件夹）`, `Find among ${sessions.length} sessions (title, folder)`)}
+                  aria-label={L("找会话", "Find a session")} />
+                {picked.size > 0 && <span className="wl-sessions-count">{L(`已选 ${picked.size} 个`, `${picked.size} picked`)}</span>}
+              </label>
+            )}
+            <div className="wl-sessions" role="group" aria-label={L("把已有的会话加进来", "Bring in sessions you have")} data-testid="prepare-sessions">
+              {shown.length === 0 && <div className="wl-none">{L("没有找到", "Nothing found")}</div>}
               {shown.map((s) => {
                 const on = picked.has(s.session_id);
                 const why = failed.find((f) => f.s.session_id === s.session_id);
@@ -166,11 +179,7 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
                   </label>
                 );
               })}
-              {sessions.length > 5 && (
-                <button type="button" className="wl-more" onClick={() => setAll((a) => !a)}>
-                  {all ? L("收起", "Fewer") : L(`显示全部 ${sessions.length} 个`, `Show all ${sessions.length}`)}
-                </button>
-              )}
+            </div>
             </div>
           )}
     </>
