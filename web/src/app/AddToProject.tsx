@@ -645,24 +645,25 @@ function ReachNote({ url, hubUrl, local, onOpened, onRelink }: {
   if (reach === "public") return null;
   const strip = (u: string) => u.replace(/\/+$/, "");
   const mine = (local?.hubs || []).find((h) => [h.local_url, h.public_url].filter(Boolean).map((u) => strip(u!)).includes(strip(hubUrl)));
-  const text = reach === "local"
-    ? L("这个工作区现在只有这台电脑能连上：别的电脑（比如云服务器）运行这条命令会连不上。", "Only this computer can reach this workspace now: another computer (a cloud server, say) can't connect with this command.")
+  const [title, detail] = reach === "local"
+    ? [L("只有这台电脑能连上这个工作区", "Only this computer can reach this workspace"),
+      L("别的电脑（比如云服务器）运行这条命令会连不上。", "Another computer (a cloud server, say) can't connect with this command.")]
     : reach === "tailnet"
-      ? L("这个工作区的地址在 Tailscale 网络里：只有同一个 Tailscale 网络里的电脑能连上。", "This workspace's address is on a Tailscale network: only computers on that network can connect.")
-      : L("这个工作区现在只在局域网里能连上：同一个网络里的电脑可以，云服务器（VPS）连不上。", "This workspace is reachable on the local network only: computers on the same network can connect, a cloud server (VPS) can't.");
+      ? [L("只有同一个 Tailscale 网络里的电脑能连上", "Only computers on the same Tailscale network can connect"),
+        L("这个工作区的地址在 Tailscale 网络里，不在这个网络里的电脑（比如云服务器）连不上。", "Its address is on a Tailscale network: computers outside it (a cloud server, say) can't connect.")]
+      : [L("只有同一个局域网里的电脑能连上", "Only computers on the same local network can connect"),
+        L("云服务器（VPS）运行这条命令会连不上。", "A cloud server (VPS) can't connect with this command.")];
   return (
-    <div className="app-notice" data-testid="reach-note">
-      <Info />
-      <div>
-        <div>{text}</div>
-        {mine ? (
-          <div className="app-notice-actions">
-            <button type="button" className="app-btn app-btn-small" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
-          </div>
-        ) : (
-          <div className="app-small-note">{L("要让外面的电脑连上，请工作区的主人把它开放到公网（设置 › 工作区）。", "For computers outside to connect, the workspace's owner opens it to the internet (Settings › Workspaces).")}</div>
-        )}
+    <div className="reach-note" data-testid="reach-note" data-reach={reach}>
+      <div className="reach-note-text">
+        <b><i aria-hidden />{title}</b>
+        <span>{detail}{L("", " ")}{mine
+          ? L("开放到公网后，哪里的电脑都能连。", "Open it to the internet and computers anywhere can.")
+          : L("要让外面的电脑连上，请工作区的主人在 设置 › 工作区 里把它开放到公网。", "For computers outside, the workspace's owner opens it to the internet in Settings › Workspaces.")}</span>
       </div>
+      {mine && (
+        <button type="button" className="app-btn app-btn-small reach-note-btn" onClick={() => setOpen(true)}><Globe />{L("开放到公网", "Open to the internet")}</button>
+      )}
       {mine && <PublicAccessDialog open={open} onOpenChange={setOpen} local={local} name={mine.name || undefined}
         onDone={() => { onOpened(); onRelink(); }} />}
     </div>
@@ -745,7 +746,7 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
         <button type="button" role="tab" aria-selected={os === "ps"} className={cn("seg-btn", os === "ps" && "active")} onClick={() => setOs("ps")}>{L("Windows（PowerShell）", "Windows (PowerShell)")}</button>
       </div>
       {link ? (
-        <div className="app-command"><code>{command}</code><CopyButton value={command} /></div>
+        <div className="app-command is-long"><code>{command}</code><CopyButton value={command} /></div>
       ) : error ? (
         (error as { code?: string }).code === "permission_denied"
           ? <div className="app-small-note">{L("只有工作区的主人或管理员能连电脑：请他们来连。", "Only the workspace's owner or admins can connect a computer: ask one of them.")}</div>

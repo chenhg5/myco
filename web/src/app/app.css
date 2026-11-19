@@ -8239,6 +8239,8 @@ body.is-resizing {
 /* Settings › Agents: the agent CLIs on this computer (LocalAgents.tsx). */
 .la-line { align-items: flex-start; }
 .la-line > .app-pill, .la-line > .app-btn { margin-top: 2px; flex: none; }
+/* The status tag sits level with the button beside it (28px high). */
+.la-line > .app-pill { margin-top: 6.5px; }
 .la-icon {
   flex: none;
   width: 28px;
@@ -8458,3 +8460,22 @@ body.is-resizing {
   .ob-intro { animation: none; }
   .ob-bar i { transition: none; }
 }
+
+/* Before a command goes to another computer: who can reach this workspace
+   (AddToProject.tsx ReachNote). One line in bold with an amber dot, one
+   line why, and opening it to the internet on the right. */
+.reach-note { display: flex; align-items: center; gap: 14px; margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line); }
+.reach-note-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.reach-note-text b { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.reach-note-text b i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+.reach-note-text span { padding-left: 15px; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.reach-note-btn { flex: none; }
+.reach-note-btn svg { width: 13px; height: 13px; }
+@media (max-width: 640px) {
+  .reach-note { flex-direction: column; align-items: flex-start; }
+  .reach-note-btn { margin-left: 15px; }
+}
+/* A long one-line command (a link in it): fills each line rather than
+   breaking only at its spaces. */
+.app-command.is-long code { word-break: break-all; }
