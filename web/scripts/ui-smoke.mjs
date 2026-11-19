@@ -1364,6 +1364,9 @@ async function runMatrix(browser, size, scheme) {
       } finally {
         await page.evaluate(async () => { await fetch("/app/mock/forks", { method: "POST" }); });
       }
+      // Back to the project the next steps work in (the copy's chat is
+      // loose, outside it).
+      await go(page, "官网改版", narrow);
     });
 
     await step("这台电脑 · 一键修复", async () => {
