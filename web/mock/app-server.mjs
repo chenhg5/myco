@@ -2512,7 +2512,11 @@ const server = http.createServer(async (req, res) => {
       }
       const a = find();
       if (!a) return fail(res, 404, "not_found", "no such automation");
-      if (parts.length === 5 && method === "GET") return send(res, 200, { automation: view(a), runs: a.runs || [] });
+      if (parts.length === 5 && method === "GET") return send(res, 200, { automation: view(a), runs: (a.runs || []).map((r) => (r.request ? { ...r, request: { ...r.request, body: undefined } } : r)) });
+      if (parts.length === 7 && parts[5] === "runs" && method === "GET") {
+        const run = (a.runs || []).find((r) => r.id === parts[6]);
+        return run ? send(res, 200, run) : fail(res, 404, "not_found", "no such run");
+      }
       if (parts.length === 5 && method === "PATCH") { const secret = apply(a, await readBody(req)); return send(res, 200, { automation: view(a), ...(secret ? { webhook_secret: secret } : {}) }); }
       if (parts.length === 5 && method === "DELETE") { list.splice(list.indexOf(a), 1); res.writeHead(204); return res.end(); }
       if (parts.length === 6 && parts[5] === "run" && method === "POST") return send(res, 201, runOnce(a, "manual"));
@@ -3405,12 +3409,50 @@ function seedHandovers(name) {
 
 function seedAutomations(hub) {
   if (hub.id !== "hub_studio") return [];
+  // Each run that went out has its task in the chat with its agent, done
+  // (and answered), so 看对话 lands somewhere.
+  const task = (aid, to, at, body) => {
+    const threadId = `th_auto_seed_${msgSeq + 1}`;
+    const m = makeMessage({ thread_id: threadId, from: CONSOLE, to, type: "task", status: "done", body, automation: aid, created_at: iso(at), updated_at: iso(at - 300) });
+    const reply = makeMessage({ thread_id: threadId, from: to, to: CONSOLE, type: "reply", status: "done", body: "看过了，清单在这里：\n1. #212 登录在 Safari 上闪退（要紧）\n2. #215 文档链接坏了", reply_to: m.id, created_at: iso(at - 300), updated_at: iso(at - 300) });
+    (hub.threads ||= {})[threadId] = [m, reply];
+    return m.id;
+  };
+  const day = 86400;
+  const mk = (aid, to, i, at, trigger, outcome, extra = {}) => ({
+    id: `run_seed_${aid}_${i}`, automation_id: aid, at: iso(at), trigger, outcome,
+    ...(outcome === "sent" ? { message_id: task(aid, to, at, extra.body || "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。") } : {}),
+    ...(extra.error ? { error: extra.error } : {}),
+    ...(extra.request ? { request: extra.request } : {}),
+  });
+  const morning = [
+    mk("aut_morning", "pm-codex", 1, 10 * 3600, "schedule", "sent"),
+    mk("aut_morning", "pm-codex", 2, 10 * 3600 + day, "schedule", "sent"),
+    mk("aut_morning", "pm-codex", 3, 10 * 3600 + 2 * day, "schedule", "skipped", { error: "the last task it sent is not finished" }),
+    mk("aut_morning", "pm-codex", 4, 10 * 3600 + 3 * day, "manual", "sent"),
+    mk("aut_morning", "pm-codex", 5, 10 * 3600 + 5 * day, "schedule", "sent"),
+  ];
+  const ci = (n, sha, job) => JSON.stringify({ action: "completed", workflow_run: { name: "CI", conclusion: "failure", head_branch: "main", head_sha: sha, run_number: n,
+    html_url: `https://github.com/acme/web/actions/runs/${n}`, failed_job: job } });
+  const hookReq = (body) => ({ content_type: "application/json", size: body.length,
+    headers: { "Content-Type": "application/json", "User-Agent": "GitHub-Hookshot/5c3a2e1", "X-Github-Event": "workflow_run", "X-Github-Delivery": "8f1c0d2e-77aa-11ef-9b6e-1d3c4f5a6b7c" }, body });
+  const ciBodies = [ci(4812, "9c1e7a2", "test (ubuntu, go 1.24)"), ci(4807, "41bd0f3", "lint"), ci(4801, "e07c55d", "test (windows)")];
+  const hooks = [
+    mk("aut_ci", "release-cloud", 1, 2 * 3600, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[0]}`, request: hookReq(ciBodies[0]) }),
+    mk("aut_ci", "release-cloud", 2, 2 * 3600 + 400, "webhook", "skipped", { error: "the last task it sent is not finished", request: hookReq(ciBodies[1]) }),
+    mk("aut_ci", "release-cloud", 3, 3 * day, "webhook", "sent", { body: `CI 构建失败了，看一下日志找出原因：\n${ciBodies[2]}`, request: hookReq(ciBodies[2]) }),
+    mk("aut_ci", "release-cloud", 4, 6 * day, "webhook", "failed", { error: "release-cloud is not in this workspace any more", request: { content_type: "text/plain", size: 0, headers: { "User-Agent": "curl/8.7.1" } } }),
+  ];
   return [{
     id: "aut_morning", name: "每天早上汇总 issue", owner: "glenn", from: CONSOLE, to: "pm-codex",
     body: "看一下昨天新开的 issue，挑出要紧的，在这里回我一份清单。", schedule: { cron: "0 9 * * 1-5", tz: "Asia/Shanghai" },
     webhook: false, skip_if_busy: true, enabled: true, created_at: iso(7 * 86400), updated_at: iso(86400),
     next_run_at: new Date(Date.now() + 14 * 3600e3).toISOString(),
-    last_run: { id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" },
-    runs: [{ id: "run_seed", automation_id: "aut_morning", at: iso(10 * 3600), trigger: "schedule", outcome: "sent", message_id: "msg_auto_seed" }],
+    last_run: morning[0], runs: morning,
+  }, {
+    id: "aut_ci", name: "CI 失败时排查", owner: "glenn", from: CONSOLE, to: "release-cloud",
+    body: "CI 构建失败了，看一下日志找出原因，能修就修，修不了告诉我卡在哪：\n{{payload}}",
+    webhook: true, webhook_url: `${hub.url.replace(/\/+$/, "")}/hooks/aut_ci`, skip_if_busy: true, enabled: true, created_at: iso(10 * 86400), updated_at: iso(10 * 86400),
+    last_run: hooks[0], runs: hooks,
   }];
 }

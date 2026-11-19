@@ -818,6 +818,7 @@ export const appApi = {
   createAutomation: (hubId: string, input: AutomationRequest) => request<AutomationResponse>("POST", `app/hubs/${enc(hubId)}/automations`, input),
   updateAutomation: (hubId: string, id: string, input: AutomationRequest) => request<AutomationResponse>("PATCH", `app/hubs/${enc(hubId)}/automations/${enc(id)}`, input),
   deleteAutomation: (hubId: string, id: string) => request<void>("DELETE", `app/hubs/${enc(hubId)}/automations/${enc(id)}`),
+  automationRun: (hubId: string, id: string, run: string) => request<AutomationRun>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}/runs/${enc(run)}`),
   runAutomation: (hubId: string, id: string) => request<AutomationRun>("POST", `app/hubs/${enc(hubId)}/automations/${enc(id)}/run`, {}),
   /** Saves a conversation the app rendered (.md or .jsonl) to Downloads and shows it. */
   saveExport: (name: string, content: string) => request<{ path: string }>("POST", "app/export", { name, content }),

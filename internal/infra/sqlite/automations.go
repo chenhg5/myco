@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -124,8 +125,16 @@ func (r *AutomationRepo) AddRun(ctx context.Context, run *domain.AutomationRun, 
 		return internal(err)
 	}
 	defer tx.Rollback() //nolint:errcheck
-	if _, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (id, automation_id, at, run_trigger, outcome, message_id, error) VALUES (?,?,?,?,?,?,?)`,
-		run.ID, run.AutomationID, ms(run.At), run.Trigger, run.Outcome, run.MessageID, run.Error); err != nil {
+	req := ""
+	if run.Request != nil {
+		b, err := json.Marshal(run.Request)
+		if err != nil {
+			return internal(err)
+		}
+		req = string(b)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (id, automation_id, at, run_trigger, outcome, message_id, error, request) VALUES (?,?,?,?,?,?,?,?)`,
+		run.ID, run.AutomationID, ms(run.At), run.Trigger, run.Outcome, run.MessageID, run.Error, req); err != nil {
 		return internal(err)
 	}
 	if keep > 0 {
@@ -138,7 +147,7 @@ func (r *AutomationRepo) AddRun(ctx context.Context, run *domain.AutomationRun, 
 }
 
 func (r *AutomationRepo) Runs(ctx context.Context, automationID string, limit int) ([]*domain.AutomationRun, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, automation_id, at, run_trigger, outcome, message_id, error FROM automation_runs
+	rows, err := r.db.QueryContext(ctx, `SELECT `+runColumns+` FROM automation_runs
 		WHERE automation_id=? ORDER BY at DESC, rowid DESC LIMIT ?`, automationID, limit)
 	if err != nil {
 		return nil, internal(err)
@@ -146,17 +155,45 @@ func (r *AutomationRepo) Runs(ctx context.Context, automationID string, limit in
 	defer rows.Close()
 	var out []*domain.AutomationRun
 	for rows.Next() {
-		var (
-			run domain.AutomationRun
-			at  int64
-		)
-		if err := rows.Scan(&run.ID, &run.AutomationID, &at, &run.Trigger, &run.Outcome, &run.MessageID, &run.Error); err != nil {
-			return nil, internal(err)
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
 		}
-		run.At = fromMS(at)
-		out = append(out, &run)
+		out = append(out, run)
 	}
 	return out, internal(rows.Err())
+}
+
+func (r *AutomationRepo) Run(ctx context.Context, automationID, id string) (*domain.AutomationRun, error) {
+	run, err := scanRun(r.db.QueryRowContext(ctx, `SELECT `+runColumns+` FROM automation_runs WHERE automation_id=? AND id=?`, automationID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.Errf(domain.CodeNotFound, "run %s not found", id)
+	}
+	return run, err
+}
+
+const runColumns = `id, automation_id, at, run_trigger, outcome, message_id, error, request`
+
+func scanRun(row interface{ Scan(...any) error }) (*domain.AutomationRun, error) {
+	var (
+		run domain.AutomationRun
+		at  int64
+		req string
+	)
+	if err := row.Scan(&run.ID, &run.AutomationID, &at, &run.Trigger, &run.Outcome, &run.MessageID, &run.Error, &req); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		return nil, internal(err)
+	}
+	run.At = fromMS(at)
+	if req != "" {
+		var wr domain.WebhookRequest
+		if json.Unmarshal([]byte(req), &wr) == nil {
+			run.Request = &wr
+		}
+	}
+	return &run, nil
 }
 
 func (r *AutomationRepo) RunsSince(ctx context.Context, automationID, trigger string, since time.Time) (int, error) {

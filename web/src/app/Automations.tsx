@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarDays, Clock, Coffee, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
+import { Activity, ArrowLeft, CalendarDays, ChevronDown, Clock, Coffee, MessageSquare, NotebookPen, Pause, Pencil, Play, Plus, Trash2, Webhook } from "lucide-react";
 import { useContextMenu } from "@/app/ContextMenu";
-import type { Automation, AutomationRun } from "@/api";
+import type { Automation, AutomationRun, WebhookRequest } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
@@ -12,7 +12,7 @@ import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
 import { L } from "@/lib/i18n";
-import { cn, timeAgo } from "@/lib/utils";
+import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /**
  * Automations: a task sent for you to one agent, on a schedule or when an
@@ -23,7 +23,9 @@ import { cn, timeAgo } from "@/lib/utils";
  * The page is a list of them, each saying what it does in a line: when, to
  * whom, when next, how the last one went; a switch turns one off, ▷ sends it
  * now. With none yet, a few common ones to start from. The editor reads top
- * to bottom as the automation does: to whom, what, when.
+ * to bottom as the automation does: to whom, what, when. One opened: what it
+ * is set to, then every time it ran, each with how it went, the chat it
+ * started and, for a webhook call, what the call carried.
  */
 
 const outcomeWords = (r: AutomationRun) =>
@@ -71,13 +73,20 @@ const templates = (): (Start & { icon: typeof Clock; hint: string })[] => [
  *  once and refreshes behind it (skeletons only the first time). */
 const seen = new Map<string, Automation[]>();
 
-export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: AgentRow[]; now: number }) {
+export function AutomationsPage({ hubId, rows, now, onOpenMessage }: {
+  hubId: string; rows: AgentRow[]; now: number;
+  /** a task it sent, in its conversation */
+  onOpenMessage?: (agent: string, messageId: string) => void;
+}) {
   const [list, setList] = useState<Automation[] | null>(() => seen.get(hubId) ?? null);
   const [unsupported, setUnsupported] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState("");
   const [removing, setRemoving] = useState<Automation | null>(null);
+  // The one opened (its page), and a count that makes it read its runs again.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [stamp, setStamp] = useState(0);
   const menu = useContextMenu();
   const load = useCallback(() => {
     appApi.automations(hubId).then((r) => { seen.set(hubId, r.automations || []); setList(r.automations || []); setUnsupported(false); }, (e) => {
@@ -92,18 +101,18 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
   const toggle = async (a: Automation) => {
     setBusy(a.id);
     setError(null);
-    try { await appApi.updateAutomation(hubId, a.id, { enabled: !a.enabled }); load(); } catch (e) { setError(e); } finally { setBusy(""); }
+    try { await appApi.updateAutomation(hubId, a.id, { enabled: !a.enabled }); load(); setStamp((n) => n + 1); } catch (e) { setError(e); } finally { setBusy(""); }
   };
   const runNow = async (a: Automation) => {
     setBusy(a.id);
     setError(null);
-    try { await appApi.runAutomation(hubId, a.id); load(); } catch (e) { setError(e); } finally { setBusy(""); }
+    try { await appApi.runAutomation(hubId, a.id); load(); setStamp((n) => n + 1); } catch (e) { setError(e); } finally { setBusy(""); }
   };
 
   const remove = async (a: Automation) => {
     setBusy(a.id);
     setError(null);
-    try { await appApi.deleteAutomation(hubId, a.id); setRemoving(null); load(); } catch (e) { setError(e); setRemoving(null); } finally { setBusy(""); }
+    try { await appApi.deleteAutomation(hubId, a.id); setRemoving(null); if (openId === a.id) setOpenId(null); load(); } catch (e) { setError(e); setRemoving(null); } finally { setBusy(""); }
   };
 
   const gallery = (
@@ -126,6 +135,27 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
       </button>
     </div>
   );
+  const opened = openId ? (list || []).find((a) => a.id === openId) : undefined;
+  const dialogs = (
+    <>
+      <AutomationEditor hubId={hubId} rows={rows} editing={editing} now={now} onClose={() => setEditing(null)} onChanged={() => { load(); setStamp((n) => n + 1); }} />
+      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={L("删除这个自动化？", "Delete this automation?")}
+        description={L("它不会再发消息了，Webhook 地址也失效。已经发出去的消息和 agent 的回复都保留。", "It sends nothing more, and its webhook address stops working. What it sent and the answers stay.")}
+        confirmLabel={L("删除", "Delete")} onConfirm={() => removing && void remove(removing)} busy={!!removing && busy === removing.id} />
+      {menu.element}
+    </>
+  );
+  if (opened) {
+    return (
+      <div className="pc au pcd aud" data-testid="automation-detail">
+        <AutomationDetail hubId={hubId} a={opened} row={rowOf(opened.to)} now={now} stamp={stamp} busy={busy === opened.id} error={error}
+          onBack={() => setOpenId(null)} onEdit={() => setEditing(opened)} onRun={() => void runNow(opened)} onToggle={() => void toggle(opened)}
+          onDelete={() => setRemoving(opened)} onOpenMessage={onOpenMessage} />
+        {dialogs}
+      </div>
+    );
+  }
+
   const on = (list || []).filter((a) => a.enabled).length;
   const last = (list || []).map((a) => a.last_run).filter(Boolean).sort((x, y) => (y!.at > x!.at ? 1 : -1))[0];
 
@@ -179,6 +209,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
               <div key={a.id} className={cn("au-row", !a.enabled && "is-off")} onContextMenu={(e) => {
                 e.preventDefault();
                 menu.open(e, [
+                  { label: L("查看运行记录", "Runs"), icon: Activity, onSelect: () => setOpenId(a.id) },
                   { label: L("编辑", "Edit"), icon: Pencil, onSelect: () => setEditing(a) },
                   { label: L("立即运行", "Run now"), icon: Play, onSelect: () => void runNow(a), disabled: busy === a.id },
                   { label: a.enabled ? L("暂停", "Pause") : L("启用", "Resume"), icon: a.enabled ? Pause : Play, onSelect: () => void toggle(a), disabled: busy === a.id },
@@ -186,7 +217,7 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
                   { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(a) },
                 ]);
               }}>
-                <button type="button" className="au-row-main" onClick={() => setEditing(a)} title={L("编辑", "Edit")}>
+                <button type="button" className="au-row-main" onClick={() => setOpenId(a.id)} title={L("打开：设置和每一次运行", "Open: its settings and every run")}>
                   <span className={cn("au-icon", !a.schedule && "is-hook")}><Icon /></span>
                   <span className="au-row-text">
                     <span className="au-row-name">{a.name}</span>
@@ -222,11 +253,188 @@ export function AutomationsPage({ hubId, rows, now }: { hubId: string; rows: Age
           {gallery}
         </>
       )}
-      <AutomationEditor hubId={hubId} rows={rows} editing={editing} now={now} onClose={() => setEditing(null)} onChanged={load} />
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={L("删除这个自动化？", "Delete this automation?")}
-        description={L("它不会再发消息了，Webhook 地址也失效。已经发出去的消息和 agent 的回复都保留。", "It sends nothing more, and its webhook address stops working. What it sent and the answers stay.")}
-        confirmLabel={L("删除", "Delete")} onConfirm={() => removing && void remove(removing)} busy={!!removing && busy === removing.id} />
-      {menu.element}
+      {dialogs}
+    </div>
+  );
+}
+
+/** When, as a person says it: 今天 09:00, 昨天 18:30, 11月3日 09:00. */
+function whenAt(iso: string, now: number): string {
+  const d = new Date(iso);
+  const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const back = Math.round((day(new Date(now)) - day(d)) / 86_400_000);
+  if (back === 0) return L(`今天 ${hm}`, `Today ${hm}`);
+  if (back === 1) return L(`昨天 ${hm}`, `Yesterday ${hm}`);
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  return L(`${sameYear ? "" : `${d.getFullYear()}年`}${d.getMonth() + 1}月${d.getDate()}日 ${hm}`,
+    `${d.toLocaleDateString("en", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${hm}`);
+}
+
+type RunFilter = "all" | "sent" | "skipped" | "failed";
+
+/** One automation: what it is set to, then every run (newest first). */
+function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onBack, onEdit, onRun, onToggle, onDelete, onOpenMessage }: {
+  hubId: string; a: Automation; row?: AgentRow; now: number; stamp: number; busy: boolean; error: unknown;
+  onBack: () => void; onEdit: () => void; onRun: () => void; onToggle: () => void; onDelete: () => void;
+  onOpenMessage?: (agent: string, messageId: string) => void;
+}) {
+  const [runs, setRuns] = useState<AutomationRun[] | null>(null);
+  const [filter, setFilter] = useState<RunFilter>("all");
+  const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    const read = () => appApi.automation(hubId, a.id).then((d) => { if (!off) setRuns(d.runs || []); }, () => { if (!off) setRuns((r) => r ?? []); });
+    read();
+    const t = setInterval(read, 20_000);
+    return () => { off = true; clearInterval(t); };
+  }, [hubId, a.id, stamp]);
+  const Icon = a.schedule ? Clock : Webhook;
+  const when = [a.schedule ? describe(a.schedule.cron) : "", a.webhook ? L("Webhook 调用时", "On webhook") : ""].filter(Boolean).join(L("，或", ", or "));
+  const counts = { sent: 0, skipped: 0, failed: 0 };
+  for (const r of runs || []) counts[r.outcome] += 1;
+  const shown = (runs || []).filter((r) => filter === "all" || r.outcome === filter);
+  const filters: { key: RunFilter; label: string; n: number }[] = [
+    { key: "all", label: L("全部", "All"), n: runs?.length || 0 },
+    { key: "sent", label: L("已发送", "Sent"), n: counts.sent },
+    { key: "skipped", label: L("跳过", "Skipped"), n: counts.skipped },
+    { key: "failed", label: L("没发出去", "Not sent"), n: counts.failed },
+  ];
+  return (
+    <>
+      <button type="button" className="pcd-back" onClick={onBack}><ArrowLeft />{L("自动化", "Automations")}</button>
+      <header className={cn("pcd-head", !a.enabled && "is-away")}>
+        <span className={cn("tp-icon pcd-icon", !a.schedule && "is-hook")}><Icon /></span>
+        <div className="pcd-titles">
+          <h1><span>{a.name}</span></h1>
+          <p className="pcd-sub">
+            <span className={cn("pc-online", a.enabled && "is-on")}>{a.enabled ? L("在运行", "Running") : L("已暂停", "Paused")}</span>
+            <span>{when}</span>
+            {a.enabled && a.next_run_at && <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>}
+          </p>
+        </div>
+        <div className="ph-actions">
+          <Switch on={a.enabled} disabled={busy} onChange={onToggle} label={a.enabled ? L("暂停", "Pause") : L("启用", "Resume")} />
+          <button type="button" className="app-btn" onClick={onEdit}><Pencil />{L("编辑", "Edit")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={onRun} disabled={busy} title={L("现在就发一次", "Send it once now")}><Play />{L("立即运行", "Run now")}</button>
+        </div>
+      </header>
+      <ErrorText error={error} />
+
+      <SectionHead title={L("设置", "Settings")} />
+      <div className="aud-card" data-testid="automation-settings">
+        <div className="app-kv"><span className="app-kv-label">{L("发给", "To")}</span>
+          <span className="app-kv-value aud-to">{row && <Avatar agent={row.st.agent} size={18} badge={false} />}<b>{row ? nodeName(row.st.agent, row.hub) : a.to}</b></span></div>
+        <div className="app-kv"><span className="app-kv-label">{L("什么时候", "When")}</span>
+          <span className="app-kv-value">{when}{a.schedule && <span className="app-kv-sub">{L(`按 ${a.schedule.tz || "UTC"} 时间`, `${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
+        {a.webhook && a.webhook_url && (
+          <div className="app-kv"><span className="app-kv-label">{L("Webhook 地址", "Webhook address")}</span>
+            <span className="app-kv-value mono aud-url"><span>{a.webhook_url}</span><CopyButton value={a.webhook_url} /></span></div>
+        )}
+        <div className="app-kv"><span className="app-kv-label">{L("上一次没做完", "Last one unfinished")}</span>
+          <span className="app-kv-value">{a.skip_if_busy ? L("跳过这次", "Skip this run") : L("照样发", "Send anyway")}</span></div>
+        <div className="app-kv aud-what"><span className="app-kv-label">{L("让它做什么", "What it asks")}</span>
+          <div className="aud-body">{a.body}</div></div>
+      </div>
+
+      <SectionHead title={L("运行记录", "Runs")} count={runs?.length} />
+      {runs === null ? <RowsSkeleton rows={3} className="pc-list" /> : runs.length === 0 ? (
+        <div className="pcd-empty" data-testid="automation-no-runs">
+          <span>{L("还没运行过。到点、被调用或者点「立即运行」，每一次都会记在这里：发没发出去、为什么，以及它开始的那段对话。", "It has not run yet. Each run, on time, by a call or by Run now, is listed here: whether it went out, why not, and the chat it started.")}</span>
+          <button type="button" className="app-btn app-btn-small" onClick={onRun} disabled={busy}><Play />{L("立即运行", "Run now")}</button>
+        </div>
+      ) : (
+        <>
+          {(counts.skipped > 0 || counts.failed > 0) && (
+            <div className="tp-chips aud-filters" role="tablist" aria-label={L("只看", "Show")}>
+              {filters.filter((f) => f.key === "all" || f.n > 0).map((f) => (
+                <button key={f.key} type="button" role="tab" aria-selected={filter === f.key} className={cn("tp-chip", filter === f.key && "is-on")} onClick={() => setFilter(f.key)}>
+                  {f.label}<span className="aud-filter-n">{f.n}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="pc-list aud-runs" data-testid="automation-runs">
+            {shown.map((r) => (
+              <RunRow key={r.id} hubId={hubId} r={r} now={now} open={open === r.id} onToggle={() => setOpen((o) => (o === r.id ? null : r.id))}
+                onChat={r.message_id && onOpenMessage ? () => onOpenMessage(a.to, r.message_id!) : undefined} />
+            ))}
+          </div>
+          {runs.length >= 200 && <p className="app-small-note aud-kept">{L("只保留最近 200 次。", "Only the last 200 runs are kept.")}</p>}
+        </>
+      )}
+
+      <div className="pcd-danger">
+        <div>
+          <b>{L("删除这个自动化", "Delete this automation")}</b>
+          <span>{L("它不会再发消息了，Webhook 地址也失效。已经发出去的消息和 agent 的回复都保留。", "It sends nothing more, and its webhook address stops working. What it sent and the answers stay.")}</span>
+        </div>
+        <button type="button" className="app-btn app-btn-danger-quiet" onClick={onDelete}><Trash2 />{L("删除", "Delete")}</button>
+      </div>
+    </>
+  );
+}
+
+/** One run: how it went and when; its chat; a webhook call's content. */
+function RunRow({ hubId, r, now, open, onToggle, onChat }: {
+  hubId: string; r: AutomationRun; now: number; open: boolean; onToggle: () => void; onChat?: () => void;
+}) {
+  const hook = r.trigger === "webhook";
+  return (
+    <div className={cn("aud-run", open && "is-open")} data-testid="automation-run">
+      <div className="aud-run-line">
+        <span className={cn("au-last aud-run-what", outcomeTone(r))}><i aria-hidden /><span>{outcomeWords(r)}</span></span>
+        <span className="aud-run-trigger">{triggerWords(r.trigger)}</span>
+        <span className="aud-run-when" title={new Date(r.at).toLocaleString()}>{whenAt(r.at, now)}<small>{timeAgo(r.at, now)}</small></span>
+        <span className="aud-run-actions">
+          {hook && (
+            <button type="button" className="app-btn app-btn-quiet app-btn-small" aria-expanded={open} onClick={onToggle}>
+              {L("调用内容", "The call")}<ChevronDown className={cn("aud-chev", open && "is-open")} />
+            </button>
+          )}
+          {onChat && <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={onChat}><MessageSquare />{L("看对话", "Chat")}</button>}
+        </span>
+      </div>
+      {hook && open && <CallContent hubId={hubId} r={r} />}
+    </div>
+  );
+}
+
+/** What a webhook call carried: read when opened (lists leave bodies out). */
+function CallContent({ hubId, r }: { hubId: string; r: AutomationRun }) {
+  const [req, setReq] = useState<WebhookRequest | null | "old" | "error">(null);
+  useEffect(() => {
+    let off = false;
+    appApi.automationRun(hubId, r.automation_id, r.id).then((x) => { if (!off) setReq(x.request || "old"); },
+      (e) => { if (!off) setReq(e instanceof ApiError && e.status === 404 ? "old" : "error"); });
+    return () => { off = true; };
+  }, [hubId, r.automation_id, r.id]);
+  if (req === null) return <div className="aud-call"><span className="skel skel-line" style={{ width: "50%" }} /></div>;
+  if (req === "old") return <div className="aud-call aud-call-none">{L("这次调用没有记下内容：那时工作区的 Hub 版本还太旧（v0.20.18 起才记）。", "Nothing was kept of this call: the workspace's hub was too old then (kept from v0.20.18).")}</div>;
+  if (req === "error") return <div className="aud-call aud-call-none">{L("读不到这次调用的内容，稍后再试。", "Could not read this call; try again later.")}</div>;
+  let body = req.body || "";
+  let json = false;
+  try { if (body.trim().startsWith("{") || body.trim().startsWith("[")) { body = JSON.stringify(JSON.parse(body), null, 2); json = true; } } catch { /* as it came */ }
+  const headers = Object.entries(req.headers || {});
+  return (
+    <div className="aud-call" data-testid="automation-call">
+      <div className="aud-call-meta">
+        {req.content_type && <span className="pcd-chip mono">{req.content_type}</span>}
+        <span className="pcd-chip">{bytes(req.size)}</span>
+        {json && <span className="pcd-chip">JSON</span>}
+      </div>
+      {headers.length > 0 && (
+        <div className="aud-call-headers">
+          {headers.map(([k, v]) => <div key={k} className="app-kv"><span className="app-kv-label mono">{k}</span><span className="app-kv-value mono">{v}</span></div>)}
+        </div>
+      )}
+      {body ? (
+        <div className="aud-call-body">
+          <CopyButton value={req.body || ""} />
+          <pre>{body}</pre>
+        </div>
+      ) : <div className="aud-call-none">{L("这次调用没有带内容。", "This call carried no body.")}</div>}
+      <p className="app-small-note">{L("只记下说明来源的请求头，不记密钥、签名、Cookie 和对方的地址。", "Only headers that say where it came from are kept: never the secret, signatures, cookies or the caller's address.")}</p>
     </div>
   );
 }
@@ -273,7 +481,6 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [secret, setSecret] = useState<{ url: string; secret: string } | null>(null);
-  const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [deleting, setDeleting] = useState(false);
   const key = !editing ? "" : "start" in editing ? `new:${editing.start.name}` : editing.id;
   const setEvery = (e: Every) => {
@@ -286,7 +493,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   };
   useEffect(() => {
     if (!editing) return;
-    setError(null); setSecret(null); setRuns([]); setDeleting(false);
+    setError(null); setSecret(null); setDeleting(false);
     if ("start" in editing) {
       const s = editing.start;
       setName(s.name); setTo(agents[0]?.st.agent.name || ""); setBody(s.body); setTimed(!!s.every); setHook(s.hook); setSkip(true);
@@ -297,7 +504,6 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
     setName(editing.name); setTo(editing.to); setBody(editing.body); setHook(editing.webhook); setSkip(editing.skip_if_busy);
     setTimed(!!editing.schedule); setTz(editing.schedule?.tz || localZone());
     setEvery(fromCron(editing.schedule?.cron || "0 9 * * 1-5"));
-    appApi.automation(hubId, editing.id).then((d) => setRuns(d.runs || []), () => undefined);
     // Only when another one is opened (a refresh must not undo edits).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -460,21 +666,6 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
             <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={busy} />
             <span>{L("上一次的任务还没做完，就跳过这次", "Skip a run while the last task is not finished")}<small>{L("免得 agent 那边越堆越多。", "So that work does not pile up at the agent.")}</small></span>
           </label>
-
-          {a && runs.length > 0 && (
-            <div className="app-field">
-              <span className="app-field-label">{L("最近运行", "Recent runs")}</span>
-              <div className="au-runs" data-testid="automation-runs">
-                {runs.slice(0, 8).map((r) => (
-                  <div key={r.id} className={cn("au-run au-last", outcomeTone(r))}>
-                    <i aria-hidden />
-                    <span className="au-run-when">{timeAgo(r.at, now)} · {triggerWords(r.trigger)}</span>
-                    <span>{outcomeWords(r)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div className="au-note">{L("自动化的内容存在工作区的 Hub 上，不是端到端加密的。", "An automation's text is kept on the workspace's hub, not end-to-end encrypted.")}</div>
           <ErrorText error={error} />

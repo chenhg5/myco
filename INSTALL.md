@@ -820,7 +820,8 @@ myco automation create --name 日报 --to pm --body "写今天的日报" --cron 
 # 一个 webhook：调用时请求体会替换消息里的 {{payload}}
 myco automation create --name "CI 失败" --to dev --body "CI 失败了，看一下原因：{{payload}}" --webhook
 myco automation list
-myco automation show --id <aut_...>      # 最近 50 次运行：发出 / 跳过 / 失败及原因
+myco automation show --id <aut_...>      # 运行记录（最多 200 次）：发出 / 跳过 / 失败及原因
+myco automation show --id <aut_...> --run <arun_...>   # 某一次运行；Webhook 调用时带来的内容和请求头
 myco automation run --id <aut_...>       # 马上跑一次
 myco automation update --id <aut_...> --disabled
 myco automation update --id <aut_...> --rotate-secret   # 换一个 webhook 密钥，旧的立即失效
@@ -832,6 +833,8 @@ myco automation remove --id <aut_...>    # 它发过的消息会保留
 ```bash
 curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bearer $MYCO_WEBHOOK_SECRET" --data-binary @failure.log
 ```
+
+每次调用都记在那次运行里（Hub v0.20.18 起）：内容类型、请求体（最多 16 KiB）和说明来源的请求头（`User-Agent`、`X-GitHub-Event` 这类）。密钥、签名、Cookie 和调用方的 IP 不记。App 里点开一个自动化，在运行记录里展开「调用内容」就能看到。
 
 - 请求体最多 16 KiB，原样放进消息（JSON 也照原样）；消息里没有 `{{payload}}` 时接在消息末尾。
 - 密钥不对、自动化已关闭或没有 webhook，一律返回 404；每个自动化每小时最多 30 次，超过返回 429，`Retry-After` 是要等的秒数。

@@ -376,10 +376,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   });
   const spaceKey = loose ? `${hubId}\u0000*` : `${hubId}\u0000${(space as { name: string }).name}`;
   // Picking the space again in the sidebar brings it back to its home (not
-  // on the first render: what was open stays across a rebuild).
-  const firstHome = useRef(true);
+  // on the first render: what was open stays across a rebuild; nor when
+  // the effect runs again for the same space, as React's strict mode does,
+  // which would close a chat just asked for).
+  const homeOf = useRef<string | null>(null);
   useEffect(() => {
-    if (firstHome.current) { firstHome.current = false; return; }
+    const k = `${spaceKey}\u0000${String(home)}`;
+    const was = homeOf.current;
+    homeOf.current = k;
+    if (was === null || was === k) return;
     setView({ kind: "home" }); setGrid(() => ({ sides: [], layout: oneLayout(), zoom: "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceKey, home]);

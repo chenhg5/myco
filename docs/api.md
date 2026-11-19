@@ -224,10 +224,11 @@ An automation sends a task, as its owner, to one agent when its schedule comes r
 |---|---|---|
 | `GET /v1/console/automations` | console | `{automations: [automation]}`: everyone's for the hub's owner, admins and the admin token; a member's own otherwise |
 | `POST /v1/console/automations` | console | `{name, to, body, project?, schedule?: {cron, tz?}, webhook?, skip_if_busy?, enabled?}` → `201 {automation, webhook_secret?}`. `name`, `to`, `body` are required, and a schedule or a webhook (or both). The caller owns it and it sends from the caller's console address. `webhook_secret` (`whk_…`) is shown only here, when the webhook is turned on, and on `rotate_secret`; the hub keeps only its hash |
-| `GET /v1/console/automations/{id}` | its owner, or who manages the hub | `{automation, runs}`: its last 50 runs, newest first |
+| `GET /v1/console/automations/{id}` | its owner, or who manages the hub | `{automation, runs}`: its runs (up to 200), newest first; a webhook run's `request` without its `body` (hubs before v0.20.18: the last 50) |
 | `PATCH /v1/console/automations/{id}` | its owner, or who manages the hub | The same fields, each optional (absent: unchanged), plus `clear_schedule`, `webhook: false` (removes the webhook), `rotate_secret` (a new secret; the old one stops working) → `{automation, webhook_secret?}` |
 | `DELETE /v1/console/automations/{id}` | its owner, or who manages the hub | `204`. Its runs go too; the messages it sent stay |
 | `POST /v1/console/automations/{id}/run` | its owner, or who manages the hub | Runs it now (`trigger: manual`), also when turned off → `201` the run |
+| `GET /v1/console/automations/{id}/runs/{run}` | its owner, or who manages the hub | One run, with what its webhook call carried (`request.body` included). Hubs from v0.20.18 |
 | `POST /hooks/{id}` | the webhook secret | Public. The secret in `Authorization: Bearer <secret>` (or `?token=<secret>`). The body (text, JSON kept as it is; at most 16 KiB, else `413`) replaces `{{payload}}` in the message; a message without `{{payload}}` gets it appended after `\n\n---\n`. → `202 {run}`. A wrong or missing secret, an automation turned off or without a webhook all answer `404 not_found`. At most 30 calls an hour per automation: then `429 rate_limited` with `Retry-After` (seconds) |
 
 Others get `404 not_found` for an automation that is not theirs. Creating, changing, removing and running one are audited (`automation.*`).
@@ -247,6 +248,8 @@ An automation:
 ```
 
 A run: `trigger` is `schedule`, `webhook` or `manual`; `outcome` is `sent` (with `message_id`), `skipped` or `failed` (with a short `error`). The last 200 runs of each are kept.
+
+A webhook run also keeps what the call carried (hubs from v0.20.18), as `request`: `{"content_type": "application/json", "headers": {"User-Agent": "GitHub-Hookshot/…", "X-Github-Event": "workflow_run"}, "body": "…", "size": 1834}`. Only headers that say what sent the call are kept: `User-Agent`, `Content-Type`, `Content-Encoding`, and `X-…` headers whose names have nothing of auth, token, secret, signature, key, cookie, session, password, forwarded, real-ip, client-ip, connecting-ip, original or proxy (at most 24, each value at most 300 bytes). The secret, `?token=`, signatures and the caller's address are never kept. Calls answered `404`, `413` or `429` record no run.
 
 Rules:
 

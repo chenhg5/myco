@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ func (s *Server) automationRoutes(m *http.ServeMux) {
 	m.HandleFunc("PATCH /v1/console/automations/{id}", s.admin(s.updateAutomation))
 	m.HandleFunc("DELETE /v1/console/automations/{id}", s.admin(s.deleteAutomation))
 	m.HandleFunc("POST /v1/console/automations/{id}/run", s.admin(s.runAutomation))
+	m.HandleFunc("GET /v1/console/automations/{id}/runs/{run}", s.admin(s.getAutomationRun))
 	// Public: the secret is the credential.
 	m.HandleFunc("POST /hooks/{id}", s.hook)
 }
@@ -57,7 +59,11 @@ func automationRunDTO(r *domain.AutomationRun) *api.AutomationRun {
 	if r == nil {
 		return nil
 	}
-	return &api.AutomationRun{ID: r.ID, AutomationID: r.AutomationID, At: r.At, Trigger: r.Trigger, Outcome: r.Outcome, MessageID: r.MessageID, Error: r.Error}
+	out := &api.AutomationRun{ID: r.ID, AutomationID: r.AutomationID, At: r.At, Trigger: r.Trigger, Outcome: r.Outcome, MessageID: r.MessageID, Error: r.Error}
+	if q := r.Request; q != nil {
+		out.Request = &api.WebhookRequest{ContentType: q.ContentType, Headers: q.Headers, Body: q.Body, Size: q.Size}
+	}
+	return out
 }
 
 func (s *Server) automationDTO(r *http.Request, o *app.AutomationOut) api.Automation {
@@ -115,16 +121,33 @@ func (s *Server) getAutomation(w http.ResponseWriter, r *http.Request) {
 	if !s.automationsEnabled(w) {
 		return
 	}
-	o, runs, err := s.automations.Get(r.Context(), s.caller(r), r.PathValue("id"), 50)
+	o, runs, err := s.automations.Get(r.Context(), s.caller(r), r.PathValue("id"), domain.MaxAutomationRuns)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	out := api.AutomationDetail{Automation: s.automationDTO(r, o), Runs: []api.AutomationRun{}}
 	for _, run := range runs {
-		out.Runs = append(out.Runs, *automationRunDTO(run))
+		dto := automationRunDTO(run)
+		if dto.Request != nil {
+			dto.Request.Body = "" // (one run at a time: getAutomationRun)
+		}
+		out.Runs = append(out.Runs, *dto)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// getAutomationRun is one run, with what its webhook call carried.
+func (s *Server) getAutomationRun(w http.ResponseWriter, r *http.Request) {
+	if !s.automationsEnabled(w) {
+		return
+	}
+	run, err := s.automations.GetRun(r.Context(), s.caller(r), r.PathValue("id"), r.PathValue("run"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, automationRunDTO(run))
 }
 
 func (s *Server) updateAutomation(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +214,8 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	run, err := s.automations.Webhook(r.Context(), id, secret, string(body))
+	call := &domain.WebhookRequest{ContentType: r.Header.Get("Content-Type"), Headers: webhookHeaders(r.Header), Body: string(body), Size: len(body)}
+	run, err := s.automations.Webhook(r.Context(), id, secret, call)
 	if err != nil {
 		if domain.IsCode(err, domain.CodeRateLimited) {
 			w.Header().Set("Retry-After", strconv.Itoa(int(s.automations.RetryAfter(r.Context(), id)/time.Second)+1))
@@ -200,4 +224,52 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, api.WebhookResponse{Run: *automationRunDTO(run)})
+}
+
+// webhookHeaders are the headers of a webhook call kept with its run: the
+// ones that say what sent it and what it is (User-Agent, X-GitHub-Event,
+// X-Request-Id…), never credentials, cookies, signatures or addresses. At
+// most 24, each value at most 300 bytes.
+func webhookHeaders(h http.Header) map[string]string {
+	out := map[string]string{}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if len(out) >= 24 {
+			break
+		}
+		if !shownHeader(k) {
+			continue
+		}
+		v := strings.Join(h.Values(k), ", ")
+		if len(v) > 300 {
+			v = v[:300]
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func shownHeader(name string) bool {
+	k := strings.ToLower(name)
+	switch k {
+	case "user-agent", "content-type", "content-encoding":
+		return true
+	}
+	if !strings.HasPrefix(k, "x-") {
+		return false
+	}
+	for _, bad := range []string{"auth", "token", "secret", "signature", "key", "cookie", "session", "password",
+		"forwarded", "real-ip", "client-ip", "connecting-ip", "original", "proxy"} {
+		if strings.Contains(k, bad) {
+			return false
+		}
+	}
+	return true
 }

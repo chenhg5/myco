@@ -430,6 +430,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
     setPage("space");
     setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), reveal });
   };
+  // A message in its conversation (search, an automation's run).
+  const openAtMessage = (r: AgentRow, message: string) => {
+    const p = (projects || []).find((x) => !x.p.archived && x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
+    const s: SpaceRef = p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true };
+    setProfile(null);
+    setSpace(s);
+    setPage("space");
+    setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), focus: message });
+  };
   // The top bar's call (VoiceChip): back to the chat with whom it is with.
   const toCallRef = useRef<(hubId: string, agent: string) => void>(() => undefined);
   toCallRef.current = (hubId, agent) => {
@@ -880,7 +889,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "automations" && hub && (
           <div className="app-scroll">
-            <AutomationsPage key={hub.id} hubId={hub.id} rows={rows} now={now} />
+            <AutomationsPage key={hub.id} hubId={hub.id} rows={rows} now={now}
+              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}
 
@@ -973,13 +983,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           if (t.kind === "project") { setHubPick(t.hubId); openSpace({ hubId: t.hubId, name: t.name }); return; }
           setHubPick(t.row.hub.id);
           if (t.kind === "member") { chatWithMember(t.row); return; }
-          // A message: its conversation, at that message.
-          const r = t.row;
-          const p = (projects || []).find((x) => !x.p.archived && x.hubId === r.hub.id && x.p.members.some((m) => m.name === r.st.agent.name));
-          const s: SpaceRef = p ? { hubId: r.hub.id, name: p.p.name } : { hubId: r.hub.id, loose: true };
-          setSpace(s);
-          setPage("space");
-          setChatWith({ space: s, agent: r.st.agent.name, n: Date.now(), focus: t.message });
+          openAtMessage(t.row, t.message);
         }} />
       <MemberSheet row={profileRow} details={!!profile?.details} projects={hubProjects} rows={rows} now={now} onClose={() => setProfile(null)}
         onChat={chatWithMember} onChanged={() => void refresh()} onRefresh={refresh}

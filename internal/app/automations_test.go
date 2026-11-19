@@ -120,27 +120,27 @@ func TestAutomationWebhookRateWindow(t *testing.T) {
 		t.Fatalf("create: %v %+v", err, out)
 	}
 	id := out.Automation.ID
-	if _, err := svc.Webhook(ctx, "aut_nope", out.Secret, "x"); !domain.IsCode(err, domain.CodeNotFound) {
+	if _, err := svc.Webhook(ctx, "aut_nope", out.Secret, &domain.WebhookRequest{Body: "x"}); !domain.IsCode(err, domain.CodeNotFound) {
 		t.Fatalf("unknown id: %v", err)
 	}
-	if _, err := svc.Webhook(ctx, id, out.Secret+"x", "x"); !domain.IsCode(err, domain.CodeNotFound) {
+	if _, err := svc.Webhook(ctx, id, out.Secret+"x", &domain.WebhookRequest{Body: "x"}); !domain.IsCode(err, domain.CodeNotFound) {
 		t.Fatalf("wrong secret: %v", err)
 	}
 	for i := 0; i < app.WebhookRate; i++ {
-		if _, err := svc.Webhook(ctx, id, out.Secret, "x"); err != nil {
+		if _, err := svc.Webhook(ctx, id, out.Secret, &domain.WebhookRequest{Body: "x"}); err != nil {
 			t.Fatalf("call %d: %v", i+1, err)
 		}
 		clock.t = clock.t.Add(time.Minute)
 	}
 	// 08:30: the first call was at 08:00, so the window opens at 09:00.
-	if _, err := svc.Webhook(ctx, id, out.Secret, "x"); !domain.IsCode(err, domain.CodeRateLimited) {
+	if _, err := svc.Webhook(ctx, id, out.Secret, &domain.WebhookRequest{Body: "x"}); !domain.IsCode(err, domain.CodeRateLimited) {
 		t.Fatalf("over the rate: %v", err)
 	}
 	if d := svc.RetryAfter(ctx, id); d != 30*time.Minute {
 		t.Fatalf("retry after: %v", d)
 	}
 	clock.t = time.Date(2026, 11, 16, 9, 0, 30, 0, time.UTC)
-	if _, err := svc.Webhook(ctx, id, out.Secret, "x"); err != nil {
+	if _, err := svc.Webhook(ctx, id, out.Secret, &domain.WebhookRequest{Body: "x"}); err != nil {
 		t.Fatalf("an hour later: %v", err)
 	}
 }

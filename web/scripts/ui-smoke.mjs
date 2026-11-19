@@ -3341,6 +3341,40 @@ async function runMatrix(browser, size, scheme) {
       await row.waitFor({ state: "detached", timeout: 10_000 });
     });
 
+    // An automation opened: its settings, then every run; a webhook run
+    // shows what the call carried, and 看对话 opens the task it sent.
+    await step("自动化 · 详情", async () => {
+      await go(page, "自动化", narrow);
+      const row = page.locator("[data-testid=automations] .au-row", { hasText: "CI 失败时排查" });
+      await row.waitFor({ timeout: 20_000 });
+      await clickVisible(page, row.locator(".au-row-main"));
+      const det = page.locator("[data-testid=automation-detail]");
+      await det.waitFor({ timeout: 10_000 });
+      const set = det.locator("[data-testid=automation-settings]");
+      for (const w of ["发给", "Webhook 地址", "让它做什么", "{{payload}}"]) if (!(await set.innerText()).includes(w)) throw new Error(`设置卡里应有「${w}」`);
+      const runs = det.locator("[data-testid=automation-run]");
+      await runs.first().waitFor({ timeout: 10_000 });
+      if ((await runs.count()) < 3) throw new Error("应列出每一次运行");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-detail");
+      // Only the skipped ones.
+      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "跳过" }));
+      if ((await runs.count()) !== 1 || !(await runs.first().innerText()).includes("跳过")) throw new Error("「跳过」只看跳过的");
+      await clickVisible(page, det.locator(".aud-filters .tp-chip", { hasText: "全部" }));
+      // What the newest call carried.
+      const first = runs.first();
+      await clickVisible(page, first.getByRole("button", { name: "调用内容" }));
+      const call = first.locator("[data-testid=automation-call]");
+      await call.locator("pre", { hasText: "workflow_run" }).waitFor({ timeout: 10_000 });
+      if (!(await call.innerText()).includes("X-Github-Event")) throw new Error("应显示记下的请求头");
+      await settle(page, 200);
+      await shot(page, size, scheme, "automation-call");
+      // Its chat, at the task it sent.
+      await clickVisible(page, first.getByRole("button", { name: "看对话" }));
+      await page.locator(".conv-detail", { hasText: "CI 构建失败了" }).first().waitFor({ timeout: 15_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     // A conversation is exported from its header: Markdown for people or
     // JSON Lines for programs, saved to Downloads.
     await step("单聊 · 导出对话", async () => {
