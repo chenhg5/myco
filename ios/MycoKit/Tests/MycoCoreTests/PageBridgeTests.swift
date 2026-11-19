@@ -84,14 +84,15 @@ struct PageBridgeTests {
     @Test func sendingAsMeIsAskedOnceAndLimited() async throws {
         let hub = FakeHub()
         let (one, doors) = try await bridge(hub)
+        let before = await hub.messages(to: "studio-claude-55d0").count
         doors.allow = false
         await #expect(throws: PageBridge.Refusal.self) { _ = try await one.answer("send", ["text": "看一下"]) }
-        #expect(await hub.messages(to: "studio-claude-55d0").isEmpty)
+        #expect(await hub.messages(to: "studio-claude-55d0").count == before)
         doors.allow = true
         _ = try await one.answer("send", ["text": "看一下"])
         _ = try await one.answer("send", ["text": "再看一下"])
         #expect(doors.asked.count == 2)
-        let sent = await hub.messages(to: "studio-claude-55d0")
+        let sent = await hub.messages(to: "studio-claude-55d0").dropFirst(before)
         #expect(sent.count == 2)
         #expect(sent.first?.body.contains("真机验证清单") == true)
         // At most five a minute.
