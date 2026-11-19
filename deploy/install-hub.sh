@@ -580,9 +580,36 @@ WantedBy=multi-user.target
 EOF
 }
 write_unit
+
+# Upgrading from the App: the hub (an unprivileged service user) leaves a
+# request in its state directory; this root path unit runs `myco upgrade`,
+# which restarts it. (`sudo myco upgrade` adds the same to older servers.)
+write_upgrade_units() {
+  cat > /etc/systemd/system/myco-upgrade.path <<'UNIT'
+[Unit]
+Description=myco: upgrade when a hub asks for it (from the App)
+
+[Path]
+PathExistsGlob=/var/lib/private/myco*/upgrade.request
+PathExistsGlob=/var/lib/myco*/upgrade.request
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  cat > /etc/systemd/system/myco-upgrade.service <<'UNIT'
+[Unit]
+Description=myco: upgrade asked for by a hub
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'rm -f /var/lib/private/myco*/upgrade.request /var/lib/myco*/upgrade.request; exec /usr/local/bin/myco upgrade'
+UNIT
+}
+[[ -z "$ROOT" ]] && write_upgrade_units
 T0="$(date +%s)"
 systemctl daemon-reload
 systemctl enable --now "$UNIT"
+if [[ -z "$ROOT" ]]; then systemctl enable --now myco-upgrade.path >/dev/null 2>&1 || true; fi
 systemctl restart "$UNIT"
 
 # ------------------------------------------------------------------ Caddy

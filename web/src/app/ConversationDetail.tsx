@@ -837,17 +837,23 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (t > (saidAt.get(m.reply_to) || 0)) saidAt.set(m.reply_to, t);
   }
   const activeAt = (m: Message) => Math.max(lastActivityAt(m) || 0, saidAt.get(m.id) || 0, runActivity.get(m.id)?.at || 0);
+  // The hub says which tasks show no life (hubs from v0.20.28): left open
+  // after the work ended, or their worker went away.
+  const hubStale = new Set(row?.st.stale_tasks || []);
   const isStuck = (m: Message): boolean => {
     const offline = row?.st.state === "offline";
+    if (hubStale.has(m.id)) return true;
     if (!offline && runActivity.get(m.id)?.ended) return false;
     return possiblyStuck({ ...m, active_at: new Date(activeAt(m)).toISOString() }, { agent: row?.st.agent, receiving: row?.st.receiving, offline }, now);
   };
   const stuckLine = (m: Message): string => {
     const quiet = quietFor(now, activeAt(m));
-    return L(
-      `${quiet}没有动静，可能卡住了（结果可能没送回来）`,
-      `No activity for ${quiet}; it may be stuck (the result may not have made it back)`,
-    );
+    return row?.st.state === "offline"
+      ? L(`${quiet}没有动静，它也不在线：这条任务没收尾`, `No activity for ${quiet} and it is offline: this task was left open`)
+      : L(
+        `${quiet}没有动静：可能做完了没收尾，也可能卡住了`,
+        `No activity for ${quiet}: it may be done but left open, or stuck`,
+      );
   };
   // Every task of yours still open in this conversation, not only the newest:
   // an older one that went quiet may be stuck too. (One waiting behind the
@@ -1538,6 +1544,48 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setStopError(e);
     }
   };
+  // Its open tasks that are not in this conversation (other agents gave
+  // them, or other chats): said above the box, with a way to them, since
+  // nothing here would show them (a question it asked their sender, say).
+  const elsewhere = (row?.st.current || []).filter((m) => m.to === target.agent && m.type === "task"
+    && (m.status === "acked" || m.status === "held") && !(messages || []).some((x) => x.id === m.id));
+  const askingOthers = elsewhere.filter((m) => m.status === "held" && !!m.asking && !isMe(m.from, row?.hub));
+  const whoIs = (n: string) => {
+    const x = (row?.hub.overview?.agents || []).find((y) => y.agent.name === n);
+    return x ? nodeName(x.agent, row?.hub) : personLabel(n, row?.hub);
+  };
+  // A task left open: close it as done (nothing more to come), or ask its
+  // agent where it stands (a note in the task it reads with it).
+  const [nudged, setNudged] = useState<Set<string>>(new Set());
+  // Closing it for its recipient is for whoever manages that agent.
+  const canClose = !!row && canManage(row.hub, row.st.agent.owner_id);
+  const markDone = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      const m = await appApi.dismissMessage(target.hubId, task.id);
+      setMessages((prev) => prev && prev.map((x) => (x.id === m.id ? m : x)));
+      onRefresh?.();
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+  const nudge = async (task: Message) => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      await appApi.steer(target.hubId, task.id, L(
+        "这条任务现在怎么样了？做完了就回复结果；还没做完就接着做，并发一下进度。",
+        "Where does this task stand? If it is done, reply with the result; if not, carry on and send your progress."));
+      setNudged((s) => new Set(s).add(task.id));
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
 
   // Commands other nodes sent to the computer in view. The terminal shows
   // only your own conversation with it, so these have no row there: the
@@ -1918,11 +1966,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation || m.workflow) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
             {m.automation && <span className="conv-auto" data-testid="via-automation" title={L("由自动化替你发出", "Sent for you by an automation")}>{L("自动", "Auto")}</span>}
+            {m.workflow && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
             {receipt && <span className="conv-receipt" title={receipt.title}>{receipt.text}</span>}
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
@@ -1966,6 +2015,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
             <span className="conv-stuck-actions">
+              {canClose && (
+                <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void markDone(m)}
+                  title={L("已经做完了：关掉这条任务，不再算在干活", "It is done: close this task so it no longer counts as work")}>
+                  {L("标记完成", "Mark done")}
+                </button>
+              )}
+              <button type="button" className="conv-steer-btn" disabled={resending === m.id || nudged.has(m.id)} onClick={() => void nudge(m)}
+                title={L("问它这条任务怎么样了", "Ask it where this task stands")}>
+                {nudged.has(m.id) ? L("已经催了", "Asked") : L("再催一下", "Nudge")}
+              </button>
               <button type="button" className="conv-steer-btn" disabled={resending === m.id} onClick={() => void stop(m)}>
                 {L("停止", "Stop")}
               </button>
@@ -2322,6 +2381,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {busy && <ErrorText error={copyError} />}
+        {elsewhere.length > 0 && (
+          <div className="conv-busy" data-testid="open-elsewhere">
+            <span className="dot idle" />
+            <span className="conv-busy-text">
+              {L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+              {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
+                `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
+              {L("。", ".")}
+            </span>
+            <button type="button" className="conv-steer-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent } }))}>
+              {L("查看并处理", "See and handle")}
+            </button>
+          </div>
+        )}
         {!busy && offline && (
           <div className="conv-busy">
             <span className="dot idle" />

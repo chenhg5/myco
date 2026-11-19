@@ -66,10 +66,17 @@ type Options struct {
 	// PathPrefix is where this hub is served under another's address
 	// ("/w/<name>": one workspace of several); "" for the hub itself.
 	PathPrefix string
+	// Upgrade, if set, brings the hub's myco to a release and restarts it
+	// (POST /v1/admin/upgrade).
+	Upgrade func(ctx context.Context, version string) (api.HubUpgrade, error)
 }
 
 // AutomationTick is how often each workspace looks for automations due.
 const AutomationTick = 20 * time.Second
+
+// WorkflowTick is how often each workspace checks its workflow runs when
+// no answer kicked it sooner (timeouts, decisions that expire).
+const WorkflowTick = app.WorkflowTick
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
@@ -81,7 +88,9 @@ type Hub struct {
 	Traces     *app.TraceService
 	// Automations runs the workspace's automations (Run).
 	Automations *app.AutomationService
-	Close       func() error
+	// Workflows walks the workspace's workflow runs (Run).
+	Workflows *app.WorkflowService
+	Close     func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
 	SetPublicURL func(string)
 	// SetLAN makes links created from this machine use its LAN address.
@@ -150,12 +159,15 @@ func Build(o Options) (*Hub, error) {
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	srv.SetPathPrefix(o.PathPrefix)
+	srv.SetUpgrade(o.Upgrade)
 	var latest func() string
 	if o.UpdateCheck != nil {
 		latest = o.UpdateCheck.Latest
 	}
 	srv.SetVersion(o.Version, latest)
-	srv.SetOverview(app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow))
+	overview := app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow)
+	overview.SetPresence(messages.Presence())
+	srv.SetOverview(overview)
 	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
 	machineSvc.SetRemovalDeps(agents, enroll)
 	srv.SetMachines(machineSvc)
@@ -205,6 +217,8 @@ func Build(o Options) (*Hub, error) {
 	srv.SetTraces(traces)
 	automations := app.NewAutomationService(sqlite.NewAutomationRepo(db), messages, msgRepo, security.Tokens{}, ids, clock, o.Log)
 	srv.SetAutomations(automations)
+	workflows := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), messages, msgRepo, ids, clock, o.Log)
+	srv.SetWorkflows(workflows)
 	pages := app.NewPageService(sqlite.NewPageRepo(db), blob.FS{Dir: filesDir}, projectSvc, ids, clock)
 	pages.SetEncrypted(e2e.Enabled)
 	srv.SetPages(pages)
@@ -232,7 +246,7 @@ func Build(o Options) (*Hub, error) {
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
 	messages.SetCredentialCheck(handovers.StillCurrent)
-	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations,
+	return &Hub{Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows,
 		Close: db.Close, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}, nil
 }
 
@@ -256,6 +270,7 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Files.Run(ctx, time.Hour)
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)
+	go hub.Workflows.Run(ctx, WorkflowTick)
 	// The other workspaces this hub serves (under /w/<name>).
 	ws := newWorkspaces(ctx, o, hub)
 	if err := ws.load(); err != nil {

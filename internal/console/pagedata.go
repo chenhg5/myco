@@ -1,7 +1,8 @@
 package console
 
 import (
-	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -13,14 +14,47 @@ import (
 	"github.com/chenhg5/myco/internal/client"
 )
 
-// maxPageDownload bounds a file a page saves to Downloads (myco.download).
-const maxPageDownload = 20 << 20
+// maxPageDownload bounds a file a page saves to Downloads (myco.download);
+// a video or a recording (视频剪辑's export) may be larger.
+const (
+	maxPageDownload = 20 << 20
+	maxPageMedia    = 4 << 30
+)
 
-// What a page may save to Downloads: documents and pictures, not programs.
+// What a page may save to Downloads: documents, pictures, video and sound,
+// not programs.
 var pageDownloadTypes = map[string]bool{
 	".csv": true, ".tsv": true, ".xlsx": true, ".xls": true, ".pdf": true, ".docx": true, ".pptx": true,
 	".json": true, ".md": true, ".txt": true, ".html": true, ".png": true, ".jpg": true, ".jpeg": true,
 	".svg": true, ".gif": true, ".webp": true, ".zip": true, ".ics": true,
+	".mp4": true, ".webm": true, ".mov": true, ".m4a": true, ".mp3": true, ".wav": true,
+}
+
+var pageMediaTypes = map[string]bool{".mp4": true, ".webm": true, ".mov": true, ".m4a": true, ".mp3": true, ".wav": true}
+
+// errTooLarge is what a capped reader answers past its limit (the file
+// being written is then removed).
+var errTooLarge = errors.New("too large")
+
+type capReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (c *capReader) Read(p []byte) (int, error) {
+	if c.left <= 0 {
+		var one [1]byte
+		if n, _ := c.r.Read(one[:]); n > 0 {
+			return 0, errTooLarge
+		}
+		return 0, io.EOF
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.r.Read(p)
+	c.left -= int64(n)
+	return n, err
 }
 
 // pageDataRoutes: a page's records and change feed (templates.md), and
@@ -130,16 +164,16 @@ func (b *Backend) pageDataRoutes(m *http.ServeMux) {
 				Message: "a page saves documents and pictures (csv, xlsx, pdf, docx, pptx, json, md, txt, png, …), with a name"})
 			return
 		}
-		data, err := io.ReadAll(io.LimitReader(r.Body, maxPageDownload+1))
-		if err != nil {
-			writeErr(w, err)
+		// (streamed to the file: a video can be large)
+		limit := int64(maxPageDownload)
+		if pageMediaTypes[strings.ToLower(filepath.Ext(name))] {
+			limit = maxPageMedia
+		}
+		path, err := writeToDownloads(name, &capReader{r: r.Body, left: limit})
+		if errors.Is(err, errTooLarge) {
+			writeErr(w, &client.Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: fmt.Sprintf("the file is larger than %d MB", limit>>20)})
 			return
 		}
-		if len(data) > maxPageDownload {
-			writeErr(w, &client.Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: "the file is larger than 20 MB"})
-			return
-		}
-		path, err := writeToDownloads(name, bytes.NewReader(data))
 		if err != nil {
 			writeErr(w, err)
 			return

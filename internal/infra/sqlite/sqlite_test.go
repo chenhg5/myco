@@ -970,3 +970,32 @@ func TestFileRepo(t *testing.T) {
 		t.Fatal("duplicate file id accepted")
 	}
 }
+
+// A task's signs of life are kept with it, never move back, and the acked
+// ones are listed per recipient with the later of activity and update.
+func TestMessageRepoActivity(t *testing.T) {
+	ctx := context.Background()
+	r := sqlite.NewMessageRepo(openMem(t))
+	m, err := domain.NewMessage("m1", "alice", "bob", domain.TypeTask, "hello", "", "", "", t0)
+	mustNoErr(t, err)
+	m.Status = domain.StatusAcked
+	mustNoErr(t, r.Create(ctx, m))
+	acts, err := r.AckedActivity(ctx)
+	mustNoErr(t, err)
+	if len(acts["bob"]) != 1 || !acts["bob"][0].At.Equal(t0) {
+		t.Fatalf("before any activity: %+v", acts)
+	}
+	later := t0.Add(time.Hour)
+	mustNoErr(t, r.TouchActive(ctx, "m1", later))
+	mustNoErr(t, r.TouchActive(ctx, "m1", t0.Add(time.Minute))) // older: kept as is
+	got, err := r.Get(ctx, "m1")
+	mustNoErr(t, err)
+	if !got.ActiveAt.Equal(later) || !got.UpdatedAt.Equal(t0) || !got.LastActive().Equal(later) {
+		t.Fatalf("active %v updated %v", got.ActiveAt, got.UpdatedAt)
+	}
+	acts, err = r.AckedActivity(ctx)
+	mustNoErr(t, err)
+	if len(acts["bob"]) != 1 || acts["bob"][0].ID != "m1" || !acts["bob"][0].At.Equal(later) {
+		t.Fatalf("after: %+v", acts)
+	}
+}

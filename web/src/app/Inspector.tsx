@@ -1000,10 +1000,15 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
 
         </>
       );
+  // An agent by its name in the App (display name), a person as before.
+  const nodeLabel = (n: string) => {
+    const x = (row.hub.overview?.agents || []).find((y) => y.agent.name === n);
+    return x ? nodeName(x.agent, row.hub) : personLabel(n, row.hub);
+  };
   const sec_current = (
         <>
           <section className="app-group">
-            <div className="app-group-title"><span className="name">{L("当前工作", "Current work")}</span></div>
+            <div className="app-group-title" id="agent-current-work"><span className="name">{L("当前工作", "Current work")}</span></div>
             <div className="app-list">
               <div className="app-counts">
                 <span>{L("处理中", "In progress")}<b>{Math.max(0, row.st.in_progress - stuck.in_progress)}</b></span>
@@ -1018,18 +1023,29 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div key={m.id} className="app-msg-wrap">
                   <button type="button" className="app-msg" onClick={() => onThread(hubId, m.thread_id, ag.name)}>
                     <span className="meta">
-                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{openStatusLabel(m.status, isStuck(m))}</span>
-                      <span className="who">{personLabel(m.from, row.hub)}</span>→<span className="who">{personLabel(m.to, row.hub)}</span>
+                      <span className={cn("app-msg-status", m.status, isStuck(m) && "is-stuck")}>{m.status === "held" && m.asking
+                        ? L(`在等 ${nodeLabel(m.from)} 回答`, `Waiting on ${nodeLabel(m.from)}'s answer`)
+                        : (row.st.stale_tasks || []).includes(m.id) ? L("没收尾", "Left open") : openStatusLabel(m.status, isStuck(m))}</span>
+                      <span className="who">{nodeLabel(m.from)}</span>→<span className="who">{nodeLabel(m.to)}</span>
                       <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>
                     </span>
                     <span className="body">{m.body}</span>
                   </button>
                   {mayManage && (
-                    <button type="button" className="app-msg-dismiss" disabled={busy}
-                      title={L("不回复，直接标记为已处理", "Mark it handled without a reply")}
-                      onClick={() => void run(() => appApi.dismissMessage(hubId, m.id), "stay")}>
-                      {L("忽略", "Dismiss")}
-                    </button>
+                    <span className="app-msg-actions">
+                      <button type="button" className="app-msg-dismiss" disabled={busy}
+                        title={L("不回复，直接关掉：已经做完了，或者不用再做", "Close it without a reply: it is done, or no longer needed")}
+                        onClick={() => void run(() => appApi.dismissMessage(hubId, m.id), "stay")}>
+                        {L("标记完成", "Mark done")}
+                      </button>
+                      {m.type === "task" && m.status !== "queued" && (
+                        <button type="button" className="app-msg-dismiss" disabled={busy}
+                          title={L("停止这条任务（发它的一方会收到「已停止」）", "Stop this task (whoever sent it is told it was stopped)")}
+                          onClick={() => void run(() => appApi.stop(hubId, m.id), "stay")}>
+                          {L("停止", "Stop")}
+                        </button>
+                      )}
+                    </span>
                   )}
                 </div>
               ))}
@@ -1145,8 +1161,12 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           </section>
         </>
       );
+  // Open work it holds (left open, waiting on someone, queued): above the
+  // fold, where it can be closed or stopped.
+  const openWork = (row.st.current || []).length > 0;
   const sections = embedded ? (
     <div className="ms-details">
+      {openWork && sec_current}
       <button type="button" className={cn("ms-fold", more && "open")} onClick={() => setMore((v) => !v)} aria-expanded={more}>
         <ChevronRight />{L("详细信息", "Details")}
       </button>

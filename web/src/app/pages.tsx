@@ -434,6 +434,8 @@ function PageView({ target, open, active, reload, onMeta }: {
           dataWatch.current = true;
           return true;
         case "download": {
+          // a Blob from the page (its bridge since the video app), or base64 (older pages' bridge)
+          if (args.blob instanceof Blob) return appApi.pageDownload(String(args.name || ""), args.blob, String(args.type || ""));
           const bin = atob(String(args.base64 || ""));
           const bytes = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

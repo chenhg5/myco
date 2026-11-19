@@ -206,6 +206,9 @@ func restartMycoServices() (restarted, notes []string) {
 			// timeout grew to 360s.
 			r, n := upgradeCaddySites()
 			restarted, notes = append(restarted, r...), append(notes, n...)
+			// Hubs set up before the App could upgrade them.
+			r, n = ensureUpgradeUnits()
+			restarted, notes = append(restarted, r...), append(notes, n...)
 		}
 	} else if runtime.GOOS == "linux" {
 		if _, err := os.Stat("/etc/systemd/system/myco-hub.service"); err == nil {

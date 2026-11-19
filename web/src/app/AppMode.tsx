@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
+import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
@@ -28,7 +29,7 @@ import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
 import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
-import { agentKind, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
+import { agentKind, isMe, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
 import { prefetchMachineInfos } from "@/app/machineInfoCache";
 import { LogoWordmark } from "@/components/brand";
 import { IconSidebar } from "@/components/icons";
@@ -71,7 +72,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "templates" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -188,7 +189,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "templates" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -261,6 +262,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const on = (e: Event) => { const d = (e as CustomEvent<HandoverTarget>).detail; if (d) setHandover(d); };
     window.addEventListener("myco-handover", on);
     return () => window.removeEventListener("myco-handover", on);
+  }, []);
+  // An agent's profile (its open work), from anywhere: { hubId, name }.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ hubId: string; name: string }>).detail;
+      if (!d) return;
+      setNavChat(null);
+      setPage("members");
+      // Its details open: where its open work is.
+      setProfile({ hubId: d.hubId, name: d.name, details: true });
+      window.setTimeout(() => document.getElementById("agent-current-work")?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
+    };
+    window.addEventListener("myco-open-profile", on);
+    return () => window.removeEventListener("myco-open-profile", on);
   }, []);
   // 复制一份 (Fork.tsx): the dialog, from any menu.
   const [fork, setFork] = useState<ForkTarget | null>(null);
@@ -655,6 +670,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-automations", on);
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
+  // Decisions a workflow waits on you for: a count on its nav item.
+  const [decisionCount, setDecisionCount] = useState(0);
+  useEffect(() => {
+    let off = false;
+    setDecisionCount(0);
+    if (!hubId) return;
+    const read = () => appApi.workflowDecisions(hubId).then((r) => { if (!off) setDecisionCount((r.decisions || []).length); }, () => undefined);
+    void read();
+    const t = window.setInterval(read, 20_000);
+    // The workflows page says how many each time it reads them.
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; count: number }>).detail; if (d?.hubId === hubId && !off) setDecisionCount(d.count); };
+    window.addEventListener("myco-workflow-decisions", on);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-workflow-decisions", on); };
+  }, [hubId]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
   const [preparing, setPreparing] = useState<string | null>(() => preparePending());
@@ -803,6 +832,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
+    : page === "workflows" ? L("工作流", "Workflows")
     : page === "templates" ? L("应用", "Apps")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
@@ -812,16 +842,32 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // amber when all the work in progress may be stuck (it was picked up, but
   // nothing is moving). A node with both reads as working: something is live.
   // An agent waiting on your decision comes first: amber, saying so.
-  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | null => {
-    if (rs.some((r) => (r.st.asking || 0) > 0)) return "asking";
+  // Tasks left open with no life in them (the hub says so: stale) only get a
+  // quiet ring: nothing is running; their chat says which and offers to
+  // close them.
+  const askingYou = (r: AgentRow): boolean => {
+    if (!(r.st.asking || 0)) return false;
+    const held = (r.st.current || []).filter((m) => m.status === "held" && !!m.asking);
+    // Not told which (a member who cannot see its messages): as before.
+    if (held.length === 0) return true;
+    return held.some((m) => isMe(m.from, r.hub));
+  };
+  const workDot = (rs: AgentRow[]): "asking" | "busy" | "stuck" | "open" | null => {
+    // Amber "needs your decision" only for a question to you: a task you
+    // gave it, held on a question back to you. One to another agent (it
+    // asked whoever gave it the task) only leaves something open.
+    if (rs.some((r) => askingYou(r))) return "asking";
     let busy = false;
     let stuck = false;
+    let open = false;
     for (const r of rs) {
+      if ((r.st.stale || 0) > 0 || (r.st.asking || 0) > 0) open = true;
       if (r.st.state !== "working" || r.st.in_progress <= 0) continue;
-      if (r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
+      // A hub that tells live from stale: what it calls in progress runs.
+      if (r.st.stale !== undefined || r.st.in_progress > stuckCounts(r.st, now).in_progress) busy = true;
       else stuck = true;
     }
-    return busy ? "busy" : stuck ? "stuck" : null;
+    return busy ? "busy" : stuck ? "stuck" : open ? "open" : null;
   };
 
   return (
@@ -842,8 +888,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </button>
 
           <nav className="app-nav">
-            {/* Two pages on top, rows like the ones below (an icon each):
-                automations and apps. Then three lists under one heading
+            {/* Pages on top, rows like the ones below (an icon each):
+                automations, workflows, apps, computers. Then three lists under one heading
                 style: projects first (the work), conversations (everyone you
                 can talk to, one click into a chat, pinned ones first, in the
                 order you pick; the height left, scrolling), computers last.
@@ -852,6 +898,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("workflows"); }}>
+                <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
+                {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
@@ -884,8 +935,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     title={x.p.goal || x.p.title}>
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {dot && (
-                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : L("有成员在干活", "Someone is at work")} />
+                      <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : dot === "open" ? L("有任务没收尾", "Some tasks were left open") : L("有成员在干活", "Someone is at work")} />
                     )}
                   </button>
                 );
@@ -942,8 +993,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       <Avatar agent={r.st.agent} size={20} badge={false} />
                       <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                       {dot ? (
-                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("在干活", "At work")} />
+                        <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                          title={dot === "asking" ? L("在等你决定", "Needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有任务没做完：没在干活（没收尾，或在等别的 agent），点开对话看是哪些", "Tasks still open: nothing is running (left open, or waiting on another agent); open the chat to see which") : L("在干活", "At work")} />
                       ) : isPinned && <Pin className="sp-nav-pinned" aria-label={L("已置顶", "Pinned")} />}
                     </button>
                   );
@@ -980,8 +1031,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                         <Avatar agent={r.st.agent} size={20} badge={false} />
                         <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                         {dot && (
-                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking")}
-                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : L("正在跑命令", "Running a command")} />
+                          <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
+                            title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有命令没收尾", "Commands left open") : L("正在跑命令", "Running a command")} />
                         )}
                       </button>
                       <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
@@ -1089,6 +1140,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "automations" && hub && (
           <div className="app-scroll">
             <AutomationsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
+              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
+          </div>
+        )}
+
+        {page === "workflows" && hub && (
+          <div className="app-scroll">
+            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}

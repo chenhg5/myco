@@ -278,6 +278,7 @@ func (b *Backend) Handler() http.Handler {
 	b.workspaceRoutes(m)
 	b.voiceRoutes(m)
 	b.automationRoutes(m)
+	b.workflowRoutes(m)
 	b.pageRoutes(m)
 	b.handoverRoutes(m)
 	m.HandleFunc("POST /app/hubs", b.addHub)
@@ -762,6 +763,60 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, res.Info)
+	}))
+	// Bring the workspace's own myco (the hub) up to date: it does so and
+	// restarts (hubs before this answer not_found: upgrade on the server).
+	m.HandleFunc("POST /app/hubs/{id}/upgrade", b.withHubTimeout(2*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Version string `json:"version"`
+		}
+		if r.ContentLength != 0 && !decode(w, r, &in) {
+			return
+		}
+		up, err := c.UpgradeHub(r.Context(), in.Version)
+		if err != nil {
+			if e, ok := client.AsError(err); ok && (e.Status == http.StatusNotFound || e.Status == http.StatusMethodNotAllowed) {
+				writeErr(w, &client.Error{Status: http.StatusConflict, Code: "too_old",
+					Message: "this workspace's myco is too old to upgrade itself from the App", Suggestion: "sudo myco upgrade"})
+				return
+			}
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, up)
+	}))
+	// Bring a computer's myco up to date: its machine node upgrades it and
+	// restarts its runner (machines older than this refuse: too_old).
+	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/upgrade", b.withHubTimeout(11*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		var in struct {
+			Version string `json:"version"`
+		}
+		if r.ContentLength != 0 && !decode(w, r, &in) {
+			return
+		}
+		res, err := c.SpawnOnMachine(r.Context(), r.PathValue("mid"), api.SpawnRequest{CLI: api.UpgradeCLI, Version: in.Version}, 10*time.Minute)
+		if err != nil {
+			if e, ok := client.AsError(err); ok && strings.Contains(e.Message, `cannot spawn "upgrade"`) {
+				writeErr(w, &client.Error{Status: http.StatusConflict, Code: "too_old",
+					Message: "that computer's myco is too old to upgrade itself from here", Suggestion: "myco upgrade"})
+				return
+			}
+			writeErr(w, err)
+			return
+		}
+		if res.Upgrade == nil && res.Reply != "" {
+			// A hub that does not know Upgrade passes it on as text.
+			var up api.MachineUpgrade
+			if json.Unmarshal([]byte(res.Reply), &up) == nil && up.From != "" {
+				res.Upgrade = &up
+			}
+		}
+		if res.Upgrade == nil {
+			writeErr(w, &client.Error{Status: http.StatusConflict, Code: "too_old",
+				Message: "that computer's myco is too old to upgrade itself from here", Suggestion: "myco upgrade"})
+			return
+		}
+		writeJSON(w, http.StatusOK, res.Upgrade)
 	}))
 	m.HandleFunc("POST /app/hubs/{id}/messages", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.SendRequest

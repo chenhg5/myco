@@ -10,6 +10,7 @@ import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { ComputerCheck } from "@/app/ComputerCheck";
+import { MachineUpgrade, UpgradeAll, useLatestRelease } from "@/app/MycoUpgrade";
 import { agentQuotaHint } from "@/app/quota";
 import { Avatar, AvatarStack, isWorkspace, stateWords } from "@/app/persona";
 import { PageHero, SectionHead } from "@/app/PageHero";
@@ -68,6 +69,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
   const openComputer = (k: string | null) => setOpenKey(k);
   const [renaming, setRenaming] = useState(false);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
+  const latest = useLatestRelease();
   const hubs = [...new Map(rows.map((r) => [r.hub.id, r.hub])).values()];
   const hereIds = new Set(hubs.map((h) => thisComputerId(h, local)).filter(Boolean));
   const isHere = (m: Machine) => hereIds.has(m.id);
@@ -163,6 +165,8 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
           </div>
         </header>
 
+        <MachineUpgrade hubId={hub.id} machine={m} here={isHere(m)} latest={latest} onDone={onChanged} />
+
         <SectionHead title="Agent" count={agents.length} />
         {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
           <div className="pcd-empty">
@@ -215,6 +219,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
           <div className="au-stat"><span>{L("终端", "Terminals")}</span><b className={cn(!terminalCount && "is-quiet")}>{terminalCount}</b></div>
         </div>
       )}
+      <UpgradeAll items={machines.map((x) => ({ hubId: x.hub.id, m: x.m, here: isHere(x.m) }))} latest={latest} onDone={onChanged} />
       <SectionHead title={L("我的电脑", "Computers")} count={machines.length || undefined} />
       {machines.length === 0 ? (
         <div className="au-none pcx-none" data-testid="pc-empty">

@@ -2,7 +2,7 @@
 // it, encoded with WebCodecs (mediabunny); the sound of every clip mixed at
 // its speed (time-stretched, so voices keep their pitch) and volume.
 import {
-  ALL_FORMATS, AudioBufferSink, AudioBufferSource, BlobSource, BufferTarget, Input, Mp4OutputFormat, Output, VideoSample, VideoSampleSink, VideoSampleSource,
+  ALL_FORMATS, AudioBufferSink, AudioBufferSource, BlobSource, BufferTarget, Input, Mp4OutputFormat, Output, StreamTarget, VideoSample, VideoSampleSink, VideoSampleSource,
   QUALITY_HIGH, QUALITY_LOW, QUALITY_MEDIUM, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
 } from "mediabunny";
 import { frameSize, media, overlayList, placed, project, total, type Placed } from "./model";
@@ -24,7 +24,9 @@ export function estimate(o: ExportOptions, list = placed()) {
 }
 const RATE = 48000;
 
-export async function render(opts: ExportOptions, onProgress: (p: Progress) => void, cancelled: () => boolean): Promise<{ bytes: Uint8Array; silent: boolean }> {
+export type Rendered = { file: Blob; silent: boolean; drop: () => void };
+
+export async function render(opts: ExportOptions, onProgress: (p: Progress) => void, cancelled: () => boolean): Promise<Rendered> {
   const FPS = opts.fps;
   const list = placed();
   if (!list.length) throw new Error("时间线上还没有视频");
@@ -52,18 +54,23 @@ export async function render(opts: ExportOptions, onProgress: (p: Progress) => v
   }
   const silent = loud && !acodec;
 
-  // the sound first, all of it: it is then added a second at a time
-  let mix: AudioBuffer | null = null;
-  if (acodec) mix = await mixAudio(list, files, T, (d) => onProgress({ phase: "audio", done: d }), cancelled);
-  if (cancelled()) throw new Error("cancelled");
+  // The sound is mixed a few seconds at a time as the frames go (never all
+  // of it at once: a long video's would take hundreds of MB).
+  const sound = acodec ? mixAudio(list, files, T, cancelled) : null;
+  onProgress({ phase: "audio", done: 1 });
 
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d", { willReadFrequently: false })!;
-  const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
+  // The mp4 is written to this page's private storage on disk as it is
+  // made (where the browser has one), not kept in memory.
+  const disk = await diskFile();
+  const output = disk
+    ? new Output({ format: new Mp4OutputFormat({ fastStart: false }), target: new StreamTarget(disk.writable, { chunked: true, chunkSize: 4 << 20 }) })
+    : new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
   const vsrc = new VideoSampleSource({ codec: vcodec, bitrate: QUALITY[opts.quality], keyFrameInterval: 2 });
   output.addVideoTrack(vsrc, { frameRate: FPS });
-  const asrc = mix && acodec ? new AudioBufferSource({ codec: acodec, bitrate: QUALITY_HIGH }) : null;
+  const asrc = sound && acodec ? new AudioBufferSource({ codec: acodec, bitrate: QUALITY_HIGH }) : null;
   if (asrc) output.addAudioTrack(asrc);
   await output.start();
 
@@ -72,14 +79,12 @@ export async function render(opts: ExportOptions, onProgress: (p: Progress) => v
   const frames = Math.max(1, Math.ceil(T * FPS - 1e-6));
   let frame = 0, audioUpTo = 0;
   const feedAudio = async (upTo: number) => {
-    if (!asrc || !mix) return;
-    while (audioUpTo < Math.min(upTo, T)) {
-      const a = Math.round(audioUpTo * RATE), b = Math.min(mix.length, Math.round(Math.min(T, audioUpTo + 1) * RATE));
-      if (b <= a) break;
-      const chunk = new AudioBuffer({ length: b - a, numberOfChannels: 2, sampleRate: RATE });
-      for (let ch = 0; ch < 2; ch++) chunk.getChannelData(ch).set(mix.getChannelData(ch).subarray(a, b));
-      await asrc.add(chunk);
-      audioUpTo = b / RATE;
+    if (!asrc || !sound) return;
+    while (audioUpTo < Math.min(upTo, T) - 1e-6) {
+      const r = await sound.next();
+      if (r.done) { audioUpTo = T; break; }
+      await asrc.add(r.value);
+      audioUpTo += r.value.duration;
     }
   };
   // Decoding the next frame overlaps encoding the last: the frame drawn is
@@ -136,50 +141,92 @@ export async function render(opts: ExportOptions, onProgress: (p: Progress) => v
     await output.finalize();
   } catch (e) {
     await output.cancel().catch(() => undefined);
+    await sound?.return(undefined);
+    disk?.drop();
     throw e;
   }
-  return { bytes: new Uint8Array((output.target as BufferTarget).buffer!), silent };
+  if (disk) return { file: await disk.file(), silent, drop: disk.drop };
+  return { file: new Blob([(output.target as BufferTarget).buffer!], { type: "video/mp4" }), silent, drop: () => undefined };
 }
 
-async function mixAudio(list: Placed[], files: Map<string, Blob>, T: number, progress: (d: number) => void, cancelled: () => boolean) {
-  const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(T * RATE)), RATE);
-  let i = 0;
-  for (const c of list) {
-    progress(i++ / list.length);
-    if (cancelled()) throw new Error("cancelled");
-    if (c.muted || c.volume <= 0) continue;
-    const input = new Input({ source: new BlobSource(files.get(c.id)!), formats: ALL_FORMATS });
-    try {
-      const at = await input.getPrimaryAudioTrack();
-      if (!at || !(await at.canDecode())) continue;
-      const parts: { t: number; b: AudioBuffer }[] = [];
-      for await (const w of new AudioBufferSink(at).buffers(c.in, c.out)) parts.push({ t: w.timestamp, b: w.buffer });
-      if (!parts.length) continue;
-      const rate = parts[0].b.sampleRate;
-      const n = Math.max(1, Math.round((c.out - c.in) * rate));
-      const chans = [new Float32Array(n), new Float32Array(n)];
-      for (const p of parts) {
-        const off = Math.round((p.t - c.in) * rate);
-        for (let ch = 0; ch < 2; ch++) {
-          const src = p.b.getChannelData(Math.min(ch, p.b.numberOfChannels - 1));
-          const from = Math.max(0, -off), to = Math.min(src.length, n - off);
-          if (to > from) chans[ch].set(src.subarray(from, to), off + from);
+/** A file in this page's private storage (OPFS) to write the mp4 to; null
+ *  where there is none. Exports left from before are cleared first. */
+async function diskFile() {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const old: string[] = [];
+    for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys()) if (name.startsWith("export-")) old.push(name);
+    for (const n of old) await root.removeEntry(n).catch(() => undefined);
+    const name = `export-${Date.now()}.mp4`;
+    const fh = await root.getFileHandle(name, { create: true });
+    const writable = await (fh as unknown as { createWritable(): Promise<WritableStream> }).createWritable();
+    return { writable, file: () => fh.getFile(), drop: () => { void root.removeEntry(name).catch(() => undefined); } };
+  } catch { return null; }
+}
+
+/** The edit's sound, mixed at 48 kHz stereo, a piece (SEG seconds) at a
+ *  time in timeline order: each clip's part of the piece decoded, time-
+ *  stretched to its speed (with a little sound either side, so the pieces
+ *  join), at its volume. */
+async function* mixAudio(list: Placed[], files: Map<string, Blob>, T: number, cancelled: () => boolean): AsyncGenerator<AudioBuffer> {
+  const SEG = 10, PAD = 0.2;
+  const open = new Map<string, { input: Input; sink: AudioBufferSink | null }>();
+  const sinkOf = async (c: Placed) => {
+    let o = open.get(c.id);
+    if (!o) {
+      const input = new Input({ source: new BlobSource(files.get(c.id)!), formats: ALL_FORMATS });
+      const at = await input.getPrimaryAudioTrack().catch(() => null);
+      o = { input, sink: at && (await at.canDecode()) ? new AudioBufferSink(at) : null };
+      open.set(c.id, o);
+    }
+    return o.sink;
+  };
+  try {
+    for (let a = 0; a < T - 1e-6; a += SEG) {
+      if (cancelled()) throw new Error("cancelled");
+      const b = Math.min(T, a + SEG);
+      const ctx = new OfflineAudioContext(2, Math.max(1, Math.round((b - a) * RATE)), RATE);
+      for (const c of list) {
+        if (c.end <= a || c.start >= b || c.muted || c.volume <= 0) continue;
+        const sink = await sinkOf(c);
+        if (!sink) continue;
+        // the source sound this piece needs, with some either side
+        const o0 = Math.max(a, c.start) - c.start, o1 = Math.min(b, c.end) - c.start;
+        const s0 = Math.max(c.in, c.in + (o0 - PAD) * c.speed), s1 = Math.min(c.out, c.in + (o1 + PAD) * c.speed);
+        if (s1 <= s0) continue;
+        const parts: { t: number; b: AudioBuffer }[] = [];
+        for await (const w of sink.buffers(s0, s1)) parts.push({ t: w.timestamp, b: w.buffer });
+        if (!parts.length) continue;
+        const rate = parts[0].b.sampleRate;
+        const n = Math.max(1, Math.round((s1 - s0) * rate));
+        const chans = [new Float32Array(n), new Float32Array(n)];
+        for (const p of parts) {
+          const off = Math.round((p.t - s0) * rate);
+          for (let ch = 0; ch < 2; ch++) {
+            const src = p.b.getChannelData(Math.min(ch, p.b.numberOfChannels - 1));
+            const from = Math.max(0, -off), to = Math.min(src.length, n - off);
+            if (to > from) chans[ch].set(src.subarray(from, to), off + from);
+          }
         }
+        const out = Math.abs(c.speed - 1) < 0.02 ? chans : stretch(chans, c.speed, rate);
+        const buf = new AudioBuffer({ length: out[0].length, numberOfChannels: 2, sampleRate: rate });
+        buf.getChannelData(0).set(out[0]); buf.getChannelData(1).set(out[1]);
+        const node = ctx.createBufferSource();
+        node.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = c.volume;
+        node.connect(g).connect(ctx.destination);
+        // where the buffer's first sample falls on the timeline
+        const at = c.start + (s0 - c.in) / c.speed;
+        const from = Math.max(a, c.start), to = Math.min(b, c.end);
+        node.start(from - a, Math.max(0, from - at));
+        node.stop(to - a);
       }
-      const out = Math.abs(c.speed - 1) < 0.02 ? chans : stretch(chans, c.speed, rate);
-      const buf = new AudioBuffer({ length: out[0].length, numberOfChannels: 2, sampleRate: rate });
-      buf.getChannelData(0).set(out[0]); buf.getChannelData(1).set(out[1]);
-      const node = ctx.createBufferSource();
-      node.buffer = buf;
-      const g = ctx.createGain();
-      g.gain.value = c.volume;
-      node.connect(g).connect(ctx.destination);
-      node.start(c.start);
-      node.stop(c.end);
-    } finally { input.dispose(); }
+      yield await ctx.startRendering();
+    }
+  } finally {
+    for (const o of open.values()) o.input.dispose();
   }
-  progress(1);
-  return ctx.startRendering();
 }
 
 /** Changes the length of sound by 1/speed keeping its pitch (WSOLA: pieces

@@ -3,7 +3,7 @@ import { appApi, type AppOverview } from "@/appapi";
 import type { Agent } from "@/api";
 import { Mushroom } from "@/app/Working";
 import { Avatar } from "@/app/persona";
-import { agentKind } from "@/app/nodes";
+import { agentKind, stuckCounts } from "@/app/nodes";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import "@/app/app.css";
@@ -47,7 +47,11 @@ function busyOf(ov: AppOverview): Busy[] {
     for (const st of h.overview?.agents || []) {
       const k = agentKind(st.agent);
       if (st.state !== "working" || (k !== "agent" && k !== "shell")) continue;
-      const task = (st.current || []).find((m) => m.to === st.agent.name && m.type === "task");
+      // An older hub calls tasks left open "working" too: only live ones.
+      if (st.stale === undefined && st.in_progress <= stuckCounts(st, Date.now()).in_progress) continue;
+      const stale = new Set(st.stale_tasks || []);
+      const task = (st.current || []).find((m) => m.to === st.agent.name && m.type === "task" && m.status === "acked" && !stale.has(m.id))
+        || (st.current || []).find((m) => m.to === st.agent.name && m.type === "task");
       out.push({
         hubId: h.id,
         agent: st.agent,

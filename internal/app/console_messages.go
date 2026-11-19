@@ -100,6 +100,7 @@ func (s *MessageService) StopFromConsole(ctx context.Context, name string, manag
 	}
 	s.notifier.Publish(replyTopic(id))
 	s.wakeAfter(ctx, id)
+	s.workflowEnded(out.Workflow)
 	return out, nil
 }
 
@@ -119,6 +120,7 @@ func (s *MessageService) StopBySender(ctx context.Context, agent *domain.Agent, 
 	if err == nil {
 		s.notifier.Publish(replyTopic(id))
 		s.wakeAfter(ctx, id)
+		s.workflowEnded(m.Workflow)
 	}
 	return m, err
 }

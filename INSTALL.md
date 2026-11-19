@@ -843,6 +843,31 @@ curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bea
 - 每个工作区最多 200 个自动化。成员只能看到和修改自己的，所有者和管理员能看到全部；创建、修改、删除和手动运行都记入审计。
 - 消息由 Hub 生成，所以即使开了端到端加密，自动化发出的消息也是明文。
 
+### 4.16.1 工作流：按固定的步骤交给几个 agent
+
+工作流是一套固定的做法（写 → 审 → 没过就改 → 跑测试 → 你点头），由 Hub 按顺序往下走：每一步以启动它的人的名义交给一个 agent（一条普通任务，对话里标「工作流」），或在一台电脑上跑一条命令，或者等你在 App 里做个决定。agent 只交结果，下一步由 Hub 决定；电脑关着也照常。需要 Hub v0.21 或更新。
+
+App 里在侧栏「工作流」：挑一个现成的（写-审-改、改完跑测试、分头做再汇总、发布前问你一句）选好谁来做，或者让一个 agent 按你的一句话写一个。命令行（agent 用自己的令牌，人用管理员或成员令牌）：
+
+```bash
+myco workflow validate --file wf.json        # 格式在 myco workflow validate --help
+myco workflow apply --file wf.json           # 新建，或同名的出一个新版本
+myco workflow run start --name 写-审-改 --input task="加导出按钮" --wait
+myco workflow run show --id <run_...>        # 每一步交给了谁、结果、为什么失败
+myco workflow run decide --id <run_...> --step ok --choice 合并
+myco workflow run retry --id <run_...>       # 从失败的那一步重来
+myco workflow decisions                      # 等你决定的
+```
+
+agent 收到工作流的任务时，用 `myco message reply --result '{"approved": true, "summary": "…", "reason": "…"}'` 交结构化结果（旧版 myco 没有 `--result`：把 JSON 放在回复最后的 ```json 代码块里，一样认）。结果不符合这一步要的结构会退回去重交一次。
+
+- 回到前面的步骤（比如审没过回去改）必须写 `maxIterations`，到了上限走 `else`（默认失败）。
+- 等你决定的步骤过期（默认 3 天）当作「不做」，从不默认同意。
+- 电脑步骤退出码不是 0 就算失败，可以用 `onError` 的边接住（比如把报错交回去再改）。
+- 结构化结果不做端到端加密（Hub 要读它来决定下一步）。
+
+格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
+
 ### 4.17 网页：把结果做成网页，在 App 里打开
 
 agent 可以把一个文件夹（报告、幻灯片、原型、小工具）发到 Hub 上，人在 App 里点开就能看（需要 Hub v0.19.24 或更新）：
@@ -899,7 +924,7 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 ```
 给 agent 的内容是一层层给的，应用再多也不会一下子塞给它：技能里只有一小段怎么用应用（不列应用）；`myco template list` 每个应用只有一行（叫什么、做什么用、分类，不带图标、数据结构和说明，可以按 `--category`、`--query` 筛）；选中一个再用 `myco template get` 或 `use` 拿到它自己的数据结构和说明（`agent.md`）。
 - **数据**：每条记录单独存、带版本号，同时改同一条时后到的会被拒，并拿到最新的那条；改不同的行互不影响。用应用建的网页会按应用的字段检查每条记录。一条最多 64KB，一个网页最多 2 万条。
-- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF 等存到「下载」，在访达 / 资源管理器里显示出来）。
+- **网页里**：myco 桥多了 `myco.data.list / get / put / remove / on`（读写记录、收到别人改的）和 `myco.download(文件名, 内容, 类型)`（导出的 CSV、Excel、PDF、图片，以及视频剪辑导出的 mp4，存到「下载」，在访达 / 资源管理器里显示出来；存视频要新版本的 App）。
 - **官方应用**（Hub v0.20.5 起，每个工作区都有）：`myco/table` 表格（像飞书表格：列有类型，单选、多选是彩色标签；框选复制、从 Excel 粘贴、拖填充柄往下填；拖列宽、拖动行和列；筛选、排序、Ctrl+F 搜索；导出 Excel / CSV）、`myco/base` 多维表格（同一套表格，加上看板、日历、画廊、表单视图，点一条在右侧展开）、`myco/doc` 文档（像飞书文档：输入「/」插入标题、列表、待办、表格、代码块，选中文字改格式，拖动段落；每段单独保存，两个人改不同段落不冲突；导出 Markdown / 网页）、`myco/slides` 幻灯片（agent 写每页的版式和内容，网页按主题排好：封面、要点、图表、数字卡片、表格、引言；点哪改哪，拖动换顺序，全屏放映，导出能接着改的 PowerPoint）。Hub v0.20.6 起官方应用按类分栏，还有：编程开发的「代码编辑器」（VS Code 同款编辑器，文件树、多标签、HTML 预览、下载 zip）和「开发者工具箱」（JSON、Base64、URL、MD5/SHA、时间戳、UUID、JWT、正则、文本对比等）；效率工具的「待办清单」「投票」；生活的「记账本」「习惯打卡」；创意设计的「白板」「思维导图」「视频剪辑」（导入 mp4，时间线上分割、裁剪、调顺序、变速，加文字、模糊和马赛克，在本机导出 mp4；视频只存在这台电脑上，Hub 只存剪辑方案，agent 按备注帮你剪）；游戏的「五子棋」（能和 agent 下）「数独」。官方应用从 Hub v0.20.7 起单独发布：Hub 每天自己拉新的（`myco template sync` 或应用页的「检查官方应用更新」立刻拉），不用为了新应用升级 Hub；用应用建的网页在应用出新版本时会提示「升级」（`myco page upgrade --page <id>`），数据不变。表格里直接打字（英文、数字）就开始编辑；输入中文时先按回车或双击格子再打字。在 App 里点边栏的「应用」，选一个、起个名字就新建一份；agent 用 `myco template use --template myco/base --name 招聘进度 --sample`。
 - **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
@@ -974,6 +999,12 @@ myco upgrade --version v0.16.5        # 安装指定版本（也可以用来回�
 - 在 agent 的一轮任务里执行时（runner 唤醒的会话），只替换程序、不重启服务，避免把这一轮任务自己中断；它会提示你稍后执行 `myco runner service restart`。
 - 不想重启服务：加 `--no-restart`。
 - Hub 和各台机器分别升级：Hub 所在机器执行 `sudo myco upgrade`（或 `myco upgrade`，如果是 `hub up` 开的），每台机器执行 `myco upgrade`。v0.16.6 之前的版本还没有这个命令，第一次请用原来的安装脚本升级。
+- **在 App 里升级**（v0.20.29 起，不用打开终端）：
+  - **电脑**：「电脑」页上会列出 myco 不是最新的电脑，可以「全部升级」，也可以点开一台单独升级。每台电脑由它自己的 myco 后台下载新版，几秒后重启后台（上面正在跑的任务会中断）。这台电脑由 App 直接升级。不在线的电脑、或者 myco 早于 v0.20.29 的电脑，会给出要在它上面运行的 `myco upgrade`；运行过一次以后就能在 App 里升级。
+  - **工作区**：「设置 › 工作区」里，版本不是最新的工作区会有「升级工作区」按钮。工作区会重启，大约半分钟连不上，消息不会丢；App 会一直等到它用新版本回来。
+    - 这台电脑上的工作区：App 直接升级。
+    - 用 `install-hub.sh` 装在服务器上的工作区：服务器上要有一个 root 的 `myco-upgrade.path`。新装的服务器自带；以前装的，在服务器上 `sudo myco upgrade` 一次就会装上。工作区收到请求后在自己的数据目录里留一个请求，这个服务看到后执行 `myco upgrade`。
+    - `myco hub up` 开的工作区：自己换掉程序，再让服务管理器（launchd 或 systemd --user）把它重新启动。
 
 
 ## 9. 控制台 App（Mac / Windows / Linux）

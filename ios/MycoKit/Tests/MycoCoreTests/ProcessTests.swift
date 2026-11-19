@@ -416,3 +416,69 @@ struct ConversationProcessTests {
         #expect(!model.items.contains { if case .mine(_, _, let by) = $0.kind { return by != nil } else { return false } })
     }
 }
+
+/// What says an agent is at work on my task, and what stops it, as the
+/// desktop app has them.
+@MainActor
+struct RunStateAlignmentTests {
+    private func run(_ seq: Int, _ command: String, _ at: Date) -> TraceEvent {
+        TraceEvent(seq: seq, kind: "tool", data: TraceStep(tool: "Bash", input: command), at: at)
+    }
+
+    /// A coordinator in one long session: it worked, ended its turn, said
+    /// where things stand (an update, not an answer), and went back to
+    /// listening. It waits: no loading under it, and what I type is a new
+    /// message, not an addition with a stop button.
+    @Test func anAgentThatSpokeAndWentBackToListeningIsNotAtWork() async throws {
+        let hub = FakeHub()
+        let now = Date()
+        let agent = "studio-claude-c41f"
+        await hub.add(Message(id: "t_wait", from: FakeHub.me, to: agent, body: "停掉应用构建那几条", status: "acked",
+                        createdAt: now.addingTimeInterval(-1_200), updatedAt: now.addingTimeInterval(-1_150)))
+        await hub.add(Message(id: "p_wait", from: agent, to: FakeHub.me, threadId: "t_wait", replyTo: "t_wait", type: "progress",
+                        body: "截图是对话里的提示……", status: "done", createdAt: now.addingTimeInterval(-720)))
+        await hub.setTrace(of: "t_wait", [
+            run(1, "go build ./...", now.addingTimeInterval(-1_000)),
+            TraceEvent(seq: 2, kind: "turn_end", data: TraceStep(), at: now.addingTimeInterval(-900)),
+            run(3, "myco inbox wait --timeout 55m", now.addingTimeInterval(-700)),
+        ])
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        let model = ConversationModel(session: session, agent: agent)
+        await model.reload()
+        #expect(model.openTask?.id != "t_wait")
+
+        // One running a real command after it spoke is at work.
+        await hub.setTrace(of: "t_wait", [
+            run(1, "go build ./...", now.addingTimeInterval(-1_000)),
+            TraceEvent(seq: 2, kind: "turn_end", data: TraceStep(), at: now.addingTimeInterval(-900)),
+            run(3, "go test ./...", now.addingTimeInterval(-700)),
+        ])
+        let fresh = ConversationModel(session: session, agent: agent)
+        await fresh.reload()
+        #expect(fresh.openTask?.id == "t_wait")
+    }
+
+    /// The round button turns into stop under the finger as a message goes:
+    /// a second tap right then does not stop what was just sent.
+    @Test func aTapRightAfterSendingDoesNotStopIt() async throws {
+        let hub = FakeHub()
+        let session = WorkspaceSession(id: "demo", name: "Demo", hub: hub)
+        await session.refresh()
+        let model = ConversationModel(session: session, agent: "studio-claude-c41f")
+        await model.reload()
+        model.draft = "把测试跑一遍"
+        await model.submit()
+        await model.reload()
+        let sent = try #require(model.openTask)
+        #expect(model.action == .stop)
+        await model.submit()
+        let after = try #require(await hub.messages(to: "studio-claude-c41f").first { $0.id == sent.id })
+        #expect(after.isOpen, "a stop right after sending is not taken")
+        // Later, the button stops it.
+        try await Task.sleep(for: .seconds(model.stopGrace + 0.2))
+        await model.submit()
+        let stopped = try #require(await hub.messages(to: "studio-claude-c41f").first { $0.id == sent.id })
+        #expect(stopped.error == RunState.stoppedBySender)
+    }
+}

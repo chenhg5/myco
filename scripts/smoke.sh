@@ -133,6 +133,18 @@ wait_for 20 bash -c "curl -fsS -H 'Authorization: Bearer $ADMIN' '$MYCO_HUB/v1/t
 MYCO_ADMIN_TOKEN="$ADMIN" myco automation remove --id "$AID" >/dev/null || fail "automation remove"
 ok
 
+step "workflow: steps handed out in order"
+cat >"$T/wf.json" <<'EOF'
+{"name": "smoke-flow", "steps": [
+  {"id": "one", "agent": "worker", "prompt": "first"},
+  {"id": "two", "agent": "worker", "prompt": "then {{steps.one.summary}}"}]}
+EOF
+MYCO_ADMIN_TOKEN="$ADMIN" myco workflow apply --file "$T/wf.json" >/dev/null 2>>"$T/cli.log" || fail "workflow apply"
+OUT="$(MYCO_ADMIN_TOKEN="$ADMIN" myco workflow run start --name smoke-flow --wait --timeout 60s 2>>"$T/cli.log")" || fail "workflow run: $OUT"
+grep -q '"status": *"succeeded"' <<<"$OUT" || fail "workflow did not succeed: $OUT"
+grep -q 'THEN \[工作流' <<<"$OUT" || fail "the second step did not get the first one's summary: $OUT"
+ok
+
 step "handover: another session takes a node over"
 MYCO_ADMIN_TOKEN="$ADMIN" myco agent register --name scribe --config "$T/scribe-old.yaml" >/dev/null || fail "register scribe"
 HURL="$(MYCO_ADMIN_TOKEN="$ADMIN" myco agent handover-link --name scribe --note "smoke" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')" || fail "handover-link"

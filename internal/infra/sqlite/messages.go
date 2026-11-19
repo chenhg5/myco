@@ -19,7 +19,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project, ask, asking, answers, suggest, automation`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project, ask, asking, answers, suggest, automation, workflow, result`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -31,9 +31,9 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 		idem = m.IdempotencyKey
 	}
 	att, _ := json.Marshal(nonNil(m.Attachments))
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.After, m.Type, m.Body, m.Status, m.Attempts,
-		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers, m.Suggest, m.Automation)
+		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers, m.Suggest, m.Automation, m.Workflow, m.Result)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
 	}
@@ -70,6 +70,32 @@ func (r *MessageRepo) OpenCounts(ctx context.Context) (map[domain.AgentName]map[
 			out[a] = map[domain.Status]int{}
 		}
 		out[a][s] = n
+	}
+	return out, internal(rows.Err())
+}
+
+func (r *MessageRepo) TouchActive(ctx context.Context, id string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE messages SET active_at=? WHERE id=? AND active_at<?`, ms(at), id, ms(at))
+	return internal(err)
+}
+
+func (r *MessageRepo) AckedActivity(ctx context.Context) (map[domain.AgentName][]domain.Activity, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, id, MAX(active_at, updated_at) FROM messages WHERE status='acked'`)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	out := map[domain.AgentName][]domain.Activity{}
+	for rows.Next() {
+		var (
+			a  domain.AgentName
+			id string
+			at int64
+		)
+		if err := rows.Scan(&a, &id, &at); err != nil {
+			return nil, internal(err)
+		}
+		out[a] = append(out[a], domain.Activity{ID: id, At: fromMS(at)})
 	}
 	return out, internal(rows.Err())
 }
@@ -276,7 +302,7 @@ type querier interface {
 }
 
 func (r *MessageRepo) one(ctx context.Context, q querier, where string, args ...any) (*domain.Message, error) {
-	m, err := scanMessage(q.QueryRowContext(ctx, `SELECT `+msgCols+` FROM messages `+where, args...))
+	m, err := scanMessage(q.QueryRowContext(ctx, `SELECT `+msgCols+`, active_at FROM messages `+where, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.Errf(domain.CodeNotFound, "message not found")
 	}
@@ -284,7 +310,7 @@ func (r *MessageRepo) one(ctx context.Context, q querier, where string, args ...
 }
 
 func (r *MessageRepo) many(ctx context.Context, q querier, where string, args ...any) ([]*domain.Message, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+msgCols+` FROM messages `+where, args...)
+	rows, err := q.QueryContext(ctx, `SELECT `+msgCols+`, active_at FROM messages `+where, args...)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -304,13 +330,17 @@ func scanMessage(s scanner) (*domain.Message, error) {
 	var (
 		m                       domain.Message
 		lease, created, updated int64
+		active                  int64
 		idem                    sql.NullString
 		att                     string
 	)
 	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.After, &m.Type, &m.Body, &m.Status,
-		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project, &m.Ask, &m.Asking, &m.Answers, &m.Suggest, &m.Automation)
+		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project, &m.Ask, &m.Asking, &m.Answers, &m.Suggest, &m.Automation, &m.Workflow, &m.Result, &active)
 	if err != nil {
 		return nil, err
+	}
+	if active > 0 {
+		m.ActiveAt = fromMS(active)
 	}
 	_ = json.Unmarshal([]byte(att), &m.Attachments)
 	m.IdempotencyKey = idem.String

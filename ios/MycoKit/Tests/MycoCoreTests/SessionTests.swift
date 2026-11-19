@@ -332,6 +332,8 @@ struct SessionTests {
         #expect(model.draft == "and the license")
         model.draft = ""
 
+        // (a stop right after sending is not taken: this one is meant)
+        model.stopGrace = 0
         await model.submit() // stop
         #expect(model.items.contains { $0.kind == .stopped })
         // The open task ended: what waited is an ordinary message now.

@@ -42,6 +42,9 @@ type Caller struct {
 	Name     string // member name, or the console device's
 	MemberID string
 	Manages  bool
+	// Agent is set when an agent asks (with its own token) on its
+	// person's behalf.
+	Agent domain.AgentName
 }
 
 func (c Caller) owns(a *domain.Automation) bool {
