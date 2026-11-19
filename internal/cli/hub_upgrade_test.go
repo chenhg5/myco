@@ -49,8 +49,10 @@ func TestInstallHubWritesTheUpgradeUnits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows checkouts may turn the script's line ends into CRLF.
+	script := strings.ReplaceAll(string(b), "\r\n", "\n")
 	for _, want := range []string{upgradePathContent, upgradeServiceContent} {
-		if !strings.Contains(string(b), want) {
+		if !strings.Contains(script, want) {
 			t.Fatalf("install-hub.sh does not write:\n%s", want)
 		}
 	}
