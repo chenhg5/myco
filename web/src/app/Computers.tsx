@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Info, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, Monitor, Pencil, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
 import { appApi, type LocalState, type MachineAI, type MachineInfo } from "@/appapi";
 import type { Machine, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
@@ -9,7 +9,8 @@ import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { agentQuotaHint } from "@/app/quota";
-import { Avatar, isWorkspace } from "@/app/persona";
+import { Avatar, AvatarStack, isWorkspace, stateWords } from "@/app/persona";
+import { PageHero, SectionHead } from "@/app/PageHero";
 import { projectsOf } from "@/app/Members";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
@@ -18,36 +19,30 @@ import { cn } from "@/lib/utils";
 
 type Projects = { hubId: string; p: Project }[];
 
-/**
- * The computers agents may use, one row each as a project shows them
- * ("Studio Mac · myco"): the folder, the projects that have it, and Open
- * for its terminal. Connecting another is at the top; below, in one line,
- * the computers connected (each can be removed from there).
- */
-/**
- * The tightest quota among the agents running on this computer's machine
- * (a shell node has none of its own), named in the title: out of quota
- * first, then the most used.
- */
-function machineQuotaHint(r: AgentRow, rows: AgentRow[]) {
-  const mid = r.st.agent.machine_id;
-  if (!mid) return undefined;
+/** The tightest quota among the agents on a computer: out of quota first,
+ *  then the most used; named in its title. */
+function computerQuotaHint(machineId: string, hubId: string, rows: AgentRow[]) {
   let best: (NonNullable<ReturnType<typeof agentQuotaHint>> & { who: string }) | undefined;
   let bestRank = -1;
   for (const x of rows) {
-    if (x.hub.id !== r.hub.id || x.st.agent.machine_id !== mid || x.st.agent.name === r.st.agent.name) continue;
+    if (x.hub.id !== hubId || x.st.agent.machine_id !== machineId) continue;
     const h = agentQuotaHint(x.st.agent);
     if (!h) continue;
     const used = Math.max(...(x.st.agent.runtime?.quota?.windows || []).map((w) => w.used), 0);
     const rank = (h.level === "spent" ? 2 : 0) + Math.min(used, 1.99) / 2;
-    if (rank > bestRank) {
-      best = { ...h, who: nodeName(x.st.agent, x.hub) };
-      bestRank = rank;
-    }
+    if (rank > bestRank) { best = { ...h, who: nodeName(x.st.agent, x.hub) }; bestRank = rank; }
   }
   return best && { ...best, title: L(`${best.who}：${best.title}`, `${best.who}: ${best.title}`) };
 }
 
+/*
+ * 电脑: the real machines agents run on (a laptop, a VPS, WSL), as the
+ * other top pages are: a header with its main action, a few numbers, then
+ * a card each (what it is, whether it is on, what runs there). A card
+ * opens the computer: its agents, its terminals, what it allows (asked of
+ * it), and removing it, each a section of its own. Terminals whose
+ * computer is not known (older runners) are listed under the cards.
+ */
 export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, onAddAgentOn, onAddTerminal, onChanged, onSettings }: {
   rows: AgentRow[];
   projects: Projects;
@@ -66,35 +61,41 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
 }) {
   const [local, setLocal] = useState<LocalState | null>(null);
   const [dropping, setDropping] = useState<Machine | null>(null);
-  // The computer whose details (folders, AIs, terminals allowed) are open.
-  const [open, setOpen] = useState<string | null>(null);
-  // The computer whose name is being changed.
-  const [renaming, setRenaming] = useState<string | null>(null);
+  // The computer opened (coming to the page again shows them all).
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const openComputer = (k: string | null) => setOpenKey(k);
+  const [renaming, setRenaming] = useState(false);
   useEffect(() => { appApi.local().then(setLocal).catch(() => setLocal(null)); }, []);
   const hubs = [...new Map(rows.map((r) => [r.hub.id, r.hub])).values()];
   const hereIds = new Set(hubs.map((h) => thisComputerId(h, local)).filter(Boolean));
   const isHere = (m: Machine) => hereIds.has(m.id);
-  const machines = hubs.flatMap((h) => machinesOfHub(h).map((m) => ({ m, hub: h })))
+  const machines = hubs.flatMap((h) => machinesOfHub(h).map((m) => ({ m, hub: h, key: `${h.id}/${m.id}` })))
     .sort((a, b) => Number(isHere(b.m)) - Number(isHere(a.m)) || Number(b.m.online) - Number(a.m.online) || a.m.name.localeCompare(b.m.name));
-  const onIt = (m: Machine) => rows.filter((r) => r.st.agent.machine_id === m.id);
+  const onIt = (hubId: string, m: Machine) => rows.filter((r) => r.hub.id === hubId && r.st.agent.machine_id === m.id);
   const byState = (a: AgentRow, b: AgentRow) => Number(a.st.state === "offline") - Number(b.st.state === "offline") || nodeName(a.st.agent, a.hub).localeCompare(nodeName(b.st.agent, b.hub));
+  const split = (hubId: string, m: Machine) => {
+    const all = onIt(hubId, m);
+    return {
+      agents: all.filter((r) => agentKind(r.st.agent) === "agent").sort(byState),
+      terminals: all.filter((r) => isWorkspace(r.st.agent)).sort(byState),
+    };
+  };
   // Terminals whose computer is not known (older runners).
   const known = new Set(machines.map((x) => x.m.id));
   const loose = rows.filter((r) => isWorkspace(r.st.agent) && !known.has(r.st.agent.machine_id || "")).sort(byState);
+  const opened = machines.find((x) => x.key === openKey) || null;
+  useEffect(() => { if (openKey && !opened && machines.length) openComputer(null); }, [openKey, opened, machines.length]);
 
   const terminalRow = (r: AgentRow) => {
     const a = r.st.agent;
     const ps = projectsOf(r, projects);
-    const quota = machineQuotaHint(r, rows);
     return (
-      <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row", r.st.state === "offline" && "is-away")}>
+      <div key={`${r.hub.id}/${a.name}`} className={cn("pc-row pc-term", r.st.state === "offline" && "is-away")}>
         <Avatar agent={a} size={28} state={r.st.state} />
         <button type="button" className="pc-row-main" onClick={() => onProfile(r)}>
-          <span className="pc-row-name">{a.binding.workdir ? shortDir(a.binding.workdir) : nodeName(a, r.hub)}</span>
+          <span className="pc-row-name mono">{a.binding.workdir ? shortDir(a.binding.workdir) : nodeName(a, r.hub)}</span>
           <span className="pc-row-sub">
-            <span>{L("终端", "Terminal")}</span>
-            {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
-            {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
+            {ps.length > 0 ? <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span> : <span>{L("不在项目里", "In no project")}</span>}
             {r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
           </span>
         </button>
@@ -103,75 +104,160 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
       </div>
     );
   };
+  const agentRow = (r: AgentRow) => {
+    const a = r.st.agent;
+    const ps = projectsOf(r, projects);
+    const quota = agentQuotaHint(a);
+    return (
+      <button key={`${r.hub.id}/${a.name}`} type="button" className={cn("pc-row pcd-agent", r.st.state === "offline" && "is-away")} onClick={() => onProfile(r)}
+        title={a.binding.workdir || undefined}>
+        <Avatar agent={a} size={28} state={r.st.state} />
+        <span className="pc-row-main">
+          <span className="pc-row-name">{nodeName(a, r.hub)}</span>
+          <span className="pc-row-sub">
+            <span>{stateWords(r.st.state, a.status_text)}</span>
+            {a.binding.workdir && <span className="mono">{shortDir(a.binding.workdir)}</span>}
+            {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
+            {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
+          </span>
+        </span>
+        <ChevronRight className="pcd-go" />
+      </button>
+    );
+  };
 
+  // ── One computer, opened ──
+  if (opened) {
+    const { m, hub } = opened;
+    const { agents, terminals } = split(hub.id, m);
+    const Icon = osInfo(m.os).icon;
+    return (
+      <div className="pc pcd" data-testid="pc-detail">
+        <button type="button" className="pcd-back" onClick={() => { setRenaming(false); openComputer(null); }}><ArrowLeft />{L("电脑", "Computers")}</button>
+        <header className={cn("pcd-head", !m.online && "is-away")}>
+          <span className="tp-icon pcd-icon"><Icon /></span>
+          <div className="pcd-titles">
+            {renaming ? (
+              <RenameComputer hubId={hub.id} machine={m} taken={machines.filter((x) => x.hub.id === hub.id && x.m.id !== m.id).map((x) => x.m.name)}
+                onDone={() => { setRenaming(false); onChanged(); }} />
+            ) : (
+              <h1>
+                <span>{m.name}</span>
+                {isHere(m) && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}
+                <button type="button" className="app-btn app-btn-plain pc-rename" onClick={() => setRenaming(true)} aria-label={L("改名", "Rename")} title={L("改名", "Rename")}><Pencil /></button>
+              </h1>
+            )}
+            <p className="pcd-sub">
+              <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
+              <span>{osInfo(m.os).label}{m.arch ? ` · ${m.arch}` : ""}</span>
+              {m.hostname && <span className="mono">{m.hostname}</span>}
+              {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
+            </p>
+          </div>
+          <div className="ph-actions">
+            <button type="button" className="app-btn" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}
+              title={m.can_spawn ? undefined : L("这台电脑还没允许开终端：见下面「它允许什么」", "This computer does not allow terminals yet: see below")}><SquareTerminal />{L("开终端", "Terminal")}</button>
+            <button type="button" className="app-btn app-btn-primary" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
+          </div>
+        </header>
+
+        <SectionHead title="Agent" count={agents.length} />
+        {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
+          <div className="pcd-empty">
+            <span>{L("这台电脑上还没有 agent。可以把它上面已有的会话加进来，或者新开一个。", "No agents on it yet: add a session it already has, or start a new one.")}</span>
+            <button type="button" className="app-btn app-btn-small" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
+          </div>
+        )}
+
+        <SectionHead title={L("终端", "Terminals")} count={terminals.length} />
+        {terminals.length ? <div className="pc-list">{terminals.map(terminalRow)}</div> : (
+          <div className="pcd-empty">
+            <span>{L("还没有终端：在它的一个文件夹里开一个，agent 就能在里面跑命令，你也能看着。", "No terminals yet: open one in a folder of it, for agents to run commands in while you watch.")}</span>
+            <button type="button" className="app-btn app-btn-small" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}><SquareTerminal />{L("开终端", "Terminal")}</button>
+          </div>
+        )}
+
+        <SectionHead title={L("它允许什么", "What it allows")} />
+        <ComputerDetails hubId={hub.id} hub={hub} machine={m} onChanged={onChanged} />
+
+        <div className="pcd-danger">
+          <div>
+            <b>{L("移除这台电脑", "Remove this computer")}</b>
+            <span>{L("它和上面的 agent、终端都从工作区里拿掉；聊过的内容保留。", "It leaves the workspace with its agents and terminals; conversations are kept.")}</span>
+          </div>
+          <button type="button" className="app-btn app-btn-danger-quiet" onClick={() => setDropping(m)}><Trash2 />{L("移除", "Remove")}</button>
+        </div>
+        <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); openComputer(null); onChanged(); }} />
+      </div>
+    );
+  }
+
+  // ── All of them ──
+  const online = machines.filter((x) => x.m.online).length;
+  const agentCount = machines.reduce((n, x) => n + split(x.hub.id, x.m).agents.length, 0);
+  const terminalCount = machines.reduce((n, x) => n + split(x.hub.id, x.m).terminals.length, 0) + loose.length;
   return (
-    <div className="pc">
-      <div className="pc-head">
-        <p className="pc-intro">{L("你的 agent 跑在这些电脑上：笔记本、云服务器、WSL 都各算一台。连上以后，它上面的会话点一下就能加进来，也能在上面新开会话、开终端。", "Your agents run on these computers: a laptop, a cloud server or WSL each counts as one. Once connected, its sessions join with a click, and you can start new ones or open terminals on it.")}</p>
-        <button type="button" className="app-btn app-btn-small" onClick={onConnect}><Plus />{L("连一台电脑", "Connect a computer")}</button>
-      </div>
-      {machines.length === 0 && <div className="app-empty-note">{L("还没有连上的电脑。", "No computers connected yet.")}</div>}
-      <div className="pc-cards">
-        {machines.map(({ m, hub }) => {
-          const all = onIt(m);
-          const agents = all.filter((r) => agentKind(r.st.agent) === "agent").sort(byState);
-          const terminals = all.filter((r) => isWorkspace(r.st.agent)).sort(byState);
-          const Icon = osInfo(m.os).icon;
-          const here = isHere(m);
-          return (
-            <section key={`${hub.id}/${m.id}`} className={cn("pc-list pc-card", !m.online && "is-away")} data-testid="pc-card">
-              <div className="pc-card-head">
-                <span className="pc-card-icon"><Icon /></span>
-                <div className="pc-row-main">
-                  {renaming === m.id ? (
-                    <RenameComputer hubId={hub.id} machine={m} taken={machines.filter((x) => x.hub.id === hub.id && x.m.id !== m.id).map((x) => x.m.name)}
-                      onDone={() => { setRenaming(null); onChanged(); }} />
-                  ) : (
-                    <span className="pc-row-name">
-                      {m.name}{here && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}
-                      <button type="button" className="app-btn app-btn-plain pc-rename" onClick={() => setRenaming(m.id)} aria-label={L("改名", "Rename")} title={L("改名", "Rename")}><Pencil /></button>
+    <div className="pc pcx">
+      <PageHero title={L("电脑", "Computers")}
+        subtitle={L("agent 跑在这些电脑上：笔记本、云服务器、WSL 各算一台。点开一台看它上面的 agent 和终端。", "Your agents run on these: a laptop, a cloud server or WSL each counts as one. Open one for its agents and terminals.")}>
+        <button type="button" className="app-btn app-btn-primary" onClick={onConnect}><Plus />{L("连一台电脑", "Connect a computer")}</button>
+      </PageHero>
+      {machines.length > 0 && (
+        <div className="au-stats pcx-stats">
+          <div className="au-stat"><span>{L("在线", "Online")}</span><b>{online}<small className="pcx-of">/ {machines.length}</small></b></div>
+          <div className="au-stat"><span>Agent</span><b className={cn(!agentCount && "is-quiet")}>{agentCount}</b></div>
+          <div className="au-stat"><span>{L("终端", "Terminals")}</span><b className={cn(!terminalCount && "is-quiet")}>{terminalCount}</b></div>
+        </div>
+      )}
+      <SectionHead title={L("我的电脑", "Computers")} count={machines.length || undefined} />
+      {machines.length === 0 ? (
+        <div className="au-none pcx-none" data-testid="pc-empty">
+          <span className="tp-icon"><Monitor /></span>
+          <div>
+            <b>{L("还没有连上的电脑", "No computers yet")}</b>
+            <p>{L("连上以后，它上面的 Claude Code、Codex 会话点一下就能加进来，也能在上面新开会话、开终端。", "Once connected, its Claude Code and Codex sessions join with a click, and you can start new ones or open terminals on it.")}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="pcx-grid">
+          {machines.map(({ m, hub, key }) => {
+            const { agents, terminals } = split(hub.id, m);
+            const Icon = osInfo(m.os).icon;
+            const quota = computerQuotaHint(m.id, hub.id, rows);
+            return (
+              <button key={key} type="button" className={cn("pc-card", !m.online && "is-away")} data-testid="pc-card" onClick={() => openComputer(key)}>
+                <span className="pc-card-top">
+                  <span className="tp-icon"><Icon /></span>
+                  <span className="pc-card-text">
+                    <span className="pc-card-name"><span>{m.name}</span>{isHere(m) && <span className="pc-machine-tag">{L("这台电脑", "This computer")}</span>}</span>
+                    <span className="pc-card-sub">
+                      <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
+                      <span>{osInfo(m.os).label}</span>
+                      {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
                     </span>
-                  )}
-                  <span className="pc-row-sub">
-                    <span className={cn("pc-online", m.online && "is-on")}>{m.online ? L("在线", "Online") : L("不在线", "Away")}</span>
-                    <span>{osInfo(m.os).label}</span>
-                    {m.myco_version && <span>myco {ver(m.myco_version)}</span>}
                   </span>
-                </div>
-                <button type="button" className="app-btn app-btn-small" onClick={() => onAddAgentOn(m)}><Plus />{L("加 agent", "Add an agent")}</button>
-                <button type="button" className="app-btn app-btn-small" onClick={() => onAddTerminal(m)} disabled={!m.can_spawn}><SquareTerminal />{L("开终端", "Terminal")}</button>
-                <button type="button" className={cn("app-btn app-btn-small app-btn-quiet pc-card-more", open === m.id && "is-open")} onClick={() => setOpen(open === m.id ? null : m.id)}
-                  aria-expanded={open === m.id} title={L("它允许什么、装了哪些 AI、移除", "What it allows, its AIs, remove")}>{L("详情", "Details")}<ChevronDown /></button>
-              </div>
-              {agents.length > 0 && (
-                <div className="pc-card-agents">
-                  {agents.map((r) => (
-                    <button key={r.st.agent.name} type="button" className={cn("pc-card-agent", r.st.state === "offline" && "is-away")} onClick={() => onProfile(r)} title={r.st.agent.binding.workdir || undefined}>
-                      <Avatar agent={r.st.agent} size={20} state={r.st.state} />
-                      <span>{nodeName(r.st.agent, r.hub)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {terminals.map(terminalRow)}
-              {agents.length === 0 && terminals.length === 0 && (
-                <div className="pc-card-empty">{L("上面还没有 agent 或终端。", "No agents or terminals on it yet.")}</div>
-              )}
-              {open === m.id && (
-                <ComputerDetails hubId={hub.id} hub={hub} machine={m}
-                  onChanged={onChanged} onRemove={() => { setDropping(m); setOpen(null); }} />
-              )}
-            </section>
-          );
-        })}
-      </div>
+                  <ChevronRight className="pc-card-go" />
+                </span>
+                <span className="pc-card-foot">
+                  {agents.length > 0 && <AvatarStack agents={agents.map((r) => r.st.agent)} size={20} max={4} />}
+                  <span className="pc-card-count">
+                    {agents.length || terminals.length
+                      ? [agents.length ? L(`${agents.length} 个 agent`, `${agents.length} agent${agents.length === 1 ? "" : "s"}`) : "", terminals.length ? L(`${terminals.length} 个终端`, `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ")
+                      : L("上面还没有 agent", "Nothing on it yet")}
+                  </span>
+                  {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       {loose.length > 0 && (
         <>
-          <div className="pc-loose-head">{L("其他终端", "Other terminals")}</div>
+          <SectionHead title={L("其他终端", "Other terminals")} count={loose.length} />
           <div className="pc-list">{loose.map(terminalRow)}</div>
         </>
       )}
-      <RemoveComputer machine={dropping} rows={rows} onClose={() => setDropping(null)} onRemoved={() => { setDropping(null); onChanged(); }} />
     </div>
   );
 }
@@ -219,12 +305,11 @@ const ACCESS_LABEL: Record<string, () => string> = {
 /** A computer's details, asked of it: where agents may start, how much
  *  they may do, which AIs it has; whether terminals may be opened there;
  *  removing it. */
-function ComputerDetails({ hubId, hub, machine, onChanged, onRemove }: {
+function ComputerDetails({ hubId, hub, machine, onChanged }: {
   hubId: string;
   hub: AgentRow["hub"];
   machine: Machine;
   onChanged: () => void;
-  onRemove: () => void;
 }) {
   // The last answer at once (the App asks ahead), a fresh one behind it.
   const [info, setInfo] = useState<MachineInfo | null>(() => cachedMachineInfo(hubId, machine.id)?.info || null);
@@ -247,16 +332,17 @@ function ComputerDetails({ hubId, hub, machine, onChanged, onRemove }: {
         <div className="app-small-note">{L("正在问它…", "Asking it…")}</div>
       ) : (
         <div>
-          <div className="app-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span><span className="app-kv-value mono">{info.dirs.join("、")}</span></div>
+          <div className="app-kv"><span className="app-kv-label">{L("agent 能在哪里开工", "Where agents may start")}</span>
+            <span className="app-kv-value pcd-chips">{info.dirs.map((d) => <span key={d} className="pcd-chip mono">{d}</span>)}</span></div>
           <div className="app-kv"><span className="app-kv-label">{L("最高权限", "Highest access")}</span><span className="app-kv-value">{(ACCESS_LABEL[info.max_access] || (() => info.max_access))()}</span></div>
-          <div className="app-kv"><span className="app-kv-label">AI</span><span className="app-kv-value">{info.ais.map((a) => `${a.name} ${aiText(a)}`).join(" · ")}</span></div>
+          <div className="app-kv"><span className="app-kv-label">AI</span>
+            <span className="app-kv-value pcd-chips">{info.ais.map((a) => (
+              <span key={a.name} className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{`${a.name} ${aiText(a)}`}</span>
+            ))}</span></div>
           <div className="app-small-note">{L("这些由那台电脑自己决定，只能在它上面改（~/.myco/machine.yaml 的 spawn.dirs、spawn.max_access）。", "That computer decides these itself; they are changed on it only (spawn.dirs and spawn.max_access in ~/.myco/machine.yaml).")}</div>
         </div>
       )}
       <LocalShellAccess machine={machine} hub={hub} what="shell" shell={machineShell(hub, machine.id)} onChange={async () => onChanged()} />
-      <div className="app-setting-actions">
-        <button type="button" className="app-btn app-btn-quiet" onClick={onRemove}><Trash2 />{L("移除这台电脑", "Remove this computer")}</button>
-      </div>
     </div>
   );
 }

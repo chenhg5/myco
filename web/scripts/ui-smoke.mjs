@@ -3150,36 +3150,38 @@ async function runMatrix(browser, size, scheme) {
 
     await step("电脑", async () => {
       await go(page, "电脑", narrow);
+      // A card each: what it is, whether it is on, what runs there.
       await page.locator(".pc-card").first().waitFor({ timeout: 20_000 });
-      await page.locator(".pc-row").first().waitFor({ timeout: 20_000 });
-      // An agent on that computer has nearly used its quota: the rows of
-      // that machine say so, quietly.
-      await page.locator(".pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
+      // An agent on that computer has nearly used its quota: its card says
+      // so, quietly.
+      await page.locator(".pc-card .pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
-      // A computer that has not allowed terminals is marked, and says how to
-      // allow it: on that computer, never from here.
-      // Its details: what it allows and its AIs (asked of it), and whether
-      // terminals may be opened (only changed on it).
-      const vps = page.locator(".pc-card", { hasText: "VPS 东京" });
-      await clickVisible(page, vps.getByRole("button", { name: "详情" }));
-      await vps.locator("[data-testid=pc-details] .app-kv", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
-      await vps.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
+      const back = () => clickVisible(page, page.locator(".pcd-back"));
+      // A card opens the computer: its agents and terminals, and what it
+      // allows and its AIs (asked of it).
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+      const detail = page.locator("[data-testid=pc-detail]");
+      await detail.locator(".pc-row").first().waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computer-detail");
+      await back();
+      await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
+      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "~/code/myco-team" }).waitFor({ timeout: 10_000 });
+      await detail.locator("[data-testid=pc-details] .app-kv", { hasText: "Codex 没装" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-details");
-      await clickVisible(page, vps.getByRole("button", { name: "详情" }));
-      const office = page.locator(".pc-card", { hasText: "Office PC" });
-      await clickVisible(page, office.getByRole("button", { name: "详情" }));
-      const view = office.locator("[data-testid=pc-details]");
-      await view.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
+      await back();
+      // A computer that has not allowed terminals says how to allow it: on
+      // that computer, never from here.
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Office PC" }));
+      await detail.locator("[data-testid=shell-ask] code", { hasText: "myco machine shell-access --allow" }).waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-permission");
-      await clickVisible(page, office.getByRole("button", { name: "详情" }));
-      await view.waitFor({ state: "hidden", timeout: 5_000 });
-      // Renaming a computer from its card: another computer's name is refused.
-      const bench = page.locator(".pc-card", { hasText: "Bench Linux" });
-      await bench.locator(".pc-card-head").hover();
-      await clickVisible(page, bench.getByRole("button", { name: "改名" }));
+      await back();
+      // Renaming a computer, from its page: another computer's name is refused.
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Bench Linux" }));
+      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
       const form = page.locator(".pc-rename-form");
       const nameBox = form.getByRole("textbox", { name: "电脑的名字" });
       await nameBox.fill("office pc");
@@ -3189,29 +3191,37 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "computer-rename-clash");
       await nameBox.fill(`测试机 ${size.width} ${scheme}`);
       await nameBox.press("Enter");
-      const renamed = page.locator(".pc-card", { hasText: `测试机 ${size.width} ${scheme}` });
-      await renamed.waitFor({ timeout: 10_000 });
+      await detail.locator(".pcd-titles h1", { hasText: `测试机 ${size.width} ${scheme}` }).waitFor({ timeout: 10_000 });
       // Back to its name for the steps after this one.
-      await renamed.locator(".pc-card-head").hover();
-      await clickVisible(page, renamed.getByRole("button", { name: "改名" }));
+      await clickVisible(page, detail.getByRole("button", { name: "改名" }));
       await nameBox.fill("Bench Linux");
       await nameBox.press("Enter");
-      await page.locator(".pc-card .pc-card-head .pc-row-name", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
+      await detail.locator(".pcd-titles h1", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
+      await back();
+      await page.locator(".pc-card", { hasText: "Bench Linux" }).waitFor({ timeout: 10_000 });
       // Who may use a computer, which projects have it, and removing it are
       // in one place, a click from its row.
       // (The folder added in the project step, at full width; else the first.)
-      const pcRow = narrow ? page.locator(".pc-row").first() : page.locator(".pc-row", { hasText: `wsl-${size.width}-${scheme}` });
+      // (terminals of a known computer are on its page: open one when the
+      // list has none of its own)
+      const someRow = async () => {
+        if (!(await page.locator(".pc-term:visible").count())) await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+        await page.locator(".pc-term").first().waitFor({ timeout: 10_000 });
+      };
+      const isWsl = !narrow && (await page.locator(".pc-term", { hasText: `wsl-${size.width}-${scheme}` }).count()) > 0;
+      if (!isWsl) await someRow();
+      const pcRow = isWsl ? page.locator(".pc-term", { hasText: `wsl-${size.width}-${scheme}` }) : page.locator(".pc-term").first();
       await clickVisible(page, pcRow.getByRole("button", { name: "设置" }));
       const set = page.locator("[data-testid=computer-settings]");
       await set.waitFor({ timeout: 10_000 });
       await set.locator(".pcs-agent").first().waitFor({ timeout: 10_000 });
-      if (!narrow) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
+      if (isWsl) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
       await clickVisible(page, set.locator(".pcs-agent").last());
       await clickVisible(page, set.getByRole("button", { name: "保存" }));
       await set.getByText("已保存").waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-settings");
-      if (!narrow) {
+      if (isWsl) {
         await clickVisible(page, set.getByRole("button", { name: "移除这个终端" }));
         const sure = page.locator(".app-modal.app-confirm");
         await sure.waitFor({ timeout: 5_000 });
@@ -3223,7 +3233,8 @@ async function runMatrix(browser, size, scheme) {
         await set.waitFor({ state: "hidden", timeout: 5_000 });
       }
       // A folder's terminal opens from here.
-      await clickVisible(page, page.locator(".pc-row").first().getByRole("button", { name: "打开", exact: true }));
+      await someRow();
+      await clickVisible(page, page.locator(".pc-term").first().getByRole("button", { name: "打开", exact: true }));
       await page.locator(".conv-detail").waitFor({ timeout: 20_000 });
       // And the terminal's header opens its settings too.
       await clickVisible(page, page.locator("[data-testid=computer-settings-open]").first());
@@ -3449,11 +3460,10 @@ async function runMatrix(browser, size, scheme) {
     // the online one shows the uninstall command, and both are gone after.
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
-      const card = page.locator(".pc-card", { hasText: "临时 Mac" });
-      await clickVisible(page, card.getByRole("button", { name: "详情" }));
-      const view = card.locator("[data-testid=pc-details]");
+      await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
+      const view = page.locator("[data-testid=pc-detail]");
       await view.waitFor({ timeout: 10_000 });
-      await clickVisible(page, view.getByRole("button", { name: "移除这台电脑" }));
+      await clickVisible(page, view.locator(".pcd-danger").getByRole("button", { name: "移除" }));
       const dialog = page.locator(".app-modal");
       await dialog.locator(".pc-gone-row").nth(1).waitFor({ timeout: 10_000 });
       const dialogText = compactText(await dialog.innerText());
@@ -3679,7 +3689,9 @@ async function runMatrix(browser, size, scheme) {
       // Adding a computer to the new workspace, outside any project: the
       // same one command; the folder it is run in is in the sidebar after.
       await go(page, "电脑", narrow);
-      await page.locator(".pc .app-empty-note", { hasText: "还没有连上的电脑" }).waitFor({ timeout: 10_000 });
+      await page.locator("[data-testid=pc-empty]", { hasText: "还没有连上的电脑" }).waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "computers-empty");
       if (narrow) await sidebar(page, true);
       await clickVisible(page, page.locator(".sp-nav-pcs").getByRole("button", { name: "加一个终端" }));
       const pick = page.locator(".app-modal-add");
