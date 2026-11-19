@@ -3338,3 +3338,98 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
   display: flex;
   justify-content: flex-end;
 }
+
+/* A computer's check-up (ComputerCheck.tsx). */
+.cc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cc-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.cc-route .mono {
+  color: var(--fg);
+}
+.cc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cc-actions svg {
+  width: 13px;
+  height: 13px;
+}
+.cc .app-small-note,
+.cc .cx-error,
+.cc-fixed,
+.cc-findings {
+  margin-top: 12px;
+}
+.cc-fixed {
+  font-size: 12.5px;
+  color: var(--green);
+}
+.cc-fixed.is-bad {
+  color: var(--red);
+}
+.cc-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cc-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.cc-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.cc-row.is-warn .cc-dot {
+  background: var(--amber);
+}
+.cc-row.is-bad .cc-dot {
+  background: var(--red);
+}
+.cc-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.cc-detail {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.cc-row .app-command {
+  margin-top: 6px;
+}
+.cc-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.cc-pick-row .app-select-field {
+  flex: 1;
+  min-width: 0;
+}
+.cc-pick-row .app-group-action svg {
+  width: 12px;
+  height: 12px;
+}
+.cc-pick > .app-small-note:first-child {
+  margin-top: 0;
+}

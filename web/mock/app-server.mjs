@@ -385,6 +385,9 @@ const sshHosts = [
   { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
 ];
 const connectJobs = new Map();
+// How the App reaches each computer ("<hub>/<machine>") and what a check-up finds.
+const machineReach = new Map([["hub_studio/m_vps", { via: "ssh", target: "tokyo-vps" }]]);
+const machineHealth = new Map();
 // What a job shows at this moment: log in (0.8 s), install (2 s), show up
 // (1 s); old-pi fails to log in. Once done, the computer is on the workspace.
 function connectView(job) {
@@ -3072,6 +3075,47 @@ const server = http.createServer(async (req, res) => {
         uses,
         expires_hours: hours,
       });
+    }
+
+    // /app/hubs/{id}/machines/{mid}/reach|diagnose|fix — a computer's
+    // check-up over SSH (ComputerCheck.tsx). VPS 东京 runs its runner through
+    // a proxy that no longer gets through (as a WSL did once).
+    if (parts.length === 6 && parts[3] === "machines" && ["reach", "diagnose", "fix"].includes(parts[5])) {
+      const mid = parts[4];
+      const key = `${hub.id}/${mid}`;
+      if (parts[5] === "reach" && method === "GET") return send(res, 200, { route: machineReach.get(key) || null });
+      if (parts[5] === "reach" && method === "PUT") {
+        const body = await readBody(req);
+        machineReach.set(key, { via: body.via, target: body.target });
+        return send(res, 200, { route: machineReach.get(key) });
+      }
+      const rt = machineReach.get(key);
+      if (!rt) return fail(res, 409, "not_configured", "this App does not know how to reach that computer");
+      const machine = (hub.machines || []).find((m) => m.id === mid);
+      const st = machineHealth.get(key) || { proxyBroken: mid === "m_vps", service: "active", version: (machine && machine.myco_version) || "0.20.14" };
+      machineHealth.set(key, st);
+      if (parts[5] === "diagnose" && method === "POST") {
+        await sleep(900);
+        if (rt.target === "old-pi") return fail(res, 502, "auth", "pi@192.168.1.40: Permission denied (publickey).", "ssh old-pi");
+        return send(res, 200, {
+          route: rt,
+          found: { os: "Linux", myco: `v${st.version}`, myco_path: "/home/glenn/.local/bin/myco", service: st.service, since: "Wed 2026-11-18 02:17:35 CST", linger: "yes", running: "yes", proxy: "http://127.0.0.1:7890" },
+          hubs: [{ url: "https://hub.example.com", mine: true, direct: "200", proxy: st.proxyBroken ? "000" : "200" }],
+          log: [
+            "time=2026-11-19T08:59:41.521+08:00 level=WARN msg=\"pull failed\" agent=vps-claude err=\"unavailable: cannot reach hub https://hub.example.com: Post \\\"https://hub.example.com/v1/inbox/pull\\\": EOF\" retry_in=30s",
+            "time=2026-11-19T09:00:14.476+08:00 level=WARN msg=\"pull failed\" agent=vps-claude err=\"unavailable: cannot reach hub https://hub.example.com: Post \\\"https://hub.example.com/v1/inbox/pull\\\": EOF\" retry_in=30s",
+          ],
+        });
+      }
+      if (parts[5] === "fix" && method === "POST") {
+        const body = await readBody(req);
+        await sleep(body.action === "upgrade" ? 1500 : 700);
+        if (body.action === "upgrade") { st.version = "0.20.17"; if (machine) machine.myco_version = "0.20.17"; }
+        st.service = "active";
+        return send(res, 200, { ok: true, log: body.action === "upgrade"
+          ? ["==> downloading https://github.com/chenhg5/myco/releases/latest/download/myco-linux-amd64", "==> checksum ok", "==> installed: /home/glenn/.local/bin/myco v0.20.17", "runner service restarted (systemd)"]
+          : ["runner service restarted (systemd)"] });
+      }
     }
 
     // /app/hubs/{id}/machines/connect — connect a computer over SSH or WSL:

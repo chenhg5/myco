@@ -3549,6 +3549,34 @@ async function runMatrix(browser, size, scheme) {
 
     // Removing a whole computer: a dry run lists the agent and folder on it,
     // the online one shows the uninstall command, and both are gone after.
+    // A computer's check-up over SSH: VPS 东京's runner goes through a proxy
+    // that no longer gets through; restarting says so; a computer the App
+    // did not connect asks which SSH host it is.
+    await step("电脑 · 检查", async () => {
+      await go(page, "电脑", narrow);
+      await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
+      const check = page.locator("[data-testid=computer-check]");
+      await check.locator(".cc-route", { hasText: "tokyo-vps" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, check.getByRole("button", { name: "检查" }));
+      const bad = check.locator(".cc-row.is-bad").first();
+      await bad.waitFor({ timeout: 10_000 });
+      const badText = compactText(await bad.innerText());
+      if (!badText.includes("经代理连不上工作区，直连是通的") || !badText.includes("127.0.0.1:7890")) throw new Error(`检查应先说代理连不上、直连通，实际是「${badText}」`);
+      await check.locator(".cc-row.is-ok", { hasText: "myco 后台在运行" }).waitFor({ timeout: 5_000 });
+      await check.locator(".cc-row").last().scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-check");
+      await clickVisible(page, check.getByRole("button", { name: "重启后台" }));
+      await check.locator(".cc-fixed", { hasText: "后台重启好了" }).waitFor({ timeout: 10_000 });
+      // One the App did not connect: which SSH host is it?
+      await clickVisible(page, page.locator(".pcd-back"));
+      await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));
+      await page.locator("[data-testid=computer-check] select.app-select-field").waitFor({ timeout: 10_000 });
+      await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-check-pick");
+    });
+
     await step("电脑 · 移除", async () => {
       await go(page, "电脑", narrow);
       await clickVisible(page, page.locator(".pc-card", { hasText: "临时 Mac" }));

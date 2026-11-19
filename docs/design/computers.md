@@ -102,9 +102,10 @@ App 经 Hub 给那台电脑的 machine 节点发一个 `cli: "info"` 的请求�
 
 **记住怎么连回去**：加成功后，App 在本机记下「这台电脑 ← SSH 名字 / WSL 发行版」（`~/.myco/app-reach.json`，只记名字，不记地址和密钥）。之后：
 
-- **诊断**（还没做）：电脑页上一个按钮，通过同一条路跑一段只读脚本，逐项给结论：myco 版本；后台服务在不在跑；linger（Linux）；服务配置里的代理；经那个代理和直连各能不能连上 Hub；runner 日志最后 20 行。比如「代理 127.0.0.1:7890 连不上任何网站，直连 Hub 是通的」。
-- **重启后台**、**升级 myco**：`myco runner service install`（会重启）、`myco upgrade`。
-- 不是从 App 加的电脑没有这条路，电脑页给一个「用 SSH 连这台」，选一个 SSH 名字记下来，之后一样能诊断。
+- **检查**：电脑页「检查和修复」一块，通过同一条路跑一段只读脚本，逐项给结论（最坏的排最前）：myco 版本和位置；后台服务在不在跑、从什么时候起；linger（Linux）；服务配置里的代理；它所在的每个工作区经那个代理、和直连各连不连得上（问 `/v1/health`）；runner 日志最后 20 行。比如「经代理连不上工作区，直连是通的」，说清代理地址和怎么办。代理密码、令牌在离开那台电脑前就遮掉。
+- **重启后台**（`myco runner service restart`）、**升级 myco**（同一个安装脚本，用不了 sudo 时装到 `~/.local/bin`，再让服务用新的那个）：做完再自动检查一次；失败时展开它打印的最后几行。
+- 不是从 App 加的电脑：这一块先问「它是哪一个」，从 SSH 配置里的主机和这台 Windows 上的 WSL 里选（按名字、主机名先猜一个），记下来，之后一样能检查。
+- App 后端：`GET/PUT /app/hubs/{id}/machines/{mid}/reach`、`POST …/diagnose`、`POST …/fix {action: restart|upgrade}`（`remote_diag.go`）。
 
 **范围**：先做 SSH 到 Linux、macOS，和 Windows 上的 WSL。SSH 到 Windows 本身（PowerShell）先不做。App 后端只用系统自带的 `ssh`、`wsl.exe`，不引新依赖。Hub 和那台电脑的 myco 都不用升级。
 

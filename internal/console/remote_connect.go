@@ -126,6 +126,7 @@ func parseProbe(lines []string) map[string]string {
 func (b *Backend) remoteRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/local/ssh-hosts", b.getSSHHosts)
 	m.HandleFunc("GET /app/local/wsl", b.getWSL)
+	b.diagRoutes(m)
 	m.HandleFunc("POST /app/hubs/{id}/machines/connect", b.withHub(b.postConnect))
 	m.HandleFunc("GET /app/connect/{job}", func(w http.ResponseWriter, r *http.Request) {
 		j, ok := b.connects.get(r.PathValue("job"))
@@ -144,9 +145,7 @@ func (b *Backend) postConnect(w http.ResponseWriter, r *http.Request, c *client.
 	if !decode(w, r, &in) {
 		return
 	}
-	in.Target = strings.TrimSpace(in.Target)
-	bad := in.Target == "" || strings.HasPrefix(in.Target, "-") || strings.ContainsAny(in.Target, " \t\r\n'\"`;|&$<>\\")
-	if (in.Via != "ssh" && in.Via != "wsl") || bad || in.Port < 0 || in.Port > 65535 {
+	if !validRoute(&in) {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "say how to reach it: via ssh or wsl, and a plain name"})
 		return
 	}

@@ -97,3 +97,29 @@ func TestInstallScriptKeepsTheLinkOffCommandLines(t *testing.T) {
 		t.Fatalf("%v", p)
 	}
 }
+
+func TestParseDiagMasksSecrets(t *testing.T) {
+	found, hubs, log := parseDiag([]string{
+		"myco-check myco v0.20.17",
+		"myco-check service active",
+		"myco-check proxy http://alice:s3cret@127.0.0.1:7890",
+		"myco-check hub https://hub.example.com",
+		"myco-check hub_direct https://hub.example.com 200",
+		"myco-check hub_proxy https://hub.example.com 000",
+		"myco-log time=x level=WARN msg=\"pull failed\" token=myco_agent_abcdefghijklmnop",
+		"noise",
+		"myco-check end ok",
+	})
+	if found["proxy"] != "http://***@127.0.0.1:7890" || found["service"] != "active" || found["end"] != "ok" {
+		t.Fatalf("%v", found)
+	}
+	if len(hubs) != 1 || hubs[0].Direct != "200" || hubs[0].Proxy != "000" {
+		t.Fatalf("%+v", hubs)
+	}
+	if len(log) != 1 || strings.Contains(log[0], "abcdefghijklmnop") {
+		t.Fatalf("log not masked: %v", log)
+	}
+	if !sameHubURL("https://hub.example.com/w/team/", "https://hub.example.com") || sameHubURL("https://a.example", "https://b.example") {
+		t.Fatal("sameHubURL")
+	}
+}
