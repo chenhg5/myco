@@ -2298,7 +2298,9 @@ const server = http.createServer(async (req, res) => {
       }
       const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
       if (tunnel === "cloudflare" && !local.tools.cloudflared) {
-        return fail(res, 409, "cloudflared_missing", "没有找到 cloudflared。", "在终端运行 brew install cloudflared。");
+        // The App gets cloudflared itself (cloudflared.go).
+        await sleep(1500);
+        local.tools.cloudflared = { path: "/Users/glenn/.local/bin/cloudflared" };
       }
       if (tunnel === "tailscale" && !local.tools.tailscale) {
         return fail(res, 409, "tailscale_missing", "没有找到 Tailscale。", "先安装 Tailscale 并为这台设备开启 Funnel。");

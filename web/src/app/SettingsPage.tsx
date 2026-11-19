@@ -2,7 +2,7 @@ import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
+  AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
 } from "lucide-react";
 import {
   appApi, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -272,9 +272,9 @@ function host(url: string) {
 const TUNNELS: { key: LocalTunnel; title: string; desc: string; needsDomain?: boolean; missing?: string }[] = [
   {
     key: "cloudflare",
-    get title() { return L("Cloudflare 临时地址", "Cloudflare temporary address"); },
-    get desc() { return L("不用账号，地址每次重启都会变，适合先试试。", "No account needed. The address changes on every restart, so it’s good for trying things out."); },
-    get missing() { return L("需要先安装 cloudflared。", "Install cloudflared first."); },
+    get title() { return L("一键开放（推荐）", "One click (recommended)"); },
+    get desc() { return L("不用账号，也不用装别的：一个 Cloudflare 临时地址。这台电脑重启后地址会变，到时再点一次就行。", "No account, nothing to install: a temporary Cloudflare address. It changes when this computer restarts; click again then."); },
+    get missing() { return L("不用账号：第一次会自动下载 Cloudflare 的小工具（cloudflared，约 20 MB）。这台电脑重启后地址会变。", "No account: the first time, Cloudflare's small tool (cloudflared, about 20 MB) is downloaded for you. The address changes when this computer restarts."); },
   },
   {
     key: "cloudflare",
@@ -869,15 +869,16 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
 
   useEffect(() => {
     if (!open) return;
-    setChoice(cf ? 0 : ts ? 2 : 0);
+    setChoice(0);
     setHostname("");
     setBusy(false);
     setError(null);
     setResult(null);
   }, [open, cf, ts]);
 
+  // The one-click way gets cloudflared itself; the others need their tool.
   const disabled = (i: TunnelChoice) =>
-    i === 0 || i === 1 ? !cf : !ts;
+    i === 0 ? false : i === 1 ? !cf : !ts;
 
   // Opening can take a minute or two (Funnel's certificate, a tunnel's
   // DNS): say how long, and let it be cancelled.
@@ -969,7 +970,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
                   <span className="app-radio" aria-hidden />
                   <span className="app-choice-text">
                     <span className="t">{t.title}</span>
-                    <span className="d">{off ? t.missing : t.desc}</span>
+                    <span className="d">{off || (i === 0 && !cf) ? t.missing : t.desc}</span>
                   </span>
                 </label>
               );
@@ -987,17 +988,13 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               />
             </label>
           )}
-          {!cf && !ts && (
-            <div className="app-notice">
-              <Monitor />
-              <span>{L("没有找到 cloudflared 或 Tailscale。先安装其中一个，才能开放到公网。", "Neither cloudflared nor Tailscale was found. Install one of them to open the Hub to the internet.")}</span>
-            </div>
-          )}
           {busy && waited >= 15 && (
             <div className="app-small-note" data-testid="opening-wait">
               {choice === 2
                 ? L(`已经 ${waited} 秒：Tailscale 第一次开放要申请证书，可能要一两分钟。不想等就点「取消」。`, `${waited}s so far: the first time, Tailscale gets a certificate, which can take a minute or two. Cancel if you would rather not wait.`)
-                : L(`已经 ${waited} 秒：正在等隧道连通。不想等就点「取消」。`, `${waited}s so far: waiting for the tunnel to come up. Cancel if you would rather not wait.`)}
+                : !cf && choice === 0
+                  ? L(`已经 ${waited} 秒：正在下载 cloudflared、等隧道连通。不想等就点「取消」。`, `${waited}s so far: downloading cloudflared and waiting for the tunnel. Cancel if you would rather not wait.`)
+                  : L(`已经 ${waited} 秒：正在等隧道连通。不想等就点「取消」。`, `${waited}s so far: waiting for the tunnel to come up. Cancel if you would rather not wait.`)}
             </div>
           )}
           {error && choice === 2 && <div className="app-small-note">{L("Tailscale 这一步没成功，原因和办法在下面（来自 Tailscale）。常见的是：这个 macOS 用户下没开 Tailscale App 或没登录、还没在 Tailscale 后台为这台设备打开 Funnel。", "Tailscale's step failed; why and what to do are below (from Tailscale). Usually: the Tailscale app is not open and signed in for this macOS user, or Funnel is not on for this device in the Tailscale admin console.")}</div>}
@@ -1008,7 +1005,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               type="button"
               className="app-btn app-btn-primary"
               onClick={() => void submit()}
-              disabled={busy || (!cf && !ts) || (choice === 1 && !hostname.trim())}
+              disabled={busy || disabled(choice) || (choice === 1 && !hostname.trim())}
             >
               {busy ? <><span className="app-spinner" />{L("正在开放…", "Opening…")}</> : <><Cloud />{L("开放", "Open")}</>}
             </button>

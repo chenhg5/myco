@@ -186,10 +186,19 @@ func TestAgentScopeResumesOneBoundSession(t *testing.T) {
 }
 
 func TestBusySessionReleasesInsteadOfFailing(t *testing.T) {
+	busyPause = time.Millisecond
+	t.Cleanup(func() { busyPause = 5 * time.Second })
 	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"})
+	tries := 0
 	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		tries++
 		return harness.Result{}, fmt.Errorf("%w: open in UI", harness.ErrSessionBusy)
 	}}
+	defer func() {
+		if tries != 1+busyRetries {
+			t.Errorf("a busy session was tried %d times, want %d", tries, 1+busyRetries)
+		}
+	}()
 	New(hub, h, NewMemorySessions(), nil, Options{Once: true}, quiet()).Run(context.Background())
 	if hub.fails["t1"] != "" || hub.status["t1"] != "delivered" {
 		t.Fatalf("busy session must release, not fail: status=%s fail=%q", hub.status["t1"], hub.fails["t1"])
@@ -281,5 +290,25 @@ func TestRunnerOnStop(t *testing.T) {
 	New(newFakeHub(), fakeHarness{}, NewMemorySessions(), nil, Options{OnStop: func() { stops++ }}, quiet()).Run(ctx)
 	if stops != 1 {
 		t.Fatalf("stopped runner: OnStop ran %d times", stops)
+	}
+}
+
+// A session busy only for a moment (just copied) gets its answer without
+// going back to the queue.
+func TestBusyForAMomentIsRetried(t *testing.T) {
+	busyPause = time.Millisecond
+	t.Cleanup(func() { busyPause = 5 * time.Second })
+	hub := newFakeHub(api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"})
+	tries := 0
+	h := fakeHarness{fn: func(r harness.Request) (harness.Result, error) {
+		tries++
+		if tries < 2 {
+			return harness.Result{}, fmt.Errorf("%w: active writer", harness.ErrSessionBusy)
+		}
+		return harness.Result{Output: "hi"}, nil
+	}}
+	New(hub, h, NewMemorySessions(), nil, Options{Once: true}, quiet()).Run(context.Background())
+	if hub.replies["t1"] != "hi" || tries != 2 {
+		t.Fatalf("reply %q after %d tries, want hi after 2", hub.replies["t1"], tries)
 	}
 }

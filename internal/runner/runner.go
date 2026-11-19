@@ -127,6 +127,13 @@ type activeTask struct {
 // runner's timeout.
 var errIdle = errors.New("no activity")
 
+// How often, and how far apart, a busy session is tried again before the
+// task goes back (tests shorten them).
+var (
+	busyRetries = 3
+	busyPause   = 5 * time.Second
+)
+
 // errSteered is the cancel cause of a run interrupted by a steer.
 var errSteered = errors.New("interrupted by a steer from the task's sender")
 
@@ -539,6 +546,16 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			}
 		}
 		res, runErr = r.harness.Run(runCtx, req)
+		// A session busy for a moment (just copied, or another program
+		// glancing at it) is retried here a few times before the task goes
+		// back and the App says the session is open elsewhere.
+		for i := 0; errors.Is(runErr, harness.ErrSessionBusy) && i < busyRetries && runCtx.Err() == nil; i++ {
+			select {
+			case <-runCtx.Done():
+			case <-time.After(busyPause):
+				res, runErr = r.harness.Run(runCtx, req)
+			}
+		}
 		steered := errors.Is(context.Cause(runCtx), errSteered)
 		switch cause := context.Cause(runCtx); {
 		case runErr == nil:

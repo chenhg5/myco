@@ -38,6 +38,9 @@ type Local struct {
 	// Remote runs ssh or wsl.exe for reaching another computer (remote.go;
 	// tests replace it).
 	Remote remoteExec
+	// EnsureTool gets cloudflared when it is missing (tests replace it);
+	// default EnsureCloudflared.
+	EnsureTool func(ctx context.Context) (string, error)
 	// versions remembers agent CLIs' --version by file (agents.go).
 	versions sync.Map
 	// Install downloads the myco CLI into dir (tests replace it).
@@ -571,6 +574,19 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		if _, err := install(ctx, filepath.Join(l.Home, ".local", "bin")); err != nil {
 			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "install_failed", Message: "cannot install the myco command line: " + err.Error(),
 				Suggestion: "check the network and try again"})
+			return
+		}
+	}
+	// The temporary Cloudflare address needs only cloudflared: get it now
+	// rather than send the person off to install it.
+	if in.Tunnel == "cloudflare" && l.cloudflaredPath() == "" {
+		ensure := l.EnsureTool
+		if ensure == nil {
+			ensure = l.EnsureCloudflared
+		}
+		if _, err := ensure(ctx); err != nil {
+			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "cloudflared_missing",
+				Message: "could not get cloudflared: " + err.Error(), Suggestion: "brew install cloudflared, or download it from https://github.com/cloudflare/cloudflared/releases"})
 			return
 		}
 	}
