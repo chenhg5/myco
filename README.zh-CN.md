@@ -210,7 +210,7 @@ myco upgrade
 - **每台机器一行命令**：`curl … | bash` 就能装好 myco、登记机器、启动后台 runner，不用手动复制任何令牌。
 - **不一定要 VPS**：Hub 可以放在 VPS 上，也可以放在你已有的电脑上，通过 Cloudflare Tunnel 或 Tailscale Funnel 对外访问。
 - **远程开新会话**：在另一台机器的某个目录里新开一个 Claude Code 或 Codex 会话并直接接入；谁能开、能开在哪、给什么权限，由那台机器自己的规则决定。
-- **接入任意 CLI**：内置 Claude Code、Codex、Pi、Kiro、Cursor、Gemini CLI、OpenCode，其他工具用模板也能接入（[完整列表](#支持的-agent)）。
+- **接入任意 CLI**：内置 Claude Code、Codex、Pi、Kiro、Cursor、Gemini CLI、OpenCode、Qoder、Qwen Code、Kimi、GitHub Copilot 等，其他工具用模板也能接入（[完整列表](#支持的-agent)）。
 - **派活方式灵活**：一对一派任务并用 `--wait` 等结果，或按标签（`group=review,machine=vps`）广播，每个接收方的回复都会被追踪。
 - **exec 节点**：在远端机器上执行命令并返回输出，用起来像 ssh。发送方必须在白名单里，每条命令都有审计记录。
 - **自动化**：Hub 按时间表（cron，按你的时区）或在 webhook 被调用时给 agent 派任务，比如每天的日报、CI 失败后排查，电脑关着也照常。`myco automation create`，或在 App 里设。
@@ -295,6 +295,16 @@ sequenceDiagram
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP：实验性 |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP：实验性 |
 | [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP：实验性 |
+| [Qoder CLI](https://qoder.com) | `qodercli --acp` | `qoder` | ACP：实验性 |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen --acp` | `qwen` | ACP：实验性 |
+| [Kimi Code](https://moonshotai.github.io/kimi-cli/) | `kimi acp` | `kimi` | ACP：实验性 |
+| [goose](https://block.github.io/goose/) | `goose acp` | `goose` | ACP：实验性 |
+| [GitHub Copilot](https://github.com/github/copilot-cli) | `copilot --acp` | `copilot` | ACP：实验性 |
+| [Auggie](https://github.com/augmentcode/auggie) | `auggie --acp` | `auggie` | ACP：实验性 |
+| [CodeBuddy Code](https://www.codebuddy.cn/cli/) | `codebuddy --acp` | `codebuddy` | ACP：实验性 |
+| [Kilo Code](https://kilo.ai) | `kilo acp` | `kilo` | ACP：实验性 |
+| [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP：实验性 |
+| [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP：实验性 |
 
 - **原生适配**：专门写的适配器。它还会读会话记录，所以你正在用的会话 myco 不会去打断；并且会把 `runner.access`（`readonly` / `workspace` / `full`）翻译成该 CLI 自己的权限参数。
 - **预设**：内置的命令行模板。**实验性**表示按该 CLI 文档中的输出格式实现，但还没有经过长期的真实使用，欢迎反馈。

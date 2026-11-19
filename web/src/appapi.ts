@@ -132,7 +132,8 @@ export interface ProfileInput {
 
 /** CLIs that a machine can be asked to start a new session with. */
 /** An agent CLI to start a session with, or "exec": a shell node that runs the commands it is sent. */
-export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "exec";
+export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "exec"
+  | "qoder" | "qwen" | "kimi" | "goose" | "copilot" | "auggie" | "codebuddy" | "kilo" | "cline" | "grok";
 export interface SpawnInput {
   cli: SpawnCli;
   /** Directory on that machine; `~/...` is that machine's home directory. */

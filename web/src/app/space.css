@@ -3496,3 +3496,6 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
   color: var(--muted);
   font-size: 11px;
 }
+.la-more {
+  margin-top: 8px;
+}

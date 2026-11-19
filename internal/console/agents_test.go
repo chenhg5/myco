@@ -147,7 +147,7 @@ func TestAgentTerminal(t *testing.T) {
 	defer resp.Body.Close()
 	var list struct{ Agents []console.LocalAgent }
 	json.NewDecoder(resp.Body).Decode(&list)
-	if len(list.Agents) != 4 || list.Agents[0].CLI != "claude" || list.Agents[0].State != "missing" {
+	if len(list.Agents) < 4 || list.Agents[0].CLI != "claude" || list.Agents[0].State != "missing" {
 		t.Fatalf("list: %+v", list.Agents)
 	}
 }

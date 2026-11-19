@@ -20,6 +20,17 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   cursor: { label: "Cursor", icon: IconPointer },
   gemini: { label: "Gemini CLI", icon: IconStar },
   opencode: { label: "OpenCode", icon: IconTerminal },
+  qoder: { label: "Qoder CLI", icon: IconBot },
+  qwen: { label: "Qwen Code", icon: IconBot },
+  kimi: { label: "Kimi Code", icon: IconBot },
+  goose: { label: "goose", icon: IconBot },
+  copilot: { label: "GitHub Copilot", icon: IconBot },
+  auggie: { label: "Auggie", icon: IconBot },
+  codebuddy: { label: "CodeBuddy Code", icon: IconBot },
+  kilo: { label: "Kilo Code", icon: IconBot },
+  cline: { label: "Cline", icon: IconBot },
+  grok: { label: "Grok", icon: IconBot },
+
   shell: { label: "Shell", icon: IconPrompt },
   exec: { label: "Exec", icon: IconTerminal },
   // Any agent joined from a session without a runner it can wake: it receives
