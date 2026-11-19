@@ -646,11 +646,13 @@ public final class ConversationModel {
         // Which open runs have stopped for now: not at work.
         var paused: Set<String> = []
         for task in all.values where task.to == agent && task.isOpen {
-            let moved = windows.windows[task.id] != nil
             let said = all.values
                 .filter { $0.type == "progress" && windows.home(of: $0.replyTo ?? $0.threadId, at: $0.createdAt) == task.id }
                 .sorted { $0.createdAt < $1.createdAt }
-            let events = moved ? windows.events(of: task.id, traces: traces) : traces[task.id] ?? []
+            // (without the turns it woke for only to keep listening, as the
+            // desktop app's: an agent that spoke and went back to `myco
+            // inbox wait` is waiting, not running a command)
+            let events = windows.events(of: task.id, traces: traces)
             if RunProcess.isPaused(events: events, task: task, reports: said, now: Date()) { paused.insert(task.id) }
         }
         // Each open task's last step, and whether its session ended its
@@ -811,10 +813,20 @@ public final class ConversationModel {
         }
     }
 
+    /// When I last sent or added something here.
+    private var lastSentAt: Date?
+
+    /// How long after a send the round button does not stop: it turns into
+    /// stop under the finger as the message goes, and a second tap (or one
+    /// that lagged) must not stop what was just sent.
+    static let stopGrace: TimeInterval = 1.5
+
     /// The send button: a new message, an addition to the open task, or stop.
     public func submit() async {
         guard canSubmit else { return }
         let action = action
+        if action == .stop, let sent = lastSentAt, Date().timeIntervalSince(sent) < Self.stopGrace { return }
+        if action != .stop { lastSentAt = Date() }
         let text = trimmedDraft
         let files = pending
         let attachments = Self.ids(of: files)
@@ -972,6 +984,7 @@ public final class ConversationModel {
     /// refuses; then it is kept here and sent when the task ends.
     public func queueNext() async {
         guard canSubmit, action != .stop else { return }
+        lastSentAt = Date()
         guard let task = openTask else {
             await submit()
             return
