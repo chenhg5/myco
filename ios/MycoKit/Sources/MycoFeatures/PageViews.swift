@@ -396,7 +396,8 @@ private struct PageWebView: UIViewRepresentable {
                 guard let json = try? JSONSerialization.data(withJSONObject: reply, options: [.fragmentsAllowed]),
                       let text = String(data: json, encoding: .utf8)
                 else { return }
-                _ = try? await view?.evaluateJavaScript("window.__mycoAnswer && window.__mycoAnswer(\(call), \(text))")
+                // (the callback form: the async one traps on `undefined`)
+                view?.evaluateJavaScript("window.__mycoAnswer && window.__mycoAnswer(\(call), \(text)); void 0", completionHandler: nil)
             }
         }
 
@@ -408,7 +409,7 @@ private struct PageWebView: UIViewRepresentable {
                     try? await Task.sleep(for: .seconds(2))
                     for event in await bridge.poll() {
                         guard let text = String(data: event, encoding: .utf8) else { continue }
-                        _ = try? await self?.view?.evaluateJavaScript("window.__mycoEvent && window.__mycoEvent(\(text))")
+                        self?.view?.evaluateJavaScript("window.__mycoEvent && window.__mycoEvent(\(text)); void 0", completionHandler: nil)
                     }
                 }
             }
@@ -488,6 +489,7 @@ private struct PageWebView: UIViewRepresentable {
 
 /// The web view keeps its message handler strongly: this one does not
 /// keep the page's coordinator alive.
+@MainActor
 private final class WeakHandler: NSObject, WKScriptMessageHandler {
     weak var target: (any WKScriptMessageHandler)?
 

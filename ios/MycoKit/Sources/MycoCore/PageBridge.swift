@@ -40,7 +40,7 @@ public final class PageBridge {
     private let hub: any HubAPI
     public private(set) var page: Page
     private let me: String
-    private let names: (String) -> String
+    private let names: @MainActor (String) -> String
     private let doors: Doors
     private let storage: UserDefaults
     private let storageKey: String
@@ -54,7 +54,7 @@ public final class PageBridge {
     private var sends: [Date] = []
 
     public init(
-        hub: any HubAPI, page: Page, me: String, workspace: String, names: @escaping (String) -> String, doors: Doors,
+        hub: any HubAPI, page: Page, me: String, workspace: String, names: @escaping @MainActor (String) -> String, doors: Doors,
         storage: UserDefaults = .standard
     ) {
         self.hub = hub
