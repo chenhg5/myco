@@ -3613,6 +3613,8 @@ async function runMatrix(browser, size, scheme) {
       await page.locator("[data-testid=computer-check]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "computer-check-pick");
+      await clickVisible(page, page.locator(".pcd-back"));
+      await page.locator(".pc-card", { hasText: "临时 Mac" }).waitFor({ timeout: 10_000 });
     });
 
     await step("电脑 · 移除", async () => {
