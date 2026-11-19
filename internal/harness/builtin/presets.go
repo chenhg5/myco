@@ -74,6 +74,18 @@ var ACPPresets = map[string]acp.Spec{
 		},
 		Login: "run opencode auth login on this machine",
 	},
+	// More CLIs that speak ACP: myco answers their permission requests from
+	// the access level, so they need only how to start them.
+	"qoder":     {Binary: "qodercli", Args: []string{"--acp"}, Login: "run qodercli on this machine and sign in"},
+	"qwen":      {Binary: "qwen", Args: []string{"--acp"}, Login: "run qwen on this machine and sign in (or set an API key in its settings)"},
+	"kimi":      {Binary: "kimi", Args: []string{"acp"}, Login: "run kimi on this machine and sign in"},
+	"goose":     {Binary: "goose", Args: []string{"acp"}, Login: "run goose configure on this machine"},
+	"copilot":   {Binary: "copilot", Args: []string{"--acp"}, Login: "run copilot on this machine and sign in"},
+	"auggie":    {Binary: "auggie", Args: []string{"--acp"}, Login: "run auggie login on this machine"},
+	"codebuddy": {Binary: "codebuddy", Args: []string{"--acp"}, Login: "run codebuddy on this machine and sign in"},
+	"kilo":      {Binary: "kilo", Args: []string{"acp"}, Login: "run kilo on this machine and sign in"},
+	"cline":     {Binary: "cline", Args: []string{"--acp"}, Login: "run cline on this machine and sign in"},
+	"grok":      {Binary: "grok", Args: []string{"agent", "stdio"}, Login: "run grok on this machine and sign in"},
 }
 
 // opencodeAsk makes opencode ask before shell commands and edits.

@@ -212,7 +212,7 @@ More setups (claude.ai cloud sessions, exec nodes, aliases, webhooks, GitHub wak
 - **One line per machine.** `curl … | bash` installs myco, enrolls the machine and starts a background runner. No tokens to copy.
 - **No VPS required.** Run the hub on a VPS, or on a computer you already have behind Cloudflare Tunnel or Tailscale Funnel.
 - **Spawn agents remotely.** Start a new Claude Code or Codex session in a folder on another machine. That machine's own rules decide who may, where, and with what permissions.
-- **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI and OpenCode, plus a template for anything else ([full list](#supported-agents)).
+- **Bring any CLI.** Built-in support for Claude Code, Codex, Pi, Kiro, Cursor, Gemini CLI, OpenCode, Qoder, Qwen Code, Kimi, GitHub Copilot and more, plus a template for anything else ([full list](#supported-agents)).
 - **Delegation that scales.** 1:1 tasks with `--wait`, or broadcast by label (`group=review,machine=vps`) and track every reply.
 - **Exec nodes.** Run a command on a remote machine and get its output, like ssh. Senders are allow-listed and every command is audited.
 - **Automations.** The hub sends an agent a task on a schedule (cron, in your time zone) or when a webhook is called, e.g. a daily report or a CI failure, while your computers are off. `myco automation create`, or the app.
@@ -297,6 +297,16 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP: experimental |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP: experimental |
 | [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP: experimental |
+| [Qoder CLI](https://qoder.com) | `qodercli --acp` | `qoder` | ACP: experimental |
+| [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen --acp` | `qwen` | ACP: experimental |
+| [Kimi Code](https://moonshotai.github.io/kimi-cli/) | `kimi acp` | `kimi` | ACP: experimental |
+| [goose](https://block.github.io/goose/) | `goose acp` | `goose` | ACP: experimental |
+| [GitHub Copilot](https://github.com/github/copilot-cli) | `copilot --acp` | `copilot` | ACP: experimental |
+| [Auggie](https://github.com/augmentcode/auggie) | `auggie --acp` | `auggie` | ACP: experimental |
+| [CodeBuddy Code](https://www.codebuddy.cn/cli/) | `codebuddy --acp` | `codebuddy` | ACP: experimental |
+| [Kilo Code](https://kilo.ai) | `kilo acp` | `kilo` | ACP: experimental |
+| [Cline](https://cline.bot/cli) | `cline --acp` | `cline` | ACP: experimental |
+| [Grok](https://x.ai/cli) | `grok agent stdio` | `grok` | ACP: experimental |
 
 - **Native**: a dedicated adapter. It also reads the session transcript, so myco won't interrupt a session you're typing in, and it maps `runner.access` (`readonly` / `workspace` / `full`) to the CLI's own permission flags.
 - **Preset**: a built-in command-line template. *Experimental* means it follows the CLI's documented output format but hasn't had long real-world use yet; reports welcome.

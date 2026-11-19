@@ -14,7 +14,7 @@ import (
 )
 
 // readmeHarnesses are the harnesses the README advertises.
-var readmeHarnesses = []string{"acp", "claude", "codex", "cursor", "exec", "gemini", "kiro", "opencode", "pi", "shell", "template"}
+var readmeHarnesses = []string{"acp", "auggie", "claude", "cline", "codebuddy", "codex", "copilot", "cursor", "exec", "gemini", "goose", "grok", "kilo", "kimi", "kiro", "opencode", "pi", "qoder", "qwen", "shell", "template"}
 
 func TestRegistryHasEveryAdvertisedHarness(t *testing.T) {
 	got := Registry().Names()

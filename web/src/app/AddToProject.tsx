@@ -87,6 +87,16 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "opencode", label: "OpenCode" },
   { value: "kiro", label: "Kiro" },
   { value: "pi", label: "Pi" },
+  { value: "qoder", label: "Qoder CLI" },
+  { value: "qwen", label: "Qwen Code" },
+  { value: "kimi", label: "Kimi Code" },
+  { value: "goose", label: "goose" },
+  { value: "copilot", label: "GitHub Copilot" },
+  { value: "auggie", label: "Auggie" },
+  { value: "codebuddy", label: "CodeBuddy Code" },
+  { value: "kilo", label: "Kilo Code" },
+  { value: "cline", label: "Cline" },
+  { value: "grok", label: "Grok" },
 ];
 
 /** What a computer told about itself, as the dialog keeps it. */

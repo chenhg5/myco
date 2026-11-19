@@ -97,7 +97,11 @@ export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[];
   if (!agents) {
     return error ? <ErrorText error={error} onRetry={() => void load()} /> : <div className="app-empty-note">{L("正在看这台电脑上装了哪些 agent…", "Looking for agents on this computer…")}</div>;
   }
-  const list = (only ? agents.filter((a) => only.includes(a.cli)) : agents).filter((a) => !hideReady || a.state !== "ready");
+  // The main four always; the many others only once installed (else a new
+  // computer lists a dozen "not installed").
+  const shown = only ? agents.filter((a) => only.includes(a.cli)) : agents.filter((a) => MAIN_CLIS.includes(a.cli) || a.state !== "missing");
+  const list = shown.filter((a) => !hideReady || a.state !== "ready");
+  const more = only ? [] : agents.filter((a) => !MAIN_CLIS.includes(a.cli) && a.state === "missing");
   if (hideReady && list.length === 0 && !error) return null;
   const Wrap = hideReady ? CardWrap : Fragment;
   return (
@@ -150,10 +154,18 @@ export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[];
           </button>
         </div>
       )}
+      {more.length > 0 && !hideReady && (
+        <div className="app-small-note la-more" data-testid="more-agents">
+          {L(`还支持 ${more.map((a) => a.name).join("、")}：装好后会出现在这里。`, `Also supported: ${more.map((a) => a.name).join(", ")}; once installed they show here.`)}
+        </div>
+      )}
       {menu.element}
     </Wrap>
   );
 }
+
+/** Always listed, installed or not; the others once installed. */
+const MAIN_CLIS = ["claude", "codex", "gemini", "opencode"];
 
 /** Used outside Settings (the new-agent form): its own card. */
 function CardWrap({ children }: { children: ReactNode }) {

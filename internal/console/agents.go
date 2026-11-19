@@ -55,6 +55,16 @@ var agentCLIs = []agentCLI{
 	{cli: "gemini", name: "Gemini CLI", binary: "gemini", npm: "npm install -g @google/gemini-cli", login: "gemini"},
 	{cli: "opencode", name: "opencode", binary: "opencode",
 		install: "curl -fsSL https://opencode.ai/install | bash", npm: "npm install -g opencode-ai", login: "opencode auth login"},
+	{cli: "qoder", name: "Qoder CLI", binary: "qodercli", npm: "npm install -g @qoder-ai/qodercli", login: "qodercli"},
+	{cli: "qwen", name: "Qwen Code", binary: "qwen", npm: "npm install -g @qwen-code/qwen-code", login: "qwen"},
+	{cli: "kimi", name: "Kimi Code", binary: "kimi", npm: "npm install -g @moonshot-ai/kimi-code", login: "kimi"},
+	{cli: "copilot", name: "GitHub Copilot", binary: "copilot", npm: "npm install -g @github/copilot", login: "copilot"},
+	{cli: "auggie", name: "Auggie", binary: "auggie", npm: "npm install -g @augmentcode/auggie", login: "auggie"},
+	{cli: "codebuddy", name: "CodeBuddy Code", binary: "codebuddy", npm: "npm install -g @tencent-ai/codebuddy-code", login: "codebuddy"},
+	{cli: "kilo", name: "Kilo Code", binary: "kilo", npm: "npm install -g @kilocode/cli", login: "kilo"},
+	{cli: "cline", name: "Cline", binary: "cline", npm: "npm install -g cline", login: "cline"},
+	{cli: "grok", name: "Grok", binary: "grok", npm: "npm install -g @xai-official/grok", login: "grok"},
+	{cli: "goose", name: "goose", binary: "goose", install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", login: "goose configure"},
 }
 
 func findAgentCLI(cli string) (agentCLI, bool) {
