@@ -66,6 +66,9 @@ type Options struct {
 	// PathPrefix is where this hub is served under another's address
 	// ("/w/<name>": one workspace of several); "" for the hub itself.
 	PathPrefix string
+	// Upgrade, if set, brings the hub's myco to a release and restarts it
+	// (POST /v1/admin/upgrade).
+	Upgrade func(ctx context.Context, version string) (api.HubUpgrade, error)
 }
 
 // AutomationTick is how often each workspace looks for automations due.
@@ -150,6 +153,7 @@ func Build(o Options) (*Hub, error) {
 	srv.SetFiles(files)
 	srv.SetPublicURL(o.Dispatch.PublicURL)
 	srv.SetPathPrefix(o.PathPrefix)
+	srv.SetUpgrade(o.Upgrade)
 	var latest func() string
 	if o.UpdateCheck != nil {
 		latest = o.UpdateCheck.Latest

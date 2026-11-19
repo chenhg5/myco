@@ -720,6 +720,37 @@ type SpawnRequest struct {
 	// so nothing is run by hand there. The machine only follows links to
 	// the server it is already connected to through this node.
 	JoinLink string `json:"join_link,omitempty"`
+	// Version, with CLI UpgradeCLI: the release to install ("" = latest).
+	Version string `json:"version,omitempty"`
+}
+
+// HubUpgrade is POST /v1/admin/upgrade: the hub brings its own myco to a
+// release and restarts (v0.20.29). Via says how: "service" (a root
+// service of the server does it, installed by install-hub.sh or `sudo
+// myco upgrade`) or "self" (the hub replaces its binary and its service
+// manager starts it again). Done in the background: watch /v1/health's
+// server_version.
+type HubUpgrade struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Via  string `json:"via"`
+}
+
+// UpgradeCLI, as a spawn request's CLI, asks the machine node to bring the
+// machine's myco to a release (Version, or the latest) and restart its
+// runner (SpawnResult.Upgrade). Machines older than it refuse it as an
+// unknown CLI.
+const UpgradeCLI = "upgrade"
+
+// MachineUpgrade is a machine's answer to an upgrade request.
+type MachineUpgrade struct {
+	// From and To are its myco before and after ("" To: it was current).
+	From string `json:"from"`
+	To   string `json:"to,omitempty"`
+	// Restarting: its runner restarts in a few seconds to run To; false
+	// when it runs under no service it can restart (Note says so).
+	Restarting bool   `json:"restarting"`
+	Note       string `json:"note,omitempty"`
 }
 
 // SpawnResult is a machine node's answer to a SpawnRequest.
@@ -742,6 +773,8 @@ type SpawnResult struct {
 	// has (older machines refuse it as an unknown CLI). Reply carries the
 	// same as JSON text, which hubs older than Info pass on.
 	Info *MachineInfo `json:"info,omitempty"`
+	// Upgrade answers a request with CLI UpgradeCLI (also as JSON in Reply).
+	Upgrade *MachineUpgrade `json:"upgrade,omitempty"`
 }
 
 // InfoCLI, as a spawn request's CLI, asks the machine node about its

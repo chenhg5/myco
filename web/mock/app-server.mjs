@@ -1781,6 +1781,15 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/hub-version {version} — how old the studio workspace's myco is.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "hub-version" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const body = await readBody(req);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    if (hub && body?.version) hub.hub_version = body.version;
+    return send(res, 200, { ok: true });
+  }
+
   // /app/mock/held-for-other {on} — Myco (Grok) waits on PM's answer.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "held-for-other" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
@@ -1812,6 +1821,9 @@ const server = http.createServer(async (req, res) => {
       hub.machines = [...(hub.machines || []).filter((m) => m.id !== machine.id), machine];
       hub.agents = hub.agents.filter((a) => a.machine_id !== machine.id);
       hub.agents.push(...deletableAgents());
+      // Upgraded from the App in a smoke step: back to its old myco.
+      const office = hub.machines.find((m) => m.id === "m_office");
+      if (office) office.myco_version = "0.16.6";
     }
     return send(res, 200, { ok: true });
   }
@@ -3210,6 +3222,22 @@ const server = http.createServer(async (req, res) => {
     // /app/hubs/{id}/machines/{mid}/reach|diagnose|fix — a computer's
     // check-up over SSH (ComputerCheck.tsx). VPS 东京 runs its runner through
     // a proxy that no longer gets through (as a WSL did once).
+    // /app/hubs/{id}/machines/{mid}/upgrade — the computer upgrades its myco.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "upgrade" && method === "POST") {
+      const m = (hub.machines || []).find((x) => x.id === parts[4]);
+      if (!m) return fail(res, 404, "not_found", "没有这台电脑");
+      await sleep(900);
+      const from = "v" + String(m.myco_version || "").replace(/^v/, "");
+      m.myco_version = "0.17.2";
+      return send(res, 200, { from, to: "v0.17.2", restarting: true });
+    }
+    // /app/hubs/{id}/upgrade — the workspace upgrades itself and restarts.
+    if (parts.length === 4 && parts[3] === "upgrade" && method === "POST") {
+      await sleep(600);
+      const from = "v" + String(hub.hub_version || "").replace(/^v/, "");
+      hub.hub_version = "0.17.2";
+      return send(res, 202, { from, to: "v0.17.2", via: "service" });
+    }
     if (parts.length === 6 && parts[3] === "machines" && ["reach", "diagnose", "fix"].includes(parts[5])) {
       const mid = parts[4];
       const key = `${hub.id}/${mid}`;

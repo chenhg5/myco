@@ -901,6 +901,14 @@ func (c *Client) SpawnOnMachine(ctx context.Context, id string, req api.SpawnReq
 	return &out, c.do(ctx, http.MethodPost, "/v1/machines/"+esc(id)+"/spawn", q, req, &out)
 }
 
+// UpgradeHub asks the hub to bring its own myco to version ("" = latest)
+// and restart (owner or admin; hubs from v0.20.29). It answers at once:
+// watch Health's ServerVersion for the new one.
+func (c *Client) UpgradeHub(ctx context.Context, version string) (*api.HubUpgrade, error) {
+	var out api.HubUpgrade
+	return &out, c.do(ctx, http.MethodPost, "/v1/admin/upgrade", nil, map[string]string{"version": version}, &out)
+}
+
 // ConsoleSend sends a message as the administrator from the console app
 // (admin or console token); the sender is "@console:<device>".
 func (c *Client) ConsoleSend(ctx context.Context, req api.SendRequest) (*api.SendResponse, error) {

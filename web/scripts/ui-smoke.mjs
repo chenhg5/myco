@@ -3688,6 +3688,52 @@ async function runMatrix(browser, size, scheme) {
     // A command another agent left on a computer: the sidebar dot turns
     // amber (it is "working", but nothing is moving), and the terminal says
     // so above it, with a way to stop it.
+    // Computers behind the latest myco: upgraded from the App, all at once
+    // or one by one; one that cannot start sessions gets the command.
+    await step("电脑 · 一键升级 myco", async () => {
+      await go(page, "电脑", narrow);
+      const all = page.locator("[data-testid=upgrade-all]");
+      await all.waitFor({ timeout: 15_000 });
+      const text = compactText(await all.innerText());
+      for (const want of ["Office PC", "Bench Linux", "全部升级（1 台）"]) {
+        if (!text.includes(want)) throw new Error(`升级提示应写到「${want}」，实际「${text}」`);
+      }
+      await settle(page, 300);
+      await shot(page, size, scheme, "computers-upgrade");
+      await clickVisible(page, all.getByRole("button", { name: /全部升级/ }));
+      await all.locator(".mu-state", { hasText: "已升级到" }).waitFor({ timeout: 15_000 });
+      // One that cannot be reached is told the command, on its own page.
+      await clickVisible(page, page.locator(".pc-card", { hasText: "Bench Linux" }));
+      const one = page.locator("[data-testid=machine-upgrade]");
+      await one.locator("code", { hasText: "myco upgrade" }).waitFor({ timeout: 10_000 });
+      await settle(page, 300);
+      await shot(page, size, scheme, "computer-upgrade-command");
+      await page.evaluate(async () => { await fetch("/app/mock/machine", { method: "POST" }); });
+    });
+
+    // A workspace behind the latest myco: upgraded from Settings, which
+    // waits for it to come back on the new version.
+    await step("设置 · 升级工作区", async () => {
+      const setVersion = (v) => page.evaluate(async (x) => { await fetch("/app/mock/hub-version", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: x }) }); }, v);
+      await setVersion("0.16.9");
+      try {
+        await go(page, "设置", narrow);
+        const dialog = page.locator("[data-testid=settings-dialog]");
+        await clickVisible(page, page.locator(".app-settings-tab", { hasText: "工作区" }).first());
+        // (the workspace on this computer, older too, has its own)
+        const up = dialog.locator("[data-testid=hub-upgrade]", { hasText: "v0.16.9" });
+        await up.waitFor({ timeout: 15_000 });
+        await up.scrollIntoViewIfNeeded();
+        await settle(page, 300);
+        await shot(page, size, scheme, "settings-hub-upgrade");
+        await clickVisible(page, up.getByRole("button", { name: "升级工作区" }));
+        await dialog.locator("[data-testid=hub-upgrade] .mu-text", { hasText: "已升级到 v0.17.2" }).waitFor({ timeout: 30_000 });
+      } finally {
+        await setVersion("0.19.23");
+        await closeSettings(page);
+      }
+    });
+
     await step("电脑 · 可能卡住的命令", async () => {
       await sidebar(page, true);
       const pc = page.locator(".sp-nav-pc", { hasText: "mac-exec" });

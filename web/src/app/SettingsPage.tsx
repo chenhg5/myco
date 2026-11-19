@@ -26,6 +26,7 @@ import type { TranslateConfig } from "@/appapi";
 import { L, lang, type LangChoice } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
+import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 
 type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "about";
 
@@ -400,6 +401,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   const [removeTarget, setRemoveTarget] = useState<Hub | null>(null);
   const [stopTarget, setStopTarget] = useState<LocalWorkspace | null>(null);
   const [publicTarget, setPublicTarget] = useState<LocalWorkspace | null>(null);
+  const latest = useLatestRelease();
 
   // "Hub 设置" in the switcher should land on the Hub list, even when this
   // page was last left on another section.
@@ -599,6 +601,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                     </div>
                     {linked && <E2ERow hubId={linked.id} ov={hubsOv?.find((o) => o.id === linked.id)} onChanged={onRefresh} />}
                   </div>
+                  {w.running && <HubUpgrade version={w.version || linked?.hub_version} local manages latest={latest} onDone={() => { void reloadLocal(); onRefresh(); }} />}
                   {!w.running && (
                     <div className="app-small-note" style={{ marginTop: 8 }}>{L("这个工作区已停止，点「启动」重新运行。", "This workspace is stopped. Start it again to bring it back.")}</div>
                   )}
@@ -654,6 +657,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                   </div>
                   <E2ERow hubId={h.id} ov={hubsOv?.find((o) => o.id === h.id)} onChanged={onRefresh} />
                 </div>
+                {h.ok && <HubUpgrade hubId={h.id} version={h.hub_version} local={false} manages={!!hubsOv?.find((o) => o.id === h.id)?.me?.can_manage} latest={latest} onDone={onRefresh} />}
 
                 <div className="app-setting-actions">
                   <button type="button" className="app-btn app-btn-quiet-danger" onClick={() => { setActionError(null); setRemoveTarget(h); }}>

@@ -824,6 +824,14 @@ export const appApi = {
   shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
+  /** A computer upgrades its own myco (its machine node does it, then its
+   *  runner restarts); too_old from machines before v0.20.29. */
+  upgradeMachine: (hubId: string, machineId: string) =>
+    request<{ from: string; to?: string; restarting: boolean; note?: string }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/upgrade`, {}),
+  /** The workspace upgrades its own myco and restarts (answers at once;
+   *  too_old from hubs before v0.20.29). */
+  upgradeHub: (hubId: string) =>
+    request<{ from: string; to: string; via: string }>("POST", `app/hubs/${enc(hubId)}/upgrade`, {}),
   /** Brings this computer's myco to the latest release and restarts its runner. */
   upgradeMyco: () => request<{ from: string; version: string; restarted: string[] }>("POST", "app/local/myco/upgrade"),
   /** Starts a Hub on this machine (and adds it to the App); can take up to 90s. */
