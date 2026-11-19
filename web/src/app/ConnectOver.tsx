@@ -263,6 +263,7 @@ export function remoteErrorText(e: RemoteError, rt: RemoteRoute): string {
     case "missing_bash": return L("那台电脑上没有 bash：先装上，再重试。", "It has no bash: install it and try again.");
     case "install_failed": return L("装的时候出错了，下面是它最后打印的几行。", "Installing failed; the last lines it printed are below.");
     case "not_online": return L("装好了，但它还没出现在工作区里：多半是那台电脑连不上这个工作区的地址。", "It is set up but has not shown up on the workspace: most likely it cannot reach the workspace's address.");
+    case "no_service": return L("装好也连上了，但那台电脑上装不了 myco 后台服务（没有 systemd 用户服务，比如容器、没开 systemd 的 WSL）。在那台电脑上运行下面这条，并让它一直开着（比如放在 tmux 里）：", "Installed and joined, but the runner service cannot be installed there (no systemd user services: a container, or WSL without systemd). Run this there and keep it running (in tmux, say):");
     case "wsl_missing": return L("找不到这个 WSL：在 PowerShell 里运行 wsl -l -v 看看有哪些。", "No such WSL distribution: run wsl -l -v in PowerShell to see which there are.");
     case "ssh_missing": return L("这台电脑上没有 ssh 命令。", "This computer has no ssh command.");
     default: return e.message;

@@ -37,6 +37,8 @@ type Local struct {
 	// Remote runs ssh or wsl.exe for reaching another computer (remote.go;
 	// tests replace it).
 	Remote remoteExec
+	// versions remembers agent CLIs' --version by file (agents.go).
+	versions sync.Map
 	// Install downloads the myco CLI into dir (tests replace it).
 	Install func(ctx context.Context, dir string) (string, error)
 	// Device names console tokens this app creates ("<device>-app").
