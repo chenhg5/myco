@@ -1344,6 +1344,29 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-modal").waitFor({ state: "hidden" });
     });
 
+    await step("会话 · 右键复制一份", async () => {
+      // A Claude Code or Codex agent: right-click, 复制一份, a name, and the
+      // copy's chat opens (the original carries on).
+      try {
+        await go(page, "官网改版", narrow);
+        const who = narrow ? page.locator('.sp-strip-face[title="PM (Codex)"]') : page.locator(".sp-nav-person", { hasText: "PM (Codex)" });
+        await who.first().click({ button: "right" });
+        await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "复制一份", exact: true }));
+        const dialog = page.locator("[data-testid=fork-dialog]");
+        await dialog.waitFor({ timeout: 10_000 });
+        const name = dialog.locator("input.app-input");
+        if ((await name.inputValue()) !== "PM (Codex) 副本") throw new Error(`副本的名字默认应是「PM (Codex) 副本」，实际「${await name.inputValue()}」`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "fork-dialog");
+        await name.fill("PM 试验版");
+        await clickVisible(page, dialog.getByRole("button", { name: "复制", exact: true }));
+        await dialog.waitFor({ state: "detached", timeout: 20_000 });
+        await page.getByText("PM 试验版").first().waitFor({ timeout: 20_000 });
+      } finally {
+        await page.evaluate(async () => { await fetch("/app/mock/forks", { method: "POST" }); });
+      }
+    });
+
     await step("这台电脑 · 一键修复", async () => {
       // This computer's part of myco that starts sessions is not connected:
       // the dialog says so (not "too old") and fixes it from the App.

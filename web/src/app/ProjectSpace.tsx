@@ -20,6 +20,7 @@ import { MessageContent } from "@/app/Markdown";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
 import { handoverItem } from "@/app/Handover";
+import { forkItem } from "@/app/Fork";
 import { PaneGrid, dragAgent, leastShare, onePane, paneKeys, placePane, removePane, replacePane, soundLayout, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
 import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
@@ -463,6 +464,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
           onContextMenu={(e) => stripMenu.open(e, [
             { label: isWorkspace(r.st.agent) ? L("打开终端", "Open terminal") : L("打开", "Open"), onSelect: () => open(r) },
             { label: L("在新的一栏打开", "Open in a new pane"), icon: Columns2, onSelect: () => openInPane(r.st.agent.name) },
+            ...(!isWorkspace(r.st.agent) ? forkItem(r, project) : []),
           ])}>
           <Avatar agent={r.st.agent} size={30} state={r.st.state} badge={false} />
         </button>
@@ -614,6 +616,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
       </div>
 
       <MembersPanel
+        project={project}
         agents={agents}
         workspaces={workspaces}
         loose={loose}
@@ -1132,7 +1135,7 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   return { text: a.description || stateWords(r.st.state) };
 }
 
-function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn }: {
+function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf, now, onSetCoordinator, onChat, onNewPane, onProfile, onAddAgent, onAddWorkspace, folded, onFold, projects = [], onPutIn, project }: {
   agents: AgentRow[];
   workspaces: AgentRow[];
   loose: boolean;
@@ -1153,6 +1156,8 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   /** chat: the projects an agent can be put in */
   projects?: Project[];
   onPutIn?: (r: AgentRow, p: Project) => void;
+  /** the project shown (a copy made here goes into it too) */
+  project?: Project;
 }) {
   const menu = useContextMenu();
   // Who is in front: the coordinator always first, then whoever is at
@@ -1176,6 +1181,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       { label: L("在新的一栏打开", "Open in a new pane"), icon: Columns2, onSelect: () => onNewPane(r) },
       ...(!ws && onSetCoordinator && a.name !== coordinator ? [{ label: L("设为协调者", "Make it the coordinator"), onSelect: () => onSetCoordinator(a.name) }] : []),
       { label: L("资料", "Profile"), onSelect: () => onProfile(r) },
+      ...(!ws ? forkItem(r, project) : []),
       ...(!ws ? handoverItem(r) : []),
       // Chat: an agent that should work with others goes into a project.
       ...(!ws && onPutIn && projects.length ? [
