@@ -34,6 +34,9 @@ type Local struct {
 	Run func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
 	// LookPath finds a program (tests replace it); default exec.LookPath.
 	LookPath func(string) (string, error)
+	// Remote runs ssh or wsl.exe for reaching another computer (remote.go;
+	// tests replace it).
+	Remote remoteExec
 	// Install downloads the myco CLI into dir (tests replace it).
 	Install func(ctx context.Context, dir string) (string, error)
 	// Device names console tokens this app creates ("<device>-app").
