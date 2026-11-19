@@ -1976,7 +1976,7 @@ async function runMatrix(browser, size, scheme) {
       const icons = await head.locator(".conv-head-actions > .conv-head-find:visible").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
       if (icons.join("|") !== "更多|在这段对话里找") throw new Error(`单聊顶栏右边应是「更多」「找」两个，实际 ${icons.join("、")}`);
       await clickVisible(page, head.locator("[data-testid=chat-more]"));
-      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "图片和文件" }));
+      await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "文件和应用" }));
       const panel = page.locator(".cf-panel");
       await panel.waitFor({ timeout: 5_000 });
       const pics = panel.locator("[data-testid=chat-files-pictures] .cf-shot");

@@ -168,7 +168,7 @@ export function PageCards({ body }: { body: string }) {
   );
 }
 
-function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
+export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: string }) {
   const [page, setPage] = useState<Page | null>(null);
   const [gone, setGone] = useState(false);
   const pins = useContext(PagePinsContext);

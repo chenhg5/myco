@@ -23,10 +23,10 @@ import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
 import { useAutoGrow } from "@/app/autogrow";
 import { MessageAttachments } from "@/app/attachments";
-import { ChatFiles, type ChatFile } from "@/app/ChatFiles";
+import { ChatFiles, type ChatApp, type ChatFile } from "@/app/ChatFiles";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { chatKey, useChatBg } from "@/app/chatBg";
-import { PageCards, PagePinsContext, pageTargetOf, type PagePins } from "@/app/pages";
+import { PageCards, PagePinsContext, pageLinksIn, pageTargetOf, type PagePins } from "@/app/pages";
 import { VersionsContext, versionsOf } from "@/app/preview";
 import { sentTexts, useInputHistory } from "@/app/inputHistory";
 import { drafted, Reveal } from "@/app/Reveal";
@@ -1969,7 +1969,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // The header's ⋯ menu: what is used now and then.
   const headMore: MenuItem[] = [
     ...(!termMode ? [
-      { label: L("图片和文件", "Pictures and files"), icon: Images, onSelect: () => setFilesOpen(true) },
+      { label: L("文件和应用", "Files and apps"), icon: Images, onSelect: () => setFilesOpen(true) },
       { label: L("聊天背景", "Chat background"), icon: Paintbrush, onSelect: () => setBgOpen(true) },
       "sep" as const,
     ] : []),
@@ -1977,10 +1977,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
     ...(!observed && (shown?.length || 0) > 0 ? [{ label: L("导出这段对话", "Export this conversation"), icon: Download, onSelect: () => setExporting(true) }] : []),
   ].filter((it, i, all) => it !== "sep" || i < all.length - 1);
-  // Everything sent in the chat so far (what is loaded), for 图片和文件.
+  // Everything sent in the chat so far (what is loaded), for 文件和应用:
+  // files, and the apps (pages) linked in its messages.
   const chatFiles: ChatFile[] = filesOpen ? (shown || []).flatMap((m) => [
     ...(m.unreadable ? [] : (m.attachments || []).map((a) => ({ a, msg: m.id, from: m.from, at: m.created_at }))),
     ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : (x.attachments || []).map((a) => ({ a, msg: m.id, from: x.from, at: x.created_at })))),
+  ]) : [];
+  const chatApps: ChatApp[] = filesOpen ? (shown || []).flatMap((m) => [
+    ...(m.unreadable ? [] : pageLinksIn(m.body || "").map((p) => ({ ...p, msg: m.id, from: m.from, at: m.created_at }))),
+    ...(steersOf.get(m.id) || []).flatMap((x) => (x.unreadable ? [] : pageLinksIn(x.body || "").map((p) => ({ ...p, msg: m.id, from: x.from, at: x.created_at })))),
   ]) : [];
 
   return (
@@ -2063,7 +2068,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       {pinMenu.element}
       {headMenu.element}
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
-      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} now={now}
+      <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} apps={chatApps} now={now}
         nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}
         more={exchange && more} loadingMore={loadingOlder} onMore={() => void loadOlder()} onJump={(id) => setSeek({ id, tries: 0 })} />
       <ExportChat open={exporting} onClose={() => setExporting(false)} hubId={target.hubId} withWhom={agentName}
