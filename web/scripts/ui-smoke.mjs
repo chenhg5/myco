@@ -239,6 +239,9 @@ function watchPage(page, size, scheme) {
     if (msg.type() !== "error") return;
     const loc = msg.location();
     const where = loc.url ? `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}` : "";
+    // On purpose: Claude on this computer cannot sign in until a way is
+    // picked (添加 agent: the sign-in card, then it starts).
+    if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -1303,6 +1306,14 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 300);
       await shot(page, size, scheme, "add-agent-new");
       await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
+      // Claude's account sign-in has expired here: the card says so in
+      // words and offers the ways this computer has; one tries again.
+      const fix = dialog.locator("[data-testid=claude-auth-fix]");
+      await fix.waitFor({ timeout: 10_000 });
+      if (!(await fix.innerText()).includes("用 cc-switch 的「Kimi」")) throw new Error("登录不上时应列出 cc-switch 里的服务商");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-claude-auth");
+      await clickVisible(page, fix.getByRole("button", { name: /沿用终端里的 API 设置/ }));
       await dialog.locator(".add-arrived").nth(3).waitFor({ timeout: 20_000 });
       await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
       await page.locator(".app-modal").waitFor({ state: "hidden" });

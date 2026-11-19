@@ -385,6 +385,13 @@ const sshHosts = [
   { name: "bastion", user: "glenn", host: "bastion.example.com", port: 22 },
 ];
 const connectJobs = new Map();
+// How agents this computer starts sign in to Claude (ClaudeAuthFix).
+const claudeAuth = {
+  account: "signed_out",
+  cc_switch: [{ ref: "cc-switch:kimi", id: "kimi", name: "Kimi", host: "api.moonshot.cn", current: true }],
+  shell: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"], shell_host: "api.magpie.example",
+  using: "",
+};
 // Setting up a workspace over SSH: log in (0.8 s), install (2 s), add (0.8 s).
 function hubJobView(job) {
   const t = Date.now() - job.started;
@@ -2225,6 +2232,17 @@ const server = http.createServer(async (req, res) => {
       connectJobs.set(job.id, job);
       return send(res, 200, connectView(job));
     }
+    // /app/local/claude-auth: how agents started here sign in to Claude.
+    if (parts.length === 3 && parts[2] === "claude-auth") {
+      if (method === "POST") {
+        const body = await readBody(req);
+        if (body.use === "shell") { claudeAuth.using = "shell"; claudeAuth.using_name = "api.magpie.example"; }
+        else if (body.use === "account") { claudeAuth.using = ""; delete claudeAuth.using_name; }
+        else if (String(body.use || "").startsWith("cc-switch:")) { claudeAuth.using = body.use; claudeAuth.using_name = "Kimi"; }
+        else return fail(res, 400, "invalid_argument", "use is account, shell or cc-switch:<id>");
+      }
+      return send(res, 200, claudeAuth);
+    }
     if (parts.length === 3 && parts[2] === "wsl" && method === "GET") {
       return send(res, 200, { supported: true, distros: [
         { name: "Ubuntu-22.04", default: true, running: true, version: 2 },
@@ -3255,6 +3273,12 @@ const server = http.createServer(async (req, res) => {
       if (!dir) return fail(res, 400, "invalid_request", "dir 为必填项。");
       if (dir === "/etc" || dir.startsWith("/etc/")) {
         return fail(res, 403, "dir_not_allowed", "目录不在允许范围内。");
+      }
+      // This computer's Claude account sign-in has expired until a way is
+      // picked (ClaudeAuthFix): the terminal uses an API set by Magpie.
+      if (machine.id === "m_studio" && body.cli === "claude" && !claudeAuth.using) {
+        await sleep(600);
+        return fail(res, 502, "spawn_failed", "starting the claude session failed: claude reported an error: Failed to authenticate: OAuth session expired and could not be refreshed");
       }
       if (machine.id === "m_vps" && !/^(~|\/home\/glenn)\/code\/myco-team(\/|$)/.test(dir)) {
         return fail(res, 403, "permission_denied", `directory ${dir} is outside the folders this computer allows (~/code/myco-team); its owner can change spawn.dirs in ~/.myco/machine.yaml there`);
