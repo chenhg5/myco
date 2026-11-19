@@ -169,7 +169,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {
     const on = (e: Event) => {
-      if ((e as CustomEvent<{ section?: string }>).detail?.section === "voice") openSettingsSection("voice");
+      const s = (e as CustomEvent<{ section?: string }>).detail?.section;
+      if (s === "voice" || s === "hubs") openSettingsSection(s);
       setPage("settings");
     };
     window.addEventListener("myco-open-settings", on);
@@ -631,7 +632,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     const at = preparing;
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
-        <Prepare hubId={at} now={now} onDone={(joined) => {
+        <Prepare hubId={at} hubName={namedHubs.find((h) => h.id === at)?.name || ""} hubUrl={hubs.find((h) => h.id === at)?.url || ""} now={now} onDone={(joined) => {
           setPreparePending(null);
           setPreparing(null);
           void refresh();
@@ -656,6 +657,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
     { key: "task", title: L("交给它第一件事", "Give it something to do"), hint: L("在对话里说一句要做什么，回车发出去", "Say what you want done in its chat and press Enter"),
       done: !!hereOv?.recent?.some((m) => m.type === "task" && m.from.startsWith("@console:")) || myAgents.some((r) => r.st.in_progress + r.st.queued > 0),
       go: () => { if (myAgents[0]) chatWithMember(myAgents[0]); else addAgentHere(); } },
+    { key: "workspace", title: L("认识你的工作区", "Meet your workspace"), hint: L("agent 在这里碰头；看看怎么让别的电脑和同事加入", "Where agents meet; see how other computers and people join"),
+      done: false, seen: "workspaces", go: () => window.dispatchEvent(new CustomEvent("myco-open-settings", { detail: { section: "hubs" } })) },
     { key: "project", title: L("让两个 agent 一起做一件事", "Have two agents work together"), hint: L("建一个项目，把它们拉进来", "Start a project and bring them in"),
       done: hubProjects.some((x) => !x.p.archived && x.p.members.length >= 2), go: () => setNewProjectOpen(true) },
     { key: "automation", title: L("设一个自动化", "Set up an automation"), hint: L("让它每天到点自己干活", "Have it work on its own, on a schedule"),

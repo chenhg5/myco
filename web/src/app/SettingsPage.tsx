@@ -1,4 +1,5 @@
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { IntroCard, introOf } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, AudioLines, Bot, Check, Cloud, Globe, Info, Languages, Monitor, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, Terminal, Users,
@@ -189,7 +190,7 @@ const GROUPS: { title: () => string; keys: Section[] }[] = [
 
 /** Each section's one line, under its title. */
 const SECTION_ABOUT: Record<Section, () => string> = {
-  hubs: () => L("工作区是 agent 所在的服务器。连接后，所有页面只显示选中的工作区。", "A workspace is the server your agents live on. Once connected, every page shows only the selected workspace."),
+  hubs: () => L("工作区是你的 agent 碰头的地方，跑在某一台电脑或服务器上。所有页面只显示左下角选中的那个。", "A workspace is where your agents meet; it runs on a computer or a server. Every page shows the one picked at the bottom left."),
   agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
   members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
   audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
@@ -250,11 +251,11 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about" | "agents") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs") { nextSettingsSection = s; }
+/** (read as the page starts; cleared once it is up, so a second run of
+ *  its first render, as React's strict mode does, reads the same) */
 function takeSettingsSection(): Section | null {
-  const s = nextSettingsSection;
-  nextSettingsSection = null;
-  return s;
+  return nextSettingsSection;
 }
 
 /** The section to come back to when a language change remounts the page. */
@@ -312,8 +313,10 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }) {
   const simple = useSimpleMode();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
+  useEffect(() => { nextSettingsSection = null; }, []);
   // Simple mode hides the workspace, people and audit sections.
-  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key));
+  // (简单模式 hides some; one asked for by name, as the 上手清单 does, shows while on it)
+  const sections = SECTIONS.filter((s) => !simple || !SIMPLE_HIDDEN.includes(s.key) || s.key === section);
   // Search: rows of any section, by their words (each word typed must be
   // there); picking one opens its section and points the row out.
   const [query, setQuery] = useState("");
@@ -359,7 +362,9 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, []);
-  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section)) setSection("agents"); }, [simple, section]);
+  // (one asked for by name stays: the 上手清单 opens 工作区 in 简单模式 too)
+  const askedFor = useRef(takeSettingsSection());
+  useEffect(() => { if (simple && SIMPLE_HIDDEN.includes(section) && section !== askedFor.current) setSection("agents"); }, [simple, section]);
   // After a language remount, the request that was already handled must not
   // pull the page back to the Hub section.
   const handledRequest = useRef(langSwitchSection !== null ? sectionRequest : undefined);
@@ -515,6 +520,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         </header>
         {section === "hubs" && (
           <>
+            <IntroCard id="workspaces" {...introOf("workspaces")} />
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
 

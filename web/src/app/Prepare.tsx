@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import type { Agent } from "@/api";
-import { appApi, type LocalSession } from "@/appapi";
+import { appApi, type LocalSession, type LocalState } from "@/appapi";
+import { accessLabel, localWorkspaceOf } from "@/app/localHubs";
+import { PublicAccessDialog } from "@/app/SettingsPage";
 import { ErrorText } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { Avatar } from "@/app/persona";
@@ -37,8 +39,11 @@ const cliName = (cli: string) => (cli === "codex" ? "Codex" : "Claude Code");
 /** What it will be called (the hub has the last word). */
 const nameOf = (s: LocalSession) => base(s.workdir);
 
-export function Prepare({ hubId, now, onDone }: {
+export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
   hubId: string;
+  /** the workspace's name and address (its card at the top) */
+  hubName: string;
+  hubUrl: string;
   now: number;
   /** in: with the agents that joined (the first one's chat opens) */
   onDone: (joined: string[]) => void;
@@ -49,6 +54,10 @@ export function Prepare({ hubId, now, onDone }: {
   const [busy, setBusy] = useState<{ at: number; of: number } | null>(null);
   const [failed, setFailed] = useState<{ s: LocalSession; error: unknown }[]>([]);
   const [joinedSoFar, setJoinedSoFar] = useState<string[]>([]);
+  const [local, setLocal] = useState<LocalState | null>(null);
+  const [opening, setOpening] = useState(false);
+  useEffect(() => { appApi.local().then(setLocal, () => setLocal(null)); }, []);
+  const ws = localWorkspaceOf(local, hubUrl);
   useEffect(() => {
     appApi.localSessions().then((r) => {
       // Sessions people had (not ones a program ran), not in a workspace yet.
@@ -98,6 +107,30 @@ export function Prepare({ hubId, now, onDone }: {
     onDone([...joinedSoFar, ...joined]);
   };
 
+  // What a workspace is, and this one: where it runs, who can reach it.
+  const wsPart = (
+    <>
+      <h2 className="wl-sec">{L("你的工作区", "Your workspace")}
+        <small>{L("工作区是你的 agent 碰头的地方：连到同一个工作区的 agent，不管在哪台电脑上，都能互相派活、一起做项目。", "A workspace is where your agents meet: agents connected to the same one, on whichever computer, hand each other work and share projects.")}</small></h2>
+      <div className="wl-card wl-ws" data-testid="prepare-workspace">
+        <span className="wl-ws-mark" aria-hidden>{[...(hubName || "W")][0]?.toUpperCase()}</span>
+        <span className="wl-ws-text">
+          <b>{hubName || L("我的工作区", "My workspace")}</b>
+          <small>{L("在这台电脑上", "On this computer")}{ws ? ` · ${accessLabel(ws)}` : ""}</small>
+        </span>
+        {ws && !ws.public_url && (
+          <button type="button" className="app-btn app-btn-small" onClick={() => setOpening(true)}>{L("让外面的电脑也能连", "Let computers outside connect")}</button>
+        )}
+      </div>
+      <ul className="wl-ws-more">
+        <li>{L("别的电脑（服务器、另一台笔记本）：进去后在「电脑 › 连一台电脑」连进来，它上面的 agent 就在同一个工作区里。", "Other computers (a server, another laptop): connect them under Computers › Connect a computer, and their agents join the same workspace.")}</li>
+        <li>{L("同事：发一个邀请链接，他们的 agent 也能加进来。", "Colleagues: send an invite link, and their agents can join too.")}</li>
+        <li>{L("想把工作和个人分开：左下角的工作区菜单里可以再建一个，或者加入别人的。", "To keep work and personal apart: start another one, or join someone else's, from the workspace menu at the bottom left.")}</li>
+      </ul>
+      {ws && <PublicAccessDialog open={opening} onOpenChange={setOpening} local={local} name={ws.name || undefined}
+        onDone={() => { appApi.local().then(setLocal, () => undefined); }} />}
+    </>
+  );
   const clisPart = (
     <>
           <h2 className="wl-sec">{L("AI 命令行", "Agent CLIs")}</h2>
@@ -156,6 +189,7 @@ export function Prepare({ hubId, now, onDone }: {
           )}</p>
 
           {/* What the button below acts on comes first, when there is any. */}
+          {wsPart}
           {sessions && sessions.length > 0 ? <>{sessionsPart}{clisPart}</> : <>{clisPart}{sessionsPart}</>}
         </div>
         <footer className="wl-foot wl-prep-foot">
@@ -170,14 +204,14 @@ export function Prepare({ hubId, now, onDone }: {
         </footer>
       </section>
       <aside className="wl-stage" aria-hidden>
-        <PrepStage chosen={chosen} />
+        <PrepStage chosen={chosen} hubName={hubName || L("我的工作区", "My workspace")} />
       </aside>
     </div>
   );
 }
 
 /** The sidebar as it will be: the sessions ticked, as agents. */
-function PrepStage({ chosen }: { chosen: LocalSession[] }) {
+function PrepStage({ chosen, hubName }: { chosen: LocalSession[]; hubName: string }) {
   const faces = chosen.slice(0, 5).map((s) => ({
     s,
     a: { id: `prep-${s.session_id}`, name: nameOf(s), display_name: nameOf(s), binding: { harness: s.cli }, runtime: { cli: s.cli } } as unknown as Agent,
@@ -185,7 +219,7 @@ function PrepStage({ chosen }: { chosen: LocalSession[] }) {
   return (
     <div className="wl-scene">
       <div className="wl-win wl-prep-win">
-        <div className="wl-win-bar"><i /><i /><i /></div>
+        <div className="wl-win-bar"><i /><i /><i /><span className="wl-win-title">{hubName}</span></div>
         <div className="wl-prep-side">
           <div className="wl-side-title">{L("会话", "Chats")}</div>
           {faces.map(({ s, a }) => (
@@ -200,7 +234,7 @@ function PrepStage({ chosen }: { chosen: LocalSession[] }) {
         </div>
       </div>
       <p className="wl-cap">
-        <b>{chosen.length ? L("进去以后，它们就在侧栏里", "Inside, they are in the sidebar") : L("选几个会话，它们就会出现在这里", "Pick a few sessions to see them here")}</b>
+        <b>{chosen.length ? L(`进去以后，它们就在「${hubName}」里`, `Inside, they are in ${hubName}`) : L("选几个会话，它们就会出现在这里", "Pick a few sessions to see them here")}</b>
         <span>{L("每一个都是一个 agent：直接聊，或者拉进一个项目一起做事", "Each one is an agent: chat with it, or bring it into a project with others")}</span>
       </p>
     </div>

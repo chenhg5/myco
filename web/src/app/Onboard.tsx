@@ -43,7 +43,9 @@ function useTick() {
   }, []);
 }
 
-export type ChecklistStep = { key: string; title: string; hint: string; done: boolean; go?: () => void };
+export type ChecklistStep = { key: string; title: string; hint: string; done: boolean; go?: () => void;
+  /** done too once this intro card was read */
+  seen?: IntroId };
 
 /** The 上手清单: a card at the foot of the sidebar, folded to a line with
  *  its progress, open to the steps. Gone once put away. */
@@ -51,6 +53,8 @@ export function Checklist({ steps }: { steps: ChecklistStep[] }) {
   useTick();
   const [open, setOpen] = useState(() => get(LIST_OPEN) !== "0");
   if (get(NEW) !== "1" || get(LIST_OFF) === "1" || !steps.length) return null;
+  const read = (get(SEEN) || "").split(",");
+  steps = steps.map((s) => (s.seen && read.includes(s.seen) ? { ...s, done: true } : s));
   const done = steps.filter((s) => s.done).length;
   const all = done === steps.length;
   const toggle = () => { setOpen((o) => { set(LIST_OPEN, o ? "0" : "1"); return !o; }); };
@@ -85,7 +89,7 @@ export function Checklist({ steps }: { steps: ChecklistStep[] }) {
 
 /** The first time on a page: what it is for, and its usual action. */
 export function IntroCard({ id, title, text, action }: {
-  id: "projects" | "automations" | "apps" | "computers";
+  id: "projects" | "automations" | "apps" | "computers" | "workspaces";
   title: string;
   text: string;
   action?: { label: string; onClick: () => void };
@@ -125,6 +129,11 @@ export const INTROS = {
     title: L("应用：你和 agent 都能用的小工具", "Apps: small tools for you and your agents"),
     text: L("表格、多维表格、文档、幻灯片……建一个，agent 也能读写它；agent 做的页面也会出现在这里。",
       "Sheets, bases, docs, slides… Make one and your agents can read and write it too; pages your agents make show up here as well."),
+  }),
+  workspaces: () => ({
+    title: L("工作区：你的 agent 碰头的地方", "Workspaces: where your agents meet"),
+    text: L("连到同一个工作区的 agent，不管在这台电脑、服务器还是同事的电脑上，都能互相派活、一起做项目，你在一个窗口里看着。现在它跑在这台电脑上；想让外面的电脑或同事加入，就开放到公网再发邀请。也可以再建一个工作区（比如工作和个人分开），或者加入别人的。",
+      "Agents connected to the same workspace, on this computer, a server or a colleague's computer, can hand each other work and share projects while you watch in one window. It runs on this computer now; to let computers or people outside join, open it to the internet and invite them. You can also start another one (work and personal apart, say) or join someone else's."),
   }),
   computers: () => ({
     title: L("电脑：agent 在哪里干活", "Computers: where your agents work"),
