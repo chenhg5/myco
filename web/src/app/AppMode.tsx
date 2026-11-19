@@ -594,7 +594,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   if (hubs.length === 0) {
     return (
       <div key={lang()} className={cn("app-shell welcome-shell", isMac && "shell-mac")}>
-        <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} />
+        <Welcome onStartLocal={startLocal} onConnect={() => setConnectOpen(true)} langChoice={langChoice} onLang={chooseLang} />
         <ConnectHubDialog open={connectOpen} onOpenChange={closeConnect} prefill={connectPrefill} onAdded={() => void hubAdded()} />
       </div>
     );
