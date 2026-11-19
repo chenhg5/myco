@@ -37,6 +37,9 @@ func (s *MachineService) SetRemovalDeps(agents *AgentService, enroll *Enrollment
 // Remove revokes the machine enrollment before deleting its nodes, then the
 // machine record. Retrying after a partial failure is safe.
 func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*domain.Machine, []string, error) {
+	if strings.HasPrefix(id, "env:") {
+		return s.removeLegacy(ctx, id, dry)
+	}
 	m, err := s.machines.Get(ctx, id)
 	if err != nil {
 		return nil, nil, err
@@ -113,6 +116,58 @@ func (s *MachineService) Remove(ctx context.Context, id string, dry bool) (*doma
 		return nil, nil, err
 	}
 	return m, names, nil
+}
+
+// removeLegacy removes a machine the hub only knows from its agents (runners
+// older than machine reporting, grouped by host name as "env:<host>"): its
+// agents, and machine nodes of that host without a machine record. There
+// is no machine record or machine enrollment to remove.
+func (s *MachineService) removeLegacy(ctx context.Context, id string, dry bool) (*domain.Machine, []string, error) {
+	views, where, err := s.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	var view *MachineView
+	for _, v := range views {
+		if v.ID == id {
+			view = v
+		}
+	}
+	if view == nil {
+		return nil, nil, domain.Errf(domain.CodeNotFound, "machine %s not found", id).WithSuggestion("it has no agents left; refresh the list")
+	}
+	machines, err := s.machines.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	known := map[string]bool{}
+	for _, m := range machines {
+		known[m.ID] = true
+	}
+	all, err := s.agents.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make([]string, 0)
+	for _, a := range all {
+		switch {
+		case where[a.Name] == id:
+			names = append(names, string(a.Name))
+		case a.Kind() == domain.KindMachine && !known[a.MachineID] && "env:"+hostKey(a.Binding.Environment) == id:
+			names = append(names, string(a.Name))
+		}
+	}
+	sort.Strings(names)
+	m := view.Machine
+	if dry {
+		return &m, names, nil
+	}
+	for _, name := range names {
+		if _, err := s.agentService.Remove(ctx, name, false); err != nil {
+			return nil, nil, err
+		}
+	}
+	return &m, names, nil
 }
 
 // NewMachineService wires the machine use cases.
