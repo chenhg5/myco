@@ -25,3 +25,6 @@ func detach(cmd *exec.Cmd) {
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNewConsole, HideWindow: true}
 }
+
+// wslHost: WSL distributions can live on this computer.
+const wslHost = true
