@@ -3938,8 +3938,21 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       await clickVisible(page, page.locator(".app-nav-add"));
       await page.locator(".app-modal .np-input").waitFor();
+      // A name, a goal (optional) and its files (optional): listed before
+      // it is made, one taken away again.
+      const form = page.locator("[data-testid=new-project-form]");
+      await form.locator(".np-input").fill("官网改版");
+      await form.locator(".np-goal").fill("11 月底前上线新版官网：首页、文档站和下载页，中英双语。");
+      await form.locator("input[type=file]").setInputFiles([
+        { name: "需求.md", mimeType: "text/markdown", buffer: Buffer.from("# 需求\n") },
+        { name: "设计稿.png", mimeType: "image/png", buffer: Buffer.alloc(2048) },
+      ]);
+      await form.locator("[data-testid=new-project-files] .np-file").nth(1).waitFor({ timeout: 5_000 });
+      await form.getByRole("button", { name: "建好，并上传 2 个资料" }).waitFor({ timeout: 5_000 });
       await settle(page, 300);
       await shot(page, size, scheme, "dialog-new-project");
+      await clickVisible(page, form.getByRole("button", { name: "去掉 设计稿.png" }));
+      await form.getByRole("button", { name: "建好，并上传 1 个资料" }).waitFor({ timeout: 5_000 });
       await closeDialog(page);
       if (narrow) await sidebar(page, false);
     });

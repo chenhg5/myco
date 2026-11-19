@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Cloud, Globe, Info, Laptop, Plus, Users } from "lucide-react";
+import { Check, ChevronDown, Cloud, FileText, Globe, Info, Laptop, Plus, Upload, Users, X } from "lucide-react";
 import { ConnectOver } from "@/app/ConnectOver";
 import { appApi, type Hub, type JoinLink, type LocalSession, type LocalState, type MachineInfo, type MachineSession, type SpawnCli } from "@/appapi";
 import { IconAsterisk, IconCode } from "@/components/icons";
@@ -20,7 +20,7 @@ import { PublicAccessDialog } from "@/app/SettingsPage";
 import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
 import { L } from "@/lib/i18n";
-import { cn, timeAgo } from "@/lib/utils";
+import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /**
  * Lets a new member use the project's workspaces: each one's "who may run
@@ -1352,7 +1352,8 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
   );
 }
 
-/** Starts a project: just a name. */
+/** Starts a project: its name, what it is for (optional) and its files
+ *  (optional, uploaded once it exists). */
 export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated }: {
   open: boolean;
   hubs: Hub[];
@@ -1361,12 +1362,14 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
   onCreated: (ref: { hubId: string; name: string }) => void;
 }) {
   return (
-    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")}
-      description={L("一个项目就是一件事，和一起做这件事的 agent。", "A project is one thing to get done, and the agents doing it together.")}>
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")} className="np-modal"
+      description={L("一个项目就是一件事，和一起做这件事的 agent。写清楚目标、放上资料，协调者和成员一开始就知道要做什么。", "A project is one thing to get done, and the agents doing it together. A clear goal and its files tell the coordinator and members what to do from the start.")}>
       <NewProjectForm hubs={hubs} defaultHubId={defaultHubId} onCreated={onCreated} onCancel={onClose} />
     </Modal>
   );
 }
+
+const MAX_PROJECT_FILE = 20 << 20;
 
 export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }: {
   hubs: Hub[];
@@ -1379,28 +1382,102 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
   const usable = hubs.filter((h) => h.ok !== false);
   const [hubId, setHubId] = useState(defaultHubId && usable.some((h) => h.id === defaultHubId) ? defaultHubId : usable[0]?.id || "");
   const [title, setTitle] = useState(big ? L("我的项目", "My project") : "");
-  const [busy, setBusy] = useState(false);
+  const [goal, setGoal] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<unknown>(null);
+  // Made, but some files did not go up: in anyway, or try them again.
+  const [made, setMade] = useState<{ hubId: string; name: string; failed: File[] } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const tooBig = files.filter((f) => f.size > MAX_PROJECT_FILE);
+  const addFiles = (fs: File[]) => setFiles((have) => [...have, ...fs.filter((f) => !have.some((h) => h.name === f.name && h.size === f.size))]);
+  const upload = async (target: { hubId: string; name: string }, list: File[]) => {
+    const failed: File[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setBusy(L(`正在上传资料 ${i + 1}/${list.length}…`, `Uploading files ${i + 1}/${list.length}…`));
+      try { await appApi.uploadProjectFile(target.hubId, target.name, list[i]); } catch (err) { failed.push(list[i]); setError(err); }
+    }
+    return failed;
+  };
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hubId || !title.trim() || busy) return;
-    setBusy(true);
+    if (!hubId || !title.trim() || busy || tooBig.length) return;
+    setBusy(L("正在创建…", "Creating…"));
     setError(null);
     try {
       const slug = title.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
       const name = `${slug || "p"}-${Math.random().toString(36).slice(2, 6)}`;
-      const p = await appApi.createProject(hubId, { name, title: title.trim() });
+      const p = await appApi.createProject(hubId, { name, title: title.trim(), ...(goal.trim() ? { goal: goal.trim() } : {}) });
+      const failed = files.length ? await upload({ hubId, name: p.name }, files) : [];
+      if (failed.length) { setMade({ hubId, name: p.name, failed }); return; }
       onCreated({ hubId, name: p.name });
     } catch (err) {
       setError(err);
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
+  const retry = async () => {
+    if (!made) return;
+    setError(null);
+    const failed = await upload(made, made.failed);
+    setBusy("");
+    if (failed.length) setMade({ ...made, failed });
+    else onCreated({ hubId: made.hubId, name: made.name });
+  };
+  if (made) {
+    return (
+      <div className="np np-made" data-testid="new-project-partial">
+        <p className="np-made-text">{L(`项目建好了，但有 ${made.failed.length} 个资料没传上去：`, `The project is made, but ${made.failed.length} file(s) did not go up:`)}</p>
+        <ul className="np-files">{made.failed.map((f) => <li key={f.name} className="np-file"><FileText /><span>{f.name}</span><small>{bytes(f.size)}</small></li>)}</ul>
+        <ErrorText error={error} />
+        <div className="app-modal-actions">
+          <button type="button" className="app-btn" onClick={() => onCreated({ hubId: made.hubId, name: made.name })} disabled={!!busy}>{L("先进去，稍后再传", "Go in; upload later")}</button>
+          <button type="button" className="app-btn app-btn-primary" onClick={() => void retry()} disabled={!!busy}>{busy || L("再传一次", "Try again")}</button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <form onSubmit={create} className={cn("np", big && "is-big")}>
-      <input className="app-input np-input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
-        placeholder={L("项目叫什么？比如 官网改版", "What's it called? e.g. Website redesign")} aria-label={L("项目名", "Project name")} />
+    <form onSubmit={create} className={cn("np", big && "is-big")} data-testid="new-project-form">
+      <label className="app-field">
+        <span className="app-field-label">{L("项目名", "Name")}</span>
+        <input className="app-input np-input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus maxLength={80}
+          placeholder={L("比如：官网改版", "e.g. Website redesign")} aria-label={L("项目名", "Project name")} />
+      </label>
+      <label className="app-field">
+        <span className="app-field-label">{L("目标", "Goal")}<small className="np-optional">{L("选填", "optional")}</small></span>
+        <textarea className="app-input np-goal" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={2000}
+          placeholder={L("想做成什么、什么时候、做到什么程度算完成。比如：11 月底前上线新版官网：首页、文档站和下载页，中英双语。", "What should come out of it, by when, and what counts as done. E.g. ship the new website by the end of November: home, docs and downloads, in Chinese and English.")}
+          aria-label={L("目标", "Goal")} />
+        <span className="app-small-note">{L("协调者和成员都会看到；以后在「项目资料」里随时能改。", "The coordinator and members all see it; change it any time in Project notes.")}</span>
+      </label>
+      <div className="app-field">
+        <span className="app-field-label">{L("项目资料", "Files")}<small className="np-optional">{L("选填", "optional")}</small></span>
+        <div className={cn("np-drop", dragging && "is-over")} role="button" tabIndex={0}
+          onClick={() => fileInput.current?.click()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.current?.click(); } }}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(Array.from(e.dataTransfer.files)); }}
+          data-testid="new-project-drop">
+          <Upload />
+          <span><b>{L("把文件拖到这里，或点一下选择", "Drop files here, or click to choose")}</b>
+            <small>{L("需求文档、设计稿、约定、截图都可以，每个 20 MB 以内；成员 agent 能读到。", "Specs, designs, conventions, screenshots: up to 20 MB each; member agents can read them.")}</small></span>
+        </div>
+        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
+        {files.length > 0 && (
+          <ul className="np-files" data-testid="new-project-files">
+            {files.map((f) => (
+              <li key={`${f.name}/${f.size}`} className={cn("np-file", f.size > MAX_PROJECT_FILE && "is-bad")}>
+                <FileText />
+                <span>{f.name}</span>
+                <small>{f.size > MAX_PROJECT_FILE ? L("超过 20 MB", "Over 20 MB") : bytes(f.size)}</small>
+                <button type="button" className="np-file-x" onClick={() => setFiles((fs) => fs.filter((x) => x !== f))} aria-label={L(`去掉 ${f.name}`, `Remove ${f.name}`)} disabled={!!busy}><X /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {usable.length > 1 && (
         <label className="app-field">
           <span className="app-field-label">{L("放在哪个工作区", "In which workspace")}</span>
@@ -1411,8 +1488,11 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
       )}
       <ErrorText error={error} />
       <div className="app-modal-actions">
-        {onCancel && <button type="button" className="app-btn" onClick={onCancel}>{big ? L("先不建", "Not now") : L("取消", "Cancel")}</button>}
-        <button type="submit" className="app-btn app-btn-primary" disabled={!title.trim() || busy}>{busy ? L("正在创建…", "Creating…") : L("建好了", "Create")}</button>
+        {tooBig.length > 0 && <span className="app-modal-hint">{L("有文件超过 20 MB，去掉它再建", "A file is over 20 MB: remove it first")}</span>}
+        {onCancel && <button type="button" className="app-btn" onClick={onCancel} disabled={!!busy}>{big ? L("先不建", "Not now") : L("取消", "Cancel")}</button>}
+        <button type="submit" className="app-btn app-btn-primary" disabled={!title.trim() || !!busy || tooBig.length > 0}>
+          {busy || (files.length ? L(`建好，并上传 ${files.length} 个资料`, `Create, with ${files.length} file(s)`) : L("建好了", "Create"))}
+        </button>
       </div>
     </form>
   );
