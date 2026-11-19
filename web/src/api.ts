@@ -216,6 +216,39 @@ export interface AutomationRequest {
   webhook?: boolean; rotate_secret?: boolean; skip_if_busy?: boolean; enabled?: boolean;
 }
 export interface AutomationResponse { automation: Automation; webhook_secret?: string }
+
+/** Workflows (hubs from v0.21): steps the workspace hands to agents,
+ *  computers and people, in order (docs/design/workflow.md). */
+export interface WfSchema {
+  type?: string; title?: string; description?: string; required?: string[];
+  properties?: Record<string, WfSchema>; items?: WfSchema; enum?: unknown[]; default?: unknown; format?: string;
+}
+export interface WfStepDef {
+  id: string; title?: string; agent?: string; prompt?: string; computer?: string; run?: string; parse?: string;
+  human?: string; options?: string[]; output?: WfSchema; timeout?: string; retry?: number; dispatch?: string; join?: string;
+}
+export interface WfEdgeDef { from: string; to: string; when?: string; maxIterations?: number; else?: string; onError?: boolean }
+export interface WorkflowDef { name: string; description?: string; project?: string; inputs?: WfSchema; steps: WfStepDef[]; edges?: WfEdgeDef[] }
+export interface Workflow {
+  id: string; name: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
+  steps: number; active: number; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
+}
+export type RunStatus = "running" | "waiting" | "succeeded" | "failed" | "cancelled";
+export type StepStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
+export interface RunStep {
+  id: string; step: string; title?: string; kind: "agent" | "computer" | "human"; attempt: number; status: StepStatus;
+  target?: string; message_id?: string; input?: string; output?: Record<string, unknown>; summary?: string; error?: string;
+  retries?: number; bounced?: boolean; options?: string[]; started_at: string; ended_at?: string; due_at?: string;
+}
+export interface RunEvent { at: string; kind: string; step?: string; text: string }
+export interface WorkflowRun {
+  id: string; workflow_id: string; name: string; version: number; project?: string; status: RunStatus;
+  inputs?: Record<string, unknown>; owner?: string; by?: string; trigger?: string; error?: string; current?: string[];
+  steps?: RunStep[]; events?: RunEvent[]; definition?: WorkflowDef; created_at: string; updated_at: string; ended_at?: string;
+}
+export interface WorkflowApplyResponse { workflow: Workflow; created: boolean; changed: boolean; warnings?: string[] }
+export interface WorkflowCheck { valid: boolean; problems?: string[]; warnings?: string[] }
+export interface WorkflowDecision { run: WorkflowRun; step: RunStep }
 export interface AutomationDetail { automation: Automation; runs: AutomationRun[] }
 /** Handing a node over to another session (「换一个来接着做」, hubs after
  *  v0.19.22): the name and conversations stay, the session changes. */
@@ -244,6 +277,10 @@ export interface Message {
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the automation that sent it (hubs from v0.19.22) */
   automation?: string;
+  /** On a task a workflow sent: its run (hubs from v0.21). */
+  workflow?: string;
+  /** On a reply: the structured result handed back with it. */
+  result?: Record<string, unknown>;
   /** the person behind the sender (member name) */
   from_owner?: string;
   /** a progress update asking the task's sender to decide (body: the

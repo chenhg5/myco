@@ -843,6 +843,31 @@ curl -fsS -X POST "https://hub.example.com/hooks/aut_..." -H "Authorization: Bea
 - 每个工作区最多 200 个自动化。成员只能看到和修改自己的，所有者和管理员能看到全部；创建、修改、删除和手动运行都记入审计。
 - 消息由 Hub 生成，所以即使开了端到端加密，自动化发出的消息也是明文。
 
+### 4.16.1 工作流：按固定的步骤交给几个 agent
+
+工作流是一套固定的做法（写 → 审 → 没过就改 → 跑测试 → 你点头），由 Hub 按顺序往下走：每一步以启动它的人的名义交给一个 agent（一条普通任务，对话里标「工作流」），或在一台电脑上跑一条命令，或者等你在 App 里做个决定。agent 只交结果，下一步由 Hub 决定；电脑关着也照常。需要 Hub v0.21 或更新。
+
+App 里在侧栏「工作流」：挑一个现成的（写-审-改、改完跑测试、分头做再汇总、发布前问你一句）选好谁来做，或者让一个 agent 按你的一句话写一个。命令行（agent 用自己的令牌，人用管理员或成员令牌）：
+
+```bash
+myco workflow validate --file wf.json        # 格式在 myco workflow validate --help
+myco workflow apply --file wf.json           # 新建，或同名的出一个新版本
+myco workflow run start --name 写-审-改 --input task="加导出按钮" --wait
+myco workflow run show --id <run_...>        # 每一步交给了谁、结果、为什么失败
+myco workflow run decide --id <run_...> --step ok --choice 合并
+myco workflow run retry --id <run_...>       # 从失败的那一步重来
+myco workflow decisions                      # 等你决定的
+```
+
+agent 收到工作流的任务时，用 `myco message reply --result '{"approved": true, "summary": "…", "reason": "…"}'` 交结构化结果（旧版 myco 没有 `--result`：把 JSON 放在回复最后的 ```json 代码块里，一样认）。结果不符合这一步要的结构会退回去重交一次。
+
+- 回到前面的步骤（比如审没过回去改）必须写 `maxIterations`，到了上限走 `else`（默认失败）。
+- 等你决定的步骤过期（默认 3 天）当作「不做」，从不默认同意。
+- 电脑步骤退出码不是 0 就算失败，可以用 `onError` 的边接住（比如把报错交回去再改）。
+- 结构化结果不做端到端加密（Hub 要读它来决定下一步）。
+
+格式和接口见 [docs/api.md](docs/api.md#workflows)，设计见 [docs/design/workflow.md](docs/design/workflow.md)。
+
 ### 4.17 网页：把结果做成网页，在 App 里打开
 
 agent 可以把一个文件夹（报告、幻灯片、原型、小工具）发到 Hub 上，人在 App 里点开就能看（需要 Hub v0.19.24 或更新）：

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, ChevronRight, LayoutGrid, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { AutomationsPage } from "@/app/Automations";
+import { WorkflowsPage } from "@/app/Workflows";
 import { TemplatesPage } from "@/app/Templates";
 import "@/app/app.css";
 import "@/app/space.css";
@@ -71,7 +72,7 @@ function readPendingLink(): Promise<string> {
  * agents work together and hand out tasks; Members is everyone you work
  * with; Settings holds the rest (team spaces, computers, the app itself).
  */
-type Page = "space" | "members" | "computers" | "automations" | "templates" | "settings" | "about";
+type Page = "space" | "members" | "computers" | "automations" | "workflows" | "templates" | "settings" | "about";
 
 function initialCollapsed() {
   try {
@@ -138,7 +139,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
-      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "templates" ? page : "space" };
+      places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" ? page : "space" };
       try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
@@ -567,6 +568,20 @@ export default function AppMode({ initialHubs, initialInfo }: {
     window.addEventListener("myco-automations", on);
     return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-automations", on); };
   }, [hubId, page]);
+  // Decisions a workflow waits on you for: a count on its nav item.
+  const [decisionCount, setDecisionCount] = useState(0);
+  useEffect(() => {
+    let off = false;
+    setDecisionCount(0);
+    if (!hubId) return;
+    const read = () => appApi.workflowDecisions(hubId).then((r) => { if (!off) setDecisionCount((r.decisions || []).length); }, () => undefined);
+    void read();
+    const t = window.setInterval(read, 20_000);
+    // The workflows page says how many each time it reads them.
+    const on = (e: Event) => { const d = (e as CustomEvent<{ hubId: string; count: number }>).detail; if (d?.hubId === hubId && !off) setDecisionCount(d.count); };
+    window.addEventListener("myco-workflow-decisions", on);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener("myco-workflow-decisions", on); };
+  }, [hubId]);
   // 准备这台电脑 (Prepare.tsx): after a new install's first workspace
   // starts, until done or skipped; Settings › About opens it again.
   const [preparing, setPreparing] = useState<string | null>(() => preparePending());
@@ -708,6 +723,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const title = page === "members" ? L("成员", "Members")
     : page === "computers" ? L("电脑", "Computers")
     : page === "automations" ? L("自动化", "Automations")
+    : page === "workflows" ? L("工作流", "Workflows")
     : page === "templates" ? L("应用", "Apps")
     : page === "settings" ? L("设置", "Settings")
     : page === "about" ? L("项目资料", "Project notes")
@@ -763,8 +779,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
           </button>
 
           <nav className="app-nav">
-            {/* Two pages on top, rows like the ones below (an icon each):
-                automations and apps. Then three lists under one heading
+            {/* Pages on top, rows like the ones below (an icon each):
+                automations, workflows, apps, computers. Then three lists under one heading
                 style: projects first (the work), conversations (everyone you
                 can talk to, one click into a chat, pinned ones first, in the
                 order you pick; the height left, scrolling), computers last.
@@ -773,6 +789,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("automations"); }}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
+              </button>
+              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("workflows"); }}>
+                <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
+                {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>
               <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }}>
@@ -1010,6 +1031,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
         {page === "automations" && hub && (
           <div className="app-scroll">
             <AutomationsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
+              onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
+          </div>
+        )}
+
+        {page === "workflows" && hub && (
+          <div className="app-scroll">
+            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}

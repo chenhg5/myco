@@ -1966,11 +1966,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation || m.workflow) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
             {m.automation && <span className="conv-auto" data-testid="via-automation" title={L("由自动化替你发出", "Sent for you by an automation")}>{L("自动", "Auto")}</span>}
+            {m.workflow && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
             {receipt && <span className="conv-receipt" title={receipt.title}>{receipt.text}</span>}
             {failedNote || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
