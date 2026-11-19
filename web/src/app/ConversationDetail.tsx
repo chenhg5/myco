@@ -165,12 +165,26 @@ function changedUntil(ms: Message[]): number {
   return t > 0 ? t - 2000 : 0;
 }
 
+/** Whether a is a later copy of the same message than b. */
+function newerThan(a: Message, b: Message): boolean {
+  const ta = new Date(a.updated_at || a.created_at).getTime();
+  const tb = new Date(b.updated_at || b.created_at).getTime();
+  return ta > tb;
+}
+
 /** Messages with changed ones put in (by id), in the order they were sent.
  *  Also how a message just sent goes in: the poll may have brought it
  *  already, and a plain append would show it twice. */
 function mergeById(ms: Message[], changed: Message[]): Message[] {
   const by = new Map(ms.map((m) => [m.id, m]));
-  for (const m of changed) by.set(m.id, m);
+  // The newer of two copies stays: the answer to a send can come after a
+  // poll that already brought the same message further along (taken,
+  // answered); it must not put it back to 还没开始 and hide the reply.
+  for (const m of changed) {
+    const had = by.get(m.id);
+    if (had && newerThan(had, m)) continue;
+    by.set(m.id, m);
+  }
   const at = (m: Message) => new Date(m.created_at).getTime();
   return [...by.values()].sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
