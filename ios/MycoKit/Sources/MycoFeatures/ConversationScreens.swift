@@ -847,6 +847,10 @@ struct ConversationBody: View {
         case .mine(let text, let steer, let by):
             // A colleague's task carries their name; mine needs none.
             VStack(alignment: .trailing, spacing: Space.s) {
+                // Added to a task further up: which one, quoted on top.
+                if let quote = item.quote {
+                    QuoteLine(L("补充：\(quote)", "Adding to: \(quote)"), trailing: true)
+                }
                 // Files sent with no words of my own: they are shown alone,
                 // without the line that only names them.
                 // What is added to a task is plain, like anything else I say.
@@ -884,6 +888,10 @@ struct ConversationBody: View {
             }
         case .reply(let text, let taskID, let to):
             VStack(alignment: .leading, spacing: Space.s) {
+                // Not right under what it answers: which one, quoted on top.
+                if let quote = item.quote {
+                    QuoteLine(L("回复：\(quote)", "In answer to: \(quote)"), trailing: false)
+                }
                 if let to {
                     // An answer to a colleague says whom it answers.
                     Text(L("回复 \(session.displayName(of: to))", "To \(session.displayName(of: to))"))
@@ -936,10 +944,19 @@ struct ConversationBody: View {
         case .stopped:
             NoticeLine(.idle, L("已停止", "Stopped"))
         case .status(let state, _):
-            status(state)
+            status(state, saying: item.saying)
         case .process(let taskID, let live):
-            ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
-                AnyView(files(attachments, trailing: trailing))
+            VStack(alignment: .leading, spacing: Space.s) {
+                // Not taken up yet: what shows here is the earlier task's,
+                // still being done.
+                if let earlier = model.carrying(taskID) {
+                    Text(L("接着做上一件：\(earlier)", "Still on the one before: \(earlier)"))
+                        .font(.caption).foregroundStyle(MycoColor.muted)
+                        .accessibilityIdentifier("run.carrying")
+                }
+                ProcessView(parts: model.run(of: taskID), live: live) { attachments, trailing in
+                    AnyView(files(attachments, trailing: trailing))
+                }
             }
         case .handoff(let handoff):
             // What the agent and another agent handed each other: one
@@ -1000,6 +1017,7 @@ struct ConversationBody: View {
         case .offline: return L("对方离线，上线后再看", "Offline; it reads it when back")
         case .sessionBusy: return L("会话开在别处，空出来再看", "Its session is busy elsewhere")
         case .later: return L("稍后回复", "Will answer later")
+        case .delivered: return L("已送到", "Delivered")
         }
     }
 
@@ -1033,7 +1051,7 @@ struct ConversationBody: View {
         return date.formatted(.dateTime.month().day().locale(locale)) + " " + time
     }
 
-    @ViewBuilder private func status(_ state: RunState) -> some View {
+    @ViewBuilder private func status(_ state: RunState, saying: String? = nil) -> some View {
         let look = MushroomLook.of(session.agent(model.agent))
         switch state {
         case .queued:
@@ -1042,7 +1060,9 @@ struct ConversationBody: View {
         case .working(let since):
             // What it says it is doing; when it has not said, a playful
             // word that changes every few seconds, as on the desktop.
-            let text = session.agent(model.agent)?.statusText
+            // What it says it is doing now (its newest update, when it has
+            // not answered since), else its status.
+            let text = saying ?? session.agent(model.agent)?.statusText
             TimelineView(.periodic(from: .now, by: 3.6)) { context in
                 WorkingLine(
                     look: look, text: (text?.isEmpty == false ? text : nil) ?? RelativeTime.workingVerb(now: context.date),

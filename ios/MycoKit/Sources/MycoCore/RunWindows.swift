@@ -3,25 +3,29 @@ import MycoAPI
 
 /// Which of an agent's steps and updates show under which of my messages.
 ///
-/// An agent in one long session (it receives in its conversation) picks up
-/// what I send next and goes on, while its steps and updates still go to
-/// the task it took first, which stays open. Shown as filed, all of that
-/// would sit above my newer message, and the newer one would have nothing
-/// under it. So the page goes by time: a task shows its own steps up to my
-/// next message that was taken up, and that message shows what the earlier
-/// tasks still open got since. An agent woken by a runner starts the next
-/// task only after the first is done: nothing moves there.
+/// Strictly in time: once I have sent my next message, nothing an earlier
+/// task does grows above it. An agent in one long session (it receives in
+/// its conversation) picks up what I send next and goes on, while its steps
+/// and updates still go to the task it took first, which stays open; and
+/// any agent may still be at the earlier task when the next one comes. So a
+/// task shows its own steps up to my next message, and that message shows
+/// what the earlier tasks still open got since: as its own run once the
+/// agent has taken it up, else headed "接着做上一件" (the earlier task's
+/// first words) while it says it waits behind.
 ///
 /// The desktop app's `until` and `borrow`.
 public struct RunWindows: Sendable, Hashable {
     public struct Window: Sendable, Hashable {
-        /// Its own steps show up to here: my next message that was taken up.
+        /// Its own steps show up to here: my next message.
         public var until: Date?
         /// The earlier tasks still open whose steps show here, from `since`
-        /// (when this one was sent) to `borrowedUntil` (the next one taken up).
+        /// (when this one was sent) to `borrowedUntil` (my next message).
         public var lenders: [String] = []
         public var since: Date?
         public var borrowedUntil: Date?
+        /// Not taken up yet: what it shows is still the earlier task's,
+        /// whose first words these are.
+        public var carrying: String?
     }
 
     public private(set) var windows: [String: Window] = [:]
@@ -34,21 +38,35 @@ public struct RunWindows: Sendable, Hashable {
     ///   - reported: the tasks it has sent an update on.
     public init(tasks: [Message], answered: Set<String>, reported: Set<String>) {
         let mine = tasks.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-        // Taken up: it began on it, or said something about it. One that
-        // failed before that (never delivered, taken back) was not.
-        let taken = mine.map { ["acked", "held", "done"].contains($0.status) || reported.contains($0.id) }
-        for (i, task) in mine.enumerated() where taken[i] {
-            let lenders = mine[..<i].filter { $0.isOpen && !answered.contains($0.id) }.map(\.id)
-            guard !lenders.isEmpty else { continue }
+        for (i, task) in mine.enumerated() {
+            let earlier = mine[..<i].filter { $0.isOpen && !answered.contains($0.id) }
+            guard let last = earlier.last else { continue }
+            // Taken up: it began on it, or said something about it.
+            let taken = ["acked", "held", "done"].contains(task.status) || reported.contains(task.id)
             var window = windows[task.id] ?? Window()
-            window.lenders = lenders
+            window.lenders = earlier.map(\.id)
             window.since = task.createdAt
-            window.borrowedUntil = mine.indices.first { $0 > i && taken[$0] }.map { mine[$0].createdAt }
+            window.borrowedUntil = i + 1 < mine.count ? mine[i + 1].createdAt : nil
+            window.carrying = taken ? nil : Self.title(of: last)
             windows[task.id] = window
-            for id in lenders where windows[id]?.until == nil {
+            for id in window.lenders where windows[id]?.until == nil {
                 windows[id, default: Window()].until = task.createdAt
             }
         }
+    }
+
+    /// A task's first words, as a heading says it.
+    static func title(of task: Message) -> String {
+        let line = ConversationBuilder.firstLine(of: task.body)
+        return line.count > 24 ? String(line.prefix(23)) + "…" : line
+    }
+
+    /// The earlier task a run carries on with, when its own task has not
+    /// been taken up yet and shows only what that one did since.
+    public func carrying(_ taskID: String, traces: [String: [TraceEvent]]) -> String? {
+        guard let window = windows[taskID], let words = window.carrying, !words.isEmpty else { return nil }
+        guard RunProcess.withoutChores(traces[taskID] ?? []).isEmpty, !events(of: taskID, traces: traces).isEmpty else { return nil }
+        return words
     }
 
     public var isEmpty: Bool { windows.isEmpty }

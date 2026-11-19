@@ -51,6 +51,12 @@ public struct ConversationItem: Identifiable, Hashable, Sendable {
     public var receipt: TaskReceipt?
     /// An automation sent it for me (marked 自动).
     public var automated = false
+    /// What it answers or adds to, when that is not right above it: the
+    /// task's first words, quoted on top.
+    public var quote: String?
+    /// The loading at the foot: what the agent says it is doing now, when
+    /// it has said so since it last answered.
+    public var saying: String?
 }
 
 /// What is said under a task of mine that the agent has not started on,
@@ -68,6 +74,9 @@ public enum TaskReceipt: Hashable, Sendable {
     case sessionBusy
     /// The agent set it aside: it answers later.
     case later
+    /// In the conversation of an agent that receives in its own session:
+    /// it is there, not looked at yet.
+    case delivered
 }
 
 /// What two agents said to each other, in a conversation that is mine with
@@ -189,10 +198,16 @@ public enum ConversationBuilder {
                 if recipient.state == "offline" { return .offline }
                 if recipient.sessionInUse == true, recipient.receiving != "session" { return .sessionBusy }
             }
-            return atWork != nil && atWork != task.id ? .behind : .notOpened
+            if atWork != nil && atWork != task.id { return .behind }
+            if task.status == "delivered", status(task.to)?.receiving == "session" { return .delivered }
+            return .notOpened
         }
         /// Updates of tasks that have ended, by task, oldest first.
         var past: [String: [(message: Message, said: String)]] = [:]
+        /// The task an item belongs to, when that is not plain from the
+        /// item (an update, an addition): what a reply below it answers
+        /// is right above it, or quoted.
+        var owner: [String: String] = [:]
         /// My tasks that are still open, with where each stands.
         var myOpen: [(task: Message, state: RunState)] = []
         /// Colleagues' tasks that are still open, with where each stands.
@@ -251,11 +266,18 @@ public enum ConversationBuilder {
                     break
                 }
             case "steer":
-                // Added to a task whose run is shown: it is in the run,
-                // where it was sent.
-                if let task = m.replyTo, processes.contains(task) { continue }
+                // Added to a task whose run is shown, with nothing said in
+                // between: it is in the run, where it was sent. With other
+                // messages since, it is drawn where it was sent, quoting
+                // the task it adds to.
+                let close = Self.steerIsInItsRun(m, among: messages)
+                if let task = m.replyTo, processes.contains(task), close { continue }
                 if asked {
-                    items.append(.init(id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by), files: files(of: m)))
+                    var item = ConversationItem(
+                        id: m.id, at: m.createdAt, kind: .mine(text: text(of: m), steer: true, by: by), files: files(of: m))
+                    if !close, let task = m.replyTo.flatMap({ byID[$0] }) { item.quote = RunWindows.title(of: task) }
+                    if let task = m.replyTo { owner[m.id] = task }
+                    items.append(item)
                 }
             case "reply":
                 if !asked {
@@ -284,6 +306,7 @@ public enum ConversationBuilder {
                 // A task that is not on this page counts as open: when in
                 // doubt, an update is shown, not tucked away.
                 if byID[taskID].map(\.isOpen) ?? true {
+                    owner[m.id] = windows.home(of: taskID, at: m.createdAt)
                     items.append(.init(id: m.id, at: m.createdAt, kind: .progress(text: said, latest: false)))
                     if newestUpdate[taskID].map({ m.createdAt >= $0.at }) ?? true { newestUpdate[taskID] = (m.id, m.createdAt) }
                 } else {
@@ -334,7 +357,25 @@ public enum ConversationBuilder {
             (rank(a.kind), b.task.createdAt) < (rank(b.kind), a.task.createdAt)
         }
         if let leading {
-            items.append(.init(id: leading.task.id + ".status", at: .distantFuture, kind: leading.kind))
+            var line = ConversationItem(id: leading.task.id + ".status", at: .distantFuture, kind: leading.kind)
+            if case .status(.working, let taskID) = leading.kind {
+                // What it is doing now, whatever task it is on: its newest
+                // update, unless it has answered since; its clock from the
+                // latest message here (a coordinator in one long session
+                // keeps an early task open while it answers newer ones).
+                let fromAgent = messages.filter { $0.from == agent }
+                let update = fromAgent.filter { $0.type == "progress" }.max { $0.createdAt < $1.createdAt }
+                let answer = fromAgent.filter { $0.type == "reply" }.map(\.createdAt).max() ?? .distantPast
+                if let update, update.createdAt > answer {
+                    let said = Self.firstLine(of: RunProcess.splitPlan(update.body).map { $0.rest } ?? update.body)
+                    if !said.isEmpty { line.saying = said }
+                }
+                let latest = messages.filter { ["task", "note", "steer", "reply"].contains($0.type) }.map(\.createdAt).max()
+                if let latest, case .status(.working(let since), _) = leading.kind, latest > since {
+                    line.kind = .status(.working(since: latest), taskID: taskID)
+                }
+            }
+            items.append(line)
         }
         for (taskID, plan) in plans {
             guard let task = byID[taskID] else { continue }
@@ -359,7 +400,41 @@ public enum ConversationBuilder {
                 items.append(.init(id: "handover." + takeover.id, at: takeover.at, kind: .takenOver(text: takeover.text)))
             }
         }
-        return withTimeBreaks(items.sorted { ($0.at, $0.id) < ($1.at, $1.id) })
+        var sorted = items.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+        // An answer that does not come right under what it answers (other
+        // messages came between) quotes it on top.
+        func belongs(_ item: ConversationItem) -> String? {
+            if let known = owner[item.id] { return known }
+            switch item.kind {
+            case .mine: return item.id
+            case .process(let taskID, _): return taskID
+            case .reply(_, let taskID, _): return taskID
+            case .plan: return String(item.id.dropLast(".plan".count))
+            case .failure, .stopped, .pastProgress: return item.id.split(separator: ".").first.map(String.init)
+            default: return nil
+            }
+        }
+        for index in sorted.indices {
+            guard case .reply(_, let taskID?, _) = sorted[index].kind, let task = byID[taskID] else { continue }
+            let above = sorted[..<index].last { item in
+                if case .time = item.kind { return false }
+                if case .status = item.kind { return false }
+                return true
+            }
+            if let above, belongs(above) == taskID { continue }
+            sorted[index].quote = RunWindows.title(of: task)
+        }
+        return withTimeBreaks(sorted)
+    }
+
+    /// An addition goes into its task's run when nothing else was said
+    /// between them (another task, an answer, the task's own answer).
+    public static func steerIsInItsRun(_ steer: Message, among messages: [Message]) -> Bool {
+        guard let taskID = steer.replyTo, let task = messages.first(where: { $0.id == taskID }) else { return false }
+        return !messages.contains { other in
+            other.id != taskID && ["task", "note", "reply"].contains(other.type)
+                && other.createdAt > task.createdAt && other.createdAt < steer.createdAt
+        }
     }
 
     private static func handoffState(of task: Message) -> Handoff.State {
@@ -556,7 +631,7 @@ public enum ConversationBuilder {
                     said = split.rest
                 }
                 reports.append(RunReport(id: m.id, text: said, at: m.createdAt, files: files(of: m)))
-            case "steer" where m.from != agent && m.replyTo == taskID:
+            case "steer" where m.from != agent && m.replyTo == taskID && steerIsInItsRun(m, among: messages):
                 added.append(RunReport(id: m.id, text: text(of: m), at: m.createdAt, files: files(of: m)))
             default:
                 break

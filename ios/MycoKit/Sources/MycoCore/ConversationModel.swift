@@ -183,6 +183,15 @@ public final class ConversationModel {
 
     private var runs: [String: [RunPart]] = [:]
 
+    /// Runs under a message not taken up yet: they show what the agent
+    /// still does for an earlier task, whose first words these are.
+    private var carrying: [String: String] = [:]
+
+    /// "接着做上一件：…" above a run, when it is the earlier task's.
+    public func carrying(_ taskID: String) -> String? {
+        carrying[taskID]
+    }
+
     public var action: ComposerAction {
         ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
@@ -600,6 +609,12 @@ public final class ConversationModel {
         for taskID in windows.windows.keys where traces[taskID] != nil || processes[taskID] != nil {
             shownProcesses[taskID] = RunProcess(events: windows.events(of: taskID, traces: traces))
         }
+        // A message not taken up yet that shows what the earlier task did since.
+        var carrying: [String: String] = [:]
+        for taskID in windows.windows.keys {
+            if let words = windows.carrying(taskID, traces: traces) { carrying[taskID] = words }
+        }
+        if carrying != self.carrying { self.carrying = carrying }
         // Which open runs have stopped for now: not at work.
         var paused: Set<String> = []
         for task in all.values where task.to == agent && task.isOpen {
