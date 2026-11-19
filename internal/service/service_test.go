@@ -82,6 +82,30 @@ func TestSystemdUnit(t *testing.T) {
 	}
 }
 
+// Installing turns linger on when it is off, so the runner keeps running
+// after the last SSH or WSL session ends; when it is on, nothing is added.
+func TestSystemdTurnsLingerOn(t *testing.T) {
+	r := &fakeRunner{output: map[string]string{"loginctl show-user me --property=Linger": "Linger=no\n"}}
+	s := &Systemd{Home: t.TempDir(), R: r, User: "me"}
+	p, _ := s.PlanInstall(spec)
+	if got := strings.Join(p.Commands[0], " "); got != "-loginctl enable-linger me" {
+		t.Fatalf("first command %q, want linger turned on", got)
+	}
+	if s.Linger() {
+		t.Fatal("linger is off")
+	}
+	r.output["loginctl show-user me --property=Linger"] = "Linger=yes\n"
+	p, _ = s.PlanInstall(spec)
+	for _, c := range p.Commands {
+		if c[0] == "-loginctl" {
+			t.Fatalf("linger already on, yet %v", c)
+		}
+	}
+	if !strings.Contains(s.LingerNote(), "sudo loginctl enable-linger me") {
+		t.Fatalf("note: %s", s.LingerNote())
+	}
+}
+
 // flakyRunner fails a command the first n times.
 type flakyRunner struct {
 	fakeRunner
