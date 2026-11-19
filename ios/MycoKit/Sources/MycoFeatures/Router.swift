@@ -33,6 +33,12 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     case export(agent: String, project: String?)
     /// Another session takes this agent over; `back`: a handover to undo.
     case handover(agent: String, back: String?)
+    /// A conversation's pictures and files on one page.
+    case files(agent: String, project: String?)
+    /// An address to pin above a conversation.
+    case pinAddress(agent: String)
+    /// A conversation's background (nil key: the default for all).
+    case background(key: String?)
 
     public var id: String {
         switch self {
@@ -42,6 +48,9 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .addComputer(let project): return "computer:" + (project ?? "")
         case .export(let agent, let project): return "export:" + agent + ":" + (project ?? "")
         case .handover(let agent, let back): return "handover:" + agent + ":" + (back ?? "")
+        case .files(let agent, let project): return "files:" + agent + ":" + (project ?? "")
+        case .pinAddress(let agent): return "pin:" + agent
+        case .background(let key): return "background:" + (key ?? "")
         }
     }
 }

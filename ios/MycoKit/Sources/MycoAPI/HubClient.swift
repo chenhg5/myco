@@ -158,6 +158,20 @@ public struct HubClient: HubAPI {
 
     public var address: URL? { baseURL }
 
+    public func pins(with agent: String) async throws -> [Pin] {
+        let envelope: PinsEnvelope = try await get("/v1/pins", ["with": agent], timeout: Self.pollTimeout)
+        return envelope.pins
+    }
+
+    public func addPin(_ request: PinRequest) async throws -> Pin {
+        let data = try await call("POST", "/v1/pins", body: HubJSON.encoder().encode(request))
+        return try Self.decode(Pin.self, from: data)
+    }
+
+    public func removePin(_ id: String, with agent: String) async throws {
+        _ = try await call("DELETE", "/v1/pins/\(Self.segment(id))", query: ["with": agent])
+    }
+
     public func page(_ id: String) async throws -> Page {
         try await get("/v1/pages/\(Self.segment(id))", timeout: Self.pollTimeout)
     }
@@ -334,6 +348,7 @@ extension HubClient {
     }
 }
 
+struct PinsEnvelope: Decodable { @LossyList var pins: [Pin] }
 struct HandoversEnvelope: Decodable { @LossyList var handovers: [Handover] }
 struct AutomationsEnvelope: Decodable { @LossyList var automations: [Automation] }
 struct ProjectsEnvelope: Decodable { @LossyList var projects: [Project] }

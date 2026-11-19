@@ -79,3 +79,22 @@ struct FailureTests {
         #expect(model.failure == nil)
     }
 }
+
+/// Sentences for one's own agent, as the desktop app words them.
+struct AgentSetupTests {
+    @Test func theSentencesCarryTheGuideAndWhatToAskFirst() {
+        AppLanguage.$forced.withValue(.en) {
+            #expect(AgentSetup.setup.contains(AgentSetup.guide))
+            #expect(AgentSetup.setup.contains(AgentSetup.mirror))
+            #expect(AgentSetup.setup.contains("before using sudo"))
+            // An error's raw words, on one line, not too long.
+            let debug = AgentSetup.debug("HTTP 502\n  502 Bad Gateway   nginx")
+            #expect(debug.hasPrefix("myco shows an error: \"HTTP 502 502 Bad Gateway nginx\"."))
+            #expect(debug.contains("排错"))
+            #expect(AgentSetup.debug(String(repeating: "x", count: 2000)).count < 1000)
+            let computer = AgentSetup.computer("curl -fsSL https://hub/j/x | bash", workspace: "Team")
+            #expect(computer.contains("\"Team\""))
+            #expect(computer.contains("is a credential"))
+        }
+    }
+}

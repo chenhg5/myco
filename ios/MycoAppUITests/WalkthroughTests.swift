@@ -466,6 +466,16 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAnOfflineAgentsCardSaysWhy() {
+        // The writer's runner said goodbye as it was stopped.
+        let app = launch(["-myco-route", "member:laptop-claude-a1e2"])
+        let why = app.staticTexts["member.offline.why"]
+        XCTAssertTrue(why.waitForExistence(timeout: 15))
+        XCTAssertTrue(why.label.hasPrefix("Its runner was stopped"), why.label)
+        shot("member-offline")
+    }
+
+    @MainActor
     func testAComputerIsAddedWithOneCommand() {
         let app = launch()
         XCTAssertTrue(app.buttons["chat.project:myco-ios"].waitForExistence(timeout: 15))

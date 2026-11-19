@@ -454,3 +454,25 @@ public struct PrimaryButtonStyle: ButtonStyle {
             .background(MycoColor.button.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
+
+/// Which message something answers or adds to, quoted above it when it is
+/// not right under that message: a small line, a bar at its side.
+public struct QuoteLine: View {
+    let text: String
+    let trailing: Bool
+
+    public init(_ text: String, trailing: Bool) {
+        self.text = text
+        self.trailing = trailing
+    }
+
+    public var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1).fill(MycoColor.line).frame(width: 2, height: 14)
+            Text(text).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
+        .padding(trailing ? .trailing : .leading, 6)
+        .accessibilityIdentifier("message.quote")
+    }
+}

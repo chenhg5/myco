@@ -183,6 +183,15 @@ public final class ConversationModel {
 
     private var runs: [String: [RunPart]] = [:]
 
+    /// Runs under a message not taken up yet: they show what the agent
+    /// still does for an earlier task, whose first words these are.
+    private var carrying: [String: String] = [:]
+
+    /// "接着做上一件：…" above a run, when it is the earlier task's.
+    public func carrying(_ taskID: String) -> String? {
+        carrying[taskID]
+    }
+
     public var action: ComposerAction {
         ComposerAction.resolve(hasOpenTask: openTask != nil, hasText: !trimmedDraft.isEmpty || !pending.isEmpty)
     }
@@ -485,6 +494,34 @@ public final class ConversationModel {
         return !page.messages.isEmpty
     }
 
+    // MARK: Pictures and files
+
+    /// A message that carried files, for the page of a conversation's
+    /// pictures and files.
+    public struct Carried: Identifiable, Sendable, Hashable {
+        public var id: String
+        public var from: String
+        public var at: Date
+        public var files: [Attachment]
+    }
+
+    /// Every message here that carried files, newest first: what is loaded
+    /// of the conversation (`loadEarlier` reads further back), without
+    /// what was taken back or out of my view, nor sealed ones.
+    public var carried: [Carried] {
+        let hidden = session.hidden
+        return known.values
+            .filter { !withdrawn.contains($0.id) && !hidden.contains($0.id) }
+            .compactMap { message in
+                let files = ConversationBuilder.files(of: message)
+                return files.isEmpty ? nil : Carried(id: message.id, from: message.from, at: message.createdAt, files: files)
+            }
+            .sorted { ($0.at, $0.id) > ($1.at, $1.id) }
+    }
+
+    /// Whether older messages could still be read (to find more files).
+    public var hasMoreEarlier: Bool { hasEarlier }
+
     // MARK: Export
 
     /// A conversation written out as a file.
@@ -600,6 +637,12 @@ public final class ConversationModel {
         for taskID in windows.windows.keys where traces[taskID] != nil || processes[taskID] != nil {
             shownProcesses[taskID] = RunProcess(events: windows.events(of: taskID, traces: traces))
         }
+        // A message not taken up yet that shows what the earlier task did since.
+        var carrying: [String: String] = [:]
+        for taskID in windows.windows.keys {
+            if let words = windows.carrying(taskID, traces: traces) { carrying[taskID] = words }
+        }
+        if carrying != self.carrying { self.carrying = carrying }
         // Which open runs have stopped for now: not at work.
         var paused: Set<String> = []
         for task in all.values where task.to == agent && task.isOpen {

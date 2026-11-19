@@ -33,6 +33,20 @@ public enum MycoColor {
     public static let button = dynamic(0x26262C, 0xE8E8ED)
     public static let buttonText = dynamic(0xFFFFFF, 0x17171B)
 
+    /// A colour mixed into the page's: `fraction` of it, the rest the page
+    /// (light and dark alike). For quiet backgrounds.
+    public static func tinted(_ hex: UInt32, _ fraction: CGFloat) -> Color {
+        Color(uiColor: UIColor { traits in
+            let page = UIColor(hex: traits.userInterfaceStyle == .dark ? 0x1B1B1F : 0xF8F8FA)
+            let tint = UIColor(hex: hex)
+            var (r1, g1, b1, a1): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+            var (r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+            page.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+            tint.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+            return UIColor(red: r1 + (r2 - r1) * fraction, green: g1 + (g2 - g1) * fraction, blue: b1 + (b2 - b1) * fraction, alpha: 1)
+        })
+    }
+
     static func dynamic(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
             UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)

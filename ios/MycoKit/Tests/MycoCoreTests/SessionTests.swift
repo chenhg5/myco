@@ -531,3 +531,24 @@ struct HandoverTests {
         await #expect(throws: HubError.self) { _ = try await model.link(note: nil, back: nil) }
     }
 }
+
+/// Why an agent is offline, as far as can be told.
+struct OfflineWhyTests {
+    func status(_ runtime: Runtime?, machine: String? = "m1", state: String = "offline", cli: String = "claude") -> AgentStatus {
+        AgentStatus(agent: Agent(id: "a", name: "coder", binding: Binding(harness: cli), machineId: machine, runtime: runtime), state: state)
+    }
+
+    @Test func itSaysWhyAsFarAsCanBeTold() {
+        let mac = Machine(id: "m1", name: "Studio Mac", os: "darwin")
+        let linux = Machine(id: "m1", name: "box", os: "linux")
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude", away: "stopped")), machines: [mac]) == .stopped)
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude", env: "wsl")), machines: [linux]) == .wsl)
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude")), machines: [mac]) == .sleep)
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude")), machines: [linux]) == .gone)
+        #expect(OfflineWhy.of(status(nil), machines: []) == .gone, "an old runner says nothing")
+        // Online, or a session in the cloud: nothing to explain here.
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude", away: "stopped"), state: "idle"), machines: [mac]) == nil)
+        #expect(OfflineWhy.of(status(Runtime(cli: "claude-cloud"), machine: nil, cli: "claude-cloud"), machines: []) == nil)
+        #expect(OfflineWhy.keepWSL.contains("wsl.exe"))
+    }
+}

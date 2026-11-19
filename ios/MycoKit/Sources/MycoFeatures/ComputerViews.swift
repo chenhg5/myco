@@ -27,6 +27,7 @@ struct AddComputerSheet: View {
     @State private var arrived: Agent?
     @State private var placing: Failure?
     @State private var copied = false
+    @State private var copiedForAgent = false
 
     private var command: String {
         link.map { ComputerCommand.line(for: $0, on: system) } ?? ""
@@ -114,6 +115,17 @@ struct AddComputerSheet: View {
                     .accessibilityIdentifier("computer.command")
                 }
                 standing
+                // Or have the agent on that computer do it: the same line,
+                // in the folder its person names.
+                if link != nil {
+                    Button(copiedForAgent ? L("已复制，发给那台电脑上的 agent", "Copied: send it to the agent on that computer") : L("复制一句话，让那台电脑上的 agent 来加", "Copy a sentence for the agent on that computer")) {
+                        UIPasteboard.general.string = AgentSetup.computer(command, workspace: session.name)
+                        copiedForAgent = true
+                    }
+                    .font(.footnote.weight(.medium))
+                    .tint(MycoColor.fg2)
+                    .accessibilityIdentifier("computer.agent")
+                }
                 HStack(spacing: 10) {
                     Button(copied ? L("已复制", "Copied") : L("复制", "Copy")) {
                         UIPasteboard.general.string = command
@@ -146,6 +158,7 @@ struct AddComputerSheet: View {
             guard arrived == nil else { return }
             link = nil
             copied = false
+            copiedForAgent = false
             do {
                 before = Set(session.computers.map(\.name))
                 link = try await session.computerLink(for: chosen.isEmpty ? nil : chosen)

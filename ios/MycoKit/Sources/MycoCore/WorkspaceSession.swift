@@ -90,6 +90,7 @@ public final class WorkspaceSession {
     }
 
     @ObservationIgnored private var handoverModels: [String: HandoversModel] = [:]
+    @ObservationIgnored var pinModels: [String: PinsModel] = [:]
 
     /// An agent's handovers: the times another session took it over.
     public func handovers(of agent: String) -> HandoversModel {

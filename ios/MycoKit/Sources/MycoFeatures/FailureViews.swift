@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MycoCore
 import MycoUI
 
@@ -12,6 +13,7 @@ struct FailureLine: View {
     var onRetry: (() -> Void)?
 
     @State private var open = false
+    @State private var asked = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -22,7 +24,7 @@ struct FailureLine: View {
                 Text(advice).font(.footnote).foregroundStyle(MycoColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if onRetry != nil || failure.detail != nil {
+            if onRetry != nil || failure.detail != nil || failure.kind == .transient {
                 HStack(spacing: 14) {
                     if let onRetry {
                         Button(L("重试", "Retry"), action: onRetry)
@@ -38,6 +40,16 @@ struct FailureLine: View {
                         .frame(minHeight: 30)
                         .accessibilityIdentifier("failure.details")
                     }
+                    // A sentence for the person's own agent: the raw error
+                    // and where to look.
+                    Button(asked ? L("已复制，发给你的 agent", "Copied: send it to your agent") : L("让 agent 帮我查", "Ask my agent")) {
+                        UIPasteboard.general.string = AgentSetup.debug(failure.detail ?? failure.text)
+                        asked = true
+                    }
+                    .font(.footnote).foregroundStyle(MycoColor.muted)
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 30)
+                    .accessibilityIdentifier("failure.ask")
                 }
             }
             if open, let detail = failure.detail {
@@ -45,7 +57,10 @@ struct FailureLine: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onChange(of: failure) { open = false }
+        .onChange(of: failure) {
+            open = false
+            asked = false
+        }
     }
 }
 

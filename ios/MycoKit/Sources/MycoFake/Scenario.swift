@@ -33,6 +33,8 @@ public enum Scenario: Sendable {
         var automations: [Automation] = []
         /// The times another session took an agent over.
         var handovers: [Handover] = []
+        /// What each conversation keeps above its messages, by agent.
+        var pins: [String: [Pin]] = [:]
         /// Web pages agents published, with their files by path.
         var pages: [(page: Page, files: [String: (type: String, text: String)])] = []
     }
@@ -72,7 +74,8 @@ public enum Scenario: Sendable {
             AgentStatus(agent: backend, state: "working", inProgress: 1),
             AgentStatus(agent: frontend, state: "pending", queued: 1),
             AgentStatus(agent: tester, state: "idle"),
-            AgentStatus(agent: writer, state: "offline"),
+            // (its runner said goodbye as it was stopped)
+            AgentStatus(agent: { var one = writer; one.runtime?.away = "stopped"; return one }(), state: "offline"),
             AgentStatus(agent: ops, state: "working", inProgress: 1),
             AgentStatus(agent: helper, state: "idle"),
             AgentStatus(agent: fresh, state: "idle"),
@@ -184,6 +187,12 @@ public enum Scenario: Sendable {
             "style.css": ("text/css; charset=utf-8", "body{font:17px/1.6 -apple-system,sans-serif;margin:24px;color:#1c1c21}h1{font-size:24px}li{list-style:none;margin:10px 0}ul{padding:0}.v{color:#85858d}#n{color:#2f8a68}"),
             "app.js": ("text/javascript; charset=utf-8", "const p=document.createElement('p');p.id='n';const say=()=>p.textContent=document.querySelectorAll('input:checked').length+' / 4';say();document.body.appendChild(p);document.addEventListener('change',say);"),
         ])]
+        // The coordinator's conversation keeps the repository and the
+        // first decision at hand.
+        world.pins[lead.name] = [
+            Pin(id: "pin_repo", kind: "link", title: "仓库", target: "https://github.com/chenhg5/myco", addedBy: lead.name, at: ago(2_000)),
+            Pin(id: "pin_nav", kind: "message", title: "定了：底部三个 Tab", target: "m2", addedBy: me, at: ago(1_900)),
+        ]
         // Two automations, except where the page with none is looked at.
         if self != .waiting {
             world.automations = [

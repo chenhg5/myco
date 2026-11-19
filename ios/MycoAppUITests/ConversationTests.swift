@@ -622,6 +622,77 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testAConversationsPicturesAndFilesAreOnOnePage() {
+        // The coordinator's conversation has three sketches in an answer.
+        let app = launch(["-myco-route", "agent:cloud-lead"])
+        let more = app.buttons["conversation.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20))
+        more.tap()
+        app.buttons["Pictures and files"].tap()
+        let message = app.descendants(matching: .any).matching(identifier: "files.message").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 10), "each message with files, with who sent it")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "协调者 · ")).firstMatch.exists)
+        snap("chat-files")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testWhatAConversationKeepsAtHandIsAboveIt() {
+        // The coordinator's conversation keeps the repository and the
+        // first decision pinned.
+        let app = launch(["-myco-route", "agent:cloud-lead"])
+        let message = app.buttons["pin.message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 20), "the pins are above the conversation")
+        XCTAssertTrue(app.buttons["pin.link"].exists)
+        snap("pins")
+        message.tap()
+        XCTAssertTrue(app.staticTexts["定了：底部三个 Tab（**聊天、项目、成员**）。".replacingOccurrences(of: "**", with: "")].exists
+            || app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "定了")).firstMatch.exists, "a tap goes to the message")
+        // Pinning an address from the menu.
+        app.buttons["conversation.more"].tap()
+        app.buttons["Pin an address"].tap()
+        let address = app.textFields["pin.address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        address.tap()
+        address.typeText("https://example.com/plan")
+        app.textFields["pin.title"].tap()
+        app.textFields["pin.title"].typeText("Plan")
+        app.buttons["pin.save"].tap()
+        let added = app.buttons.matching(NSPredicate(format: "label == %@", "Pinned: Plan")).firstMatch
+        XCTAssertTrue(added.waitForExistence(timeout: 10), "it joins the strip")
+        // A long press takes it away.
+        added.press(forDuration: 1.0)
+        app.buttons["Unpin"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: added)
+        waitForExpectations(timeout: 10)
+    }
+
+    @MainActor
+    func testAConversationHasABackgroundOfItsOwn() {
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let more = app.buttons["conversation.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20))
+        more.tap()
+        app.buttons["Chat background"].tap()
+        let follow = app.switches["background.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 5))
+        if (follow.value as? String) == "1" { follow.switches.firstMatch.exists ? follow.switches.firstMatch.tap() : follow.tap() }
+        app.buttons["Mint"].tap()
+        snap("background-sheet")
+        app.buttons["background.done"].tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+        snap("background-on")
+        // Back to the default.
+        more.tap()
+        app.buttons["Chat background"].tap()
+        XCTAssertTrue(follow.waitForExistence(timeout: 5))
+        XCTAssertEqual(follow.value as? String, "0", "it has its own")
+        follow.switches.firstMatch.exists ? follow.switches.firstMatch.tap() : follow.tap()
+        app.buttons["background.done"].tap()
+    }
+
+    @MainActor
     func testAConversationIsExportedAsAFile() {
         let app = launch(["-myco-route", "agent:studio-claude-c41f"])
         let more = app.buttons["conversation.more"]
