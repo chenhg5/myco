@@ -494,6 +494,34 @@ public final class ConversationModel {
         return !page.messages.isEmpty
     }
 
+    // MARK: Pictures and files
+
+    /// A message that carried files, for the page of a conversation's
+    /// pictures and files.
+    public struct Carried: Identifiable, Sendable, Hashable {
+        public var id: String
+        public var from: String
+        public var at: Date
+        public var files: [Attachment]
+    }
+
+    /// Every message here that carried files, newest first: what is loaded
+    /// of the conversation (`loadEarlier` reads further back), without
+    /// what was taken back or out of my view, nor sealed ones.
+    public var carried: [Carried] {
+        let hidden = session.hidden
+        return known.values
+            .filter { !withdrawn.contains($0.id) && !hidden.contains($0.id) }
+            .compactMap { message in
+                let files = ConversationBuilder.files(of: message)
+                return files.isEmpty ? nil : Carried(id: message.id, from: message.from, at: message.createdAt, files: files)
+            }
+            .sorted { ($0.at, $0.id) > ($1.at, $1.id) }
+    }
+
+    /// Whether older messages could still be read (to find more files).
+    public var hasMoreEarlier: Bool { hasEarlier }
+
     // MARK: Export
 
     /// A conversation written out as a file.

@@ -32,6 +32,23 @@ struct MemberCardSheet: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("member.chat")
 
+                    // Offline: why, as far as can be told, and what to do.
+                    if let why = OfflineWhy.of(status, machines: session.machines) {
+                        CardSection(title: L("为什么离线", "Why it is offline")) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(why.words).font(.subheadline).foregroundStyle(MycoColor.fg)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("member.offline.why")
+                                if why == .wsl {
+                                    RawReason(OfflineWhy.keepWSL, copyLabel: L("复制", "Copy"))
+                                }
+                                Text(OfflineWhy.queued).font(.footnote).foregroundStyle(MycoColor.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.vertical, 10)
+                        }
+                    }
+
                     CardSection(title: L("它是谁", "Who it is")) {
                         KeyValueRow(L("在哪", "Where"), place(of: agent))
                         KeyValueRow(L("用的 AI", "AI"), Words.ai(agent))
@@ -408,6 +425,13 @@ struct SettingsScreen: View {
                     Text("中文").tag("zh")
                     Text("English").tag("en")
                 }
+                // For the conversations without one of their own.
+                NavigationLink {
+                    ChatBackgroundSheet(key: nil)
+                } label: {
+                    Text(L("默认聊天背景", "Default chat background"))
+                }
+                .accessibilityIdentifier("settings.background")
             }
             Section {
                 Toggle(L("回车键发送", "Return sends"), isOn: $returnSends)
@@ -1079,6 +1103,7 @@ struct AddAgentSheet: View {
 struct WelcomeScreen: View {
     @Environment(AppModel.self) private var app
     @State private var joining = false
+    @State private var copiedSetup = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -1096,6 +1121,16 @@ struct WelcomeScreen: View {
                 .accessibilityIdentifier("welcome.join")
             Text(L("链接在电脑上的 myco 里：设置 → 成员 → 添加设备。", "The link is in myco on your computer: Settings → Members → Add a device."))
                 .font(.footnote).foregroundStyle(MycoColor.muted).multilineTextAlignment(.center)
+            // Not set up anywhere yet: a sentence for the agent one already
+            // has (Claude Code, Codex…) on a computer, to set myco up there.
+            Button(copiedSetup ? L("已复制，发给你电脑上的 agent", "Copied: send it to the agent on your computer") : L("还没装 myco？复制一句话让你的 agent 装好", "No myco yet? Copy a sentence for your agent to set it up")) {
+                UIPasteboard.general.string = AgentSetup.setup
+                copiedSetup = true
+            }
+            .font(.footnote.weight(.medium))
+            .tint(MycoColor.fg2)
+            .multilineTextAlignment(.center)
+            .accessibilityIdentifier("welcome.setup")
             Button(L("先看看演示工作区", "Look around a demo workspace")) { app.enterDemo() }
                 .font(.subheadline.weight(.medium))
                 .tint(MycoColor.accent)

@@ -175,6 +175,15 @@ public protocol HubAPI: Sendable {
     /// `POST /v1/agents/{name}/handover-link`: a one-time command (a day)
     /// that makes whichever session runs it take the agent over.
     func handoverLink(of agent: String, note: String?, back: String?) async throws -> HandoverLink
+    /// `GET /v1/pins?with=`: what my conversation with an agent keeps
+    /// above its messages, in their order. A workspace from before v0.20.3
+    /// answers `not_found`.
+    func pins(with agent: String) async throws -> [Pin]
+    /// `POST /v1/pins`: the same thing pinned again is not added twice;
+    /// past twenty, `conflict`.
+    func addPin(_ request: PinRequest) async throws -> Pin
+    /// `DELETE /v1/pins/{id}?with=`
+    func removePin(_ id: String, with agent: String) async throws
     /// Where this workspace is: its links (a page's address) begin with it.
     var address: URL? { get }
     /// `GET /v1/pages/{id}`: a web page an agent published, with its

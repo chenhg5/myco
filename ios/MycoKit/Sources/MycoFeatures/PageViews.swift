@@ -12,6 +12,8 @@ import MycoUI
 struct PageCard: View {
     let page: Page
     let publisher: String
+    /// Pinned above the conversation: a small pin before 打开.
+    var pinned = false
     let open: () -> Void
 
     var body: some View {
@@ -27,6 +29,10 @@ struct PageCard: View {
                     Text(PageWords.line(page, publisher: publisher)).font(.caption).foregroundStyle(MycoColor.muted).lineLimit(1)
                 }
                 Spacer(minLength: 4)
+                if pinned {
+                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(MycoColor.muted)
+                        .accessibilityLabel(L("已置顶", "Pinned"))
+                }
                 Text(L("打开", "Open")).font(.footnote.weight(.medium)).foregroundStyle(MycoColor.fg2)
                 Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(MycoColor.faint)
             }
@@ -46,6 +52,8 @@ struct PageCard: View {
 /// comes on screen, and again now and then: a page gets new versions.
 struct PageCards: View {
     let text: String
+    /// The conversation's pins, when a card may be pinned above it.
+    var pins: PinsModel?
     @Environment(WorkspaceSession.self) private var session
     @Environment(Router.self) private var router
 
@@ -55,7 +63,26 @@ struct PageCards: View {
             VStack(spacing: 6) {
                 ForEach(ids, id: \.self) { id in
                     if let page = session.pages.pages[id] {
-                        PageCard(page: page, publisher: session.displayName(of: page.publisher)) { router.page = PageRoute(id: id) }
+                        let address = page.url ?? ""
+                        let pinned = pins?.pin(link: address)
+                        PageCard(page: page, publisher: session.displayName(of: page.publisher), pinned: pinned != nil) {
+                            router.page = PageRoute(id: id)
+                        }
+                        .contextMenu {
+                            Button(L("打开", "Open"), systemImage: "macwindow") { router.page = PageRoute(id: id) }
+                            if let pins, pins.supported, !address.isEmpty {
+                                if let pinned {
+                                    Button(L("取消置顶", "Unpin"), systemImage: "pin.slash") { Task { await pins.remove(pinned) } }
+                                } else {
+                                    Button(L("置顶到对话上方", "Pin above the conversation"), systemImage: "pin") {
+                                        Task { await pins.pinLink(address, title: page.name) }
+                                    }
+                                }
+                            }
+                            if !address.isEmpty {
+                                Button(L("复制链接", "Copy link"), systemImage: "link") { UIPasteboard.general.string = address }
+                            }
+                        }
                     }
                 }
             }

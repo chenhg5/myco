@@ -34,6 +34,17 @@ struct AgentScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                            router.sheet = .files(agent: name, project: nil)
+                        }
+                        if session.pins(with: name).supported {
+                            Button(L("置顶一个网址", "Pin an address"), systemImage: "pin") {
+                                router.sheet = .pinAddress(agent: name)
+                            }
+                        }
+                        Button(L("聊天背景", "Chat background"), systemImage: "paintpalette") {
+                            router.sheet = .background(key: ChatBackgrounds.key(workspace: session.id, agent: name))
+                        }
                         Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
                             router.sheet = .export(agent: name, project: nil)
                         }
@@ -62,7 +73,8 @@ struct ExchangeScreen: View {
         let model = session.exchange(of: agent, with: other)
         let front = scenePhase != .background
         ZStack {
-            MycoColor.bg.ignoresSafeArea()
+            // Its own background, the default, or the page.
+            ChatBackdrop(key: ChatBackgrounds.key(workspace: session.id, agent: agent))
             ConversationBody(model: model, focus: focus)
         }
         .task(id: front) {
@@ -132,6 +144,17 @@ struct ProjectScreen: View {
                         router.sheet = .addComputer(project: name)
                     }
                     if let project = session.project(name), let lead = session.coordinator(of: project) {
+                        Button(L("图片和文件", "Pictures and files"), systemImage: "photo.on.rectangle") {
+                            router.sheet = .files(agent: lead, project: name)
+                        }
+                        if session.pins(with: lead).supported {
+                            Button(L("置顶一个网址", "Pin an address"), systemImage: "pin") {
+                                router.sheet = .pinAddress(agent: lead)
+                            }
+                        }
+                        Button(L("聊天背景", "Chat background"), systemImage: "paintpalette") {
+                            router.sheet = .background(key: ChatBackgrounds.key(workspace: session.id, agent: lead))
+                        }
                         Button(L("导出对话", "Export the conversation"), systemImage: "square.and.arrow.up") {
                             router.sheet = .export(agent: lead, project: name)
                         }
@@ -194,7 +217,8 @@ struct ConversationHost: View {
         // The app in the background asks for nothing.
         let front = scenePhase != .background
         ZStack {
-            MycoColor.bg.ignoresSafeArea()
+            // Its own background, the default, or the page.
+            ChatBackdrop(key: ChatBackgrounds.key(workspace: session.id, agent: agent))
             ConversationBody(model: model, focus: focus)
         }
         // Starts once the workspace has said who this device is, and
@@ -235,6 +259,10 @@ struct ConversationBody: View {
     @State private var settingUpVoice = false
     /// A file about to go, opened to look at it first.
     @State private var lookingAt: URL?
+    /// A pinned message to scroll to.
+    @State private var jumpTo: String?
+    /// What this conversation keeps above its messages (mine with the agent).
+    private var pins: PinsModel? { model.readOnly ? nil : session.pins(with: model.agent) }
     /// The end was pulled up: the page is asking the workspace again.
     @State private var refreshingFromEnd = false
     /// Counts those pulls: a tap answers each.
@@ -488,6 +516,12 @@ struct ConversationBody: View {
                     settled = true
                 }
             }
+            // A pinned message: scrolled to, in the middle.
+            .onChange(of: jumpTo) { _, target in
+                guard let target else { return }
+                jumpTo = nil
+                withAnimation(.snappy(duration: 0.3)) { proxy.scrollTo(target, anchor: .center) }
+            }
         }
         // Still on its way after a moment: the shape of a conversation
         // stands in, breathing, until the real one fades in over it. One
@@ -517,12 +551,25 @@ struct ConversationBody: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { if !model.readOnly { bottom } }
         // The workspace does not answer: what is here is from before.
         .safeAreaInset(edge: .top, spacing: 0) {
-            if model.unreachable != nil {
-                StaleBanner(
-                    L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
-                    details: .of(model.unreachableDetail))
-                    .accessibilityIdentifier("conversation.stale")
+            VStack(spacing: 0) {
+                if model.unreachable != nil {
+                    StaleBanner(
+                        L("连不上工作区，这里可能不是最新的。往上拉可以再试。", "Cannot reach the workspace: this may not be the latest. Pull up to try again."),
+                        details: .of(model.unreachableDetail))
+                        .accessibilityIdentifier("conversation.stale")
+                }
+                if let pins {
+                    PinStrip(pins: pins, openFile: { file in
+                        Task { lookingAt = try? await session.shelf.url(of: file) }
+                    }, jump: { id in
+                        if model.items.contains(where: { $0.id == id }) { jumpTo = id }
+                    })
+                }
             }
+        }
+        // (and read again now and then: what the agent pins comes later)
+        .task(id: pins == nil) {
+            if let pins { await pins.run() }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: pulls)
         .quickLookPreview($lookingAt)
@@ -861,6 +908,7 @@ struct ConversationBody: View {
                     MyBubble(voiced?.text ?? text, name: by.map { session.displayName(of: $0) })
                         .contextMenu {
                             copyButton(voiced?.text ?? text)
+                            pinButton(item.id, text: voiced?.text ?? text)
                             deleteButton(item.id)
                         }
                     if let voiced {
@@ -900,7 +948,7 @@ struct ConversationBody: View {
                 ReplyText(text)
                 files(of: item, trailing: false)
                 // A web page it published and links to: a card that opens it.
-                PageCards(text: text)
+                PageCards(text: text, pins: pins)
                 // The newest answer carries what can be done with it; the
                 // others keep the page quiet (a long press copies any).
                 if item.id == newestReply {
@@ -913,6 +961,7 @@ struct ConversationBody: View {
             }
             .contextMenu {
                 copyButton(text)
+                pinButton(item.id, text: text)
                 deleteButton(item.id)
             }
         case .progress(let text, let latest):
@@ -920,7 +969,7 @@ struct ConversationBody: View {
                 ProgressLine(
                     text, time: item.at.formatted(date: .omitted, time: .shortened),
                     position: timelinePosition(at: index), latest: latest)
-                PageCards(text: text)
+                PageCards(text: text, pins: pins)
             }
         case .plan(let plan, _):
             let done = plan.filter { $0.state == .done }.count
@@ -1039,6 +1088,19 @@ struct ConversationBody: View {
 
     private func copyButton(_ text: String) -> some View {
         Button(L("复制", "Copy"), systemImage: "square.on.square") { UIPasteboard.general.string = text }
+    }
+
+    /// Keeps a message at the top of the conversation, or takes it away.
+    @ViewBuilder private func pinButton(_ id: String, text: String) -> some View {
+        if let pins, pins.supported {
+            if let pinned = pins.pin(message: id) {
+                Button(L("取消置顶", "Unpin"), systemImage: "pin.slash") { Task { await pins.remove(pinned) } }
+            } else {
+                Button(L("置顶", "Pin"), systemImage: "pin") {
+                    Task { await pins.pinMessage(id, title: PinsModel.title(of: text)) }
+                }
+            }
+        }
     }
 
     /// "14:32" today, "昨天 14:32", else "11月12日 14:32".

@@ -48,6 +48,7 @@ public actor FakeHub: HubAPI {
         automationList = world.automations
         pageList = world.pages.map(\.page)
         handoverList = world.handovers
+        pinList = world.pins
         pageFiles = Dictionary(world.pages.map { ($0.page.id, $0.files) }, uniquingKeysWith: { first, _ in first })
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
     }
@@ -444,6 +445,46 @@ public actor FakeHub: HubAPI {
         var handover = handoverList[place]
         take(over: index, with: &handover, cli: "claude-cloud", dir: "/home/user/myco", machine: nil)
         handoverList[place] = handover
+    }
+
+    // MARK: Pins
+
+    private var pinList: [String: [Pin]] = [:]
+    private var tooOldForPins = false
+
+    public func setTooOldForPins(_ value: Bool) {
+        tooOldForPins = value
+    }
+
+    private func checkPins() async throws {
+        try await check()
+        if tooOldForPins { throw HubError(error: "not_found", message: "no route for GET /v1/pins", status: 404) }
+    }
+
+    public func pins(with agent: String) async throws -> [Pin] {
+        try await checkPins()
+        return pinList[agent] ?? []
+    }
+
+    public func addPin(_ request: PinRequest) async throws -> Pin {
+        try await checkPins()
+        var list = pinList[request.with] ?? []
+        // The same thing again is not added twice.
+        if let same = list.first(where: { $0.kind == request.kind && $0.target == request.target && $0.file?.fileId == request.file?.fileId }) {
+            return same
+        }
+        guard list.count < 20 else { throw HubError(error: "conflict", message: "at most 20 pins", status: 409) }
+        seq += 1
+        let title = request.title?.isEmpty == false ? request.title! : (request.target ?? request.file?.name ?? "")
+        let pin = Pin(id: "pin_fake\(seq)", kind: request.kind, title: String(title.prefix(80)), target: request.target, file: request.file, addedBy: Self.me, at: Date())
+        list.append(pin)
+        pinList[request.with] = list
+        return pin
+    }
+
+    public func removePin(_ id: String, with agent: String) async throws {
+        try await checkPins()
+        pinList[agent]?.removeAll { $0.id == id }
     }
 
     // MARK: Pages

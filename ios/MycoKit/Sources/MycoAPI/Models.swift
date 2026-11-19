@@ -29,10 +29,15 @@ public struct Runtime: Codable, Sendable, Hashable {
     /// The reasoning effort its CLI runs with (hubs from v0.19.5).
     public var effort: String?
     public var effortSource: String?
+    /// Why its runner went offline, sent as it stopped: "stopped" (by
+    /// hand, its service, logging out or shutting down). None while it runs.
+    public var away: String?
+    /// Where it runs, when that explains going offline: "wsl".
+    public var env: String?
 
     public init(
         cli: String? = nil, cliVersion: String? = nil, model: String? = nil, modelSource: String? = nil,
-        effort: String? = nil, effortSource: String? = nil
+        effort: String? = nil, effortSource: String? = nil, away: String? = nil, env: String? = nil
     ) {
         self.cli = cli
         self.cliVersion = cliVersion
@@ -40,6 +45,8 @@ public struct Runtime: Codable, Sendable, Hashable {
         self.modelSource = modelSource
         self.effort = effort
         self.effortSource = effortSource
+        self.away = away
+        self.env = env
     }
 }
 
@@ -747,5 +754,49 @@ public struct HandoverResult: Codable, Sendable, Hashable {
     public init(handover: Handover, spawn: Spawn? = nil) {
         self.handover = handover
         self.spawn = spawn
+    }
+}
+
+/// Something a conversation keeps at hand above its messages (hubs from
+/// v0.20.3): a web address, a file, or one of its messages. Both sides of
+/// the conversation see the same list.
+public struct Pin: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    /// link | file | message
+    public var kind: String
+    public var title: String
+    /// The address (link) or the message's id (message).
+    public var target: String?
+    public var file: Attachment?
+    /// Who pinned it: an agent's name or a console sender.
+    public var addedBy: String?
+    public var at: Date?
+
+    public init(id: String, kind: String, title: String, target: String? = nil, file: Attachment? = nil, addedBy: String? = nil, at: Date? = nil) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.target = target
+        self.file = file
+        self.addedBy = addedBy
+        self.at = at
+    }
+}
+
+/// What is pinned: a link, a file, or a message, with a title of its own
+/// if given (else the address, the file's name or the message's id).
+public struct PinRequest: Codable, Sendable, Hashable {
+    public var with: String
+    public var kind: String
+    public var title: String?
+    public var target: String?
+    public var file: Attachment?
+
+    public init(with: String, kind: String, title: String? = nil, target: String? = nil, file: Attachment? = nil) {
+        self.with = with
+        self.kind = kind
+        self.title = title
+        self.target = target
+        self.file = file
     }
 }
