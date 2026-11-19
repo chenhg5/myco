@@ -201,8 +201,20 @@ public actor FakeHub: HubAPI {
         messages.append(Message(id: nextID(), from: agent, to: Self.me, type: "note", body: body, status: "done", createdAt: Date()))
     }
 
+    /// A task's steps as given, instead of the scripted run (for tests of
+    /// how a real session's steps read).
+    private var givenTraces: [String: [TraceEvent]] = [:]
+
+    public func setTrace(of messageID: String, _ events: [TraceEvent]) {
+        givenTraces[messageID] = events
+    }
+
     public func trace(of messageID: String, after seq: Int) async throws -> Trace {
         try await check()
+        if let given = givenTraces[messageID] {
+            let status = messages.first { $0.id == messageID }?.status ?? "acked"
+            return Trace(message: messageID, status: status, events: given.filter { $0.seq > seq })
+        }
         if slowSteps > .zero { try? await Task.sleep(for: slowSteps) }
         advance()
         guard let task = messages.first(where: { $0.id == messageID }) else {
